@@ -1384,6 +1384,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The element type of `t[i]` where `t` is a pack-typed tuple and `i` is
+    /// the index of an enclosing variadic `.enumerate()` — the one non-literal
+    /// subscript a tuple admits, since unrolling fixes it per element.
+    ///
+    /// A mapped pack (`[..Option<F>]`) yields its mapped element, matching how
+    /// the variadic for-of binds one.
+    pub(super) fn variadic_enumerate_subscript_type(
+        type_table: &std::cell::RefCell<TypeTable>,
+        elements: &[TypeId],
+        index_expr: &ast::Expr,
+        ctx: &FunctionContext,
+    ) -> Option<TypeId> {
+        let ast::Expr::Ident(ident) = index_expr else {
+            return None;
+        };
+        if !ctx.variadic_enumerate_indices.contains(&ident.name) {
+            return None;
+        }
+        let type_table = type_table.borrow();
+        elements.iter().find_map(|&e| match type_table.get(e) {
+            ResolvedType::TypePack {
+                mapped_elem: Some(elem),
+                ..
+            } => Some(*elem),
+            ResolvedType::TypePack { .. } => Some(e),
+            _ => None,
+        })
+    }
+
     /// Resolve an index expression
     pub(super) fn resolve_index(
         &mut self,
@@ -1428,6 +1457,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     return TypeTable::UNKNOWN;
                 }
+            }
+            // A pack-typed tuple accepts the index of an enclosing variadic
+            // `.enumerate()`: unrolling fixes it to a literal per element.
+            if let Some(elem) = Self::variadic_enumerate_subscript_type(
+                &self.tysys.type_table,
+                elements,
+                &index.index,
+                ctx,
+            ) {
+                return elem;
             }
             // Non-constant index on tuple
             let _ = self.emit(TypeError::InvalidLiteral {

@@ -350,8 +350,17 @@ impl Monomorphizer {
                                 name: pack_name,
                                 mapped_elem,
                             } => {
-                                let &pack_type =
-                                    substitution.get(&index).unwrap_or_else(|| {
+                                // A splice position spells the whole pack, so
+                                // inside a variadic for-of body it reads the
+                                // pack's own tuple rather than the element the
+                                // loop binds (see `pack_splice_bindings`).
+                                let pack_type = self
+                                    .pack_splice_bindings
+                                    .borrow()
+                                    .get(&index)
+                                    .copied()
+                                    .or_else(|| substitution.get(&index).copied())
+                                    .unwrap_or_else(|| {
                                         panic!(
                                             "TypePack `..{pack_name}` (index {index}) not found in substitution map"
                                         )

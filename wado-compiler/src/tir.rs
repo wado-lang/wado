@@ -4693,6 +4693,9 @@ pub enum TirStmtKind {
         /// `for v of &list` refiter semantics. The binding is resolved with
         /// type `&TypePack`; expansion wraps each element field in `&`.
         by_ref: bool,
+        /// When the iterable is `tuple.enumerate()`, the binding is the pair
+        /// `[i32, T_k]`; expansion pairs each element with its index literal.
+        is_enumerate: bool,
     },
 }
 

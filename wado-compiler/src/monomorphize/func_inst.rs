@@ -299,6 +299,33 @@ struct LocalIndexRewriter {
     new_idx: u32,
 }
 
+/// Folds `t[i]` — a pack-typed tuple subscripted by a variadic
+/// `.enumerate()` index — into the unrolled element's field access.
+/// The index is a compile-time constant by construction, so the read and the
+/// write (`slots[i] = v`, an `Assign` over the same node) both land on a
+/// concrete tuple field (WEP 2026-03-14).
+struct EnumerateSubscriptRewriter {
+    index_local: u32,
+    element: u32,
+}
+
+impl TirMutVisitor for EnumerateSubscriptRewriter {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        self.walk_expr(expr);
+        let TirExprKind::Index { expr: base, index } = &mut expr.kind else {
+            return;
+        };
+        if !matches!(&index.kind, TirExprKind::Local { index, .. } if *index == self.index_local) {
+            return;
+        }
+        expr.kind = TirExprKind::FieldAccess {
+            expr: Box::new((**base).clone()),
+            field_index: self.element,
+            field_name: self.element.to_string(),
+        };
+    }
+}
+
 impl TirMutVisitor for LocalIndexRewriter {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         match &mut expr.kind {
@@ -3407,11 +3434,13 @@ impl Monomorphizer {
             body,
             unique_id,
             by_ref,
+            is_enumerate,
         } = &mut stmt.kind
         else {
             unreachable!()
         };
         let by_ref = *by_ref;
+        let is_enumerate = *is_enumerate;
 
         // A mapped pack (`[..Case<T, P>]`) substitutes per element from the
         // source pack element `P_k`, not the mapped tuple element, so read its
@@ -3472,6 +3501,32 @@ impl Monomorphizer {
         let b_name = binding_name.clone();
         let b_mut = *is_mut;
 
+        // `.enumerate()` binds `[i, v]`, so the index is the sub-binding
+        // reading field 0 of the pair. A `t[i]` in the body folds against it
+        // once the element position is known.
+        let enumerate_index_local: Option<u32> = is_enumerate
+            .then(|| {
+                body.stmts.iter().find_map(|s| {
+                    let TirStmtKind::Let {
+                        local_index, value, ..
+                    } = &s.kind
+                    else {
+                        return None;
+                    };
+                    let TirExprKind::FieldAccess {
+                        expr: inner,
+                        field_index: 0,
+                        ..
+                    } = &value.kind
+                    else {
+                        return None;
+                    };
+                    matches!(&inner.kind, TirExprKind::Local { index, .. } if *index == binding_local_idx)
+                        .then_some(*local_index)
+                })
+            })
+            .flatten();
+
         // Allocate a dedicated temp local for the tuple (the original binding_local
         // will be reused per-iteration below with distinct types per element).
         let temp_local_idx = *local_count;
@@ -3530,6 +3585,31 @@ impl Monomorphizer {
             // reference to a fresh copy of the field. Otherwise it is `T_k`.
             let (bind_type, bind_value) =
                 type_table.tuple_element_binding(field, elem_type, by_ref, span);
+            // `.enumerate()` binds the pair `[i, T_k]`; the index is a literal
+            // fixed by the unroll position.
+            let (bind_type, bind_value) = if is_enumerate {
+                let index_literal = TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: i as u64,
+                        repr: i.to_string(),
+                    },
+                    TypeTable::I32,
+                    span,
+                );
+                let pair_type = type_table.make_tuple(vec![TypeTable::I32, bind_type]);
+                (
+                    pair_type,
+                    TirExpr::new(
+                        TirExprKind::TupleLiteral {
+                            elements: vec![index_literal, bind_value],
+                        },
+                        pair_type,
+                        span,
+                    ),
+                )
+            } else {
+                (bind_type, bind_value)
+            };
             locals.push(TirLocal {
                 name: b_name.clone(),
                 type_id: bind_type,
@@ -3553,6 +3633,9 @@ impl Monomorphizer {
             // Override the TypePack → elem_type (instead of TypePack → tuple type)
             let mut elem_body = body.clone();
             if let Some(pack_idx) = pack_index {
+                // The pack's own tuple, for types in the body that spell the
+                // whole pack (`[..T]`) rather than the element the loop binds.
+                let pack_tuple = substitution.get(&pack_idx).copied();
                 // Detect destructured zip patterns: body starts with Let stmts
                 // whose values are FieldAccess on the binding local
                 // (e.g., `let a = binding.0; let b = binding.1;`).
@@ -3577,21 +3660,36 @@ impl Monomorphizer {
                     // exclusive. The branch rebuilds the destructure with
                     // non-reference field types, which would be wrong for a
                     // `&T_k` binding; assert the combination never reaches here.
+                    // `.enumerate()` is exempt: its pair fields are read off
+                    // `bind_type`, which already carries the `&`.
                     assert!(
-                        !by_ref,
+                        !by_ref || is_enumerate,
                         "by-reference variadic for-of with a destructured zip binding is unsupported"
                     );
                     // For destructured zip patterns, substitute_type's Tuple splicing
                     // corrupts the pair type Tuple([TypePack, TypePack]) → Tuple([T0,T1,...,T0,T1,...]).
                     // Instead, generate fresh destructured Let stmts with correct field types
                     // from elem_type, and only substitute the remaining user body stmts.
-                    let pair_fields = type_table
-                        .as_tuple(elem_type)
-                        .unwrap_or_else(|| vec![elem_type]);
+                    //
+                    // `.enumerate()` pairs an `i32` index with the element, so
+                    // its fields come from the synthesized pair, not `elem_type`.
+                    let pair_fields = if is_enumerate {
+                        type_table
+                            .as_tuple(bind_type)
+                            .unwrap_or_else(|| vec![TypeTable::I32, elem_type])
+                    } else {
+                        type_table
+                            .as_tuple(elem_type)
+                            .unwrap_or_else(|| vec![elem_type])
+                    };
 
                     // The body_pack_type is the individual field type (e.g., [i32, i32] → i32).
                     // For non-tuple field types this is just the field type itself.
-                    let body_pack_type = pair_fields[0];
+                    let body_pack_type = if is_enumerate {
+                        elem_type
+                    } else {
+                        pair_fields[0]
+                    };
 
                     // Replace the destructured stmts with fresh ones that have correct types.
                     let mut fresh_destruct_stmts = Vec::with_capacity(destruct_count);
@@ -3620,7 +3718,7 @@ impl Monomorphizer {
                                     index: binding_local_idx,
                                     name: b_name.clone(),
                                 },
-                                elem_type,
+                                bind_type,
                                 span,
                             );
                             let field_access = TirExpr::new(
@@ -3663,6 +3761,7 @@ impl Monomorphizer {
                     // Substitute user body with field type (not pair type)
                     let mut elem_substitution = substitution.clone();
                     elem_substitution.insert(pack_idx, body_pack_type);
+                    let displaced = pack_tuple.map(|t| self.bind_pack_splice(pack_idx, t));
                     self.substitute_types_in_block(
                         &mut user_body,
                         &elem_substitution,
@@ -3670,6 +3769,9 @@ impl Monomorphizer {
                         local_count,
                         locals,
                     );
+                    if let Some(previous) = displaced {
+                        self.restore_pack_splice(pack_idx, previous);
+                    }
 
                     // Reassemble: fresh destructured stmts + substituted user body
                     elem_body.stmts = fresh_destruct_stmts;
@@ -3681,6 +3783,7 @@ impl Monomorphizer {
                         .and_then(|es| es.get(i).copied())
                         .unwrap_or(elem_type);
                     elem_substitution.insert(pack_idx, override_ty);
+                    let displaced = pack_tuple.map(|t| self.bind_pack_splice(pack_idx, t));
                     self.substitute_types_in_block(
                         &mut elem_body,
                         &elem_substitution,
@@ -3688,6 +3791,9 @@ impl Monomorphizer {
                         local_count,
                         locals,
                     );
+                    if let Some(previous) = displaced {
+                        self.restore_pack_splice(pack_idx, previous);
+                    }
                 }
             } else {
                 // Fallback: no TypePack index in the substitution. A
@@ -3715,6 +3821,17 @@ impl Monomorphizer {
                     type_table,
                 );
             }
+            // Fold `t[i]` against this element's position before the body's
+            // method calls are typed: the fold turns a tuple `Index` — which
+            // has no lowering — into the element's field access.
+            if let Some(index_local) = enumerate_index_local {
+                EnumerateSubscriptRewriter {
+                    index_local,
+                    element: i as u32,
+                }
+                .visit_block(&mut elem_body);
+            }
+
             // Populate type_args on method-call nodes that have inferred generic params.
             // Inside variadic for-of, method calls like `seq.element(&v)` have empty type_args
             // because T was inferred from a TypePack at resolution time. Now that types are
