@@ -937,12 +937,12 @@ impl<T: Eq> Eq for Pair<T> {
 
 ### Auto-Derived Traits
 
-`Eq`, `Ord`, `Default`, `Serialize`, and `Deserialize` are _bound-driven_: the compiler synthesizes them where a use or bound needs them, no marker required. A plain struct is comparable and serializable with no declaration:
+`Eq`, `Ord`, `Default`, `Serialize`, and `Deserialize` are _bound-driven_: they are derived where a use or bound needs them, no marker required. A plain struct is comparable and serializable with no declaration:
 
 ```wado
 struct Point { x: i32, y: i32 }
-Point { x: 1, y: 2 } == Point { x: 1, y: 2 };  // Eq synthesized here
-to_string(&Point { x: 1, y: 2 });              // Serialize synthesized here
+Point { x: 1, y: 2 } == Point { x: 1, y: 2 };  // Eq derived here
+to_string(&Point { x: 1, y: 2 });              // Serialize derived here
 ```
 
 An empty marker `impl Trait for T;` asserts conformance: the compiler checks `T` is eligible and errors if not. Optional for these traits, but it documents intent and is the way to attach `#[wire(...)]` customization.
@@ -977,6 +977,7 @@ See [`core:prelude`](./stdlib-core-prelude.md) for the full API.
 f64::sin(x)    f64::cos(x)    f64::sqrt(x)
 f64::abs(x)    f64::ceil(x)   f64::floor(x)
 f64::pow(x, y) f64::ln(x)     f64::exp(x)
+f64::mul_add(x, y, z)
 
 x.is_nan()     x.is_finite()    // where x is f64 or f32
 

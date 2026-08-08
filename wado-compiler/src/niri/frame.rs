@@ -11,7 +11,6 @@
 //! program never produced.
 
 use crate::const_eval::Value;
-use crate::name::RefKind;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
@@ -20,7 +19,7 @@ use crate::tir::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
 use super::place::{borrowed_place_operand, place_aliased_by_another, place_of};
-use super::region::{region_free_reads, region_shape, value_block_shape};
+use super::region::{block_shape, region_free_reads, region_shape, value_block_shape};
 use super::trackability::Trackability;
 use super::{CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
 
@@ -276,7 +275,8 @@ impl Interpreter<'_> {
                         | Value::Float { .. }
                         | Value::Char(_)
                         | Value::Aggregate { .. }
-                        | Value::Seq { .. },
+                        | Value::Seq { .. }
+                        | Value::Variant { .. },
                     )
                     | Lattice::NonConst
                     | Lattice::Unevaluated => Flow::Bail,
@@ -353,6 +353,21 @@ impl Interpreter<'_> {
             && let Some(flow) = self.exec_call_stmt(body, e)
         {
             return flow;
+        }
+        // A block at statement position is run for what it performs. Inlining
+        // leaves one where a call stood, and a unit-typed one — every `push`
+        // onto a string or list, once inlined — denotes nothing to evaluate, so
+        // the value path would abandon the frame over a statement whose whole
+        // purpose is its writes.
+        if let Some(e) = op.as_expr()
+            && let Some((block, label)) = block_shape(body, e)
+        {
+            let label = label.map(str::to_string);
+            let flow = self.exec_block(body, block);
+            return match value_of_block_flow(flow, label.as_deref()) {
+                Ok(value) => Flow::Fallthrough(value),
+                Err(other) => other,
+            };
         }
         match self.eval_operand(body, op) {
             lattice @ Lattice::Const(_) => Flow::Fallthrough(lattice),
@@ -437,6 +452,7 @@ impl Interpreter<'_> {
             CtfeBuiltin::ArrayGet
             | CtfeBuiltin::ArrayLen
             | CtfeBuiltin::ArrayNew
+            | CtfeBuiltin::ArrayClonePrefix
             | CtfeBuiltin::Select
             | CtfeBuiltin::I32AsChar => None,
         }
@@ -560,14 +576,23 @@ impl Interpreter<'_> {
     /// a deref — so the RHS is matched as a local written out, not through
     /// [`place_of`], which peels a deref precisely because a write target
     /// wants the storage behind it.
+    ///
+    /// A borrow does not always arrive spelled as one: the boxing pass rewrites
+    /// `&x` over an address-taken local into a bare read of the `Box<T>` the
+    /// local became, which is why the reference-shaped type is asked for too. A
+    /// value copy of that same local is a projection (`x.value`), so the
+    /// whole-local read is the borrow and nothing else answers here.
     fn aliased_operand(&self, body: &Body, value: Operand) -> Option<Operand> {
         if let Some((_, borrowed)) = borrowed_place_operand(body, value) {
             return Some(borrowed);
         }
         let index = named_local(body, value)?;
-        self.frame
-            .place_aliases
-            .contains_key(&index)
+        if self.frame.place_aliases.contains_key(&index) {
+            return Some(value);
+        }
+        let type_id = body.exprs[value.as_expr()?].type_id;
+        self.type_table
+            .is_reference_shaped(type_id)
             .then_some(value)
     }
 
@@ -664,6 +689,13 @@ impl Interpreter<'_> {
             return None;
         }
         let returns_unit = callee.return_type == TypeTable::UNIT;
+        // A callee returning a reference yields an alias into the caller's
+        // storage, not a value. Binding what it points at would snapshot the
+        // referent, and a later write through the place — or through the
+        // reference — would leave the snapshot standing for a value the program
+        // no longer holds. The writes it performs are still applied; only its
+        // result is refused.
+        let returns_reference = self.type_table.is_reference_shaped(callee.return_type);
 
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
         let mut targets: Vec<(u32, u32, Vec<u32>)> = Vec::new();
@@ -684,6 +716,14 @@ impl Interpreter<'_> {
         if aliased_write_targets(&targets, &places) {
             return None;
         }
+        // A callee that writes through a `&mut` parameter may hand the
+        // parameter's storage back inside its result — `Formatter::new(&mut
+        // buf)` returns a `Formatter` holding that borrow. The engine has no
+        // reference values, so the result would stand as a snapshot of the
+        // referent and every later write through it would land in the copy
+        // while the referent went stale. A scalar embeds nothing, so only an
+        // aggregate result is refused.
+        let may_embed_a_write_target = !targets.is_empty();
 
         self.charge(1)?;
         self.call_stack.push(key);
@@ -693,7 +733,18 @@ impl Interpreter<'_> {
         let run = self.exec_frame(&mut scratch, targets, returns_unit);
         self.swap_frame(caller);
         self.call_stack.pop();
-        run
+        run.map(|run| {
+            let embeds_storage = may_embed_a_write_target
+                && !matches!(&run.result, Lattice::Const(v) if v.is_scalar());
+            if returns_reference || embeds_storage {
+                CallRun {
+                    result: Lattice::Unevaluated,
+                    ..run
+                }
+            } else {
+                run
+            }
+        })
     }
 
     /// Run the scratch body already installed as the current frame, reporting
@@ -764,7 +815,7 @@ impl Interpreter<'_> {
         if let Some(value) = self.frame.scratch_folds.get(&e) {
             return Some(value.clone());
         }
-        if RefKind::from_resolved(self.type_table.get(body.exprs[e].type_id)).is_some() {
+        if self.type_table.is_reference_shaped(body.exprs[e].type_id) {
             return None;
         }
         if self.frame.region_misses.contains(&e) {

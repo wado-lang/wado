@@ -45,7 +45,13 @@ use {
 use { G4Token } from "./token.wado";
 use { tokenize_chars, resolve_unicode_escape_code, string_literal_code_points } from "./lexer.wado";
 use { scan_balanced, is_id_continue_char } from "./scan.wado";
-use { general_category_ranges, general_category_group } from "./unicode_tables.wado";
+use {
+    general_category_ranges,
+    general_category_group,
+    script_ranges,
+    block_ranges,
+    binary_property_ranges,
+} from "./unicode_tables.wado";
 
 pub struct G4Parser {
     tokens: List<Token>,
@@ -1444,22 +1450,87 @@ fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
 
 /// Expand a `\p{...}` property into its ranges. False for a property with no
 /// table, so the caller can reject rather than yield a set matching nothing.
-/// General categories only; scripts, blocks and binary properties are the loud
-/// gap (`TODO.md`).
+///
+/// Bare names are resolved general category → script → binary property →
+/// block, which is what makes a block need the `In` prefix ANTLR4 documents
+/// (`\p{InGreek}`); a name that happens to start with `in` (the
+/// `Inscriptional_*` scripts) is answered by an earlier table. The
+/// `Property=Value` form names its table instead.
 fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool {
-    let group = general_category_group(name);
+    let key = normalize_property_name(name);
+    let mut parts = key.split("=");
+    let head = parts.next().unwrap();
+    if let Some(value) = parts.next() {
+        if parts.next() matches { Some(_) } {
+            return false;
+        }
+        return match head {
+            "generalcategory" | "gc" => expand_general_category(&value, ranges),
+            "script" | "sc" => push_property_ranges(&script_ranges(&value), ranges),
+            "block" | "blk" => push_property_ranges(&block_ranges(&value), ranges),
+            _ => false,
+        };
+    }
+    if expand_general_category(&key, ranges) {
+        return true;
+    }
+    if push_property_ranges(&script_ranges(&key), ranges) {
+        return true;
+    }
+    if push_property_ranges(&binary_property_ranges(&key), ranges) {
+        return true;
+    }
+    if key.starts_with("in") {
+        return push_property_ranges(&block_ranges(&drop_prefix(&key, 2)), ranges);
+    }
+    return false;
+}
+
+/// A general category (`Lu`), or a group letter (`L`) as the union of its
+/// subcategories.
+fn expand_general_category(key: &String, ranges: &mut List<CharRange>) -> bool {
+    let group = general_category_group(key);
     if !group.is_empty() {
         for let sub of &group {
             push_encoded_ranges(&general_category_ranges(sub), ranges);
         }
         return true;
     }
-    let encoded = general_category_ranges(name);
+    return push_property_ranges(&general_category_ranges(key), ranges);
+}
+
+fn push_property_ranges(encoded: &String, ranges: &mut List<CharRange>) -> bool {
     if encoded.is_empty() {
         return false;
     }
-    push_encoded_ranges(&encoded, ranges);
+    push_encoded_ranges(encoded, ranges);
     return true;
+}
+
+/// Fold a property name to its table key. UAX #44 matches property and value
+/// names ignoring case, `_`, `-` and spaces, and `scripts/gen_unicode_tables`
+/// emits every key folded the same way.
+fn normalize_property_name(name: &String) -> String {
+    let mut out = String::with_capacity(name.len());
+    for let c of name.chars() {
+        if c == '_' || c == '-' || c == ' ' {
+            continue;
+        }
+        out.push(c.to_ascii_lowercase());
+    }
+    return out;
+}
+
+fn drop_prefix(name: &String, count: i32) -> String {
+    let mut out = String::with_capacity(name.len());
+    let mut i = 0;
+    for let c of name.chars() {
+        if i >= count {
+            out.push(c);
+        }
+        i += 1;
+    }
+    return out;
 }
 
 /// Decode a `START[-END],…` hex range list from the generated tables.

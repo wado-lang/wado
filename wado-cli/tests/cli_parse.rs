@@ -9,6 +9,7 @@ use wado_cli::args::CliExit;
 use wado_cli::build;
 use wado_cli::check;
 use wado_cli::compile::{self, OptLevel, OutputFormat};
+use wado_cli::lsp;
 
 /// Assert that a `Result<T, CliExit>` is an error with exit code 1
 /// and the message contains the given substring.
@@ -957,4 +958,30 @@ fn parse_log_level_valid() {
     );
     assert_eq!(parse_log_level("off"), Some(wado_compiler::LogLevel::Off));
     assert_eq!(parse_log_level("invalid"), None);
+}
+
+// ---- lsp ----
+
+#[test]
+fn lsp_help() {
+    let parser = Parser::from_args(&["--help"]);
+    assert_help(lsp::parse_args(parser), "Usage: wado lsp");
+}
+
+#[test]
+fn lsp_short_help() {
+    let parser = Parser::from_args(&["-h"]);
+    assert_help(lsp::parse_args(parser), "Usage: wado lsp");
+}
+
+#[test]
+fn lsp_unknown_option() {
+    let parser = Parser::from_args(&["--unknown"]);
+    assert_err(lsp::parse_args(parser), "invalid option");
+}
+
+#[test]
+fn lsp_no_args() {
+    let parser = Parser::from_args(&[] as &[&str]);
+    lsp::parse_args(parser).unwrap();
 }

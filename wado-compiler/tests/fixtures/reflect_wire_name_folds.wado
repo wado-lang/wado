@@ -1,0 +1,54 @@
+// A derived wire name is a compile-time fact: the member walk, the `#[wire]`
+// reads and the casing all fold, so the serializer writes a literal instead of
+// resolving the name on every call.
+use { to_string, from_string } from "core:json";
+
+struct Point {
+    x: i32,
+    y: String,
+}
+
+#[wire(name_policy = "camelCase")]
+struct Renamed {
+    record_id: i32,
+    #[wire(name = "X-Trace")]
+    trace_id: String,
+}
+
+enum Rank {
+    LowPriority,
+    HighPriority,
+}
+
+// One field is one read of the member tuple, which used to make the tuple
+// move-eligible and cost the member handle a defensive copy — the copy the
+// name has to fold through.
+struct Single {
+    only_one: i32,
+}
+
+test "a struct's wire names reach the wire as literals" {
+    assert to_string(&Point { x: 1, y: "a" }) == Result::Ok(`\{"x":1,"y":"a"\}`);
+}
+
+test "a naming policy is applied at compile time" {
+    assert to_string(&Renamed { record_id: 7, trace_id: "t" })
+        == Result::Ok(`\{"recordId":7,"X-Trace":"t"\}`);
+    assert to_string(&Rank::HighPriority) == Result::Ok(`"HighPriority"`);
+}
+
+test "a single-field struct's name folds like any other" {
+    assert to_string(&Single { only_one: 3 }) == Result::Ok(`\{"only_one":3\}`);
+}
+
+// The read side resolves the same names, so it folds or it does not — the
+// `apply_case` pin below covers both directions only if both are here.
+test "a naming policy is applied at compile time when reading" {
+    assert from_string::<Rank>(`"HighPriority"`) == Result::Ok(Rank::HighPriority);
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O2": ["core:serde/apply_case"]
+}

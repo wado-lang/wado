@@ -1,0 +1,19 @@
+//! A predicate after a greedy repeat keeps the plain greedy emit — the
+//! peek/commit emitter has nowhere to place one — and the rule still matches.
+
+use pr from "./grammars/lexer_pred_after_repeat.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_pred_after_repeat" },
+    };
+
+test "a predicate after a greedy repeat still generates and matches" {
+    let ok = pr::parse(&"abbz");
+    assert ok.ok(), "clean parse of a run the predicate admits";
+    assert ok.output == "a", `output: '${ok.output}'`;
+}
+
+test "a single char cannot satisfy the rule and falls to the catch-all" {
+    let one = pr::parse(&"a");
+    assert one.ok(), "clean parse of a lone char";
+    assert one.output == "j", `output: '${one.output}'`;
+}

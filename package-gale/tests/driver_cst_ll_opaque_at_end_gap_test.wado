@@ -1,0 +1,26 @@
+use g from "./grammars/ll_opaque_at_end_gap.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_opaque_at_end_gap" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The two opaque alts: expansion of `a` / `b` separates them on the second token.
+test "tree: X Y enters the first opaque rule" {
+    assert_tree(&"X Y", &"(r (e (a X Y)))");
+}
+
+test "tree: X Z enters the second opaque rule" {
+    assert_tree(&"X Z", &"(r (e (b X Z)))");
+}
+
+// The at-end alt: complete after `X`, so no branch of the expanded
+// dispatch claims it.
+test "tree: a bare X takes the at-end alt" {
+    assert_tree(&"X", &"(r (e X))");
+}

@@ -784,6 +784,18 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
 }
 
+/// The alts alive at an expansion point, ordered as the caller's own fallback
+/// orders them: the surviving non-opaque configs first, then the opaque alts.
+fn expansion_alts(configs: &List<SllConfig>, opaque_alts: &List<i32>) -> List<i32> {
+    let mut alts = sll_unique_alts(configs);
+    for let oa of opaque_alts {
+        if !alts.contains(oa) {
+            alts.push(*oa);
+        }
+    }
+    return alts;
+}
+
 /// Try to resolve opaque configs by expanding their multi-token RuleRefs.
 /// Uses ATN-style expansion: enter referenced rules, advance by one token,
 /// then compute FIRST sets at the decision point's lookahead level.
@@ -868,6 +880,34 @@ fn try_expand_opaque(
     let mut all_tokens: List<i32> = [];
     let mut config_firsts: List<List<i32>> = [];
     collect_config_first_tokens(&all_configs, ctx, &mut all_tokens, &mut config_firsts);
+    // A config with an empty FIRST set claims no token here, so no branch
+    // below can carry it and the coverage check — opaque alts only — does not
+    // notice. At-end is the expected shape: the alt is complete and the next
+    // token belongs to the calling context, which is what `build_sll_node`
+    // reports as `AtEndConflict`. Any other empty FIRST is outside what this
+    // walk models, so the expansion is abandoned to the tournament.
+    let mut has_at_end = false;
+    for let mut i = 0; i < all_configs.len(); i += 1 {
+        if !config_firsts[i].is_empty() {
+            continue;
+        }
+        if !config_is_at_end(&all_configs[i]) {
+            return null;
+        }
+        has_at_end = true;
+    }
+    if has_at_end {
+        if all_tokens.is_empty() {
+            return null;
+        }
+        return Option::<PredictionNode>::Some(
+            PredictionNode::Ambiguous(AmbiguousNode {
+                alts: expansion_alts(&all_configs, &opaque_alts),
+                reason: AmbiguityReason::AtEndConflict,
+                branch_tokens: ctx.token_names_of(&all_tokens),
+            }),
+        );
+    }
     let mut branches: List<PredictionBranch> = [];
     let mut has_improvement = false;
     for let mut t = 0; t < all_tokens.len(); t += 1 {

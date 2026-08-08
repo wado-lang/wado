@@ -117,12 +117,8 @@ global global:core:prelude/primitive.wado::__const_obj_3: ref null "core:prelude
 fn "trait_bound_5.wado/trait_bound_option_eq_none"() with Stdout {
     let a_0: ref "core:prelude/types.wado//Option<i32>";
     let b_1: ref "core:prelude/types.wado//Option<i32>";
-    let c: ref "core:prelude/types.wado//Option<i32>";
-    let d: ref "core:prelude/types.wado//Option<i32>";
     let a_6: i32;
     let b_7: i32;
-    let a_10: i32;
-    let b_11: i32;
     a_0 = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     b_1 = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(a_0) -> bool {
@@ -142,69 +138,19 @@ fn "trait_bound_5.wado/trait_bound_option_eq_none"() with Stdout {
     }) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("None == None"), used: 12 });
     }
-    c = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 1 };
-    d = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 2 };
-    if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(c) -> bool {
-        a_10 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(c).payload_0;
-        if ref.test "core:prelude/types.wado//Option<i32>::Some"(d) -> bool {
-            b_11 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(d).payload_0;
-            a_10 == b_11;
-        } else {
-            0;
-        }
-    } else {
-        if ref.test "core:prelude/types.wado//Option<i32>::Some"(d) -> bool {
-            0;
-        } else {
-            1;
-        }
-    }) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Some(1) != Some(2)"), used: 18 });
-    }
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Some(1) != Some(2)"), used: 18 });
 }
 
 fn "trait_bound_5.wado/trait_bound_option_propagation"() with Stdout {
-    let a_0: ref "core:prelude/types.wado//Option<i32>";
-    let b_1: ref "core:prelude/types.wado//Option<i32>";
     let c: ref "core:prelude/types.wado//Option<i32>";
-    let a_5: i32;
-    let b_6: i32;
-    let a_9: i32;
     let b_10: i32;
-    a_0 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 };
-    b_1 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 };
     c = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
-    if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(a_0) -> bool {
-        a_5 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(a_0).payload_0;
-        if ref.test "core:prelude/types.wado//Option<i32>::Some"(b_1) -> bool {
-            b_6 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(b_1).payload_0;
-            a_5 == b_6;
-        } else {
-            0;
-        }
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a == b"), used: 6 });
+    if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(c) -> bool {
+        b_10 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(c).payload_0;
+        42 == b_10;
     } else {
-        if ref.test "core:prelude/types.wado//Option<i32>::Some"(b_1) -> bool {
-            0;
-        } else {
-            1;
-        }
-    }) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a == b"), used: 6 });
-    }
-    if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(a_0) -> bool {
-        a_9 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(a_0).payload_0;
-        if ref.test "core:prelude/types.wado//Option<i32>::Some"(c) -> bool {
-            b_10 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(c).payload_0;
-            a_9 == b_10;
-        } else {
-            0;
-        }
-    } else {
-        if ref.test "core:prelude/types.wado//Option<i32>::Some"(c) -> bool {
-            0;
-        } else {
-            1;
-        }
+        0;
     }) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a != c"), used: 6 });
     }
@@ -286,12 +232,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b18: block {
-        l19: loop {
-            break_if b18 t <= 0_i64;
+    b8: block {
+        l9: loop {
+            break_if b8 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l19;
+            continue l9;
         };
     };
     return n;
@@ -305,13 +251,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b21: block {
-            l22: loop {
-                break_if b21 temp <= 0_i64;
+        b11: block {
+            l12: loop {
+                break_if b11 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l22;
+                continue l12;
             };
         };
     }
@@ -320,12 +266,12 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b23: block {
-        l24: loop {
-            break_if b23 i >= len;
+    b13: block {
+        l14: loop {
+            break_if b13 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l24;
+            continue l14;
         };
     };
 }
@@ -356,20 +302,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b25: block {
-        l26: loop {
-            break_if b25 offset >= count;
+    b15: block {
+        l16: loop {
+            break_if b15 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b25 (if (result >> 4) == 0 -> i32 {
+            break_if b15 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l26;
+            continue l16;
         };
     };
 }

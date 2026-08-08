@@ -67,6 +67,10 @@ For other important files:
 - `lib/core/builtin.wado` for compiler intrinsics.
 - `lib/core/rt.wado` for runtime support helpers (panic, assert, CM ABI glue)
 
+`lib/wasi/` and `lib/core/kiln/` are generated from WIT — see `wado-from-idl/AGENTS.md` before editing them.
+
+The crate also bundles prebuilt Wasm modules for language features: `wado-bundled-libm/` provides deterministic math via the `libm` crate. Rebuild it with `mise run update-bundled`.
+
 ## E2E Test Specification (Compiler Tests)
 
 E2E tests verify language features and compiler behaviors (codegen, error messages, optimization). They are `.wado` files in `tests/fixtures/` with a `__DATA__` section containing test specification in JSON.

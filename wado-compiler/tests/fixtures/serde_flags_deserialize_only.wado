@@ -1,0 +1,17 @@
+// Deserializing a `flags` type without also serializing it. The reflect member
+// struct is instantiated for flags types the program never names — a stdlib one
+// whose own `TypeId` type DCE then prunes — so registering it must not depend on
+// those arguments still being in the table.
+use { Deserialize } from "core:serde";
+use { from_string } from "core:json";
+
+flags Perms {
+    Read,
+    Write,
+}
+
+impl Deserialize for Perms;
+
+test "a flags type deserializes without a serialize impl" {
+    assert from_string::<Perms>(`["Read"]`) matches { Ok(_) };
+}

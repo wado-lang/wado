@@ -69,8 +69,6 @@ fn "niri_template_region_fold.wado/__cm_binding__Stdout_write_via_stream"(data) 
 }
 
 fn "niri_template_region_fold.wado/__cm_export__run"() {
-    let s: ref "core:prelude/string.wado//String";
-    let t: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:niri_template_region_fold.wado::__modules_initialized);
         cold_path;
@@ -83,10 +81,8 @@ fn "niri_template_region_fold.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:niri_template_region_fold.wado::__modules_initialized = 1;
     };
-    s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 };
-    "core:cli/println"(s);
-    t = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 };
-    "core:cli/println"(t);
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 });
     "wasi/task-return"(0);
 }
 

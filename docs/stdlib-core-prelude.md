@@ -1960,7 +1960,14 @@ Truncate toward zero
 
 #### `pub fn round(x: f32) -> f32`
 
-Round to nearest even
+Round to nearest, breaking ties away from zero
+
+Wasm rounds the other way, so this is a software implementation —
+slower than `round_ties_even`.
+
+#### `pub fn round_ties_even(x: f32) -> f32`
+
+Round to nearest, breaking ties toward the even neighbour
 
 #### `pub fn sqrt(x: f32) -> f32`
 
@@ -2038,6 +2045,10 @@ e raised to the power x
 
 2 raised to the power x
 
+#### `pub fn exp10(x: f32) -> f32`
+
+10 raised to the power x
+
 #### `pub fn expm1(x: f32) -> f32`
 
 e^x - 1 (more accurate for small x)
@@ -2073,6 +2084,13 @@ Euclidean distance: sqrt(x^2 + y^2)
 #### `pub fn fmod(x: f32, y: f32) -> f32`
 
 Floating-point remainder of x/y
+
+#### `pub fn mul_add(x: f32, y: f32, z: f32) -> f32`
+
+`x * y + z`, rounded once instead of twice.
+
+Wasm has no scalar FMA instruction, so this is a software
+implementation — slower than `x * y + z`.
 
 #### `pub fn is_nan(&self) -> bool`
 
@@ -2202,7 +2220,14 @@ Truncate toward zero
 
 #### `pub fn round(x: f64) -> f64`
 
-Round to nearest even
+Round to nearest, breaking ties away from zero
+
+Wasm rounds the other way, so this is a software implementation —
+slower than `round_ties_even`.
+
+#### `pub fn round_ties_even(x: f64) -> f64`
+
+Round to nearest, breaking ties toward the even neighbour
 
 #### `pub fn sqrt(x: f64) -> f64`
 
@@ -2280,6 +2305,10 @@ e raised to the power x
 
 2 raised to the power x
 
+#### `pub fn exp10(x: f64) -> f64`
+
+10 raised to the power x
+
 #### `pub fn expm1(x: f64) -> f64`
 
 e^x - 1 (more accurate for small x)
@@ -2315,6 +2344,13 @@ Euclidean distance: sqrt(x^2 + y^2)
 #### `pub fn fmod(x: f64, y: f64) -> f64`
 
 Floating-point remainder of x/y
+
+#### `pub fn mul_add(x: f64, y: f64, z: f64) -> f64`
+
+`x * y + z`, rounded once instead of twice.
+
+Wasm has no scalar FMA instruction, so this is a software
+implementation — slower than `x * y + z`.
 
 #### `pub fn is_nan(&self) -> bool`
 

@@ -1,0 +1,9 @@
+// Exits non-zero after reporting its own diagnostic. Pins that `wado run`
+// propagates the code instead of reporting a trap.
+
+use { eprintln, exit, Stderr, Exit } from "core:cli";
+
+export fn run() with Stderr, Exit {
+    eprintln("run_exit_code: bad input");
+    exit(3);
+}

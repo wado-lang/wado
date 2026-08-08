@@ -67,27 +67,21 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:string_multiline.wado::__modules_initialized: bool = 0;
 
 fn "string_multiline.wado/run"() with Stdout {
-    let poem: ref "core:prelude/string.wado//String";
-    let mixed: ref "core:prelude/string.wado//String";
-    let with_empty: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:string_multiline.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:string_multiline.wado::__modules_initialized = 1;
     };
-    poem = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Roses are red,
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Roses are red,
 Violets are blue,
 Wado is great,
-And so are you!"), used: 63 };
-    "core:cli/println"(poem);
-    mixed = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Line with tab:	here
-Next line"), used: 29 };
-    "core:cli/println"(mixed);
-    with_empty = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("First
+And so are you!"), used: 63 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Line with tab:	here
+Next line"), used: 29 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("First
 
-Third"), used: 12 };
-    "core:cli/println"(with_empty);
+Third"), used: 12 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
 }
 

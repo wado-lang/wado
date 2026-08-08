@@ -13,7 +13,6 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
-use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError};
 use super::util;
 use super::util::placeholder;
@@ -525,76 +524,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (value_type, value_type)
         };
 
-        // Type check: if type annotation is present, verify value type matches.
-        // Uses direct comparison instead of typecheck() because we need to catch
-        // type-param-to-concrete mismatches (e.g., `let n: i32 = x` where x: T)
-        // at definition time. check_assignable defers all type param cases because
-        // trait impls legitimately use TypeParam-vs-concrete (monomorphized later).
-        if let_stmt.ty.is_some()
-            && value_type != type_id
-            && !matches!(
-                value_type,
-                TypeTable::UNKNOWN | TypeTable::NEVER | TypeTable::ERROR
-            )
-            && type_id != TypeTable::ERROR
-        {
-            // Allow null (Option<unknown>) to be assigned to Option<T>
-            let is_null_to_option = {
-                let type_table = self.tysys.type_table.borrow();
-                type_table
-                    .as_option(value_type)
-                    .is_some_and(|inner| inner == TypeTable::UNKNOWN)
-                    && type_table.as_option(type_id).is_some()
-            };
-            // Function-type compatibility is structural over params and return,
-            // ignoring effects (see `typecheck::check_assignable` rule 7). This
-            // lets `let c: fn() with Stdout = || { ... }` accept a closure with
-            // a synthesized `fn() with []` type without a spurious mismatch,
-            // while still rejecting genuine signature mismatches such as a
-            // closure with the wrong arity or parameter types. `check_assignable`
-            // returns `Deferred` whenever either side contains a type param
-            // (rule 3), so for generic signatures like `fn(T) -> T` we fall back
-            // to a direct `TypeId` comparison of params and return — that
-            // accepts identical generic shapes that differ only in effects
-            // without admitting any type-param-to-concrete mismatches.
-            let is_compatible_fn_type = {
-                let type_table = self.tysys.type_table.borrow();
-                if let (
-                    ResolvedType::Function {
-                        params: actual_params,
-                        return_type: actual_return,
-                        ..
-                    },
-                    ResolvedType::Function {
-                        params: expected_params,
-                        return_type: expected_return,
-                        ..
-                    },
-                ) = (type_table.get(value_type), type_table.get(type_id))
-                {
-                    match check_assignable(value_type, type_id, &type_table) {
-                        TypeCheckResult::Compatible => true,
-                        TypeCheckResult::Deferred => {
-                            actual_params.len() == expected_params.len()
-                                && actual_params
-                                    .iter()
-                                    .zip(expected_params.iter())
-                                    .all(|(a, e)| a == e)
-                                && actual_return == expected_return
-                        }
-                        TypeCheckResult::Incompatible => false,
-                    }
-                } else {
-                    false
-                }
-            };
-            if !is_null_to_option && !is_compatible_fn_type {
-                let _ = self.emit(TypeError::TypeMismatch {
-                    expected: self.tysys.type_table.borrow().type_name(type_id),
-                    found: self.tysys.type_table.borrow().type_name(value_type),
-                    span: ast_value.span(),
-                });
-            }
+        if let_stmt.ty.is_some() {
+            self.typecheck(value_type, type_id, ast_value.span());
         }
 
         if let Some(else_block) = &let_stmt.else_block {

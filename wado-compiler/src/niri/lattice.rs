@@ -11,12 +11,14 @@
 //! Where a frame gave a local a place of its own, that holds only for reads
 //! made *through* it — see [`Interpreter::projected_lattice`].
 
+use std::rc::Rc;
+
 use crate::compiler_item::SeqField;
 use crate::const_eval::{
     MAX_SEQ_ELEMENTS, Value, eval_binary, eval_cast, eval_unary, is_f32_type, is_int_prim, prim_of,
 };
 use crate::module_source::ModuleSource;
-use crate::nir::NirUnaryOp;
+use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind,
 };
@@ -48,7 +50,15 @@ impl Interpreter<'_> {
             ValueKind::Bool(b) => Lattice::Const(Value::Bool(*b)),
             ValueKind::Char(c) => Lattice::Const(Value::Char(*c)),
             ValueKind::Int(value, _) => {
-                let Some(prim) = prim_of(ty, self.type_table).filter(|p| is_int_prim(*p)) else {
+                // An enum value is its discriminant, promoted under the enum's
+                // own type, so the pool holds an `i32` no primitive names.
+                let prim = prim_of(ty, self.type_table)
+                    .filter(|p| is_int_prim(*p))
+                    .or_else(|| {
+                        matches!(self.type_table.get(ty), ResolvedType::Enum { .. })
+                            .then_some(PrimitiveType::I32)
+                    });
+                let Some(prim) = prim else {
                     return Lattice::Unevaluated;
                 };
                 Lattice::Const(Value::Int {
@@ -201,6 +211,31 @@ impl Interpreter<'_> {
         Lattice::Const(Value::aggregate(type_id, values))
     }
 
+    /// The lattice of a variant construction: the case it names, plus its
+    /// payload where it carries one. A payload that is not itself constant
+    /// leaves the whole value unknown, as an aggregate field does.
+    fn variant_lattice(
+        &self,
+        body: &Body,
+        type_id: TypeId,
+        case_name: &str,
+        payload: Option<Operand>,
+    ) -> Lattice {
+        let payload = match payload {
+            None => None,
+            Some(op) => match self.operand_to_lattice(body, op) {
+                Lattice::Const(v) => Some(Rc::new(v)),
+                Lattice::NonConst => return Lattice::NonConst,
+                Lattice::Unevaluated => return Lattice::Unevaluated,
+            },
+        };
+        Lattice::Const(Value::Variant {
+            type_id,
+            case_name: case_name.into(),
+            payload,
+        })
+    }
+
     /// An array literal denotes the whole container, not just its elements:
     /// `wir_build` lowers it to `{ backing: array.new_fixed, len: N }`.
     fn array_literal_lattice(&self, body: &Body, type_id: TypeId, elements: &[Operand]) -> Lattice {
@@ -270,6 +305,19 @@ impl Interpreter<'_> {
                     .collect();
                 Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
             }
+            // A plain enum case is its discriminant, which is the whole value:
+            // an enum carries no payload, so nothing else distinguishes two
+            // values of one case.
+            ExprKind::EnumConstruct { case_index, .. } => Lattice::Const(Value::Int {
+                value: u64::from(*case_index),
+                prim: PrimitiveType::I32,
+            }),
+            ExprKind::VariantConstruct {
+                variant_type,
+                case_name,
+                payload,
+                ..
+            } => self.variant_lattice(body, *variant_type, case_name, *payload),
             ExprKind::Index { expr: inner, index } => self.index_lattice(body, *inner, *index),
             ExprKind::Call { .. } => self.try_ctfe_builtin_fold(body, e),
             ExprKind::Unary {
@@ -340,6 +388,12 @@ impl Interpreter<'_> {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
+                // The right operand does not run at run time either, so what it
+                // would have done — a read past the end, guarded by the very
+                // test that short-circuits — must not leave the test unknown.
+                if let Some(decided) = short_circuit_result(&l, *op) {
+                    return Lattice::Const(Value::Bool(decided));
+                }
                 let r = match self.operand_to_lattice(body, *right) {
                     Lattice::Const(v) => v,
                     other => return other,
@@ -486,6 +540,10 @@ impl Interpreter<'_> {
                 [len] => self.allocation_lattice(body, e, len.expr),
                 _ => Lattice::Unevaluated,
             },
+            CtfeBuiltin::ArrayClonePrefix => match args {
+                [src, len] => self.clone_prefix_lattice(body, e, src.expr, len.expr),
+                _ => Lattice::Unevaluated,
+            },
             CtfeBuiltin::Select => match args {
                 [condition, if_true, if_false] => {
                     self.select_lattice(body, condition.expr, if_true.expr, if_false.expr)
@@ -565,6 +623,30 @@ impl Interpreter<'_> {
             return Lattice::Unevaluated;
         }
         Value::seq(array_type, vec![default; len]).map_or(Lattice::Unevaluated, Lattice::Const)
+    }
+
+    /// The sequence `array_clone_prefix(src, len)` returns: a fresh backing
+    /// holding `src`'s first `len` elements. A length past what `src` holds
+    /// traps at run time, so it is not a constant here.
+    fn clone_prefix_lattice(&self, body: &Body, e: ExprId, src: Operand, len: Operand) -> Lattice {
+        let (Lattice::Const(src), Lattice::Const(len)) = (
+            self.projected_lattice(body, src),
+            self.operand_lattice_folded(body, len),
+        ) else {
+            return Lattice::Unevaluated;
+        };
+        let (Some((len, PrimitiveType::I32)), Value::Seq { elements, .. }) = (len.as_int(), &src)
+        else {
+            return Lattice::Unevaluated;
+        };
+        let Ok(len) = usize::try_from(len as i32) else {
+            return Lattice::Unevaluated;
+        };
+        let Some(prefix) = elements.get(..len) else {
+            return Lattice::Unevaluated;
+        };
+        Value::seq(body.exprs[e].type_id, prefix.to_vec())
+            .map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
     /// An argument's value, folding the arithmetic it may still be spelled as:
@@ -662,5 +744,15 @@ pub(super) fn pattern_is_catch_all(body: &Body, pat: PatId) -> bool {
         PatKind::Wildcard | PatKind::Binding { .. } => true,
         PatKind::Or(alts) => alts.iter().any(|p| pattern_is_catch_all(body, *p)),
         _ => false,
+    }
+}
+
+/// What a short-circuit yields on its left operand alone: `false && _` and
+/// `true || _`. `None` where the right operand still decides.
+fn short_circuit_result(left: &Value, op: NirBinaryOp) -> Option<bool> {
+    match (left.as_bool()?, op) {
+        (false, NirBinaryOp::And) => Some(false),
+        (true, NirBinaryOp::Or) => Some(true),
+        _ => None,
     }
 }

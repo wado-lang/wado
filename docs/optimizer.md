@@ -64,7 +64,7 @@ Allocation and aggregate:
 - `array_literal` — fold an array-builder window into a single fixed-array literal.
 - `value_copy_demote` — demote a deep list value-copy to a shallow spine copy when its elements are provably never mutated through the binding.
 
-There is no value-copy _elision_ pass: defensive copies are inserted precisely at the lower phase by the ownership analysis, so none exist for an elider to recover (see [WEP: Ownership Analysis](./wep-2026-05-21-resource-ownership.md)).
+There is no value-copy _elision_ pass: defensive copies are chosen at the lower phase by the ownership analysis, before NIR exists, so none are reachable from here and an imprecise one is that analysis's to fix — see [WEP: Ownership Analysis](./wep-2026-05-21-resource-ownership.md), which records the standing case (a by-value `for` binding copies each element of a `List` of aggregates).
 
 Variant and reference:
 
@@ -79,7 +79,7 @@ Scalar and dataflow:
 - `drve` — make a function void-returning when its result is dropped at every call site.
 - `store_load_forward` — forward a stored literal to a later unmodified load.
 - `elide_local` — drop a binding that is never read (keeping its value if impure).
-- `const_folding` — partial evaluation: constant arithmetic (an `enum` case counts as one — it interns as the discriminant it lowers to), compile-time execution, immutable-global reads, constant-branch collapse, short-circuit simplification (a neutral operand keeps the other, an absorbing one becomes the result when the deleted operand can neither trap nor be observed), and constant struct / tuple values (field projection, aggregate arguments and results of a compile-time call, and struct / tuple patterns over a constant scrutinee, with the arm's bindings and guard). A constant sequence's length and elements read out of it too, whether it is a local literal or a global. An immutable global's value is read from the assignment that fills its slot as well as from its initializer, since a non-trivial initializer is extracted into module init; a global something writes through, or hands a part of to a local, is not read at all. A compile-time call runs the callee's statements — `let` sequences, decided branches, early returns, loops, and the expression-position blocks inlining leaves — bounded by a work budget rather than by a constant trip count, and abandons the call rather than stepping past a statement it cannot perform. It also writes: a store, an element write, an allocation and a copy all land in the value the frame itself built, and a call writing through a `&mut` parameter runs and writes back into the caller's place. So a container filled at compile time — `push` and the growth it triggers included — is a compile-time value, and one whose elements are bytes leaves the engine as the literal a source string lowers to. A closed block — one that builds its value in locals of its own, writes only to those, and yields the result — runs as a frame of its own, which is what folds a fully-constant string template to the literal it denotes. Only a frame may step past a write, since only a frame performs one; an ordinary walk keeps no value across a call that writes.
+- `const_folding` — partial evaluation: constant arithmetic (an `enum` case counts as one — it interns as the discriminant it lowers to), compile-time execution, immutable-global reads, constant-branch collapse, short-circuit simplification (a neutral operand keeps the other, an absorbing one becomes the result when the deleted operand can neither trap nor be observed), and constant struct / tuple / variant values (field projection, aggregate arguments and results of a compile-time call, and struct / tuple / variant / enum patterns over a constant scrutinee, with the arm's bindings and guard — except a binding that names storage rather than a value). A constant sequence's length and elements read out of it too, whether it is a local literal or a global. An immutable global's value is read from the assignment that fills its slot as well as from its initializer, since a non-trivial initializer is extracted into module init; a global something writes through, or hands a part of to a local, is not read at all. A compile-time call runs the callee's statements — `let` sequences, decided branches, early returns, loops, and the expression-position blocks inlining leaves — bounded by a work budget rather than by a constant trip count, and abandons the call rather than stepping past a statement it cannot perform. It also writes: a store, an element write, an allocation and a copy all land in the value the frame itself built, and a call writing through a `&mut` parameter runs and writes back into the caller's place. So a container filled at compile time — `push` and the growth it triggers included — is a compile-time value, and one whose elements are bytes leaves the engine as the literal a source string lowers to — as does a container literal still computing contents the engine already knows, which is what a value copy of a constant leaves behind. A closed block — one that builds its value in locals of its own, writes only to those, and yields the result — runs as a frame of its own, which is what folds a fully-constant string template to the literal it denotes. Only a frame may step past a write, since only a frame performs one; an ordinary walk keeps no value across a call that writes.
 - `const_branch_prune` — simplify trivial blocks and fold a constant-condition `if` to its taken arm.
 
 Loop and field:
@@ -96,7 +96,7 @@ Whole-program and backend:
 - `match_to_switch` — lower a dense integer/enum `match` to a `br_table` switch.
 - `select_lowering` — lower an `if` with pure arms to a branchless `builtin::select`.
 - `multi_value_return` — emit the multi-value ABI for tuple/struct returns whose call sites destructure.
-- `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)).
+- `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)). A hoist the later folds leave with no reader is taken back, dropping the initializer with it — unless it could trap, which is observed like any other effect.
 
 ## Lowering optimizations
 
@@ -145,8 +145,18 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 - [ ] `param_spec` profitability — specialize only when the constants can decide
       a branch, so a chain that never folds stops duplicating code.
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when
-      the callee only reads them. `param_spec` covers the constant case; a
-      non-constant field still costs a GC load per read.
+      the callee only reads them, and return them by multi-value when it only
+      writes them. Together they retire a scratch aggregate at its allocation
+      site, which `sroa` then finishes. `sroa_param` is the single-field
+      rewrite, `stored_params` decides the escape precondition, and
+      `multi_value_return` / `sroa_variant_return` own the write-back ABI, so
+      what is missing is the N-field case under the same arity cap.
+      `param_spec` covers only the constant case; a non-constant field still
+      costs a GC load per read. `core:json`'s number scanner is the standing
+      case: its `ScannedNumber` is written by one callee and read by another,
+      each through nothing but field access, and costs ~5% of the json-canada
+      deserialize phase. Inlining that pair also buys caller-specific dead-field
+      elimination, which promotion alone would not recover.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Folding a `match` whose scrutinee is a syntactically known

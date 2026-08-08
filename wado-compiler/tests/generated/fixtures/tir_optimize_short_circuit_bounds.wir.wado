@@ -82,7 +82,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:tir_optimize_short_circuit_bounds.wado::__modules_initialized: bool = 0;
-global mut global:tir_optimize_short_circuit_bounds.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "tir_optimize_short_circuit_bounds.wado/check_char"(arr, pos, ch) {
     if (if pos >= arr.used -> i32 {
@@ -104,9 +103,11 @@ fn "tir_optimize_short_circuit_bounds.wado/run"() with Stdout {
     let self_28: bool;
     let self_35: bool;
     let self_42: bool;
+    let self_48: bool;
     let content_51: ref "core:prelude/string.wado//String";
     let content_59: ref "core:prelude/string.wado//String";
     let content_67: ref "core:prelude/string.wado//String";
+    let content_75: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:tir_optimize_short_circuit_bounds.wado::__modules_initialized);
         cold_path;
@@ -141,11 +142,13 @@ fn "tir_optimize_short_circuit_bounds.wado/run"() with Stdout {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, content_67);
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_2;
     }; __local_6);
-    "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __inline_core_prelude_format_wado_Formatter__pad_spec0_3: block {
-        if ref.is_null(global:tir_optimize_short_circuit_bounds.wado::__const_obj_1) {
-            global:tir_optimize_short_circuit_bounds.wado::__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-        }
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_8, global:tir_optimize_short_circuit_bounds.wado::__const_obj_1);
+    "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; self_48 = "tir_optimize_short_circuit_bounds.wado/check_char"(a, 2, 120); __inline_core_prelude_format_wado_Formatter__pad_spec0_3: block {
+        content_75 = (if self_48 -> ref "core:prelude/string.wado//String" {
+            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
+        } else {
+            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
+        });
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_8, content_75);
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_3;
     }; __local_8);
 }

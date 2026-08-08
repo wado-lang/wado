@@ -346,6 +346,42 @@ fn test_help() {
         .stderr(predicate::str::contains("run"));
 }
 
+/// The one-line summary in the command list must describe the whole
+/// subcommand, matching `wado check --help`.
+#[test]
+fn test_help_summarizes_check_as_verifying_a_source_file() {
+    wado()
+        .arg("--help")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "check [options] [file.wado]         Verify a source file and its Kiln generators",
+        ));
+}
+
+/// `--help` must print usage rather than start the language server on stdio.
+#[test]
+fn test_lsp_help_does_not_start_the_server() {
+    wado()
+        .args(["lsp", "--help"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Usage: wado lsp"));
+}
+
+#[test]
+fn test_run_propagates_a_guest_exit_code() {
+    // `wasi:cli/exit` reaches wasmtime as `Err(I32Exit)`, indistinguishable
+    // from a trap unless it is classified.
+    wado()
+        .args(["run", "wado-cli/tests/fixtures/run_exit_code.wado"])
+        .assert()
+        .code(3)
+        .stderr(predicate::str::contains("run_exit_code: bad input"))
+        .stderr(predicate::str::contains("Runtime error").not())
+        .stderr(predicate::str::contains("wasm backtrace").not());
+}
+
 #[test]
 fn test_version() {
     wado()

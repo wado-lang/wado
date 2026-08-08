@@ -1,0 +1,41 @@
+//! `\p{...}` beyond the general categories: script, block and binary
+//! property, through the generated lexer.
+
+use g from "./grammars/unicode_prop_kinds.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_unicode_prop_kinds" },
+    };
+
+/// Token kind names, without the trailing `Eof` every stream ends with.
+fn kinds(input: &String) -> List<String> {
+    let tokens = g::tokenize(input);
+    let mut out: List<String> = [];
+    for let mut i = 0; i < tokens.kinds.len() - 1; i += 1 {
+        out.push(g::token_kind_name(tokens.kinds[i]));
+    }
+    return out;
+}
+
+fn assert_kinds(input: &String, expected: &List<String>) {
+    let actual = kinds(input);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected:?}\nactual:   ${actual:?}`;
+}
+
+// U+03B1 is in both the script and the block, so the tie goes to the rule
+// declared first; U+1FB0 is Script=Greek only.
+test "script and block are different sets" {
+    assert_kinds(&"α", &["GREEK"]);
+    assert_kinds(&"ᾰ", &["GREEK"]);
+    assert_kinds(&"α ᾰ", &["GREEK", "GREEK"]);
+}
+
+// Nothing outside the script reaches GREEK.
+test "a non-Greek letter falls through to the catch-all" {
+    assert_kinds(&"a", &["OTHER"]);
+    assert_kinds(&"а", &["OTHER"]);
+}
+
+test "a binary property matches its own code points" {
+    assert_kinds(&"+", &["PATSYN"]);
+    assert_kinds(&"α + a", &["GREEK", "PATSYN", "OTHER"]);
+}

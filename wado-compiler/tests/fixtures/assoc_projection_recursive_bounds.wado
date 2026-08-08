@@ -1,0 +1,18 @@
+// Two associated types whose bounds name each other through `Self` have no
+// fixpoint, so resolving a bound's right-hand side to build the other's
+// bindings must not recurse into it. Compiling this used to overflow the
+// stack; the bindings a frame cannot answer are simply left abstract.
+
+trait Looper {
+    type A: Iterator<Item = Self::B>;
+    type B: Iterator<Item = Self::A>;
+
+    fn a(&self) -> Self::A;
+}
+
+struct Idle {}
+
+test "mutually recursive associated-type bounds terminate" {
+    let x = Idle {};
+    assert x matches { Idle {} };
+}

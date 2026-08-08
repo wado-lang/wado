@@ -1430,7 +1430,6 @@ impl Lexer {
 
 fn try_A(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let mut accept_0: i32 = -1;
     let alts_saved_1 = pos;
     let mut alts_ok_1 = false;
     alts_1_0: {
@@ -1448,58 +1447,32 @@ fn try_A(chars: &List<char>, start: i32) -> i32 {
         }
     }
     if !alts_ok_1 { return -1; }
-    let peek_save_2 = pos;
-    let mut peek_ok_2 = false;
-    peek_2: {
-        if pos >= chars.len() || chars[pos] != 'c' { break peek_2; }
-        pos += 1;
-        peek_ok_2 = true;
-    }
-    pos = peek_save_2;
-    if peek_ok_2 {
-        accept_0 = peek_save_2;
-    }
     loop {
-        let la_saved_0 = pos;
-        la_rep_0: {
-            let alts_saved_3 = pos;
-            let mut alts_ok_3 = false;
-            alts_3_0: {
-                pos = alts_saved_3;
-                if pos >= chars.len() || chars[pos] != 'a' { break alts_3_0; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_2 = pos;
+            let mut alts_ok_2 = false;
+            alts_2_0: {
+                pos = alts_saved_2;
+                if pos >= chars.len() || chars[pos] != 'a' { break alts_2_0; }
                 pos += 1;
-                alts_ok_3 = true;
+                alts_ok_2 = true;
             }
-            if !alts_ok_3 {
-                alts_3_1: {
-                    pos = alts_saved_3;
-                    if pos >= chars.len() || chars[pos] != 'b' { break alts_3_1; }
+            if !alts_ok_2 {
+                alts_2_1: {
+                    pos = alts_saved_2;
+                    if pos >= chars.len() || chars[pos] != 'b' { break alts_2_1; }
                     pos += 1;
-                    alts_ok_3 = true;
+                    alts_ok_2 = true;
                 }
             }
-            if !alts_ok_3 { break la_rep_0; }
-            let peek_save_4 = pos;
-            let mut peek_ok_4 = false;
-            peek_4: {
-                if pos >= chars.len() || chars[pos] != 'c' { break peek_4; }
-                pos += 1;
-                peek_ok_4 = true;
-            }
-            pos = peek_save_4;
-            if peek_ok_4 {
-                accept_0 = peek_save_4;
-            }
+            if !alts_ok_2 { break rep_0; }
             continue;
         }
-        pos = la_saved_0;
+        pos = rep_saved_0;
         break;
     }
-    if accept_0 < 0 {
-        return -1;
-    }
-    pos = accept_0;
-    if pos >= chars.len() || chars[pos] != 'c' { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
+    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
     return pos;
 }

@@ -371,12 +371,12 @@ alternative's next token.
 
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
-greedy `+`/`*` inner can also match the suffix's first char (`'a'
-~('b')+ 'c'`), the emitter peeks the suffix each iteration and rewinds
-once to the latest legal suffix start. This narrow lookahead-aware path
-fires only when inner and suffix are all single-char-consuming; other
-shapes fall through to the plain greedy loop (sound because the inner
-cannot consume the suffix's first char there).
+greedy `+`/`*` inner can eat a char the suffix needs (`'a' ~('b')+ 'c'`),
+the emitter peeks the suffix each iteration and rewinds once to the latest
+legal suffix start. The peek lowers the suffix through the same path the
+commit will run, so what it proves is what then happens. A suffix carrying a
+semantic predicate keeps the plain greedy loop instead: the peek would
+evaluate the predicate once per iteration and again on commit.
 
 The first-character dispatch that picks which rules to try is a filter, not a
 decision: a rule admitted by its first character can still fail on the rest of
@@ -393,9 +393,10 @@ rule's. With a suffix after it neither first-match nor longest-arm is right —
 `xyz` needs the first — so each arm is scanned from the same start, its suffix
 peeked without consuming, and the arm whose arm-plus-suffix reaches furthest
 wins, ties to the first. Scoring on the suffix rather than the arm is what
-makes `('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. Same window as
-the repeat path: outside it the alternation keeps the first-match emit.
-Fixture: `lexer_alt_suffix_longest.g4`.
+makes `('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. Same peek and
+the same predicate limit as the repeat path. Fixtures:
+`lexer_alt_suffix_longest.g4`, `lexer_alt_suffix_shapes.g4`,
+`lexer_suffix_peek_limits.g4`.
 
 ### Static LL prediction — the runtime FOLLOW gate
 
@@ -601,10 +602,10 @@ the compiled fast path:**
    no simulator. A rule reachable only past a `.` / `~X` (whose follow set
    can't be enumerated) routes conservatively. Every other multi-alt
    ambiguity keeps the tournament, whose longest-match matches ANTLR4
-   across the corpus. Regression fixtures:
-   `tests/grammars/ll_longest_vs_context.g4` and
-   `ll_at_end_nullable_gap.g4` (routed to the simulator),
-   `ll_at_end_follow_disjoint.g4` (stays on the tournament),
+   across the corpus. Regression fixtures: `tests/grammars/ll_longest_vs_context.g4`,
+   `ll_at_end_nullable_gap.g4` and `ll_opaque_at_end_context.g4` (routed to
+   the simulator), `ll_at_end_follow_disjoint.g4` and
+   `ll_opaque_at_end_gap.g4` (stay on the tournament),
    `ll_optional_non_greedy_multi.g4`.
 
 Two more sites _would_ belong here on correctness grounds and are left out on

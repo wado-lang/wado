@@ -39,10 +39,13 @@ pub struct FeatureCollection {
 impl Serialize for FeatureCollection;
 impl Deserialize for FeatureCollection;
 
+/// Sums the coordinate count, consuming the decoded value so the decode is not
+/// optimized away. Walks by reference: binding by value would copy every ring,
+/// charging the decode phase for the harness rather than the codec.
 pub fn count_points(fc: &FeatureCollection) -> i32 {
     let mut total = 0;
-    for let feat of fc.features {
-        for let ring of feat.geometry.coordinates {
+    for let feat of &fc.features {
+        for let ring of &feat.geometry.coordinates {
             total = total + ring.len();
         }
     }

@@ -106,7 +106,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:serde_serialize_trait.wado::__modules_initialized: bool = 0;
-global mut global:serde_serialize_trait.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = ref.null none;
+global global:serde_serialize_trait.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
 global global:core:prelude/primitive.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "serde_serialize_trait.wado/run"() with Stdout {
@@ -136,9 +136,6 @@ fn "serde_serialize_trait.wado/run"() with Stdout {
     drop("serde_serialize_trait.wado/serde_serialize_trait.wado/TextSerializer^Serializer::serialize_i32"(ser, 42));
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; start_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1); builtin::array_set_u8(__local_3.repr, start_10, 105); start_19 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1); builtin::array_set_u8(__local_3.repr, start_19, 51); start_28 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1); builtin::array_set_u8(__local_3.repr, start_28, 50); start_37 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1); builtin::array_set_u8(__local_3.repr, start_37, 58); start_46 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_3, 1); builtin::array_set_u8(__local_3.repr, start_46, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3, ser.buf); __local_3);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    if ref.is_null(global:serde_serialize_trait.wado::__const_obj_1) {
-        global:serde_serialize_trait.wado::__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    }
     drop("serde_serialize_trait.wado/serde_serialize_trait.wado/TextSerializer^Serializer::serialize_string"(ser, global:serde_serialize_trait.wado::__const_obj_1));
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }; start_58 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_58, 83); start_67 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_67, 116); start_76 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_76, 114); start_85 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_85, 105); start_94 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_94, 110); start_103 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_103, 103); start_112 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_112, 58); start_121 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_121, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, ser.buf); __local_4);
 }
@@ -209,12 +206,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b3: block {
-        l4: loop {
-            break_if b3 t <= 0_i64;
+    b2: block {
+        l3: loop {
+            break_if b2 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l4;
+            continue l3;
         };
     };
     return n;
@@ -228,13 +225,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b6: block {
-            l7: loop {
-                break_if b6 temp <= 0_i64;
+        b5: block {
+            l6: loop {
+                break_if b5 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l7;
+                continue l6;
             };
         };
     }
@@ -243,12 +240,12 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b8: block {
-        l9: loop {
-            break_if b8 i >= len;
+    b7: block {
+        l8: loop {
+            break_if b7 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l9;
+            continue l8;
         };
     };
 }
@@ -279,20 +276,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b10: block {
-        l11: loop {
-            break_if b10 offset >= count;
+    b9: block {
+        l10: loop {
+            break_if b9 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b10 (if (result >> 4) == 0 -> i32 {
+            break_if b9 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l11;
+            continue l10;
         };
     };
 }

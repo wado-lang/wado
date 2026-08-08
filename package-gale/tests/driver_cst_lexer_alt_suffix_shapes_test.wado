@@ -1,0 +1,58 @@
+//! An alternation's arm is chosen by how far the whole rule reaches, whatever
+//! the suffix is built from — a repeat, a fragment reference, or an
+//! alternation with a multi-element arm.
+
+use g from "./grammars/lexer_alt_suffix_shapes.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_alt_suffix_shapes" },
+    };
+use { TK_EOF } from "./grammars/lexer_alt_suffix_shapes.g4";
+
+fn dump(input: &String) -> String {
+    return g::to_lexer_string(&g::tokenize(input), TK_EOF);
+}
+
+fn assert_tokens(input: &String, expected: &String) {
+    let actual = dump(input);
+    assert actual == *expected, `\ninput: ${*input}\nactual:\n${actual}\nexpected:\n${*expected}`;
+}
+
+// Repeat suffix: the short arm strands the optional `'c'`, so the long arm
+// reaches further.
+test "repeat suffix: the arm reaching furthest wins" {
+    assert_tokens(&"abc", &"[@0,0:2='abc',<1>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+}
+
+// The short arm is still taken when the long one does not fit.
+test "repeat suffix: short arm kept when the long arm cannot match" {
+    assert_tokens(&"ac", &"[@0,0:1='ac',<1>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n");
+}
+
+// The optional suffix matching empty is a valid whole-rule match.
+test "repeat suffix: the optional suffix may match empty" {
+    assert_tokens(&"a", &"[@0,0:0='a',<1>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n");
+}
+
+// Fragment-reference suffix.
+test "fragment-reference suffix decides the arm" {
+    assert_tokens(&"pqr", &"[@0,0:2='pqr',<2>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+}
+
+// Alternation suffix with a multi-element arm.
+test "alternation suffix with a multi-element arm decides the arm" {
+    assert_tokens(&"mnq", &"[@0,0:2='mnq',<3>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+}
+
+test "alternation suffix: short arm kept when its multi-element arm fits" {
+    assert_tokens(&"mno", &"[@0,0:2='mno',<3>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+}
+
+// The greedy repeat's per-iteration peek scores the same way: the loop stops
+// one `'d'` early so the suffix still has one to match.
+test "greedy repeat yields the last char to a repeat-bearing suffix" {
+    assert_tokens(&"ddd", &"[@0,0:2='ddd',<4>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+}
+
+test "greedy repeat stops where the optional suffix element also matches" {
+    assert_tokens(&"dded", &"[@0,0:3='dded',<4>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
+}

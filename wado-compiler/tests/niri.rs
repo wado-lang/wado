@@ -3632,12 +3632,10 @@ fn array_literal_reduces_to_the_container_it_denotes() {
     );
 }
 
-/// The shape the lower phase emits for a source string: a container struct
-/// over a packed byte array plus its length.
-fn seq_lit(type_id: TypeId, bytes: Vec<u8>) -> Build {
+fn container_lit(type_id: TypeId, backing: Build, used: u64) -> Build {
     Rc::new(move |b| {
-        let backing = packed_array(bytes.clone(), type_id)(b);
-        let used = int_lit(bytes.len() as u64, TypeTable::I32, "len")(b);
+        let backing = backing(b);
+        let used = int_lit(used, TypeTable::I32, "len")(b);
         Operand::Expr(pe(
             b,
             ExprKind::StructLiteral {
@@ -3659,6 +3657,13 @@ fn seq_lit(type_id: TypeId, bytes: Vec<u8>) -> Build {
             type_id,
         ))
     })
+}
+
+/// The shape the lower phase emits for a source string: a container struct
+/// over a packed byte array plus its length.
+fn seq_lit(type_id: TypeId, bytes: Vec<u8>) -> Build {
+    let used = bytes.len() as u64;
+    container_lit(type_id, packed_array(bytes, type_id), used)
 }
 
 /// Register the container items `materialize_seq_via` identifies by, and the
@@ -3719,6 +3724,54 @@ fn a_constant_string_call_result_becomes_a_literal() {
             .find(|f| f.field_index == SeqField::Len.index())
             .map(|f| op_int(&body, f.value)),
         Some(2),
+    );
+}
+
+#[test]
+fn a_container_still_copying_its_contents_becomes_a_literal_once() {
+    // `String { repr: array_clone_prefix(&"hi", 2), used: 2 }` — the shape a
+    // copy of a constant leaves behind. Writing the literal over it drops an
+    // allocation and a copy per evaluation.
+    //
+    // And it must happen exactly once: the rewrite produces a container
+    // literal, which is the same node kind it admits, so a second pass finding
+    // more to do would keep the fixed-point loop reporting changes forever.
+    let mut table = TypeTable::new();
+    register_seq_containers(&mut table);
+    let string_ty = table.make_struct("String".to_string(), ModuleSource::default());
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    let clone_id = next_test_func_id();
+    let builtins = ctfe_builtin_map(clone_id, CtfeBuiltin::ArrayClonePrefix);
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_ctfe_builtins(&builtins);
+
+    let copied = container_lit(
+        string_ty,
+        ctfe_builtin_call(
+            clone_id,
+            vec![
+                shared_ref(packed_array(b"hi".to_vec(), array_ty), array_ty),
+                int_lit(2, TypeTable::I32, "2"),
+            ],
+            array_ty,
+        ),
+        2,
+    );
+    let (changed, mut body, e) = reduce_local_into(&mut interp, &copied);
+    assert!(changed, "the copy folds into the container literal");
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[e].kind else {
+        panic!("the container survives as a literal");
+    };
+    let backing = fields
+        .iter()
+        .find(|f| f.field_index == SeqField::Backing.index())
+        .and_then(|f| f.value.as_expr())
+        .expect("a backing operand");
+    assert!(matches!(&body.exprs[backing].kind, ExprKind::PackedArray(b) if b == b"hi"));
+    assert!(
+        !interp.reduce_local_in_body(&mut body, e),
+        "the literal it wrote is left alone",
     );
 }
 
@@ -7998,6 +8051,79 @@ fn a_ref_global_alias_survives_the_body_growing_under_it() {
             prim: PrimitiveType::I32,
         }),
         "the alias must still resolve to the global it was recorded for",
+    );
+}
+
+#[test]
+fn a_box_shaped_ref_returning_callee_does_not_fold_through_the_lost_alias() {
+    // The scenario `a_ref_returning_callee_does_not_fold_through_the_lost_alias`
+    // pins, as it looks after the boxing pass: that pass redefines the `&Inner`
+    // TypeId itself into `Box<Inner>`, so `RefKind::from_resolved` no longer
+    // recognises the return type as a reference. The alias is just as real, and
+    // `TypeTable::is_reference_shaped` is what keeps both spellings refused.
+    let mut table = TypeTable::new();
+    let inner_ty = table.make_struct("Inner".to_string(), ModuleSource::default());
+    let pair_ty = table.make_struct("Pair".to_string(), ModuleSource::default());
+    let boxed_inner = table.make_struct("Box<Inner>".to_string(), ModuleSource::default());
+    table.register_box_payload(boxed_inner, inner_ty);
+    let ref_pair = table.make_ref(pair_ty);
+
+    let pick = make_pure_fn(
+        "pick",
+        vec![("p", ref_pair)],
+        boxed_inner,
+        return_stmt(unary(
+            NirUnaryOp::Ref,
+            field_access(local_expr(0, ref_pair), 0, "inner", inner_ty),
+            boxed_inner,
+        )),
+    );
+    let inner_lit = struct_lit(inner_ty, vec![(0, "x", int_lit(7, TypeTable::I32, "7"))]);
+    let pair_lit = struct_lit(pair_ty, vec![(0, "inner", inner_lit)]);
+    let scenario = make_pure_fn_stmts(
+        "scenario",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b("p", 0, pair_ty, pair_lit),
+            let_stmt_b(
+                "a",
+                1,
+                boxed_inner,
+                call_expr(
+                    &pick,
+                    vec![unary(NirUnaryOp::Ref, local_expr(0, pair_ty), ref_pair)],
+                ),
+            ),
+            assign_stmt_b(
+                field_access(
+                    field_access(local_expr(0, pair_ty), 0, "inner", inner_ty),
+                    0,
+                    "x",
+                    TypeTable::I32,
+                ),
+                int_lit(9, TypeTable::I32, "9"),
+            ),
+            return_stmt(field_access(
+                local_expr(1, boxed_inner),
+                0,
+                "x",
+                TypeTable::I32,
+            )),
+        ],
+    );
+
+    let funcs = [pick, scenario];
+    let callees = build_callee_map_test(&funcs);
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.enter_function();
+    let call = call_expr(&funcs[1], vec![]);
+    assert_ne!(
+        reduce_lat(&mut interp, &call),
+        Lattice::Const(int(7)),
+        "the frame bound pick's boxed reference as a value snapshot and \
+         folded through the alias",
     );
 }
 

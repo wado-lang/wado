@@ -371,8 +371,13 @@ pub(super) fn clobbered_locals(body: &Body, reached: &Reached) -> LocalSet {
                     disqualify(body, (*target).into(), &mut set);
                 }
             }
+            // Only a mutable borrow. A shared one cannot be written through, so
+            // it cannot make the referent stale — which is the same reading
+            // [`aggregate_safe_locals`] gives the node, where `&x` counts as a
+            // read of `x`. A frame that refused it could not run a body whose
+            // own parameter is borrowed, which every `&self` method's is.
             ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                op: NirUnaryOp::MutRef,
                 expr,
             } => {
                 if !reached.covers(body, *expr) {

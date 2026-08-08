@@ -71,6 +71,14 @@ Value model:
   global, or a compile-time call result. An aggregate leaves the engine only
   where it has a literal shape to be written as; otherwise what reaches the IR
   is the scalars projected out of it.
+- An enum value, which is its discriminant, and a variant value, which is its
+  case plus the payload the case carries. Both construction forms fold and both
+  pattern kinds decide, so an `Option` / `Result` accessor exposed by inlining
+  collapses instead of leaving a residual match, and a policy enum passed to a
+  library helper — serde's `CaseStyle` — is a constant at the call it reaches. An
+  enum constant enters the pool under the enum's own type, which is an `i32` no
+  primitive names, so reading one back out is its own case; a variant has no
+  literal shape and stays inside the engine.
 - A three-state lattice — unevaluated, constant, non-constant — with a join,
   so an unreachable branch contributes nothing to the result and a trapping
   arm does not contaminate a fold.
@@ -138,7 +146,7 @@ Calls:
 - A local the frame cannot track — one a mutable borrow, a mutable argument, a
   method receiver, a store through a projection, or an assignment buried inside
   a larger expression can write — carries no value, so a stale constant cannot
-  outlive the write.
+  outlive the write. A shared borrow is not one of those channels.
 - A string literal's `len()` folds, as a consequence of the generic
   struct-field projection rather than any string-specific rule.
 
@@ -166,6 +174,10 @@ Sequences:
   out of a global, whose container the engine recovers from the assignment that
   fills its slot. Only a scalar element reaches the IR; an aggregate one stays
   inside the engine, as every aggregate does.
+- A prefix clone folds: `array_clone_prefix(&src, len)` — what a value copy of a
+  sequence container lowers to — is the source's first `len` elements. Without
+  it, passing a constant `String` by value hands the callee a value the engine
+  cannot see, which is where a derivation's own field reads end up.
 - An element write lands. `array_set` through a `&mut` reaching a place the
   frame owns — a local it bound to a constant, plus the field path into it —
   updates that local's value, so a later read sees what was written. The write
@@ -173,21 +185,28 @@ Sequences:
   executor runs it. A place rooted anywhere else — a parameter, a global,
   anything the frame did not build — has no current value to update and
   abandons the evaluation rather than being stepped past.
-- A borrow handed to a sequence builtin does not make its root stale: the
-  executor performs the write itself, and a read cannot write at all. Every
-  other borrow still does.
-- A byte-sequence container a compile-time call produced is written back as the
-  literal the lower phase emits for a source string — a struct over a packed
+- A shared borrow never makes its root stale: nothing writes through one, which
+  is the same reading the aggregate-binding scan gives the node, where `&x`
+  counts as a read of `x`. A frame that refused it could not run a body whose
+  own parameter is borrowed — which every `&self` method's is, and which is what
+  a derivation walking member handles does at every step. A mutable borrow still
+  does, except where the executor performs the write itself (a sequence
+  builtin).
+- A byte-sequence container the engine knows the contents of is written back as
+  the literal the lower phase emits for a source string — a struct over a packed
   byte array and its length. The bytes are the container's first `used`, since
   a grown container's capacity outruns what it holds and capacity is not
   observable. A container the frame never filled stays as the source wrote it:
   an empty one is a reservation rather than a result, and a literal cannot
-  carry the capacity it asked for. Only a call or a self-contained region is
-  rewritten
-  this way: the literal
-  denotes the value it replaced, so materializing one again would report a
-  change at every visit and the worklist would never settle — and both rewrites
-  replace the node with a kind neither matches again.
+  carry the capacity it asked for.
+- Written back wherever the write buys something, which is everywhere but two
+  shapes already holding the answer. One is the literal the rewrite itself
+  produces: refusing what was already written is what keeps the worklist
+  settling. The other is a read of a globalized constant, whose value is in a
+  shared slot precisely so it is built once — a literal in its place is that
+  constant copied back to every site. Anything else is written, including the
+  field read and the borrow operand a derived wire name would otherwise cost on
+  every call.
 
 Regions:
 
@@ -232,6 +251,11 @@ Regions:
   __r }` is refused on that ground rather than by accident. An ordinary walk
   performs nothing, so outside a frame such a binding still clobbers its
   referent.
+- A reference is recognized by shape, not by spelling. The boxing pass redefines
+  a `&T` into `Box<T>`, so every refusal above — a reference-typed node, a
+  reference-returning callee, a reference-typed binding, region or free read —
+  asks both, and one that asked only the borrow spelling would snapshot an alias
+  a later write invalidates.
 - A cast between the same reference shape denotes its operand;
   monomorphization leaves one over every buffer the formatting path builds. A
   converting cast still folds only through the primitive-cast evaluator. Place
@@ -243,9 +267,6 @@ Regions:
 
 ### Values the engine cannot represent
 
-- Enum and variant values with their payloads. Today an enum or variant
-  pattern cannot be decided, so an `Option` / `Result` accessor exposed by
-  inlining leaves a residual match the engine walks past.
 - A place-valued field, so an aggregate can carry a `&mut`. Today such an
   aggregate is simply not a constant, since a field holding the referent's
   value would take a write meant for the referent. What the field needs to
@@ -255,8 +276,8 @@ Regions:
 - An aggregate that is not a byte sequence has no way back into the IR. A
   `List<T>` of scalars would want the `ArrayLiteral` shape, and a plain struct
   a `StructLiteral` over its materialized fields; both are exits to add beside
-  the byte-sequence one, and both inherit its `Call`-only restriction until
-  something establishes the value did not come from the node being rewritten.
+  the byte-sequence one, each needing its own answer to "is this already the
+  literal the rewrite writes" so the worklist still settles.
 - Comparing two literal strings. A string pattern reaches the engine as a
   guard, and deciding it means running the comparison — which is a method call
   taking references, so it waits on the two entries below rather than on the

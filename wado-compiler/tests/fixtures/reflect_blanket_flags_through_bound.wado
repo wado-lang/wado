@@ -1,0 +1,22 @@
+// A `flags` value erases to `u32`, but its derivations are keyed by the
+// declaration. Reaching one through a generic bound must not peel the receiver
+// to the erased base — that loses the `Reflect*` blanket the declaration owns
+// and dispatches to `u32`'s impl (or to none at all).
+
+flags Perms {
+    can_read,
+    can_write,
+}
+
+fn debug_of<T: Inspect>(v: &T) -> String {
+    return `${v:?}`;
+}
+
+test "a flags value keeps its derived Inspect through a generic bound" {
+    assert debug_of(&Perms::can_read) == "Perms::can_read";
+    assert debug_of(&(Perms::can_read | Perms::can_write)) == "Perms::can_read | Perms::can_write";
+    assert debug_of(&Perms::none()) == "Perms::none()";
+}
+
+__DATA__
+{"test": {}}

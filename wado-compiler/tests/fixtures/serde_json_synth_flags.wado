@@ -99,7 +99,27 @@ test "flags deserialize unknown flag" {
     let r = from_string::<Perms>(`["Read","Delete"]`);
     if let Err(e) = r {
         assert e.message == "unknown flag: Delete";
+        // A name no member answers to is a case not recognized, which is what
+        // `UnknownVariant` names; `InvalidValue` is for a value out of range.
+        assert e.kind matches { UnknownVariant };
     } else {
         panic("expected error for unknown flag");
     }
+}
+
+// A naming policy reaches flags members like every other member kind. Pinned
+// because nothing else here would notice it changing.
+#[wire(name_policy = "camelCase")]
+flags Renamed {
+    ReadOnly,
+    WriteAll,
+}
+
+impl Serialize for Renamed;
+impl Deserialize for Renamed;
+
+test "flags apply a naming policy" {
+    assert to_string::<Renamed>(&(Renamed::ReadOnly | Renamed::WriteAll))
+        == Result::Ok(`["readOnly","writeAll"]`);
+    assert from_string::<Renamed>(`["readOnly"]`) == Result::Ok(Renamed::ReadOnly);
 }

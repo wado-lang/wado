@@ -1430,75 +1430,48 @@ impl Lexer {
 
 fn try_LETTERS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let mut accept_0: i32 = -1;
-    let peek_save_1 = pos;
-    let mut peek_ok_1 = false;
-    peek_1: {
-        if pos >= chars.len() || chars[pos] != 'c' { break peek_1; }
-        pos += 1;
-        peek_ok_1 = true;
-    }
-    pos = peek_save_1;
-    if peek_ok_1 {
-        accept_0 = peek_save_1;
-    }
     loop {
-        let la_saved_0 = pos;
-        la_rep_0: {
-            let alts_saved_2 = pos;
-            let mut alts_ok_2 = false;
-            alts_2_0: {
-                pos = alts_saved_2;
-                if pos >= chars.len() || chars[pos] != 'a' { break alts_2_0; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_1 = pos;
+            let mut alts_ok_1 = false;
+            alts_1_0: {
+                pos = alts_saved_1;
+                if pos >= chars.len() || chars[pos] != 'a' { break alts_1_0; }
                 pos += 1;
-                alts_ok_2 = true;
+                alts_ok_1 = true;
             }
-            if !alts_ok_2 {
-                alts_2_1: {
-                    pos = alts_saved_2;
-                    if pos >= chars.len() || chars[pos] != 'ä' { break alts_2_1; }
+            if !alts_ok_1 {
+                alts_1_1: {
+                    pos = alts_saved_1;
+                    if pos >= chars.len() || chars[pos] != 'ä' { break alts_1_1; }
                     pos += 1;
-                    alts_ok_2 = true;
+                    alts_ok_1 = true;
                 }
-                if !alts_ok_2 {
-                    alts_2_2: {
-                        pos = alts_saved_2;
-                        if pos >= chars.len() || chars[pos] != '亜' { break alts_2_2; }
+                if !alts_ok_1 {
+                    alts_1_2: {
+                        pos = alts_saved_1;
+                        if pos >= chars.len() || chars[pos] != '亜' { break alts_1_2; }
                         pos += 1;
-                        alts_ok_2 = true;
+                        alts_ok_1 = true;
                     }
-                    if !alts_ok_2 {
-                        alts_2_3: {
-                            pos = alts_saved_2;
-                            if pos >= chars.len() || chars[pos] != 'あ' { break alts_2_3; }
+                    if !alts_ok_1 {
+                        alts_1_3: {
+                            pos = alts_saved_1;
+                            if pos >= chars.len() || chars[pos] != 'あ' { break alts_1_3; }
                             pos += 1;
-                            alts_ok_2 = true;
+                            alts_ok_1 = true;
                         }
                     }
                 }
             }
-            if !alts_ok_2 { break la_rep_0; }
-            let peek_save_3 = pos;
-            let mut peek_ok_3 = false;
-            peek_3: {
-                if pos >= chars.len() || chars[pos] != 'c' { break peek_3; }
-                pos += 1;
-                peek_ok_3 = true;
-            }
-            pos = peek_save_3;
-            if peek_ok_3 {
-                accept_0 = peek_save_3;
-            }
+            if !alts_ok_1 { break rep_0; }
             continue;
         }
-        pos = la_saved_0;
+        pos = rep_saved_0;
         break;
     }
-    if accept_0 < 0 {
-        return -1;
-    }
-    pos = accept_0;
-    if pos >= chars.len() || chars[pos] != 'c' { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
+    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
     return pos;
 }

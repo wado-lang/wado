@@ -409,55 +409,24 @@ where T: ReflectStruct<FieldTypes = [..F]>
 
 ## Implementation Plan
 
-- [x] Parser: recognize `..T` in generic parameter lists and `[..T]` in type position
-- [x] AST/TIR: add `TypePackSpread`, `TupleSpread` nodes; track pack bounds
-- [x] Prelude: add `pub type [...T]` declaration; register tuples' owning module
-- [x] Elaborator: at monomorphization, substitute concrete types for packs
 - [ ] The `[for let v of tuple { expr }]` / `[for let [i, v] of tuple.enumerate() { expr }]`
       construction form: unparsed. Until it lands, a build derivation needing the
       member handle or index per element routes the work through a pack map
-      (`[..F::method(args)]`) over a pre-ordered cursor
-- [x] Variadic `for let v of`: deferred expansion via `VariadicForOf` TIR node, expanded
-      by the monomorphizer after type substitution resolves packs to concrete tuples
-- [x] Variadic trait bounds: `..T: Trait` checked via `type_param_bounds`; `TypePack`
-      handled identically to `TypeParam` in `type_implements_trait`
-- [x] Variadic trait impls: `impl<..T: Trait> Trait for [..T]` resolved, monomorphized,
-      and dispatched through standard generic impl pipeline
-- [x] Value spread: lower `[..a, ..b]` into concatenated tuple literal
-- [x] Standard library: add variadic impls for `Inspect`, `InspectAlt`, `Display`,
-      `DisplayAlt` in `core:prelude/tuple.wado`; remove hardcoded tuple synthesis
-- [x] Type pack expansion: lower `[..T::method()]` to a tuple literal at monomorphization
-- [x] Standard library: add variadic impls for `Serialize` and `Deserialize` for tuples
-      in `core:serde`; monomorphizer handles cross-module variadic impls with method-level
-      type params (e.g., `fn serialize<S: Serializer>`) and associated type projections
-- [x] Coherence Rule 1 (non-variadic wins): a concrete tuple impl is a concrete
-      _instantiation_ impl, so it emits the function name the instantiated
-      receiver already calls, and the template is never instantiated onto it
-- [x] Coherence Rule 2 (variadic overlap forbidden): rejected where the second
-      impl is written, grouped by the trait's declaration and arguments
+      (`[..F::method(args)]`) over a pre-ordered cursor. What waits on it:
+      [the struct build direction over a streaming format](./wep-2026-06-13-reflect-derivation.md#building-a-struct-from-a-streaming-format)
+- [ ] `.enumerate()` over a variadic `for-of`. The concrete-tuple form expands
+      it; the deferred (`VariadicForOf`) one rejects it outright
+- [ ] The `.enumerate()` index as a tuple subscript. It is a compile-time
+      constant by construction, but `slots[i]` is rejected as a non-constant
+      index
 - [ ] Variadic impl targets other than the bare `[..T]` — fixed elements
       (`[i32, ..T]`) or under a reference (`&[..T]`): rejected for now.
       Selection, pack binding, and template naming all ignore the fixed
       elements, and a pack under a reference never reaches the impl's
       type-param scope
-- [x] `ReflectStruct` trait: synthesize per-struct impl (`type_name`, `members`,
-      `wire_name_policy`, and the `FieldTypes` / `Members` associated tuples) in the
-      synthesis pass
-- [x] `ReflectStruct` over a generic struct: one generic impl over `S<T, …>`,
-      substituted per instantiation; value bridges minted post-monomorphize
-- [x] `ReflectVariant` over a generic variant: the case bridges and the tag read
-      are minted per instantiation, since a generic variant is never
-      instantiated into its own declaration
 - [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
 - [ ] Error messages: show call site, element index, and body location
-- [x] Tuple `Eq`: monomorphizer expands `==`/`!=` on concrete tuples to element-wise
-      comparisons; enables `<..T: Eq>` trait bounds on variadic functions
 - [ ] Standard library: add variadic impls for `Default`, `Clone`
-- [x] Remove compiler-magic struct `Inspect`; replace with the `ReflectStruct`-based impl
-- [x] Dispatch a `static` trait method through a blanket impl, so a
-      build-direction derivation
-      (`impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Zero> Zero for T`)
-      resolves at its `T::zero()` entry point
 
 ---
 

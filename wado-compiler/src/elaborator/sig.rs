@@ -394,15 +394,34 @@ impl DeclSig {
         type_table: &RefCell<TypeTable>,
         substitution: &IndexMap<u32, TypeId>,
     ) -> InstantiatedSig {
+        self.instantiate_slots_with(
+            type_table,
+            substitution,
+            &crate::tir::SlotProjections::default(),
+        )
+    }
+
+    /// [`Self::instantiate_slots`] for a use site that also knows what the
+    /// projections rooted at a slot mean. A signature written against
+    /// `Self::X` is abstract over that too, and only the use site can fill it.
+    pub(crate) fn instantiate_slots_with(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        substitution: &IndexMap<u32, TypeId>,
+        projections: &crate::tir::SlotProjections,
+    ) -> InstantiatedSig {
         let mut table = type_table.borrow_mut();
         InstantiatedSig {
             param_types: self
                 .param_types
                 .iter()
-                .map(|&p| table.substitute_type_params(p, substitution))
+                .map(|&p| table.substitute_type_params_with(p, substitution, projections))
                 .collect(),
-            return_type: table
-                .substitute_type_params(self.return_type.unwrap_or(TypeTable::UNIT), substitution),
+            return_type: table.substitute_type_params_with(
+                self.return_type.unwrap_or(TypeTable::UNIT),
+                substitution,
+                projections,
+            ),
         }
     }
 }

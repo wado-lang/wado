@@ -204,7 +204,6 @@ fn "tmpl_hoist_escape_via_if.wado/run"() with Stdout {
     let __v0_9: ref "core:prelude/string.wado//String";
     let __cond_10: bool;
     let picked: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let other: ref "core:prelude/string.wado//String";
     let i_14: i32;
     let __v0_16: ref "core:prelude/string.wado//String";
     let __cond_17: bool;
@@ -351,7 +350,6 @@ fn "tmpl_hoist_escape_via_if.wado/run"() with Stdout {
         unreachable;
     }
     picked = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
-    other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     i_14 = 0;
     __tmpl_buf_318 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     __fmt_buf_319 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __tmpl_buf_318 };
@@ -372,7 +370,7 @@ fn "tmpl_hoist_escape_via_if.wado/run"() with Stdout {
             __fmt_buf_319.indent = 0;
             "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(i_14, __fmt_buf_319);
             "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(picked, v_184 = (if i_14 == 1 -> ref "core:prelude/string.wado//String" {
-                other;
+                struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
             } else {
                 __tmpl_buf_318;
             }); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = v_184.repr; let __array_clone_len_5: i32; __array_clone_len_5 = v_184.used; let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: v_184.used });

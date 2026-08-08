@@ -463,6 +463,10 @@ impl Monomorphizer {
             | ResolvedType::Variant { name, .. }
             | ResolvedType::Flags { name, .. } => Some(name.clone()),
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
+            // `()` names its impls under the same spelling the source writes
+            // (`impl Trait for ()`), so a unit receiver finds them like a
+            // primitive does.
+            ResolvedType::Unit => Some(TypeTable::UNIT_TYPE_NAME.to_string()),
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {

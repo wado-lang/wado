@@ -240,6 +240,11 @@ impl<T, P> VariantCase<T, P> {
     pub fn construct(&self, payload: P) -> T {
         return builtin::variant_case_construct(payload, self.index);
     }
+
+    /// Builds this case with no payload. Traps unless `is_unit()`.
+    pub fn make(&self) -> T {
+        return builtin::variant_case_construct((), self.index);
+    }
 }
 
 impl<T, P> Member for VariantCase<T, P> {
