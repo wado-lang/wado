@@ -75,13 +75,19 @@ pub(crate) fn value_kind_to_const(
 /// keeps the evaluator's relation honest: a value that compares unequal to
 /// itself must never become a hash-cons key.
 #[derive(Clone, Debug)]
-pub struct ConstKey(std::rc::Rc<crate::const_eval::Value>);
+pub struct ConstKey(crate::const_eval::Value);
 
 impl ConstKey {
-    /// Take identity ownership of an evaluated constant.
+    /// Wrap an evaluated constant in its identity relation.
+    ///
+    /// Held inline rather than behind an `Rc`: a hash-cons lookup builds the
+    /// key before it knows whether the value is already interned, so boxing
+    /// would allocate on every intern. An aggregate's payload is already
+    /// `Rc`-shared inside [`crate::const_eval::Value`], so cloning one is a
+    /// refcount bump either way.
     #[must_use]
     pub fn new(value: crate::const_eval::Value) -> Self {
-        Self(std::rc::Rc::new(value))
+        Self(value)
     }
 
     /// The constant itself.
@@ -93,7 +99,7 @@ impl ConstKey {
 
 impl PartialEq for ConstKey {
     fn eq(&self, other: &Self) -> bool {
-        std::rc::Rc::ptr_eq(&self.0, &other.0) || const_identity_eq(&self.0, &other.0)
+        const_identity_eq(&self.0, &other.0)
     }
 }
 
@@ -333,9 +339,19 @@ pub enum ValueKind {
     Null,
     Unit,
     /// A constant the scalar cases above cannot name: a `String`, a `List`, a
-    /// struct, a variant. Boxed because the payload is a tree, while a scalar
-    /// stays unboxed — the pool is on the compile-speed path and scalars are
-    /// the overwhelming majority.
+    /// struct, a variant.
+    ///
+    /// The scalar cases are not folded into this one, and the reason is not
+    /// encoding cost. They key on a `TypeId`; [`crate::const_eval::Value`]'s
+    /// scalars key on a `PrimitiveType`, which cannot name the type of an enum
+    /// discriminant, a `flags`, or a newtype — `prim_of` yields `None` for all
+    /// three. The graph names a value *in the program*, where extraction has to
+    /// re-emit it at its NIR type; the evaluator names a value *under
+    /// arithmetic*, where wrapping and sign extension are defined at a width.
+    /// An enum case is an `i32` under arithmetic and an enum in the program,
+    /// and collapsing the two would lose whichever distinction the other
+    /// consumer needs. One projection between them, not one type: see
+    /// [`value_kind_to_const`].
     ///
     /// Invariant: a constant a scalar case *can* name is never a `Const`, so
     /// one constant has one `ValueId`. [`ValuePool::constant`] is the only
