@@ -9,8 +9,8 @@ use crate::ast::{
     ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
     GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl,
     InterfaceMethod, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr,
-    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
-    StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt,
+    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
     TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr,
     UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
     WorldDecl, WorldExport,
@@ -1060,12 +1060,15 @@ impl<'a> Unparser<'a> {
                 this.last_source_line = method.span.end_line();
             }
 
-            if i.has_rest {
+            if let Some(rest) = i.rest {
                 if !i.methods.is_empty() {
                     this.output.push('\n');
                 }
                 this.write_indent();
-                this.output.push_str("..trap\n");
+                this.output.push_str(match rest {
+                    RestClause::Trap => "..trap\n",
+                    RestClause::Forward => "..forward\n",
+                });
             }
         });
     }

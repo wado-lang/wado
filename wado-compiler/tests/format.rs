@@ -559,6 +559,39 @@ fn run() {
 }
 
 #[test]
+fn test_format_effect_handler_forward_rest() {
+    let source = r"impl Foo for Bar {
+    fn op(&self) -> i32 {
+        return 1;
+    }
+    ..forward
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("..forward"),
+        "rest clause should round-trip as `..forward`: {formatted}"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_effect_handler_rest_only_block() {
+    let source = r"impl Foo for Bar {
+    ..forward
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("..forward"),
+        "a rest-only block should keep its clause: {formatted}"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
 fn test_format_effect_handler_trap_rest() {
     let source = r"impl Foo for Bar {
     fn op(&self) -> i32 {

@@ -2362,7 +2362,7 @@ mod tests {
             constants: vec![],
             methods: vec![],
             is_synthesize_request: false,
-            has_rest: false,
+            rest: None,
             span: dummy_span(),
         }
     }

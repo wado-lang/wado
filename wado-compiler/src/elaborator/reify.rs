@@ -676,6 +676,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     tir_module.add_struct(self.reify_struct(struct_decl));
                 }
                 Item::Impl(impl_block) => {
+                    if let Some(tir_impl) = self.reify_impl_decl(impl_block) {
+                        tir_module.add_impl(tir_impl);
+                    }
                     for tir_func in self.reify_impl(impl_block) {
                         tir_module.add_function(tir_func);
                     }
@@ -1339,6 +1342,40 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// per-module path. This keeps the responsibility split clean
     /// (per-impl-block code in `reify_impl`, per-module aggregation
     /// in `reify_module`).
+    /// Reify the impl block's own declaration — its identity and rest
+    /// clause, with no methods (those go through [`Self::reify_impl`] into
+    /// `TirModule::functions`). A block whose only content is a rest clause
+    /// still produces a record, which is the point: the effect-dispatch
+    /// synthesis has no method to learn about it from.
+    fn reify_impl_decl(&mut self, impl_block: &ast::ImplBlock) -> Option<crate::tir::TirImpl> {
+        use crate::name::LocalMethodName;
+
+        if impl_block.is_synthesize_request {
+            return None;
+        }
+        let facts = self.sem.types.impl_facts.get(&impl_block.id)?;
+
+        // Derive the target's name the way `reify_method` derives it for this
+        // block's methods, so the block and its methods agree on the key the
+        // effect-dispatch handler index is built from.
+        let mut naming = LocalMethodName::of(
+            facts.receiver.clone(),
+            facts.trait_name_mangled.clone(),
+            String::new(),
+        );
+        if let Some(owner) = facts.concrete_owner.as_ref() {
+            naming = naming.with_substituted_struct_name(owner);
+        }
+
+        Some(crate::tir::TirImpl {
+            trait_canonical: facts.trait_canonical.clone(),
+            trait_type_args: facts.trait_type_args.clone(),
+            struct_name: naming.struct_name(),
+            rest: impl_block.rest,
+            span: impl_block.span,
+        })
+    }
+
     fn reify_impl(&mut self, impl_block: &ast::ImplBlock) -> Vec<TirFunction> {
         if impl_block.is_synthesize_request {
             return Vec::new();

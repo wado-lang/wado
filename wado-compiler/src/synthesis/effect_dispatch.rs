@@ -1832,8 +1832,8 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             field_index: 0,
         });
         for op in &plan.operations {
-            // Ops the impl defines get a forwarding closure; the rest (`..trap`)
-            // get a trapping stub.
+            // An op the impl defines calls into the handler; the rest are the
+            // block's rest clause, defaulting to a trap.
             let closure_expr = if impl_info.methods.contains_key(&op.name) {
                 build_handler_op_closure(
                     op,
@@ -1843,6 +1843,8 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                     &h_name,
                     &env.type_table,
                 )
+            } else if impl_info.rest == Some(crate::ast::RestClause::Forward) {
+                build_forward_closure(op, plan, &env.entry_source, &env.type_table)
             } else {
                 build_trap_closure(op, &env.type_table)
             };
@@ -2423,6 +2425,73 @@ fn build_handler_op_closure(
 /// the closure is well-typed at `fn(<op_params>) -> <op_ret>`. The
 /// stub captures nothing, mirroring the WEP's "trap stub funcref" for
 /// wildcard-handled operations.
+/// Build the stub for an operation a `..forward` block leaves out: call the
+/// operation's own dispatch wrapper.
+///
+/// The wrapper installs `outer` before invoking a handler closure, so by the
+/// time this stub runs the global already points past this handler and the
+/// call lands on the next one out — the same path a handler method takes when
+/// it performs its own effect. The wrapper is named directly rather than
+/// emitted as an `E::op(...)` call because call-site rewriting has already run
+/// by the time this stub is built.
+fn build_forward_closure(
+    op: &TirEffectOp,
+    plan: &DispatchPlan,
+    entry_source: &ModuleSource,
+    type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
+) -> TirExpr {
+    let span = synth_span();
+    let closure_params: Vec<(String, TypeId)> = op
+        .params
+        .iter()
+        .map(|p| (p.name.clone(), p.type_id))
+        .collect();
+    let args: Vec<CallArg> = op
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            CallArg::new(
+                TirExpr::new(
+                    TirExprKind::Local {
+                        index: i as u32,
+                        name: p.name.clone(),
+                    },
+                    p.type_id,
+                    span,
+                ),
+                false,
+            )
+        })
+        .collect();
+    let closure_ret = handler_return_type(op, &type_table.borrow());
+    let wrapper_name = plan
+        .wrapper_names
+        .get(&op.name)
+        .expect("wrapper name registered for every op in the plan")
+        .clone();
+    let body = wrapper_call(wrapper_name, args, closure_ret, span, entry_source);
+
+    let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+    let func_type = type_table
+        .borrow_mut()
+        .make_function(param_types, closure_ret, vec![], vec![]);
+    TirExpr::new(
+        TirExprKind::Closure {
+            params: closure_params,
+            body: Box::new(body),
+            captures: Vec::new(),
+            functor_id: None,
+            address_taken_locals: crate::hashmap::IndexSet::default(),
+            // Synthetic forwarding stub; no body-level let-bindings.
+            body_locals: Vec::new(),
+            declared_effects: None,
+        },
+        func_type,
+        span,
+    )
+}
+
 fn build_trap_closure(
     op: &TirEffectOp,
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
@@ -3158,6 +3227,10 @@ struct HandlerImplInfo {
     impl_module: ModuleSource,
     /// Per-operation call target, keyed by operation name.
     methods: IndexMap<String, HandlerMethodTarget>,
+    /// The block's `..trap` / `..forward`, deciding what an operation absent
+    /// from `methods` does. `None` behaves as `..trap`: a block that lists
+    /// every operation never reaches the stub either way.
+    rest: Option<crate::ast::RestClause>,
 }
 
 /// The TIR function a synthesised dispatch call must target for
@@ -3225,6 +3298,7 @@ fn build_handler_impl_index(
             let entry = out.entry(key).or_insert_with(|| HandlerImplInfo {
                 impl_module: module_source.clone(),
                 methods: IndexMap::default(),
+                rest: None,
             });
             entry.methods.insert(
                 method_info.method_name.clone(),
@@ -3233,6 +3307,32 @@ fn build_handler_impl_index(
                     method_info: method_info.clone(),
                 },
             );
+        }
+
+        // The rest clause lives on the block, not on any method, so it comes
+        // from `module.impls`. A block whose only content is a rest clause has
+        // no method to be discovered through, so this is also what registers
+        // it as a handler at all.
+        for tir_impl in &module.impls {
+            let Some((effect_module, base_trait_name)) = &tir_impl.trait_canonical else {
+                continue;
+            };
+            if !effect_index.contains_key(&(effect_module.clone(), base_trait_name.clone())) {
+                continue;
+            }
+            let key: HandlerImplKey = (
+                tir_impl.struct_name.clone(),
+                effect_module.clone(),
+                base_trait_name.clone(),
+                tir_impl.trait_type_args.clone(),
+            );
+            out.entry(key)
+                .or_insert_with(|| HandlerImplInfo {
+                    impl_module: module_source.clone(),
+                    methods: IndexMap::default(),
+                    rest: None,
+                })
+                .rest = tir_impl.rest;
         }
     }
     out

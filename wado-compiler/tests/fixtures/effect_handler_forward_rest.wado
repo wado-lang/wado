@@ -1,0 +1,68 @@
+// A `..forward` rest clause sends every operation the block leaves out to the
+// outer handler, so a layer implements only what it changes. `Prefix` handles
+// `emit` and forwards `enabled`; `Passthrough` implements nothing at all, which
+// is the shape that has no method for the dispatch synthesis to discover it by.
+use { println, Stdout } from "core:cli";
+
+interface Log {
+    fn enabled(level: i32) -> bool;
+    fn emit(message: String);
+}
+
+struct Base {
+    lines: List<String> = [],
+}
+
+impl Log for Base {
+    fn enabled(&self, level: i32) -> bool {
+        resume level >= 1;
+    }
+
+    fn emit(&mut self, message: String) {
+        self.lines.push(message);
+    }
+}
+
+struct Prefix {
+    tag: String,
+}
+
+impl Log for Prefix {
+    fn emit(&self, message: String) {
+        Log::emit(`${self.tag}: ${message}`);
+    }
+
+    ..forward
+}
+
+struct Passthrough {
+}
+
+impl Log for Passthrough {
+    ..forward
+}
+
+export fn run() with Stdout {
+    let mut base = Base {};
+    with Log => &mut base do {
+        let through = Passthrough {};
+        with Log => &through do {
+            let p = Prefix { tag: "app" };
+            with Log => &p do {
+                if Log::enabled(2) {
+                    Log::emit(`hello`);
+                }
+                if Log::enabled(0) {
+                    Log::emit(`dropped`);
+                }
+            };
+        };
+    };
+    println(`${base.lines.len()}`);
+    println(base.lines[0]);
+}
+
+__DATA__
+{
+    "stdout": "1\napp: hello\n"
+}

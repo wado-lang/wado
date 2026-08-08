@@ -8,9 +8,9 @@ The full dispatch protocol — front-end, elaborator/effect-check, synthesis pas
 codegen — is shipping. Detailed development history is in the git log; this
 section records only the current state.
 
-- [x] Front-end: `with E => h do { ... }`, `resume value`, and a rest clause in
-      `impl Effect for Type` (shipped as bare `..` = trap; being migrated to the
-      explicit `..trap` / `..forward` below).
+- [x] Front-end: `with E => h do { ... }`, `resume value`, and an explicit
+      `..trap` / `..forward` rest clause in `impl Effect for Type`. Bare `..`
+      is rejected.
 - [x] Elaborator / effect-check: `TirExprKind::WithHandler` and
       `TirExprKind::Resume` carry the structure through TIR. The elaborator
       validates effect-decl reference, handler-impls-effect relationship,
@@ -115,10 +115,15 @@ section records only the current state.
       `Unit`-tailed body skips the temp entirely. Fixture:
       `effect_handler_value_form.wado`.
 
-- [ ] Replace bare `..` with explicit `..trap` / `..forward`. Drop bare `..`
-      from the parser, add the `forward` / `trap` contextual keywords, emit a
-      forward-to-outer stub for `..forward`, and migrate existing `..` sites
-      (all mocks/tests) to `..trap`.
+- [x] `..forward`. The rest clause lives on the impl block rather than on any
+      method, so it reaches the dispatch synthesis through `TirModule::impls`
+      — a block whose only content is a rest clause has no method to be
+      discovered by, and registers as a handler through that record alone.
+      An operation the block omits gets a stub that calls the operation's own
+      dispatch wrapper: the wrapper installs `outer` before invoking a handler
+      closure, so the call lands on the next handler out, and its no-handler
+      branch is what makes `..forward` on the outermost handler behave like
+      `..trap`. Fixture: `effect_handler_forward_rest.wado`.
 
 - [ ] `core:test::MockCM` and handler-bundling helpers (e.g.
       `MockStdout::drain()`). With generic-resource dispatch in place,

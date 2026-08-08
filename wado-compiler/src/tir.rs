@@ -5384,6 +5384,33 @@ pub enum SynthTrait {
     Deserialize,
 }
 
+/// An `impl` block as declared — its identity, not its methods.
+///
+/// The methods live in [`TirModule::functions`], flattened there by reify and
+/// linked back to their block by [`TirFunction::method_info`]. Keeping the
+/// block a declaration record leaves one source of truth for bodies while
+/// still describing a block whose only content is a rest clause
+/// (`impl Log for Passthrough { ..forward }`), which produces no methods at
+/// all. Consumed by the effect-dispatch synthesis; nothing past it sees an
+/// impl block.
+#[derive(Debug, Clone)]
+pub struct TirImpl {
+    /// Canonical `(declaring_module, base_trait_name)`; `None` for an inherent
+    /// impl. Matches `LocalMethodName::{base_trait_module, base_trait_name}`,
+    /// so a block and its methods agree on which declaration they target.
+    pub trait_canonical: Option<(ModuleSource, String)>,
+    /// Trait / resource type arguments at the impl site (`impl Stream<u8>` →
+    /// `[u8]`). Matches `LocalMethodName::trait_type_args`.
+    pub trait_type_args: Vec<TypeId>,
+    /// The target type's name, derived exactly as `reify_method` derives it
+    /// for this block's methods, so a block and its methods produce the same
+    /// key in the effect-dispatch handler index.
+    pub struct_name: String,
+    /// `..trap` / `..forward`, when the block ends with a rest clause.
+    pub rest: Option<crate::ast::RestClause>,
+    pub span: Span,
+}
+
 /// `impl Trait for Type;` — request the compiler to synthesize the trait implementation.
 #[derive(Debug, Clone)]
 pub struct SynthesisRequest {
@@ -5505,6 +5532,9 @@ pub struct TirModule {
     pub effects: Vec<TirEffect>,
     pub resources: Vec<TirResource>,
     pub traits: Vec<TirTrait>,
+    /// `impl` blocks as declared (identity + rest clause); their methods are
+    /// in `functions`.
+    pub impls: Vec<TirImpl>,
     /// `impl Trait for Type;` — synthesis requests (populated by elaborator, consumed by synthesis)
     pub synthesis_requests: Vec<SynthesisRequest>,
     /// Test declarations with their metadata
@@ -5541,6 +5571,7 @@ impl TirModule {
             effects: Vec::new(),
             resources: Vec::new(),
             traits: Vec::new(),
+            impls: Vec::new(),
             synthesis_requests: Vec::new(),
             tests: Vec::new(),
             globals: Vec::new(),
@@ -5569,6 +5600,7 @@ impl TirModule {
             effects: Vec::new(),
             resources: Vec::new(),
             traits: Vec::new(),
+            impls: Vec::new(),
             synthesis_requests: Vec::new(),
             tests: Vec::new(),
             globals: Vec::new(),
@@ -5621,6 +5653,10 @@ impl TirModule {
 
     pub fn add_trait(&mut self, trait_decl: TirTrait) {
         self.traits.push(trait_decl);
+    }
+
+    pub fn add_impl(&mut self, impl_block: TirImpl) {
+        self.impls.push(impl_block);
     }
 
     pub fn find_function(&self, name: &str) -> Option<Rc<RefCell<TirFunction>>> {

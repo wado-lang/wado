@@ -11,8 +11,8 @@ use crate::ast::{
     IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl,
     InterfaceMethod, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
     MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
-    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind,
-    StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt,
+    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
     StructLiteralField, StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart,
     TemplateStringExpr, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
     UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
@@ -5486,7 +5486,7 @@ impl Parser {
                 constants: Vec::new(),
                 methods: Vec::new(),
                 is_synthesize_request: true,
-                has_rest: false,
+                rest: None,
                 span: start_span.merge(&end_span),
             });
         }
@@ -5496,40 +5496,36 @@ impl Parser {
         let mut associated_types = Vec::new();
         let mut constants = Vec::new();
         let mut methods = Vec::new();
-        let mut has_rest = false;
+        let mut rest = None;
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            // Effect-handler rest clause: `..trap` traps on any unimplemented
-            // operation of this effect and must be the impl block's last item.
-            // `..forward` (delegate to the outer handler) is not yet implemented.
+            // Effect-handler rest clause: `..trap` traps on any operation of
+            // this effect the block leaves out, `..forward` delegates it to the
+            // outer handler. Either must be the impl block's last item.
             if self.check_dot_dot_or_ellipsis() {
                 let dot_span = self.consume_dot_dot()?;
-                match self.peek_kind().as_ident_name() {
-                    Some("trap") => {
-                        self.advance();
-                    }
-                    Some("forward") => {
-                        return Err(self.error_at_span(
-                            dot_span,
-                            "`..forward` is not yet supported; use `..trap`, or implement every operation",
-                        ));
-                    }
+                let kind = match self.peek_kind().as_ident_name() {
+                    Some("trap") => RestClause::Trap,
+                    Some("forward") => RestClause::Forward,
                     _ => {
                         return Err(self.error_at_span(
                             dot_span,
-                            "bare `..` is no longer accepted; write `..trap` to trap on unimplemented operations",
+                            "bare `..` is no longer accepted; write `..trap` to trap on \
+                             unimplemented operations, or `..forward` to delegate them to \
+                             the outer handler",
                         ));
                     }
-                }
+                };
+                self.advance();
                 if self.check(&TokenKind::Semicolon) {
                     self.advance();
                 }
                 if !self.check(&TokenKind::RBrace) {
                     return Err(self.error_at_span(
                         dot_span,
-                        "`..trap` rest clause must be the last item in the impl block",
+                        "a rest clause must be the last item in the impl block",
                     ));
                 }
-                has_rest = true;
+                rest = Some(kind);
                 break;
             }
 
@@ -5611,7 +5607,7 @@ impl Parser {
             constants,
             methods,
             is_synthesize_request: false,
-            has_rest,
+            rest,
             span: start_span.merge(&end_span),
         })
     }
@@ -7821,8 +7817,39 @@ line 2
         let Item::Impl(impl_block) = &module.items[0] else {
             panic!("expected impl block");
         };
-        assert!(impl_block.has_rest);
+        assert_eq!(impl_block.rest, Some(RestClause::Trap));
         assert_eq!(impl_block.methods.len(), 1);
+    }
+
+    #[test]
+    fn parse_impl_block_forward_rest() {
+        let source = r"
+            impl Foo for Bar {
+                fn op(&self) -> i32 { return 1; }
+                ..forward
+            }
+        ";
+        let module = parse(source).unwrap();
+        let Item::Impl(impl_block) = &module.items[0] else {
+            panic!("expected impl block");
+        };
+        assert_eq!(impl_block.rest, Some(RestClause::Forward));
+        assert_eq!(impl_block.methods.len(), 1);
+    }
+
+    #[test]
+    fn parse_impl_block_rest_only() {
+        let source = r"
+            impl Foo for Bar {
+                ..forward
+            }
+        ";
+        let module = parse(source).unwrap();
+        let Item::Impl(impl_block) = &module.items[0] else {
+            panic!("expected impl block");
+        };
+        assert_eq!(impl_block.rest, Some(RestClause::Forward));
+        assert!(impl_block.methods.is_empty());
     }
 
     #[test]
@@ -7852,7 +7879,7 @@ line 2
         let Item::Impl(impl_block) = &module.items[0] else {
             panic!("expected impl block");
         };
-        assert!(!impl_block.has_rest);
+        assert_eq!(impl_block.rest, None);
     }
 
     #[test]

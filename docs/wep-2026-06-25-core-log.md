@@ -445,7 +445,7 @@ sufficient.
 - [x] Anonymous structs with bound-driven `Serialize` derivation.
 - [x] `#[param]` with compile-time constant folding and DCE.
 - [x] Span scoping via the `in_span` closure.
-- [ ] `..forward` effect forwarding.
+- [x] `..forward` effect forwarding.
 - [ ] Constant propagation through a `String` parameter, plus a missed-fold remark.
 - [ ] Sinking pure definitions into the branch that uses them.
 - [ ] `core:log` itself: the types and `Log` effect above, the `#[ambient]` facade
