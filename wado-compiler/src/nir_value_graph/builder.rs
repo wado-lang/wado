@@ -345,24 +345,12 @@ pub(crate) fn build_scoped(
     out
 }
 
-/// Whether `id`'s value is a constant literal — a build-context-free value safe
-/// to freeze into an operand at the early freeze (see
-/// `extract::freeze_pure_arith`'s constant-leaf promotion).
+/// Whether `id`'s value is a build-context-free constant safe to freeze into an
+/// operand at the early freeze (see `extract::freeze_pure_arith`'s constant-leaf
+/// promotion). Not every constant qualifies — see
+/// [`ValueKind::is_operand_constant`].
 pub(crate) fn is_const_value(pool: &ValuePool, id: ValueId) -> bool {
-    is_const_kind(pool.kind(id))
-}
-
-/// Whether a `ValueKind` is a constant literal (carries no build-local context).
-fn is_const_kind(k: &ValueKind) -> bool {
-    matches!(
-        k,
-        ValueKind::Int(..)
-            | ValueKind::Float(..)
-            | ValueKind::Bool(_)
-            | ValueKind::Char(_)
-            | ValueKind::Null
-            | ValueKind::Unit
-    )
+    pool.kind(id).is_operand_constant()
 }
 
 /// Re-intern a constant `ValueKind` into `pool`, returning its id there.
@@ -381,7 +369,9 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
         | ValueKind::Cast { .. }
         | ValueKind::Select { .. }
         | ValueKind::LoopPhi { .. }
-        | ValueKind::FieldAccess { .. } => unreachable!("is_const_kind gates this"),
+        | ValueKind::FieldAccess { .. } => {
+            unreachable!("the caller's match admits only constant kinds")
+        }
     }
 }
 

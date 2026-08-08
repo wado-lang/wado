@@ -392,6 +392,60 @@ pub enum ValueKind {
     },
 }
 
+impl ValueKind {
+    /// Whether this value denotes a compile-time constant.
+    ///
+    /// A query, not an enumeration: which cases spell a constant is the pool's
+    /// business, and a caller that re-lists them goes stale the next time one
+    /// is added. Every "is this constant" test goes through here.
+    #[must_use]
+    pub fn is_constant(&self) -> bool {
+        match self {
+            Self::Int(..)
+            | Self::Float(..)
+            | Self::Bool(_)
+            | Self::Char(_)
+            | Self::Null
+            | Self::Unit
+            | Self::Const(..) => true,
+            Self::Opaque(_)
+            | Self::Binary { .. }
+            | Self::Unary { .. }
+            | Self::Cast { .. }
+            | Self::Select { .. }
+            | Self::LoopPhi { .. }
+            | Self::FieldAccess { .. } => false,
+        }
+    }
+
+    /// Whether this constant may be frozen into an operand slot: it lowers to a
+    /// `const` instruction, so a rule may duplicate it at a use site.
+    ///
+    /// A [`Self::Const`] aggregate may not. Materialising one is an allocation,
+    /// and where to place it is `const_object_globalization`'s decision — so it
+    /// stays a fact the graph reasons with rather than something the extractor
+    /// re-emits. This is the distinction [`Self::is_constant`] does not draw.
+    #[must_use]
+    pub fn is_operand_constant(&self) -> bool {
+        match self {
+            Self::Int(..)
+            | Self::Float(..)
+            | Self::Bool(_)
+            | Self::Char(_)
+            | Self::Null
+            | Self::Unit => true,
+            Self::Const(..)
+            | Self::Opaque(_)
+            | Self::Binary { .. }
+            | Self::Unary { .. }
+            | Self::Cast { .. }
+            | Self::Select { .. }
+            | Self::LoopPhi { .. }
+            | Self::FieldAccess { .. } => false,
+        }
+    }
+}
+
 /// Hash-consed pure-value pool. One instance per function. Also owns the
 /// `OpaqueId` counter, so [`ValuePool::fresh_opaque`] returns a
 /// pool-unique identity each call.
