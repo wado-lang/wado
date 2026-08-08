@@ -259,41 +259,103 @@ unreachability or an explicit `span.close()`; fmt sinks usually ignore it.
 ### Subscribers and layers
 
 A sink or layer is `impl Log`; layers nest, each handling what it cares about and
-forwarding the rest to the outer layer with `..forward` (effect forwarding,
-[Effect Handler](./wep-2026-04-11-effect-handler.md)). The bootstrap's base sink
-sits at the bottom and implements every operation, so a forwarded operation
+delegating the rest outward with `..forward` (effect forwarding,
+[Effect Handler](./wep-2026-04-11-effect-handler.md)). A sink is a layer that
+forwards nothing: it implements every operation, so a forwarded operation
 terminates there instead of trapping. A test sink that must never see an
 operation uses `..trap`.
 
 ```wado
 pub struct TextSink { pub timestamp: bool = true, pub seq: bool = true, pub location: bool = false }
-pub struct JsonSink { pub timestamp: bool = true, pub seq: bool = true }   // JSONL via json::to_string
+pub struct JsonSink { pub timestamp: bool = true, pub seq: bool = true }
 pub struct NopSink {}
-pub struct CaptureSink { events: List<Event> }        // test sink
+pub struct CaptureSink { events: List<Event> = [], spans: List<SpanAttrs> = [] }
 
-pub struct Context<T: Serialize> { fields: T }        // slog `With`: prepend fixed fields
-pub struct Filter { directives: List<Directive> }     // EnvFilter-style, per target
+pub struct Context<T: Serialize> { fields: T }     // slog `With`: prepend fixed fields
+pub struct Filter { directives: List<Directive> }  // EnvFilter-style, per target
 ```
 
-Compose layers by nesting `with` (a filter outside a formatter):
+`Context` and `Filter` implement one operation each and forward the rest, which
+is what `..forward` buys: a layer no longer restates the span operations it does
+not care about.
 
 ```wado
-with Log => &TextSink {} do {
-    with Log => &Filter { directives: parse_env() } do { app(); }
+impl<T: Serialize> Log for Context<T> {
+    fn event(&self, event: Event) { Log::event(event.with_fields_under(&self.fields)); }
+    ..forward
+}
+
+impl Log for Filter {
+    fn enabled(&self, level: Level) -> bool { resume self.admits(level, "") && Log::enabled(level); }
+    fn event(&self, event: Event) { if self.admits(event.meta.level, event.meta.target) { Log::event(event); } }
+    ..forward
 }
 ```
 
-`Context` is generic over its field payload and installs directly as a handler
-through `impl<T: Serialize> Log for Context<T>`.
+Compose layers by nesting `with`, innermost last:
+
+```wado
+with Log => &TextSink {} do {
+    with Log => &Filter { directives: parse_directives(log_directives()) } do { app(); }
+}
+```
+
+Sinks track the current-span stack themselves, from `enter` / `exit`; `Span`
+carries only its id, so a sink that wants per-span data keeps its own map keyed
+by `SpanId` (`tracing`'s `Registry`, hand-rolled where a sink needs it).
+
+### Output formats
+
+`TextSink` writes one line per event, fields appended as `key=value`, omitting
+any part its configuration turns off:
+
+```
+2026-08-08T11:47:08.204Z INFO 42 handle_request: user logged in user_id=7 ip=127.0.0.1
+```
+
+`JsonSink` writes JSONL through `json::to_string`, one object per line, so a
+collector needs no parsing rules:
+
+```json
+{"ts":"2026-08-08T11:47:08.204Z","seq":42,"level":"info","target":"handle_request","message":"user logged in","span":3,"fields":{"user_id":7,"ip":"127.0.0.1"}}
+```
+
+Both write through the ambient `log_stderr`, so a sink needs no `Stderr` in its
+signature and installs in any world — matching the never-fail rule, since a world
+without stderr degrades to a no-op instead of a trap. Timestamps are the one part
+that needs a capability: a sink with `timestamp: true` reads `SystemClock`, and
+`timestamp: false` removes the requirement.
+
+### Runtime filter directives
+
+`Filter` parses an `EnvFilter`-style list, comma-separated, from `WADO_LOG` or
+any string an application supplies:
+
+```
+info,core:json=debug,app::db=trace
+```
+
+A bare level is the default for unmatched targets; `target=level` overrides it
+for targets under that prefix, longest matching prefix winning. A malformed
+directive is skipped, not fatal — a typo in an environment variable must not stop
+a program from starting.
+
+### Timestamp and sequence
+
+The timestamp is owned by the sink (not `Event`) and defaults on. Container and
+collector stamps record ingestion time, not event time, and drift under
+buffering — and not every target has a collector. A monotonic `seq` counter
+(default on) preserves intra-process order without a clock, and stays useful when
+`timestamp: false` hands stamping to the container.
 
 ### Default sink and scoped overrides
 
-`Log` is an ordinary effect. The entry point installs a default sink as the
-outermost handler, so `info(...)` works with no per-call setup, and inner
-`with Log => &sink do` blocks override it for a scope:
+`Log` is an ordinary effect. The outermost handler is a default sink, so
+`info(...)` works with no per-call setup, and inner `with Log => &sink do` blocks
+override it for a scope:
 
 ```wado
-export fn run() with Stdout, Stderr, SystemClock {
+export fn run() {
     with Log => &TextSink {} do { app(); }
 }
 ```
@@ -301,17 +363,15 @@ export fn run() with Stdout, Stderr, SystemClock {
 The facade functions are marked `#[ambient]` (the existing function attribute, as
 on `log_stdout`), so performing `Log` adds no `with Log` to callers — logging is
 callable anywhere without infecting signatures. A `Log` operation reached with no
-handler installed traps, so the entry point owns the default install; the stdlib
-bootstrap wraps `run` / `handle` to make this automatic, and also seeds
-`set_log_level` from `WADO_LOG`.
+handler installed traps, so something must own the default install. The export
+shim the compiler already synthesises around an entry point is where it goes: for
+a program whose module graph reaches `core:log`, the shim installs the default
+sink and seeds `set_log_level` from `WADO_LOG` before calling the entry function.
+Explicitly installing a sink still works and shadows the default for its scope.
 
-### Timestamp
-
-Owned by the sink (not `Event`), configurable (`timestamp`, default on).
-Container and collector stamps record ingestion time, not event time, and drift
-under buffering — and not every target has a collector. With `timestamp: false`
-the sink needs no `SystemClock`. A monotonic `seq` counter (default on) preserves
-intra-process order without a clock.
+TODO: decide the default sink per world — `TextSink` everywhere is the obvious
+choice, but `wado test` wants output attributed to the failing test, which may
+mean `CaptureSink` under the test world.
 
 ### Error handling and reentrancy
 
@@ -319,8 +379,24 @@ Operations return `()`; sinks swallow errors; logging never aborts. Reentrancy (
 sink, or a `Serialize` it calls, logs again) doesn't loop: handler bodies run in
 the outer scope, so a re-entrant log forwards outward and terminates at the
 non-logging default. No panic — it would break the never-fail rule and punish
-legitimate composition; a depth limit drops a pathological self-reinstalling
-handler.
+legitimate composition.
+
+A `core:log`-owned depth counter is the backstop against a pathological
+self-reinstalling handler: the facade increments it around dispatch and drops the
+event past a small fixed depth. Dropping is deliberate — the alternative, an
+unbounded chain, is what takes the program down.
+
+### Module surface
+
+`core:log` lives in `wado-compiler/lib/core/log.wado`, its tests alongside in
+`log_test.wado`, exercised through `CaptureSink` so assertions read the events
+rather than captured output.
+
+Exported: `Level`, `SpanId`, `Metadata`, `Event`, `SpanAttrs`, `Span`, `NoFields`;
+the facade `trace` / `debug` / `info` / `warn` / `error` / `event` / `enabled`;
+`span` / `current` / `in_span`; `set_log_level` / `log_level` / `level_from_str`;
+the `Log` effect; sinks `TextSink` / `JsonSink` / `NopSink` / `CaptureSink`; layers
+`Context` / `Filter` with `Directive` and `parse_directives`.
 
 ### Cost when disabled
 
@@ -448,11 +524,7 @@ sufficient.
 - [x] `..forward` effect forwarding.
 - [ ] Constant propagation through a `String` parameter, plus a missed-fold remark.
 - [ ] Sinking pure definitions into the branch that uses them.
-- [ ] `core:log` itself: the types and `Log` effect above, the `#[ambient]` facade
-      (`trace` / `debug` / `info` / `warn` / `error` / `event` / `enabled`),
-      `span` / `current` / `in_span`, sinks (`TextSink`, `JsonSink`, `NopSink`,
-      `CaptureSink`), layers (`Context`, `Filter`), the level globals, and a
-      bootstrap that installs the default sink and seeds `set_log_level`.
+- [ ] `core:log` itself — see [Module surface](#module-surface).
 - [ ] Optional: native `with <span> do { … }` sugar.
 - [ ] Optional: erased serde for field passing (performance-gated).
 - [ ] Automatic cross-task current-span propagation (async-gated).
