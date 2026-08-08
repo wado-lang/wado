@@ -299,6 +299,77 @@ struct LocalIndexRewriter {
     new_idx: u32,
 }
 
+/// Retypes every use of one unrolled binding to its concrete element type, and
+/// re-points a method call whose receiver is that binding at the impl the
+/// concrete type selects. Closures keep their own local namespace, so their
+/// bodies are left alone.
+struct BindingTypePinner<'a> {
+    binding_local: u32,
+    elem_type: TypeId,
+    functions: &'a super::state::FuncInstState,
+    type_table: &'a mut TypeTable,
+}
+
+impl TirMutVisitor for BindingTypePinner<'_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } if *index == self.binding_local => {
+                expr.type_id = self.elem_type;
+            }
+            TirExprKind::Closure { .. } => return,
+            _ => {}
+        }
+        self.walk_expr(expr);
+
+        // A `&`/`&mut` wrapper's type is derived from what it wraps, so pinning
+        // the binding without it leaves `&T` for the enclosing substitution to
+        // re-map — which is how a nested unroll retargeted a method call at its
+        // own element's impl.
+        if let TirExprKind::Unary { op, expr: inner } = &expr.kind
+            && matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+            && Monomorphizer::expr_uses_local(inner, self.binding_local)
+        {
+            expr.type_id = match op {
+                TirUnaryOp::MutRef => self.type_table.make_mut_ref(self.elem_type),
+                _ => self.type_table.make_ref(self.elem_type),
+            };
+        }
+
+        let TirExprKind::Call {
+            func,
+            args,
+            has_receiver: true,
+            ..
+        } = &mut expr.kind
+        else {
+            return;
+        };
+        let Some((receiver, _)) = args.split_first() else {
+            return;
+        };
+        if !Monomorphizer::expr_uses_local(&receiver.expr, self.binding_local) {
+            return;
+        }
+        let Some(info) = &mut func.method_info else {
+            return;
+        };
+        *info = info.with_substituted_struct_name(&self.type_table.fq_type_name(self.elem_type));
+        func.name = info.to_mangled_name();
+        // The impl that defines the method owns the call, not the receiver
+        // type's own module: `impl Display for String` lives in `format.wado`,
+        // so keying on `String` alone would mint an extern stub for a name the
+        // package defines.
+        let receiver_module = module_source_for_trait_impl(self.type_table, self.elem_type);
+        if let Some(ms) = self
+            .functions
+            .impl_module(info, receiver_module.as_ref())
+            .or(receiver_module)
+        {
+            func.module_source = ms;
+        }
+    }
+}
+
 /// Folds `t[i]` — a pack-typed tuple subscripted by a variadic
 /// `.enumerate()` index — into the unrolled element's field access.
 /// The index is a compile-time constant by construction, so the read and the
@@ -3715,6 +3786,7 @@ impl Monomorphizer {
 
                     // Replace the destructured stmts with fresh ones that have correct types.
                     let mut fresh_destruct_stmts = Vec::with_capacity(destruct_count);
+                    let mut pinned: Vec<(u32, TypeId)> = Vec::new();
                     for (j, orig_stmt) in elem_body.stmts[..destruct_count].iter().enumerate() {
                         if let TirStmtKind::Let {
                             name,
@@ -3759,6 +3831,7 @@ impl Monomorphizer {
                                 field_type,
                                 span,
                             );
+                            pinned.push((*local_index, field_type));
                             fresh_destruct_stmts.push(TirStmt::new(
                                 TirStmtKind::Let {
                                     name: name.clone(),
@@ -3778,6 +3851,14 @@ impl Monomorphizer {
                     let user_stmts: Vec<TirStmt> =
                         elem_body.stmts.drain(destruct_count..).collect();
                     let mut user_body = TirBlock::new(user_stmts, span);
+
+                    // Decide this element's bindings before the body is
+                    // substituted: a nested unroll over the same pack
+                    // substitutes it again with *its* element, and a use of
+                    // this binding would follow it.
+                    for (local, ty) in &pinned {
+                        self.pin_binding_types(&mut user_body, *local, *ty, type_table);
+                    }
 
                     // Substitute user body with field type (not pair type)
                     let mut elem_substitution = substitution.clone();
@@ -3804,6 +3885,12 @@ impl Monomorphizer {
                         .and_then(|es| es.get(i).copied())
                         .unwrap_or(elem_type);
                     elem_substitution.insert(pack_idx, override_ty);
+                    self.pin_binding_types(
+                        &mut elem_body,
+                        binding_local_idx,
+                        bind_type,
+                        type_table,
+                    );
                     let displaced = pack_tuple.map(|t| self.bind_pack_splice(pack_idx, t));
                     self.substitute_types_in_block(
                         &mut elem_body,
@@ -3835,7 +3922,7 @@ impl Monomorphizer {
                     local_count,
                     locals,
                 );
-                self.rewrite_variadic_binding_types(
+                self.pin_binding_types(
                     &mut elem_body,
                     binding_local_idx,
                     elem_type,
@@ -4134,6 +4221,7 @@ impl Monomorphizer {
             // `.enumerate()` index — which a wildcard (`[_, v]`) leaves absent.
             let mut index_local: Option<u32> = None;
             let mut sub_locals: Vec<(u32, u32)> = Vec::new();
+            let mut pinned: Vec<(u32, TypeId)> = Vec::new();
             for (j, template) in template_destructure.iter().enumerate() {
                 let TirStmtKind::Let {
                     name,
@@ -4163,6 +4251,7 @@ impl Monomorphizer {
                     is_mut: false,
                 });
                 sub_locals.push((*local_index, sub_local));
+                pinned.push((*local_index, field_type));
                 if field_index == 0 {
                     index_local = Some(sub_local);
                 }
@@ -4214,6 +4303,17 @@ impl Monomorphizer {
                         .and_then(|es| es.get(i).copied())
                         .unwrap_or(elem_type),
                 );
+                // Decide this element's bindings before substituting, so a
+                // nested unroll over the same pack cannot re-map a use of them.
+                self.pin_binding_types(
+                    &mut elem_body,
+                    binding_local_idx,
+                    bind_type,
+                    type_table,
+                );
+                for (local, ty) in &pinned {
+                    self.pin_binding_types(&mut elem_body, *local, *ty, type_table);
+                }
                 let displaced = pack_tuple.map(|t| self.bind_pack_splice(pack_idx, t));
                 self.substitute_types_in_block(
                     &mut elem_body,
@@ -4329,193 +4429,27 @@ impl Monomorphizer {
         .visit_block(block);
     }
 
-    /// Rewrite types in the body of a variadic for-of iteration.
-    fn rewrite_variadic_binding_types(
+    /// Pin the uses of one unrolled binding to its concrete element type.
+    ///
+    /// A nested unroll over the same pack substitutes this body again with
+    /// *its* element, and the substitution is type-directed — it cannot tell an
+    /// enclosing binding's use from its own. Deciding the enclosing one first
+    /// takes it out of reach.
+    fn pin_binding_types(
         &self,
         block: &mut TirBlock,
         binding_local: u32,
         elem_type: TypeId,
         type_table: &mut TypeTable,
     ) {
-        for stmt in &mut block.stmts {
-            self.rewrite_variadic_types_in_stmt(stmt, binding_local, elem_type, type_table);
+        BindingTypePinner {
+            binding_local,
+            elem_type,
+            functions: &self.functions,
+            type_table,
         }
+        .visit_block(block);
     }
-
-    fn rewrite_variadic_types_in_stmt(
-        &self,
-        stmt: &mut TirStmt,
-        binding_local: u32,
-        elem_type: TypeId,
-        type_table: &mut TypeTable,
-    ) {
-        match &mut stmt.kind {
-            TirStmtKind::Let { value, .. } => {
-                self.rewrite_variadic_types_in_expr(value, binding_local, elem_type, type_table);
-            }
-            TirStmtKind::Expr(expr) => {
-                self.rewrite_variadic_types_in_expr(expr, binding_local, elem_type, type_table);
-            }
-            TirStmtKind::Return { value } => {
-                if let Some(expr) = value {
-                    self.rewrite_variadic_types_in_expr(expr, binding_local, elem_type, type_table);
-                }
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.rewrite_variadic_types_in_expr(
-                    condition,
-                    binding_local,
-                    elem_type,
-                    type_table,
-                );
-                self.rewrite_variadic_binding_types(
-                    then_block,
-                    binding_local,
-                    elem_type,
-                    type_table,
-                );
-                if let Some(eb) = else_block {
-                    self.rewrite_variadic_binding_types(eb, binding_local, elem_type, type_table);
-                }
-            }
-            TirStmtKind::Loop { body } => {
-                self.rewrite_variadic_binding_types(body, binding_local, elem_type, type_table);
-            }
-            TirStmtKind::LabeledBlock { block, .. } => {
-                self.rewrite_variadic_binding_types(block, binding_local, elem_type, type_table);
-            }
-            TirStmtKind::LetDestructure { value, .. } => {
-                self.rewrite_variadic_types_in_expr(value, binding_local, elem_type, type_table);
-            }
-            TirStmtKind::Break { value, .. } => {
-                if let Some(v) = value {
-                    self.rewrite_variadic_types_in_expr(v, binding_local, elem_type, type_table);
-                }
-            }
-            TirStmtKind::Continue
-            | TirStmtKind::TaskReturn { .. }
-            | TirStmtKind::VariadicForOf { .. } => {}
-        }
-    }
-
-    fn rewrite_variadic_types_in_expr(
-        &self,
-        expr: &mut TirExpr,
-        binding_local: u32,
-        elem_type: TypeId,
-        type_table: &mut TypeTable,
-    ) {
-        match &mut expr.kind {
-            TirExprKind::Local { index, .. } => {
-                if *index == binding_local {
-                    expr.type_id = elem_type;
-                }
-            }
-            TirExprKind::Call {
-                func,
-                args,
-                has_receiver: true,
-                ..
-            } => {
-                let Some((receiver, args)) = args.split_first_mut() else {
-                    return;
-                };
-                let receiver = &mut receiver.expr;
-                self.rewrite_variadic_types_in_expr(receiver, binding_local, elem_type, type_table);
-                for arg in args.iter_mut() {
-                    self.rewrite_variadic_types_in_expr(
-                        &mut arg.expr,
-                        binding_local,
-                        elem_type,
-                        type_table,
-                    );
-                }
-                // If the receiver uses the binding local, update the method's struct name
-                if Self::expr_uses_local(receiver, binding_local)
-                    && let Some(info) = &mut func.method_info
-                {
-                    *info = info.with_substituted_struct_name(&type_table.fq_type_name(elem_type));
-                    func.name = info.to_mangled_name();
-                    // The impl that defines the method owns the call, not the
-                    // receiver type's own module: `impl Display for String`
-                    // lives in `format.wado`, so keying on `String` alone would
-                    // mint an extern stub for a name the package defines.
-                    let receiver_module = module_source_for_trait_impl(type_table, elem_type);
-                    if let Some(ms) = self
-                        .functions
-                        .impl_module(info, receiver_module.as_ref())
-                        .or(receiver_module)
-                    {
-                        func.module_source = ms;
-                    }
-                }
-            }
-            TirExprKind::Call { args, .. } => {
-                for arg in args.iter_mut() {
-                    self.rewrite_variadic_types_in_expr(
-                        &mut arg.expr,
-                        binding_local,
-                        elem_type,
-                        type_table,
-                    );
-                }
-            }
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Index { expr: inner, .. } => {
-                self.rewrite_variadic_types_in_expr(inner, binding_local, elem_type, type_table);
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                self.rewrite_variadic_binding_types(block, binding_local, elem_type, type_table);
-            }
-            TirExprKind::VariadicTupleComprehension { iterable, body, .. } => {
-                self.rewrite_variadic_types_in_expr(iterable, binding_local, elem_type, type_table);
-                self.rewrite_variadic_types_in_expr(body, binding_local, elem_type, type_table);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-                ..
-            } => {
-                self.rewrite_variadic_types_in_expr(
-                    condition,
-                    binding_local,
-                    elem_type,
-                    type_table,
-                );
-                self.rewrite_variadic_binding_types(
-                    then_branch,
-                    binding_local,
-                    elem_type,
-                    type_table,
-                );
-                if let Some(eb) = else_branch {
-                    self.rewrite_variadic_binding_types(eb, binding_local, elem_type, type_table);
-                }
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.rewrite_variadic_types_in_expr(left, binding_local, elem_type, type_table);
-                self.rewrite_variadic_types_in_expr(right, binding_local, elem_type, type_table);
-            }
-            TirExprKind::Assign { target, value } => {
-                self.rewrite_variadic_types_in_expr(target, binding_local, elem_type, type_table);
-                self.rewrite_variadic_types_in_expr(value, binding_local, elem_type, type_table);
-            }
-            TirExprKind::Block(block) => {
-                self.rewrite_variadic_binding_types(block, binding_local, elem_type, type_table);
-            }
-            _ => {
-                // Literals, FuncRef, GlobalVarGet, etc. — no rewriting needed
-            }
-        }
-    }
-
 
     fn expr_uses_local(expr: &TirExpr, local_index: u32) -> bool {
         match &expr.kind {
