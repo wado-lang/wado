@@ -392,6 +392,11 @@ struct CallSite {
     expected: TypeId,
     /// The local, when the consumer is a `let`.
     bound_local: Option<u32>,
+    /// Whether the `let` rewrite can take this site. It destructures a binding
+    /// whose initializer *is* the call, so a call reached through a branch arm
+    /// is not one — `inline` plants those already rewritten, and they are here
+    /// only so the repair leaves them alone.
+    bindable: bool,
 }
 
 /// Every position in `body` where a consumer reads a call's result at a type it
@@ -451,7 +456,22 @@ fn collect_call_sites(
                 callee,
                 expected,
                 bound_local,
+                bindable: true,
             });
+        } else if bound_local.is_some() {
+            // Already-rewritten calls under a branch, courtesy of `inline`
+            // expanding a callee whose `return match { … }` this pass rewrote.
+            // The binding, the branch node and the calls all arrive tuple-typed
+            // together, so the repair must not treat them as stragglers.
+            let mut reached = Vec::new();
+            collect_return_tail_calls(body, value, expected, &mut reached);
+            for site in reached {
+                out.push(CallSite {
+                    bound_local,
+                    bindable: false,
+                    ..site
+                });
+            }
         }
     };
     match node {
@@ -515,6 +535,7 @@ fn collect_return_tail_calls(
             callee: *func_id,
             expected: own_return,
             bound_local: None,
+            bindable: true,
         }),
         ExprKind::Block(b) => tail_of(*b, out),
         ExprKind::If {
@@ -1509,7 +1530,7 @@ fn bound_temps(
     call_sites(body, own_return)
         .into_iter()
         .filter_map(|site| {
-            let local = site.bound_local?;
+            let local = site.bound_local.filter(|_| site.bindable)?;
             // Required whatever `is_mut` says — see [`settled_locals`].
             (settled.contains(&local) && candidates.contains_key(&site.callee))
                 .then_some((local, site.callee))
