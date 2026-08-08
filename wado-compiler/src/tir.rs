@@ -5371,17 +5371,6 @@ pub struct TirTraitMethod {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
-pub struct TirImpl {
-    /// Generic type parameters for the impl block (e.g., `impl<T> Box<T>`)
-    pub type_params: Vec<TirTypeParam>,
-    /// The trait being implemented, if any (e.g., "Display" for `impl Display for Type`)
-    pub trait_name: Option<String>,
-    pub target_type: TypeId,
-    pub methods: Vec<TirFunction>,
-    pub span: Span,
-}
-
 /// Which compiler-synthesizable trait an `impl Trait for Type;` request names.
 ///
 /// The set is closed: the elaborator classifies the requested trait at the
@@ -5516,7 +5505,6 @@ pub struct TirModule {
     pub effects: Vec<TirEffect>,
     pub resources: Vec<TirResource>,
     pub traits: Vec<TirTrait>,
-    pub impls: Vec<TirImpl>,
     /// `impl Trait for Type;` — synthesis requests (populated by elaborator, consumed by synthesis)
     pub synthesis_requests: Vec<SynthesisRequest>,
     /// Test declarations with their metadata
@@ -5553,7 +5541,6 @@ impl TirModule {
             effects: Vec::new(),
             resources: Vec::new(),
             traits: Vec::new(),
-            impls: Vec::new(),
             synthesis_requests: Vec::new(),
             tests: Vec::new(),
             globals: Vec::new(),
@@ -5582,7 +5569,6 @@ impl TirModule {
             effects: Vec::new(),
             resources: Vec::new(),
             traits: Vec::new(),
-            impls: Vec::new(),
             synthesis_requests: Vec::new(),
             tests: Vec::new(),
             globals: Vec::new(),
@@ -5635,10 +5621,6 @@ impl TirModule {
 
     pub fn add_trait(&mut self, trait_decl: TirTrait) {
         self.traits.push(trait_decl);
-    }
-
-    pub fn add_impl(&mut self, impl_block: TirImpl) {
-        self.impls.push(impl_block);
     }
 
     pub fn find_function(&self, name: &str) -> Option<Rc<RefCell<TirFunction>>> {

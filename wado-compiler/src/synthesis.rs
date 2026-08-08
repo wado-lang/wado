@@ -112,9 +112,9 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 
 /// Collect every `(type_name, trait_name) -> ModuleSource` triple that the
 /// synthesis phase added to TIR, regardless of which sub-pass produced it
-/// (auto-derives, `from_synth`, `serde_synth`). Walks both `module.functions`
-/// (free functions and synthesized wrappers) and `module.impls` (user-written
-/// impl blocks lowered into TIR).
+/// (auto-derives, `from_synth`, `serde_synth`). Walks `module.functions`,
+/// which holds every function in the module — reify flattens impl-block
+/// methods into it alongside free functions and synthesized wrappers.
 ///
 /// User-written impls already live in [`TraitEnv::trait_impl_modules`] from
 /// the AST layer, so they are excluded here to keep the synthesis layer a
@@ -183,25 +183,6 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
                     is_concrete,
                 );
                 record_concrete_instantiation(&mut record, info, trait_name, module_source);
-            }
-        }
-        for impl_block in &tir_module.impls {
-            let Some(ref trait_name) = impl_block.trait_name else {
-                continue;
-            };
-            let is_concrete = impl_block.type_params.is_empty();
-            for method in &impl_block.methods {
-                if let Some(ref info) = method.method_info
-                    && info.trait_name.is_some()
-                {
-                    record(
-                        info.base_struct_name(),
-                        trait_name.clone(),
-                        module_source,
-                        is_concrete,
-                    );
-                    record_concrete_instantiation(&mut record, info, trait_name, module_source);
-                }
             }
         }
     }

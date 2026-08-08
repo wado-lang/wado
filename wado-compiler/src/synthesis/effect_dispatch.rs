@@ -197,13 +197,6 @@ fn identify_uncovered_effects(
                 collector.visit_block(body);
             }
         }
-        for impl_block in &module.impls {
-            for method in &impl_block.methods {
-                if let Some(body) = &method.body {
-                    collector.visit_block(body);
-                }
-            }
-        }
     }
     collector.called
 }
@@ -1315,11 +1308,6 @@ fn lower_with_handler_dispatch_in_modules(
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
             lower_with_handler_dispatch_in_func(&mut func, &env);
-        }
-        for impl_block in &mut module.impls {
-            for method in &mut impl_block.methods {
-                lower_with_handler_dispatch_in_func(method, &env);
-            }
         }
     }
 }
@@ -2577,16 +2565,6 @@ fn rewrite_call_sites_to_wrappers(
             }
             if let Some(body) = &mut func.body {
                 rewrite_calls_in_block(body, &ctx);
-            }
-        }
-        for impl_block in &mut module.impls {
-            for method in &mut impl_block.methods {
-                if method.is_dispatch_wrapper {
-                    continue;
-                }
-                if let Some(body) = &mut method.body {
-                    rewrite_calls_in_block(body, &ctx);
-                }
             }
         }
     }

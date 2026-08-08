@@ -829,17 +829,6 @@ pub struct NirTraitMethod {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
-pub struct NirImpl {
-    /// Generic type parameters for the impl block (e.g., `impl<T> Box<T>`)
-    pub type_params: Vec<NirTypeParam>,
-    /// The trait being implemented, if any (e.g., "Display" for `impl Display for Type`)
-    pub trait_name: Option<String>,
-    pub target_type: TypeId,
-    pub methods: Vec<NirFunction>,
-    pub span: Span,
-}
-
 /// `impl Trait for Type;` — request the compiler to synthesize the trait implementation.
 #[derive(Debug, Clone)]
 pub struct SynthesisRequest {
@@ -961,7 +950,6 @@ pub struct NirModule {
     pub effects: Vec<NirEffect>,
     pub resources: Vec<NirResource>,
     pub traits: Vec<NirTrait>,
-    pub impls: Vec<NirImpl>,
     /// `impl Trait for Type;` — synthesis requests (populated by elaborator, consumed by synthesis)
     pub synthesis_requests: Vec<SynthesisRequest>,
     /// Test declarations with their metadata
@@ -1006,7 +994,6 @@ impl NirModule {
             effects: Vec::new(),
             resources: Vec::new(),
             traits: Vec::new(),
-            impls: Vec::new(),
             synthesis_requests: Vec::new(),
             tests: Vec::new(),
             globals: Vec::new(),
@@ -1040,7 +1027,6 @@ impl NirModule {
             effects: Vec::new(),
             resources: Vec::new(),
             traits: Vec::new(),
-            impls: Vec::new(),
             synthesis_requests: Vec::new(),
             tests: Vec::new(),
             globals: Vec::new(),
@@ -1098,10 +1084,6 @@ impl NirModule {
 
     pub fn add_trait(&mut self, trait_decl: NirTrait) {
         self.traits.push(trait_decl);
-    }
-
-    pub fn add_impl(&mut self, impl_block: NirImpl) {
-        self.impls.push(impl_block);
     }
 
     pub fn find_function(&self, name: &str) -> Option<Rc<RefCell<NirFunction>>> {
