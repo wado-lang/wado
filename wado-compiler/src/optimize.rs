@@ -96,7 +96,7 @@ mod licm;
 mod loop_version_bce;
 mod match_to_switch;
 mod mod_ref;
-mod multi_value_return;
+pub(crate) mod multi_value_return;
 mod param_spec;
 mod peephole;
 mod ref_elim;

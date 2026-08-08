@@ -1159,20 +1159,19 @@ impl FunctionTranslator<'_, '_> {
     /// `FieldAccess(LocalGet(local), name)` accesses read the matching
     /// split local directly via `multi_value_split_locals`.
     fn try_emit_multi_value_let(&mut self, local_index: u32, value: ExprId) -> Option<WirInstr> {
-        // Only a direct `Call(f)` initialiser: anything else falls through to a
-        // regular `LocalSet`, which cannot bind N results into one local. That
-        // makes this the narrower half of a contract —
-        // `optimize::multi_value_return` must not hand the ABI to a callee whose
-        // call site it accepted through a wrapper, or the site here silently
-        // becomes invalid Wasm. `debug_assert_bindable_multi_value` is that
-        // contract; widening one side means widening this one first.
-        let func_id = match &self.body.exprs[value].kind {
-            ExprKind::Call { func_id, .. } => *func_id,
-            other => {
-                self.debug_assert_bindable_multi_value(other);
-                return None;
-            }
-        };
+        // The initialiser is the call, or a block whose tail is the call with a
+        // receiver hoisted in front of it — the shape `let_block_flatten`
+        // leaves. `block_tail_call` is the same recogniser
+        // `optimize::multi_value_return` validates call sites with, so the
+        // shapes the two accept cannot drift apart: anything it declines falls
+        // through to a regular `LocalSet`, which cannot bind N results into one
+        // local.
+        let mut prefix: Vec<StmtId> = Vec::new();
+        let (func_id, _, call) = crate::optimize::multi_value_return::block_tail_call(
+            self.body,
+            Operand::Expr(value),
+            &mut prefix,
+        )?;
         let func = self.callee_descriptor(func_id);
         let key = (func.name.clone(), func.module_source);
         let fields = self.ctx.multi_value_return_funcs.get(&key)?.clone();
@@ -1188,11 +1187,15 @@ impl FunctionTranslator<'_, '_> {
             order.push((local_name, wir_ty));
         }
 
+        // Whatever ran ahead of the call in the block still has to run, and
+        // ahead of the bind — the receiver the call reads is bound there.
+        let mut instrs: Vec<WirInstr> = self.translate_stmts(&prefix);
+
         // Translate the call (after dropping any borrow on `value`'s expr).
-        let call_instr = self.translate_expr(value);
+        let call_instr = self.translate_expr(call);
 
         // Emit DeclareLocal for each split, plus the MultiValueLocalBind.
-        let mut instrs: Vec<WirInstr> = Vec::with_capacity(order.len() + 1);
+        instrs.reserve(order.len() + 1);
         for (name, ty) in &order {
             instrs.push(WirInstr::DeclareLocal {
                 name: name.clone(),
@@ -1210,39 +1213,6 @@ impl FunctionTranslator<'_, '_> {
 
         Some(WirInstr::Seq(instrs))
     }
-
-    /// A `let` initializer this cannot split must not be a wrapped call to a
-    /// multi-value callee. `optimize::multi_value_return` only accepts a bare
-    /// `Call` at a `let`, so reaching here with one wrapped in a block means the
-    /// two have drifted — and the regular `LocalSet` below would bind N results
-    /// into one local.
-    #[cfg(debug_assertions)]
-    fn debug_assert_bindable_multi_value(&self, init: &ExprKind) {
-        let ExprKind::Block(b) = init else { return };
-        let Some(&last) = self.body.blocks[*b].stmts.last() else {
-            return;
-        };
-        let StmtKind::Expr(tail) = self.body.stmts[last].kind else {
-            return;
-        };
-        let Some(e) = tail.as_expr() else { return };
-        let ExprKind::Call { func_id, .. } = &self.body.exprs[e].kind else {
-            return;
-        };
-        let func = self.callee_descriptor(*func_id);
-        assert!(
-            !self
-                .ctx
-                .multi_value_return_funcs
-                .contains_key(&(func.name.clone(), func.module_source)),
-            "multi-value callee `{}` bound through a block-wrapped `let`, which \
-             `try_emit_multi_value_let` cannot split",
-            func.name
-        );
-    }
-
-    #[cfg(not(debug_assertions))]
-    fn debug_assert_bindable_multi_value(&self, _: &ExprKind) {}
 
     /// Resolve the WIR tuple struct type and translate its non-unit field
     /// initialisers, applying `cast_nonnull_fields` to honour non-nullable

@@ -10,7 +10,8 @@
 //! A function `f` is a candidate when its return type is a tuple or user
 //! struct of 2..=[`MAX_RESULTS`] fields (all field types eligible), every
 //! `Return` produces a fresh aggregate literal of that shape, and every call
-//! site is `let __tmp = Call(f); …` whose only uses of `__tmp` are
+//! site binds it as `let __tmp = Call(f); …` — directly, or at the tail of a
+//! block that hoists the receiver first — whose only uses of `__tmp` are
 //! `FieldAccess(Local(__tmp), name)`. See the per-function comments below for
 //! the exact gates.
 //!
@@ -39,41 +40,21 @@ struct CandidateInfo {
     field_name_set: IndexSet<String>,
 }
 
-/// [`candidate_call_idx`] for an operand.
-fn candidate_call_idx_operand(
-    body: &Body,
-    op: Operand,
-    candidate_ids: &IndexMap<FuncId, usize>,
-) -> Option<usize> {
-    op.as_expr()
-        .and_then(|e| candidate_call_idx(body, e, candidate_ids))
-}
-
-/// If `expr` is a direct `Call(f)` whose callee is a
-/// candidate, return that candidate's index.
-fn candidate_call_idx(
-    body: &Body,
-    expr: ExprId,
-    candidate_ids: &IndexMap<FuncId, usize>,
-) -> Option<usize> {
-    let func_id = match &body.exprs[expr].kind {
-        ExprKind::Call { func_id, .. } => *func_id,
-        _ => return None,
-    };
-    candidate_ids.get(&func_id).copied()
-}
-
-/// A `return`ed direct call: its callee, the call's own type, and the node.
-/// Looks through a block tail, the shape `let_block_flatten` leaves when it
-/// hoists a receiver in front of the call — and hands back the statements the
-/// block runs first.
+/// A direct call in tail position: its callee, the call's own type, and the
+/// node. Looks through a block tail, the shape `let_block_flatten` leaves when
+/// it hoists a receiver in front of the call — and hands back the statements
+/// the block runs first.
 ///
-/// Those statements are ordinary code and the caller has to validate them. The
-/// tail-call rule exempts the call from needing a `let` to bind; it says nothing
-/// about what the block does before it. Skipping them let a whole-aggregate use
-/// in the prefix pass unseen, so its callee took the multi-value ABI while the
-/// use still read a local the split had left unassigned.
-fn tail_return_call(
+/// Those statements are ordinary code and the caller has to deal with them: a
+/// `return` validates them, `wir_build` emits them ahead of the bind. Skipping
+/// them let a whole-aggregate use in the prefix pass unseen, so its callee took
+/// the multi-value ABI while the use still read a local the split had left
+/// unassigned.
+///
+/// `wir_build::translate::try_emit_multi_value_let` shares this recogniser, so
+/// the shape this pass accepts at a `let` is by construction the shape the
+/// lowering can split.
+pub(crate) fn block_tail_call(
     body: &Body,
     op: Operand,
     prefix: &mut Vec<StmtId>,
@@ -86,25 +67,12 @@ fn tail_return_call(
             match &body.stmts[last].kind {
                 StmtKind::Expr(inner) => {
                     prefix.extend_from_slice(lead);
-                    tail_return_call(body, *inner, prefix)
+                    block_tail_call(body, *inner, prefix)
                 }
                 _ => None,
             }
         }
         _ => None,
-    }
-}
-
-/// [`walk_call_args_for_uses`] for an operand.
-fn walk_call_args_for_uses_operand(
-    body: &Body,
-    op: Operand,
-    cx: &UseCx<'_>,
-    invalid: &mut IndexSet<usize>,
-    tracked: &IndexMap<u32, usize>,
-) {
-    if let Some(e) = op.as_expr() {
-        walk_call_args_for_uses(body, e, cx, invalid, tracked);
     }
 }
 
@@ -655,18 +623,21 @@ fn validate_stmt(
             // see `sroa_variant_return::settled_locals`, whose rule this shares
             // because that pass hands this one its tuple-returning functions.
             //
-            // They deliberately differ on one point: that pass binds a call
-            // through a block tail, and this one takes a bare `Call` only,
-            // because `wir_build::try_emit_multi_value_let` splits nothing else
-            // — a wrapped call would bind N results into one local. Accepting
-            // the wider shape here costs a boxed tuple at that site; emitting it
-            // would cost invalid Wasm.
+            // The call may sit at a block tail with its receiver hoisted in
+            // front; those statements are ordinary code and are validated here.
+            // `wir_build::try_emit_multi_value_let` splits the same shape off
+            // the same recogniser, so neither side can accept what the other
+            // refuses.
+            let mut prefix: Vec<StmtId> = Vec::new();
             if cx.settled.contains(&local_index)
-                && let Some(candidate_idx) =
-                    candidate_call_idx_operand(body, value, cx.candidate_ids)
+                && let Some((func_id, _, call)) = block_tail_call(body, value, &mut prefix)
+                && let Some(&candidate_idx) = cx.candidate_ids.get(&func_id)
             {
+                for s in prefix {
+                    validate_stmt(body, s, cx, invalid, tracked);
+                }
                 tracked.insert(local_index, candidate_idx);
-                walk_call_args_for_uses_operand(body, value, cx, invalid, tracked);
+                walk_call_args_for_uses(body, call, cx, invalid, tracked);
                 return;
             }
             walk_expr_for_uses_operand(body, value, cx, invalid, tracked);
@@ -681,7 +652,7 @@ fn validate_stmt(
             // needs no `let` to bind. Its arguments are still ordinary uses.
             let mut prefix: Vec<StmtId> = Vec::new();
             if let Some(ours) = cx.passes_through
-                && let Some(call) = tail_return_call(body, e, &mut prefix)
+                && let Some(call) = block_tail_call(body, e, &mut prefix)
                 && cx
                     .candidate_ids
                     .get(&call.0)
