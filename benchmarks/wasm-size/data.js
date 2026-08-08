@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786181930851,
+  "lastUpdate": 1786182892960,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46477,6 +46477,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0aa3dfb4b0ebac8486a4b1338cf3ea57ff3b32f1"
         },
         "date": 1786181930342,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6034,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16221,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271639,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4fd69382f7bb6732f6c3131c865a149ed953aaf8",
+          "message": "Merge pull request #1765 from wado-lang/claude/antlr4-oracle-superclass-gsdum5\n\nfeat(gale): oracle superClass grammars with --super",
+          "timestamp": "2026-08-08T18:31:01+09:00",
+          "tree_id": "f0afebc3028fd6fa747c0783c8c43050669fd971",
+          "url": "https://github.com/wado-lang/wado/commit/4fd69382f7bb6732f6c3131c865a149ed953aaf8"
+        },
+        "date": 1786182892101,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
