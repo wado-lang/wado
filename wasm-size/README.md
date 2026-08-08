@@ -21,8 +21,14 @@ Compares WebAssembly binary sizes across different languages.
 
 ## Results
 
-Measured 2026-08-03 with wasi-sdk 25.0, rustc 1.97.1, Zig 0.15.2, Moonbit
-0.1.20260803. Sizes are toolchain- but not host-dependent.
+Measured 2026-08-05 with rustc 1.97.1, Zig 0.15.2, Moonbit 0.1.20260803, and
+2026-08-03 with wasi-sdk 25.0 for the rows below marked as carried over. Sizes
+are toolchain- but not host-dependent, so a row whose toolchain has not moved
+does not need remeasuring.
+
+The `c` rows and `sqlite_highlight`'s `rust` row carry over: this run had no
+wasi-sdk (`sqlite_highlight` needs it for tree-sitter's C parser), so
+`report-wasm-size` skipped them.
 
 ### hello_world
 
@@ -50,7 +56,7 @@ Reads gzip data from stdin and decompresses it.
 
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
-| wado     |       16,249 | stdin + gzip decompress (core:zlib)    |
+| wado     |       16,237 | stdin + gzip decompress (core:zlib)    |
 | zig      |       20,072 | stdin + gzip decompress (std.compress) |
 | c        |       34,484 | stdin + gzip decompress (zlib 1.3.1)   |
 | rust     |       89,069 | stdin + gzip decompress (zlib-rs)      |
@@ -61,7 +67,7 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
 | Language | Size (bytes) | Notes                                       |
 | -------- | -----------: | ------------------------------------------- |
-| wado     |      273,270 | Gale-generated highlighter from `SQLite.g4` |
+| wado     |      271,633 | Gale-generated highlighter from `SQLite.g4` |
 | rust     |    3,487,646 | tree-sitter + tree-sitter-sequel            |
 
 ## Usage
