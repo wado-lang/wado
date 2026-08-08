@@ -3579,6 +3579,10 @@ impl Monomorphizer {
 
         // Allocate a dedicated temp local for the tuple (the original binding_local
         // will be reused per-iteration below with distinct types per element).
+        //
+        // The temp is private to this unroll and each of its fields is read by
+        // exactly one iteration, so every element binding below moves its field
+        // out (`skip_value_copy`) instead of deep-copying it.
         let temp_local_idx = *local_count;
         *local_count += 1;
         locals.push(TirLocal {
@@ -3587,21 +3591,39 @@ impl Monomorphizer {
             is_mut: false,
         });
 
+        // Detect destructured zip patterns: body starts with Let stmts whose
+        // values are FieldAccess on the binding local (e.g., `let a =
+        // binding.0; let b = binding.1;`). Shared by every element, so it is
+        // read off the template once.
+        let destruct_count = Self::destructure_prefix_len(body, binding_local_idx);
+
+        // A destructured `.enumerate()` binds only the pair's fields, never the
+        // pair: bind them from the index literal and the element directly, so
+        // the pair — and the value copy the element would take into it — is
+        // never built.
+        let inline_enumerate_pair = is_enumerate && destruct_count > 0;
+        // `for let [i, _] of xs.enumerate()` reads only the index, so the temp
+        // is never read. Binding it anyway would deep-copy the whole tuple.
+        let temp_read =
+            !inline_enumerate_pair || Self::binds_element_field(&body.stmts[..destruct_count]);
+
         let mut outer_stmts = Vec::new();
 
         // let __tuple_N = iterable;
-        outer_stmts.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: temp_name.clone(),
-                local_index: temp_local_idx,
-                is_mut: false,
-                is_reactive: false,
-                type_id: iterable_type,
-                value: iterable.clone(),
-                skip_value_copy: false,
-            },
-            span,
-        ));
+        if temp_read || !Self::is_pure_place(iterable) {
+            outer_stmts.push(TirStmt::new(
+                TirStmtKind::Let {
+                    name: temp_name.clone(),
+                    local_index: temp_local_idx,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id: iterable_type,
+                    value: iterable.clone(),
+                    skip_value_copy: false,
+                },
+                span,
+            ));
+        }
 
         // For each element, create: { let v = __tuple_N.i; body }
         for (i, &elem_type) in elements.iter().enumerate() {
@@ -3630,32 +3652,22 @@ impl Monomorphizer {
             );
             // By reference (`for v of &[..T]`), the binding is `&T_k`: a
             // reference to a fresh copy of the field. Otherwise it is `T_k`.
-            let (bind_type, bind_value) =
+            let (elem_bind_type, elem_bind_value) =
                 type_table.tuple_element_binding(field, elem_type, by_ref, span);
+            let index_literal = TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: i as u64,
+                    repr: i.to_string(),
+                },
+                TypeTable::I32,
+                span,
+            );
             // `.enumerate()` binds the pair `[i, T_k]`; the index is a literal
             // fixed by the unroll position.
-            let (bind_type, bind_value) = if is_enumerate {
-                let index_literal = TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: i as u64,
-                        repr: i.to_string(),
-                    },
-                    TypeTable::I32,
-                    span,
-                );
-                let pair_type = type_table.make_tuple(vec![TypeTable::I32, bind_type]);
-                (
-                    pair_type,
-                    TirExpr::new(
-                        TirExprKind::TupleLiteral {
-                            elements: vec![index_literal, bind_value],
-                        },
-                        pair_type,
-                        span,
-                    ),
-                )
+            let bind_type = if is_enumerate {
+                type_table.make_tuple(vec![TypeTable::I32, elem_bind_type])
             } else {
-                (bind_type, bind_value)
+                elem_bind_type
             };
             locals.push(TirLocal {
                 name: b_name.clone(),
@@ -3663,18 +3675,31 @@ impl Monomorphizer {
                 is_mut: b_mut,
             });
 
-            iter_stmts.push(TirStmt::new(
-                TirStmtKind::Let {
-                    name: b_name.clone(),
-                    local_index: iter_binding,
-                    is_mut: b_mut,
-                    is_reactive: false,
-                    type_id: bind_type,
-                    value: bind_value,
-                    skip_value_copy: false,
-                },
-                span,
-            ));
+            if !inline_enumerate_pair {
+                let bind_value = if is_enumerate {
+                    TirExpr::new(
+                        TirExprKind::TupleLiteral {
+                            elements: vec![index_literal.clone(), elem_bind_value.clone()],
+                        },
+                        bind_type,
+                        span,
+                    )
+                } else {
+                    elem_bind_value.clone()
+                };
+                iter_stmts.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: b_name.clone(),
+                        local_index: iter_binding,
+                        is_mut: b_mut,
+                        is_reactive: false,
+                        type_id: bind_type,
+                        value: bind_value,
+                        skip_value_copy: true,
+                    },
+                    span,
+                ));
+            }
 
             // Clone the body and substitute types with per-element substitution.
             // Override the TypePack → elem_type (instead of TypePack → tuple type)
@@ -3683,22 +3708,6 @@ impl Monomorphizer {
                 // The pack's own tuple, for types in the body that spell the
                 // whole pack (`[..T]`) rather than the element the loop binds.
                 let pack_tuple = substitution.get(&pack_idx).copied();
-                // Detect destructured zip patterns: body starts with Let stmts
-                // whose values are FieldAccess on the binding local
-                // (e.g., `let a = binding.0; let b = binding.1;`).
-                let destruct_count = body
-                    .stmts
-                    .iter()
-                    .take_while(|s| {
-                        if let TirStmtKind::Let { value, .. } = &s.kind
-                            && let TirExprKind::FieldAccess { expr: inner, .. } = &value.kind
-                            && let TirExprKind::Local { index, .. } = &inner.kind
-                        {
-                            return *index == binding_local_idx;
-                        }
-                        false
-                    })
-                    .count();
 
                 if destruct_count > 0 {
                     // Destructured zip patterns only arise from `for [a, b] of
@@ -3776,23 +3785,31 @@ impl Monomorphizer {
                             // `reconcile_unrolled_body_locals`: writing it here
                             // would let the last iteration's type clobber the
                             // slot the first one still holds.
-                            let binding_ref = TirExpr::new(
-                                TirExprKind::Local {
-                                    index: binding_local_idx,
-                                    name: b_name.clone(),
-                                },
-                                bind_type,
-                                span,
-                            );
-                            let field_access = TirExpr::new(
-                                TirExprKind::FieldAccess {
-                                    expr: Box::new(binding_ref),
-                                    field_index,
-                                    field_name: field_index.to_string(),
-                                },
-                                field_type,
-                                span,
-                            );
+                            let field_access = if inline_enumerate_pair {
+                                if field_index == 0 {
+                                    index_literal.clone()
+                                } else {
+                                    elem_bind_value.clone()
+                                }
+                            } else {
+                                let binding_ref = TirExpr::new(
+                                    TirExprKind::Local {
+                                        index: binding_local_idx,
+                                        name: b_name.clone(),
+                                    },
+                                    bind_type,
+                                    span,
+                                );
+                                TirExpr::new(
+                                    TirExprKind::FieldAccess {
+                                        expr: Box::new(binding_ref),
+                                        field_index,
+                                        field_name: field_index.to_string(),
+                                    },
+                                    field_type,
+                                    span,
+                                )
+                            };
                             pinned.push((*local_index, field_type));
                             fresh_destruct_stmts.push(TirStmt::new(
                                 TirStmtKind::Let {
@@ -3802,7 +3819,7 @@ impl Monomorphizer {
                                     is_reactive: *is_reactive,
                                     type_id: field_type,
                                     value: field_access,
-                                    skip_value_copy: false,
+                                    skip_value_copy: true,
                                 },
                                 span,
                             ));
@@ -4021,6 +4038,46 @@ impl Monomorphizer {
         }
     }
 
+    /// Whether a destructure template binds a field other than the
+    /// `.enumerate()` index — i.e. whether the unroll reads the element at all.
+    fn binds_element_field(destructure: &[TirStmt]) -> bool {
+        destructure.iter().any(|s| {
+            matches!(&s.kind, TirStmtKind::Let { value, .. }
+                if matches!(&value.kind, TirExprKind::FieldAccess { field_index, .. } if *field_index != 0))
+        })
+    }
+
+    /// Whether evaluating `expr` is observable. Only a place rooted at a local
+    /// qualifies, so dropping an unread iterable changes nothing.
+    fn is_pure_place(expr: &TirExpr) -> bool {
+        match &expr.kind {
+            TirExprKind::Local { .. } => true,
+            TirExprKind::FieldAccess { expr: inner, .. } => Self::is_pure_place(inner),
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
+                expr: inner,
+            } => Self::is_pure_place(inner),
+            _ => false,
+        }
+    }
+
+    /// How many leading `let`s of an unroll body read a field of `binding` —
+    /// the destructured sub-bindings a `for let [a, b] of …` pattern lowered to.
+    fn destructure_prefix_len(body: &TirBlock, binding: u32) -> usize {
+        body.stmts
+            .iter()
+            .take_while(|s| {
+                if let TirStmtKind::Let { value, .. } = &s.kind
+                    && let TirExprKind::FieldAccess { expr: inner, .. } = &value.kind
+                    && let TirExprKind::Local { index, .. } = &inner.kind
+                {
+                    return *index == binding;
+                }
+                false
+            })
+            .count()
+    }
+
     /// Unroll `[for let v of tuple { expr }]` into the tuple literal it denotes,
     /// once the pack is concrete (WEP 2026-03-14).
     ///
@@ -4056,6 +4113,15 @@ impl Monomorphizer {
         let b_name = binding_name.clone();
         let template_destructure = destructure.clone();
         let template_body = body.clone();
+        // A destructured `.enumerate()` binds only the pair's fields, never the
+        // pair: bind them from the index literal and the element directly, so
+        // the pair — and the value copy the element would take into it — is
+        // never built.
+        let inline_enumerate_pair = is_enumerate && !template_destructure.is_empty();
+        // `[for let [i, _] of xs.enumerate() { … }]` reads only the index, so the
+        // temp is never read. Binding it anyway would deep-copy the whole tuple.
+        let temp_read =
+            !inline_enumerate_pair || Self::binds_element_field(&template_destructure);
 
         let (pack_index, pack_mapped) = type_table
             .as_tuple_through_ref(iterable.type_id)
@@ -4092,6 +4158,8 @@ impl Monomorphizer {
         };
         let pack_tuple = pack_index.and_then(|idx| substitution.get(&idx).copied());
 
+        // Private to this unroll, one reader per field — so each element binding
+        // moves its field out (`skip_value_copy`) rather than deep-copying it.
         let temp_name = format!("__comp_{uid}");
         let temp_local = *local_count;
         *local_count += 1;
@@ -4122,30 +4190,18 @@ impl Monomorphizer {
                 elem_type,
                 span,
             );
-            let (bind_type, bind_value) = if is_enumerate {
-                let pair_type = type_table.make_tuple(vec![TypeTable::I32, elem_type]);
-                (
-                    pair_type,
-                    TirExpr::new(
-                        TirExprKind::TupleLiteral {
-                            elements: vec![
-                                TirExpr::new(
-                                    TirExprKind::IntLiteral {
-                                        value: i as u64,
-                                        repr: i.to_string(),
-                                    },
-                                    TypeTable::I32,
-                                    span,
-                                ),
-                                field,
-                            ],
-                        },
-                        pair_type,
-                        span,
-                    ),
-                )
+            let index_literal = TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: i as u64,
+                    repr: i.to_string(),
+                },
+                TypeTable::I32,
+                span,
+            );
+            let bind_type = if is_enumerate {
+                type_table.make_tuple(vec![TypeTable::I32, elem_type])
             } else {
-                (elem_type, field)
+                elem_type
             };
 
             let iter_binding = *local_count;
@@ -4155,18 +4211,31 @@ impl Monomorphizer {
                 type_id: bind_type,
                 is_mut: false,
             });
-            stmts.push(TirStmt::new(
-                TirStmtKind::Let {
-                    name: b_name.clone(),
-                    local_index: iter_binding,
-                    is_mut: false,
-                    is_reactive: false,
-                    type_id: bind_type,
-                    value: bind_value,
-                    skip_value_copy: false,
-                },
-                span,
-            ));
+            if !inline_enumerate_pair {
+                let bind_value = if is_enumerate {
+                    TirExpr::new(
+                        TirExprKind::TupleLiteral {
+                            elements: vec![index_literal.clone(), field.clone()],
+                        },
+                        bind_type,
+                        span,
+                    )
+                } else {
+                    field.clone()
+                };
+                stmts.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: b_name.clone(),
+                        local_index: iter_binding,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: bind_type,
+                        value: bind_value,
+                        skip_value_copy: true,
+                    },
+                    span,
+                ));
+            }
 
             // The destructure reads off the concrete binding, so it is rebuilt
             // rather than substituted: splicing the pack through the pair type
@@ -4219,23 +4288,31 @@ impl Monomorphizer {
                         is_mut: false,
                         is_reactive: false,
                         type_id: field_type,
-                        value: TirExpr::new(
-                            TirExprKind::FieldAccess {
-                                expr: Box::new(TirExpr::new(
-                                    TirExprKind::Local {
-                                        index: iter_binding,
-                                        name: b_name.clone(),
-                                    },
-                                    bind_type,
-                                    span,
-                                )),
-                                field_index,
-                                field_name: field_index.to_string(),
-                            },
-                            field_type,
-                            span,
-                        ),
-                        skip_value_copy: false,
+                        value: if inline_enumerate_pair {
+                            if field_index == 0 {
+                                index_literal.clone()
+                            } else {
+                                field.clone()
+                            }
+                        } else {
+                            TirExpr::new(
+                                TirExprKind::FieldAccess {
+                                    expr: Box::new(TirExpr::new(
+                                        TirExprKind::Local {
+                                            index: iter_binding,
+                                            name: b_name.clone(),
+                                        },
+                                        bind_type,
+                                        span,
+                                    )),
+                                    field_index,
+                                    field_name: field_index.to_string(),
+                                },
+                                field_type,
+                                span,
+                            )
+                        },
+                        skip_value_copy: true,
                     },
                     span,
                 ));
@@ -4317,33 +4394,32 @@ impl Monomorphizer {
             result_type,
             span,
         );
+        let mut block_stmts = Vec::with_capacity(2);
+        if temp_read || !Self::is_pure_place(&source) {
+            block_stmts.push(TirStmt::new(
+                TirStmtKind::Let {
+                    name: temp_name,
+                    local_index: temp_local,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id: source_type,
+                    value: source,
+                    skip_value_copy: false,
+                },
+                span,
+            ));
+        }
+        block_stmts.push(TirStmt::new(
+            TirStmtKind::Break {
+                label: Some(outer_label.clone()),
+                value: Some(tuple),
+            },
+            span,
+        ));
         *expr = TirExpr::new(
             TirExprKind::LabeledBlock {
-                label: outer_label.clone(),
-                block: TirBlock::new(
-                    vec![
-                        TirStmt::new(
-                            TirStmtKind::Let {
-                                name: temp_name,
-                                local_index: temp_local,
-                                is_mut: false,
-                                is_reactive: false,
-                                type_id: source_type,
-                                value: source,
-                                skip_value_copy: false,
-                            },
-                            span,
-                        ),
-                        TirStmt::new(
-                            TirStmtKind::Break {
-                                label: Some(outer_label),
-                                value: Some(tuple),
-                            },
-                            span,
-                        ),
-                    ],
-                    span,
-                ),
+                label: outer_label,
+                block: TirBlock::new(block_stmts, span),
                 result_type,
             },
             result_type,
