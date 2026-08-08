@@ -609,6 +609,7 @@ impl Translator<'_> {
             span: global.span,
             locals: global.locals.iter().map(convert_local).collect(),
             prefer_fixed_string_repr: false,
+            param_name: global.param.as_ref().map(|p| p.name.clone()),
         }
     }
 

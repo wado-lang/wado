@@ -272,6 +272,10 @@ pub struct NirGlobal {
     /// assignment redundant, and hoisting buys nothing. `false` for every
     /// other global, including a `LetBinding` candidate.
     pub prefer_fixed_string_repr: bool,
+    /// The `#[param]` name, when the global carries one. Kept past TIR so a
+    /// remark can say *which* compile-time parameter failed to fold — a remark
+    /// that cannot name it stays silent.
+    pub param_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]

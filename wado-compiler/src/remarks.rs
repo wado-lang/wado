@@ -227,3 +227,90 @@ fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
         _ => body.exprs[inner_e].type_id,
     }
 }
+
+/// Collect remarks for compile-time parameters that reach a branch condition in
+/// the optimized NIR.
+///
+/// A `#[param]` global exists to be decided at build time: the param-resolution
+/// pass replaces its initializer with the override's literal, and every gate
+/// reading it is expected to constant-fold away. When a read survives *into a
+/// branch condition*, the build kept a run-time test it was told to settle —
+/// the failure mode `core:log`'s level gate has, where a build asked to strip
+/// `trace` and `debug` ships them and consults the parameter at run time
+/// instead.
+///
+/// A read outside a condition is not reported: passing a parameter to
+/// `println` is an ordinary use of its value, not a gate that failed.
+///
+/// Restricted to the entry module's functions, like the value-copy remarks, and
+/// silent unless it can name the parameter — a remark that cannot say *which*
+/// one is exactly the vague remark the WEP rules out.
+pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
+    let params: IndexMap<(ModuleSource, String), String> = package
+        .globals
+        .iter()
+        .filter_map(|g| {
+            let name = g.param_name.clone()?;
+            Some(((g.module_source.clone(), g.name.clone()), name))
+        })
+        .collect();
+    if params.is_empty() {
+        return Vec::new();
+    }
+
+    let mut remarks = Vec::new();
+    for func_rc in &package.functions {
+        let func = func_rc.borrow();
+        if func.module_source != package.entry_module_source {
+            continue;
+        }
+        let Some(body) = &func.body else {
+            continue;
+        };
+        for stmt in body.stmts.values() {
+            let crate::nir_arena::StmtKind::If { condition, .. } = &stmt.kind else {
+                continue;
+            };
+            collect_param_reads(body, *condition, &params, stmt.span, &mut remarks);
+        }
+        for expr in body.exprs.values() {
+            let ExprKind::If { condition, .. } = &expr.kind else {
+                continue;
+            };
+            collect_param_reads(body, *condition, &params, expr.span, &mut remarks);
+        }
+    }
+    remarks
+}
+
+/// Report every `#[param]` global the condition rooted at `op` still reads.
+fn collect_param_reads(
+    body: &Body,
+    op: crate::nir_arena::Operand,
+    params: &IndexMap<(ModuleSource, String), String>,
+    span: Span,
+    out: &mut Vec<Remark>,
+) {
+    let Some(root) = op.as_expr() else {
+        return;
+    };
+    let mut stack = vec![NodeRef::Expr(root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } = &body.exprs[e].kind
+            && let Some(param) = params.get(&(module_source.clone(), name.clone()))
+        {
+            out.push(Remark {
+                message: format!(
+                    "compile-time parameter `{param}` is still read here, so this branch is \
+                     decided at run time; the code it guards was not stripped"
+                ),
+                span,
+            });
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+}

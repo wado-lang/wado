@@ -130,3 +130,96 @@ export fn run() with Stdout {
         "remark should point at the copy statement on line 8, not a placeholder span: {remarks:?}"
     );
 }
+
+/// Compile `source` at `-O2` with `-D` overrides and return the `remark:`
+/// diagnostics as `"line:col message"` strings.
+fn remarks_for_params(source: &str, overrides: &[(&str, &str)]) -> Vec<String> {
+    let host = InMemoryHost::new();
+    let mut param_overrides = wado_compiler::hashmap::IndexMap::default();
+    for (k, v) in overrides {
+        param_overrides.insert((*k).to_string(), (*v).to_string());
+    }
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        param_overrides,
+        ..CompilerOptions::default()
+    };
+    let _ = runtime().block_on(wado_compiler::compile_with_options(
+        source,
+        &host,
+        Some("test.wado"),
+        options,
+    ));
+    host.diagnostics()
+        .into_iter()
+        .filter(|d| d.message.starts_with("remark:"))
+        .map(|d| {
+            let loc = d
+                .span
+                .as_ref()
+                .map(|s| format!("{}:{}", s.line, s.column))
+                .unwrap_or_default();
+            format!("{loc} {}", d.message)
+        })
+        .collect()
+}
+
+#[test]
+fn param_reaching_a_branch_is_remarked() {
+    // The helper takes the parameter by value, and a constant does not reach a
+    // `String` parameter compared with `==`, so the gate survives to run time
+    // even though `-D log.level=info` settles it at build time.
+    let remarks = remarks_for_params(
+        r#"
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: String = "trace";
+
+fn is_trace(s: String) -> bool {
+    if s == "trace" {
+        return true;
+    }
+    return false;
+}
+
+export fn run() with Stdout {
+    if is_trace(LOG_LEVEL) {
+        println(`tracing`);
+    }
+}
+"#,
+        &[("log.level", "info")],
+    );
+    assert!(
+        remarks
+            .iter()
+            .any(|r| r.contains("compile-time parameter `log.level` is still read here")),
+        "expected a param-gate remark, got {remarks:?}"
+    );
+}
+
+#[test]
+fn param_that_folds_is_not_remarked() {
+    // Read directly, the parameter reaches the comparison and the branch is
+    // decided at build time — nothing survives to remark on.
+    let remarks = remarks_for_params(
+        r#"
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: i32 = 0;
+
+export fn run() with Stdout {
+    if LOG_LEVEL < 2 {
+        println(`tracing`);
+    }
+}
+"#,
+        &[("log.level", "3")],
+    );
+    assert!(
+        !remarks.iter().any(|r| r.contains("compile-time parameter")),
+        "a folded parameter should not be remarked, got {remarks:?}"
+    );
+}

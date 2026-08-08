@@ -249,6 +249,8 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             span: crate::token::Span::new(0, 0, 1, 1),
             locals: Vec::new(),
             prefer_fixed_string_repr: prefer_fixed_repr,
+            // Synthesized storage for a hoisted literal, not a user parameter.
+            param_name: None,
         });
     }
     true
