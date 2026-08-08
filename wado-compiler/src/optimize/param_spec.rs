@@ -91,9 +91,11 @@ enum FieldConst {
 }
 
 impl FieldConst {
-    /// The constant an operand holds, or `None` for a non-constant operand or a
-    /// non-scalar value kind (the pool models pure scalars; aggregates never
-    /// reach an operand slot).
+    /// The scalar constant an operand holds, or `None` otherwise.
+    ///
+    /// A [`ValueKind::Const`] aggregate is deliberately not a specialization
+    /// key: cloning a function per distinct constant `String` trades code size
+    /// for folds the constant already enables in place.
     fn of_operand(body: &Body, op: Operand) -> Option<Self> {
         let value = op.as_value()?;
         match body.values.kind(value) {
@@ -103,6 +105,7 @@ impl FieldConst {
             ValueKind::Char(c) => Some(FieldConst::Char(*c)),
             ValueKind::Null
             | ValueKind::Unit
+            | ValueKind::Const(..)
             | ValueKind::Opaque(_)
             | ValueKind::Binary { .. }
             | ValueKind::Unary { .. }

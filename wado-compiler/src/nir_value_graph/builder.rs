@@ -374,7 +374,14 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
         ValueKind::Char(c) => pool.char(c),
         ValueKind::Null => pool.null(),
         ValueKind::Unit => pool.unit(),
-        _ => unreachable!("is_const_kind gates this"),
+        ValueKind::Const(key, t) => pool.constant(key.value(), t),
+        ValueKind::Opaque(_)
+        | ValueKind::Binary { .. }
+        | ValueKind::Unary { .. }
+        | ValueKind::Cast { .. }
+        | ValueKind::Select { .. }
+        | ValueKind::LoopPhi { .. }
+        | ValueKind::FieldAccess { .. } => unreachable!("is_const_kind gates this"),
     }
 }
 
@@ -408,7 +415,8 @@ fn reintern_live_rooted(
         | ValueKind::Bool(_)
         | ValueKind::Char(_)
         | ValueKind::Null
-        | ValueKind::Unit => reintern_const(live, kind),
+        | ValueKind::Unit
+        | ValueKind::Const(..) => reintern_const(live, kind),
         ValueKind::Binary { op, lhs, rhs, ty } => {
             let l = reintern_live_rooted(scratch, live, lhs, live_base, type_table)?;
             let r = reintern_live_rooted(scratch, live, rhs, live_base, type_table)?;
@@ -1208,7 +1216,23 @@ impl<'a> Builder<'a> {
             }
 
             // ---- Other Skel-side leaves ----
-            ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => None,
+            // The backing bytes of a `String` / `List<u8>` literal are a
+            // constant the pool can name, so a literal keeps its identity
+            // through a binding instead of going opaque at the first `let`.
+            // Bounded by `MAX_SEQ_ELEMENTS`: past it the walk would cost more
+            // than any fold it enables, and `Value::seq` declines.
+            ExprKind::PackedArray(bytes) => {
+                let elements = bytes
+                    .iter()
+                    .map(|b| crate::const_eval::Value::Int {
+                        value: u64::from(*b),
+                        prim: crate::tir::PrimitiveType::U8,
+                    })
+                    .collect();
+                let ty = self.body.exprs[expr].type_id;
+                crate::const_eval::Value::seq(ty, elements).map(|seq| self.pool.constant(&seq, ty))
+            }
+            ExprKind::GlobalVarGet { .. } => None,
         }
     }
 

@@ -141,7 +141,9 @@ fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Opti
 
 /// A promoted pure value is select-eligible when it is a scalar constant leaf or
 /// a local read: both are duplicable and cannot trap, so evaluating it in both
-/// `select` operand positions is observation-free.
+/// `select` operand positions is observation-free. A [`ValueKind::Const`]
+/// aggregate is not — materialising it in both arms allocates twice, and
+/// `select` takes scalars anyway.
 fn is_select_eligible_value(body: &Body, v: ValueId) -> bool {
     match body.values.kind(v) {
         ValueKind::Int(..)
@@ -156,7 +158,8 @@ fn is_select_eligible_value(body: &Body, v: ValueId) -> bool {
                 Some(OpaqueSource::Local(_))
             )
         }
-        ValueKind::Binary { .. }
+        ValueKind::Const(..)
+        | ValueKind::Binary { .. }
         | ValueKind::Unary { .. }
         | ValueKind::Cast { .. }
         | ValueKind::Select { .. }

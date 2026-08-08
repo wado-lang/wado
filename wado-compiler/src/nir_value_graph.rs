@@ -49,8 +49,197 @@ pub(crate) fn value_kind_to_const(
         }
         ValueKind::Bool(b) => Value::Bool(*b),
         ValueKind::Char(c) => Value::Char(*c),
-        _ => return None,
+        // Already an evaluated constant; the prim filter above is a scalar
+        // concern and does not apply.
+        ValueKind::Const(key, _) => key.value().clone(),
+        ValueKind::Null
+        | ValueKind::Unit
+        | ValueKind::Opaque(_)
+        | ValueKind::Binary { .. }
+        | ValueKind::Unary { .. }
+        | ValueKind::Cast { .. }
+        | ValueKind::Select { .. }
+        | ValueKind::LoopPhi { .. }
+        | ValueKind::FieldAccess { .. } => return None,
     })
+}
+
+/// Identity view of a compile-time constant, so the pool can hash-cons one.
+///
+/// [`crate::const_eval::Value`]'s `PartialEq` is the *numeric* relation the
+/// evaluator needs — `NaN != NaN`, `+0.0 == -0.0`. Hash-consing needs the
+/// *identity* relation instead, the one [`ValueKind::Float`] already spells by
+/// keying on the bit pattern. Wrapping the value rather than giving it `Eq`
+/// keeps the evaluator's relation honest: a value that compares unequal to
+/// itself must never become a hash-cons key.
+#[derive(Clone, Debug)]
+pub struct ConstKey(std::rc::Rc<crate::const_eval::Value>);
+
+impl ConstKey {
+    /// Take identity ownership of an evaluated constant.
+    #[must_use]
+    pub fn new(value: crate::const_eval::Value) -> Self {
+        Self(std::rc::Rc::new(value))
+    }
+
+    /// The constant itself.
+    #[must_use]
+    pub fn value(&self) -> &crate::const_eval::Value {
+        &self.0
+    }
+}
+
+impl PartialEq for ConstKey {
+    fn eq(&self, other: &Self) -> bool {
+        std::rc::Rc::ptr_eq(&self.0, &other.0) || const_identity_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for ConstKey {}
+
+impl std::hash::Hash for ConstKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        const_identity_hash(&self.0, state);
+    }
+}
+
+/// Structural equality under the identity relation: floats compare by bit
+/// pattern, so `NaN` equals itself and `+0.0` differs from `-0.0`.
+fn const_identity_eq(a: &crate::const_eval::Value, b: &crate::const_eval::Value) -> bool {
+    use crate::const_eval::Value;
+    match (a, b) {
+        (
+            Value::Int {
+                value: av,
+                prim: ap,
+            },
+            Value::Int {
+                value: bv,
+                prim: bp,
+            },
+        ) => av == bv && ap == bp,
+        (
+            Value::Float {
+                value: av,
+                prim: ap,
+            },
+            Value::Float {
+                value: bv,
+                prim: bp,
+            },
+        ) => av.to_bits() == bv.to_bits() && ap == bp,
+        (Value::Bool(a), Value::Bool(b)) => a == b,
+        (Value::Char(a), Value::Char(b)) => a == b,
+        (
+            Value::Aggregate {
+                type_id: at,
+                fields: af,
+            },
+            Value::Aggregate {
+                type_id: bt,
+                fields: bf,
+            },
+        ) => {
+            at == bt
+                && af.len() == bf.len()
+                && af
+                    .iter()
+                    .zip(bf.iter())
+                    .all(|((ai, av), (bi, bv))| ai == bi && const_identity_eq(av, bv))
+        }
+        (
+            Value::Seq {
+                type_id: at,
+                elements: ae,
+            },
+            Value::Seq {
+                type_id: bt,
+                elements: be,
+            },
+        ) => {
+            at == bt
+                && ae.len() == be.len()
+                && ae
+                    .iter()
+                    .zip(be.iter())
+                    .all(|(av, bv)| const_identity_eq(av, bv))
+        }
+        (
+            Value::Variant {
+                type_id: at,
+                case_name: ac,
+                payload: ap,
+            },
+            Value::Variant {
+                type_id: bt,
+                case_name: bc,
+                payload: bp,
+            },
+        ) => {
+            at == bt
+                && ac == bc
+                && match (ap, bp) {
+                    (None, None) => true,
+                    (Some(a), Some(b)) => const_identity_eq(a, b),
+                    (None, Some(_)) | (Some(_), None) => false,
+                }
+        }
+        (Value::Int { .. }, _)
+        | (Value::Float { .. }, _)
+        | (Value::Bool(_), _)
+        | (Value::Char(_), _)
+        | (Value::Aggregate { .. }, _)
+        | (Value::Seq { .. }, _)
+        | (Value::Variant { .. }, _) => false,
+    }
+}
+
+/// The hash matching [`const_identity_eq`]. Discriminants are mixed in so two
+/// shapes carrying the same leaves do not collide by construction.
+fn const_identity_hash<H: std::hash::Hasher>(v: &crate::const_eval::Value, state: &mut H) {
+    use crate::const_eval::Value;
+    use std::hash::Hash;
+
+    std::mem::discriminant(v).hash(state);
+    match v {
+        Value::Int { value, prim } => {
+            value.hash(state);
+            prim.hash(state);
+        }
+        Value::Float { value, prim } => {
+            value.to_bits().hash(state);
+            prim.hash(state);
+        }
+        Value::Bool(b) => b.hash(state),
+        Value::Char(c) => c.hash(state),
+        Value::Aggregate { type_id, fields } => {
+            type_id.hash(state);
+            fields.len().hash(state);
+            for (index, field) in fields.iter() {
+                index.hash(state);
+                const_identity_hash(field, state);
+            }
+        }
+        Value::Seq { type_id, elements } => {
+            type_id.hash(state);
+            elements.len().hash(state);
+            for element in elements.iter() {
+                const_identity_hash(element, state);
+            }
+        }
+        Value::Variant {
+            type_id,
+            case_name,
+            payload,
+        } => {
+            type_id.hash(state);
+            case_name.hash(state);
+            match payload {
+                Some(p) => const_identity_hash(p, state),
+                None => 0u8.hash(state),
+            }
+        }
+    }
 }
 
 /// Opaque handle for a pure value. Two structurally-equivalent values share
@@ -136,6 +325,15 @@ pub enum ValueKind {
     Char(char),
     Null,
     Unit,
+    /// A constant the scalar cases above cannot name: a `String`, a `List`, a
+    /// struct, a variant. Boxed because the payload is a tree, while a scalar
+    /// stays unboxed — the pool is on the compile-speed path and scalars are
+    /// the overwhelming majority.
+    ///
+    /// Invariant: a constant a scalar case *can* name is never a `Const`, so
+    /// one constant has one `ValueId`. [`ValuePool::constant`] is the only
+    /// place allowed to decide, and every producer goes through it.
+    Const(ConstKey, TypeId),
 
     // ---- Opaque ----
     /// Anonymous unknown. Used for parameters and loop locals; Stage 6
@@ -268,13 +466,21 @@ impl ValuePool {
         let id = ValueId(self.values.len() as u32);
         // A typed literal carries its width in the kind; record it so extraction
         // (which reads `type_of`) sees it without a separate `set_type` call.
-        let carried_type = match kind {
+        let carried_type = match &kind {
             ValueKind::Int(_, t)
             | ValueKind::Float(_, t)
+            | ValueKind::Const(_, t)
             | ValueKind::Binary { ty: t, .. }
             | ValueKind::Unary { ty: t, .. }
-            | ValueKind::Cast { target: t, .. } => Some(t),
-            _ => None,
+            | ValueKind::Cast { target: t, .. } => Some(*t),
+            ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::Opaque(_)
+            | ValueKind::Select { .. }
+            | ValueKind::LoopPhi { .. }
+            | ValueKind::FieldAccess { .. } => None,
         };
         self.values.push(kind.clone());
         self.types.push(carried_type);
@@ -312,6 +518,30 @@ impl ValuePool {
         let id = ValueId(self.values.len() as u32);
         self.values.push(kind);
         self.types.push(Some(type_id));
+        id
+    }
+
+    /// Name an evaluated constant, whatever its shape.
+    ///
+    /// The single place that decides between an unboxed scalar kind and a
+    /// boxed [`ValueKind::Const`], which is what keeps one constant to one
+    /// `ValueId`: were a caller free to box an integer, `Int(7)` and
+    /// `Const(Int 7)` would be two ids for one value and CSE would miss the
+    /// pair. `ty` is the value's NIR type, needed because `ValueKind` is
+    /// type-erased and extraction reads the width back off the pool.
+    pub fn constant(&mut self, value: &crate::const_eval::Value, ty: TypeId) -> ValueId {
+        use crate::const_eval::Value;
+        let kind = match value {
+            Value::Int { value, .. } => ValueKind::Int(*value, ty),
+            Value::Float { value, .. } => ValueKind::Float(value.to_bits(), ty),
+            Value::Bool(b) => ValueKind::Bool(*b),
+            Value::Char(c) => ValueKind::Char(*c),
+            Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => {
+                ValueKind::Const(ConstKey::new(value.clone()), ty)
+            }
+        };
+        let id = self.intern(kind);
+        self.set_type(id, ty);
         id
     }
 
