@@ -1633,6 +1633,7 @@ impl<'a> Unparser<'a> {
             Expr::Cast(c) => self.unparse_cast(c),
             Expr::StructLiteral(s) => self.unparse_struct_literal(s),
             Expr::TupleLiteral(t) => self.unparse_tuple_literal(t),
+            Expr::TupleComprehension(c) => self.unparse_tuple_comprehension(c),
             Expr::LabeledBlock(lb) => self.unparse_labeled_block_expr(lb),
             Expr::TryOp(qm) => {
                 self.unparse_expr(&qm.expr);
@@ -1697,6 +1698,21 @@ impl<'a> Unparser<'a> {
         self.indent_level -= 1;
         self.write_indent();
         self.output.push('}');
+    }
+
+    /// `[for let v of tuple { expr }]` — always one line: the body is a single
+    /// expression, so there is nothing to break across lines.
+    fn unparse_tuple_comprehension(&mut self, c: &crate::ast::TupleComprehensionExpr) {
+        self.output.push_str("[for let ");
+        self.unparse_pattern(&c.binding);
+        self.output.push_str(" of ");
+        self.unparse_expr(&c.iterable);
+        if c.is_enumerate {
+            self.output.push_str(".enumerate()");
+        }
+        self.output.push_str(" { ");
+        self.unparse_expr(&c.body);
+        self.output.push_str(" }]");
     }
 
     fn unparse_tuple_literal(&mut self, tuple_lit: &TupleLiteralExpr) {
@@ -3309,6 +3325,18 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
         }
         Expr::TupleLiteral(t) => {
             delimited_into("[", "]", &t.elements, output, unparse_expr_into);
+        }
+        Expr::TupleComprehension(c) => {
+            output.push_str("[for let ");
+            unparse_pattern_into(&c.binding, output);
+            output.push_str(" of ");
+            unparse_expr_into(&c.iterable, output);
+            if c.is_enumerate {
+                output.push_str(".enumerate()");
+            }
+            output.push_str(" { ");
+            unparse_expr_into(&c.body, output);
+            output.push_str(" }]");
         }
         Expr::LabeledBlock(_) => output.push_str("<labeled-block>"),
         Expr::TryOp(qm) => {
@@ -4929,6 +4957,24 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str("[..");
                 self.unparse_expr(expr);
                 self.output.push(']');
+            }
+            TirExprKind::VariadicTupleComprehension {
+                iterable,
+                binding_name,
+                body,
+                is_enumerate,
+                ..
+            } => {
+                self.output.push_str("[for let ");
+                self.output.push_str(binding_name);
+                self.output.push_str(" of ");
+                self.unparse_expr(iterable);
+                if *is_enumerate {
+                    self.output.push_str(".enumerate()");
+                }
+                self.output.push_str(" { ");
+                self.unparse_expr(body);
+                self.output.push_str(" }]<variadic>");
             }
             TirExprKind::TypePackExpansion { call_expr, .. } => {
                 self.output.push_str("[..");

@@ -4201,6 +4201,28 @@ pub enum TirExprKind {
         pack_type_id: TypeId,
     },
 
+    /// Deferred `[for let v of tuple { expr }]` over a pack-typed tuple.
+    ///
+    /// The body is resolved once with the binding typed as the pack element;
+    /// the monomorphizer unrolls it into a tuple literal once the pack is
+    /// concrete. See `docs/wep-2026-03-14-variadic-type-parameters.md`.
+    VariadicTupleComprehension {
+        /// The source tuple (type contains `TypePack` before substitution)
+        iterable: Box<TirExpr>,
+        /// The element binding's name and local slot
+        binding_name: String,
+        binding_local: u32,
+        /// Sub-bindings of a destructured binding (`[i, v]`), as
+        /// field reads off the binding local
+        destructure: Vec<TirStmt>,
+        /// The per-element expression
+        body: Box<TirExpr>,
+        /// Unique ID for generating labels
+        unique_id: u32,
+        /// Whether the binding is the `[index, value]` pair of `.enumerate()`
+        is_enumerate: bool,
+    },
+
     /// Access to a captured variable inside a closure body
     Capture {
         /// Index into the closure's captures array

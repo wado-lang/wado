@@ -2871,6 +2871,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     )?;
                 }
             }
+            ast::Expr::TupleComprehension(c) => {
+                for elem in [&c.iterable, &c.body] {
+                    Self::validate_expr_type_names(
+                        elem,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
             ast::Expr::TemplateString(ts) => {
                 for part in &ts.parts {
                     if let ast::TemplatePart::Interpolation { expr, .. } = part {

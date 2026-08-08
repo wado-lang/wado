@@ -4476,6 +4476,9 @@ impl Parser {
 
     /// Parse tuple literal: `[expr, expr, ...]` or `[]`
     fn parse_tuple_literal(&mut self, start_span: Span) -> ParseResult<Expr> {
+        if self.check(&TokenKind::For) {
+            return self.parse_tuple_comprehension(start_span);
+        }
         let elements = self.parse_comma_separated_recovering(
             &TokenKind::RBracket,
             Self::parse_tuple_element,
@@ -4490,6 +4493,40 @@ impl Parser {
             elements,
             span: start_span.merge(&end_span),
         })))
+    }
+
+    /// Parse tuple comprehension: `[for let v of tuple { expr }]`.
+    ///
+    /// The braces hold one expression — the element's value — not a statement
+    /// block: a comprehension produces a tuple, so every element has a value.
+    fn parse_tuple_comprehension(&mut self, start_span: Span) -> ParseResult<Expr> {
+        let id = self.alloc_ast_id();
+        self.expect(&TokenKind::For)?;
+        self.expect(&TokenKind::Let)?;
+        let binding = self.parse_pattern()?;
+        self.expect(&TokenKind::Of)?;
+        let iterable = self.parse_expr_no_struct_literal()?;
+        let (iterable, is_enumerate) = match iterable {
+            Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
+                (mc.receiver, true)
+            }
+            other => (other, false),
+        };
+        self.expect(&TokenKind::LBrace)?;
+        let body = self.parse_expr()?;
+        self.expect(&TokenKind::RBrace)?;
+        let end_span = self.expect(&TokenKind::RBracket)?.span;
+
+        Ok(Expr::TupleComprehension(Box::new(
+            crate::ast::TupleComprehensionExpr {
+                id,
+                binding,
+                iterable,
+                is_enumerate,
+                body,
+                span: start_span.merge(&end_span),
+            },
+        )))
     }
 
     /// Parse a tuple element: either a spread `..expr` or a regular expression.

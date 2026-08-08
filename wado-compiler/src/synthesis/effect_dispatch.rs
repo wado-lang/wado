@@ -1389,6 +1389,18 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
         | TirExprKind::VariantPayload { expr, .. } => {
             lower_dispatch_in_expr(expr, env, ctx);
         }
+        TirExprKind::VariadicTupleComprehension {
+            iterable,
+            destructure,
+            body,
+            ..
+        } => {
+            lower_dispatch_in_expr(iterable, env, ctx);
+            for stmt in destructure {
+                lower_dispatch_in_stmt(stmt, env, ctx);
+            }
+            lower_dispatch_in_expr(body, env, ctx);
+        }
         TirExprKind::Assign { target, value } => {
             lower_dispatch_in_expr(target, env, ctx);
             lower_dispatch_in_expr(value, env, ctx);
@@ -2161,6 +2173,18 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
             | TirExprKind::Resume { value: inner } => {
                 self.visit_expr(inner);
             }
+            TirExprKind::VariadicTupleComprehension {
+                iterable,
+                destructure,
+                body,
+                ..
+            } => {
+                self.visit_expr(iterable);
+                for stmt in destructure {
+                    self.visit_stmt(stmt);
+                }
+                self.visit_expr(body);
+            }
             TirExprKind::Assign { target, value }
             | TirExprKind::Index {
                 expr: target,
@@ -2841,6 +2865,18 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             rewrite_calls_in_expr(expr, ctx);
+        }
+        TirExprKind::VariadicTupleComprehension {
+            iterable,
+            destructure,
+            body,
+            ..
+        } => {
+            rewrite_calls_in_expr(iterable, ctx);
+            for stmt in destructure {
+                rewrite_calls_in_stmt(stmt, ctx);
+            }
+            rewrite_calls_in_expr(body, ctx);
         }
         TirExprKind::Assign { target, value } => {
             rewrite_calls_in_expr(target, ctx);

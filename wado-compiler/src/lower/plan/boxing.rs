@@ -458,6 +458,9 @@ fn remap_locals_in_expr(expr: &mut TirExpr, remap: &IndexMap<u32, u32>) {
         | TirExprKind::VariantTest { expr: inner, .. } => {
             remap_locals_in_expr(inner, remap);
         }
+        TirExprKind::VariadicTupleComprehension { .. } => {
+            unreachable!("VariadicTupleComprehension should be expanded during monomorphization")
+        }
         TirExprKind::Index { expr: e, index, .. } => {
             remap_locals_in_expr(e, remap);
             remap_locals_in_expr(index, remap);

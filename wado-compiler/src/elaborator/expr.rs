@@ -225,6 +225,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Binary(binary) => self.resolve_binary(binary, ctx, expected_type),
             Expr::Unary(unary) => self.resolve_unary(unary, ctx, expected_type),
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
+            Expr::TupleComprehension(comp) => self.resolve_tuple_comprehension(comp, ctx),
             Expr::Call(call) => self.resolve_call(call, ctx, expected_type),
             Expr::MethodCall(method_call) => {
                 self.resolve_method_call(method_call, ctx, expected_type)
@@ -4109,6 +4110,136 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args.iter().any(|e| self.type_contains_pack(*e))
             }
             _ => false,
+        }
+    }
+
+    /// The pack a comprehension's iterable walks: its `(name, index)` and the
+    /// type the binding takes for one element.
+    ///
+    /// A mapped pack (`[..StructField<T, F>]`) binds the mapped element, the
+    /// same choice the variadic for-of makes.
+    pub(super) fn comprehension_pack_elem(
+        type_table: &std::cell::RefCell<TypeTable>,
+        iterable_type: TypeId,
+    ) -> Option<TypeId> {
+        Self::comprehension_pack_of(type_table, iterable_type).map(|(_, _, elem)| elem)
+    }
+
+    pub(super) fn comprehension_pack(
+        &self,
+        iterable_type: TypeId,
+    ) -> Option<(String, u32, TypeId)> {
+        Self::comprehension_pack_of(&self.tysys.type_table, iterable_type)
+    }
+
+    fn comprehension_pack_of(
+        type_table: &std::cell::RefCell<TypeTable>,
+        iterable_type: TypeId,
+    ) -> Option<(String, u32, TypeId)> {
+        let type_table = type_table.borrow();
+        let (elems, _) = type_table.as_tuple_through_ref(iterable_type)?;
+        elems.iter().find_map(|&e| match type_table.get(e) {
+            ResolvedType::TypePack {
+                name,
+                index,
+                mapped_elem,
+            } => Some((name.clone(), *index, mapped_elem.unwrap_or(e))),
+            _ => None,
+        })
+    }
+
+    /// Resolve `[for let v of tuple { expr }]`.
+    ///
+    /// Only a pack-typed tuple is walkable: a concrete tuple's elements have
+    /// unrelated types, so the body would need resolving once per element.
+    /// The result is the mapped pack `[..body_type]` — one element per source
+    /// element, each carrying the body's type at that element.
+    pub(super) fn resolve_tuple_comprehension(
+        &mut self,
+        comp: &ast::TupleComprehensionExpr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let iterable_type = self.resolve_expr(&comp.iterable, ctx, None);
+        let Some((pack_name, pack_index, elem_type)) = self.comprehension_pack(iterable_type) else {
+            let type_name = self.tysys.type_table.borrow().type_name(iterable_type);
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: format!(
+                    "a tuple comprehension walks a variadic tuple (`[..T]`); `{type_name}` is not one"
+                ),
+                span: comp.span,
+            });
+            return TypeTable::UNKNOWN;
+        };
+
+        let binding_type = if comp.is_enumerate {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_tuple(vec![TypeTable::I32, elem_type])
+        } else {
+            elem_type
+        };
+
+        ctx.enter_scope();
+        self.bind_comprehension_pattern(&comp.binding, binding_type, comp.span, ctx);
+        let index_binding = comp
+            .is_enumerate
+            .then(|| Self::enumerate_index_binding_name(&comp.binding))
+            .flatten();
+        if let Some(name) = &index_binding {
+            ctx.variadic_enumerate_indices.push(name.clone());
+        }
+        let body_type = self.resolve_expr(&comp.body, ctx, None);
+        if index_binding.is_some() {
+            ctx.variadic_enumerate_indices.pop();
+        }
+        ctx.exit_scope();
+
+        // A body that yields the element unchanged reproduces the source shape;
+        // anything else maps the pack through the body's type.
+        if body_type == elem_type {
+            return iterable_type;
+        }
+        let mut type_table = self.tysys.type_table.borrow_mut();
+        let mapped = type_table.make_mapped_type_pack(pack_name, pack_index, body_type);
+        type_table.make_tuple(vec![mapped])
+    }
+
+    /// Bind a comprehension's element pattern: an ident, or the sub-idents of a
+    /// tuple pattern (`[i, v]`).
+    fn bind_comprehension_pattern(
+        &mut self,
+        binding: &ast::Pattern,
+        binding_type: TypeId,
+        fallback_span: Span,
+        ctx: &mut FunctionContext,
+    ) {
+        match binding {
+            ast::Pattern::Ident { id, name, span } => {
+                ctx.add_local(name.clone(), binding_type, false, Some(*id));
+                self.record_local_symbol(*id, name, *span, false, binding_type);
+            }
+            ast::Pattern::Tuple(elems, _) => {
+                let inner = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .as_tuple(binding_type)
+                    .unwrap_or_else(|| vec![binding_type]);
+                for (i, elem) in elems.iter().enumerate() {
+                    if let ast::Pattern::Ident { id, name, span } = elem {
+                        let elem_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
+                        ctx.add_local(name.clone(), elem_type, false, Some(*id));
+                        self.record_local_symbol(*id, name, *span, false, elem_type);
+                    }
+                }
+            }
+            _ => {
+                let _ = self.emit(TypeError::InvalidPattern {
+                    message: "a tuple comprehension binds an identifier or `[i, v]`".to_string(),
+                    span: fallback_span,
+                });
+            }
         }
     }
 

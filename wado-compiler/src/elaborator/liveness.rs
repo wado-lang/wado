@@ -734,6 +734,10 @@ impl LastUseAnalyzer<'_> {
                     self.walk_expr(element, live, record);
                 }
             }
+            Expr::TupleComprehension(e) => {
+                self.walk_expr(&e.body, live, record);
+                self.walk_expr(&e.iterable, live, record);
+            }
             Expr::TemplateString(e) => {
                 for part in e.parts.iter().rev() {
                     if let ast::TemplatePart::Interpolation { expr, .. } = part {
