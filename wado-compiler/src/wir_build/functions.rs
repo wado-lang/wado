@@ -885,6 +885,9 @@ fn translate_global_init(
                 _ => WirInstr::F64Const(value),
             };
         }
+        // `null` at a reference slot *is* the placeholder, and a unit global
+        // has no slot at all — both land where the non-reducible case does.
+        Value::Null | Value::Unit => return init_placeholder(wir_type),
         Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => {
             return init_placeholder(wir_type);
         }

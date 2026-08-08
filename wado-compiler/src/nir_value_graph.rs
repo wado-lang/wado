@@ -130,6 +130,7 @@ fn const_identity_eq(a: &crate::const_eval::Value, b: &crate::const_eval::Value)
         ) => av.to_bits() == bv.to_bits() && ap == bp,
         (Value::Bool(a), Value::Bool(b)) => a == b,
         (Value::Char(a), Value::Char(b)) => a == b,
+        (Value::Null, Value::Null) | (Value::Unit, Value::Unit) => true,
         (
             Value::Aggregate {
                 type_id: at,
@@ -188,6 +189,8 @@ fn const_identity_eq(a: &crate::const_eval::Value, b: &crate::const_eval::Value)
         | (Value::Float { .. }, _)
         | (Value::Bool(_), _)
         | (Value::Char(_), _)
+        | (Value::Null, _)
+        | (Value::Unit, _)
         | (Value::Aggregate { .. }, _)
         | (Value::Seq { .. }, _)
         | (Value::Variant { .. }, _) => false,
@@ -212,6 +215,8 @@ fn const_identity_hash<H: std::hash::Hasher>(v: &crate::const_eval::Value, state
         }
         Value::Bool(b) => b.hash(state),
         Value::Char(c) => c.hash(state),
+        // The discriminant already hashed above is the whole identity.
+        Value::Null | Value::Unit => {}
         Value::Aggregate { type_id, fields } => {
             type_id.hash(state);
             fields.len().hash(state);
@@ -590,13 +595,13 @@ impl ValuePool {
             Value::Float { value, .. } => ValueKind::Float(value.to_bits(), ty),
             Value::Bool(b) => ValueKind::Bool(*b),
             Value::Char(c) => ValueKind::Char(*c),
+            Value::Null => ValueKind::Null,
+            Value::Unit => ValueKind::Unit,
             Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => {
                 ValueKind::Const(ConstKey::new(value.clone()), ty)
             }
         };
-        let id = self.intern(kind);
-        self.set_type(id, ty);
-        id
+        self.intern(kind)
     }
 
     /// Allocate a fresh `Opaque` value. Each call returns a `ValueId`
@@ -943,24 +948,11 @@ impl ValuePool {
         value_kind_to_const(self.kind(id), crate::const_eval::prim_of(ty, type_table))
     }
 
-    /// Intern a folded constant under `ty`. Arithmetic never yields an
-    /// aggregate or a sequence, which have no pure-value form.
+    /// Intern a folded constant under `ty`. An alias for [`Self::constant`],
+    /// kept for the arithmetic-folding call sites that read better naming the
+    /// interning.
     pub fn intern_const(&mut self, value: crate::const_eval::Value, ty: TypeId) -> ValueId {
-        match value {
-            crate::const_eval::Value::Int { value, .. } => self.int_typed(value, ty),
-            crate::const_eval::Value::Float { value, .. } => self.float(value, ty),
-            crate::const_eval::Value::Bool(b) => self.bool(b),
-            crate::const_eval::Value::Char(c) => self.char(c),
-            // The pool models pure scalars; the arithmetic folds feeding this
-            // never produce an aggregate, a sequence, or a variant.
-            crate::const_eval::Value::Aggregate { .. }
-            | crate::const_eval::Value::Seq { .. }
-            | crate::const_eval::Value::Variant { .. } => {
-                panic!(
-                    "an aggregate, sequence, or variant constant cannot be interned as a pure value"
-                )
-            }
-        }
+        self.constant(&value, ty)
     }
 
     pub fn select(&mut self, cond: ValueId, then: ValueId, else_: ValueId) -> ValueId {

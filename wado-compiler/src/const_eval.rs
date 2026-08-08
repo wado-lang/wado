@@ -23,6 +23,15 @@ pub enum Value {
     Bool(bool),
     /// Unicode scalar value (`char`).
     Char(char),
+    /// The null reference — what `null` denotes at a nullable reference type.
+    ///
+    /// Equality is decided only against another `Null`. A constant aggregate
+    /// names a *value*, not the reference reaching it, so `null == <aggregate>`
+    /// is left unevaluated rather than answered `false`: the evaluator must not
+    /// claim more than it knows.
+    Null,
+    /// The unit value, `()`. One inhabitant, so two are always equal.
+    Unit,
     /// A struct or tuple whose every field is itself a compile-time value.
     ///
     /// Fields are keyed by `field_index` — the key `FieldAccess`,
@@ -209,6 +218,8 @@ impl Value {
             | Self::Float { .. }
             | Self::Bool(_)
             | Self::Char(_)
+            | Self::Null
+            | Self::Unit
             | Self::Aggregate { .. }
             | Self::Variant { .. } => None,
         }
@@ -280,7 +291,10 @@ impl Value {
                         .zip(b_elements.iter())
                         .all(|(a, b)| a.denotes_same(b))
             }
+            // One inhabitant each, so identity needs no payload comparison.
+            (Self::Null, Self::Null) | (Self::Unit, Self::Unit) => true,
             (Self::Int { .. } | Self::Bool(_) | Self::Char(_), _) => self == other,
+            (Self::Null | Self::Unit, _) => false,
             (
                 Self::Float { .. }
                 | Self::Aggregate { .. }
@@ -338,6 +352,8 @@ impl Value {
             Self::Float { value, .. } => format_float_repr(*value),
             Self::Bool(b) => b.to_string(),
             Self::Char(c) => format_char_repr(*c),
+            Self::Null => "null".to_string(),
+            Self::Unit => "()".to_string(),
             Self::Aggregate { .. } | Self::Seq { .. } | Self::Variant { .. } => {
                 panic!(
                     "an aggregate, sequence, or variant value has no NIR literal repr; none enters the value pool"
@@ -415,6 +431,8 @@ pub(crate) fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
             }
             Value::Bool(_)
             | Value::Char(_)
+            | Value::Null
+            | Value::Unit
             | Value::Aggregate { .. }
             | Value::Seq { .. }
             | Value::Variant { .. } => None,

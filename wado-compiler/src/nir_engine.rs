@@ -816,6 +816,10 @@ impl<'a> Engine<'a> {
             Value::Float { value, .. } => ValueKind::Float(value.to_bits(), type_id),
             Value::Bool(b) => ValueKind::Bool(b),
             Value::Char(c) => ValueKind::Char(c),
+            // `null` and `()` are constants the pool can name, but promoting
+            // one is an extraction question this path does not answer: `()` has
+            // no Wasm representation at all. Keep the skeleton form.
+            Value::Null | Value::Unit => return false,
             Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => return false,
         };
         let vid = self.body.values.alloc_unshared(kind, type_id);
