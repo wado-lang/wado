@@ -448,7 +448,7 @@ trait Sized {}
    - **Mitigation**: Compiler warnings for expensive implicit copies
 2. **Orphan rule limitations**: Cannot extend external types with external traits
    - **Mitigation**: Newtype pattern (`struct MyString(String)`)
-3. **No opt-in copy trait**: a type cannot decline the deep copy or define its own
+3. **A type cannot decline the deep copy** or define its own
    - **Mitigation**: a reference (`&T`) is how a value is shared rather than copied
 4. **One trait per receiver at one argument list**: a call names only the method, and
    method resolution reads neither the argument nor the expected type, so
@@ -468,15 +468,14 @@ trait Sized {}
 
 ### Comparison with Rust
 
-| Aspect                 | Rust          | Wado                        |
-| ---------------------- | ------------- | --------------------------- |
-| Default on assignment  | Move          | Deep copy (value semantics) |
-| Opting out of the copy | (the default) | `move`, or share via `&T`   |
-| Bitwise copy           | `Copy` trait  | Automatic for primitives    |
-| Deep copy              | `Clone` trait | Automatic — no trait        |
-| Memory cleanup         | `Drop` trait  | GC (Drop for resources)     |
-| Trait syntax           | Same          | Same                        |
-| impl blocks            | Same          | Same                        |
+| Aspect                 | Rust                    | Wado                        |
+| ---------------------- | ----------------------- | --------------------------- |
+| Default on assignment  | Move                    | Deep copy (value semantics) |
+| Opting out of the copy | (the default)           | `move`, or share via `&T`   |
+| Copying a value        | `Copy` / `Clone` traits | Automatic, and deep         |
+| Memory cleanup         | `Drop` trait            | GC (Drop for resources)     |
+| Trait syntax           | Same                    | Same                        |
+| impl blocks            | Same                    | Same                        |
 
 ## Examples
 

@@ -18,7 +18,7 @@ The original 2026-01-16 design captured by value, exposed a single `fn` type, an
 1. Rust-like ergonomics: automatic capture-by-reference, surface syntax close to Rust.
 2. Type-level mutation info: split `fn` (read-only) from `fn mut` (mutating) so the optimizer can exploit purity on type-erased call paths.
 3. Compiler-managed dispatch: the compiler decides static vs dynamic dispatch by context (escape analysis); users do not annotate this choice. The LSP surfaces the decision as inline hints / hover information for those who care.
-4. Compatibility with value semantics: no `Clone`, no `move`, no `FnOnce` — closures are values like everything else.
+4. Compatibility with value semantics: closures are values like everything else.
 
 ## Closure Types
 
@@ -140,9 +140,9 @@ c2();
 assert(count == 2);
 ```
 
-### No `Clone` Trait
+### Copying a Closure
 
-Wado has no `Clone` trait or `.clone()` method. Constructions like `[f, f]` auto-copy `f`:
+A closure copies like any other value, so it can be used twice over:
 
 ```wado
 fn dup<F: fn(i32) -> i32>(f: F) -> [F, F] {
@@ -262,7 +262,6 @@ Future: resource adapter — wrap closures as CM resources with a `call` method 
 | Type in non-bound position | `impl Fn` / `dyn Fn` / `fn` ptr | `fn(T) -> U` (compiler picks dispatch; LSP surfaces it) |
 | `mut` binding for mutating | required                        | required                                                |
 | User-implementable trait   | unstable (`fn_traits`)          | not allowed                                             |
-| `Clone`                    | required trait                  | none (auto-copy)                                        |
 | Function pointer           | separate type                   | collapsed (closures with empty env)                     |
 | Lifetimes                  | tied to captured borrows        | none (GC)                                               |
 
@@ -274,7 +273,7 @@ Future: resource adapter — wrap closures as CM resources with a `call` method 
 2. Optimizer has mutation/purity information at type-erased call sites.
 3. Sub-typing `fn <: fn mut` — pure closures fit everywhere a mutating one does.
 4. Effect transparency via `<effect E>` keeps iterator API readable.
-5. Fewer concepts than Rust (no `Clone`, no `move`, no `FnOnce`, no separate `fn` pointer type, no user-facing `impl` / `dyn` distinction).
+5. Fewer concepts than Rust: one closure form, one bound syntax, and one dispatch decision the compiler makes.
 6. Single bare form `fn(T) -> U` in every type position — minimal syntactic surface.
 
 ### Negative
