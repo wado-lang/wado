@@ -1,11 +1,6 @@
-// Source: written for Gale from the `impl RustLexerBase for RustBase` in
-// package-gale/tests/driver_cst_rust_test.wado — not ported from
-// grammars-v4's RustLexerBase.java (see License hygiene in AGENTS.md).
-// License: same as the Gale package
-//
-// The Java twin of that Wado impl, so `antlr4-oracle.sh --super` runs ANTLR4
-// against the base class Gale runs against. Edit both or neither: a lone edit
-// silently re-opens the gap this file closes.
+// The Java twin of `impl RustLexerBase for RustBase` in
+// package-gale/tests/driver_cst_rust_test.wado, so `antlr4-oracle.sh --super`
+// runs ANTLR4 against the base class Gale runs against. Edit both or neither.
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.Lexer;
 

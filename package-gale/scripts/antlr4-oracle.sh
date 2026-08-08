@@ -224,9 +224,8 @@ else
     GRAMMAR_NAME="$(basename "$GRAMMAR_PATH" .g4)"
 fi
 
-# `options { superClass = X; }`, possibly spread over lines. The generated
-# recognizer will `extends X`, so X has to be on the compile path.
-# Most grammars declare none, and no match must not trip `pipefail`.
+# The generated recognizer will `extends X`, so X has to be on the compile
+# path. Most grammars declare none, and no match must not trip `pipefail`.
 SUPER_CLASS=$(tr '\n' ' ' < "$GRAMMAR_PATH" \
     | { grep -oE 'superClass[[:space:]]*=[[:space:]]*[A-Za-z_][A-Za-z0-9_]*' || true; } \
     | head -1 \
@@ -289,9 +288,8 @@ probe_param_type() {
     esac
 }
 
-# Java signature for one `this.<name>(<args>)` call site, as `name|params`.
-# Two call sites that differ only in their literals (`n("get")`, `n("set")`)
-# collapse to one signature here — emitting both would be a duplicate method.
+# Two call sites differing only in their literals (`n("get")`, `n("set")`)
+# collapse to one signature — emitting both would be a duplicate method.
 probe_signature() {
     local sig="$1"
     local name args params i part parts
@@ -313,9 +311,7 @@ probe_signature() {
     printf '%s|%s\n' "$name" "$params"
 }
 
-# Base class for $SUPER_CLASS derived from the grammar's own call sites: a
-# name used in a `{ ... }?` predicate answers -Dgale.probe.predicate, every
-# other name is a void action. Both record to -Dgale.probe.log — a name in
+# Predicates and actions alike record to -Dgale.probe.log: a name used in
 # both roles is stubbed boolean, so without that its action side would run
 # unrecorded.
 emit_probe_super() {
@@ -449,9 +445,8 @@ recognizer_errors() {
 }
 
 if [ "$PROBE_SUPER" = "1" ]; then
-    # A report, not an answer: stderr only, always exit 3. The stub has
-    # only the members the grammar names, so not even "reached nothing,
-    # both polarities agree" certifies anything.
+    # The stub has only the members the grammar names, so not even
+    # "reached nothing, both polarities agree" certifies anything.
     : > "$WORK_DIR/reached.txt"
     PROBE_LOG="-Dgale.probe.log=$WORK_DIR/reached.txt"
     run_testrig "$WORK_DIR/out.true" "$WORK_DIR/err.true" \

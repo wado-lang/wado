@@ -83,8 +83,7 @@ check "super float dot" '1.' 0 "'1.',<FLOAT_LITERAL>" '' \
     -- --tokens --super "$RUST_BASE" tests/grammars/RustLexer.g4
 
 # --probe-super reports, never answers: exit 3 and empty stdout every time,
-# so no caller can pin it. It still says which members the input reached and
-# whether the predicates changed the outcome.
+# so no caller can pin it.
 check "probe reports a polarity split" '1.' 3 '' 'NOT an oracle
 FloatDotPossible
 with every predicate true
@@ -137,8 +136,6 @@ lexer grammar OpaqueLex;
 options { superClass = OpaqueBase; }
 ID : [a-z]+ {this.f(getText());} ;
 EOF
-# A non-literal argument has no inferable type; say so instead of letting
-# javac report a missing symbol.
 check "non-literal argument refused" 'abc' 1 '' 'cannot infer a signature' \
     -- --tokens --probe-super "$FIXTURES/OpaqueLex.g4"
 

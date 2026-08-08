@@ -303,9 +303,7 @@ in `regen-oracle.sh`:
 
 `options { superClass = X; }` puts part of the grammar's behaviour in
 hand-written host code outside the `.g4`, so the grammar alone has no
-observable answer and the oracle refuses to guess one. That refusal used
-to fall on exactly the grammars hardest to reason about — `RustLexer`,
-`TypeScriptLexer`, `ANTLRv4Lexer`.
+observable answer and the oracle refuses to guess one.
 
 `--super <Base.java>` compiles a base class alongside the generated
 recognizer, and is the only way to oracle such a grammar.
@@ -314,16 +312,14 @@ recognizer, and is the only way to oracle such a grammar.
 specification and a divergence is a Gale bug rather than two different
 grammars disagreeing. Keep each pair in sync.
 
-`--probe-super` derives a base from the grammar's own
-`this.<name>(...)` call sites — predicates return a constant, actions do
-nothing, both record themselves — and reports which members the input
-reached plus the answer under each predicate polarity. It writes to
-stderr only and always exits 3.
+`--probe-super` synthesizes a base from the grammar's own
+`this.<name>(...)` call sites and reports which of those members the
+input reached, plus the answer under each predicate polarity. It writes
+to stderr only and always exits 3.
 
-**The probe cannot be promoted to an oracle**, and the reason is
-structural: a base class also reaches the recognizer through overrides of
-inherited runtime methods, which the grammar never names and a stub
-derived from it therefore never has. `ANTLRv4Lexer` declares `TOKEN_REF`
+**The probe cannot be promoted to an oracle.** A base class also reaches
+the recognizer through overrides of inherited runtime methods, which the
+grammar never names and a stub derived from it therefore never has. `ANTLRv4Lexer` declares `TOKEN_REF`
 and `RULE_REF` in `tokens {}` with no rule producing them, so
 `LexerAdaptor` must assign them from an `emit()` override; on `A : B ;`
 the probe reaches no `LexerAdaptor` member and both polarities agree, and

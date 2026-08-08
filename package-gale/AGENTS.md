@@ -37,7 +37,6 @@ ANTLR4 is BSD-3; copying or paraphrasing its implementation risks making Gale a 
 - Do NOT read ANTLR4 implementation source: `vendor/antlr4/tool/**/*.{java,g}` and `vendor/antlr4/runtime/**/*.java` (e.g. `ParserATNSimulator.java`, `LL1Analyzer.java`, the bootstrap `.g` grammars). Algorithmic ideas inferred from that source belong to ANTLR4, not Gale.
 - OK to read: `.g4` files anywhere under `vendor/antlr4/`; `runtime-testsuite/**/*.txt` descriptors; `vendor/antlr4/doc/*.md` (spec-like prose — the canonical `.g4` semantics reference; a curated index is in `antlr4-compatibility.md`).
 - OK to run: the published `antlr-4.13.2-complete.jar` as a black-box oracle (clean-room measurement).
-- The base classes in `tests/grammars/java/` are written from Gale's own Wado `impl`s, not ported from grammars-v4's Java. Keep it that way: the point is to hold the base class equal across the two sides, and grammars-v4's own version is neither needed for that nor ours to paraphrase.
 
 ## Standing codegen rules
 
