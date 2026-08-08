@@ -1,0 +1,27 @@
+// A compile-time parameter bound to a local still settles the gate. The value
+// graph names the global read, so the binding is transparent and the branch
+// folds — `guarded` must not survive at `-O2`, and the local must not appear as
+// a runtime read of the parameter.
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: i32 = 0;
+
+fn guarded() -> String {
+    return `this text only exists inside the folded branch`;
+}
+
+export fn run() with Stdout {
+    let level = LOG_LEVEL;
+    if level < 2 {
+        println(guarded());
+    }
+    println(`done`);
+}
+
+__DATA__
+{
+    "params": { "log.level": "5" },
+    "stdout": "done\n",
+    "wir_not_expect:O2": ["this text only exists inside the folded branch"]
+}

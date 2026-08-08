@@ -366,12 +366,17 @@ pub(crate) fn build_scoped(
     out
 }
 
-/// Whether `id`'s value is a build-context-free constant safe to freeze into an
-/// operand at the early freeze (see `extract::freeze_pure_arith`'s constant-leaf
-/// promotion). Not every constant qualifies — see
-/// [`ValueKind::is_operand_constant`].
+/// Whether `id`'s value is safe to freeze into an operand slot — the use site
+/// can re-emit it without the surrounding flow.
+///
+/// Constants qualify by being context-free; not every constant does, see
+/// [`ValueKind::is_operand_constant`]. A [`ValueKind::GlobalRead`] qualifies by
+/// invariant instead: [`Builder::bump_heap_globals`] drops a local's value the
+/// moment anything may have written a global, so a global read that still
+/// reaches a use is one that use may re-emit as a `global.get`.
 pub(crate) fn is_const_value(pool: &ValuePool, id: ValueId) -> bool {
-    pool.kind(id).is_operand_constant()
+    let kind = pool.kind(id);
+    kind.is_operand_constant() || matches!(kind, ValueKind::GlobalRead { .. })
 }
 
 /// Re-intern a constant `ValueKind` into `pool`, returning its id there.
@@ -753,7 +758,7 @@ impl<'a> Builder<'a> {
             _ => true,
         };
         if writes_globals {
-            self.heap_state.bump_globals();
+            self.bump_heap_globals();
         }
         let pure = self.pure_calls.contains(&call);
         // Iterate ascending local index, not `mut_escaped`'s insertion order:
@@ -864,7 +869,7 @@ impl<'a> Builder<'a> {
                 // writes.
                 self.walk_block(block);
                 self.dirty_all_writes_in_block(block);
-                self.heap_state.bump_all();
+                self.bump_heap_all();
             }
         }
     }
@@ -1049,7 +1054,7 @@ impl<'a> Builder<'a> {
                         }
                     }
                     _ => {
-                        self.heap_state.bump_all();
+                        self.bump_heap_all();
                     }
                 }
                 None
@@ -1057,7 +1062,7 @@ impl<'a> Builder<'a> {
             ExprKind::GlobalVarSet { value, .. } => {
                 self.walk_operand(value);
                 // Globals share the heap from the optimizer's perspective.
-                self.heap_state.bump_all();
+                self.bump_heap_all();
                 None
             }
 
@@ -1116,7 +1121,7 @@ impl<'a> Builder<'a> {
                 // Same break-only-write hazard as the `StmtKind::LabeledBlock` arm.
                 self.walk_block(block);
                 self.dirty_all_writes_in_block(block);
-                self.heap_state.bump_all();
+                self.bump_heap_all();
                 None
             }
             ExprKind::Match { expr: scrut, arms } => {
@@ -1231,7 +1236,7 @@ impl<'a> Builder<'a> {
                     self.walk_operand(a);
                 }
                 // Raw CM calls have opaque captures; stay fully conservative.
-                self.heap_state.bump_all();
+                self.bump_heap_all();
                 None
             }
             ExprKind::IndirectCall { callee, args } => {
@@ -1239,7 +1244,7 @@ impl<'a> Builder<'a> {
                 for a in args {
                     self.walk_operand(a);
                 }
-                self.heap_state.bump_all();
+                self.bump_heap_all();
                 None
             }
 
@@ -1417,6 +1422,51 @@ impl<'a> Builder<'a> {
         for (field, stored) in live {
             let dst_ver = self.heap_state.version_of(Some(dst_root), field);
             self.field_store.insert((dst_recv, field, dst_ver), stored);
+        }
+    }
+
+    /// Bump every heap generation, and forget what any local holding a global
+    /// read holds. See [`Builder::bump_heap_globals`].
+    fn bump_heap_all(&mut self) {
+        self.heap_state.bump_all();
+        self.forget_global_valued_locals();
+    }
+
+    /// Bump the global generation, and forget what any local holding a global
+    /// read holds.
+    ///
+    /// The forgetting is what makes a `GlobalRead` value mean "re-emittable
+    /// here". A local bound from a global holds the value the global had *at
+    /// the binding*; once anything may have written a global, re-reading gives
+    /// something else, so promoting the local's read to a `global.get` would
+    /// change what the program computes. Dropping the value to an `Opaque`
+    /// keeps the graph honest — it says "I no longer know" rather than naming a
+    /// value that is no longer there — and leaves promotion with the invariant
+    /// it needs: a `GlobalRead` reaching a use is a `GlobalRead` that use may
+    /// re-emit.
+    fn bump_heap_globals(&mut self) {
+        self.heap_state.bump_globals();
+        self.forget_global_valued_locals();
+    }
+
+    /// Drop every local whose current value is a global read to a fresh
+    /// `Opaque`. Computed from `current_value` rather than tracked alongside
+    /// it: `current_value` is snapshotted, restored and joined as one unit, and
+    /// a parallel set would be one more component a join could forget.
+    fn forget_global_valued_locals(&mut self) {
+        let stale: Vec<u32> = self
+            .current_value
+            .iter()
+            .filter(|(_, v)| {
+                matches!(
+                    self.pool.kind(**v),
+                    crate::nir_value_graph::ValueKind::GlobalRead { .. }
+                )
+            })
+            .map(|(idx, _)| *idx)
+            .collect();
+        for idx in stale {
+            self.invalidate_local_with_source(idx, Some(OpaqueSource::Local(idx)));
         }
     }
 
@@ -1706,7 +1756,7 @@ impl<'a> Builder<'a> {
         self.heap_state.field_global = new_field_global;
         self.heap_state.default_version = new_default;
         if globals_changed {
-            self.heap_state.bump_globals();
+            self.bump_heap_globals();
         } else {
             self.heap_state.global_version = pre.global_version;
         }
@@ -1823,7 +1873,7 @@ impl<'a> Builder<'a> {
         }
         self.drop_ref_targets_for(&guard_writes);
         if any_guard {
-            self.heap_state.bump_all();
+            self.bump_heap_all();
         }
 
         let pre = self.flow_snapshot();

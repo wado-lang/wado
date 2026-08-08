@@ -2135,6 +2135,27 @@ impl FunctionTranslator<'_, '_> {
             // the passes can add a divergent-width use). Behavior-neutral today
             // (late freeze sets `type_of` to the same type); load-bearing for
             // early promotion.
+            // The promoted read re-emits as a read. Sound because the value
+            // only reaches a use while the graph's global generation is
+            // unchanged since the read — see `builder::is_const_value`.
+            ValueKind::GlobalRead { global, .. } => {
+                let (module_source, name) = self
+                    .body
+                    .values
+                    .global_of(global)
+                    .expect("a promoted global read names an interned global");
+                WirInstr::GlobalGet {
+                    name: WirName {
+                        fq: global_name(module_source, name),
+                    },
+                    result_ty: self.wir_type(
+                        self.body
+                            .values
+                            .type_of(v)
+                            .expect("a promoted global read carries its type"),
+                    ),
+                }
+            }
             ValueKind::Int(value, int_ty) => match self.type_table.get(int_ty) {
                 ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
                     WirInstr::I64Const(value as i64)

@@ -291,26 +291,57 @@ fn collect_param_reads(
     span: Span,
     out: &mut Vec<Remark>,
 ) {
+    let mut report = |param: &String| {
+        out.push(Remark {
+            message: format!(
+                "compile-time parameter `{param}` is still read here, so this branch is \
+                 decided at run time; the code it guards was not stripped"
+            ),
+            span,
+        });
+    };
+    // The condition itself may be nothing but a promoted read.
+    if let Some(param) = promoted_param_read(body, op, params) {
+        report(param);
+    }
     let Some(root) = op.as_expr() else {
         return;
     };
     let mut stack = vec![NodeRef::Expr(root)];
     while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(e) = node
-            && let ExprKind::GlobalVarGet {
+        if let NodeRef::Expr(e) = node {
+            if let ExprKind::GlobalVarGet {
                 module_source,
                 name,
             } = &body.exprs[e].kind
-            && let Some(param) = params.get(&(module_source.clone(), name.clone()))
-        {
-            out.push(Remark {
-                message: format!(
-                    "compile-time parameter `{param}` is still read here, so this branch is \
-                     decided at run time; the code it guards was not stripped"
-                ),
-                span,
+                && let Some(param) = params.get(&(module_source.clone(), name.clone()))
+            {
+                report(param);
+            }
+            // A promoted read is an `Operand::Value`, which `for_each_child`
+            // does not reach — and promotion is exactly what a folded gate's
+            // read goes through, so missing it would make the remark silent on
+            // the case it exists for.
+            body.for_each_expr_operand(e, &mut |child| {
+                if let Some(param) = promoted_param_read(body, child, params) {
+                    report(param);
+                }
             });
         }
         body.for_each_child(node, |c| stack.push(c));
     }
+}
+
+/// The `#[param]` name a promoted global-read operand names, if any.
+fn promoted_param_read<'a>(
+    body: &Body,
+    op: crate::nir_arena::Operand,
+    params: &'a IndexMap<(ModuleSource, String), String>,
+) -> Option<&'a String> {
+    let v = op.as_value()?;
+    let crate::nir_value_graph::ValueKind::GlobalRead { global, .. } = body.values.kind(v) else {
+        return None;
+    };
+    let (module_source, name) = body.values.global_of(*global)?;
+    params.get(&(module_source.clone(), name.clone()))
 }
