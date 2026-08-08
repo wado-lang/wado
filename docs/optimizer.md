@@ -141,6 +141,26 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 - [ ] Dead store elimination.
 - [ ] Strength reduction; reassociation; jump threading; SimplifyCFG.
 - [ ] Cross-block copy propagation.
+- [ ] Sinking pure definitions into the branch that uses them (partial dead code
+      elimination). The mirror of LICM — the same motion-safety predicates and
+      `mod_ref` summary apply, and moving pure code past effectful code is sound
+      where hoisting is not. The standing case is a gated call whose arguments
+      the caller has already built: `core:log`'s runtime level check reduces to a
+      global read and a compare, but the message template and field struct are
+      still constructed in front of it, so the disabled path pays two allocations
+      and two calls for a branch it does not take.
+- [ ] Constant propagation into a `String` parameter. A constant reaches a scalar
+      parameter, and reaches a `String` parameter consumed by `match`, but a
+      `String` parameter compared with `==` does not fold — so a helper that maps
+      a `#[param]` string to a value silently stops the whole `#[param]` fold.
+- [ ] Devirtualizing effect dispatch. An effect operation compiles to a load of
+      the per-effect dispatch global, an `outer` save/restore around the call, a
+      `ref.cast` of the closure field, and a `call_ref` — none of it inlinable.
+      Whole-program compilation can see when an effect has a single `impl` that
+      does not self-delegate, and lower the wrapper to a direct call; declaring
+      each dispatch field at its precise closure type retires the `ref.cast`
+      independently. High value: it applies to every effect, not just the hot
+      ones.
 - [ ] `param_spec` profitability — specialize only when the constants can decide
       a branch, so a chain that never folds stops duplicating code.
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when
