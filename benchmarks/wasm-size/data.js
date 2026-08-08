@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786182892960,
+  "lastUpdate": 1786228719517,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46541,6 +46541,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 271639,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "47afccab8ac158d853ba864c83b973762cc99c45",
+          "message": "Merge pull request #1767 from wado-lang/claude/returnabi-variant-design-vt1q73\n\nperf(optimizer): scalarize variant returns at NIR",
+          "timestamp": "2026-08-09T07:27:16+09:00",
+          "tree_id": "53193fda44518a3da461e8bc4b797ff5bad6c26b",
+          "url": "https://github.com/wado-lang/wado/commit/47afccab8ac158d853ba864c83b973762cc99c45"
+        },
+        "date": 1786228718715,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271633,
             "unit": "bytes"
           }
         ]
