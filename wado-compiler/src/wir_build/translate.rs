@@ -2881,7 +2881,7 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
             }
         }
         WirInstr::Block { body, result, .. } => {
-            if result.is_some() && return_every_exit(body, 0) {
+            if result.is_some() && return_every_exit(body, 0, Tail::IsResult) {
                 *result = None;
             }
         }
@@ -2903,14 +2903,23 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
     }
 }
 
+/// Where the last instruction of a list ends up: yielding the block's result, or
+/// feeding whatever operand it was written for.
+#[derive(Clone, Copy, PartialEq)]
+enum Tail {
+    IsResult,
+    IsOperand,
+}
+
 /// Turn every exit to `target_depth` into a `Return` of its N fields, and
 /// report whether it reached all of them — the caller drops the block's result
 /// type on that answer.
 ///
 /// Only `Block`, `Loop` and `If` bodies open a Wasm label. Every other child an
 /// instruction carries rides at the enclosing depth, `let x = f()?` lowering to
-/// `LocalSet { value: If { … } }` among them.
-fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32) -> bool {
+/// `LocalSet { value: If { … } }` among them. Their fall-through tails feed the
+/// operand rather than the block, so only a `Br` in them becomes a `Return`.
+fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> bool {
     fn exits_to_target(instr: &WirInstr, target_depth: u32) -> bool {
         match instr {
             WirInstr::Br { depth } => *depth == target_depth,
@@ -2941,8 +2950,15 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32) -> bool {
         }
     }
 
+    /// The two values an exit may carry: the aggregate itself, or a call to a
+    /// callee under this same ABI, which `multi_value_return`'s tail-call rule
+    /// accepts wherever it accepts the aggregate.
+    fn yields_results(instr: &WirInstr) -> bool {
+        matches!(instr, WirInstr::StructNew { .. } | WirInstr::Call { .. })
+    }
+
     fn exit_as_siblings(instrs: &[WirInstr], i: usize, target_depth: u32) -> bool {
-        matches!(&instrs[i], WirInstr::StructNew { .. })
+        yields_results(&instrs[i])
             && instrs.get(i + 1).is_some_and(
                 |next| matches!(next, WirInstr::Br { depth } if *depth == target_depth),
             )
@@ -2953,15 +2969,18 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32) -> bool {
             return false;
         };
         exits_to_target(instr, target_depth)
-            && matches!(
-                seq.get(seq.len().wrapping_sub(2)),
-                Some(WirInstr::StructNew { .. })
-            )
+            && seq
+                .get(seq.len().wrapping_sub(2))
+                .is_some_and(yields_results)
     }
 
-    fn returning(fields: Vec<WirInstr>) -> WirInstr {
+    fn returning(value: WirInstr) -> WirInstr {
+        let payload = match value {
+            WirInstr::StructNew { fields, .. } => WirInstr::Seq(fields),
+            already_results => already_results,
+        };
         WirInstr::Return {
-            value: Some(Box::new(WirInstr::Seq(fields))),
+            value: Some(Box::new(payload)),
         }
     }
 
@@ -2969,23 +2988,20 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32) -> bool {
     let mut i = 0;
     while i < instrs.len() {
         if exit_as_siblings(instrs, i, target_depth) {
-            if let WirInstr::StructNew { fields, .. } =
-                std::mem::replace(&mut instrs[i], WirInstr::Nop)
-            {
-                instrs[i] = returning(fields);
-                instrs[i + 1] = WirInstr::Nop;
-            }
+            let value = std::mem::replace(&mut instrs[i], WirInstr::Nop);
+            instrs[i] = returning(value);
+            instrs[i + 1] = WirInstr::Nop;
             i += 2;
             continue;
         }
         if exit_as_seq(&instrs[i], target_depth) {
             if let WirInstr::Seq(mut seq) = std::mem::replace(&mut instrs[i], WirInstr::Nop) {
                 let _br = seq.pop();
-                if let Some(WirInstr::StructNew { fields, .. }) = seq.pop() {
+                if let Some(value) = seq.pop() {
                     instrs[i] = if seq.is_empty() {
-                        returning(fields)
+                        returning(value)
                     } else {
-                        seq.push(returning(fields));
+                        seq.push(returning(value));
                         WirInstr::Seq(seq)
                     };
                 }
@@ -2995,9 +3011,14 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32) -> bool {
         }
         all_rewritten &= !exits_to_target(&instrs[i], target_depth);
         let one_deeper = target_depth + 1;
+        let inherited = if tail == Tail::IsResult && i + 1 == instrs.len() {
+            Tail::IsResult
+        } else {
+            Tail::IsOperand
+        };
         match &mut instrs[i] {
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-                all_rewritten &= return_every_exit(body, one_deeper);
+                all_rewritten &= return_every_exit(body, one_deeper, inherited);
             }
             WirInstr::If {
                 condition,
@@ -3005,20 +3026,27 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32) -> bool {
                 else_body,
                 ..
             } => {
-                all_rewritten &=
-                    return_every_exit(std::slice::from_mut(condition.as_mut()), target_depth);
-                all_rewritten &= return_every_exit(then_body, one_deeper);
+                all_rewritten &= return_every_exit(
+                    std::slice::from_mut(condition.as_mut()),
+                    target_depth,
+                    Tail::IsOperand,
+                );
+                all_rewritten &= return_every_exit(then_body, one_deeper, inherited);
                 if let Some(eb) = else_body {
-                    all_rewritten &= return_every_exit(eb, one_deeper);
+                    all_rewritten &= return_every_exit(eb, one_deeper, inherited);
                 }
             }
             WirInstr::Seq(body) => {
-                all_rewritten &= return_every_exit(body, target_depth);
+                all_rewritten &= return_every_exit(body, target_depth, inherited);
             }
             other => {
                 let mut ok = true;
                 other.for_each_boxed_child_mut(&mut |child| {
-                    ok &= return_every_exit(std::slice::from_mut(child), target_depth);
+                    ok &= return_every_exit(
+                        std::slice::from_mut(child),
+                        target_depth,
+                        Tail::IsOperand,
+                    );
                 });
                 all_rewritten &= ok;
             }
@@ -3026,11 +3054,12 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32) -> bool {
         i += 1;
     }
 
-    if let Some(last) = instrs.last_mut()
-        && matches!(last, WirInstr::StructNew { .. })
-        && let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop)
+    if tail == Tail::IsResult
+        && let Some(last) = instrs.last_mut()
+        && yields_results(last)
     {
-        *last = returning(fields);
+        let value = std::mem::replace(last, WirInstr::Nop);
+        *last = returning(value);
     }
     all_rewritten
 }
