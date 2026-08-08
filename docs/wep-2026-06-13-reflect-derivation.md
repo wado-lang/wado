@@ -42,9 +42,11 @@ parallel metadata list or value accessor.
 ```wado
 internal trait ReflectStruct {                    // struct
     type FieldTypes;                             // payload pack [F_0, F_1, …]
+    type FieldSlots;                             // [Option<F_0>, …]
     type Members;                                // [StructField<Self, F_0>, …]
     fn members() -> Self::Members;
     fn from_fields(fields: Self::FieldTypes) -> Self;  // assemble from field values
+    fn defaults() -> Self::FieldSlots;           // declared `f: T = expr` per field
     fn type_name() -> String;
     fn wire_name_policy() -> CaseStyle;          // #[wire(name_policy)], casing not applied
 }
@@ -110,6 +112,14 @@ Every kind spells its build direction `from_<channel>`. `from_discriminant` /
 error, not a bug; `from_fields` is total, since a field-value tuple is already
 typed. `discriminant` / `bits` read the live tag off a value.
 
+`FieldSlots` and `defaults()` are the value-level companion of `FieldTypes`:
+the same pack under `Option`, carrying each field's declared default (`f: T =
+expr`) or `None`. They are not a parallel metadata list — a default is a value
+of the field's own type, so it belongs to the payload channel, and a build over
+a wire-ordered stream seeds its slots with one call. Keeping it off the member
+handle keeps every other `members()` walk from materializing defaults it never
+reads.
+
 ## Members
 
 Every reflected member is a handle implementing the sealed `Member` trait — the
@@ -155,54 +165,25 @@ A struct's build direction is `from_fields`, which takes the field values in
 declaration order — but a self-describing format delivers them in wire order,
 and a pack map (`[..F::method(args)]`) applies one expression per element with
 no per-element context beyond a mutable cursor. Neither side can reorder alone,
-so the derivation holds the values: a slot tuple `[..Option<F>]`, written by the
-wire loop at the index the format reports and read back in declaration order.
+so the derivation holds the values: a slot tuple `[..Option<F>]` seeded with the
+declared defaults, written by the wire loop at the index the format reports and
+read back in declaration order.
 
-```wado
-impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Deserialize> Deserialize for T {
-    fn deserialize<D: Deserializer>(d: &mut D) -> Result<T, DeserializeError> {
-        let members = ReflectStruct::<T>::members();
-        let mut sd = d.begin_struct(&ReflectStruct::<T>::type_name(), members.len())?;
-        let mut slots = [..F::empty_slot()];              // [..Option<F>]
-        while let Some(index) = sd.next_field::<T>()? {
-            let mut taken = false;
-            for let [i, _] of slots.enumerate() {
-                if i == index {
-                    slots[i] = Option::Some(sd.value()?);
-                    taken = true;
-                }
-            }
-            if !taken {
-                sd.skip()?;
-            }
-        }
-        sd.end()?;
-        return Result::Ok(ReflectStruct::<T>::from_fields(
-            [for let [i, slot] of slots.enumerate() { resolve_field(slot, &members[i])? }],
-        ));
-    }
-}
-```
+The blanket binds `T: ReflectStruct<FieldTypes = [..F]> + FieldSchema` and
+`..F: Deserialize`, and the walk needs three things the language grew for it: a
+variadic `for-of` that binds the element index, that index as a tuple subscript
+so the wire loop can write one slot, and the comprehension that reads the slots
+back into `from_fields`' argument (WEP 2026-03-14).
 
-`resolve_field` is ordinary library code: the slot's value where the wire
-carried one, else the field's declared default, else a `MissingField` error
-naming it.
+Seeding with `defaults()` is what makes a declared default an optional field:
+the wire overwrites the slot when it carries one, and a slot still empty at the
+end becomes a `MissingField` error naming the field.
 
 The wire protocol is unchanged — `next_field` over `FieldSchema`, one streaming
-pass — so no format implementation moves. Four things the language and the
-reflection API do not have yet are what it waits on:
-
-- `.enumerate()` over a variadic (pack-typed) `for-of`. The concrete-tuple form
-  exists; the deferred one rejects it.
-- The `[for let [i, v] of tuple.enumerate() { expr }]` collection form
-  (WEP 2026-03-14 §8b), which assembles `[..F]` out of `[..Option<F>]`. A pack
-  map cannot: it applies one expression to every element, with no index to pair
-  a slot with its member.
-- The `.enumerate()` index usable as a tuple subscript. It is a compile-time
-  constant by construction, but `slots[i]` is rejected today.
-- `StructField::default_value() -> Option<F>`, exposing a field's declared
-  default (`f: T = expr`) to a build derivation. It lowers to an index-keyed
-  bridge, as `get` does.
+pass — so no format implementation moves. `FieldSchema` is the one piece the
+compiler still synthesizes per struct: `lookup` matches a wire key's bytes
+against the field names without allocating a substring, which no library
+derivation can spell.
 
 The alternative — a `DeserializeStruct` serving fields in declaration order —
 moves the reordering into every format (JSON, CBOR, NSD, `core:args`), each
@@ -291,14 +272,9 @@ casing is serialization vocabulary, not type structure, so it lives in
 `core:serde`; any schema library (Jade) calls the same helper, so wire names never
 diverge.
 
-```wado
-pub fn wire_name<M: Member>(m: &M, policy: CaseStyle) -> String {
-    return match m.wire_name_override() {
-        Option::Some(o) => o,                     // explicit override wins
-        Option::None    => apply_case(policy, m.name()),
-    };
-}
-```
+`core:serde::wire_name(member, policy)` resolves it: the explicit override wins,
+otherwise the policy's casing applies to the source name. It reads only compile-time
+facts, so it folds to a literal at each use site.
 
 `CaseStyle` is total (`Identity` when no `name_policy` is set). `apply_case` covers
 the six styles (`camelCase`, `snake_case`, `PascalCase`, `SCREAMING_SNAKE_CASE`,

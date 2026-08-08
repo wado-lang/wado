@@ -956,6 +956,54 @@ fn unknown_case_error(key: &CaseKey) -> DeserializeError {
     };
 }
 
+/// The value a slot resolves to: what the wire carried, else the field's
+/// declared default (already seeded into the slot), else a `MissingField`
+/// error naming it.
+fn require_field<F>(slot: Option<F>, name: String) -> Result<F, DeserializeError> {
+    if let Some(value) = slot {
+        return Result::Ok(value);
+    }
+    return Result::Err(DeserializeError {
+        kind: DeserializeErrorKind::MissingField,
+        message: `missing field: ${name}`,
+        offset: -1,
+    });
+}
+
+/// Struct deserialization derived over `ReflectStruct`.
+///
+/// The wire delivers fields in its own order while `from_fields` takes them in
+/// declaration order, so the derivation holds them: a slot tuple seeded with
+/// the declared defaults, written at the index the format reports and read back
+/// in declaration order.
+impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deserialize for T {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<T, DeserializeError> {
+        let members = ReflectStruct::<T>::members();
+        let policy = ReflectStruct::<T>::wire_name_policy();
+        let mut sd = d.begin_struct(&ReflectStruct::<T>::type_name(), members.len())?;
+        let mut slots = ReflectStruct::<T>::defaults();
+        while let Some(index) = sd.next_field::<T>()? {
+            let mut taken = false;
+            for let [i, _slot] of slots.enumerate() {
+                if i == index {
+                    let value: F = sd.value()?;
+                    slots[i] = Option::Some(value);
+                    taken = true;
+                }
+            }
+            if !taken {
+                sd.skip()?;
+            }
+        }
+        sd.end()?;
+        return Result::Ok(ReflectStruct::<T>::from_fields(
+            [for let [i, slot] of slots.enumerate() {
+                require_field(slot, wire_name(&members[i], policy))?
+            }],
+        ));
+    }
+}
+
 /// Variant deserialization derived over `ReflectVariant`: find the case the
 /// wire names, then read its payload.
 impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Deserialize> Deserialize for V {

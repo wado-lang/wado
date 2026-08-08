@@ -70,6 +70,10 @@ internal trait ReflectStruct {
     /// The per-field member tuple `[StructField<Self, F_0>, ...]`.
     type Members;
 
+    /// The field slots `[Option<F_0>, ...]` — the value-level companion of
+    /// `FieldTypes`, seeded by `defaults()`.
+    type FieldSlots;
+
     /// Returns the struct name.
     #[compiler_item("reflect_struct_type_name")]
     fn type_name() -> String;
@@ -81,6 +85,11 @@ internal trait ReflectStruct {
     /// Assembles the struct from its field values.
     #[compiler_item("reflect_struct_from_fields")]
     fn from_fields(fields: Self::FieldTypes) -> Self;
+
+    /// The declared field defaults (`f: T = expr`), `None` where a field
+    /// declares none. Seeds a build over a wire-ordered stream.
+    #[compiler_item("reflect_struct_defaults")]
+    fn defaults() -> Self::FieldSlots;
 
     /// The struct's `#[wire(name_policy)]` (`Identity` if none).
     #[compiler_item("reflect_struct_wire_name_policy")]

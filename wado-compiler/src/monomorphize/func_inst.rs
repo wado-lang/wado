@@ -1904,10 +1904,7 @@ impl Monomorphizer {
         // Substitute the expression's own type
         expr.type_id = self.substitute_type(expr.type_id, substitution, type_table);
 
-        if matches!(
-            expr.kind,
-            TirExprKind::VariadicTupleComprehension { .. }
-        ) {
+        if matches!(expr.kind, TirExprKind::VariadicTupleComprehension { .. }) {
             self.expand_tuple_comprehension(expr, substitution, type_table, local_count, locals);
             return;
         }
@@ -3694,8 +3691,16 @@ impl Monomorphizer {
 
                     // The body_pack_type is the individual field type (e.g., [i32, i32] → i32).
                     // For non-tuple field types this is just the field type itself.
+                    //
+                    // Under `.enumerate()` the binding is the mapped element,
+                    // but the body's own pack positions still mean the source
+                    // element — `[..Option<F>]` binds `Option<F_k>` and spells
+                    // `F` as `F_k`.
                     let body_pack_type = if is_enumerate {
-                        elem_type
+                        mapped_source_elems
+                            .as_ref()
+                            .and_then(|es| es.get(i).copied())
+                            .unwrap_or(elem_type)
                     } else {
                         pair_fields[0]
                     };
@@ -3713,15 +3718,10 @@ impl Monomorphizer {
                         } = &orig_stmt.kind
                         {
                             let field_type = pair_fields.get(j).copied().unwrap_or(body_pack_type);
-                            // Update locals for this local
-                            let idx = *local_index as usize;
-                            if idx < locals.len() {
-                                locals[idx] = TirLocal {
-                                    name: name.clone(),
-                                    type_id: field_type,
-                                    is_mut: *is_mut,
-                                };
-                            }
+                            // The `locals` entry is left to
+                            // `reconcile_unrolled_body_locals`: writing it here
+                            // would let the last iteration's type clobber the
+                            // slot the first one still holds.
                             let binding_ref = TirExpr::new(
                                 TirExprKind::Local {
                                     index: binding_local_idx,
@@ -4207,9 +4207,7 @@ impl Monomorphizer {
                     Self::rewrite_local_index_in_stmt(s, template_local, sub_local);
                 }
             }
-            if is_enumerate
-                && let Some((_, index_local)) = sub_locals.first()
-            {
+            if is_enumerate && let Some((_, index_local)) = sub_locals.first() {
                 EnumerateSubscriptRewriter {
                     index_local: *index_local,
                     element: i as u32,

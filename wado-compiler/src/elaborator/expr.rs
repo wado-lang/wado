@@ -4160,7 +4160,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let iterable_type = self.resolve_expr(&comp.iterable, ctx, None);
-        let Some((pack_name, pack_index, elem_type)) = self.comprehension_pack(iterable_type) else {
+        let Some((pack_name, pack_index, elem_type)) = self.comprehension_pack(iterable_type)
+        else {
             let type_name = self.tysys.type_table.borrow().type_name(iterable_type);
             let _ = self.emit(TypeError::InvalidPattern {
                 message: format!(

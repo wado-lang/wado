@@ -6044,13 +6044,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `.enumerate()` index: kept as `Index` here and rewritten to the
         // element's `FieldAccess` when the loop unrolls (WEP 2026-03-14).
         if let Some(elems) = &tuple_elems
-            && let Some(elem_type) =
-                super::Elaborator::<H>::variadic_enumerate_subscript_type(
-                    &self.tysys.type_table,
-                    elems,
-                    &index.index,
-                    ctx,
-                )
+            && let Some(elem_type) = super::Elaborator::<H>::variadic_enumerate_subscript_type(
+                &self.tysys.type_table,
+                elems,
+                &index.index,
+                ctx,
+            )
         {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             return TirExpr::new(

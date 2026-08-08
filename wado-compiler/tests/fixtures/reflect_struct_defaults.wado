@@ -1,0 +1,35 @@
+// `ReflectStruct::defaults()` — the declared field defaults as `[..Option<F>]`,
+// the value-level companion of `FieldTypes` (WEP 2026-06-13).
+
+struct Config {
+    host: String = "localhost",
+    port: i32 = 8080,
+    verbose: bool,
+}
+
+struct NoDefaults {
+    a: i32,
+}
+
+test "defaults carries each field's declared default" {
+    let slots = ReflectStruct::<Config>::defaults();
+    if let Some(host) = slots.0 {
+        assert host == "localhost";
+    } else {
+        assert false;
+    }
+    if let Some(port) = slots.1 {
+        assert port == 8080;
+    } else {
+        assert false;
+    }
+    assert slots.2 matches { None };
+}
+
+test "a field without a default has an empty slot" {
+    let slots = ReflectStruct::<NoDefaults>::defaults();
+    assert slots.0 matches { None };
+}
+
+__DATA__
+{"test": {}}

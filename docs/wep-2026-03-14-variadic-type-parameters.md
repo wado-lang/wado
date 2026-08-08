@@ -203,9 +203,13 @@ impl<..T: Clone> Clone for [..T] {
 }
 ```
 
+The braces hold one expression — the element's value — not a statement block: a
+comprehension produces a tuple, so every element has a value.
+
 At monomorphization, the compiler unrolls the loop and collects each result expression
-into the corresponding position of a new tuple literal. The result type is `[..T]` when
-`v` has type `T_k` and the body expression has type `T_k`.
+into the corresponding position of a new tuple literal. A body that yields the element
+unchanged reproduces the source shape; anything else maps the pack through the body's
+type, so `[for let v of *self {`${v}`}]` is a walkable `[..String]`.
 
 The `[for let [i, v] of tuple.enumerate() { expr }]` form (with index binding) is also
 valid.
@@ -314,111 +318,15 @@ occurred.
 
 ---
 
-## Standard Library Applications
-
-### Tuple `Eq`
-
-```wado
-impl<..T: Eq> Eq for [..T] {
-    fn eq(&self, other: &Self) -> bool {
-        let mut result = true;
-        for let [i, v] of (*self).enumerate() {
-            if !v.eq(&(*other)[i]) { result = false; }
-        }
-        return result;
-    }
-}
-```
-
-### Tuple `Default`
-
-```wado
-impl<..T: Default> Default for [..T] {
-    fn default() -> [..T] {
-        return [..T::default()];
-    }
-}
-```
-
-### Tuple `Clone`
-
-```wado
-impl<..T: Clone> Clone for [..T] {
-    fn clone(&self) -> [..T] {
-        return [for let v of *self { v.clone() }];
-    }
-}
-```
-
-### Tuple `Inspect`
-
-```wado
-impl<..T: Inspect> Inspect for [..T] {
-    fn inspect(&self) -> String {
-        let mut parts: List<String> = [];
-        for let v of *self {
-            parts.push(v.inspect());
-        }
-        return `[${parts.join(", ")}]`;
-    }
-}
-```
-
-### Tuple `Serialize`
-
-```wado
-impl<..T: Serialize> Serialize for [..T] {
-    fn serialize<S: Serializer>(&self, seq: &mut S::SeqSerializer) -> Result<(), SerializeError> {
-        for let v of *self {
-            seq.element(&v)?;
-        }
-        return Result::<(), SerializeError>::Ok(());
-    }
-}
-```
-
-### Tuple `Deserialize`
-
-```wado
-impl<..T: Deserialize> Deserialize for [..T] {
-    fn deserialize<D: Deserializer>(seq: &mut D::SeqAccess) -> Result<[..T], DeserializeError> {
-        return Result::<[..T], DeserializeError>::Ok([for let _v of [..T::default()] {
-            seq.next_element()?
-        }]);
-    }
-}
-```
-
-### Struct `Inspect` via `ReflectStruct`
-
-```wado
-impl<T, ..F: Inspect> Inspect for T
-where T: ReflectStruct<FieldTypes = [..F]>
-{
-    fn inspect(&self) -> String {
-        let mut parts: List<String> = [];
-        for let f of ReflectStruct::<T>::members() {
-            parts.push(`${f.name()}: ${f.get(self).inspect()}`);
-        }
-        return `${ReflectStruct::<T>::type_name()} \{ ${parts.join(", ")} \}`;
-    }
-}
-```
-
----
-
 ## Implementation Plan
 
-- [ ] The `[for let v of tuple { expr }]` / `[for let [i, v] of tuple.enumerate() { expr }]`
-      construction form: unparsed. Until it lands, a build derivation needing the
-      member handle or index per element routes the work through a pack map
-      (`[..F::method(args)]`) over a pre-ordered cursor. What waits on it:
-      [the struct build direction over a streaming format](./wep-2026-06-13-reflect-derivation.md#building-a-struct-from-a-streaming-format)
-- [ ] `.enumerate()` over a variadic `for-of`. The concrete-tuple form expands
-      it; the deferred (`VariadicForOf`) one rejects it outright
-- [ ] The `.enumerate()` index as a tuple subscript. It is a compile-time
-      constant by construction, but `slots[i]` is rejected as a non-constant
-      index
+- [x] The `[for let v of tuple { expr }]` / `[for let [i, v] of tuple.enumerate() { expr }]`
+      construction form, over a pack-typed tuple
+- [ ] The same form over a _concrete_ tuple: its elements have unrelated types,
+      so the body needs resolving once per element (the per-element overlays the
+      concrete `for-of` already keeps), not once against a pack element
+- [x] `.enumerate()` over a variadic `for-of`
+- [x] The `.enumerate()` index as a tuple subscript, for reads and writes alike
 - [ ] Variadic impl targets other than the bare `[..T]` — fixed elements
       (`[i32, ..T]`) or under a reference (`&[..T]`): rejected for now.
       Selection, pack binding, and template naming all ignore the fixed

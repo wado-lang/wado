@@ -1,0 +1,59 @@
+// Struct `Deserialize` derived over `ReflectStruct` in `core:serde`: the slot
+// tuple is seeded with the declared defaults, filled at the index the format
+// reports, and read back in declaration order (WEP 2026-06-13).
+
+use { DeserializeError, SerializeError } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+struct User {
+    name: String,
+    age: i32 = 7,
+}
+
+test "struct round trip" {
+    let u = User { name: "a", age: 3 };
+    let s: Result<String, SerializeError> = to_string(&u);
+    assert s matches { Ok(_) };
+    if let Ok(text) = s {
+        assert text == "{\"name\":\"a\",\"age\":3}";
+        let back: Result<User, DeserializeError> = from_string(text);
+        if let Ok(v) = back {
+            assert v.name == "a";
+            assert v.age == 3;
+        } else {
+            assert false;
+        }
+    }
+}
+
+test "a missing field falls back to its default" {
+    let back: Result<User, DeserializeError> = from_string("{\"name\":\"b\"}");
+    if let Ok(v) = back {
+        assert v.name == "b";
+        assert v.age == 7;
+    } else {
+        assert false;
+    }
+}
+
+test "a missing required field is an error" {
+    let back: Result<User, DeserializeError> = from_string("{\"age\":1}");
+    if let Err(e) = back {
+        assert e.message == "missing field: name";
+    } else {
+        assert false;
+    }
+}
+
+test "an unknown field is skipped" {
+    let back: Result<User, DeserializeError> = from_string("{\"name\":\"c\",\"zzz\":9,\"age\":2}");
+    if let Ok(v) = back {
+        assert v.name == "c";
+        assert v.age == 2;
+    } else {
+        assert false;
+    }
+}
+
+__DATA__
+{"test": {}}

@@ -623,6 +623,22 @@ for let v of t {
 
 `break` and `continue` are not allowed inside a tuple for-of body because the loop is unrolled at compile time into sequential blocks and these have no natural target. `.enumerate()` is supported and provides a compile-time index.
 
+#### Tuple comprehension
+
+Wrapping the same walk in `[...]` collects one result element per source element. The braces hold a single expression — the element's value — since every position of the result tuple has one.
+
+```wado
+impl<..T: Clone> Clone for [..T] {
+    fn clone(&self) -> [..T] {
+        return [for let v of *self { v.clone() }];
+    }
+}
+```
+
+The `.enumerate()` form binds the index alongside the value (`[for let [i, v] of t.enumerate() { ... }]`). The index is a compile-time constant, so it is also the one non-literal a tuple accepts as a subscript (`t[i]`), for reads and writes alike.
+
+The source must be a variadic tuple (`[..T]`); a concrete tuple is not walkable this way.
+
 ### Infinite Loop
 
 ```wado
