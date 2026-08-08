@@ -649,20 +649,9 @@ fn validate_stmt(
             let e = *e;
             // `return g(x)` in a function that returns the same aggregate: `g`
             // leaves its N results on the stack and they are ours, so the call
-            // needs no `let` to bind. Its arguments are still ordinary uses.
-            let mut prefix: Vec<StmtId> = Vec::new();
-            if let Some(ours) = cx.passes_through
-                && let Some(call) = block_tail_call(body, e, &mut prefix)
-                && cx
-                    .candidate_ids
-                    .get(&call.0)
-                    .and_then(|idx| cx.candidates.get(idx))
-                    .is_some_and(|_| call.1 == ours)
-            {
-                for s in prefix {
-                    validate_stmt(body, s, cx, invalid, tracked);
-                }
-                walk_call_args_for_uses(body, call.2, cx, invalid, tracked);
+            // needs no `let` to bind.
+            if let Some(ours) = cx.passes_through {
+                validate_tail_return(body, e, ours, cx, invalid, tracked);
                 return;
             }
             walk_expr_for_uses_operand(body, e, cx, invalid, tracked);
@@ -701,6 +690,104 @@ fn validate_stmt(
         StmtKind::LetDestructure { value, .. } => {
             walk_expr_for_uses_operand(body, *value, cx, invalid, tracked);
         }
+    }
+}
+
+/// Walk a `return`ed value, sparing a pass-through call in every tail position
+/// [`expr_returns_match`] accepts it — a block or labeled-block tail, an `If`
+/// branch tail, a `Match` arm body, a `Switch` arm tail — and recursively,
+/// since those nest. Everything the value reaches off that spine is an ordinary
+/// use.
+///
+/// The two halves have to agree: a position the return side admits but this one
+/// walks as an escape invalidates the callee, and the fix-point then withdraws
+/// the caller as well, so both keep the heap-tuple ABI. Break values are the
+/// deliberate exception — see [`ExpectedShape::tail_call_lowerable`], which
+/// refuses them on the return side too.
+fn validate_tail_return(
+    body: &Body,
+    op: Operand,
+    ours: TypeId,
+    cx: &UseCx<'_>,
+    invalid: &mut IndexSet<usize>,
+    tracked: &mut IndexMap<u32, usize>,
+) {
+    let Some(e) = op.as_expr() else {
+        return;
+    };
+    match &body.exprs[e].kind {
+        ExprKind::Call { func_id, .. }
+            if body.exprs[e].type_id == ours && cx.candidate_ids.contains_key(func_id) =>
+        {
+            walk_call_args_for_uses(body, e, cx, invalid, tracked);
+        }
+        ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
+            validate_tail_block(body, *b, ours, cx, invalid, tracked);
+        }
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
+            walk_expr_for_uses_operand(body, condition, cx, invalid, tracked);
+            for b in [Some(then_branch), else_branch].into_iter().flatten() {
+                let mut inner = tracked.clone();
+                validate_tail_block(body, b, ours, cx, invalid, &mut inner);
+            }
+        }
+        ExprKind::Match { expr: scrut, arms } => {
+            let (scrut, arms) = (*scrut, arms.clone());
+            walk_expr_for_uses_operand(body, scrut, cx, invalid, tracked);
+            for arm in arms {
+                let mut inner = tracked.clone();
+                if let Some(guard) = arm.guard {
+                    walk_expr_for_uses_operand(body, guard, cx, invalid, &mut inner);
+                }
+                validate_tail_return(body, arm.body, ours, cx, invalid, &mut inner);
+            }
+        }
+        ExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            let (scrutinee, arms, default) = (*scrutinee, arms.clone(), *default);
+            walk_expr_for_uses_operand(body, scrutinee, cx, invalid, tracked);
+            for b in arms.into_iter().chain([default]) {
+                let mut inner = tracked.clone();
+                validate_tail_block(body, b, ours, cx, invalid, &mut inner);
+            }
+        }
+        _ => walk_expr_for_uses(body, e, cx, invalid, tracked),
+    }
+}
+
+/// The tail position of `block`: everything ahead of the last statement is
+/// ordinary code, and the last one continues the tail walk when it carries the
+/// block's value.
+fn validate_tail_block(
+    body: &Body,
+    block: BlockId,
+    ours: TypeId,
+    cx: &UseCx<'_>,
+    invalid: &mut IndexSet<usize>,
+    tracked: &mut IndexMap<u32, usize>,
+) {
+    let stmts = body.blocks[block].stmts.clone();
+    let Some((&last, lead)) = stmts.split_last() else {
+        return;
+    };
+    for &s in lead {
+        validate_stmt(body, s, cx, invalid, tracked);
+    }
+    match &body.stmts[last].kind {
+        StmtKind::Expr(v) | StmtKind::Return { value: Some(v) } => {
+            let v = *v;
+            validate_tail_return(body, v, ours, cx, invalid, tracked);
+        }
+        _ => validate_stmt(body, last, cx, invalid, tracked),
     }
 }
 

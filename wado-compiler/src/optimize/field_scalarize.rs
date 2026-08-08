@@ -1762,18 +1762,41 @@ fn capture_for_sync(
 /// Locals the sync sequence assigns. A re-read (`__hfs_F = local.F`) refreshes
 /// its scalar local, so an operand naming that local must be captured before the
 /// sync; a write-back (`local.F = __hfs_F`) only reads one.
+///
+/// Read off the statements rather than assumed from the emitter, and read from
+/// the whole subtree rather than the top of each one: a statement is not
+/// required to be a bare `Expr(Assign(Local, …))`, and missing an assignment
+/// buried in one would leave [`bind_for_sync`] re-emitting that local after the
+/// sync had overwritten it.
 fn sync_assigned_locals(body: &Body, sync_stmts: &[StmtId]) -> IndexSet<u32> {
-    let mut out = IndexSet::default();
+    let mut v = AssignedLocals {
+        out: IndexSet::default(),
+    };
     for &s in sync_stmts {
-        if let StmtKind::Expr(op) = &body.stmts[s].kind
-            && let Some(e) = op.as_expr()
+        v.visit_node(body, NodeRef::Stmt(s));
+    }
+    v.out
+}
+
+struct AssignedLocals {
+    out: IndexSet<u32>,
+}
+
+impl NirRefVisitor for AssignedLocals {
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
+        if let NodeRef::Expr(e) = node
             && let ExprKind::Assign { target, .. } = &body.exprs[e].kind
             && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
         {
-            out.insert(*index);
+            self.out.insert(*index);
         }
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+        {
+            self.out.insert(*local_index);
+        }
+        self.walk_node(body, node);
     }
-    out
 }
 
 /// One operand of [`capture_for_sync`]: a literal constant and a local the sync

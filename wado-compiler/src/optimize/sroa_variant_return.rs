@@ -300,13 +300,56 @@ fn rebox_stragglers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         let reboxed = !targets.is_empty();
         for call in targets {
             crate::compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
-            rebox_call(&mut body, &mut func, call, &scalarized, span);
+            rebox_call(&mut body, &mut func.locals, call, &scalarized, span);
         }
         func.body = Some(body);
         if reboxed {
             gate.mark_changed(FuncId::new(i));
             changed = true;
         }
+    }
+    changed |= rebox_stragglers_in_globals(project, &scalarized);
+    changed
+}
+
+/// The same repair over the global initializers. They are never rewritten —
+/// `used_in_globals` keeps a candidate a global calls out of the candidate set
+/// — but that set is this round's, so a callee scalarized earlier and reached
+/// from a global later has only the backstop. Unreachable while nothing plants
+/// calls into an initializer, and the cost of covering it is this loop.
+fn rebox_stragglers_in_globals(
+    project: &mut NirPackage,
+    scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
+) -> bool {
+    let mut changed = false;
+    for global in &mut project.globals {
+        let (span, name) = (global.span, global.name.clone());
+        // An initializer has no `return`, so no call in it is a pass-through
+        // and the type `handled_call_sites` compares against is never read.
+        let own_return = global.ty;
+        let locals = &mut global.locals;
+        let body = global.init.slot_expr_mut().body_mut();
+        let bound = handled_call_sites(body, scalarized, own_return);
+        let mut targets: Vec<ExprId> = Vec::new();
+        collect_straggler_calls(
+            body,
+            NodeRef::Block(body.root),
+            scalarized,
+            &bound,
+            &mut targets,
+        );
+        if targets.is_empty() {
+            continue;
+        }
+        crate::compiler_trace!(
+            "sroa_variant_return",
+            "reboxing {} call(s) in global {name}",
+            targets.len()
+        );
+        for call in targets {
+            rebox_call(body, locals, call, scalarized, span);
+        }
+        changed = true;
     }
     changed
 }
@@ -539,7 +582,7 @@ fn collect_straggler_calls(
 /// typed by the variant the callee used to return.
 fn rebox_call(
     body: &mut Body,
-    func: &mut NirFunction,
+    locals: &mut Vec<NirLocal>,
     call: ExprId,
     scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
     span: Span,
@@ -549,9 +592,9 @@ fn rebox_call(
     };
     let (variant_type, layout) = scalarized[&func_id].clone();
 
-    let local_index = func.local_count();
+    let local_index = u32::try_from(locals.len()).expect("local index overflow");
     let name = format!("__rebox_{local_index}");
-    func.locals.push(NirLocal {
+    locals.push(NirLocal {
         name: name.clone(),
         type_id: layout.tuple_type,
         is_mut: false,
@@ -740,6 +783,28 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
                 func.name
             );
         }
+    }
+    // Initializer bodies hold calls too, and `rebox_stragglers_in_globals` is
+    // what keeps them repaired; check the same invariant over them so the
+    // repair is not trusted on faith.
+    for global in &project.globals {
+        let body = global.init.slot_expr().body();
+        let handled = handled_call_sites(body, &scalarized, global.ty);
+        let mut stragglers = Vec::new();
+        collect_straggler_calls(
+            body,
+            NodeRef::Block(body.root),
+            &scalarized,
+            &handled,
+            &mut stragglers,
+        );
+        assert!(
+            stragglers.is_empty(),
+            "variant-return SROA left {} unreboxed call(s) to a scalarized \
+             function in global `{}`",
+            stragglers.len(),
+            global.name
+        );
     }
 }
 
