@@ -3591,19 +3591,13 @@ impl Monomorphizer {
             is_mut: false,
         });
 
-        // Detect destructured zip patterns: body starts with Let stmts whose
-        // values are FieldAccess on the binding local (e.g., `let a =
-        // binding.0; let b = binding.1;`). Shared by every element, so it is
-        // read off the template once.
         let destruct_count = Self::destructure_prefix_len(body, binding_local_idx);
 
-        // A destructured `.enumerate()` binds only the pair's fields, never the
-        // pair: bind them from the index literal and the element directly, so
-        // the pair — and the value copy the element would take into it — is
-        // never built.
+        // A destructured `.enumerate()` binds the pair's fields, never the pair,
+        // so they come from the index literal and the element directly — no pair,
+        // and no value copy taken into it. `[i, _]` then reads nothing off the
+        // temp, whose binding would deep-copy the whole tuple.
         let inline_enumerate_pair = is_enumerate && destruct_count > 0;
-        // `for let [i, _] of xs.enumerate()` reads only the index, so the temp
-        // is never read. Binding it anyway would deep-copy the whole tuple.
         let temp_read =
             !inline_enumerate_pair || Self::binds_element_field(&body.stmts[..destruct_count]);
 
@@ -3662,8 +3656,6 @@ impl Monomorphizer {
                 TypeTable::I32,
                 span,
             );
-            // `.enumerate()` binds the pair `[i, T_k]`; the index is a literal
-            // fixed by the unroll position.
             let bind_type = if is_enumerate {
                 type_table.make_tuple(vec![TypeTable::I32, elem_bind_type])
             } else {
@@ -3727,8 +3719,7 @@ impl Monomorphizer {
                     // Instead, generate fresh destructured Let stmts with correct field types
                     // from elem_type, and only substitute the remaining user body stmts.
                     //
-                    // `.enumerate()` pairs an `i32` index with the element, so
-                    // its fields come from the synthesized pair, not `elem_type`.
+                    // `.enumerate()`'s fields come from the synthesized pair.
                     let pair_fields = if is_enumerate {
                         type_table
                             .as_tuple(bind_type)
@@ -3768,11 +3759,9 @@ impl Monomorphizer {
                             ..
                         } = &orig_stmt.kind
                         {
-                            // The field the sub-binding reads is the pattern's
-                            // position, which the template recorded — a
-                            // wildcard (`[_, v]`) makes it differ from this
-                            // statement's position in the destructure list, so
-                            // the type must be read off the same index.
+                            // The field a sub-binding reads is its pattern
+                            // position, which the template recorded; a wildcard
+                            // makes it differ from its position in the list.
                             let field_index = match &orig_value.kind {
                                 TirExprKind::FieldAccess { field_index, .. } => *field_index,
                                 _ => j as u32,
@@ -4113,13 +4102,7 @@ impl Monomorphizer {
         let b_name = binding_name.clone();
         let template_destructure = destructure.clone();
         let template_body = body.clone();
-        // A destructured `.enumerate()` binds only the pair's fields, never the
-        // pair: bind them from the index literal and the element directly, so
-        // the pair — and the value copy the element would take into it — is
-        // never built.
         let inline_enumerate_pair = is_enumerate && !template_destructure.is_empty();
-        // `[for let [i, _] of xs.enumerate() { … }]` reads only the index, so the
-        // temp is never read. Binding it anyway would deep-copy the whole tuple.
         let temp_read =
             !inline_enumerate_pair || Self::binds_element_field(&template_destructure);
 

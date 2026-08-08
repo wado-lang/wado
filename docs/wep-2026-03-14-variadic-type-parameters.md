@@ -209,7 +209,8 @@ comprehension produces a tuple, so every element has a value.
 At monomorphization, the compiler unrolls the loop and collects each result expression
 into the corresponding position of a new tuple literal. A body that yields the element
 unchanged reproduces the source shape; anything else maps the pack through the body's
-type, so `[for let v of *self {`${v}`}]` is a walkable `[..String]`.
+type, so a body interpolating the element into a template yields a walkable
+`[..String]`.
 
 The `[for let [i, v] of tuple.enumerate() { expr }]` form (with index binding) is also
 valid.

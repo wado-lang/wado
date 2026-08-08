@@ -3798,8 +3798,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         } else {
             inner
         };
-        // `.enumerate()` binds the pair `[i32, T_k]`; expansion supplies the
-        // index literal per unrolled element.
+        // Expansion supplies the index literal per unrolled element.
         let binding_type = if is_enumerate {
             self.tysys
                 .type_table

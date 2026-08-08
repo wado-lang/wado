@@ -1460,8 +1460,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return TypeTable::UNKNOWN;
                 }
             }
-            // A pack-typed tuple accepts the index of an enclosing variadic
-            // `.enumerate()`: unrolling fixes it to a literal per element.
+            // Unrolling fixes the index to a literal per element.
             if let Some(elem) = Self::variadic_enumerate_subscript_type(
                 &self.tysys.type_table,
                 elements,
