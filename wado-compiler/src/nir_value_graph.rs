@@ -18,15 +18,17 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
-/// Bridge a literal [`ValueKind`] to niri's [`crate::const_eval::Value`] for
-/// constant folding, applying the same prim-consistency filter niri's own
-/// `Value::from_operand` enforces: an `Int` only with an integer prim
-/// (`is_int_prim` — excludes `i128`/`u128`/`v128`), a `Float` only with
-/// `F32`/`F64`. `prim` is the operand's resolved primitive type (from its NIR
-/// type), needed for the integer width / float precision. Returns `None` for a
-/// non-literal kind, a missing prim, or a prim niri would refuse — so the
-/// value-graph const-folder and `store_load_forward`'s literal synthesizer fold
-/// exactly the set niri's CTFE folds, from one definition.
+/// The constant a [`ValueKind`] denotes, as niri's
+/// [`crate::const_eval::Value`]. The one projection from the graph's values to
+/// the evaluator's: `Value::from_operand` delegates here rather than repeating
+/// the match, so a kind cannot reach one and be dropped by the other.
+///
+/// Total over the constant kinds but for the prim-consistency filter an `Int`
+/// or a `Float` carries: an `Int` needs an integer prim (`is_int_prim` —
+/// excludes `i128`/`u128`/`v128`), a `Float` needs `F32`/`F64`, and those are
+/// the widths the evaluator's arithmetic is defined at. `prim` is the operand's
+/// resolved primitive type, from its NIR type. A non-constant kind yields
+/// `None`.
 pub(crate) fn value_kind_to_const(
     kind: &ValueKind,
     prim: Option<PrimitiveType>,
@@ -52,9 +54,9 @@ pub(crate) fn value_kind_to_const(
         // Already an evaluated constant; the prim filter above is a scalar
         // concern and does not apply.
         ValueKind::Const(key, _) => key.value().clone(),
-        ValueKind::Null
-        | ValueKind::Unit
-        | ValueKind::Opaque(_)
+        ValueKind::Null => Value::Null,
+        ValueKind::Unit => Value::Unit,
+        ValueKind::Opaque(_)
         | ValueKind::Binary { .. }
         | ValueKind::Unary { .. }
         | ValueKind::Cast { .. }

@@ -362,41 +362,23 @@ impl Value {
         }
     }
 
-    /// Project an [`Operand`] to a `Value` when it is a pure scalar constant.
-    /// The constant lives in the function's `ValuePool` (the source of truth for
-    /// pure scalars; WEP: The Live `ValueGraph`) — only `Operand::Value` can be one,
-    /// since scalars no longer occupy skeleton `ExprId` slots. Only `Int` (tracked
-    /// int prims), `Float` (`f32`/`f64`), `Bool`, and `Char` project; `i128` /
-    /// `u128` and non-primitive types yield `None`.
+    /// Project an [`Operand`] to the constant it denotes.
+    ///
+    /// The constant lives in the function's `ValuePool` (the source of truth
+    /// for pure values; WEP: The Live `ValueGraph`), so only `Operand::Value`
+    /// can be one. Delegates to
+    /// [`crate::nir_value_graph::value_kind_to_const`] rather than repeating the
+    /// projection: the two were separate matches kept in step by a comment, and
+    /// the copy here silently dropped every kind it had not been taught.
     #[must_use]
     pub fn from_operand(
         body: &Body,
         op: crate::nir_arena::Operand,
         type_table: &TypeTable,
     ) -> Option<Self> {
-        use crate::nir_value_graph::ValueKind;
         let v = op.as_value()?;
         let ty = body.values.type_of(v)?;
-        match body.values.kind(v) {
-            ValueKind::Int(value, _) => {
-                let prim = prim_of(ty, type_table).filter(|p| is_int_prim(*p))?;
-                Some(Self::Int {
-                    value: *value,
-                    prim,
-                })
-            }
-            ValueKind::Float(bits, _) => {
-                let prim = prim_of(ty, type_table)
-                    .filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
-                Some(Self::Float {
-                    value: f64::from_bits(*bits),
-                    prim,
-                })
-            }
-            ValueKind::Bool(b) => Some(Self::Bool(*b)),
-            ValueKind::Char(c) => Some(Self::Char(*c)),
-            _ => None,
-        }
+        crate::nir_value_graph::value_kind_to_const(body.values.kind(v), prim_of(ty, type_table))
     }
 }
 
@@ -405,6 +387,7 @@ pub(crate) fn eval_binary(left: Value, op: NirBinaryOp, right: Value) -> Option<
     match (left, right) {
         (Value::Bool(l), Value::Bool(r)) => eval_bool_binary(l, op, r),
         (Value::Char(l), Value::Char(r)) => eval_char_binary(l, op, r),
+        (Value::Null, Value::Null) | (Value::Unit, Value::Unit) => eval_singleton_binary(op),
         (Value::Float { value: l, prim: lp }, Value::Float { value: r, prim: rp }) if lp == rp => {
             eval_float_binary(l, op, r, lp)
         }
@@ -632,6 +615,16 @@ fn trunc_to_int(value: f64, target: PrimitiveType) -> Option<u64> {
         | PrimitiveType::I128
         | PrimitiveType::U128
         | PrimitiveType::V128 => panic!("trunc_to_int: non-integer target {target:?}"),
+    }
+}
+
+/// Equality between two values that have a single inhabitant each: `null` with
+/// `null`, `()` with `()`. Every other operator is meaningless on them.
+pub(crate) fn eval_singleton_binary(op: NirBinaryOp) -> Option<Value> {
+    match op {
+        NirBinaryOp::Eq => Some(Value::Bool(true)),
+        NirBinaryOp::NotEq => Some(Value::Bool(false)),
+        _ => None,
     }
 }
 
