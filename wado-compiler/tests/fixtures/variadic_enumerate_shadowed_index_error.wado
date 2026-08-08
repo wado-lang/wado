@@ -1,0 +1,20 @@
+// The enumerate index is a subscript because unrolling fixes it. A shadowing
+// binding is an ordinary run-time value, which no tuple field can be read by.
+
+trait Picked {
+    fn picked(&self) -> String;
+}
+
+impl<..T: Display> Picked for [..T] {
+    fn picked(&self) -> String {
+        let mut parts: List<String> = [];
+        for let [i, v] of (*self).enumerate() {
+            let i = 1;
+            parts.push(`${(*self)[i]}`);
+        }
+        return parts.join(",");
+    }
+}
+
+__DATA__
+{"compile_error": "tuple index must be a constant integer"}

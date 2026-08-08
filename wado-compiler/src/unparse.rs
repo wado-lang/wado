@@ -1707,12 +1707,14 @@ impl<'a> Unparser<'a> {
         self.unparse_pattern(&c.binding);
         self.output.push_str(" of ");
         self.unparse_expr(&c.iterable);
-        // A comment inside the braces forces the body onto its own line; the
-        // one-line form has no slot for it and would drop it.
-        if self.has_comment_in_range(c.iterable.span().end, c.span.end) {
+        // A comment anywhere in the comprehension forces the body onto its own
+        // line; the one-line form has no slot for one and would drop it. A
+        // comment in the head has no place of its own either, so it lands at
+        // the top of the body rather than being lost.
+        if self.has_comment_in_range(c.span.start, c.span.end) {
             self.output.push_str(" {\n");
             self.indent_level += 1;
-            self.emit_comments_in_range(c.iterable.span().end, c.body.span().start);
+            self.emit_comments_in_range(c.span.start, c.body.span().start);
             self.write_indent();
             self.unparse_expr(&c.body);
             self.output.push('\n');

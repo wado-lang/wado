@@ -629,6 +629,38 @@ impl LastUseAnalyzer<'_> {
         self.walk_expr(&s.iterable, live, record);
     }
 
+    /// `[for let v of t { body }]` unrolls the body once per element, so — like
+    /// a for-of — a local last-used inside it is live on every copy. Reach the
+    /// fixpoint before recording, or the first copy would take the last use and
+    /// the rest would alias a moved value.
+    fn walk_tuple_comprehension(
+        &mut self,
+        c: &ast::TupleComprehensionExpr,
+        live: &mut IndexSet<AstId>,
+        record: bool,
+    ) {
+        let exit_live = live.clone();
+        let mut head = exit_live.clone();
+        loop {
+            let mut work = head.clone();
+            self.kill_pattern(&c.binding, &mut work);
+            self.walk_expr(&c.body, &mut work, false);
+            let candidate = union(&work, &exit_live);
+            if candidate == head {
+                break;
+            }
+            head = candidate;
+        }
+        if record {
+            let mut work = head.clone();
+            self.kill_pattern(&c.binding, &mut work);
+            self.walk_expr(&c.body, &mut work, true);
+        }
+        // The iterable is evaluated once, before the unrolled bodies.
+        *live = union(&head, &exit_live);
+        self.walk_expr(&c.iterable, live, record);
+    }
+
     fn walk_match(&mut self, m: &ast::MatchExpr, live: &mut IndexSet<AstId>, record: bool) {
         let after = live.clone();
         let mut merged = IndexSet::default();
@@ -734,10 +766,7 @@ impl LastUseAnalyzer<'_> {
                     self.walk_expr(element, live, record);
                 }
             }
-            Expr::TupleComprehension(e) => {
-                self.walk_expr(&e.body, live, record);
-                self.walk_expr(&e.iterable, live, record);
-            }
+            Expr::TupleComprehension(e) => self.walk_tuple_comprehension(e, live, record),
             Expr::TemplateString(e) => {
                 for part in e.parts.iter().rev() {
                     if let ast::TemplatePart::Interpolation { expr, .. } = part {

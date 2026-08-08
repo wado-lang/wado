@@ -1400,7 +1400,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ast::Expr::Ident(ident) = index_expr else {
             return None;
         };
-        if !ctx.variadic_enumerate_indices.contains(&ident.name) {
+        let local = ctx.lookup(&ident.name)?;
+        if !ctx.variadic_enumerate_indices.contains(&local.index) {
             return None;
         }
         let type_table = type_table.borrow();
@@ -4113,6 +4114,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The local slot bound to the index of `for let [i, v] of t.enumerate()`,
+    /// once the binding is in scope. `None` when the form is not an enumerate
+    /// or the index position is a wildcard.
+    pub(super) fn enumerate_index_local(
+        is_enumerate: bool,
+        binding: &ast::Pattern,
+        ctx: &FunctionContext,
+    ) -> Option<u32> {
+        if !is_enumerate {
+            return None;
+        }
+        let name = Self::enumerate_index_binding_name(binding)?;
+        ctx.lookup(&name).map(|local| local.index)
+    }
+
     /// Split a `t.enumerate()` iterable into its receiver and the flag, leaving
     /// any other expression alone. The suffix stays in the AST so the formatter
     /// round-trips it, matching how the statement for-of reads it.
@@ -4196,11 +4212,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         ctx.enter_scope();
         self.bind_comprehension_pattern(&comp.binding, binding_type, comp.span, ctx);
-        let index_binding = is_enumerate
-            .then(|| Self::enumerate_index_binding_name(&comp.binding))
-            .flatten();
-        if let Some(name) = &index_binding {
-            ctx.variadic_enumerate_indices.push(name.clone());
+        let index_binding = Self::enumerate_index_local(is_enumerate, &comp.binding, ctx);
+        if let Some(local) = index_binding {
+            ctx.variadic_enumerate_indices.push(local);
         }
         let body_type = self.resolve_expr(&comp.body, ctx, None);
         if index_binding.is_some() {

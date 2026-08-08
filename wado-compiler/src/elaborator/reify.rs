@@ -3872,11 +3872,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
-        let index_binding = is_enumerate
-            .then(|| super::Elaborator::<H>::enumerate_index_binding_name(&for_of.binding))
-            .flatten();
-        if let Some(name) = &index_binding {
-            ctx.variadic_enumerate_indices.push(name.clone());
+        let index_binding =
+            super::Elaborator::<H>::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
+        if let Some(local) = index_binding {
+            ctx.variadic_enumerate_indices.push(local);
         }
         let mut body = self.reify_block(&for_of.body, ctx, None);
         if index_binding.is_some() {
@@ -3990,11 +3989,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
-        let index_binding = is_enumerate
-            .then(|| super::Elaborator::<H>::enumerate_index_binding_name(&comp.binding))
-            .flatten();
-        if let Some(name) = &index_binding {
-            ctx.variadic_enumerate_indices.push(name.clone());
+        let index_binding =
+            super::Elaborator::<H>::enumerate_index_local(is_enumerate, &comp.binding, ctx);
+        if let Some(local) = index_binding {
+            ctx.variadic_enumerate_indices.push(local);
         }
         let body = self.reify_expr(&comp.body, ctx, None);
         if index_binding.is_some() {

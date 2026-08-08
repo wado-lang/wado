@@ -304,18 +304,25 @@ struct LocalIndexRewriter {
 /// The index is a compile-time constant by construction, so the read and the
 /// write (`slots[i] = v`, an `Assign` over the same node) both land on a
 /// concrete tuple field (WEP 2026-03-14).
-struct EnumerateSubscriptRewriter {
+struct EnumerateSubscriptRewriter<'a> {
     index_local: u32,
     element: u32,
+    type_table: &'a TypeTable,
 }
 
-impl TirMutVisitor for EnumerateSubscriptRewriter {
+impl TirMutVisitor for EnumerateSubscriptRewriter<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         self.walk_expr(expr);
         let TirExprKind::Index { expr: base, index } = &mut expr.kind else {
             return;
         };
         if !matches!(&index.kind, TirExprKind::Local { index, .. } if *index == self.index_local) {
+            return;
+        }
+        // Only a tuple has a compile-time field at this index. A `List` read
+        // keyed by the same local is an ordinary runtime index and must lower
+        // as one.
+        if self.type_table.as_tuple_through_ref(base.type_id).is_none() {
             return;
         }
         expr.kind = TirExprKind::FieldAccess {
@@ -1576,6 +1583,9 @@ impl Monomorphizer {
         type_table: &mut TypeTable,
     ) -> Option<TirFunction> {
         let mangled_name = self.lookup_function_instantiation(key)?.clone();
+        // Claims are per instantiation: this function gets its own `locals`
+        // table, so no slot it unrolls into is shared with another's.
+        self.unrolled_local_claims.borrow_mut().clear();
 
         // Build substitution map: type param index -> concrete type
         // Include both method-level type params AND impl block type params
@@ -3559,8 +3569,6 @@ impl Monomorphizer {
             span,
         ));
 
-        // Track locals defined across iterations to detect conflicts
-        let mut seen_locals: IndexSet<u32> = IndexSet::default();
 
         // For each element, create: { let v = __tuple_N.i; body }
         for (i, &elem_type) in elements.iter().enumerate() {
@@ -3717,7 +3725,19 @@ impl Monomorphizer {
                             ..
                         } = &orig_stmt.kind
                         {
-                            let field_type = pair_fields.get(j).copied().unwrap_or(body_pack_type);
+                            // The field the sub-binding reads is the pattern's
+                            // position, which the template recorded — a
+                            // wildcard (`[_, v]`) makes it differ from this
+                            // statement's position in the destructure list, so
+                            // the type must be read off the same index.
+                            let field_index = match &orig_value.kind {
+                                TirExprKind::FieldAccess { field_index, .. } => *field_index,
+                                _ => j as u32,
+                            };
+                            let field_type = pair_fields
+                                .get(field_index as usize)
+                                .copied()
+                                .unwrap_or(body_pack_type);
                             // The `locals` entry is left to
                             // `reconcile_unrolled_body_locals`: writing it here
                             // would let the last iteration's type clobber the
@@ -3733,16 +3753,8 @@ impl Monomorphizer {
                             let field_access = TirExpr::new(
                                 TirExprKind::FieldAccess {
                                     expr: Box::new(binding_ref),
-                                    field_index: if let TirExprKind::FieldAccess {
-                                        field_index,
-                                        ..
-                                    } = &orig_value.kind
-                                    {
-                                        *field_index
-                                    } else {
-                                        j as u32
-                                    },
-                                    field_name: j.to_string(),
+                                    field_index,
+                                    field_name: field_index.to_string(),
                                 },
                                 field_type,
                                 span,
@@ -3837,6 +3849,7 @@ impl Monomorphizer {
                 EnumerateSubscriptRewriter {
                     index_local,
                     element: i as u32,
+                    type_table,
                 }
                 .visit_block(&mut elem_body);
             }
@@ -3880,12 +3893,7 @@ impl Monomorphizer {
             // the earlier iteration still depends on. Ordinary instantiation is
             // immune — `instantiate_function` substitutes a fresh per-function
             // `locals` table up front, so iterations never share a slot.
-            Self::reconcile_unrolled_body_locals(
-                &mut elem_body,
-                &mut seen_locals,
-                local_count,
-                locals,
-            );
+            self.reconcile_unrolled_body_locals(&mut elem_body, local_count, locals);
 
             iter_stmts.extend(elem_body.stmts);
 
@@ -3934,8 +3942,8 @@ impl Monomorphizer {
     /// instantiation is immune — `instantiate_function` substitutes a fresh
     /// per-function `locals` table up front, so iterations never share a slot.
     fn reconcile_unrolled_body_locals(
+        &self,
         body: &mut TirBlock,
-        seen_locals: &mut IndexSet<u32>,
         local_count: &mut u32,
         locals: &mut Vec<TirLocal>,
     ) {
@@ -3948,7 +3956,7 @@ impl Monomorphizer {
         body_locals.dedup();
         for body_local in body_locals {
             let concrete_type = Self::find_local_type_in_block(body, body_local);
-            if !seen_locals.insert(body_local) {
+            if !self.claim_unrolled_local(body_local) {
                 let new_idx = *local_count;
                 *local_count += 1;
                 let body_local_type = concrete_type.unwrap_or_else(|| {
@@ -4049,7 +4057,6 @@ impl Monomorphizer {
             is_mut: false,
         });
 
-        let mut seen_locals: IndexSet<u32> = IndexSet::default();
         let mut result_elements = Vec::with_capacity(elements.len());
         for (i, &elem_type) in elements.iter().enumerate() {
             let element_label = format!("__comp_{uid}_{i}");
@@ -4123,15 +4130,31 @@ impl Monomorphizer {
             let pair_fields = type_table
                 .as_tuple(bind_type)
                 .unwrap_or_else(|| vec![bind_type]);
+            // `index_local` is the sub-binding that reads field 0 — the
+            // `.enumerate()` index — which a wildcard (`[_, v]`) leaves absent.
+            let mut index_local: Option<u32> = None;
             let mut sub_locals: Vec<(u32, u32)> = Vec::new();
             for (j, template) in template_destructure.iter().enumerate() {
                 let TirStmtKind::Let {
-                    name, local_index, ..
+                    name,
+                    local_index,
+                    value,
+                    ..
                 } = &template.kind
                 else {
                     continue;
                 };
-                let field_type = pair_fields.get(j).copied().unwrap_or(elem_type);
+                // The field a sub-binding reads is its pattern position, which
+                // the template recorded; a wildcard makes it differ from this
+                // statement's position in the destructure list.
+                let field_index = match &value.kind {
+                    TirExprKind::FieldAccess { field_index, .. } => *field_index,
+                    _ => j as u32,
+                };
+                let field_type = pair_fields
+                    .get(field_index as usize)
+                    .copied()
+                    .unwrap_or(elem_type);
                 let sub_local = *local_count;
                 *local_count += 1;
                 locals.push(TirLocal {
@@ -4140,6 +4163,9 @@ impl Monomorphizer {
                     is_mut: false,
                 });
                 sub_locals.push((*local_index, sub_local));
+                if field_index == 0 {
+                    index_local = Some(sub_local);
+                }
                 stmts.push(TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
@@ -4157,8 +4183,8 @@ impl Monomorphizer {
                                     bind_type,
                                     span,
                                 )),
-                                field_index: j as u32,
-                                field_name: j.to_string(),
+                                field_index,
+                                field_name: field_index.to_string(),
                             },
                             field_type,
                             span,
@@ -4207,20 +4233,16 @@ impl Monomorphizer {
                     Self::rewrite_local_index_in_stmt(s, template_local, sub_local);
                 }
             }
-            if is_enumerate && let Some((_, index_local)) = sub_locals.first() {
+            if is_enumerate && let Some(index_local) = index_local {
                 EnumerateSubscriptRewriter {
-                    index_local: *index_local,
+                    index_local,
                     element: i as u32,
+                    type_table,
                 }
                 .visit_block(&mut elem_body);
             }
             self.infer_method_call_type_args(&mut elem_body, type_table, iter_binding);
-            Self::reconcile_unrolled_body_locals(
-                &mut elem_body,
-                &mut seen_locals,
-                local_count,
-                locals,
-            );
+            self.reconcile_unrolled_body_locals(&mut elem_body, local_count, locals);
 
             let element_result_type = Self::break_value_type(&elem_body).unwrap_or(elem_type);
             stmts.extend(elem_body.stmts);
@@ -4418,7 +4440,16 @@ impl Monomorphizer {
                 {
                     *info = info.with_substituted_struct_name(&type_table.fq_type_name(elem_type));
                     func.name = info.to_mangled_name();
-                    if let Some(ms) = module_source_for_trait_impl(type_table, elem_type) {
+                    // The impl that defines the method owns the call, not the
+                    // receiver type's own module: `impl Display for String`
+                    // lives in `format.wado`, so keying on `String` alone would
+                    // mint an extern stub for a name the package defines.
+                    let receiver_module = module_source_for_trait_impl(type_table, elem_type);
+                    if let Some(ms) = self
+                        .functions
+                        .impl_module(info, receiver_module.as_ref())
+                        .or(receiver_module)
+                    {
                         func.module_source = ms;
                     }
                 }
@@ -4441,6 +4472,10 @@ impl Monomorphizer {
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.rewrite_variadic_binding_types(block, binding_local, elem_type, type_table);
+            }
+            TirExprKind::VariadicTupleComprehension { iterable, body, .. } => {
+                self.rewrite_variadic_types_in_expr(iterable, binding_local, elem_type, type_table);
+                self.rewrite_variadic_types_in_expr(body, binding_local, elem_type, type_table);
             }
             TirExprKind::If {
                 condition,
@@ -4480,6 +4515,7 @@ impl Monomorphizer {
             }
         }
     }
+
 
     fn expr_uses_local(expr: &TirExpr, local_index: u32) -> bool {
         match &expr.kind {

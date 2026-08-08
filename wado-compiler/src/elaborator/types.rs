@@ -1663,11 +1663,15 @@ pub(super) struct FunctionContext {
     /// re-resolving the node, so it is walked once (matching reify's
     /// `compound_overrides`). Empty outside `resolve_compound_assign`.
     pub(super) compound_hoist_types: IndexMap<crate::ast::AstId, TypeId>,
-    /// Names bound as the index of an enclosing variadic `for let [i, v] of
-    /// t.enumerate()`. Such a name is a compile-time constant once the loop is
-    /// unrolled, so it is the one non-literal a pack-typed tuple accepts as a
-    /// subscript (`slots[i]`). Empty outside a variadic enumerate body.
-    pub(super) variadic_enumerate_indices: Vec<String>,
+    /// Local slots bound as the index of an enclosing variadic `for let [i, v]
+    /// of t.enumerate()`. Such a binding is a compile-time constant once the
+    /// loop is unrolled, so it is the one non-literal a pack-typed tuple
+    /// accepts as a subscript (`slots[i]`).
+    ///
+    /// Keyed by slot, not by name: a shadowing `let i = …` inside the body is a
+    /// different slot and an ordinary run-time value, which the unroller could
+    /// not fold. Empty outside a variadic enumerate body.
+    pub(super) variadic_enumerate_indices: Vec<u32>,
 }
 
 impl FunctionContext {

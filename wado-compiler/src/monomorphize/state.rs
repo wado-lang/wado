@@ -189,6 +189,15 @@ pub(super) struct Monomorphizer {
     /// type of a local declared outside the loop) still means the whole tuple,
     /// so the splice reads this instead. Empty outside the expansion.
     pub pack_splice_bindings: RefCell<IndexMap<u32, TypeId>>,
+    /// Template local slots already claimed by an unrolled copy in the function
+    /// being instantiated.
+    ///
+    /// Every unroll — a variadic for-of iteration, a comprehension element —
+    /// clones the same template body, so its locals collide with every other
+    /// copy's. The first copy keeps the template slot and the rest reallocate;
+    /// the claims must be shared, because an inner unroll nested in an outer
+    /// one competes for the very same slots. Cleared per instantiation.
+    pub unrolled_local_claims: RefCell<IndexSet<u32>>,
 }
 
 impl Monomorphizer {
@@ -213,7 +222,14 @@ impl Monomorphizer {
             current_impl_struct_name: None,
             current_param_substitution_key: IndexMap::default(),
             pack_splice_bindings: RefCell::new(IndexMap::default()),
+            unrolled_local_claims: RefCell::new(IndexSet::default()),
         }
+    }
+
+    /// Claim `local` for an unrolled copy, returning whether it was free. A
+    /// taken slot means a previous copy holds it and this one must reallocate.
+    pub fn claim_unrolled_local(&self, local: u32) -> bool {
+        self.unrolled_local_claims.borrow_mut().insert(local)
     }
 
     /// Bind `index`'s splice positions to `tuple` for the duration of one

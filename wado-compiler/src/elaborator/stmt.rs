@@ -2296,11 +2296,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let index_binding = is_enumerate
-            .then(|| Self::enumerate_index_binding_name(&for_of.binding))
-            .flatten();
-        if let Some(name) = &index_binding {
-            ctx.variadic_enumerate_indices.push(name.clone());
+        let index_binding = Self::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
+        if let Some(local) = index_binding {
+            ctx.variadic_enumerate_indices.push(local);
         }
         for stmt in &for_of.body.stmts {
             self.resolve_stmt(stmt, ctx);

@@ -2139,6 +2139,9 @@ fn carries_of(
             }
             acc
         }
+        // The comprehension builds a tuple out of its body, one element per
+        // source element, so what the body carries the tuple carries.
+        Expr::TupleComprehension(c) => recurse(&c.body),
         _ => IndexSet::default(),
     }
 }
@@ -2466,6 +2469,9 @@ impl AstVisitor for RefFlow<'_, '_> {
                 for el in &t.elements {
                     self.sink_value(el, Sink::Tuple);
                 }
+            }
+            Expr::TupleComprehension(c) => {
+                self.sink_value(&c.body, Sink::Tuple);
             }
             Expr::Assign(assign) => {
                 let carried = self.carries(&assign.value);
