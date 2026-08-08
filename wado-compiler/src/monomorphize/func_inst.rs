@@ -3603,7 +3603,6 @@ impl Monomorphizer {
             span,
         ));
 
-
         // For each element, create: { let v = __tuple_N.i; body }
         for (i, &elem_type) in elements.iter().enumerate() {
             let mut iter_stmts = Vec::new();
@@ -3885,12 +3884,7 @@ impl Monomorphizer {
                     local_count,
                     locals,
                 );
-                self.pin_binding_types(
-                    &mut elem_body,
-                    binding_local_idx,
-                    elem_type,
-                    type_table,
-                );
+                self.pin_binding_types(&mut elem_body, binding_local_idx, elem_type, type_table);
             }
             // Fold `t[i]` against this element's position before the body's
             // method calls are typed: the fold turns a tuple `Index` — which
@@ -4268,12 +4262,7 @@ impl Monomorphizer {
                 );
                 // Decide this element's bindings before substituting, so a
                 // nested unroll over the same pack cannot re-map a use of them.
-                self.pin_binding_types(
-                    &mut elem_body,
-                    binding_local_idx,
-                    bind_type,
-                    type_table,
-                );
+                self.pin_binding_types(&mut elem_body, binding_local_idx, bind_type, type_table);
                 for (local, ty) in &pinned {
                     self.pin_binding_types(&mut elem_body, *local, *ty, type_table);
                 }
