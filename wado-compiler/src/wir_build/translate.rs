@@ -2926,7 +2926,9 @@ fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) -
             return false;
         };
         seq.len() >= 2
-            && seq.last().is_some_and(|last| takes_target(last, target_depth))
+            && seq
+                .last()
+                .is_some_and(|last| takes_target(last, target_depth))
             && matches!(seq.get(seq.len() - 2), Some(WirInstr::StructNew { .. }))
     }
 
