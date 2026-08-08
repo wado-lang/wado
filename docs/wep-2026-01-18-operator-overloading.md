@@ -222,7 +222,7 @@ let v2 = Vec3 { x: 4.0, y: 5.0, z: 6.0 };
 let v3 = v1 + v2;  // Desugars to: v1.add(v2)
 ```
 
-**Note**: `self` consumes the value (ownership transfer). For types that should preserve the original, implement `Clone` and clone before the operation, or take `&self` if the trait signature allows it.
+**Note**: `self` consumes the value (ownership transfer). Value semantics already hand the operator its own deep copy, so the original survives; take `&self` where the trait signature allows it to skip the copy.
 
 #### Negation (Unary Minus)
 
@@ -543,11 +543,9 @@ let sum_vec = add_values(v1, v2);            // Vec3
 // Numeric trait bound (multiple operators)
 fn dot_product<T>(a: Vec3<T>, b: Vec3<T>) -> T
 where
-    T: Mul<Output = T> + Add<Output = T> + Clone,
+    T: Mul<Output = T> + Add<Output = T>,
 {
-    return a.x.clone() * b.x.clone() +
-           a.y.clone() * b.y.clone() +
-           a.z * b.z;
+    return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 ```
 

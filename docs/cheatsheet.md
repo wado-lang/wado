@@ -763,9 +763,9 @@ fn make_defaults<..T: Default>() -> [..T] {
 
 // Tuple comprehension: one result element per source element; the braces hold
 // one expression. `.enumerate()` binds the index, which doubles as a subscript.
-impl<..T: Clone> Clone for [..T] {
-    fn clone(&self) -> [..T] {
-        return [for let v of *self { v.clone() }];
+impl<..T: Doubled> Doubled for [..T] {
+    fn doubled(&self) -> [..T] {
+        return [for let v of *self { v.doubled() }];
     }
 }
 ```

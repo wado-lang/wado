@@ -227,7 +227,7 @@ impl Log for Context {
 // Test sink: capture events; a span op reaching it is a test bug.
 impl Log for CaptureSink {
     fn enabled(&self, meta: &Metadata) -> bool { resume true }
-    fn event(&mut self, event: &Event) { self.events.push(event.clone()); resume () }
+    fn event(&mut self, event: &Event) { self.events.push(*event); resume () }
     ..trap
 }
 

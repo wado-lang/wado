@@ -628,9 +628,9 @@ for let v of t {
 Wrapping the same walk in `[...]` collects one result element per source element. The braces hold a single expression — the element's value — since every position of the result tuple has one.
 
 ```wado
-impl<..T: Clone> Clone for [..T] {
-    fn clone(&self) -> [..T] {
-        return [for let v of *self { v.clone() }];
+impl<..T: Doubled> Doubled for [..T] {
+    fn doubled(&self) -> [..T] {
+        return [for let v of *self { v.doubled() }];
     }
 }
 ```

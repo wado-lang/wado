@@ -9,7 +9,7 @@ the problem variadic type parameters solve.
 
 Primary use cases driving this design:
 
-1. **Tuple trait impls without arity explosion**: `Eq`, `Default`, `Clone`, `Inspect`,
+1. **Tuple trait impls without arity explosion**: `Eq`, `Default`, `Inspect`,
    `Serialize` for any tuple without writing separate impls for 0, 1, 2, … element tuples.
 2. **Struct reflection**: expose a struct's fields as a typed tuple at compile time so that
    generic Wado code (rather than compiler magic) can implement `Inspect` for structs.
@@ -84,7 +84,7 @@ that `i32: Eq` and `String: Eq`.
 Multiple bounds are written with `+`:
 
 ```wado
-impl<..T: Clone + Eq> CloneAndEq for [..T] { ... }
+impl<..T: Ord + Eq> Sortable for [..T] { ... }
 ```
 
 ### 5. Coherence Rules
@@ -196,9 +196,9 @@ When a source tuple exists and each element is transformed to produce the result
 wrap a `for let v of tuple` expression in `[...]`:
 
 ```wado
-impl<..T: Clone> Clone for [..T] {
-    fn clone(&self) -> [..T] {
-        return [for let v of *self { v.clone() }];
+impl<..T: Doubled> Doubled for [..T] {
+    fn doubled(&self) -> [..T] {
+        return [for let v of *self { v.doubled() }];
     }
 }
 ```
@@ -334,7 +334,7 @@ occurred.
       type-param scope
 - [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
 - [ ] Error messages: show call site, element index, and body location
-- [ ] Standard library: add variadic impls for `Default`, `Clone`
+- [ ] Standard library: add a variadic impl for `Default`
 
 ---
 
