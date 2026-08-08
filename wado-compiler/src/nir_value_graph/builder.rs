@@ -69,6 +69,11 @@ struct HeapState {
     field_global: IndexMap<u32, HeapVersion>,
     /// Version covering slots in none of the maps above.
     default_version: HeapVersion,
+    /// Version covering module-scope globals. Separate from `default_version`
+    /// because what invalidates a global is not what invalidates a field: a
+    /// call bumps this whether or not it touches any caller local, since the
+    /// callee may write a `global mut`.
+    global_version: HeapVersion,
 }
 
 impl HeapState {
@@ -79,7 +84,17 @@ impl HeapState {
             per_local: IndexMap::default(),
             field_global: IndexMap::default(),
             default_version: HeapVersion::INITIAL,
+            global_version: HeapVersion::INITIAL,
         }
+    }
+
+    /// The version a read of any global sees.
+    fn global_version(&self) -> HeapVersion {
+        self.global_version
+    }
+
+    fn bump_globals(&mut self) {
+        self.global_version = self.fresh();
     }
 
     fn fresh(&mut self) -> HeapVersion {
@@ -129,6 +144,7 @@ impl HeapState {
         self.per_local.clear();
         self.field_global.clear();
         self.default_version = v;
+        self.global_version = v;
     }
 
     /// Snapshot the read-visible state only. `next` is a monotonic counter
@@ -140,6 +156,7 @@ impl HeapState {
             per_local: self.per_local.clone(),
             field_global: self.field_global.clone(),
             default_version: self.default_version,
+            global_version: self.global_version,
         }
     }
 
@@ -148,6 +165,7 @@ impl HeapState {
         self.per_local = snap.per_local;
         self.field_global = snap.field_global;
         self.default_version = snap.default_version;
+        self.global_version = snap.global_version;
     }
 
     /// Seed a fresh `HeapState` (as in [`build_scoped`]) with a snapshot taken at
@@ -161,12 +179,14 @@ impl HeapState {
         self.per_local.clone_from(&snap.per_local);
         self.field_global.clone_from(&snap.field_global);
         self.default_version = snap.default_version;
+        self.global_version = snap.global_version;
         let max = snap
             .per_slot
             .values()
             .chain(snap.per_local.values())
             .chain(snap.field_global.values())
             .chain(std::iter::once(&snap.default_version))
+            .chain(std::iter::once(&snap.global_version))
             .copied()
             .max()
             .unwrap_or(HeapVersion::INITIAL);
@@ -180,6 +200,7 @@ pub(crate) struct HeapSnapshot {
     per_local: IndexMap<u32, HeapVersion>,
     field_global: IndexMap<u32, HeapVersion>,
     default_version: HeapVersion,
+    global_version: HeapVersion,
 }
 
 /// A snapshot of *all* flow-sensitive builder state at a program point:
@@ -369,6 +390,7 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
         | ValueKind::Cast { .. }
         | ValueKind::Select { .. }
         | ValueKind::LoopPhi { .. }
+        | ValueKind::GlobalRead { .. }
         | ValueKind::FieldAccess { .. } => {
             unreachable!("the caller's match admits only constant kinds")
         }
@@ -434,7 +456,11 @@ fn reintern_live_rooted(
             let e = reintern_live_rooted(scratch, live, else_, live_base, type_table)?;
             live.select(c, t, e)
         }
-        ValueKind::Opaque(_) | ValueKind::LoopPhi { .. } => return None,
+        // A global read carries the walk's own heap version, which names
+        // nothing in the caller's pool.
+        ValueKind::GlobalRead { .. } | ValueKind::Opaque(_) | ValueKind::LoopPhi { .. } => {
+            return None;
+        }
     })
 }
 
@@ -717,6 +743,18 @@ impl<'a> Builder<'a> {
     /// bumped (conservative). Skipping the bump for a pure accessor keeps a
     /// `mut_escaped` receiver's field version stable across it.
     fn bump_call_effects(&mut self, call: ExprId) {
+        // A global read survives only across a call the graph knows writes
+        // nothing. `pure_calls` is about caller locals, so it cannot answer
+        // this — a callee that touches no argument may still write a global.
+        let writes_globals = match &self.body.exprs[call].kind {
+            ExprKind::Call { func_id, .. } => {
+                !is_builtin_pure_call(&self.pure_builtin_callees, *func_id)
+            }
+            _ => true,
+        };
+        if writes_globals {
+            self.heap_state.bump_globals();
+        }
         let pure = self.pure_calls.contains(&call);
         // Iterate ascending local index, not `mut_escaped`'s insertion order:
         // opaque `ValueId`s and heap versions are handed out in visit order, so
@@ -1222,7 +1260,19 @@ impl<'a> Builder<'a> {
                 let ty = self.body.exprs[expr].type_id;
                 crate::const_eval::Value::seq(ty, elements).map(|seq| self.pool.constant(&seq, ty))
             }
-            ExprKind::GlobalVarGet { .. } => None,
+            // Name the read, do not evaluate it: what the global holds is the
+            // evaluator's question. Naming alone is what makes `let s = G`
+            // transparent and what lets two reads of one global share an id.
+            ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => {
+                let slot = self.pool.global_slot(&module_source, &name);
+                let ver = self.heap_state.global_version();
+                let id = self.pool.global_read(slot, ver);
+                self.pool.set_type(id, self.body.exprs[expr].type_id);
+                Some(id)
+            }
         }
     }
 
@@ -1648,10 +1698,18 @@ impl<'a> Builder<'a> {
             pre.default_version,
             live.iter().map(|a| (&a.field_global, a.default_version)),
         );
+        // A global read survives the join only if no arm touched a global; the
+        // versions carry no overlay, so the test is direct.
+        let globals_changed = live.iter().any(|a| a.global_version != pre.global_version);
         self.heap_state.per_slot = new_per_slot;
         self.heap_state.per_local = new_per_local;
         self.heap_state.field_global = new_field_global;
         self.heap_state.default_version = new_default;
+        if globals_changed {
+            self.heap_state.bump_globals();
+        } else {
+            self.heap_state.global_version = pre.global_version;
+        }
     }
 
     /// Join one overlay map across the live arms. A key keeps its pre version

@@ -168,6 +168,7 @@ fn is_select_eligible_value(body: &Body, v: ValueId) -> bool {
         | ValueKind::Cast { .. }
         | ValueKind::Select { .. }
         | ValueKind::LoopPhi { .. }
+        | ValueKind::GlobalRead { .. }
         | ValueKind::FieldAccess { .. } => false,
     }
 }

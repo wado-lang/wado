@@ -62,6 +62,7 @@ pub(crate) fn value_kind_to_const(
         | ValueKind::Cast { .. }
         | ValueKind::Select { .. }
         | ValueKind::LoopPhi { .. }
+        | ValueKind::GlobalRead { .. }
         | ValueKind::FieldAccess { .. } => return None,
     })
 }
@@ -286,6 +287,21 @@ impl OpaqueId {
     }
 }
 
+/// Identity of a module-scope global within one [`ValuePool`], interned by
+/// [`ValuePool::global_slot`]. A read's hash-cons key is then two integers
+/// rather than a module path and a name hashed at every lookup.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct GlobalSlot(u32);
+
+impl GlobalSlot {
+    /// Raw `u32` view, mainly for debugging.
+    #[inline]
+    #[must_use]
+    pub fn index(self) -> u32 {
+        self.0
+    }
+}
+
 /// Heap-version tag carried by [`ValueKind::FieldAccess`]. The Stage-2
 /// builder bumps the version on every `SkelTree` node that may write the heap;
 /// reads at the same `(receiver, field, heap_ver)` triple share a
@@ -403,6 +419,21 @@ pub enum ValueKind {
         body_iter: ValueId,
     },
 
+    /// A read of a module-scope global at the given version.
+    ///
+    /// The graph names the read; it does not evaluate it. What the global holds
+    /// is the evaluator's question, answered from its `GlobalEnv` — so a `let`
+    /// bound to a global stays transparent without the builder needing a
+    /// program-wide view of every initializer.
+    ///
+    /// `heap_ver` is the global generation, which any write to a global bumps
+    /// and so does any call that is not a known-pure builtin: a callee may
+    /// write a `global mut`, and the per-local versions do not cover that.
+    GlobalRead {
+        global: GlobalSlot,
+        heap_ver: HeapVersion,
+    },
+
     // ---- Heap-bearing reads ----
     /// `receiver.field_index` at the given heap version. `field_index`
     /// rather than `field_name` because the receiver `ValueId` already
@@ -437,6 +468,7 @@ impl ValueKind {
             | Self::Cast { .. }
             | Self::Select { .. }
             | Self::LoopPhi { .. }
+            | Self::GlobalRead { .. }
             | Self::FieldAccess { .. } => false,
         }
     }
@@ -464,6 +496,7 @@ impl ValueKind {
             | Self::Cast { .. }
             | Self::Select { .. }
             | Self::LoopPhi { .. }
+            | Self::GlobalRead { .. }
             | Self::FieldAccess { .. } => false,
         }
     }
@@ -485,6 +518,7 @@ impl ValueKind {
             | Self::Cast { .. }
             | Self::Select { .. }
             | Self::LoopPhi { .. }
+            | Self::GlobalRead { .. }
             | Self::FieldAccess { .. } => None,
         }
     }
@@ -506,6 +540,7 @@ impl ValueKind {
             | Self::Cast { .. }
             | Self::Select { .. }
             | Self::LoopPhi { .. }
+            | Self::GlobalRead { .. }
             | Self::FieldAccess { .. } => None,
         }
     }
@@ -527,6 +562,7 @@ impl ValueKind {
             | Self::Cast { .. }
             | Self::Select { .. }
             | Self::LoopPhi { .. }
+            | Self::GlobalRead { .. }
             | Self::FieldAccess { .. } => None,
         }
     }
@@ -557,6 +593,8 @@ pub struct ValuePool {
     /// scheduled skeleton expression (a call result kept in the skeleton).
     /// Empty for opaques minted without a recorded source.
     opaque_sources: IndexMap<OpaqueId, OpaqueSource>,
+    /// Interned module-scope globals, in [`GlobalSlot`] order.
+    globals: IndexMap<(crate::module_source::ModuleSource, String), GlobalSlot>,
     /// One stable `Opaque(Local idx)` per local, memoized so repeated requests
     /// (e.g. a loop-stability re-seed of a local's reads after maintenance
     /// dropped them) share a single identity — the precondition for matching the
@@ -620,6 +658,7 @@ impl ValuePool {
             | ValueKind::Opaque(_)
             | ValueKind::Select { .. }
             | ValueKind::LoopPhi { .. }
+            | ValueKind::GlobalRead { .. }
             | ValueKind::FieldAccess { .. } => None,
         };
         self.values.push(kind.clone());
@@ -683,6 +722,37 @@ impl ValuePool {
             }
         };
         self.intern(kind)
+    }
+
+    /// The slot naming `(module_source, name)`, interning it on first use.
+    pub fn global_slot(
+        &mut self,
+        module_source: &crate::module_source::ModuleSource,
+        name: &str,
+    ) -> GlobalSlot {
+        let key = (module_source.clone(), name.to_string());
+        if let Some(&slot) = self.globals.get(&key) {
+            return slot;
+        }
+        let slot = GlobalSlot(self.globals.len() as u32);
+        self.globals.insert(key, slot);
+        slot
+    }
+
+    /// The `(module_source, name)` a slot names.
+    #[must_use]
+    pub fn global_of(
+        &self,
+        slot: GlobalSlot,
+    ) -> Option<&(crate::module_source::ModuleSource, String)> {
+        self.globals
+            .get_index(slot.index() as usize)
+            .map(|(k, _)| k)
+    }
+
+    /// Intern a read of `global` at `heap_ver`.
+    pub fn global_read(&mut self, global: GlobalSlot, heap_ver: HeapVersion) -> ValueId {
+        self.intern(ValueKind::GlobalRead { global, heap_ver })
     }
 
     /// Allocate a fresh `Opaque` value. Each call returns a `ValueId`
