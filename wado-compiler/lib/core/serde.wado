@@ -1000,9 +1000,10 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
         }
         sd.end()?;
         return Result::Ok(ReflectStruct::<T>::from_fields(
-            [for let [i, slot] of slots.enumerate() {
-                require_field(slot, wire_name(&ReflectStruct::<T>::members()[i], policy))?
-            }],
+            [for let [i, slot] of slots.enumerate() { require_field(slot, wire_name(
+                &ReflectStruct::<T>::members()[i],
+                policy,
+            ))? }],
         ));
     }
 }
