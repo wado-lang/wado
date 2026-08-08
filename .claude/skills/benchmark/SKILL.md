@@ -25,9 +25,13 @@ mise run on-task-started
 
 ## Procedure
 
-1. Run `mise run benchmark-all` **three times**; per implementation keep the
-   fastest value (throttling only ever slows things down). Which benchmarks run,
-   and in what order, is `benchmark/mise.toml`'s `all` task.
+1. Run `mise run benchmark-all` **three times**, each to its own log, then pick
+   per row with `node benchmark/pick.ts run1.log run2.log run3.log` (throttling
+   only ever slows things down). Use that tool rather than reading the logs by
+   eye: it keys rows by (task, implementation, phase) and selects on ms/iter, so
+   a rate that rounds to a tie across runs cannot pair with the wrong ms/iter.
+   Which benchmarks run, and in what order, is `benchmark/mise.toml`'s `all`
+   task.
 2. Run http-routing separately (needs `oha` + pinned cores):
    `SLICE=4 ROUNDS=5 CONNECTIONS=50 mise run benchmark-http-routing`. It keeps
    the per-(server, request) max internally, so one invocation suffices.

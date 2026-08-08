@@ -21,7 +21,7 @@ Compares WebAssembly binary sizes across different languages.
 
 ## Results
 
-Measured 2026-08-05 with rustc 1.97.1, Zig 0.15.2, Moonbit 0.1.20260803, and
+Measured 2026-08-08 with rustc 1.97.1, Zig 0.15.2, Moonbit 0.1.20260803, and
 2026-08-03 with wasi-sdk 25.0 for the rows below marked as carried over. Sizes
 are toolchain- but not host-dependent, so a row whose toolchain has not moved
 does not need remeasuring.
