@@ -18,13 +18,42 @@
 #   package-gale/scripts/antlr4-oracle.sh --tokens <grammar.g4> < input
 #
 # Options:
-#   --tokens    print the token stream instead of the parse tree (lexer
-#               oracle; <start_rule> is omitted).
+#   --tokens        print the token stream instead of the parse tree (lexer
+#                   oracle; <start_rule> is omitted).
+#   --super <file>  compile <file> alongside the generated recognizer.
+#                   Repeatable. Supplies the hand-written base class an
+#                   `options { superClass = X }` grammar extends.
+#   --stub-super    synthesize that base class instead, and prove the input
+#                   does not depend on it (see below).
+#
+# superClass grammars
+# -------------------
+# A grammar with `options { superClass = X }` only has an observable
+# behaviour together with X — the base class is hand-written host code
+# living outside the `.g4`, and its predicates decide real tokenization
+# questions. Without one, `javac` fails and the oracle refuses the run.
+#
+# `--super` is the sound path: pass the base class the Gale-side test
+# also models, and both sides run the same specification, so a diff is a
+# Gale bug rather than a base-class disagreement. `tests/grammars/java/`
+# holds the bases paired with Gale's Wado `impl`s.
+#
+# `--stub-super` is for grammars with no such pair yet. It writes a base
+# class derived from the grammar's own `this.<name>(...)` call sites:
+# every predicate returns one configurable constant, every action is a
+# no-op. That answers a different grammar than the real one, so the mode
+# does not trust its own output — it runs the input twice, with the
+# predicates all-true and all-false, and reports the token stream only
+# when the two agree AND no stubbed action fired. That makes the answer
+# provably independent of the base class. Otherwise it exits 3 and prints
+# nothing to stdout, so a caller cannot pin a guess.
 #
 # Exit codes:
 #   0 = oracle ran and printed output
 #   1 = invocation error (missing args, missing jar after download, etc.)
 #   2 = ANTLR4 reported a parse error on the input
+#   3 = --stub-super only: the answer depends on the base class, so this
+#       input has no oracle until a real base class is supplied
 
 set -euo pipefail
 
@@ -138,16 +167,39 @@ printf '%s' "$ANTLR4_VERSION" > "$CACHE_DIR/antlr4-resolved-version"
 
 usage() {
     cat >&2 <<EOF
-Usage: $(basename "$0") <grammar.g4> <start_rule> < input
-       $(basename "$0") --tokens <grammar.g4> < input
+Usage: $(basename "$0") [options] <grammar.g4> <start_rule> < input
+       $(basename "$0") [options] --tokens <grammar.g4> < input
+
+Options:
+  --tokens          print the token stream instead of the parse tree
+  --super <file>    compile <file> alongside the recognizer (repeatable)
+  --stub-super      synthesize the superClass base and prove the input
+                    does not depend on it (exit 3 when it does)
 EOF
     exit 1
 }
 
 MODE="tree"
-if [ "${1:-}" = "--tokens" ]; then
-    MODE="tokens"
-    shift
+STUB_SUPER=0
+SUPER_SRCS=()
+# Counted separately: `${#arr[@]}` on an empty array trips `set -u` on the
+# bash 3.2 still shipped as /bin/bash on macOS.
+SUPER_N=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --tokens) MODE="tokens"; shift ;;
+        --stub-super) STUB_SUPER=1; shift ;;
+        --super) [ $# -ge 2 ] || usage; SUPER_SRCS[$SUPER_N]="$2"; SUPER_N=$((SUPER_N + 1)); shift 2 ;;
+        --super=*) SUPER_SRCS[$SUPER_N]="${1#--super=}"; SUPER_N=$((SUPER_N + 1)); shift ;;
+        --) shift; break ;;
+        -*) echo "oracle: unknown option: $1" >&2; usage ;;
+        *) break ;;
+    esac
+done
+
+if [ "$STUB_SUPER" = "1" ] && [ "$SUPER_N" -gt 0 ]; then
+    echo "oracle: --stub-super and --super are mutually exclusive" >&2
+    exit 1
 fi
 
 if [ "$MODE" = "tree" ]; then
@@ -165,6 +217,15 @@ if [ ! -f "$GRAMMAR_PATH" ]; then
     exit 1
 fi
 
+if [ "$SUPER_N" -gt 0 ]; then
+    for src in "${SUPER_SRCS[@]}"; do
+        if [ ! -f "$src" ]; then
+            echo "oracle: cannot find --super source: $src" >&2
+            exit 1
+        fi
+    done
+fi
+
 # ANTLR4 requires the source file name to match the declared
 # `grammar Name;` identifier, so use that rather than the caller's
 # basename (descriptor-derived inputs often disagree). `sed -n .. p`
@@ -178,6 +239,32 @@ if [ -n "$declared_name" ]; then
     GRAMMAR_NAME="$declared_name"
 else
     GRAMMAR_NAME="$(basename "$GRAMMAR_PATH" .g4)"
+fi
+
+# `options { superClass = X; }`, possibly spread over lines. The generated
+# recognizer will `extends X`, so X has to be on the compile path.
+# Most grammars declare none, and no match must not trip `pipefail`.
+SUPER_CLASS=$(tr '\n' ' ' < "$GRAMMAR_PATH" \
+    | { grep -oE 'superClass[[:space:]]*=[[:space:]]*[A-Za-z_][A-Za-z0-9_]*' || true; } \
+    | head -1 \
+    | sed -E 's/.*=[[:space:]]*//')
+
+if [ -n "$SUPER_CLASS" ] && [ "$STUB_SUPER" != "1" ] && [ "$SUPER_N" -eq 0 ]; then
+    cat >&2 <<EOF
+oracle: $GRAMMAR_NAME declares 'options { superClass = $SUPER_CLASS; }' but no
+oracle: base class was supplied, so the generated recognizer has nothing to
+oracle: extend and javac would fail. Either:
+oracle:   --super <path/to/$SUPER_CLASS.java>  the real base class — the oracle
+oracle:       then runs the specification the Gale side models, so a diff is
+oracle:       a Gale bug and not two different grammars disagreeing
+oracle:   --stub-super  synthesize a stub base and answer only where the
+oracle:       answer is provably independent of it
+EOF
+    exit 1
+fi
+if [ "$STUB_SUPER" = "1" ] && [ -z "$SUPER_CLASS" ]; then
+    echo "oracle: --stub-super given but $GRAMMAR_NAME declares no superClass" >&2
+    exit 1
 fi
 
 if [ ! -f "$JAR_PATH" ]; then
@@ -206,6 +293,94 @@ if ! command -v javac >/dev/null 2>&1; then
     exit 1
 fi
 
+# Java type for a literal appearing at a `this.<name>(...)` call site. Only
+# literals occur in the corpus; anything else stays Object and surfaces as a
+# javac error rather than a silently wrong signature.
+stub_param_type() {
+    case "$1" in
+        \"*) echo "String" ;;
+        \'*) echo "char" ;;
+        true|false) echo "boolean" ;;
+        -[0-9]*|[0-9]*) echo "int" ;;
+        *) echo "Object" ;;
+    esac
+}
+
+# Write a base class for $SUPER_CLASS derived from the grammar's own call
+# sites. A name called from inside a `{ ... }?` predicate returns the
+# -Dgale.stub.predicate constant; every other name is a void action that
+# records itself to -Dgale.stub.log. Both are what the differential run
+# below inspects to decide whether the answer is trustworthy.
+emit_stub_super() {
+    local grammar="$1" out="$2"
+    local flat calls pred_calls super_type ctor_param
+    flat=$(tr '\n' ' ' < "$grammar")
+    calls=$(printf '%s' "$flat" | grep -oE 'this\.[A-Za-z_][A-Za-z0-9_]*\([^()]*\)' | sort -u || true)
+    # A `{ ... }?` body with no nested braces — a predicate whose Java spans
+    # braces is missed and lands among the actions, where javac rejects it as
+    # a void expression. Visibly wrong beats silently boolean.
+    pred_calls=$(printf '%s' "$flat" | grep -oE '\{[^{}]*\}[[:space:]]*\?' \
+        | grep -oE 'this\.[A-Za-z_][A-Za-z0-9_]*\(' | sort -u || true)
+
+    if grep -qE '^[[:space:]]*lexer[[:space:]]+grammar' "$grammar"; then
+        super_type="Lexer"; ctor_param="CharStream"
+    else
+        super_type="Parser"; ctor_param="TokenStream"
+    fi
+
+    {
+        echo "// Generated by antlr4-oracle.sh --stub-super. NOT a port of any real"
+        echo "// base class: predicates answer a constant and actions do nothing."
+        echo "import org.antlr.v4.runtime.*;"
+        echo
+        echo "public abstract class $SUPER_CLASS extends $super_type {"
+        echo "    private static final boolean PRED ="
+        echo "        Boolean.parseBoolean(System.getProperty(\"gale.stub.predicate\", \"true\"));"
+        echo
+        echo "    public $SUPER_CLASS($ctor_param input) { super(input); }"
+        echo
+        echo "    private static void mark(String name) {"
+        echo "        String path = System.getProperty(\"gale.stub.log\");"
+        echo "        if (path == null) return;"
+        echo "        try (java.io.Writer w = new java.io.FileWriter(path, true)) {"
+        echo "            w.write(name);"
+        echo "            w.write('\\n');"
+        echo "        } catch (java.io.IOException e) {"
+        echo "            throw new RuntimeException(e);"
+        echo "        }"
+        echo "    }"
+
+        local sig name args params i part
+        while IFS= read -r sig; do
+            [ -n "$sig" ] || continue
+            name=${sig#this.}
+            name=${name%%(*}
+            args=${sig#*(}
+            args=${args%)}
+            args=$(printf '%s' "$args" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            params=""
+            i=0
+            if [ -n "$args" ]; then
+                local parts
+                IFS=',' read -ra parts <<< "$args"
+                for part in "${parts[@]}"; do
+                    part=$(printf '%s' "$part" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+                    i=$((i + 1))
+                    params="${params}${params:+, }$(stub_param_type "$part") a$i"
+                done
+            fi
+            echo
+            if printf '%s\n' "$pred_calls" | grep -qx "this\.$name("; then
+                echo "    public boolean $name($params) { return PRED; }"
+            else
+                echo "    public void $name($params) { mark(\"$name\"); }"
+            fi
+        done <<< "$calls"
+
+        echo "}"
+    } > "$out"
+}
+
 WORK_DIR="$(mktemp -d -t gale-antlr4-oracle.XXXXXX)"
 if [ "${ORACLE_KEEP:-0}" != "1" ]; then
     trap 'rm -rf "$WORK_DIR"' EXIT
@@ -214,6 +389,16 @@ else
 fi
 
 cp "$GRAMMAR_PATH" "$WORK_DIR/$GRAMMAR_NAME.g4"
+
+# Buffer stdin: --stub-super replays the same input under both predicate
+# polarities, and a pipe can only be read once.
+cat > "$WORK_DIR/input.txt"
+
+if [ "$SUPER_N" -gt 0 ]; then
+    cp "${SUPER_SRCS[@]}" "$WORK_DIR/"
+elif [ "$STUB_SUPER" = "1" ]; then
+    emit_stub_super "$GRAMMAR_PATH" "$WORK_DIR/$SUPER_CLASS.java"
+fi
 
 # Generate Java sources. -no-listener avoids emitting Listener
 # scaffolding we don't need.
@@ -236,12 +421,61 @@ fi
 TESTRIG_FLAG="-tree"
 [ "$MODE" = "tokens" ] && TESTRIG_FLAG="-tokens"
 
-set +e
-java -cp "$JAR_PATH:$WORK_DIR" org.antlr.v4.gui.TestRig \
-    "$GRAMMAR_NAME" "$START_RULE" "$TESTRIG_FLAG" \
-    >"$WORK_DIR/out.txt" 2>"$WORK_DIR/err.txt"
-RC=$?
-set -e
+run_testrig() {
+    local outf="$1" errf="$2"
+    shift 2
+    set +e
+    java "$@" -cp "$JAR_PATH:$WORK_DIR" org.antlr.v4.gui.TestRig \
+        "$GRAMMAR_NAME" "$START_RULE" "$TESTRIG_FLAG" \
+        <"$WORK_DIR/input.txt" >"$outf" 2>"$errf"
+    local rc=$?
+    set -e
+    return $rc
+}
+
+# ANTLR4's ConsoleErrorListener reports recognizer errors as
+# `line <l>:<c> <message>`; everything else on stderr is JVM or tool
+# chatter that must not be read as a parse failure.
+recognizer_errors() {
+    grep -E '^line [0-9]+:[0-9]+ ' "$1" || true
+}
+
+if [ "$STUB_SUPER" != "1" ]; then
+    if run_testrig "$WORK_DIR/out.txt" "$WORK_DIR/err.txt"; then RC=0; else RC=$?; fi
+else
+    # The stub answers a grammar nobody runs, so its output is only usable
+    # where the stub cannot have changed it: both predicate polarities agree
+    # and no stubbed action fired.
+    : > "$WORK_DIR/actions.txt"
+    STUB_LOG="-Dgale.stub.log=$WORK_DIR/actions.txt"
+    if run_testrig "$WORK_DIR/out.true" "$WORK_DIR/err.true" \
+        -Dgale.stub.predicate=true "$STUB_LOG"; then RC=0; else RC=$?; fi
+    if run_testrig "$WORK_DIR/out.false" "$WORK_DIR/err.false" \
+        -Dgale.stub.predicate=false "$STUB_LOG"; then RC_FALSE=0; else RC_FALSE=$?; fi
+
+    if [ -s "$WORK_DIR/actions.txt" ]; then
+        echo "oracle: input executes base-class action(s) the stub cannot model:" >&2
+        sort -u "$WORK_DIR/actions.txt" | sed 's/^/oracle:   /' >&2
+        echo "oracle: no oracle for this input without --super <$SUPER_CLASS.java>" >&2
+        exit 3
+    fi
+    recognizer_errors "$WORK_DIR/err.true" > "$WORK_DIR/rerr.true"
+    recognizer_errors "$WORK_DIR/err.false" > "$WORK_DIR/rerr.false"
+    if [ "$RC" != "$RC_FALSE" ] \
+        || ! cmp -s "$WORK_DIR/out.true" "$WORK_DIR/out.false" \
+        || ! cmp -s "$WORK_DIR/rerr.true" "$WORK_DIR/rerr.false"; then
+        echo "oracle: the answer depends on a $SUPER_CLASS predicate — the stub" >&2
+        echo "oracle: decides it, so this is Gale's guess and not ANTLR4's answer." >&2
+        echo "oracle: with every predicate true:" >&2
+        sed 's/^/oracle:   /' "$WORK_DIR/out.true" >&2
+        echo "oracle: with every predicate false:" >&2
+        sed 's/^/oracle:   /' "$WORK_DIR/out.false" >&2
+        exit 3
+    fi
+    echo "oracle: --stub-super verified: this input's answer does not depend on $SUPER_CLASS" >&2
+    mv "$WORK_DIR/out.true" "$WORK_DIR/out.txt"
+    mv "$WORK_DIR/err.true" "$WORK_DIR/err.txt"
+fi
 
 if [ -s "$WORK_DIR/err.txt" ]; then
     cat "$WORK_DIR/err.txt" >&2
@@ -252,15 +486,12 @@ cat "$WORK_DIR/out.txt"
 if [ $RC -ne 0 ]; then
     exit 1
 fi
-# ANTLR4's default ConsoleErrorListener reports lexer/parser recognizer
-# errors to stderr as `line <l>:<c> <message>` (mismatched input, no
-# viable alternative, token recognition error, extraneous/missing
-# input, …). Only those mean the input failed to parse. Other stderr
-# output — JVM warnings, ANTLR4 advisory notices — is benign and must
-# NOT be classified as a parse error, or the descriptor is wrongly
-# dropped from Stage B′. Gate exit 2 on the recognizer-error line shape
-# rather than "any stderr".
-if [ -s "$WORK_DIR/err.txt" ] && grep -Eq '^line [0-9]+:[0-9]+ ' "$WORK_DIR/err.txt"; then
+# Only a recognizer error means the input failed to parse (mismatched
+# input, no viable alternative, token recognition error, extraneous /
+# missing input, …). Other stderr output — JVM warnings, ANTLR4 advisory
+# notices — is benign and must NOT be classified as a parse error, or the
+# descriptor is wrongly dropped from Stage B′.
+if [ -n "$(recognizer_errors "$WORK_DIR/err.txt")" ]; then
     exit 2
 fi
 exit 0

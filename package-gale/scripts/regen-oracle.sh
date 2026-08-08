@@ -7,7 +7,9 @@
 #
 # Only clean single combined `WS -> skip` grammars qualify; see "Stage B' for
 # real-world grammars" in antlr4-compatibility.md for why Rust/TypeScript
-# (superClass) and css3 (whitespace tokens) are out of scope.
+# (split lexer/parser) and css3 (whitespace tokens) are out of scope. Their
+# lexers are oracle-able on their own — antlr4-oracle.sh --tokens with
+# --super / --stub-super — which this tree-pinning driver does not cover.
 #
 # Usage: scripts/regen-oracle.sh [sqlite|json|all]   (default: all)
 # Needs java+javac and a built `wado` (WADO env, default ../target/release/wado).

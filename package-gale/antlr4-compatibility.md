@@ -292,14 +292,41 @@ Adding a grammar is config + a cases file, but only for a **clean single
 combined grammar with `WS -> skip`**. Out of scope, with reasons recorded
 in `regen-oracle.sh`:
 
-- split lexer/parser grammars — `antlr4-oracle.sh` takes one `.g4`;
-- `options { superClass = ... }` grammars (RustParser, TypeScriptParser)
-  — the generated Java references a hand-written base class outside the
-  `.g4`, so the oracle's `javac` fails, and Gale itself needs predicate
-  support for them;
+- split lexer/parser grammars — `antlr4-oracle.sh` takes one `.g4`, so
+  RustParser and TypeScriptParser have no reachable token vocabulary
+  (their lexers do oracle on their own, see below);
 - grammars that emit whitespace as tree tokens (css3's `ws`) — their
   trees are whitespace-sensitive, so css3 stays pinned by parse-success
   (`driver_cst_css3_test`), not tree equality.
+
+#### Oracling a `superClass` grammar
+
+`options { superClass = X; }` puts part of the grammar's behaviour in
+hand-written host code outside the `.g4`, so the grammar alone has no
+observable answer and the oracle refuses to guess one. The predicate-
+carrying real-world lexers — `RustLexer`, `TypeScriptLexer`,
+`ANTLRv4Lexer` — are exactly the ones whose behaviour is hardest to
+reason about, so `antlr4-oracle.sh` offers two ways in.
+
+`--super <Base.java>` compiles a base class alongside the generated
+recognizer. `tests/grammars/java/` holds bases written as the Java twin
+of a Wado `impl` in the matching driver test: ANTLR4 and Gale then run
+the same specification, so a divergence is a Gale bug rather than two
+different grammars disagreeing. Keep the pair in sync — an edit to one
+side alone silently re-opens the gap the file exists to close.
+
+`--stub-super` is for a grammar with no such pair. It derives a base
+class from the grammar's own `this.<name>(...)` call sites: predicates
+return a constant, actions do nothing. That answers a _different_
+grammar, so the mode does not trust its own output — it runs the input
+under both predicate polarities and reports the answer only when the two
+agree and no stubbed action fired, which makes the answer provably
+independent of the base class. Otherwise it exits 3 with empty stdout,
+so a caller cannot pin a guess. `0x1f → INTEGER_LITERAL` clears that
+bar on the real `RustLexer`; `1.` does not, because `FloatDotPossible()`
+is what decides between `FLOAT_LITERAL` and `INTEGER_LITERAL '.'`.
+
+`scripts/antlr4-oracle-selftest.sh` pins both paths.
 
 ### Stage C — action-body translation
 
@@ -755,19 +782,21 @@ the vendor extract.
 All compat-related artefacts (extracted grammars, generated tests,
 triage state) live under `package-gale/tests/antlr4-compat/`:
 
-| Path                                       | Role                                                                                                                                       |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `scripts/extract_antlr4_descriptors.wado`  | Extractor (single-file Wado script)                                                                                                        |
-| `scripts/extract-antlr4-descriptors.sh`    | Wrapper resolving the category list and forwarding to `wado run`                                                                           |
-| `tests/antlr4-compat/grammars/`            | Generated `.g4` files (committed)                                                                                                          |
-| `tests/antlr4-compat/<category>_test.wado` | Stage A claim-(a) per-category tests (committed; `#![generated(by=…)]`)                                                                    |
-| `tests/antlr4-compat/stage_a/`             | Per-descriptor Stage A claims (b/c/d) drivers (committed). Each file ends in `_parse_test.wado`, `_err_test.wado`, or `_tokens_test.wado`. |
-| `tests/antlr4-compat/stage_b/`             | Per-descriptor Stage B drivers (committed; full-tree or sub-tree per descriptor)                                                           |
-| `tests/antlr4-compat/stage_b_oracle/`      | Per-descriptor Stage B′ drivers (committed; expected parse tree derived from the ANTLR4 JVM oracle at extract time)                        |
-| `tests/generated/antlr4_compat_a/`         | Kiln-generated parsers/lexers for Stage A drivers (committed)                                                                              |
-| `tests/generated/antlr4_compat_b/`         | Kiln-generated parsers for Stage B and Stage B′ drivers (committed; shared)                                                                |
-| `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                                                                                           |
-| `scripts/antlr4-oracle.sh`                 | Black-box wrapper around the published ANTLR4 jar. Caches the jar under `~/.cache/gale/`. Run at extract time only — CI does not need it.  |
+| Path                                       | Role                                                                                                                                        |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/extract_antlr4_descriptors.wado`  | Extractor (single-file Wado script)                                                                                                         |
+| `scripts/extract-antlr4-descriptors.sh`    | Wrapper resolving the category list and forwarding to `wado run`                                                                            |
+| `tests/antlr4-compat/grammars/`            | Generated `.g4` files (committed)                                                                                                           |
+| `tests/antlr4-compat/<category>_test.wado` | Stage A claim-(a) per-category tests (committed; `#![generated(by=…)]`)                                                                     |
+| `tests/antlr4-compat/stage_a/`             | Per-descriptor Stage A claims (b/c/d) drivers (committed). Each file ends in `_parse_test.wado`, `_err_test.wado`, or `_tokens_test.wado`.  |
+| `tests/antlr4-compat/stage_b/`             | Per-descriptor Stage B drivers (committed; full-tree or sub-tree per descriptor)                                                            |
+| `tests/antlr4-compat/stage_b_oracle/`      | Per-descriptor Stage B′ drivers (committed; expected parse tree derived from the ANTLR4 JVM oracle at extract time)                         |
+| `tests/generated/antlr4_compat_a/`         | Kiln-generated parsers/lexers for Stage A drivers (committed)                                                                               |
+| `tests/generated/antlr4_compat_b/`         | Kiln-generated parsers for Stage B and Stage B′ drivers (committed; shared)                                                                 |
+| `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                                                                                            |
+| `scripts/antlr4-oracle.sh`                 | Black-box wrapper around the published ANTLR4 jar. Caches the jar under `~/.cache/gale/`. Run at extract time only — CI does not need it.   |
+| `scripts/antlr4-oracle-selftest.sh`        | Behaviour checks for that wrapper, including the `--stub-super` soundness gate. Needs java; run after touching the oracle.                  |
+| `tests/grammars/java/`                     | Base classes for `superClass` grammars, each the Java twin of a Wado `impl` in the matching driver test. Fed to `antlr4-oracle.sh --super`. |
 
 ### Triage states (`status.toml`)
 

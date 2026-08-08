@@ -37,6 +37,7 @@ ANTLR4 is BSD-3; copying or paraphrasing its implementation risks making Gale a 
 - Do NOT read ANTLR4 implementation source: `vendor/antlr4/tool/**/*.{java,g}` and `vendor/antlr4/runtime/**/*.java` (e.g. `ParserATNSimulator.java`, `LL1Analyzer.java`, the bootstrap `.g` grammars). Algorithmic ideas inferred from that source belong to ANTLR4, not Gale.
 - OK to read: `.g4` files anywhere under `vendor/antlr4/`; `runtime-testsuite/**/*.txt` descriptors; `vendor/antlr4/doc/*.md` (spec-like prose — the canonical `.g4` semantics reference; a curated index is in `antlr4-compatibility.md`).
 - OK to run: the published `antlr-4.13.2-complete.jar` as a black-box oracle (clean-room measurement).
+- The base classes in `tests/grammars/java/` are written from Gale's own Wado `impl`s, not ported from grammars-v4's Java. Keep it that way: the point is to hold the base class equal across the two sides, and grammars-v4's own version is neither needed for that nor ours to paraphrase.
 
 ## Standing codegen rules
 
@@ -75,7 +76,9 @@ Test layers, all driven by `.g4` in `tests/grammars/` plus the descriptor corpus
 2. Driver tests (`tests/driver_*_test.wado`) — invoke the generator at compile time via `use ... with { generator: ... }`, parse input, and assert `to_string_tree()` output (EOF omitted; `normalize_tree()` lets you write indented expected trees).
 3. ANTLR4 descriptor compatibility (`tests/antlr4-compat/`) — the extracted corpus as a long-lived regression suite; see [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 
-Real-world grammars can also be oracle-pinned (Stage B′ over the published jar, not hand-written trees): `scripts/regen-oracle.sh <key>` regenerates `tests/driver_cst_<key>_oracle_test.wado` from `tests/oracle/<key>/cases.*`, marking cases Gale currently parses differently `#[TODO]`. Java runs only at regen time; the committed trees keep CI Java-free. `sqlite` and `json` are pinned this way. Adding a grammar is config + cases, but only for a clean single combined `WS -> skip` grammar — split / `superClass` / whitespace-token grammars (Rust, TypeScript, css3) are out of scope; see "Stage B′ for real-world grammars" in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
+Real-world grammars can also be oracle-pinned (Stage B′ over the published jar, not hand-written trees): `scripts/regen-oracle.sh <key>` regenerates `tests/driver_cst_<key>_oracle_test.wado` from `tests/oracle/<key>/cases.*`, marking cases Gale currently parses differently `#[TODO]`. Java runs only at regen time; the committed trees keep CI Java-free. `sqlite` and `json` are pinned this way. Adding a grammar is config + cases, but only for a clean single combined `WS -> skip` grammar — split and whitespace-token grammars (Rust, TypeScript, css3) are out of scope; see "Stage B′ for real-world grammars" in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
+
+A `superClass` grammar has no behaviour without its hand-written base class, so `antlr4-oracle.sh` refuses to guess one. Pass `--super tests/grammars/java/<Base>.java` — each of those is the Java twin of a Wado `impl` in the matching driver test, so ANTLR4 and Gale run the same specification and keeping the pair in sync is what makes the comparison mean anything. With no such pair, `--stub-super` synthesizes a base and answers only where both predicate polarities agree and no stubbed action fired, exiting 3 otherwise so a caller cannot pin a guess. `scripts/antlr4-oracle-selftest.sh` pins both paths (needs java; run it after touching the oracle).
 
 To add an e2e grammar: drop the `.g4` in `tests/grammars/` (with `// Source:` / `// License:` headers), add a parse test in `src/g4/integration_test.wado`, and a driver test that imports it via the generator.
 
