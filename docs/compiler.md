@@ -165,7 +165,7 @@ CM canonical operations (stream / future read + write, waitable-set, error-conte
 
 ## WIR Optimize
 
-`wir_optimize/` runs Wasm-shape-specific passes that need WIR's lower-level view: peephole, variant-return SROA, init-guard removal, struct elision, array data promotion, parameter SROA, nullable-ref folding, constant forwarding, DCE, and final cleanup. Tuple- and user-struct-return ABIs are decided by the TIR-level `optimize::multi_value_return` pass before WIR build.
+`wir_optimize/` runs Wasm-shape-specific passes that need WIR's lower-level view: peephole, init-guard removal, struct elision, array data promotion, parameter SROA, nullable-ref folding, constant forwarding, DCE, and final cleanup. Tuple- and user-struct-return ABIs are decided by the TIR-level `optimize::multi_value_return` pass before WIR build, and variant returns are scalarized into tuples at NIR by `optimize::sroa_variant_return`; what stays here is the result-slot flattening that needs the post-`nullable_ref` shape.
 
 ## Codegen
 
