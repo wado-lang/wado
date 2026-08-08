@@ -68,7 +68,7 @@ There is no value-copy _elision_ pass: defensive copies are chosen at the lower 
 
 Variant and reference:
 
-- `labeled_block_fusion` — delete the intermediate `Option`/`Result` an inlined `?` helper leaves at its consumer, threading each producer directly to the value it yields.
+- `labeled_block_fusion` — delete the intermediate an inlined `?` helper leaves at its consumer, threading each producer directly to the value it yields. Recognises the `Option`/`Result` and the `[tag, slots…]` `sroa_variant_return` leaves in its place.
 - `ref_elim` — drop reference bindings read only via field access, rewriting each read to the source; a shared borrow of a pure aggregate substitutes the aggregate so its projections fold.
 
 Scalar and dataflow:

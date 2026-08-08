@@ -27,8 +27,7 @@
 //! consumer reads `temp.0` / `temp.k`. Value-discarding fusion recognises that
 //! shape too — [`FusedValue`] is the one axis the two differ on, and the
 //! transform is shared. Recognising only the variant form left the tuple
-//! allocated once per call: on `fts` that was one `struct.new` per byte
-//! scanned, and 4.3× the runtime.
+//! allocated once per call, which is worse than the variant it replaced.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirLiteralPattern, NirLocal};
@@ -1118,7 +1117,7 @@ fn expr_has_free_unlabeled_loop_exit_operand(body: &Body, op: Operand, loop_dept
 // ---------------------------------------------------------------------------
 
 /// Everything the transform needs to rewrite one labeled block's exits into the
-/// consumer's arms. Bound once in [`perform_fusion`], threaded by reference.
+/// consumer's arms.
 struct Fusion<'a> {
     orig_label: &'a str,
     fused_label: &'a str,
@@ -1299,7 +1298,6 @@ fn transform_lb_stmts(engine: &mut Engine, stmts: Vec<StmtId>, f: &Fusion) -> Ve
     out
 }
 
-/// `let __fused_payload = <the VariantConstruct's payload>;`
 fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &mut Vec<StmtId>) {
     let BoundValue::Variant {
         payload_local,
@@ -1674,7 +1672,6 @@ fn replacement_for(body: &Body, e: ExprId, f: &Fusion) -> Option<ExprKind> {
 }
 
 fn subst_temp_reads_in_expr(engine: &mut Engine, e: ExprId, f: &Fusion) {
-    // Match the target pattern first (top-down, before recursing).
     if let Some(kind) = replacement_for(engine.body, e, f) {
         engine.replace_expr_kind(e, kind);
         return;

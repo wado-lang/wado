@@ -87,6 +87,22 @@ machinery already handles, and the payload is an ordinary opaque local.
 
 None of these are available to a marker-only design at any effort.
 
+### What it costs: a pass keyed on the variant shape stops firing
+
+The same reach that unlocks the table above is what a pass recognising the
+_variant_ shape loses. `labeled_block_fusion` deletes the `Option` an inlined
+helper leaves at a discriminating consumer; after this pass the intermediate is
+a tuple, its breaks carry a tuple literal and the consumer reads `temp.0`, so
+the recogniser declined and the tuple stayed heap-allocated — worse than the
+variant it replaced.
+
+The rule that follows: a pass that matches on `VariantConstruct` /
+`VariantTest` / `VariantPayload` at a call boundary has to learn the scalarized
+shape as well, and the two belong in one recogniser rather than two that can
+drift. Finding them is empirical — a `struct.new "tuple//` in a hot loop is the
+signature — so read the WIR of a workload after enabling this pass, not only the
+benchmark totals.
+
 ## Design
 
 ### The slot typing rule
@@ -358,6 +374,28 @@ it stands mid-round. Reading the latter let a caller spare its callee and then
 be invalidated later in the same round: the callee took the ABI, the caller did
 not, and the caller's `return g(x)` pushed N results through a one-ref
 signature — 239 fixtures of invalid Wasm, at `-O0` as well as `-O2`.
+
+They must also agree on _where_ a tail call may sit. The return side accepts one
+in an `if` branch, a `match` arm, a `switch` arm and their nestings; a call-site
+walk that recognised only a bare `return` counted the rest as escapes,
+invalidated the callee, and the fix-point then withdrew the caller too, so both
+kept the heap-tuple ABI. A disagreement here costs optimization rather than
+correctness, which is why it survives a green suite — the shapes have to be
+enumerated once and shared, not re-derived per half. Break values are the one
+deliberate asymmetry, refused on both sides:
+`wir_build` turns a labeled-block exit into a `Return` only for a `StructNew`,
+so `break L: g(x)` would strand `g`'s N results on the stack.
+
+#### What a `let` may bind is the lowering's question
+
+`inline` and `let_block_flatten` leave a call at a block tail with its receiver
+hoisted in front of it, and `wir_build::try_emit_multi_value_let` is what has to
+split N results into N locals there. Classification and lowering therefore ask
+the same question, and answering it twice put the narrower answer in the
+classifier: a wrapped call was refused, and its callee kept the heap tuple. One
+recogniser (`block_tail_call`) settles it for both, so the shape the classifier
+accepts is the shape the lowering can split, by construction rather than by an
+assertion policing the gap.
 
 ## Consequences
 
