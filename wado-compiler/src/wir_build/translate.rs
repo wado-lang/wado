@@ -2906,14 +2906,38 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
 /// Turn every exit to `target_depth` into a `Return` of its N fields, and
 /// report whether it reached all of them — the caller drops the block's result
 /// type on that answer.
+///
+/// Only `Block`, `Loop` and `If` bodies open a Wasm label. Every other child an
+/// instruction carries rides at the enclosing depth, `let x = f()?` lowering to
+/// `LocalSet { value: If { … } }` among them.
 fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32) -> bool {
     fn exits_to_target(instr: &WirInstr, target_depth: u32) -> bool {
         match instr {
             WirInstr::Br { depth } => *depth == target_depth,
-            WirInstr::Seq(seq) => seq
-                .last()
-                .is_some_and(|last| exits_to_target(last, target_depth)),
-            _ => false,
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+                body.iter().any(|i| exits_to_target(i, target_depth + 1))
+            }
+            WirInstr::If {
+                condition,
+                then_body,
+                else_body,
+                ..
+            } => {
+                exits_to_target(condition, target_depth)
+                    || then_body
+                        .iter()
+                        .any(|i| exits_to_target(i, target_depth + 1))
+                    || else_body
+                        .as_ref()
+                        .is_some_and(|eb| eb.iter().any(|i| exits_to_target(i, target_depth + 1)))
+            }
+            other => {
+                let mut found = false;
+                other.for_each_child(&mut |child| {
+                    found |= exits_to_target(child, target_depth);
+                });
+                found
+            }
         }
     }
 
@@ -2970,23 +2994,34 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32) -> bool {
             continue;
         }
         all_rewritten &= !exits_to_target(&instrs[i], target_depth);
-        // Each of these is one Wasm label, so an exit inside is one deeper.
         let one_deeper = target_depth + 1;
         match &mut instrs[i] {
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
                 all_rewritten &= return_every_exit(body, one_deeper);
             }
             WirInstr::If {
+                condition,
                 then_body,
                 else_body,
                 ..
             } => {
+                all_rewritten &=
+                    return_every_exit(std::slice::from_mut(condition.as_mut()), target_depth);
                 all_rewritten &= return_every_exit(then_body, one_deeper);
                 if let Some(eb) = else_body {
                     all_rewritten &= return_every_exit(eb, one_deeper);
                 }
             }
-            _ => {}
+            WirInstr::Seq(body) => {
+                all_rewritten &= return_every_exit(body, target_depth);
+            }
+            other => {
+                let mut ok = true;
+                other.for_each_boxed_child_mut(&mut |child| {
+                    ok &= return_every_exit(std::slice::from_mut(child), target_depth);
+                });
+                all_rewritten &= ok;
+            }
         }
         i += 1;
     }
