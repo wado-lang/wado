@@ -382,9 +382,14 @@ invalidated the callee, and the fix-point then withdrew the caller too, so both
 kept the heap-tuple ABI. A disagreement here costs optimization rather than
 correctness, which is why it survives a green suite — the shapes have to be
 enumerated once and shared, not re-derived per half. Break values are the one
-deliberate asymmetry, refused on both sides:
-`wir_build` turns a labeled-block exit into a `Return` only for a `StructNew`,
-so `break L: g(x)` would strand `g`'s N results on the stack.
+deliberate asymmetry, refused on both sides: a `break` names a label, and one
+naming a block nested inside the return value exits somewhere the rewrite below
+never reaches, so `break L: g(x)` would strand `g`'s N results on the stack.
+
+An arm tail is not a break value. A dense `match` lowers to a `br_table`, so a
+tail call in an arm becomes an exit carrying the callee's results rather than a
+branch tail carrying the aggregate — the rewrite returns the results directly
+there, exactly as it unpacks a `StructNew` at the same exit.
 
 #### What a `let` may bind is the lowering's question
 
@@ -524,8 +529,12 @@ Three rules make it work, and all three were learned by getting them wrong:
 - Exiting a labeled block of the callee's tuple type is a handled position too,
   not just a `let` of that type. Inlining a scalarized callee into a rewritten
   call site turns its body into a labeled block typed by the tuple, and the
-  callee's own tail calls then exit through `break L: f(x)`. Reboxing one hands
-  a variant to a tuple-typed position — invalid Wasm from the repair itself.
+  callee's own tail calls then exit through `break L: f(x)` — or through the
+  branches of one, since the tail-call positions the return side accepts arrive
+  with it. Whether a call already delivers the tuple is the consumer's declared
+  type talking, so every consumer reads its value through the same walk, not
+  just the one that binds a local. Reboxing a call there hands a variant to a
+  tuple-typed position — invalid Wasm from the repair itself.
   The call node's own `type_id` looks like a simpler test, but it is not one:
   the site rewrite retypes _every_ call to a rewritten callee before deciding
   which consumers it can rewrite, so that type says nothing about the consumer.
@@ -697,6 +706,13 @@ fields before dropping the block's result type. Dropping it while one exit still
 yields a struct leaves the function returning nothing, which traps rather than
 failing validation — so the rewrite reports whether it reached them all and the
 result type is dropped on that answer.
+
+"Every exit" reaches under value operands too: `let x = f()?` lowers to a
+`LocalSet` whose value is an `If`, and a `break` in there exits the enclosing
+block like any other. Only `Block`, `Loop` and `If` bodies open a Wasm label, so
+everything else is walked at the enclosing depth — but an operand's own
+fall-through tail feeds the operand, not the block, and rewriting it into a
+`Return` is how a `StructNew` bound to a local became the function's result.
 
 ## Alternative considered: `ReturnAbi::Variant`
 

@@ -114,13 +114,6 @@ pub(crate) struct AnnotateState {
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
-    /// Run the full resolve pipeline: annotate, then lower to TIR.
-    ///
-    /// This is a thin wrapper over [`Elaborator::annotate_modules`] +
-    /// [`Elaborator::build_tir_from_state`]. Callers that want access to the
-    /// annotate output (e.g. LSP) should call the two phases separately.
-    /// The returned move spans belong in `Package::moved_local_spans`.
-
     /// Annotate phase: collect decl-level type information and intern every
     /// declaration in the shared [`TypeTable`]. Produces an [`AnnotateState`]
     /// that downstream phases (`build_tir`, LSP queries) consume read-mostly

@@ -2108,11 +2108,14 @@ fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
     collect.0
 }
 
-/// Locals some reachable expression mentions. A binding absent here is never
-/// read: an assignment target, a borrow and a capture all mention their local,
-/// so the census over-approximates and only ever keeps a statement alive.
+/// Locals some reachable expression mentions, plus those a promoted
+/// `Opaque(Local)` reads from the value pool — that read is not in the skeleton,
+/// and a binding taken for dead under it loses a value someone still extracts.
+/// A binding absent here is never read: an assignment target, a borrow and a
+/// capture all mention their local, so the census over-approximates and only
+/// ever keeps a statement alive.
 fn mentioned_locals(body: &Body) -> IndexSet<u32> {
-    let mut out = IndexSet::default();
+    let mut out: IndexSet<u32> = body.values.opaque_local_sources().collect();
     for e in crate::nir_visitor::reachable_exprs(body) {
         if let ExprKind::Local { index, .. } = &body.exprs[e].kind {
             out.insert(*index);
