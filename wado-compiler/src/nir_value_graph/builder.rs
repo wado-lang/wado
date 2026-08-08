@@ -581,8 +581,8 @@ impl<'a> Builder<'a> {
         // `true || x → true`, `true && x → x`, `false && x → false` (and the
         // mirror cases with the constant on the right).
         if matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
-            let lb = as_bool(self.pool.kind(lhs));
-            let rb = as_bool(self.pool.kind(rhs));
+            let lb = self.pool.kind(lhs).as_bool();
+            let rb = self.pool.kind(rhs).as_bool();
             let folded = match op {
                 NirBinaryOp::Or => match (lb, rb) {
                     (Some(true), _) | (_, Some(true)) => {
@@ -2190,14 +2190,6 @@ fn collect_writes_in_pattern(
                 _ => {}
             }
         }
-    }
-}
-
-/// The boolean a constant `Bool` value carries, if any.
-fn as_bool(kind: &super::ValueKind) -> Option<bool> {
-    match kind {
-        super::ValueKind::Bool(b) => Some(*b),
-        _ => None,
     }
 }
 

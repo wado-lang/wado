@@ -516,19 +516,13 @@ impl Body {
     }
 
     pub fn operand_const_bool(&self, op: Operand) -> Option<bool> {
-        match self.values.kind(op.as_value()?) {
-            ValueKind::Bool(b) => Some(*b),
-            _ => None,
-        }
+        self.values.kind(op.as_value()?).as_bool()
     }
 
     /// The scalar value of a constant-char `Operand::Value`. `None` for an
     /// `Operand::Expr` or any non-char-constant operand.
     pub fn operand_const_char(&self, op: Operand) -> Option<char> {
-        match self.values.kind(op.as_value()?) {
-            ValueKind::Char(c) => Some(*c),
-            _ => None,
-        }
+        self.values.kind(op.as_value()?).as_char()
     }
 
     /// An empty body: no nodes and a placeholder `root` (set by the caller once

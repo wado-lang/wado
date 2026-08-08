@@ -284,9 +284,9 @@ pub(super) fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option
 /// `value_of`-free.
 fn parse_const_i64(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
     if let Operand::Value(v) = resolve(engine, binds, op)
-        && let ValueKind::Int(val, _) = engine.body.values.kind(v)
+        && let Some((val, _)) = engine.body.values.kind(v).as_int()
     {
-        return Some(*val as i64);
+        return Some(val as i64);
     }
     None
 }
@@ -369,14 +369,14 @@ fn parse_value_offset(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Op
         } => {
             let (lhs, rhs) = (*lhs, *rhs);
             if let Some((var, o)) = parse_value_offset(engine, lhs)
-                && let ValueKind::Int(c, _) = engine.body.values.kind(rhs)
+                && let Some((c, _)) = engine.body.values.kind(rhs).as_int()
             {
-                return Some((var, o + *c as i64));
+                return Some((var, o + c as i64));
             }
             if let Some((var, o)) = parse_value_offset(engine, rhs)
-                && let ValueKind::Int(c, _) = engine.body.values.kind(lhs)
+                && let Some((c, _)) = engine.body.values.kind(lhs).as_int()
             {
-                return Some((var, o + *c as i64));
+                return Some((var, o + c as i64));
             }
             None
         }
@@ -685,8 +685,8 @@ fn bitand_mask(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
 
 /// A pooled value's constant `i64`, if it is an `Int` (pool read, not `value_of`).
 fn pool_int_const(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Option<i64> {
-    if let ValueKind::Int(val, _) = engine.body.values.kind(v) {
-        Some(*val as i64)
+    if let Some((val, _)) = engine.body.values.kind(v).as_int() {
+        Some(val as i64)
     } else {
         None
     }

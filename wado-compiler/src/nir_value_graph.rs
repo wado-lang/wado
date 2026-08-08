@@ -451,6 +451,69 @@ impl ValueKind {
             | Self::FieldAccess { .. } => false,
         }
     }
+
+    /// The integer this value denotes, with the type it was interned under.
+    #[must_use]
+    pub fn as_int(&self) -> Option<(u64, TypeId)> {
+        match self {
+            Self::Int(value, ty) => Some((*value, *ty)),
+            Self::Float(..)
+            | Self::Bool(_)
+            | Self::Char(_)
+            | Self::Null
+            | Self::Unit
+            | Self::Const(..)
+            | Self::Opaque(_)
+            | Self::Binary { .. }
+            | Self::Unary { .. }
+            | Self::Cast { .. }
+            | Self::Select { .. }
+            | Self::LoopPhi { .. }
+            | Self::FieldAccess { .. } => None,
+        }
+    }
+
+    /// The boolean this value denotes.
+    #[must_use]
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Self::Bool(b) => Some(*b),
+            Self::Int(..)
+            | Self::Float(..)
+            | Self::Char(_)
+            | Self::Null
+            | Self::Unit
+            | Self::Const(..)
+            | Self::Opaque(_)
+            | Self::Binary { .. }
+            | Self::Unary { .. }
+            | Self::Cast { .. }
+            | Self::Select { .. }
+            | Self::LoopPhi { .. }
+            | Self::FieldAccess { .. } => None,
+        }
+    }
+
+    /// The character this value denotes.
+    #[must_use]
+    pub fn as_char(&self) -> Option<char> {
+        match self {
+            Self::Char(c) => Some(*c),
+            Self::Int(..)
+            | Self::Float(..)
+            | Self::Bool(_)
+            | Self::Null
+            | Self::Unit
+            | Self::Const(..)
+            | Self::Opaque(_)
+            | Self::Binary { .. }
+            | Self::Unary { .. }
+            | Self::Cast { .. }
+            | Self::Select { .. }
+            | Self::LoopPhi { .. }
+            | Self::FieldAccess { .. } => None,
+        }
+    }
 }
 
 /// Hash-consed pure-value pool. One instance per function. Also owns the
