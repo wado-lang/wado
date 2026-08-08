@@ -13,9 +13,11 @@ ORACLE="scripts/antlr4-oracle.sh"
 RUST_BASE="tests/grammars/java/RustLexerBase.java"
 FAILED=0
 
-# check <name> <input> <rc> <stdout-substring> <stderr-substring> -- <oracle args...>
+# check <name> <input> <rc> <stdout-substring> <stderr-substrings> -- <args...>
 # An empty stdout-substring asserts stdout is empty: a refused run must not
-# leave a caller anything to pin.
+# leave a caller anything to pin. stderr-substrings is one required substring
+# per line — each probe run is four JVM starts, so assert everything a run
+# should say in that one run rather than repeating the invocation.
 check() {
     local name="$1" input="$2" want_rc="$3" want_out="$4" want_err="$5"
     shift 6  # name, input, rc, out, err, --
@@ -29,8 +31,13 @@ check() {
         rm -f "$err"
         return
     fi
-    if [ -n "$want_err" ] && ! grep -qF "$want_err" "$err"; then
-        echo "FAIL $name: stderr lacks '$want_err'" >&2
+    local want missing=""
+    while IFS= read -r want; do
+        [ -n "$want" ] || continue
+        grep -qF "$want" "$err" || missing="$want"
+    done <<< "$want_err"
+    if [ -n "$missing" ]; then
+        echo "FAIL $name: stderr lacks '$missing'" >&2
         sed 's/^/  /' "$err" >&2
         FAILED=$((FAILED + 1))
         rm -f "$err"
@@ -78,24 +85,25 @@ check "super float dot" '1.' 0 "'1.',<FLOAT_LITERAL>" '' \
 # --probe-super reports, never answers: exit 3 and empty stdout every time,
 # so no caller can pin it. It still says which members the input reached and
 # whether the predicates changed the outcome.
-check "probe reports reached members" '1.' 3 '' 'FloatDotPossible' \
-    -- --tokens --probe-super tests/grammars/RustLexer.g4
-check "probe reports polarity split" '1.' 3 '' 'with every predicate false' \
+check "probe reports a polarity split" '1.' 3 '' 'NOT an oracle
+FloatDotPossible
+with every predicate true
+with every predicate false' \
     -- --tokens --probe-super tests/grammars/RustLexer.g4
 check "probe reports agreement" '0x1f' 3 '' 'same answer under both predicate polarities' \
     -- --tokens --probe-super tests/grammars/RustLexer.g4
-check "probe never certifies" '0x1f' 3 '' 'NOT an oracle' \
-    -- --tokens --probe-super tests/grammars/RustLexer.g4
-check "probe on typescript" 'function f() {}' 3 '' 'ProcessOpenBrace' \
+check "probe reports reached members" 'function f() {}' 3 '' 'ProcessOpenBrace' \
     -- --tokens --probe-super tests/grammars/TypeScriptLexer.g4
 
-# ANTLRv4Lexer is why the probe cannot certify. It declares TOKEN_REF and
-# RULE_REF in `tokens {}` with no rule producing them, so LexerAdaptor must
-# assign them from an override the grammar never names. `A : B ;` reaches no
-# LexerAdaptor member and both polarities agree, yet the stub's `ID` is not
-# ANTLR4's answer — so this must stay unpinnable.
-check "probe cannot certify antlr4 rule" 'A : B ;' 3 '' \
-    'base-class members this input reached: none' \
+# The one probe case that looks entirely clean — reaches no base-class member
+# and agrees under both polarities — and is still refused. That is the shape
+# that invites an exit-0 shortcut, and taking it would be wrong here:
+# ANTLRv4Lexer declares TOKEN_REF / RULE_REF in `tokens {}` with no rule
+# producing them, so LexerAdaptor assigns them from an emit() override the
+# stub cannot have, and the ID this run reports is not ANTLR4's answer.
+check "a clean-looking probe is still refused" 'A : B ;' 3 '' \
+    'base-class members this input reached: none
+same answer under both predicate polarities' \
     -- --tokens --probe-super tests/grammars/ANTLRv4Lexer.g4
 
 # Stub-generation shapes no corpus grammar reaches today. They are all one
@@ -123,8 +131,7 @@ NUM : [0-9]+ {this.f();} ;
 EOF
 # `f` is a predicate and an action. A boolean stub that did not record itself
 # would run the action side invisibly.
-check "dual-role member is recorded" '12' 3 '' 'reached:
-oracle:   f' \
+check "dual-role member is recorded" '12' 3 '' 'oracle:   f' \
     -- --tokens --probe-super "$FIXTURES/DualLex.g4"
 
 cat > "$FIXTURES/OpaqueLex.g4" <<'EOF'
