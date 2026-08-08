@@ -976,12 +976,15 @@ fn require_field<F>(slot: Option<F>, name: String) -> Result<F, DeserializeError
 /// declaration order, so the derivation holds them: a slot tuple seeded with
 /// the declared defaults, written at the index the format reports and read back
 /// in declaration order.
+///
+/// `members()` is spelled at its use site rather than held in a local: the wire
+/// name folds to a literal and takes the call with it, so the happy path never
+/// builds the member tuple.
 impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deserialize for T {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<T, DeserializeError> {
-        let members = ReflectStruct::<T>::members();
         let policy = ReflectStruct::<T>::wire_name_policy();
-        let mut sd = d.begin_struct(&ReflectStruct::<T>::type_name(), members.len())?;
         let mut slots = ReflectStruct::<T>::defaults();
+        let mut sd = d.begin_struct(&ReflectStruct::<T>::type_name(), slots.len())?;
         while let Some(index) = sd.next_field::<T>()? {
             let mut taken = false;
             for let [i, _slot] of slots.enumerate() {
@@ -998,7 +1001,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
         sd.end()?;
         return Result::Ok(ReflectStruct::<T>::from_fields(
             [for let [i, slot] of slots.enumerate() {
-                require_field(slot, wire_name(&members[i], policy))?
+                require_field(slot, wire_name(&ReflectStruct::<T>::members()[i], policy))?
             }],
         ));
     }
