@@ -691,6 +691,13 @@ reaching the return through `break L: v` is not in the tail, so the candidate is
 declined rather than mis-rewritten. Sound, but it gives up functions whose
 returns pass through a labeled block.
 
+`multi_value_return` does take that shape, which inlining an early-returning
+helper produces, so `wir_build` has to turn every exit into a `Return` of the N
+fields before dropping the block's result type. Dropping it while one exit still
+yields a struct leaves the function returning nothing, which traps rather than
+failing validation — so the rewrite reports whether it reached them all and the
+result type is dropped on that answer.
+
 ## Alternative considered: `ReturnAbi::Variant`
 
 Add a `Variant` case to `nir::ReturnAbi` carrying nothing — a permission, since

@@ -2881,9 +2881,7 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
             }
         }
         WirInstr::Block { body, result, .. } => {
-            // Only drop the result type once every exit returns on its own;
-            // otherwise the block still has to yield the value it built.
-            if result.is_some() && rewrite_struct_new_br_to_return(body, 0) {
+            if result.is_some() && return_every_exit(body, 0) {
                 *result = None;
             }
         }
@@ -2905,63 +2903,65 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
     }
 }
 
-/// Rewrite every exit to `target_depth` inside a typed `Block` body into
-/// `Return { Seq(fields) }`, so the function pushes its N fields instead of the
-/// block yielding a heap struct. Exits take two forms — `StructNew; Br` as
-/// sibling instructions, and `Seq([…, StructNew, Br])`, which is what
-/// `break L: <aggregate>` translates to — and either can sit at any index,
-/// including the last, or nested inside an `If` / `Block` / `Loop`.
-///
-/// Returns whether every exit it found was rewritten. The caller clears the
-/// block's result type on the strength of that answer: clearing it while an
-/// exit still yields a struct leaves the function returning nothing at all.
-fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) -> bool {
-    fn takes_target(instr: &WirInstr, target_depth: u32) -> bool {
-        matches!(instr, WirInstr::Br { depth } if *depth == target_depth)
+/// Turn every exit to `target_depth` into a `Return` of its N fields, and
+/// report whether it reached all of them — the caller drops the block's result
+/// type on that answer.
+fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32) -> bool {
+    fn exits_to_target(instr: &WirInstr, target_depth: u32) -> bool {
+        match instr {
+            WirInstr::Br { depth } => *depth == target_depth,
+            WirInstr::Seq(seq) => seq
+                .last()
+                .is_some_and(|last| exits_to_target(last, target_depth)),
+            _ => false,
+        }
     }
 
-    /// `Seq([…, StructNew, Br(target)])` — the shape `break L: <aggregate>` takes.
-    fn seq_exit(instr: &WirInstr, target_depth: u32) -> bool {
+    fn exit_as_siblings(instrs: &[WirInstr], i: usize, target_depth: u32) -> bool {
+        matches!(&instrs[i], WirInstr::StructNew { .. })
+            && instrs.get(i + 1).is_some_and(
+                |next| matches!(next, WirInstr::Br { depth } if *depth == target_depth),
+            )
+    }
+
+    fn exit_as_seq(instr: &WirInstr, target_depth: u32) -> bool {
         let WirInstr::Seq(seq) = instr else {
             return false;
         };
-        seq.len() >= 2
-            && seq
-                .last()
-                .is_some_and(|last| takes_target(last, target_depth))
-            && matches!(seq.get(seq.len() - 2), Some(WirInstr::StructNew { .. }))
+        exits_to_target(instr, target_depth)
+            && matches!(
+                seq.get(seq.len().wrapping_sub(2)),
+                Some(WirInstr::StructNew { .. })
+            )
+    }
+
+    fn returning(fields: Vec<WirInstr>) -> WirInstr {
+        WirInstr::Return {
+            value: Some(Box::new(WirInstr::Seq(fields))),
+        }
     }
 
     let mut all_rewritten = true;
     let mut i = 0;
     while i < instrs.len() {
-        // `StructNew` and the exit branch as two sibling instructions.
-        if i + 1 < instrs.len()
-            && takes_target(&instrs[i + 1], target_depth)
-            && matches!(&instrs[i], WirInstr::StructNew { .. })
-        {
+        if exit_as_siblings(instrs, i, target_depth) {
             if let WirInstr::StructNew { fields, .. } =
                 std::mem::replace(&mut instrs[i], WirInstr::Nop)
             {
-                instrs[i] = WirInstr::Return {
-                    value: Some(Box::new(WirInstr::Seq(fields))),
-                };
+                instrs[i] = returning(fields);
                 instrs[i + 1] = WirInstr::Nop;
             }
             i += 2;
             continue;
         }
-        if seq_exit(&instrs[i], target_depth) {
+        if exit_as_seq(&instrs[i], target_depth) {
             if let WirInstr::Seq(mut seq) = std::mem::replace(&mut instrs[i], WirInstr::Nop) {
-                seq.pop(); // the Br
+                let _br = seq.pop();
                 if let Some(WirInstr::StructNew { fields, .. }) = seq.pop() {
-                    let ret = WirInstr::Return {
-                        value: Some(Box::new(WirInstr::Seq(fields))),
-                    };
                     instrs[i] = if seq.is_empty() {
-                        ret
+                        returning(fields)
                     } else {
-                        seq.push(ret);
+                        seq.push(returning(fields));
                         WirInstr::Seq(seq)
                     };
                 }
@@ -2969,47 +2969,33 @@ fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) -
             i += 1;
             continue;
         }
-        // An exit this cannot rewrite — a `Br` to the target carrying something
-        // other than a fresh aggregate, bare or at the end of a `Seq`. The
-        // caller must keep the block's result.
-        let unrewritable_exit = takes_target(&instrs[i], target_depth)
-            || matches!(&instrs[i], WirInstr::Seq(seq)
-                if seq.last().is_some_and(|last| takes_target(last, target_depth)));
-        if unrewritable_exit {
-            all_rewritten = false;
-        }
-        // Descend. Each of these is one Wasm label, so the exit depth counted
-        // from inside is one deeper.
+        all_rewritten &= !exits_to_target(&instrs[i], target_depth);
+        // Each of these is one Wasm label, so an exit inside is one deeper.
+        let one_deeper = target_depth + 1;
         match &mut instrs[i] {
-            WirInstr::Block { body, .. } => {
-                all_rewritten &= rewrite_struct_new_br_to_return(body, target_depth + 1);
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+                all_rewritten &= return_every_exit(body, one_deeper);
             }
             WirInstr::If {
                 then_body,
                 else_body,
                 ..
             } => {
-                all_rewritten &= rewrite_struct_new_br_to_return(then_body, target_depth + 1);
+                all_rewritten &= return_every_exit(then_body, one_deeper);
                 if let Some(eb) = else_body {
-                    all_rewritten &= rewrite_struct_new_br_to_return(eb, target_depth + 1);
+                    all_rewritten &= return_every_exit(eb, one_deeper);
                 }
-            }
-            WirInstr::Loop { body, .. } => {
-                all_rewritten &= rewrite_struct_new_br_to_return(body, target_depth + 1);
             }
             _ => {}
         }
         i += 1;
     }
 
-    // Fallthrough StructNew (no explicit Br at the end).
     if let Some(last) = instrs.last_mut()
         && matches!(last, WirInstr::StructNew { .. })
         && let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop)
     {
-        *last = WirInstr::Return {
-            value: Some(Box::new(WirInstr::Seq(fields))),
-        };
+        *last = returning(fields);
     }
     all_rewritten
 }
