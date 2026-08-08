@@ -23,35 +23,14 @@
 #   --super <file>  compile <file> alongside the generated recognizer.
 #                   Repeatable. Supplies the hand-written base class an
 #                   `options { superClass = X }` grammar extends.
-#   --probe-super   report what the input does against a synthesized base
-#                   class. A diagnostic, never an oracle (see below).
+#   --probe-super   report on stderr what the input does against a
+#                   synthesized base class, and always exit 3.
 #
-# superClass grammars
-# -------------------
-# A grammar with `options { superClass = X }` only has an observable
-# behaviour together with X — the base class is hand-written host code
-# living outside the `.g4`. Without one, `javac` fails and the oracle
-# refuses the run.
-#
-# `--super` is the only way to oracle such a grammar. Pass the base class
-# the Gale-side test also models, and both sides run the same
-# specification, so a diff is a Gale bug rather than a base-class
-# disagreement. `tests/grammars/java/` holds the bases paired with Gale's
-# Wado `impl`s.
-#
-# `--probe-super` synthesizes a base class from the grammar's own
-# `this.<name>(...)` call sites — predicates return a configurable
-# constant, actions do nothing — and reports which of those members the
-# input reached plus the answer under both predicate polarities. It
-# writes only to stderr and always exits 3, because it cannot certify
-# anything: a base class also reaches the recognizer through overrides of
-# inherited runtime methods, which the grammar never names and the stub
-# therefore never has. `ANTLRv4Lexer` is the worked example — it declares
-# `TOKEN_REF` and `RULE_REF` in `tokens {}` with no rule producing them,
-# so `LexerAdaptor` must be assigning them from an `emit()` override, and
-# a stub prints `ID` for an input that reaches no `LexerAdaptor` member
-# at all. Use the probe to decide whether writing the real base class is
-# worth it, not to pin an expectation.
+# A grammar with `options { superClass = X }` has no behaviour without X,
+# so `--super` is the only way to oracle one and `--probe-super` is a
+# diagnostic that never yields pinnable output. Why the probe cannot be
+# promoted to an oracle: "Oracling a superClass grammar" in
+# antlr4-compatibility.md.
 #
 # Exit codes:
 #   0 = oracle ran and printed output
@@ -334,12 +313,11 @@ probe_signature() {
     printf '%s|%s\n' "$name" "$params"
 }
 
-# Write a base class for $SUPER_CLASS derived from the grammar's own call
-# sites: a name reached from inside a `{ ... }?` predicate answers the
-# -Dgale.probe.predicate constant, every other name is a void action. Both
-# record themselves to -Dgale.probe.log, so the report can say which members
-# the input actually reached — including a name used in both roles, whose
-# action side would otherwise run unrecorded behind a boolean stub.
+# Base class for $SUPER_CLASS derived from the grammar's own call sites: a
+# name used in a `{ ... }?` predicate answers -Dgale.probe.predicate, every
+# other name is a void action. Both record to -Dgale.probe.log — a name in
+# both roles is stubbed boolean, so without that its action side would run
+# unrecorded.
 emit_probe_super() {
     local grammar="$1" out="$2"
     local flat names calls pred_names super_type ctor_param name
@@ -420,8 +398,8 @@ fi
 
 cp "$GRAMMAR_PATH" "$WORK_DIR/$GRAMMAR_NAME.g4"
 
-# Buffer stdin: --stub-super replays the same input under both predicate
-# polarities, and a pipe can only be read once.
+# --probe-super replays the input under both predicate polarities, and a
+# pipe can only be read once.
 cat > "$WORK_DIR/input.txt"
 
 if [ "$SUPER_N" -gt 0 ]; then
@@ -471,11 +449,9 @@ recognizer_errors() {
 }
 
 if [ "$PROBE_SUPER" = "1" ]; then
-    # A report, not an answer. Everything goes to stderr and the exit is
-    # always 3: the stub only has the members the grammar names, so even
-    # "reached nothing, both polarities agree" does not mean the real base
-    # class would agree — it can rewrite the token stream from an override
-    # of an inherited method the grammar never mentions.
+    # A report, not an answer: stderr only, always exit 3. The stub has
+    # only the members the grammar names, so not even "reached nothing,
+    # both polarities agree" certifies anything.
     : > "$WORK_DIR/reached.txt"
     PROBE_LOG="-Dgale.probe.log=$WORK_DIR/reached.txt"
     run_testrig "$WORK_DIR/out.true" "$WORK_DIR/err.true" \

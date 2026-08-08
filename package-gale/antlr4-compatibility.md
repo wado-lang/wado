@@ -303,35 +303,32 @@ in `regen-oracle.sh`:
 
 `options { superClass = X; }` puts part of the grammar's behaviour in
 hand-written host code outside the `.g4`, so the grammar alone has no
-observable answer and the oracle refuses to guess one. The predicate-
-carrying real-world lexers — `RustLexer`, `TypeScriptLexer`,
-`ANTLRv4Lexer` — are exactly the ones whose behaviour is hardest to
-reason about, so `antlr4-oracle.sh` offers two ways in.
+observable answer and the oracle refuses to guess one. That refusal used
+to fall on exactly the grammars hardest to reason about — `RustLexer`,
+`TypeScriptLexer`, `ANTLRv4Lexer`.
 
 `--super <Base.java>` compiles a base class alongside the generated
-recognizer. `tests/grammars/java/` holds bases written as the Java twin
-of a Wado `impl` in the matching driver test: ANTLR4 and Gale then run
-the same specification, so a divergence is a Gale bug rather than two
-different grammars disagreeing. Keep the pair in sync — an edit to one
-side alone silently re-opens the gap the file exists to close.
+recognizer, and is the only way to oracle such a grammar.
+`tests/grammars/java/` holds bases written as the Java twin of a Wado
+`impl` in the matching driver test, so ANTLR4 and Gale run one
+specification and a divergence is a Gale bug rather than two different
+grammars disagreeing. Keep each pair in sync.
 
-`--probe-super` is a diagnostic for a grammar with no such pair, not a
-second oracle. It derives a base class from the grammar's own
+`--probe-super` derives a base from the grammar's own
 `this.<name>(...)` call sites — predicates return a constant, actions do
-nothing, both record themselves — and reports which of those members the
-input reached plus the answer under each predicate polarity. It writes to
-stderr only and always exits 3, so nothing it produces can be pinned.
+nothing, both record themselves — and reports which members the input
+reached plus the answer under each predicate polarity. It writes to
+stderr only and always exits 3.
 
-It cannot certify, and the reason is structural: a base class also
-reaches the recognizer through overrides of inherited runtime methods,
-which the grammar never names and the stub therefore never has.
-`ANTLRv4Lexer` is the worked example — it declares `TOKEN_REF` and
-`RULE_REF` in `tokens {}` with no rule producing them, so `LexerAdaptor`
-must assign them from an `emit()` override. On `A : B ;` the probe
-reaches no `LexerAdaptor` member and both polarities agree, and its
-answer of `ID` is still wrong. Agreement is evidence about the stubbed
-predicates, never about the base class. Use the probe to decide whether
-writing the real base class is worth it.
+**The probe cannot be promoted to an oracle**, and the reason is
+structural: a base class also reaches the recognizer through overrides of
+inherited runtime methods, which the grammar never names and a stub
+derived from it therefore never has. `ANTLRv4Lexer` declares `TOKEN_REF`
+and `RULE_REF` in `tokens {}` with no rule producing them, so
+`LexerAdaptor` must assign them from an `emit()` override; on `A : B ;`
+the probe reaches no `LexerAdaptor` member and both polarities agree, and
+its answer of `ID` is still wrong. Agreement is evidence about the
+stubbed predicates, never about the base class.
 
 `scripts/antlr4-oracle-selftest.sh` pins both paths.
 

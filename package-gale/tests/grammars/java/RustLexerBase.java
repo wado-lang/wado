@@ -1,18 +1,11 @@
-// Source: written for Gale — the Java twin of the `impl RustLexerBase for
-// RustBase` in package-gale/tests/driver_cst_rust_test.wado.
+// Source: written for Gale from the `impl RustLexerBase for RustBase` in
+// package-gale/tests/driver_cst_rust_test.wado — not ported from
+// grammars-v4's RustLexerBase.java (see License hygiene in AGENTS.md).
 // License: same as the Gale package
 //
-// RustLexer.g4 declares `options { superClass = RustLexerBase; }`, so its
-// tokenization is only defined together with a base class. Gale's driver test
-// models one in Wado; this file is the same specification in Java, so
-// `antlr4-oracle.sh --super` runs ANTLR4 against exactly the base class Gale
-// runs against and a divergence is a Gale bug rather than two different
-// grammars disagreeing.
-//
-// Written from the Wado impl, not ported from grammars-v4's RustLexerBase.java
-// (see the License hygiene section in package-gale/AGENTS.md). Keep the two in
-// sync: an edit to either side without the other silently re-opens the gap
-// this file exists to close.
+// The Java twin of that Wado impl, so `antlr4-oracle.sh --super` runs ANTLR4
+// against the base class Gale runs against. Edit both or neither: a lone edit
+// silently re-opens the gap this file closes.
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.Lexer;
 

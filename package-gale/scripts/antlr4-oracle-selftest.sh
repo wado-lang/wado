@@ -95,12 +95,10 @@ check "probe reports agreement" '0x1f' 3 '' 'same answer under both predicate po
 check "probe reports reached members" 'function f() {}' 3 '' 'ProcessOpenBrace' \
     -- --tokens --probe-super tests/grammars/TypeScriptLexer.g4
 
-# The one probe case that looks entirely clean — reaches no base-class member
-# and agrees under both polarities — and is still refused. That is the shape
-# that invites an exit-0 shortcut, and taking it would be wrong here:
-# ANTLRv4Lexer declares TOKEN_REF / RULE_REF in `tokens {}` with no rule
-# producing them, so LexerAdaptor assigns them from an emit() override the
-# stub cannot have, and the ID this run reports is not ANTLR4's answer.
+# The only corpus case that reaches no base-class member and agrees under
+# both polarities — the shape that invites an exit-0 shortcut. Taking it
+# would be wrong exactly here; see "Oracling a superClass grammar" in
+# antlr4-compatibility.md.
 check "a clean-looking probe is still refused" 'A : B ;' 3 '' \
     'base-class members this input reached: none
 same answer under both predicate polarities' \
