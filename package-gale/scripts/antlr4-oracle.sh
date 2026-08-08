@@ -23,37 +23,41 @@
 #   --super <file>  compile <file> alongside the generated recognizer.
 #                   Repeatable. Supplies the hand-written base class an
 #                   `options { superClass = X }` grammar extends.
-#   --stub-super    synthesize that base class instead, and prove the input
-#                   does not depend on it (see below).
+#   --probe-super   report what the input does against a synthesized base
+#                   class. A diagnostic, never an oracle (see below).
 #
 # superClass grammars
 # -------------------
 # A grammar with `options { superClass = X }` only has an observable
 # behaviour together with X — the base class is hand-written host code
-# living outside the `.g4`, and its predicates decide real tokenization
-# questions. Without one, `javac` fails and the oracle refuses the run.
+# living outside the `.g4`. Without one, `javac` fails and the oracle
+# refuses the run.
 #
-# `--super` is the sound path: pass the base class the Gale-side test
-# also models, and both sides run the same specification, so a diff is a
-# Gale bug rather than a base-class disagreement. `tests/grammars/java/`
-# holds the bases paired with Gale's Wado `impl`s.
+# `--super` is the only way to oracle such a grammar. Pass the base class
+# the Gale-side test also models, and both sides run the same
+# specification, so a diff is a Gale bug rather than a base-class
+# disagreement. `tests/grammars/java/` holds the bases paired with Gale's
+# Wado `impl`s.
 #
-# `--stub-super` is for grammars with no such pair yet. It writes a base
-# class derived from the grammar's own `this.<name>(...)` call sites:
-# every predicate returns one configurable constant, every action is a
-# no-op. That answers a different grammar than the real one, so the mode
-# does not trust its own output — it runs the input twice, with the
-# predicates all-true and all-false, and reports the token stream only
-# when the two agree AND no stubbed action fired. That makes the answer
-# provably independent of the base class. Otherwise it exits 3 and prints
-# nothing to stdout, so a caller cannot pin a guess.
+# `--probe-super` synthesizes a base class from the grammar's own
+# `this.<name>(...)` call sites — predicates return a configurable
+# constant, actions do nothing — and reports which of those members the
+# input reached plus the answer under both predicate polarities. It
+# writes only to stderr and always exits 3, because it cannot certify
+# anything: a base class also reaches the recognizer through overrides of
+# inherited runtime methods, which the grammar never names and the stub
+# therefore never has. `ANTLRv4Lexer` is the worked example — it declares
+# `TOKEN_REF` and `RULE_REF` in `tokens {}` with no rule producing them,
+# so `LexerAdaptor` must be assigning them from an `emit()` override, and
+# a stub prints `ID` for an input that reaches no `LexerAdaptor` member
+# at all. Use the probe to decide whether writing the real base class is
+# worth it, not to pin an expectation.
 #
 # Exit codes:
 #   0 = oracle ran and printed output
 #   1 = invocation error (missing args, missing jar after download, etc.)
 #   2 = ANTLR4 reported a parse error on the input
-#   3 = --stub-super only: the answer depends on the base class, so this
-#       input has no oracle until a real base class is supplied
+#   3 = --probe-super ran; its report is on stderr and stdout is empty
 
 set -euo pipefail
 
@@ -173,14 +177,14 @@ Usage: $(basename "$0") [options] <grammar.g4> <start_rule> < input
 Options:
   --tokens          print the token stream instead of the parse tree
   --super <file>    compile <file> alongside the recognizer (repeatable)
-  --stub-super      synthesize the superClass base and prove the input
-                    does not depend on it (exit 3 when it does)
+  --probe-super     report what the input does against a synthesized base
+                    class; diagnostic only, always exits 3
 EOF
     exit 1
 }
 
 MODE="tree"
-STUB_SUPER=0
+PROBE_SUPER=0
 SUPER_SRCS=()
 # Counted separately: `${#arr[@]}` on an empty array trips `set -u` on the
 # bash 3.2 still shipped as /bin/bash on macOS.
@@ -188,7 +192,7 @@ SUPER_N=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --tokens) MODE="tokens"; shift ;;
-        --stub-super) STUB_SUPER=1; shift ;;
+        --probe-super) PROBE_SUPER=1; shift ;;
         --super) [ $# -ge 2 ] || usage; SUPER_SRCS[$SUPER_N]="$2"; SUPER_N=$((SUPER_N + 1)); shift 2 ;;
         --super=*) SUPER_SRCS[$SUPER_N]="${1#--super=}"; SUPER_N=$((SUPER_N + 1)); shift ;;
         --) shift; break ;;
@@ -197,8 +201,8 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-if [ "$STUB_SUPER" = "1" ] && [ "$SUPER_N" -gt 0 ]; then
-    echo "oracle: --stub-super and --super are mutually exclusive" >&2
+if [ "$PROBE_SUPER" = "1" ] && [ "$SUPER_N" -gt 0 ]; then
+    echo "oracle: --probe-super and --super are mutually exclusive" >&2
     exit 1
 fi
 
@@ -249,7 +253,7 @@ SUPER_CLASS=$(tr '\n' ' ' < "$GRAMMAR_PATH" \
     | head -1 \
     | sed -E 's/.*=[[:space:]]*//')
 
-if [ -n "$SUPER_CLASS" ] && [ "$STUB_SUPER" != "1" ] && [ "$SUPER_N" -eq 0 ]; then
+if [ -n "$SUPER_CLASS" ] && [ "$PROBE_SUPER" != "1" ] && [ "$SUPER_N" -eq 0 ]; then
     cat >&2 <<EOF
 oracle: $GRAMMAR_NAME declares 'options { superClass = $SUPER_CLASS; }' but no
 oracle: base class was supplied, so the generated recognizer has nothing to
@@ -257,13 +261,13 @@ oracle: extend and javac would fail. Either:
 oracle:   --super <path/to/$SUPER_CLASS.java>  the real base class — the oracle
 oracle:       then runs the specification the Gale side models, so a diff is
 oracle:       a Gale bug and not two different grammars disagreeing
-oracle:   --stub-super  synthesize a stub base and answer only where the
-oracle:       answer is provably independent of it
+oracle:   --probe-super  report what the input does against a synthesized
+oracle:       base — a diagnostic to size that work, never an oracle
 EOF
     exit 1
 fi
-if [ "$STUB_SUPER" = "1" ] && [ -z "$SUPER_CLASS" ]; then
-    echo "oracle: --stub-super given but $GRAMMAR_NAME declares no superClass" >&2
+if [ "$PROBE_SUPER" = "1" ] && [ -z "$SUPER_CLASS" ]; then
+    echo "oracle: --probe-super given but $GRAMMAR_NAME declares no superClass" >&2
     exit 1
 fi
 
@@ -296,7 +300,7 @@ fi
 # Java type for a literal appearing at a `this.<name>(...)` call site. Only
 # literals occur in the corpus; anything else stays Object and surfaces as a
 # javac error rather than a silently wrong signature.
-stub_param_type() {
+probe_param_type() {
     case "$1" in
         \"*) echo "String" ;;
         \'*) echo "char" ;;
@@ -306,21 +310,59 @@ stub_param_type() {
     esac
 }
 
+# Java signature for one `this.<name>(<args>)` call site, as `name|params`.
+# Two call sites that differ only in their literals (`n("get")`, `n("set")`)
+# collapse to one signature here — emitting both would be a duplicate method.
+probe_signature() {
+    local sig="$1"
+    local name args params i part parts
+    name=${sig#this.}
+    name=${name%%(*}
+    args=${sig#*(}
+    args=${args%)}
+    args=$(printf '%s' "$args" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    params=""
+    i=0
+    if [ -n "$args" ]; then
+        IFS=',' read -ra parts <<< "$args"
+        for part in "${parts[@]}"; do
+            part=$(printf '%s' "$part" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            i=$((i + 1))
+            params="${params}${params:+, }$(probe_param_type "$part") a$i"
+        done
+    fi
+    printf '%s|%s\n' "$name" "$params"
+}
+
 # Write a base class for $SUPER_CLASS derived from the grammar's own call
-# sites. A name called from inside a `{ ... }?` predicate returns the
-# -Dgale.stub.predicate constant; every other name is a void action that
-# records itself to -Dgale.stub.log. Both are what the differential run
-# below inspects to decide whether the answer is trustworthy.
-emit_stub_super() {
+# sites: a name reached from inside a `{ ... }?` predicate answers the
+# -Dgale.probe.predicate constant, every other name is a void action. Both
+# record themselves to -Dgale.probe.log, so the report can say which members
+# the input actually reached — including a name used in both roles, whose
+# action side would otherwise run unrecorded behind a boolean stub.
+emit_probe_super() {
     local grammar="$1" out="$2"
-    local flat calls pred_calls super_type ctor_param
+    local flat names calls pred_names super_type ctor_param name
     flat=$(tr '\n' ' ' < "$grammar")
+    names=$(printf '%s' "$flat" | grep -oE 'this\.[A-Za-z_][A-Za-z0-9_]*\(' | sort -u || true)
     calls=$(printf '%s' "$flat" | grep -oE 'this\.[A-Za-z_][A-Za-z0-9_]*\([^()]*\)' | sort -u || true)
     # A `{ ... }?` body with no nested braces — a predicate whose Java spans
     # braces is missed and lands among the actions, where javac rejects it as
     # a void expression. Visibly wrong beats silently boolean.
-    pred_calls=$(printf '%s' "$flat" | grep -oE '\{[^{}]*\}[[:space:]]*\?' \
+    pred_names=$(printf '%s' "$flat" | grep -oE '\{[^{}]*\}[[:space:]]*\?' \
         | grep -oE 'this\.[A-Za-z_][A-Za-z0-9_]*\(' | sort -u || true)
+
+    # `calls` only matches an argument list with no nested parens, so a call
+    # like `this.f(getText())` yields a name with no signature. Say so here
+    # rather than let javac report a missing symbol.
+    while IFS= read -r name; do
+        [ -n "$name" ] || continue
+        if ! printf '%s\n' "$calls" | grep -q "^${name//./\\.}"; then
+            echo "oracle: cannot infer a signature for ${name}...) — its argument" >&2
+            echo "oracle: list is not a plain literal. Supply the base class with --super." >&2
+            return 1
+        fi
+    done <<< "$names"
 
     if grep -qE '^[[:space:]]*lexer[[:space:]]+grammar' "$grammar"; then
         super_type="Lexer"; ctor_param="CharStream"
@@ -329,18 +371,18 @@ emit_stub_super() {
     fi
 
     {
-        echo "// Generated by antlr4-oracle.sh --stub-super. NOT a port of any real"
+        echo "// Generated by antlr4-oracle.sh --probe-super. NOT a port of any real"
         echo "// base class: predicates answer a constant and actions do nothing."
         echo "import org.antlr.v4.runtime.*;"
         echo
         echo "public abstract class $SUPER_CLASS extends $super_type {"
         echo "    private static final boolean PRED ="
-        echo "        Boolean.parseBoolean(System.getProperty(\"gale.stub.predicate\", \"true\"));"
+        echo "        Boolean.parseBoolean(System.getProperty(\"gale.probe.predicate\", \"true\"));"
         echo
         echo "    public $SUPER_CLASS($ctor_param input) { super(input); }"
         echo
         echo "    private static void mark(String name) {"
-        echo "        String path = System.getProperty(\"gale.stub.log\");"
+        echo "        String path = System.getProperty(\"gale.probe.log\");"
         echo "        if (path == null) return;"
         echo "        try (java.io.Writer w = new java.io.FileWriter(path, true)) {"
         echo "            w.write(name);"
@@ -350,32 +392,20 @@ emit_stub_super() {
         echo "        }"
         echo "    }"
 
-        local sig name args params i part
-        while IFS= read -r sig; do
-            [ -n "$sig" ] || continue
-            name=${sig#this.}
-            name=${name%%(*}
-            args=${sig#*(}
-            args=${args%)}
-            args=$(printf '%s' "$args" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-            params=""
-            i=0
-            if [ -n "$args" ]; then
-                local parts
-                IFS=',' read -ra parts <<< "$args"
-                for part in "${parts[@]}"; do
-                    part=$(printf '%s' "$part" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-                    i=$((i + 1))
-                    params="${params}${params:+, }$(stub_param_type "$part") a$i"
-                done
-            fi
+        local entry params
+        while IFS= read -r entry; do
+            [ -n "$entry" ] || continue
+            name=${entry%%|*}
+            params=${entry#*|}
             echo
-            if printf '%s\n' "$pred_calls" | grep -qx "this\.$name("; then
-                echo "    public boolean $name($params) { return PRED; }"
+            if printf '%s\n' "$pred_names" | grep -qx "this\.$name("; then
+                echo "    public boolean $name($params) { mark(\"$name\"); return PRED; }"
             else
                 echo "    public void $name($params) { mark(\"$name\"); }"
             fi
-        done <<< "$calls"
+        done <<< "$(while IFS= read -r sig; do
+            [ -n "$sig" ] && probe_signature "$sig"
+        done <<< "$calls" | sort -u)"
 
         echo "}"
     } > "$out"
@@ -396,8 +426,8 @@ cat > "$WORK_DIR/input.txt"
 
 if [ "$SUPER_N" -gt 0 ]; then
     cp "${SUPER_SRCS[@]}" "$WORK_DIR/"
-elif [ "$STUB_SUPER" = "1" ]; then
-    emit_stub_super "$GRAMMAR_PATH" "$WORK_DIR/$SUPER_CLASS.java"
+elif [ "$PROBE_SUPER" = "1" ]; then
+    emit_probe_super "$GRAMMAR_PATH" "$WORK_DIR/$SUPER_CLASS.java"
 fi
 
 # Generate Java sources. -no-listener avoids emitting Listener
@@ -425,7 +455,7 @@ run_testrig() {
     local outf="$1" errf="$2"
     shift 2
     set +e
-    java "$@" -cp "$JAR_PATH:$WORK_DIR" org.antlr.v4.gui.TestRig \
+    java ${1+"$@"} -cp "$JAR_PATH:$WORK_DIR" org.antlr.v4.gui.TestRig \
         "$GRAMMAR_NAME" "$START_RULE" "$TESTRIG_FLAG" \
         <"$WORK_DIR/input.txt" >"$outf" 2>"$errf"
     local rc=$?
@@ -440,42 +470,42 @@ recognizer_errors() {
     grep -E '^line [0-9]+:[0-9]+ ' "$1" || true
 }
 
-if [ "$STUB_SUPER" != "1" ]; then
-    if run_testrig "$WORK_DIR/out.txt" "$WORK_DIR/err.txt"; then RC=0; else RC=$?; fi
-else
-    # The stub answers a grammar nobody runs, so its output is only usable
-    # where the stub cannot have changed it: both predicate polarities agree
-    # and no stubbed action fired.
-    : > "$WORK_DIR/actions.txt"
-    STUB_LOG="-Dgale.stub.log=$WORK_DIR/actions.txt"
-    if run_testrig "$WORK_DIR/out.true" "$WORK_DIR/err.true" \
-        -Dgale.stub.predicate=true "$STUB_LOG"; then RC=0; else RC=$?; fi
-    if run_testrig "$WORK_DIR/out.false" "$WORK_DIR/err.false" \
-        -Dgale.stub.predicate=false "$STUB_LOG"; then RC_FALSE=0; else RC_FALSE=$?; fi
+if [ "$PROBE_SUPER" = "1" ]; then
+    # A report, not an answer. Everything goes to stderr and the exit is
+    # always 3: the stub only has the members the grammar names, so even
+    # "reached nothing, both polarities agree" does not mean the real base
+    # class would agree — it can rewrite the token stream from an override
+    # of an inherited method the grammar never mentions.
+    : > "$WORK_DIR/reached.txt"
+    PROBE_LOG="-Dgale.probe.log=$WORK_DIR/reached.txt"
+    run_testrig "$WORK_DIR/out.true" "$WORK_DIR/err.true" \
+        -Dgale.probe.predicate=true "$PROBE_LOG" || true
+    run_testrig "$WORK_DIR/out.false" "$WORK_DIR/err.false" \
+        -Dgale.probe.predicate=false "$PROBE_LOG" || true
 
-    if [ -s "$WORK_DIR/actions.txt" ]; then
-        echo "oracle: input executes base-class action(s) the stub cannot model:" >&2
-        sort -u "$WORK_DIR/actions.txt" | sed 's/^/oracle:   /' >&2
-        echo "oracle: no oracle for this input without --super <$SUPER_CLASS.java>" >&2
-        exit 3
+    echo "oracle: --probe-super report for $GRAMMAR_NAME against a synthesized $SUPER_CLASS." >&2
+    echo "oracle: NOT an oracle — $SUPER_CLASS may also override inherited methods" >&2
+    echo "oracle: the grammar never names, which this stub does not have." >&2
+    if [ -s "$WORK_DIR/reached.txt" ]; then
+        echo "oracle: base-class members this input reached:" >&2
+        sort -u "$WORK_DIR/reached.txt" | sed 's/^/oracle:   /' >&2
+    else
+        echo "oracle: base-class members this input reached: none" >&2
     fi
-    recognizer_errors "$WORK_DIR/err.true" > "$WORK_DIR/rerr.true"
-    recognizer_errors "$WORK_DIR/err.false" > "$WORK_DIR/rerr.false"
-    if [ "$RC" != "$RC_FALSE" ] \
-        || ! cmp -s "$WORK_DIR/out.true" "$WORK_DIR/out.false" \
-        || ! cmp -s "$WORK_DIR/rerr.true" "$WORK_DIR/rerr.false"; then
-        echo "oracle: the answer depends on a $SUPER_CLASS predicate — the stub" >&2
-        echo "oracle: decides it, so this is Gale's guess and not ANTLR4's answer." >&2
+    if cmp -s "$WORK_DIR/out.true" "$WORK_DIR/out.false"; then
+        echo "oracle: same answer under both predicate polarities:" >&2
+        sed 's/^/oracle:   /' "$WORK_DIR/out.true" >&2
+    else
         echo "oracle: with every predicate true:" >&2
         sed 's/^/oracle:   /' "$WORK_DIR/out.true" >&2
         echo "oracle: with every predicate false:" >&2
         sed 's/^/oracle:   /' "$WORK_DIR/out.false" >&2
-        exit 3
     fi
-    echo "oracle: --stub-super verified: this input's answer does not depend on $SUPER_CLASS" >&2
-    mv "$WORK_DIR/out.true" "$WORK_DIR/out.txt"
-    mv "$WORK_DIR/err.true" "$WORK_DIR/err.txt"
+    echo "oracle: to pin any of this, write $SUPER_CLASS.java and pass --super." >&2
+    exit 3
 fi
+
+if run_testrig "$WORK_DIR/out.txt" "$WORK_DIR/err.txt"; then RC=0; else RC=$?; fi
 
 if [ -s "$WORK_DIR/err.txt" ]; then
     cat "$WORK_DIR/err.txt" >&2

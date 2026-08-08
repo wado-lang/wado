@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Exercise antlr4-oracle.sh against the corpus grammars. Not a CI job: it
 # needs java, javac and the cached jar, the same as regen-oracle.sh. Run it
-# after touching the oracle — its --stub-super soundness gate decides whether
-# a generated fixture pins ANTLR4's answer or a stub's guess, and nothing
-# else checks that.
+# after touching the oracle — what a generated fixture pins comes from here,
+# and nothing else checks it.
 #
 # Usage: scripts/antlr4-oracle-selftest.sh
 set -uo pipefail
@@ -64,32 +63,79 @@ check "json tokens" '{"a":1}' 0 "[@0,0:0='{'" '' \
 check "superClass unsupplied" '0x1f' 1 '' \
     "declares 'options { superClass = RustLexerBase; }'" \
     -- --tokens tests/grammars/RustLexer.g4
-check "stub-super without superClass" '{"a":1}' 1 '' 'declares no superClass' \
-    -- --tokens --stub-super tests/grammars/JSON.g4
-check "super and stub-super conflict" '0x1f' 1 '' 'mutually exclusive' \
-    -- --tokens --stub-super --super "$RUST_BASE" tests/grammars/RustLexer.g4
+check "probe-super without superClass" '{"a":1}' 1 '' 'declares no superClass' \
+    -- --tokens --probe-super tests/grammars/JSON.g4
+check "super and probe-super conflict" '0x1f' 1 '' 'mutually exclusive' \
+    -- --tokens --probe-super --super "$RUST_BASE" tests/grammars/RustLexer.g4
 
-# --super: the real base class, so this is ANTLR4's actual answer. `1.` is the
-# case the base class decides — FLOAT_LITERAL only because FloatDotPossible()
-# says so.
+# --super is the only path that answers. `1.` is the case the base class
+# decides — FLOAT_LITERAL only because FloatDotPossible() says so.
 check "super 0x1f" '0x1f' 0 "'0x1f',<INTEGER_LITERAL>" '' \
     -- --tokens --super "$RUST_BASE" tests/grammars/RustLexer.g4
 check "super float dot" '1.' 0 "'1.',<FLOAT_LITERAL>" '' \
     -- --tokens --super "$RUST_BASE" tests/grammars/RustLexer.g4
 
-# --stub-super: answers only where the base class provably cannot matter.
-check "stub agrees on 0x1f" '0x1f' 0 "'0x1f',<INTEGER_LITERAL>" 'does not depend on RustLexerBase' \
-    -- --tokens --stub-super tests/grammars/RustLexer.g4
-check "stub refuses float dot" '1.' 3 '' 'depends on a RustLexerBase predicate' \
-    -- --tokens --stub-super tests/grammars/RustLexer.g4
-check "stub agrees on typescript" 'let x = 1;' 0 "'let'" '' \
-    -- --tokens --stub-super tests/grammars/TypeScriptLexer.g4
-check "stub refuses typescript brace" 'function f() {}' 3 '' 'ProcessOpenBrace' \
-    -- --tokens --stub-super tests/grammars/TypeScriptLexer.g4
-check "stub agrees on antlr4 rule" 'A : B ;' 0 "'A',<ID>" '' \
-    -- --tokens --stub-super tests/grammars/ANTLRv4Lexer.g4
-check "stub refuses antlr4 argument" 'a[int x] : B ;' 3 '' 'handleBeginArgument' \
-    -- --tokens --stub-super tests/grammars/ANTLRv4Lexer.g4
+# --probe-super reports, never answers: exit 3 and empty stdout every time,
+# so no caller can pin it. It still says which members the input reached and
+# whether the predicates changed the outcome.
+check "probe reports reached members" '1.' 3 '' 'FloatDotPossible' \
+    -- --tokens --probe-super tests/grammars/RustLexer.g4
+check "probe reports polarity split" '1.' 3 '' 'with every predicate false' \
+    -- --tokens --probe-super tests/grammars/RustLexer.g4
+check "probe reports agreement" '0x1f' 3 '' 'same answer under both predicate polarities' \
+    -- --tokens --probe-super tests/grammars/RustLexer.g4
+check "probe never certifies" '0x1f' 3 '' 'NOT an oracle' \
+    -- --tokens --probe-super tests/grammars/RustLexer.g4
+check "probe on typescript" 'function f() {}' 3 '' 'ProcessOpenBrace' \
+    -- --tokens --probe-super tests/grammars/TypeScriptLexer.g4
+
+# ANTLRv4Lexer is why the probe cannot certify. It declares TOKEN_REF and
+# RULE_REF in `tokens {}` with no rule producing them, so LexerAdaptor must
+# assign them from an override the grammar never names. `A : B ;` reaches no
+# LexerAdaptor member and both polarities agree, yet the stub's `ID` is not
+# ANTLR4's answer — so this must stay unpinnable.
+check "probe cannot certify antlr4 rule" 'A : B ;' 3 '' \
+    'base-class members this input reached: none' \
+    -- --tokens --probe-super tests/grammars/ANTLRv4Lexer.g4
+
+# Stub-generation shapes no corpus grammar reaches today. They are all one
+# `.g4` line away, so keep them pinned here rather than in tests/grammars/.
+FIXTURES=$(mktemp -d)
+trap 'rm -rf "$FIXTURES"' EXIT
+
+cat > "$FIXTURES/DupLex.g4" <<'EOF'
+lexer grammar DupLex;
+options { superClass = DupBase; }
+GET : {this.n("get")}? 'get' ;
+SET : {this.n("set")}? 'set' ;
+EOF
+# Two call sites, one Java signature. Emitting both is a javac "already
+# defined", which would exit 1 before any run — reaching a report at all is
+# the assertion. TypeScriptParser.g4 already has this shape.
+check "duplicate call sites collapse" 'get' 3 '' "'get',<GET>" \
+    -- --tokens --probe-super "$FIXTURES/DupLex.g4"
+
+cat > "$FIXTURES/DualLex.g4" <<'EOF'
+lexer grammar DualLex;
+options { superClass = DualBase; }
+KW  : {this.f()}? 'kw' ;
+NUM : [0-9]+ {this.f();} ;
+EOF
+# `f` is a predicate and an action. A boolean stub that did not record itself
+# would run the action side invisibly.
+check "dual-role member is recorded" '12' 3 '' 'reached:
+oracle:   f' \
+    -- --tokens --probe-super "$FIXTURES/DualLex.g4"
+
+cat > "$FIXTURES/OpaqueLex.g4" <<'EOF'
+lexer grammar OpaqueLex;
+options { superClass = OpaqueBase; }
+ID : [a-z]+ {this.f(getText());} ;
+EOF
+# A non-literal argument has no inferable type; say so instead of letting
+# javac report a missing symbol.
+check "non-literal argument refused" 'abc' 1 '' 'cannot infer a signature' \
+    -- --tokens --probe-super "$FIXTURES/OpaqueLex.g4"
 
 if [ "$FAILED" -ne 0 ]; then
     echo "$FAILED check(s) failed" >&2

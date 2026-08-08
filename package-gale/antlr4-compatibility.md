@@ -315,16 +315,23 @@ the same specification, so a divergence is a Gale bug rather than two
 different grammars disagreeing. Keep the pair in sync — an edit to one
 side alone silently re-opens the gap the file exists to close.
 
-`--stub-super` is for a grammar with no such pair. It derives a base
-class from the grammar's own `this.<name>(...)` call sites: predicates
-return a constant, actions do nothing. That answers a _different_
-grammar, so the mode does not trust its own output — it runs the input
-under both predicate polarities and reports the answer only when the two
-agree and no stubbed action fired, which makes the answer provably
-independent of the base class. Otherwise it exits 3 with empty stdout,
-so a caller cannot pin a guess. `0x1f → INTEGER_LITERAL` clears that
-bar on the real `RustLexer`; `1.` does not, because `FloatDotPossible()`
-is what decides between `FLOAT_LITERAL` and `INTEGER_LITERAL '.'`.
+`--probe-super` is a diagnostic for a grammar with no such pair, not a
+second oracle. It derives a base class from the grammar's own
+`this.<name>(...)` call sites — predicates return a constant, actions do
+nothing, both record themselves — and reports which of those members the
+input reached plus the answer under each predicate polarity. It writes to
+stderr only and always exits 3, so nothing it produces can be pinned.
+
+It cannot certify, and the reason is structural: a base class also
+reaches the recognizer through overrides of inherited runtime methods,
+which the grammar never names and the stub therefore never has.
+`ANTLRv4Lexer` is the worked example — it declares `TOKEN_REF` and
+`RULE_REF` in `tokens {}` with no rule producing them, so `LexerAdaptor`
+must assign them from an `emit()` override. On `A : B ;` the probe
+reaches no `LexerAdaptor` member and both polarities agree, and its
+answer of `ID` is still wrong. Agreement is evidence about the stubbed
+predicates, never about the base class. Use the probe to decide whether
+writing the real base class is worth it.
 
 `scripts/antlr4-oracle-selftest.sh` pins both paths.
 
@@ -795,7 +802,7 @@ triage state) live under `package-gale/tests/antlr4-compat/`:
 | `tests/generated/antlr4_compat_b/`         | Kiln-generated parsers for Stage B and Stage B′ drivers (committed; shared)                                                                 |
 | `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                                                                                            |
 | `scripts/antlr4-oracle.sh`                 | Black-box wrapper around the published ANTLR4 jar. Caches the jar under `~/.cache/gale/`. Run at extract time only — CI does not need it.   |
-| `scripts/antlr4-oracle-selftest.sh`        | Behaviour checks for that wrapper, including the `--stub-super` soundness gate. Needs java; run after touching the oracle.                  |
+| `scripts/antlr4-oracle-selftest.sh`        | Behaviour checks for that wrapper: the `--super` answers, and that `--probe-super` never yields pinnable output. Needs java.                |
 | `tests/grammars/java/`                     | Base classes for `superClass` grammars, each the Java twin of a Wado `impl` in the matching driver test. Fed to `antlr4-oracle.sh --super`. |
 
 ### Triage states (`status.toml`)
