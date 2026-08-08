@@ -149,10 +149,16 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
       global read and a compare, but the message template and field struct are
       still constructed in front of it, so the disabled path pays two allocations
       and two calls for a branch it does not take.
-- [ ] Constant propagation into a `String` parameter. A constant reaches a scalar
-      parameter, and reaches a `String` parameter consumed by `match`, but a
-      `String` parameter compared with `==` does not fold — so a helper that maps
-      a `#[param]` string to a value silently stops the whole `#[param]` fold.
+- [ ] Forwarding a local bound to a global read. `ValueKind::GlobalRead` names
+      the read, so `let s = G` is transparent in the graph, but the read of `s`
+      is never promoted into an operand and niri therefore never reaches the
+      value. The local-read forwarding path admits only context-free constants;
+      a global read is not one, and re-emitting it at the read site is sound
+      only when the global generation there still equals the one the value
+      carries — the check `FieldAccess` promotion already makes by version, and
+      the one this path lacks. Without it a `#[param]` string routed through a
+      helper decides its gate at run time; `remarks::collect_param_gate_remarks`
+      reports that rather than leaving it silent.
 - [ ] Devirtualizing effect dispatch. An effect operation compiles to a load of
       the per-effect dispatch global, an `outer` save/restore around the call, a
       `ref.cast` of the closure field, and a `call_ref` — none of it inlinable.

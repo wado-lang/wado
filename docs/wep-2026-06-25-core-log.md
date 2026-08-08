@@ -443,25 +443,28 @@ A layer must implement only the operations it cares about and forward the rest.
 Without it every layer hand-writes all nine `Log` operations to pass them
 through. Tracked by [Effect Handler](./wep-2026-04-11-effect-handler.md).
 
-### Constant folding through a parameter
+### Forwarding a local bound to a global read
 
-`LOG_STATIC_LEVEL` is derived by calling a Wado function on a `#[param]` string,
-so tier 1 only folds if constant propagation reaches the callee's parameter.
-Today it reaches a scalar parameter and a `String` parameter consumed by `match`,
-but not a `String` parameter compared with `==`, so the natural
+`LOG_STATIC_LEVEL` is derived from a `#[param]` global, so tier 1 only folds if
+that global's value reaches the comparison. Read directly it does; bound to a
+local first it does not, and an inlined helper's parameter is exactly such a
+binding:
 
 ```wado
-fn level_from_str(s: String) -> Level {
-    if s == "trace" { return Level::Trace; }
-    ...
-}
+fn level_from_str(s: String) -> Level { ... }   // s is `let s = LOG_LEVEL`
 ```
 
-silently fails to fold, leaving every stripped call site in the binary. Any
-`#[param]`-driven configuration helper has the same exposure. Two things follow:
-propagation must reach a `String` parameter uniformly, and a fold that was
-expected but did not happen must surface as an
-[optimizer remark](./wep-2026-06-03-optimizer-remarks.md) rather than silence.
+The value graph names the read (`ValueKind::GlobalRead`), so the binding is
+transparent there, but the read of `s` is never promoted into an operand and the
+evaluator never reaches the value. Promotion admits only context-free constants;
+re-emitting a global read at the read site is sound only while the global
+generation there still equals the one the value carries — the check
+`FieldAccess` promotion makes by version, and the one the local-read path lacks.
+
+Until it lands, a `#[param]` routed through a helper decides its gate at run
+time. That is reported rather than silent: see
+[optimizer remarks](./wep-2026-06-03-optimizer-remarks.md), which fires when a
+parameter read survives into a branch condition.
 
 `core:log` spells the conversion as `impl LenientFromStr for Level`
 ([Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md)) with
@@ -522,7 +525,8 @@ sufficient.
 - [x] `#[param]` with compile-time constant folding and DCE.
 - [x] Span scoping via the `in_span` closure.
 - [x] `..forward` effect forwarding.
-- [ ] Constant propagation through a `String` parameter, plus a missed-fold remark.
+- [x] A remark when a compile-time parameter still decides a branch.
+- [ ] Forwarding a local bound to a constant global read.
 - [ ] Sinking pure definitions into the branch that uses them.
 - [ ] `core:log` itself — see [Module surface](#module-surface).
 - [ ] Optional: native `with <span> do { … }` sugar.
