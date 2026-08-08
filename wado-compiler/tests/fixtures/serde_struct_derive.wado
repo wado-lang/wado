@@ -10,6 +10,10 @@ struct User {
     age: i32 = 7,
 }
 
+struct Bag {
+    tags: List<String>,
+}
+
 test "struct round trip" {
     let u = User { name: "a", age: 3 };
     let s: Result<String, SerializeError> = to_string(&u);
@@ -50,6 +54,18 @@ test "an unknown field is skipped" {
     if let Ok(v) = back {
         assert v.name == "c";
         assert v.age == 2;
+    } else {
+        assert false;
+    }
+}
+
+test "a deserialized field copies on assignment, like any other value" {
+    let back: Result<Bag, DeserializeError> = from_string("{\"tags\":[\"a\"]}");
+    if let Ok(v) = back {
+        let mut other = v.tags;
+        other.push("b");
+        assert v.tags.len() == 1;
+        assert other.len() == 2;
     } else {
         assert false;
     }
