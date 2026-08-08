@@ -445,9 +445,7 @@ fn collect_call_sites(
         // this site, `let_block_flatten` and friends may have wrapped the call
         // in a block, and a bare-only match would call the pass's own earlier
         // work a straggler.
-        let mut found = Vec::new();
-        tail_call_sites(body, value, &mut found);
-        for (callee, call) in found {
+        if let Some((callee, call)) = tail_call_site(body, value) {
             out.push(CallSite {
                 call,
                 callee,
@@ -817,56 +815,17 @@ fn debug_assert_call_sites_rewritten(_: &NirPackage) {}
 /// block whose tail is the call — the shape `nir/inline` leaves when it expands
 /// a one-call wrapper, and `let_block_flatten` when it hoists a receiver.
 fn tail_call_site(body: &Body, op: Operand) -> Option<(FuncId, ExprId)> {
-    let mut out = Vec::new();
-    tail_call_sites(body, op, &mut out);
-    out.into_iter().next()
-}
-
-/// Every direct call `op` can evaluate to: bare, through a block tail, and
-/// through the arms of an `if` / `match` / `switch`, which each contribute one.
-///
-/// The branch arms are not optional. `collect_straggler_calls` sees every call
-/// in the body, so a call this misses is one the repair reboxes while the
-/// binding it feeds keeps the tuple type — a variant landing in a tuple-typed
-/// position, which is invalid Wasm rather than a missed optimization.
-fn tail_call_sites(body: &Body, op: Operand, out: &mut Vec<(FuncId, ExprId)>) {
-    let Some(e) = op.as_expr() else {
-        return;
-    };
+    let e = op.as_expr()?;
     match &body.exprs[e].kind {
-        ExprKind::Call { func_id, .. } => out.push((*func_id, e)),
-        ExprKind::Block(b) => tail_call_sites_in_block(body, *b, out),
-        ExprKind::If {
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            tail_call_sites_in_block(body, *then_branch, out);
-            if let Some(eb) = else_branch {
-                tail_call_sites_in_block(body, *eb, out);
+        ExprKind::Call { func_id, .. } => Some((*func_id, e)),
+        ExprKind::Block(b) => {
+            let last = *body.blocks[*b].stmts.last()?;
+            match &body.stmts[last].kind {
+                StmtKind::Expr(inner) => tail_call_site(body, *inner),
+                _ => None,
             }
         }
-        ExprKind::Match { arms, .. } => {
-            for arm in arms {
-                tail_call_sites(body, arm.body, out);
-            }
-        }
-        ExprKind::Switch { arms, default, .. } => {
-            for &arm in arms {
-                tail_call_sites_in_block(body, arm, out);
-            }
-            tail_call_sites_in_block(body, *default, out);
-        }
-        _ => {}
-    }
-}
-
-fn tail_call_sites_in_block(body: &Body, block: BlockId, out: &mut Vec<(FuncId, ExprId)>) {
-    let Some(&last) = body.blocks[block].stmts.last() else {
-        return;
-    };
-    if let StmtKind::Expr(inner) = &body.stmts[last].kind {
-        tail_call_sites(body, *inner, out);
+        _ => None,
     }
 }
 
