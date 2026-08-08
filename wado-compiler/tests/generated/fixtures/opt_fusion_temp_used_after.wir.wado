@@ -618,14 +618,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 
 fn "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0"(self) {
     let current: i32;
-    let __match_3: ref "tuple//[i32, i32]";
-    let __sroa_self_value_8: i32;
+    let __sroa_self_value_9: i32;
     if __inline_i32_Ord__cmp_0: block -> "core:prelude/traits.wado//enum:Ordering" {
-        __sroa_self_value_8 = self.start;
-        if __sroa_self_value_8 < 3 {
+        __sroa_self_value_9 = self.start;
+        if __sroa_self_value_9 < 3 {
             break __inline_i32_Ord__cmp_0: 0;
         }
-        if __sroa_self_value_8 > 3 {
+        if __sroa_self_value_9 > 3 {
             break __inline_i32_Ord__cmp_0: 2;
         }
         break __inline_i32_Ord__cmp_0: 1;
@@ -633,19 +632,14 @@ fn "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator
         return 1, 0;
     }
     current = self.start;
-    __match_3 = __inline_i32_Step__next_step_1: block -> ref "tuple//[i32, i32]" {
+    __fused___inline_i32_Step__next_step_1: block {
         if current == 2147483647 {
-            break __inline_i32_Step__next_step_1: struct.new "tuple//[i32, i32]" { 0: 1, 1: 0 };
+            self.start = 3;
+            break __fused___inline_i32_Step__next_step_1;
         }
-        break __inline_i32_Step__next_step_1: struct.new "tuple//[i32, i32]" { 0: 0, 1: current + 1 };
+        self.start = current + 1;
+        break __fused___inline_i32_Step__next_step_1;
     };
-    let __match_scrut_0: i32;
-    __match_scrut_0 = __match_3.0;
-    if __match_scrut_0 == 0 {
-        self.start = __match_3.1;
-    } else {
-        self.start = 3;
-    }
     return 0, current;
 }
 
