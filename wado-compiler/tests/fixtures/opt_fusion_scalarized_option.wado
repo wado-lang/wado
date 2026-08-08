@@ -1,0 +1,39 @@
+// A `while let` over an inlined `Option`-returning helper, after
+// `sroa_variant_return` gave the helper a tuple return.
+//
+// `labeled_block_fusion` recognised only the pre-scalarization shape: breaks
+// carrying `Option::Some(v)` / `null`, consumed by a variant test. Once the
+// helper returns `[tag, payload]`, `inline` leaves breaks carrying a tuple
+// literal and a consumer matching `t.0`, which the pass declined — so the
+// tuple stayed, and the loop allocated one per step.
+struct Counter {
+    limit: i32,
+    index: i32,
+}
+
+impl Counter {
+    #[inline("always")]
+    fn next(&mut self) -> Option<i32> {
+        if self.index >= self.limit {
+            return null;
+        }
+        let v = self.index;
+        self.index = self.index + 1;
+        return Option::Some(v);
+    }
+}
+
+export fn run() {
+    let mut c = Counter { limit: 5, index: 0 };
+    let mut sum = 0;
+    while let Some(v) = c.next() {
+        sum += v;
+    }
+    assert sum == 10;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["struct.new \"tuple//"]
+}
