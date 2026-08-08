@@ -294,7 +294,6 @@ global global:core:prelude/traits.wado::__const_obj_81: ref null "core:prelude/s
 global global:core:prelude/traits.wado::__const_obj_82: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 104, 97, 112, 101), used: 5 };
 global global:core:prelude/traits.wado::__const_obj_83: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
 global global:core:prelude/traits.wado::__const_obj_84: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(40), used: 1 };
-global mut global:core:prelude/traits.wado::__const_obj_96: ref null "tuple//[core:prelude/traits.wado/VariantCase<reflect_variant_inspect_proof.wado/Shape,f64>, core:prelude/traits.wado/VariantCase<reflect_variant_inspect_proof.wado/Shape,[f64,f64]>, core:prelude/traits.wado/VariantCase<reflect_variant_inspect_proof.wado/Shape,core:prelude/string.wado/String>, core:prelude/traits.wado/VariantCase<reflect_variant_inspect_proof.wado/Shape,()>]" = ref.null none;
 global global:core:prelude/tuple.wado::__const_obj_99: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(93), used: 1 };
 global global:core:prelude/tuple.wado::__const_obj_100: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
 global global:core:prelude/tuple.wado::__const_obj_102: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91), used: 1 };
@@ -1734,9 +1733,6 @@ fn "core:prelude/traits.wado/reflect_variant_inspect_proof.wado/Shape^Inspect::i
     let start_216: i32;
     let self_223: ref "core:prelude/string.wado//String";
     let start_225: i32;
-    if ref.is_null(global:core:prelude/traits.wado::__const_obj_96) {
-        global:core:prelude/traits.wado::__const_obj_96 = "reflect_variant_inspect_proof.wado/reflect_variant_inspect_proof.wado/Shape^ReflectVariant::members"();
-    }
     if self.value.discriminant == 0 {
         s_11 = global:core:prelude/traits.wado::__const_obj_82;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_11);
@@ -1909,15 +1905,15 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^Inspect::inspect$sp
     self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
     __iter_5 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self_15.repr, used: self_15.used, byte_index: 0 };
     _licm_buf_54 = f.buf;
-    b194: block {
-        l195: loop {
+    b193: block {
+        l194: loop {
             let __match_10_mv_0: i32;
             let __match_10_mv_1: char;
             multivalue_bind [__match_10_mv_0, __match_10_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_5);
             if __match_10_mv_0 == 0 {
                 if count >= 256 {
                     truncated = 1;
-                    break b194;
+                    break b193;
                 }
                 if __match_10_mv_1 == 34 {
                     start_66 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(_licm_buf_54, 1);
@@ -1963,9 +1959,9 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^Inspect::inspect$sp
                 }
                 count = count + 1;
             } else {
-                break b194;
+                break b193;
             }
-            continue l195;
+            continue l194;
         };
     };
     self_163 = f.buf;
