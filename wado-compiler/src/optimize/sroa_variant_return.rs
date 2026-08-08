@@ -458,10 +458,10 @@ fn collect_call_sites(
                 bound_local,
                 bindable: true,
             });
-        } else if bound_local.is_some() {
+        } else {
             // Already-rewritten calls under a branch, courtesy of `inline`
             // expanding a callee whose `return match { … }` this pass rewrote.
-            // The binding, the branch node and the calls all arrive tuple-typed
+            // The consumer, the branch node and the calls all arrive tuple-typed
             // together, so the repair must not treat them as stragglers.
             let mut reached = Vec::new();
             collect_return_tail_calls(body, value, expected, &mut reached);
@@ -512,28 +512,23 @@ fn collect_call_sites(
     });
 }
 
-/// Every call a `return`'s value reaches in tail position: bare, through a block
+/// Every call a consumer's value reaches in tail position: bare, through a block
 /// tail, an `If` branch, or a `Match` / `Switch` arm — exactly the positions
 /// [`return_value_scalarizable`] accepts and [`rewrite_return_value`] rewrites.
-fn collect_return_tail_calls(
-    body: &Body,
-    op: Operand,
-    own_return: TypeId,
-    out: &mut Vec<CallSite>,
-) {
+fn collect_return_tail_calls(body: &Body, op: Operand, expected: TypeId, out: &mut Vec<CallSite>) {
     let Some(e) = op.as_expr() else { return };
     let tail_of = |block: BlockId, out: &mut Vec<CallSite>| {
         if let Some(&last) = body.blocks[block].stmts.last()
             && let StmtKind::Expr(inner) = body.stmts[last].kind
         {
-            collect_return_tail_calls(body, inner, own_return, out);
+            collect_return_tail_calls(body, inner, expected, out);
         }
     };
     match &body.exprs[e].kind {
         ExprKind::Call { func_id, .. } => out.push(CallSite {
             call: e,
             callee: *func_id,
-            expected: own_return,
+            expected,
             bound_local: None,
             bindable: true,
         }),
@@ -550,7 +545,7 @@ fn collect_return_tail_calls(
         }
         ExprKind::Match { arms, .. } => {
             for arm in arms.clone() {
-                collect_return_tail_calls(body, arm.body, own_return, out);
+                collect_return_tail_calls(body, arm.body, expected, out);
             }
         }
         ExprKind::Switch { arms, default, .. } => {
