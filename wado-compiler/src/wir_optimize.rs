@@ -9,7 +9,7 @@
 //! | Module            | Pass                                       |
 //! |-------------------|--------------------------------------------|
 //! | `nullable_ref`        | Null-niche variant representation (mandatory) |
-//! | `sroa_variant_return` | Multi-value return SROA (variants)          |
+//! | `sroa_variant_return` | Nested result-slot flattening               |
 //! | `elide_struct`        | Box local elimination + seq-assign flattening |
 //! | `array`               | Data promotion / splitting / zero-fill elision |
 //! | `const_forward`       | Struct field constant forwarding            |
@@ -22,9 +22,11 @@
 //!
 //! Related passes live elsewhere: dead-arg/-return elim and single-field param
 //! SROA moved to NIR (`optimize::{dae,drve,sroa_param,elide_box_local}`) to join
-//! its fixed-point loop. Write-only-local elim is split — `optimize::elide_local`
-//! for TIR locals, `elide_local` here for `wir_build`-synthesised locals TIR
-//! can't see.
+//! its fixed-point loop, and variant-return widening followed them
+//! (`optimize::sroa_variant_return`), leaving only the slot flattening that
+//! needs post-lowering shapes. Write-only-local elim is split —
+//! `optimize::elide_local` for TIR locals, `elide_local` here for
+//! `wir_build`-synthesised locals TIR can't see.
 //!
 //! A `#![wasm_module(...)]` core module — the allocator — runs this same list as
 //! a package of its own ([`optimize_wasm_modules`]), under its own pass names.
@@ -65,7 +67,7 @@ use elide_struct::{elide_adjacent_box_locals, flatten_seq_assignments};
 use nullable_ref::lower_nullable_refs;
 use peephole::run_peephole;
 use prune_dead_data::prune_dead_data;
-use sroa_variant_return::{flatten_variant_slots, sroa_variant_returns};
+use sroa_variant_return::flatten_variant_slots;
 
 /// What a pass run's passes are called: `wir/<pass>` for the main package,
 /// `wir/<module>:<pass>` for a `#![wasm_module]` package's.
@@ -157,9 +159,6 @@ fn optimize_scoped(
     // Inline trivial `alias = source` copies so SROA sees RefTest/RefCast on source.
     wir_pass(scope, "propagate_trivial_copies", module, profiler, |m| {
         peephole::propagate_trivial_copies(m);
-    });
-    wir_pass(scope, "sroa_variant_returns", module, profiler, |m| {
-        sroa_variant_returns(m);
     });
     profiler.span_end(&scope.name("phase1_type_repr"));
 

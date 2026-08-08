@@ -18,13 +18,25 @@
 #   package-gale/scripts/antlr4-oracle.sh --tokens <grammar.g4> < input
 #
 # Options:
-#   --tokens    print the token stream instead of the parse tree (lexer
-#               oracle; <start_rule> is omitted).
+#   --tokens        print the token stream instead of the parse tree (lexer
+#                   oracle; <start_rule> is omitted).
+#   --super <file>  compile <file> alongside the generated recognizer.
+#                   Repeatable. Supplies the hand-written base class an
+#                   `options { superClass = X }` grammar extends.
+#   --probe-super   report on stderr what the input does against a
+#                   synthesized base class, and always exit 3.
+#
+# A grammar with `options { superClass = X }` has no behaviour without X,
+# so `--super` is the only way to oracle one and `--probe-super` is a
+# diagnostic that never yields pinnable output. Why the probe cannot be
+# promoted to an oracle: "Oracling a superClass grammar" in
+# antlr4-compatibility.md.
 #
 # Exit codes:
 #   0 = oracle ran and printed output
 #   1 = invocation error (missing args, missing jar after download, etc.)
 #   2 = ANTLR4 reported a parse error on the input
+#   3 = --probe-super ran; its report is on stderr and stdout is empty
 
 set -euo pipefail
 
@@ -138,16 +150,39 @@ printf '%s' "$ANTLR4_VERSION" > "$CACHE_DIR/antlr4-resolved-version"
 
 usage() {
     cat >&2 <<EOF
-Usage: $(basename "$0") <grammar.g4> <start_rule> < input
-       $(basename "$0") --tokens <grammar.g4> < input
+Usage: $(basename "$0") [options] <grammar.g4> <start_rule> < input
+       $(basename "$0") [options] --tokens <grammar.g4> < input
+
+Options:
+  --tokens          print the token stream instead of the parse tree
+  --super <file>    compile <file> alongside the recognizer (repeatable)
+  --probe-super     report what the input does against a synthesized base
+                    class; diagnostic only, always exits 3
 EOF
     exit 1
 }
 
 MODE="tree"
-if [ "${1:-}" = "--tokens" ]; then
-    MODE="tokens"
-    shift
+PROBE_SUPER=0
+SUPER_SRCS=()
+# Counted separately: `${#arr[@]}` on an empty array trips `set -u` on the
+# bash 3.2 still shipped as /bin/bash on macOS.
+SUPER_N=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --tokens) MODE="tokens"; shift ;;
+        --probe-super) PROBE_SUPER=1; shift ;;
+        --super) [ $# -ge 2 ] || usage; SUPER_SRCS[$SUPER_N]="$2"; SUPER_N=$((SUPER_N + 1)); shift 2 ;;
+        --super=*) SUPER_SRCS[$SUPER_N]="${1#--super=}"; SUPER_N=$((SUPER_N + 1)); shift ;;
+        --) shift; break ;;
+        -*) echo "oracle: unknown option: $1" >&2; usage ;;
+        *) break ;;
+    esac
+done
+
+if [ "$PROBE_SUPER" = "1" ] && [ "$SUPER_N" -gt 0 ]; then
+    echo "oracle: --probe-super and --super are mutually exclusive" >&2
+    exit 1
 fi
 
 if [ "$MODE" = "tree" ]; then
@@ -165,6 +200,15 @@ if [ ! -f "$GRAMMAR_PATH" ]; then
     exit 1
 fi
 
+if [ "$SUPER_N" -gt 0 ]; then
+    for src in "${SUPER_SRCS[@]}"; do
+        if [ ! -f "$src" ]; then
+            echo "oracle: cannot find --super source: $src" >&2
+            exit 1
+        fi
+    done
+fi
+
 # ANTLR4 requires the source file name to match the declared
 # `grammar Name;` identifier, so use that rather than the caller's
 # basename (descriptor-derived inputs often disagree). `sed -n .. p`
@@ -178,6 +222,31 @@ if [ -n "$declared_name" ]; then
     GRAMMAR_NAME="$declared_name"
 else
     GRAMMAR_NAME="$(basename "$GRAMMAR_PATH" .g4)"
+fi
+
+# The generated recognizer will `extends X`, so X has to be on the compile
+# path. Most grammars declare none, and no match must not trip `pipefail`.
+SUPER_CLASS=$(tr '\n' ' ' < "$GRAMMAR_PATH" \
+    | { grep -oE 'superClass[[:space:]]*=[[:space:]]*[A-Za-z_][A-Za-z0-9_]*' || true; } \
+    | head -1 \
+    | sed -E 's/.*=[[:space:]]*//')
+
+if [ -n "$SUPER_CLASS" ] && [ "$PROBE_SUPER" != "1" ] && [ "$SUPER_N" -eq 0 ]; then
+    cat >&2 <<EOF
+oracle: $GRAMMAR_NAME declares 'options { superClass = $SUPER_CLASS; }' but no
+oracle: base class was supplied, so the generated recognizer has nothing to
+oracle: extend and javac would fail. Either:
+oracle:   --super <path/to/$SUPER_CLASS.java>  the real base class — the oracle
+oracle:       then runs the specification the Gale side models, so a diff is
+oracle:       a Gale bug and not two different grammars disagreeing
+oracle:   --probe-super  report what the input does against a synthesized
+oracle:       base — a diagnostic to size that work, never an oracle
+EOF
+    exit 1
+fi
+if [ "$PROBE_SUPER" = "1" ] && [ -z "$SUPER_CLASS" ]; then
+    echo "oracle: --probe-super given but $GRAMMAR_NAME declares no superClass" >&2
+    exit 1
 fi
 
 if [ ! -f "$JAR_PATH" ]; then
@@ -206,6 +275,116 @@ if ! command -v javac >/dev/null 2>&1; then
     exit 1
 fi
 
+# Java type for a literal appearing at a `this.<name>(...)` call site. Only
+# literals occur in the corpus; anything else stays Object and surfaces as a
+# javac error rather than a silently wrong signature.
+probe_param_type() {
+    case "$1" in
+        \"*) echo "String" ;;
+        \'*) echo "char" ;;
+        true|false) echo "boolean" ;;
+        -[0-9]*|[0-9]*) echo "int" ;;
+        *) echo "Object" ;;
+    esac
+}
+
+# Two call sites differing only in their literals (`n("get")`, `n("set")`)
+# collapse to one signature — emitting both would be a duplicate method.
+probe_signature() {
+    local sig="$1"
+    local name args params i part parts
+    name=${sig#this.}
+    name=${name%%(*}
+    args=${sig#*(}
+    args=${args%)}
+    args=$(printf '%s' "$args" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    params=""
+    i=0
+    if [ -n "$args" ]; then
+        IFS=',' read -ra parts <<< "$args"
+        for part in "${parts[@]}"; do
+            part=$(printf '%s' "$part" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            i=$((i + 1))
+            params="${params}${params:+, }$(probe_param_type "$part") a$i"
+        done
+    fi
+    printf '%s|%s\n' "$name" "$params"
+}
+
+# Predicates and actions alike record to -Dgale.probe.log: a name used in
+# both roles is stubbed boolean, so without that its action side would run
+# unrecorded.
+emit_probe_super() {
+    local grammar="$1" out="$2"
+    local flat names calls pred_names super_type ctor_param name
+    flat=$(tr '\n' ' ' < "$grammar")
+    names=$(printf '%s' "$flat" | grep -oE 'this\.[A-Za-z_][A-Za-z0-9_]*\(' | sort -u || true)
+    calls=$(printf '%s' "$flat" | grep -oE 'this\.[A-Za-z_][A-Za-z0-9_]*\([^()]*\)' | sort -u || true)
+    # A `{ ... }?` body with no nested braces — a predicate whose Java spans
+    # braces is missed and lands among the actions, where javac rejects it as
+    # a void expression. Visibly wrong beats silently boolean.
+    pred_names=$(printf '%s' "$flat" | grep -oE '\{[^{}]*\}[[:space:]]*\?' \
+        | grep -oE 'this\.[A-Za-z_][A-Za-z0-9_]*\(' | sort -u || true)
+
+    # `calls` only matches an argument list with no nested parens, so a call
+    # like `this.f(getText())` yields a name with no signature. Say so here
+    # rather than let javac report a missing symbol.
+    while IFS= read -r name; do
+        [ -n "$name" ] || continue
+        if ! printf '%s\n' "$calls" | grep -q "^${name//./\\.}"; then
+            echo "oracle: cannot infer a signature for ${name}...) — its argument" >&2
+            echo "oracle: list is not a plain literal. Supply the base class with --super." >&2
+            return 1
+        fi
+    done <<< "$names"
+
+    if grep -qE '^[[:space:]]*lexer[[:space:]]+grammar' "$grammar"; then
+        super_type="Lexer"; ctor_param="CharStream"
+    else
+        super_type="Parser"; ctor_param="TokenStream"
+    fi
+
+    {
+        echo "// Generated by antlr4-oracle.sh --probe-super. NOT a port of any real"
+        echo "// base class: predicates answer a constant and actions do nothing."
+        echo "import org.antlr.v4.runtime.*;"
+        echo
+        echo "public abstract class $SUPER_CLASS extends $super_type {"
+        echo "    private static final boolean PRED ="
+        echo "        Boolean.parseBoolean(System.getProperty(\"gale.probe.predicate\", \"true\"));"
+        echo
+        echo "    public $SUPER_CLASS($ctor_param input) { super(input); }"
+        echo
+        echo "    private static void mark(String name) {"
+        echo "        String path = System.getProperty(\"gale.probe.log\");"
+        echo "        if (path == null) return;"
+        echo "        try (java.io.Writer w = new java.io.FileWriter(path, true)) {"
+        echo "            w.write(name);"
+        echo "            w.write('\\n');"
+        echo "        } catch (java.io.IOException e) {"
+        echo "            throw new RuntimeException(e);"
+        echo "        }"
+        echo "    }"
+
+        local entry params
+        while IFS= read -r entry; do
+            [ -n "$entry" ] || continue
+            name=${entry%%|*}
+            params=${entry#*|}
+            echo
+            if printf '%s\n' "$pred_names" | grep -qx "this\.$name("; then
+                echo "    public boolean $name($params) { mark(\"$name\"); return PRED; }"
+            else
+                echo "    public void $name($params) { mark(\"$name\"); }"
+            fi
+        done <<< "$(while IFS= read -r sig; do
+            [ -n "$sig" ] && probe_signature "$sig"
+        done <<< "$calls" | sort -u)"
+
+        echo "}"
+    } > "$out"
+}
+
 WORK_DIR="$(mktemp -d -t gale-antlr4-oracle.XXXXXX)"
 if [ "${ORACLE_KEEP:-0}" != "1" ]; then
     trap 'rm -rf "$WORK_DIR"' EXIT
@@ -214,6 +393,16 @@ else
 fi
 
 cp "$GRAMMAR_PATH" "$WORK_DIR/$GRAMMAR_NAME.g4"
+
+# --probe-super replays the input under both predicate polarities, and a
+# pipe can only be read once.
+cat > "$WORK_DIR/input.txt"
+
+if [ "$SUPER_N" -gt 0 ]; then
+    cp "${SUPER_SRCS[@]}" "$WORK_DIR/"
+elif [ "$PROBE_SUPER" = "1" ]; then
+    emit_probe_super "$GRAMMAR_PATH" "$WORK_DIR/$SUPER_CLASS.java"
+fi
 
 # Generate Java sources. -no-listener avoids emitting Listener
 # scaffolding we don't need.
@@ -236,12 +425,58 @@ fi
 TESTRIG_FLAG="-tree"
 [ "$MODE" = "tokens" ] && TESTRIG_FLAG="-tokens"
 
-set +e
-java -cp "$JAR_PATH:$WORK_DIR" org.antlr.v4.gui.TestRig \
-    "$GRAMMAR_NAME" "$START_RULE" "$TESTRIG_FLAG" \
-    >"$WORK_DIR/out.txt" 2>"$WORK_DIR/err.txt"
-RC=$?
-set -e
+run_testrig() {
+    local outf="$1" errf="$2"
+    shift 2
+    set +e
+    java ${1+"$@"} -cp "$JAR_PATH:$WORK_DIR" org.antlr.v4.gui.TestRig \
+        "$GRAMMAR_NAME" "$START_RULE" "$TESTRIG_FLAG" \
+        <"$WORK_DIR/input.txt" >"$outf" 2>"$errf"
+    local rc=$?
+    set -e
+    return $rc
+}
+
+# ANTLR4's ConsoleErrorListener reports recognizer errors as
+# `line <l>:<c> <message>`; everything else on stderr is JVM or tool
+# chatter that must not be read as a parse failure.
+recognizer_errors() {
+    grep -E '^line [0-9]+:[0-9]+ ' "$1" || true
+}
+
+if [ "$PROBE_SUPER" = "1" ]; then
+    # The stub has only the members the grammar names, so not even
+    # "reached nothing, both polarities agree" certifies anything.
+    : > "$WORK_DIR/reached.txt"
+    PROBE_LOG="-Dgale.probe.log=$WORK_DIR/reached.txt"
+    run_testrig "$WORK_DIR/out.true" "$WORK_DIR/err.true" \
+        -Dgale.probe.predicate=true "$PROBE_LOG" || true
+    run_testrig "$WORK_DIR/out.false" "$WORK_DIR/err.false" \
+        -Dgale.probe.predicate=false "$PROBE_LOG" || true
+
+    echo "oracle: --probe-super report for $GRAMMAR_NAME against a synthesized $SUPER_CLASS." >&2
+    echo "oracle: NOT an oracle — $SUPER_CLASS may also override inherited methods" >&2
+    echo "oracle: the grammar never names, which this stub does not have." >&2
+    if [ -s "$WORK_DIR/reached.txt" ]; then
+        echo "oracle: base-class members this input reached:" >&2
+        sort -u "$WORK_DIR/reached.txt" | sed 's/^/oracle:   /' >&2
+    else
+        echo "oracle: base-class members this input reached: none" >&2
+    fi
+    if cmp -s "$WORK_DIR/out.true" "$WORK_DIR/out.false"; then
+        echo "oracle: same answer under both predicate polarities:" >&2
+        sed 's/^/oracle:   /' "$WORK_DIR/out.true" >&2
+    else
+        echo "oracle: with every predicate true:" >&2
+        sed 's/^/oracle:   /' "$WORK_DIR/out.true" >&2
+        echo "oracle: with every predicate false:" >&2
+        sed 's/^/oracle:   /' "$WORK_DIR/out.false" >&2
+    fi
+    echo "oracle: to pin any of this, write $SUPER_CLASS.java and pass --super." >&2
+    exit 3
+fi
+
+if run_testrig "$WORK_DIR/out.txt" "$WORK_DIR/err.txt"; then RC=0; else RC=$?; fi
 
 if [ -s "$WORK_DIR/err.txt" ]; then
     cat "$WORK_DIR/err.txt" >&2
@@ -252,15 +487,12 @@ cat "$WORK_DIR/out.txt"
 if [ $RC -ne 0 ]; then
     exit 1
 fi
-# ANTLR4's default ConsoleErrorListener reports lexer/parser recognizer
-# errors to stderr as `line <l>:<c> <message>` (mismatched input, no
-# viable alternative, token recognition error, extraneous/missing
-# input, …). Only those mean the input failed to parse. Other stderr
-# output — JVM warnings, ANTLR4 advisory notices — is benign and must
-# NOT be classified as a parse error, or the descriptor is wrongly
-# dropped from Stage B′. Gate exit 2 on the recognizer-error line shape
-# rather than "any stderr".
-if [ -s "$WORK_DIR/err.txt" ] && grep -Eq '^line [0-9]+:[0-9]+ ' "$WORK_DIR/err.txt"; then
+# Only a recognizer error means the input failed to parse (mismatched
+# input, no viable alternative, token recognition error, extraneous /
+# missing input, …). Other stderr output — JVM warnings, ANTLR4 advisory
+# notices — is benign and must NOT be classified as a parse error, or the
+# descriptor is wrongly dropped from Stage B′.
+if [ -n "$(recognizer_errors "$WORK_DIR/err.txt")" ]; then
     exit 2
 fi
 exit 0

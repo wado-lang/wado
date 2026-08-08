@@ -91,17 +91,17 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//try_op_generic_method_call.wado/try_op_generic_method_call.wado/StringSink^Sink::put<i32>" = fn(ref "try_op_generic_method_call.wado//StringSink", i32) -> ref null "core:prelude/string.wado//String";  // TypeId(33)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(34)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(37)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(38)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(39)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(39)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -126,11 +126,11 @@ fn "try_op_generic_method_call.wado/write_values"(s, values) {
     __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: values.repr, index: 0, end: values.used };
     b0: block {
         l1: loop {
-            let __sroa___match_6_discriminant: i32;
-            let __sroa___match_6_payload_0: i32;
-            multivalue_bind [__sroa___match_6_discriminant, __sroa___match_6_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
-            if __sroa___match_6_discriminant == 0 {
-                __local_7 = "try_op_generic_method_call.wado/try_op_generic_method_call.wado/StringSink^Sink::put<i32>"(s, __sroa___match_6_payload_0);
+            let __match_6_mv_0: i32;
+            let __match_6_mv_1: i32;
+            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
+            if __match_6_mv_0 == 0 {
+                __local_7 = "try_op_generic_method_call.wado/try_op_generic_method_call.wado/StringSink^Sink::put<i32>"(s, __match_6_mv_1);
                 if @likely(ref.is_null(__local_7)) {
                 } else {
                     __qm_e = ref.as_non_null(__local_7);

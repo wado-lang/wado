@@ -1,18 +1,20 @@
-// Test: nested variant-slot flattening removes the inner `Option<scalar>` box
-// that single-level variant-return SROA leaves boxed at the function boundary.
-//
-// After single-level SROA, `step` returns the multi-value vector
-// `[outer_disc, ref Option<i64>, ref StepErr]` and still builds a
-// `struct.new Option<i64>::Some` at every return, matched at the call site.
-// The nested pass splits the `ref Option<i64>` slot into `[inner_disc, i64]`,
-// so `step` returns `[i32, i32, i64, ref StepErr]` with no inner allocation —
-// the lowered `?`-unwrap `opt = step()?` becomes a guard plus a virtual-variant
-// alias, and `if let Some(v) = opt` reads the flattened locals directly.
+// Test: a variant return whose payload is itself a variant stays boxed at the
+// inner level, and the outer level is still scalarized.
 //
 // `Cursor::step` returns `Result<Option<i64>, StepErr>` (the serde
-// `next_element<scalar>` shape) and is `#[inline("never")]` to keep it a real
-// SROA'd call site.
-
+// `next_element<scalar>` shape). `optimize::sroa_variant_return` gives it
+// `[outer_disc, ref Option<i64>, ref StepErr]` — the outer variant flattened,
+// the inner `Option<i64>` left as one slot it still builds at each return.
+//
+// Splitting that slot into `[inner_disc, i64]` is what `wir_optimize`'s
+// `slot_flatten` used to do, and it is deliberately not done here. Doing it in
+// NIR was implemented and discarded: the callee stops allocating, but a call
+// site that binds the whole inner value has to rebuild it, and the rebuild cost
+// more than the allocation it removed. Recovering it needs the destructure
+// pushed down into the call site, not the inner value reconstructed — see the
+// WEP.
+//
+// `#[inline("never")]` keeps `step` a real SROA'd call site.
 variant StepErr {
     Negative,
 }
@@ -69,9 +71,6 @@ __DATA__
     "stdout": "",
     "wir_expect:O2": [
         "Cursor::step\" = fn(ref \"",
-        "-> [i32, i32, i64, ref null \""
-    ],
-    "wir_not_expect:O2": [
-        "struct.new \"core:prelude/types.wado//Option<i64>"
+        "-> [i32, ref null \"core:prelude/types.wado//Option<i64>\", ref null \""
     ]
 }

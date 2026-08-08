@@ -1,0 +1,65 @@
+// A multi-value call bound at a block tail.
+//
+// `let_block_flatten` hoists only straight-line leading statements, so an
+// inlined helper that branches before its tail call leaves the binding wrapped:
+// `let t = { if flag { … } c.take(); }`.
+//
+// `multi_value_return` took a bare `Call` at a `let` and refused this, because
+// `try_emit_multi_value_let` could not split a wrapped call — so `take` kept
+// the heap-tuple ABI and allocated its result on every step. Both sides now
+// share `block_tail_call`, and the lowering emits the prefix ahead of the bind.
+internal struct Cursor {
+    limit: i32,
+    index: i32,
+    hits: i32,
+}
+
+impl Cursor {
+    #[inline("never")]
+    fn take(&mut self) -> Option<i32> {
+        if self.index >= self.limit {
+            return null;
+        }
+        let v = self.index;
+        self.index = self.index + 1;
+        return Option::Some(v);
+    }
+
+    #[inline("always")]
+    fn take_counting(&mut self, flag: bool) -> Option<i32> {
+        if flag {
+            self.hits = self.hits + 1;
+        }
+        return self.take();
+    }
+}
+
+// `mut`, so the bound is opaque and the loop is not unrolled away.
+global mut SEED: i32 = 5;
+
+#[inline("never")]
+internal fn drain(c: &mut Cursor, flag: bool) -> i32 {
+    let mut sum = 0;
+    while let Some(v) = c.take_counting(flag) {
+        sum += v;
+    }
+    return sum;
+}
+
+export fn run() {
+    let mut counted = Cursor { limit: SEED, index: 0, hits: 0 };
+    assert drain(&mut counted, true) == 10;
+    assert counted.hits == 6;
+    assert counted.index == 5;
+
+    let mut plain = Cursor { limit: SEED, index: 0, hits: 0 };
+    assert drain(&mut plain, false) == 10;
+    assert plain.hits == 0;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["Cursor::take\" = fn(ref \"opt_multi_value_let_block_receiver.wado//Cursor\") -> [i32, i32]"],
+    "wir_not_expect:O2": ["struct.new \"tuple//"]
+}

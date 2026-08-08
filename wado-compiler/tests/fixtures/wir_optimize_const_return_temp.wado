@@ -1,0 +1,47 @@
+// A local bound to a constant and returned after intervening statements.
+//
+// `Result<(), E>` erases to `ref null E`, so `Ok(())` is `ref.null none` — a
+// constant, not an allocation. NIR cannot see that: there it is still a
+// `VariantConstruct`, so nothing sinks it into the `return`. Once
+// `nullable_ref` has erased it, copy propagation should.
+//
+// The intervening writes are what keeps this out of reach of an expression-tree
+// peephole: they sit between the definition and the read.
+internal variant SinkError {
+    Full(String),
+}
+
+internal struct Sink {
+    buf: String,
+    count: i32,
+}
+
+impl Sink {
+    #[inline("never")]
+    fn put(&mut self, s: &String) -> Result<(), SinkError> {
+        let r = self.write(s);
+        self.count += 1;
+        return r;
+    }
+
+    #[inline("always")]
+    fn write(&mut self, s: &String) -> Result<(), SinkError> {
+        self.buf.push_str(s);
+        return Result::Ok(());
+    }
+}
+
+export fn run() {
+    let mut sink = Sink { buf: "", count: 0 };
+    assert sink.put(&"ab") matches { Result::Ok(_) };
+    assert sink.put(&"cd") matches { Result::Ok(_) };
+    assert sink.buf == "abcd";
+    assert sink.count == 2;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["return ref.null none"],
+    "wir_not_expect:O2": ["return r;"]
+}

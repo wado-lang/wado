@@ -1159,14 +1159,19 @@ impl FunctionTranslator<'_, '_> {
     /// `FieldAccess(LocalGet(local), name)` accesses read the matching
     /// split local directly via `multi_value_split_locals`.
     fn try_emit_multi_value_let(&mut self, local_index: u32, value: ExprId) -> Option<WirInstr> {
-        // Only fire on a direct `Call(f)` initialiser — wrapped calls (e.g.
-        // inlined Block) should have been simplified before this point, and
-        // would also break the `MultiValueLocalBind { instr: <Call>, … }` shape
-        // codegen expects.
-        let func_id = match &self.body.exprs[value].kind {
-            ExprKind::Call { func_id, .. } => *func_id,
-            _ => return None,
-        };
+        // The initialiser is the call, or a block whose tail is the call with a
+        // receiver hoisted in front of it — the shape `let_block_flatten`
+        // leaves. `block_tail_call` is the same recogniser
+        // `optimize::multi_value_return` validates call sites with, so the
+        // shapes the two accept cannot drift apart: anything it declines falls
+        // through to a regular `LocalSet`, which cannot bind N results into one
+        // local.
+        let mut prefix: Vec<StmtId> = Vec::new();
+        let (func_id, _, call) = crate::optimize::multi_value_return::block_tail_call(
+            self.body,
+            Operand::Expr(value),
+            &mut prefix,
+        )?;
         let func = self.callee_descriptor(func_id);
         let key = (func.name.clone(), func.module_source);
         let fields = self.ctx.multi_value_return_funcs.get(&key)?.clone();
@@ -1182,11 +1187,15 @@ impl FunctionTranslator<'_, '_> {
             order.push((local_name, wir_ty));
         }
 
+        // Whatever ran ahead of the call in the block still has to run, and
+        // ahead of the bind — the receiver the call reads is bound there.
+        let mut instrs: Vec<WirInstr> = self.translate_stmts(&prefix);
+
         // Translate the call (after dropping any borrow on `value`'s expr).
-        let call_instr = self.translate_expr(value);
+        let call_instr = self.translate_expr(call);
 
         // Emit DeclareLocal for each split, plus the MultiValueLocalBind.
-        let mut instrs: Vec<WirInstr> = Vec::with_capacity(order.len() + 1);
+        instrs.reserve(order.len() + 1);
         for (name, ty) in &order {
             instrs.push(WirInstr::DeclareLocal {
                 name: name.clone(),
@@ -2872,89 +2881,187 @@ fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
             }
         }
         WirInstr::Block { body, result, .. } => {
-            if result.is_some() {
-                rewrite_struct_new_br_to_return(body, 0);
+            if result.is_some() && return_every_exit(body, 0, Tail::IsResult) {
                 *result = None;
             }
+        }
+        // A tail that already yields the N results — a call to a callee under
+        // this same ABI (`multi_value_return`'s tail-call rule). The branch it
+        // sits in has had its result type cleared, so without a `Return` its
+        // results are left on the stack at the end of the block.
+        //
+        // One that already terminates needs no wrapper, and wrapping it would
+        // build `Return { value: Unreachable }` — a `Return` whose operand
+        // leaves nothing on the stack.
+        other if wrap_in_return && !other.ends_with_terminator() => {
+            let value = std::mem::replace(other, WirInstr::Nop);
+            *other = WirInstr::Return {
+                value: Some(Box::new(value)),
+            };
         }
         _ => {}
     }
 }
 
-/// Rewrite `StructNew; Br { depth }` exit pairs and `Seq([…, StructNew, Br])`
-/// LabeledBlock-exit patterns inside a typed `Block` body into
-/// `Return { Seq(fields) }`. Walks nested `Block` / `If` bodies recursively
-/// (depth bumps by 1 on each level). The fallthrough (last instruction
-/// without an explicit `Br`) is also rewritten when it is a `StructNew`.
-fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) {
-    let mut i = 0;
-    while i + 1 < instrs.len() {
-        if matches!(&instrs[i + 1], WirInstr::Br { depth } if *depth == target_depth) {
-            if matches!(&instrs[i], WirInstr::StructNew { .. })
-                && let WirInstr::StructNew { fields, .. } =
-                    std::mem::replace(&mut instrs[i], WirInstr::Nop)
-            {
-                instrs[i] = WirInstr::Return {
-                    value: Some(Box::new(WirInstr::Seq(fields))),
-                };
-                instrs[i + 1] = WirInstr::Nop;
+/// Where the last instruction of a list ends up: yielding the block's result, or
+/// feeding whatever operand it was written for.
+#[derive(Clone, Copy, PartialEq)]
+enum Tail {
+    IsResult,
+    IsOperand,
+}
+
+/// Turn every exit to `target_depth` into a `Return` of its N fields, and
+/// report whether it reached all of them — the caller drops the block's result
+/// type on that answer.
+///
+/// Only `Block`, `Loop` and `If` bodies open a Wasm label. Every other child an
+/// instruction carries rides at the enclosing depth, `let x = f()?` lowering to
+/// `LocalSet { value: If { … } }` among them. Their fall-through tails feed the
+/// operand rather than the block, so only a `Br` in them becomes a `Return`.
+fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> bool {
+    fn exits_to_target(instr: &WirInstr, target_depth: u32) -> bool {
+        match instr {
+            WirInstr::Br { depth } => *depth == target_depth,
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+                body.iter().any(|i| exits_to_target(i, target_depth + 1))
             }
+            WirInstr::If {
+                condition,
+                then_body,
+                else_body,
+                ..
+            } => {
+                exits_to_target(condition, target_depth)
+                    || then_body
+                        .iter()
+                        .any(|i| exits_to_target(i, target_depth + 1))
+                    || else_body
+                        .as_ref()
+                        .is_some_and(|eb| eb.iter().any(|i| exits_to_target(i, target_depth + 1)))
+            }
+            other => {
+                let mut found = false;
+                other.for_each_child(&mut |child| {
+                    found |= exits_to_target(child, target_depth);
+                });
+                found
+            }
+        }
+    }
+
+    /// The two values an exit may carry: the aggregate itself, or a call to a
+    /// callee under this same ABI, which `multi_value_return`'s tail-call rule
+    /// accepts wherever it accepts the aggregate.
+    fn yields_results(instr: &WirInstr) -> bool {
+        matches!(instr, WirInstr::StructNew { .. } | WirInstr::Call { .. })
+    }
+
+    fn exit_as_siblings(instrs: &[WirInstr], i: usize, target_depth: u32) -> bool {
+        yields_results(&instrs[i])
+            && instrs.get(i + 1).is_some_and(
+                |next| matches!(next, WirInstr::Br { depth } if *depth == target_depth),
+            )
+    }
+
+    fn exit_as_seq(instr: &WirInstr, target_depth: u32) -> bool {
+        let WirInstr::Seq(seq) = instr else {
+            return false;
+        };
+        exits_to_target(instr, target_depth)
+            && seq
+                .get(seq.len().wrapping_sub(2))
+                .is_some_and(yields_results)
+    }
+
+    fn returning(value: WirInstr) -> WirInstr {
+        let payload = match value {
+            WirInstr::StructNew { fields, .. } => WirInstr::Seq(fields),
+            already_results => already_results,
+        };
+        WirInstr::Return {
+            value: Some(Box::new(payload)),
+        }
+    }
+
+    let mut all_rewritten = true;
+    let mut i = 0;
+    while i < instrs.len() {
+        if exit_as_siblings(instrs, i, target_depth) {
+            let value = std::mem::replace(&mut instrs[i], WirInstr::Nop);
+            instrs[i] = returning(value);
+            instrs[i + 1] = WirInstr::Nop;
             i += 2;
-        } else {
-            // Seq([…, StructNew, Br(target_depth)]) — LabeledBlock exit form.
-            let is_seq_exit = if let WirInstr::Seq(seq) = &instrs[i] {
-                seq.last().is_some_and(
-                    |last| matches!(last, WirInstr::Br { depth } if *depth == target_depth),
-                ) && seq.len() >= 2
-                    && matches!(seq.get(seq.len() - 2), Some(WirInstr::StructNew { .. }))
-            } else {
-                false
-            };
-            if is_seq_exit {
-                if let WirInstr::Seq(mut seq) = std::mem::replace(&mut instrs[i], WirInstr::Nop) {
-                    seq.pop(); // remove Br
-                    if let Some(WirInstr::StructNew { fields, .. }) = seq.pop() {
-                        let ret = WirInstr::Return {
-                            value: Some(Box::new(WirInstr::Seq(fields))),
-                        };
-                        instrs[i] = if seq.is_empty() {
-                            ret
-                        } else {
-                            seq.push(ret);
-                            WirInstr::Seq(seq)
-                        };
-                    }
-                }
-            } else {
-                match &mut instrs[i] {
-                    WirInstr::Block { body, .. } => {
-                        rewrite_struct_new_br_to_return(body, target_depth + 1);
-                    }
-                    WirInstr::If {
-                        then_body,
-                        else_body,
-                        ..
-                    } => {
-                        rewrite_struct_new_br_to_return(then_body, target_depth + 1);
-                        if let Some(eb) = else_body {
-                            rewrite_struct_new_br_to_return(eb, target_depth + 1);
-                        }
-                    }
-                    _ => {}
+            continue;
+        }
+        if exit_as_seq(&instrs[i], target_depth) {
+            if let WirInstr::Seq(mut seq) = std::mem::replace(&mut instrs[i], WirInstr::Nop) {
+                let _br = seq.pop();
+                if let Some(value) = seq.pop() {
+                    instrs[i] = if seq.is_empty() {
+                        returning(value)
+                    } else {
+                        seq.push(returning(value));
+                        WirInstr::Seq(seq)
+                    };
                 }
             }
             i += 1;
+            continue;
         }
-    }
-    // Fallthrough StructNew (no explicit Br at the end).
-    if let Some(last) = instrs.last_mut()
-        && matches!(last, WirInstr::StructNew { .. })
-        && let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop)
-    {
-        *last = WirInstr::Return {
-            value: Some(Box::new(WirInstr::Seq(fields))),
+        all_rewritten &= !exits_to_target(&instrs[i], target_depth);
+        let one_deeper = target_depth + 1;
+        let inherited = if tail == Tail::IsResult && i + 1 == instrs.len() {
+            Tail::IsResult
+        } else {
+            Tail::IsOperand
         };
+        match &mut instrs[i] {
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+                all_rewritten &= return_every_exit(body, one_deeper, inherited);
+            }
+            WirInstr::If {
+                condition,
+                then_body,
+                else_body,
+                ..
+            } => {
+                all_rewritten &= return_every_exit(
+                    std::slice::from_mut(condition.as_mut()),
+                    target_depth,
+                    Tail::IsOperand,
+                );
+                all_rewritten &= return_every_exit(then_body, one_deeper, inherited);
+                if let Some(eb) = else_body {
+                    all_rewritten &= return_every_exit(eb, one_deeper, inherited);
+                }
+            }
+            WirInstr::Seq(body) => {
+                all_rewritten &= return_every_exit(body, target_depth, inherited);
+            }
+            other => {
+                let mut ok = true;
+                other.for_each_boxed_child_mut(&mut |child| {
+                    ok &= return_every_exit(
+                        std::slice::from_mut(child),
+                        target_depth,
+                        Tail::IsOperand,
+                    );
+                });
+                all_rewritten &= ok;
+            }
+        }
+        i += 1;
     }
+
+    if tail == Tail::IsResult
+        && let Some(last) = instrs.last_mut()
+        && yields_results(last)
+    {
+        let value = std::mem::replace(last, WirInstr::Nop);
+        *last = returning(value);
+    }
+    all_rewritten
 }
 
 #[cfg(test)]

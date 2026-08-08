@@ -151,27 +151,29 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::wri
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(55)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(56)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::fold<i32>" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>", i32, ref struct) -> i32;  // TypeId(56)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>") -> ref "core:prelude//List<i32>";  // TypeId(57)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(57)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(58)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(58)
 
-type "functype//closure_iterator_fn_mut.wado/closure_iterator_fn_mut.wado/__Closure_0::__call" = fn(ref "closure_iterator_fn_mut.wado//__Closure_0", i32, i32) -> i32;  // TypeId(59)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>") -> ref "core:prelude//List<i32>";  // TypeId(59)
 
-type "functype//closure_iterator_fn_mut.wado/closure_iterator_fn_mut.wado/__Closure_1::__call" = fn(ref "closure_iterator_fn_mut.wado//__Closure_1", i32);  // TypeId(60)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>") -> [i32, i32];  // TypeId(60)
 
-type "functype//closure_iterator_fn_mut.wado/closure_iterator_fn_mut.wado/__Closure_2::__call" = fn(ref "closure_iterator_fn_mut.wado//__Closure_2", i32) -> i32;  // TypeId(61)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(61)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(62)
+type "functype//closure_iterator_fn_mut.wado/closure_iterator_fn_mut.wado/__Closure_0::__call" = fn(ref "closure_iterator_fn_mut.wado//__Closure_0", i32, i32) -> i32;  // TypeId(62)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(63)
+type "functype//closure_iterator_fn_mut.wado/closure_iterator_fn_mut.wado/__Closure_1::__call" = fn(ref "closure_iterator_fn_mut.wado//__Closure_1", i32);  // TypeId(63)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(64)
+type "functype//closure_iterator_fn_mut.wado/closure_iterator_fn_mut.wado/__Closure_2::__call" = fn(ref "closure_iterator_fn_mut.wado//__Closure_2", i32) -> i32;  // TypeId(64)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(65)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(65)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>") -> [i32, i32];  // TypeId(66)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(66)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(67)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -225,32 +227,9 @@ fn "closure_iterator_fn_mut.wado/__test_0_fold_can_accumulate_via_outer_mut"() {
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __local_11: ref "core:prelude/string.wado//String";
     let __local_12: ref "core:prelude/format.wado//Formatter";
-    let self_26: ref "core:prelude/slice.wado//ArrayIter<i32>";
-    let f: ref struct;
-    let acc: i32;
     nums = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
     side_total = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
-    self_26 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: nums.repr, index: 0, end: 5 };
-    f = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_iterator_fn_mut.wado//__Closure_0" { __capture_0: side_total }, func: ref.func "closure/closure_iterator_fn_mut.wado/__closure_wrapper_0" };
-    acc = 0;
-    b0: block {
-        l1: loop {
-            let __sroa___local_5_discriminant: i32;
-            let __sroa___local_5_payload_0: i32;
-            multivalue_bind [__sroa___local_5_discriminant, __sroa___local_5_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self_26);
-            if __sroa___local_5_discriminant == 0 {
-                acc = block -> i32 {
-                    let __indirect_call_0: ref "canonical//CanonicalClosure_0";
-                    __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(f);
-                    call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, acc, __sroa___local_5_payload_0);
-                };
-            } else {
-                break b0;
-            }
-            continue l1;
-        };
-    };
-    acc_sum = acc;
+    acc_sum = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::fold<i32>"(struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: nums.repr, index: 0, end: 5 }, 0, struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_iterator_fn_mut.wado//__Closure_0" { __capture_0: side_total }, func: ref.func "closure/closure_iterator_fn_mut.wado/__closure_wrapper_0" });
     if @unlikely(acc_sum != 15) {
         cold_path;
         "core:rt/panic"(__local_9 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(125); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, global:closure_iterator_fn_mut.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, global:closure_iterator_fn_mut.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, global:closure_iterator_fn_mut.wado::__const_obj_3); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 58); __local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_9); "core:prelude/primitive.wado/i32^Display::fmt"(global:closure_iterator_fn_mut.wado::__const_obj_8, __local_10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, global:closure_iterator_fn_mut.wado::__const_obj_7); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, global:closure_iterator_fn_mut.wado::__const_obj_6); __local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_9); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: acc_sum }, __local_10); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 10); __local_9);
@@ -276,19 +255,19 @@ fn "closure_iterator_fn_mut.wado/__test_1_for_each_method_runs_side_effects"() {
     total = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
     self_17 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: nums.repr, index: 0, end: 3 };
     f = struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_iterator_fn_mut.wado//__Closure_1" { __capture_0: total }, func: ref.func "closure/closure_iterator_fn_mut.wado/__closure_wrapper_1" };
-    b6: block {
-        l7: loop {
-            let __sroa___match_3_discriminant: i32;
-            let __sroa___match_3_payload_0: i32;
-            multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self_17);
-            if __sroa___match_3_discriminant == 0 {
+    b2: block {
+        l3: loop {
+            let __match_3_mv_0: i32;
+            let __match_3_mv_1: i32;
+            multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self_17);
+            if __match_3_mv_0 == 0 {
                 let __indirect_call_0: ref "canonical//CanonicalClosure_1";
                 __indirect_call_0 = ref.cast "canonical//CanonicalClosure_1"(f);
-                call_ref "functype/$canonical_closure_fn_1"(__indirect_call_0.func, __indirect_call_0.env, __sroa___match_3_payload_0);
+                call_ref "functype/$canonical_closure_fn_1"(__indirect_call_0.func, __indirect_call_0.env, __match_3_mv_1);
             } else {
-                break b6;
+                break b2;
             }
-            continue l7;
+            continue l3;
         };
     };
     __v0 = total.value;
@@ -388,12 +367,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b15: block {
-        l16: loop {
-            break_if b15 t <= 0_i64;
+    b11: block {
+        l12: loop {
+            break_if b11 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l16;
+            continue l12;
         };
     };
     return n;
@@ -407,13 +386,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b18: block {
-            l19: loop {
-                break_if b18 temp <= 0_i64;
+        b14: block {
+            l15: loop {
+                break_if b14 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l19;
+                continue l15;
             };
         };
     }
@@ -445,12 +424,12 @@ fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b23: block {
-        l24: loop {
-            break_if b23 i >= len;
+    b19: block {
+        l20: loop {
+            break_if b19 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l24;
+            continue l20;
         };
     };
 }
@@ -529,20 +508,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b26: block {
-        l27: loop {
-            break_if b26 offset >= count;
+    b22: block {
+        l23: loop {
+            break_if b22 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b26 (if (result >> 4) == 0 -> i32 {
+            break_if b22 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l27;
+            continue l23;
         };
     };
 }
@@ -647,12 +626,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n"(s
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b35: block {
-        l36: loop {
-            break_if b35 i >= n;
+    b31: block {
+        l32: loop {
+            break_if b31 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l36;
+            continue l32;
         };
     };
 }
@@ -737,6 +716,29 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
+fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::fold<i32>"(self, init, f) {
+    let acc: i32;
+    acc = init;
+    b50: block {
+        l51: loop {
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: i32;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self);
+            if __match_5_mv_0 == 0 {
+                acc = block -> i32 {
+                    let __indirect_call_0: ref "canonical//CanonicalClosure_0";
+                    __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(f);
+                    call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, acc, __match_5_mv_1);
+                };
+            } else {
+                break b50;
+            }
+            continue l51;
+        };
+    };
+    return acc;
+}
+
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
@@ -763,11 +765,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^FromIterator::from_i
     result = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     b56: block {
         l57: loop {
-            let __sroa___match_4_discriminant: i32;
-            let __sroa___match_4_payload_0: i32;
-            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::next"(iter);
-            if __sroa___match_4_discriminant == 0 {
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __sroa___match_4_payload_0);
+            let __match_4_mv_0: i32;
+            let __match_4_mv_1: i32;
+            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::next"(iter);
+            if __match_4_mv_0 == 0 {
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __match_4_mv_1);
             } else {
                 break b56;
             }
@@ -778,14 +780,14 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^FromIterator::from_i
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::next"(self) {
-    let __sroa___match_2_discriminant: i32;
-    let __sroa___match_2_payload_0: i32;
-    multivalue_bind [__sroa___match_2_discriminant, __sroa___match_2_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self.inner);
-    if __sroa___match_2_discriminant == 0 {
+    let __match_2_mv_0: i32;
+    let __match_2_mv_1: i32;
+    multivalue_bind [__match_2_mv_0, __match_2_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self.inner);
+    if __match_2_mv_0 == 0 {
         return 0, block -> i32 {
             let __indirect_call_0: ref "canonical//CanonicalClosure_2";
             __indirect_call_0 = ref.cast "canonical//CanonicalClosure_2"(self.f);
-            call_ref "functype/$canonical_closure_fn_2"(__indirect_call_0.func, __indirect_call_0.env, __sroa___match_2_payload_0);
+            call_ref "functype/$canonical_closure_fn_2"(__indirect_call_0.func, __indirect_call_0.env, __match_2_mv_1);
         };
     } else {
     }

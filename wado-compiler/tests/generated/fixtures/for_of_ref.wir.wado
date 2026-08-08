@@ -149,13 +149,13 @@ type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<for
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(55)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(56)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(56)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(57)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(57)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(58)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(58)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(59)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(59)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -291,11 +291,11 @@ fn "for_of_ref.wado/test_for_of_value_unchanged"() with Stdout {
     __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: arr.repr, index: 0, end: 3 };
     b12: block {
         l13: loop {
-            let __sroa___match_9_discriminant: i32;
-            let __sroa___match_9_payload_0: i32;
-            multivalue_bind [__sroa___match_9_discriminant, __sroa___match_9_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(__iter_3);
-            if __sroa___match_9_discriminant == 0 {
-                sum = sum + __sroa___match_9_payload_0;
+            let __match_9_mv_0: i32;
+            let __match_9_mv_1: i32;
+            multivalue_bind [__match_9_mv_0, __match_9_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(__iter_3);
+            if __match_9_mv_0 == 0 {
+                sum = sum + __match_9_mv_1;
             } else {
                 break b12;
             }

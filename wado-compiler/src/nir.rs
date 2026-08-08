@@ -381,6 +381,12 @@ pub struct NirFunction {
     /// elision for `ValueCopy`).
     pub kind: FunctionKind,
 
+    /// The variant this function's return used to be, when
+    /// `optimize::sroa_variant_return` rewrote it into a `[tag, slots…]` tuple.
+    /// `None` for every function it did not touch. Read by that pass's repair
+    /// step, which has to recognise its own earlier work in a later iteration.
+    pub scalarized_from: Option<TypeId>,
+
     /// ABI for delivering the function's return value at WIR / Wasm level.
     /// Defaults to [`ReturnAbi::Single`]; an analysis pass sets
     /// [`ReturnAbi::MultiValue`] for tuple- or user-struct-returning
@@ -509,6 +515,7 @@ impl NirFunction {
             export_name: None,
             allocator_tag: None,
             kind: FunctionKind::default(),
+            scalarized_from: None,
             return_abi: ReturnAbi::default(),
         }
     }

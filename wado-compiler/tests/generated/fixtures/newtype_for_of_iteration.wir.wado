@@ -117,17 +117,17 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<u8>") -> ref null "core:prelude/types.wado//Box<u8>";  // TypeId(43)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(44)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(44)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(45)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(45)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(46)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(46)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(47)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(47)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(48)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(48)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(49)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(49)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -197,11 +197,11 @@ fn "newtype_for_of_iteration.wado/run"() {
     __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: bag.repr, index: 0, end: bag.used };
     b0: block {
         l1: loop {
-            let __sroa___match_31_discriminant: i32;
-            let __sroa___match_31_payload_0: u8;
-            multivalue_bind [__sroa___match_31_discriminant, __sroa___match_31_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(__iter_2);
-            if __sroa___match_31_discriminant == 0 {
-                sum = sum + __sroa___match_31_payload_0;
+            let __match_31_mv_0: i32;
+            let __match_31_mv_1: u8;
+            multivalue_bind [__match_31_mv_0, __match_31_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(__iter_2);
+            if __match_31_mv_0 == 0 {
+                sum = sum + __match_31_mv_1;
             } else {
                 break b0;
             }
