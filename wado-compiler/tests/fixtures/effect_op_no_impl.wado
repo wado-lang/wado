@@ -1,0 +1,27 @@
+// An effect operation reached with no handler installed traps at run time.
+// The compiler must lower the call to that trap even when the program
+// contains no `impl` of the effect at all — the case a stdlib facade hits
+// when every bundled handler is dead code.
+use { println, Stdout } from "core:cli";
+
+interface Log {
+    fn enabled(level: i32) -> bool;
+}
+
+#[ambient]
+fn probe(level: i32) -> bool {
+    return Log::enabled(level);
+}
+
+export fn run() with Stdout {
+    println(`before`);
+    if probe(2) {
+        println(`unreachable`);
+    }
+}
+
+__DATA__
+{
+    "stdout_contains": ["before"],
+    "trapped": true
+}

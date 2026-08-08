@@ -1,0 +1,33 @@
+// A global whose type is an `enum` lowers to an i32 discriminant, so its
+// initializer must be that discriminant constant. Emitting the generic
+// heap-type default instead yields `(global (mut i32) (ref.null none))`,
+// which fails core Wasm validation before the program ever runs.
+use { println, Stdout } from "core:cli";
+
+enum Level {
+    Trace,
+    Debug,
+    Info,
+}
+
+global DEFAULT_LEVEL: Level = Level::Debug;
+
+global mut RUNTIME_LEVEL: Level = DEFAULT_LEVEL;
+
+fn set_level(level: Level) {
+    RUNTIME_LEVEL = level;
+}
+
+export fn run() with Stdout {
+    println(`${DEFAULT_LEVEL as i32}`);
+    println(`${RUNTIME_LEVEL as i32}`);
+    set_level(Level::Info);
+    if RUNTIME_LEVEL >= Level::Info {
+        println(`raised`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "1\n1\nraised\n"
+}

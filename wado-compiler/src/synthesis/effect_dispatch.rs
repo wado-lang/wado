@@ -52,6 +52,7 @@ use crate::tir::{
     TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
     TirTemplatePart, TypeId, TypeTable,
 };
+use crate::tir_visitor::TirRefVisitor;
 
 /// Canonical identity of an effect or resource **declaration**:
 /// `(defining_module, base_name)`.
@@ -150,6 +151,80 @@ fn identify_active_effects(
             (effect_module.clone(), base_name.clone(), type_args.clone())
         })
         .collect()
+}
+
+/// Effects whose call sites nothing else in the pipeline would lower.
+///
+/// [`identify_active_effects`] keys on handler impls and `cm_binding` lowers
+/// only `#[cm]`-tagged operations, so a user-declared effect called with no
+/// `impl` anywhere in the package falls through both and reaches WIR build as
+/// an unresolved call. `#[ambient]` is what makes that reachable: it bypasses
+/// effect-check, so a facade may perform an effect the program never
+/// implements. Handing those effects the ordinary dispatch triple lowers the
+/// call to its wrapper, whose no-handler branch is the same trap a
+/// declared-but-never-installed handler already produces.
+fn identify_uncovered_effects(
+    project: &Package,
+    effect_index: &IndexMap<EffectKey, EffectMeta>,
+    active: &IndexSet<InstantiationKey>,
+) -> IndexSet<InstantiationKey> {
+    // Resources and WASI effects reach `cm_binding` through their `cm_name`;
+    // only an operation with neither a handler nor a canonical name is
+    // unlowerable. Keyed by bare name, which is what an effect call site
+    // carries as its module source.
+    let mut uncovered: IndexMap<String, InstantiationKey> = IndexMap::default();
+    for ((module, name), meta) in effect_index {
+        let key = (module.clone(), name.clone(), Vec::new());
+        if !meta.is_resource
+            && !meta.operations.is_empty()
+            && meta.operations.iter().all(|op| op.cm_name.is_none())
+            && !active.contains(&key)
+        {
+            uncovered.insert(name.clone(), key);
+        }
+    }
+    if uncovered.is_empty() {
+        return IndexSet::default();
+    }
+
+    let mut collector = UncoveredEffectCallCollector {
+        uncovered: &uncovered,
+        called: IndexSet::default(),
+    };
+    for module in project.tir_modules.values() {
+        for func_rc in &module.functions {
+            if let Some(body) = &func_rc.borrow().body {
+                collector.visit_block(body);
+            }
+        }
+        for impl_block in &module.impls {
+            for method in &impl_block.methods {
+                if let Some(body) = &method.body {
+                    collector.visit_block(body);
+                }
+            }
+        }
+    }
+    collector.called
+}
+
+/// Records which uncovered effects are actually called, so a declared but
+/// never-performed effect costs no dispatch infrastructure.
+struct UncoveredEffectCallCollector<'a> {
+    uncovered: &'a IndexMap<String, InstantiationKey>,
+    called: IndexSet<InstantiationKey>,
+}
+
+impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Call { func, .. } = &expr.kind
+            && let Some(interface) = func.module_source.interface_name()
+            && let Some(key) = self.uncovered.get(interface.as_str())
+        {
+            self.called.insert(key.clone());
+        }
+        self.walk_expr(expr);
+    }
 }
 
 /// All the bookkeeping needed to emit / refer to the dispatch
@@ -2933,7 +3008,12 @@ pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String
 
     let effect_index = build_effect_index(&project);
     let impl_index = build_handler_impl_index(&project, &effect_index);
-    let active_effects = identify_active_effects(&impl_index);
+    let mut active_effects = identify_active_effects(&impl_index);
+    active_effects.extend(identify_uncovered_effects(
+        &project,
+        &effect_index,
+        &active_effects,
+    ));
 
     if active_effects.is_empty() {
         return Ok(project);
