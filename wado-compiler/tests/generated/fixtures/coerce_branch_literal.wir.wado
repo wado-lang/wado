@@ -122,7 +122,7 @@ type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128^Shl::shl"
 
 type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Inspect::inspect" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/format.wado//Formatter");  // TypeId(45)
 
-type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(46)
+type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> [u64, i64];  // TypeId(46)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
@@ -156,13 +156,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(62)
 
-<<<<<<< HEAD
-type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> [u64, i64];  // TypeId(71)
-||||||| 61f109b25
-type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(71)
-=======
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(63)
->>>>>>> origin/main
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(64)
 
@@ -656,18 +650,10 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128^Shl::shl"(self, rhs) 
 fn "core:prelude/int128.wado/core:prelude/int128.wado/i128^Inspect::inspect"(self, f) {
     "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude"(__inline_core_prelude_int128_wado_i128__abs_u128_2: block -> ref "core:prelude/int128.wado//u128" {
         if self.high < 0_i64 {
-<<<<<<< HEAD
             let val_10_mv_low: u64;
             let val_10_mv_high: i64;
-            multivalue_bind [val_10_mv_low, val_10_mv_high] = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:core:prelude/int128.wado::__const_obj_82, self);
+            multivalue_bind [val_10_mv_low, val_10_mv_high] = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:core:prelude/int128.wado::__const_obj_62, self);
             struct.new "core:prelude/int128.wado//u128" { low: val_10_mv_low, high: val_10_mv_high };
-||||||| 61f109b25
-            val_10 = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:core:prelude/int128.wado::__const_obj_82, self);
-            struct.new "core:prelude/int128.wado//u128" { low: val_10.low, high: val_10.high };
-=======
-            val_10 = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:core:prelude/int128.wado::__const_obj_62, self);
-            struct.new "core:prelude/int128.wado//u128" { low: val_10.low, high: val_10.high };
->>>>>>> origin/main
             break __inline_core_prelude_int128_wado_i128__abs_u128_2;
         }
         struct.new "core:prelude/int128.wado//u128" { low: self.low, high: self.high };

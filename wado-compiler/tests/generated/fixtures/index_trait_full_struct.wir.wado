@@ -89,17 +89,17 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(32)
 
-type "functype//index_trait_full_struct.wado/index_trait_full_struct.wado/Value::describe" = fn(ref "index_trait_full_struct.wado//Value") -> ref "core:prelude/string.wado//String";  // TypeId(33)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(33)
 
-type "functype//index_trait_full_struct.wado/index_trait_full_struct.wado/Container^IndexRef<i32>::index_ref" = fn(ref "index_trait_full_struct.wado//Container", i32) -> ref "index_trait_full_struct.wado//Value";  // TypeId(34)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
 
-type "functype//index_trait_full_struct.wado/index_trait_full_struct.wado/Container^IndexMutRef<i32>::index_mut_ref" = fn(ref "index_trait_full_struct.wado//Container", i32) -> ref "index_trait_full_struct.wado//Value";  // TypeId(35)
+type "functype//index_trait_full_struct.wado/index_trait_full_struct.wado/Value::describe" = fn(ref "index_trait_full_struct.wado//Value") -> ref "core:prelude/string.wado//String";  // TypeId(35)
 
-type "functype//index_trait_full_struct.wado/index_trait_full_struct.wado/Container^IndexAssign<i32>::index_assign" = fn(ref "index_trait_full_struct.wado//Container", i32, ref "index_trait_full_struct.wado//Value");  // TypeId(36)
+type "functype//index_trait_full_struct.wado/index_trait_full_struct.wado/Container^IndexRef<i32>::index_ref" = fn(ref "index_trait_full_struct.wado//Container", i32) -> ref "index_trait_full_struct.wado//Value";  // TypeId(36)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(37)
+type "functype//index_trait_full_struct.wado/index_trait_full_struct.wado/Container^IndexMutRef<i32>::index_mut_ref" = fn(ref "index_trait_full_struct.wado//Container", i32) -> ref "index_trait_full_struct.wado//Value";  // TypeId(37)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
+type "functype//index_trait_full_struct.wado/index_trait_full_struct.wado/Container^IndexAssign<i32>::index_assign" = fn(ref "index_trait_full_struct.wado//Container", i32, ref "index_trait_full_struct.wado//Value");  // TypeId(38)
 
 type "functype//index_trait_full_struct.wado/index_trait_full_struct.wado/Container::stats$spec0" = fn(ref "index_trait_full_struct.wado//Container") -> ref "core:prelude/string.wado//String";  // TypeId(39)
 
@@ -484,56 +484,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     self.used = self.used + "core:prelude/string.wado/encode_char"(self.repr, self.used, c);
 }
 
-fn "index_trait_full_struct.wado/index_trait_full_struct.wado/Value::describe"(self) {
-    let __local_1: ref "core:prelude/string.wado//String";
-    let __local_2: ref "core:prelude/format.wado//Formatter";
-    let start: i32;
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_1, self.tag), start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start, 58), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self.n, __local_2), __local_1;
-}
-
-fn "index_trait_full_struct.wado/index_trait_full_struct.wado/Container^IndexRef<i32>::index_ref"(self, idx) {
-    if idx == 0 {
-        return self.v0;
-    } else if idx == 1 {
-        return self.v1;
-    } else {
-        return self.v2;
-    }
-}
-
-fn "index_trait_full_struct.wado/index_trait_full_struct.wado/Container^IndexMutRef<i32>::index_mut_ref"(self, idx) {
-    self.write_count = self.write_count + 1;
-    if idx == 0 {
-        return self.v0;
-    } else if idx == 1 {
-        return self.v1;
-    } else {
-        return self.v2;
-    }
-}
-
-fn "index_trait_full_struct.wado/index_trait_full_struct.wado/Container^IndexAssign<i32>::index_assign"(self, idx, value) {
-    self.write_count = self.write_count + 1;
-    if idx == 0 {
-        self.v0 = value;
-    } else if idx == 1 {
-        self.v1 = value;
-    } else {
-        self.v2 = value;
-    }
-}
-
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b27: block {
-        l28: loop {
-            break_if b27 i >= n;
+    b21: block {
+        l22: loop {
+            break_if b21 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l28;
+            continue l22;
         };
     };
 }
@@ -615,6 +576,45 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
         return "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
+    }
+}
+
+fn "index_trait_full_struct.wado/index_trait_full_struct.wado/Value::describe"(self) {
+    let __local_1: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/format.wado//Formatter";
+    let start: i32;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_1, self.tag), start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start, 58), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self.n, __local_2), __local_1;
+}
+
+fn "index_trait_full_struct.wado/index_trait_full_struct.wado/Container^IndexRef<i32>::index_ref"(self, idx) {
+    if idx == 0 {
+        return self.v0;
+    } else if idx == 1 {
+        return self.v1;
+    } else {
+        return self.v2;
+    }
+}
+
+fn "index_trait_full_struct.wado/index_trait_full_struct.wado/Container^IndexMutRef<i32>::index_mut_ref"(self, idx) {
+    self.write_count = self.write_count + 1;
+    if idx == 0 {
+        return self.v0;
+    } else if idx == 1 {
+        return self.v1;
+    } else {
+        return self.v2;
+    }
+}
+
+fn "index_trait_full_struct.wado/index_trait_full_struct.wado/Container^IndexAssign<i32>::index_assign"(self, idx, value) {
+    self.write_count = self.write_count + 1;
+    if idx == 0 {
+        self.v0 = value;
+    } else if idx == 1 {
+        self.v1 = value;
+    } else {
+        self.v2 = value;
     }
 }
 

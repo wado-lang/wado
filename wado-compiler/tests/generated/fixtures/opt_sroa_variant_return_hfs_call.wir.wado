@@ -103,13 +103,13 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::wri
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
+type "functype//opt_sroa_variant_return_hfs_call.wado/opt_sroa_variant_return_hfs_call.wado/Cursor::scan" = fn(ref "opt_sroa_variant_return_hfs_call.wado//Cursor") -> [i32, i32, ref null "opt_sroa_variant_return_hfs_call.wado//Fail"];  // TypeId(41)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
 
-type "functype//opt_sroa_variant_return_hfs_call.wado/opt_sroa_variant_return_hfs_call.wado/Cursor::scan" = fn(ref "opt_sroa_variant_return_hfs_call.wado//Cursor") -> [i32, i32, ref null "opt_sroa_variant_return_hfs_call.wado//Fail"];  // TypeId(44)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(44)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -139,7 +139,6 @@ fn "opt_sroa_variant_return_hfs_call.wado/fail_at"(pos) {
 
 fn "opt_sroa_variant_return_hfs_call.wado/run"() {
     let ok: ref "opt_sroa_variant_return_hfs_call.wado//Cursor";
-    let n: i32;
     let __cond_2: bool;
     let bad: ref "opt_sroa_variant_return_hfs_call.wado//Cursor";
     let f: ref "opt_sroa_variant_return_hfs_call.wado//Fail";
@@ -155,12 +154,12 @@ fn "opt_sroa_variant_return_hfs_call.wado/run"() {
         global:opt_sroa_variant_return_hfs_call.wado::__modules_initialized = 1;
     };
     ok = struct.new "opt_sroa_variant_return_hfs_call.wado//Cursor" { data: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ab;cd"), used: 5 }, pos: 0 };
-    let __sroa___match_scrut_0_discriminant: i32;
-    let __sroa___match_scrut_0_case0_payload_0: i32;
-    let __sroa___match_scrut_0_case1_payload_0: ref null "opt_sroa_variant_return_hfs_call.wado//Fail";
-    multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0, __sroa___match_scrut_0_case1_payload_0] = "opt_sroa_variant_return_hfs_call.wado/opt_sroa_variant_return_hfs_call.wado/Cursor::scan"(ok);
-    __cond_2 = (if __sroa___match_scrut_0_discriminant == 0 -> bool {
-        local.tee n(__sroa___match_scrut_0_case0_payload_0) == 3;
+    let __vr_10_mv_0: i32;
+    let __vr_10_mv_1: i32;
+    let __vr_10_mv_2: ref null "opt_sroa_variant_return_hfs_call.wado//Fail";
+    multivalue_bind [__vr_10_mv_0, __vr_10_mv_1, __vr_10_mv_2] = "opt_sroa_variant_return_hfs_call.wado/opt_sroa_variant_return_hfs_call.wado/Cursor::scan"(ok);
+    __cond_2 = (if __vr_10_mv_0 == 0 -> bool {
+        __vr_10_mv_1 == 3;
     } else {
         0;
     });
@@ -170,12 +169,12 @@ fn "opt_sroa_variant_return_hfs_call.wado/run"() {
         unreachable;
     }
     bad = struct.new "opt_sroa_variant_return_hfs_call.wado//Cursor" { data: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98, 99, 100), used: 4 }, pos: 0 };
-    let __sroa___match_scrut_1_discriminant: i32;
-    let __sroa___match_scrut_1_case0_payload_0: i32;
-    let __sroa___match_scrut_1_case1_payload_0: ref null "opt_sroa_variant_return_hfs_call.wado//Fail";
-    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "opt_sroa_variant_return_hfs_call.wado/opt_sroa_variant_return_hfs_call.wado/Cursor::scan"(bad);
-    __cond_5 = (if __sroa___match_scrut_1_discriminant == 1 -> bool {
-        f = ref.as_non_null(__sroa___match_scrut_1_case1_payload_0);
+    let __vr_11_mv_0: i32;
+    let __vr_11_mv_1: i32;
+    let __vr_11_mv_2: ref null "opt_sroa_variant_return_hfs_call.wado//Fail";
+    multivalue_bind [__vr_11_mv_0, __vr_11_mv_1, __vr_11_mv_2] = "opt_sroa_variant_return_hfs_call.wado/opt_sroa_variant_return_hfs_call.wado/Cursor::scan"(bad);
+    __cond_5 = (if __vr_11_mv_0 == 1 -> bool {
+        f = ref.as_non_null(__vr_11_mv_2);
         f.at == 4;
     } else {
         0;
@@ -452,35 +451,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_uncheck
     builtin::array_set_u8(self.repr, start, byte);
 }
 
-fn "opt_sroa_variant_return_hfs_call.wado/opt_sroa_variant_return_hfs_call.wado/Cursor::scan"(self) {
-    let b: i32;
-    let _licm_data_5: ref "core:prelude/string.wado//String";
-    let _licm_used_6: i32;
-    let _licm_repr_7: ref Array<u8>;
-    let __hfs_pos_10: i32;
-    _licm_data_5 = self.data;
-    _licm_used_6 = _licm_data_5.used;
-    _licm_repr_7 = _licm_data_5.repr;
-    __hfs_pos_10 = self.pos;
-    block {
-        l26: loop {
-            if __hfs_pos_10 >= _licm_used_6 {
-                let __scv___hfs_call_11_14_payload_0: ref "opt_sroa_variant_return_hfs_call.wado//Fail";
-                __scv___hfs_call_11_14_payload_0 = ref.as_non_null("opt_sroa_variant_return_hfs_call.wado/fail_at"(__hfs_pos_10));
-                self.pos = __hfs_pos_10;
-                return 1, 0, __scv___hfs_call_11_14_payload_0;
-            }
-            b = builtin::array_get<u8>(_licm_repr_7, __hfs_pos_10);
-            __hfs_pos_10 = __hfs_pos_10 + 1;
-            if b == 59 {
-                self.pos = __hfs_pos_10;
-                return 0, __hfs_pos_10, ref.null none;
-            }
-            continue l26;
-        };
-    };
-}
-
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
     return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
 }
@@ -490,12 +460,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n"(s
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b29: block {
-        l30: loop {
-            break_if b29 i >= n;
+    b25: block {
+        l26: loop {
+            break_if b25 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l30;
+            continue l26;
         };
     };
 }
@@ -578,6 +548,36 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         return "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "opt_sroa_variant_return_hfs_call.wado/opt_sroa_variant_return_hfs_call.wado/Cursor::scan"(self) {
+    let b: i32;
+    let _licm_data_5: ref "core:prelude/string.wado//String";
+    let _licm_used_6: i32;
+    let _licm_repr_7: ref Array<u8>;
+    let __hfs_pos_10: i32;
+    let __hfs_call_11: ref null "opt_sroa_variant_return_hfs_call.wado//Fail";
+    _licm_data_5 = self.data;
+    _licm_used_6 = _licm_data_5.used;
+    _licm_repr_7 = _licm_data_5.repr;
+    __hfs_pos_10 = self.pos;
+    block {
+        l45: loop {
+            if __hfs_pos_10 >= _licm_used_6 {
+                __hfs_call_11 = ref.as_non_null("opt_sroa_variant_return_hfs_call.wado/fail_at"(__hfs_pos_10));
+                self.pos = __hfs_pos_10;
+                return 1, 0, __hfs_call_11;
+            }
+            b = builtin::array_get<u8>(_licm_repr_7, __hfs_pos_10);
+            __hfs_pos_10 = __hfs_pos_10 + 1;
+            if b == 59 {
+                __hfs_call_11 = ref.null none;
+                self.pos = __hfs_pos_10;
+                return 0, __hfs_pos_10, __hfs_call_11;
+            }
+            continue l45;
+        };
+    };
 }
 
 export fn "opt_sroa_variant_return_hfs_call.wado/__cm_export__run" as "run"

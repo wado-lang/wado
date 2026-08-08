@@ -215,17 +215,15 @@ fn "inline_merged.wado/test_generic_nested_ref"() with Stdout {
     let __local_5_5: ref "core:prelude/string.wado//String";
     let __local_6_6: ref "core:prelude/format.wado//Formatter";
     let self_26: i32;
-    let _licm_used_28: i32;
     let _licm_repr_29: ref "Array<&mut inline_merged.wado/InlineItem>";
     a = struct.new "inline_merged.wado//InlineItem" { value: 10 };
     b = struct.new "inline_merged.wado//InlineItem" { value: 20 };
     items = struct.new "core:prelude//List<&mut inline_merged.wado/InlineItem>" { repr: array.new_fixed<ref "inline_merged.wado//InlineItem">(a, b), used: 2 };
     i = 0;
-    _licm_used_28 = 2;
     _licm_repr_29 = items.repr;
     b2: block {
         l3: loop {
-            break_if b2 i >= _licm_used_28;
+            break_if b2 i >= 2;
             "core:cli/println"(__local_5_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5_5 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_26(builtin::array_get<ref "inline_merged.wado//InlineItem">(_licm_repr_29, i).value), __local_6_6); __local_5_5);
             i = i + 1;
             continue l3;

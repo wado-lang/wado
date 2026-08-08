@@ -163,27 +163,27 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_a
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(63)
 
-type "functype//serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_f64" = fn(ref "serde_serialize_variant.wado//JsonSerializer", f64) -> ref null "serde_serialize_variant.wado//SerializeError";  // TypeId(64)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(64)
 
-type "functype//serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref "serde_serialize_variant.wado//JsonSerializer", ref "core:prelude/string.wado//String") -> ref null "serde_serialize_variant.wado//SerializeError";  // TypeId(65)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(65)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(66)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(66)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(67)
+type "functype//serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_f64" = fn(ref "serde_serialize_variant.wado//JsonSerializer", f64) -> ref null "serde_serialize_variant.wado//SerializeError";  // TypeId(67)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(68)
+type "functype//serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref "serde_serialize_variant.wado//JsonSerializer", ref "core:prelude/string.wado//String") -> ref null "serde_serialize_variant.wado//SerializeError";  // TypeId(68)
 
-type "functype//serde_serialize_variant.wado/serde_serialize_variant.wado/Shape^Serialize::serialize<serde_serialize_variant.wado/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<serde_serialize_variant.wado/Shape>", ref "serde_serialize_variant.wado//JsonSerializer") -> ref null "serde_serialize_variant.wado//SerializeError";  // TypeId(69)
+type "functype//serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant" = fn(ref "serde_serialize_variant.wado//JsonSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> [i32, ref null "serde_serialize_variant.wado//JsonVariantSerializer", ref null "serde_serialize_variant.wado//SerializeError"];  // TypeId(69)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_into$spec0" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(70)
+type "functype//serde_serialize_variant.wado/serde_serialize_variant.wado/Shape^Serialize::serialize<serde_serialize_variant.wado/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<serde_serialize_variant.wado/Shape>", ref "serde_serialize_variant.wado//JsonSerializer") -> ref null "serde_serialize_variant.wado//SerializeError";  // TypeId(70)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(71)
+type "functype//core:prelude/primitive.wado/f64::fmt_into$spec0" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(71)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(72)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(72)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(73)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(73)
 
-type "functype//serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant" = fn(ref "serde_serialize_variant.wado//JsonSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> [i32, ref null "serde_serialize_variant.wado//JsonVariantSerializer", ref null "serde_serialize_variant.wado//SerializeError"];  // TypeId(74)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(74)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1093,26 +1093,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^Add::add"(self, oth
     return result;
 }
 
-fn "serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_f64"(self, v) {
-    let __local_2: ref "core:prelude/string.wado//String";
-    let __local_3: ref "core:prelude/format.wado//Formatter";
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/f64::fmt_into$spec0"(v, __local_3); __local_2);
-    return ref.null none;
-}
-
-fn "serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_unit_variant"(self, variant_name) {
-    let __local_4: ref "core:prelude/string.wado//String";
-    let start_6: i32;
-    let start_15: i32;
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; start_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_6, 34); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, variant_name); start_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_15, 34); __local_4);
-    return ref.null none;
-}
-
-fn "serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant"(self, type_name, variant_name, disc) {
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, "core:prelude/string.wado/core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/core:prelude/string.wado/String^Add::add"(global:serde_serialize_variant.wado::__const_obj_45, variant_name), global:serde_serialize_variant.wado::__const_obj_44), global:serde_serialize_variant.wado::__const_obj_43));
-    return 0, struct.new "serde_serialize_variant.wado//JsonVariantSerializer" { ser: self }, ref.null none;
-}
-
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
     return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
 }
@@ -1212,6 +1192,26 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
+fn "serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_f64"(self, v) {
+    let __local_2: ref "core:prelude/string.wado//String";
+    let __local_3: ref "core:prelude/format.wado//Formatter";
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/f64::fmt_into$spec0"(v, __local_3); __local_2);
+    return ref.null none;
+}
+
+fn "serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_unit_variant"(self, variant_name) {
+    let __local_4: ref "core:prelude/string.wado//String";
+    let start_6: i32;
+    let start_15: i32;
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; start_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_6, 34); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, variant_name); start_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start_15, 34); __local_4);
+    return ref.null none;
+}
+
+fn "serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant"(self, type_name, variant_name, disc) {
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, "core:prelude/string.wado/core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/core:prelude/string.wado/String^Add::add"(global:serde_serialize_variant.wado::__const_obj_45, variant_name), global:serde_serialize_variant.wado::__const_obj_44), global:serde_serialize_variant.wado::__const_obj_43));
+    return 0, struct.new "serde_serialize_variant.wado//JsonVariantSerializer" { ser: self }, ref.null none;
+}
+
 fn "serde_serialize_variant.wado/serde_serialize_variant.wado/Shape^Serialize::serialize<serde_serialize_variant.wado/JsonSerializer>"(self, s) {
     let r: ref "core:prelude/types.wado//Box<f64>";
     let __local_5: ref "serde_serialize_variant.wado//JsonVariantSerializer";
@@ -1220,12 +1220,12 @@ fn "serde_serialize_variant.wado/serde_serialize_variant.wado/Shape^Serialize::s
     let start: i32;
     return let __match_scrut_0: ref "serde_serialize_variant.wado//Shape", __match_scrut_0 = self.value, (if ref.test "serde_serialize_variant.wado//Shape::Circle"(__match_scrut_0) -> ref null "serde_serialize_variant.wado//SerializeError" {
         r = struct.new "core:prelude/types.wado//Box<f64>" { value: ref.cast "serde_serialize_variant.wado//Shape::Circle"(__match_scrut_0).payload_0 };
-        let __sroa_v_3_discriminant: i32;
-        let __sroa_v_3_case0_payload_0: ref null "serde_serialize_variant.wado//JsonVariantSerializer";
-        let __sroa_v_3_case1_payload_0: ref null "serde_serialize_variant.wado//SerializeError";
-        multivalue_bind [__sroa_v_3_discriminant, __sroa_v_3_case0_payload_0, __sroa_v_3_case1_payload_0] = "serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant"(s, global:serde_serialize_variant.wado::__const_obj_48, global:serde_serialize_variant.wado::__const_obj_47, 0);
-        if __sroa_v_3_discriminant == 0 {
-            __local_5 = ref.as_non_null(__sroa_v_3_case0_payload_0);
+        let v_3_mv_0: i32;
+        let v_3_mv_1: ref null "serde_serialize_variant.wado//JsonVariantSerializer";
+        let v_3_mv_2: ref null "serde_serialize_variant.wado//SerializeError";
+        multivalue_bind [v_3_mv_0, v_3_mv_1, v_3_mv_2] = "serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant"(s, global:serde_serialize_variant.wado::__const_obj_48, global:serde_serialize_variant.wado::__const_obj_47, 0);
+        if v_3_mv_0 == 0 {
+            __local_5 = ref.as_non_null(v_3_mv_1);
             s_9 = __local_5.ser;
             drop("serde_serialize_variant.wado/serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_f64"(s_9, r.value));
             return self_11 = __local_5.ser.buf, start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self_11, 1), builtin::array_set_u8(self_11.repr, start, 125), ref.null none;

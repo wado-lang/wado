@@ -2045,54 +2045,17 @@ fn collect_type_dependencies(
 pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis) {
     {
         let type_table = project.type_table.borrow();
-<<<<<<< HEAD
-        type_table
-            .find_struct_by_name(rendered, module_source)
-            .is_some_and(|id| analysis.types.contains(&id))
-    };
-    project.structs.retain(|s| {
-        if s.monomorph_info.is_none() {
-            analysis
-                .struct_exact
-                .contains(&(s.name.clone(), s.module_source.clone()))
-                || analysis.generic_instance_names.contains(s.name.as_str())
-                || analysis.struct_monomorph_bases.contains(s.name.as_str())
-        } else {
-            let rendered = monomorph_render(s).unwrap_or_else(|| s.name.clone());
-            analysis.struct_monomorph_names.contains(s.name.as_str())
-                || analysis.struct_monomorph_names.contains(rendered.as_str())
-                || reachable_struct_id(&rendered, &s.module_source)
-        }
-    });
-    let kept_past_use = {
-        let type_table = project.type_table.borrow();
-        variant_decls_kept_past_use(project, &type_table)
-    };
-||||||| 61f109b25
-        type_table
-            .find_struct_by_name(rendered, module_source)
-            .is_some_and(|id| analysis.types.contains(&id))
-    };
-    project.structs.retain(|s| {
-        if s.monomorph_info.is_none() {
-            analysis
-                .struct_exact
-                .contains(&(s.name.clone(), s.module_source.clone()))
-                || analysis.generic_instance_names.contains(s.name.as_str())
-                || analysis.struct_monomorph_bases.contains(s.name.as_str())
-        } else {
-            let rendered = monomorph_render(s).unwrap_or_else(|| s.name.clone());
-            analysis.struct_monomorph_names.contains(s.name.as_str())
-                || analysis.struct_monomorph_names.contains(rendered.as_str())
-                || reachable_struct_id(&rendered, &s.module_source)
-        }
-    });
-=======
         project
             .structs
             .retain(|s| analysis.keeps_struct(s, &type_table));
     }
->>>>>>> origin/main
+    // Loop-invariant, and the loop it would otherwise sit in is this pass's hot
+    // spot: it reads `project` and the type table, neither of which the retains
+    // below mutate.
+    let kept_past_use = {
+        let type_table = project.type_table.borrow();
+        variant_decls_kept_past_use(project, &type_table)
+    };
     project.variants.retain(|v| {
         analysis
             .variant_exact

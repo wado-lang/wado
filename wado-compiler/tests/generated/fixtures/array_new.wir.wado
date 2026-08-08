@@ -55,13 +55,13 @@ struct core:prelude//List<u64> {  // TypeId(12)
     mut used: i32,
 }
 
-struct core:prelude//List<f64> {  // TypeId(13)
-    mut repr: ref Array<f64>,
+struct core:prelude//List<i32> {  // TypeId(13)
+    mut repr: ref Array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//List<i32> {  // TypeId(14)
-    mut repr: ref Array<i32>,
+struct core:prelude//List<f64> {  // TypeId(14)
+    mut repr: ref Array<f64>,
     mut used: i32,
 }
 
@@ -191,15 +191,15 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::app
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(77)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(78)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<f64>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<f64>") -> [i32, f64];  // TypeId(78)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(79)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(79)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(80)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(80)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<f64>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<f64>") -> [i32, f64];  // TypeId(81)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(81)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(82)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(82)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -275,11 +275,11 @@ fn "array_new.wado/array_new_data_f64"() with Stdout {
     __iter_9 = struct.new "core:prelude/slice.wado//ArrayIter<f64>" { repr: a.repr, index: 0, end: 128 };
     b0: block {
         l1: loop {
-            let __sroa___match_23_discriminant: i32;
-            let __sroa___match_23_payload_0: f64;
-            multivalue_bind [__sroa___match_23_discriminant, __sroa___match_23_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<f64>^Iterator::next$spec0"(__iter_9);
-            if __sroa___match_23_discriminant == 0 {
-                sum = sum + __sroa___match_23_payload_0;
+            let __match_23_mv_0: i32;
+            let __match_23_mv_1: f64;
+            multivalue_bind [__match_23_mv_0, __match_23_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<f64>^Iterator::next$spec0"(__iter_9);
+            if __match_23_mv_0 == 0 {
+                sum = sum + __match_23_mv_1;
             } else {
                 break b0;
             }
@@ -333,11 +333,11 @@ fn "array_new.wado/array_new_data_i32"() with Stdout {
     __iter_11 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: a.repr, index: 0, end: 128 };
     b4: block {
         l5: loop {
-            let __sroa___match_27_discriminant: i32;
-            let __sroa___match_27_payload_0: i32;
-            multivalue_bind [__sroa___match_27_discriminant, __sroa___match_27_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(__iter_11);
-            if __sroa___match_27_discriminant == 0 {
-                sum = sum + __sroa___match_27_payload_0;
+            let __match_27_mv_0: i32;
+            let __match_27_mv_1: i32;
+            multivalue_bind [__match_27_mv_0, __match_27_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(__iter_11);
+            if __match_27_mv_0 == 0 {
+                sum = sum + __match_27_mv_1;
             } else {
                 break b4;
             }
