@@ -412,7 +412,7 @@ to the WIR side — more than it took.
 
 Closing those shapes one at a time took the leftovers to zero. Counted at `-O2`
 with `WADO_TRACE=sroa_variant_return`, `widen` is what the WIR pass still
-confirmed behind the NIR one on the run that cleared step 4 for deletion:
+confirmed behind the NIR one on the run that cleared `widen.rs` for deletion:
 
 | program            | widen | slot-flatten |
 | ------------------ | ----- | ------------ |
@@ -428,8 +428,8 @@ confirmed behind the NIR one on the run that cleared step 4 for deletion:
 | `fts`              | 0     | 0            |
 | `http_routing`     | 0     | 0            |
 
-The one slot-flatten on `gale_gen` is by design — that pass stays (step 5).
-`widen` is dead on every workload, which is what makes step 4 reachable.
+The one slot-flatten on `gale_gen` is by design — that pass stays (step 4).
+`widen` is dead on every workload, which is what made deleting it safe.
 
 The NIR pass pays for padding and `Some(_)` / `None` nodes at return sites that
 the WIR pass did not, because it worked in WIR directly. No rebox fires on any
@@ -554,11 +554,7 @@ Each step lands and is measured before the next.
       `wir_optimize::sroa_variant_returns` still running behind it. What it
       still found was the worklist, and
       [closing it](#how-the-87-function-gap-closed) took it to zero.
-- [x] Step 4 — `widen.rs` and `return_temp.rs` are deleted, `wrapper.rs` is
-      down to `unwrap_to_inner_call`, `layout.rs` shrank: 4,188 lines to 1,735.
-      The count gate held — `widen = 0` everywhere. Size and throughput are
-      unmeasured; both need `mise run benchmark-all` on a quiet machine.
-- [x] Step 5 — `slot_flatten` stays in WIR, and the measurement is why. It
+- [x] Step 4 — `slot_flatten` stays in WIR, and the measurement is why. It
       splits a `ref W` result slot whose `W` is itself a small variant, and it
       fires 1–2 times per benchmark — once across `gale_gen`, twice on
       `cbor_twitter`. A NIR analogue means a tree-shaped layout through
