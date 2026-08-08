@@ -360,6 +360,8 @@ global global:core:prelude/traits.wado::__const_obj_86: ref null "core:prelude/s
 global global:core:serde::__const_obj_98: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 108, 117, 101), used: 4 };
 global global:core:serde::__const_obj_99: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(71, 114, 101, 101, 110), used: 5 };
 global global:core:serde::__const_obj_100: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 100), used: 3 };
+global mut global:core:serde::__const_obj_101: ref null "tuple//[core:prelude/traits.wado/EnumCase<serde_json_synth_enum.wado/Color>, core:prelude/traits.wado/EnumCase<serde_json_synth_enum.wado/Color>, core:prelude/traits.wado/EnumCase<serde_json_synth_enum.wado/Color>]" = ref.null none;
+global mut global:core:serde::__const_obj_105: ref null "tuple//[core:prelude/traits.wado/EnumCase<serde_json_synth_enum.wado/Color>, core:prelude/traits.wado/EnumCase<serde_json_synth_enum.wado/Color>, core:prelude/traits.wado/EnumCase<serde_json_synth_enum.wado/Color>]" = ref.null none;
 
 fn "serde_json_synth_enum.wado/__test_0_enum_serialize_red"() {
     let c: ref "core:prelude/types.wado//Box<serde_json_synth_enum.wado/Color>";
@@ -2223,6 +2225,9 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>::len"(self) {
 }
 
 fn "core:serde/serde_json_synth_enum.wado/Color^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
+    if ref.is_null(global:core:serde::__const_obj_101) {
+        global:core:serde::__const_obj_101 = "serde_json_synth_enum.wado/serde_json_synth_enum.wado/Color^ReflectEnum::members"();
+    }
     if self.value == 0 {
         return "core:json/write_escaped_string"(s, global:core:serde::__const_obj_100), ref.null none;
     }
@@ -2236,6 +2241,7 @@ fn "core:serde/serde_json_synth_enum.wado/Color^Serialize::serialize<core:json/J
 }
 
 fn "core:serde/serde_json_synth_enum.wado/Color^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+    let members: ref "tuple//[core:prelude/traits.wado/EnumCase<serde_json_synth_enum.wado/Color>, core:prelude/traits.wado/EnumCase<serde_json_synth_enum.wado/Color>, core:prelude/traits.wado/EnumCase<serde_json_synth_enum.wado/Color>]";
     let __qm_v_2: ref "core:json//JsonVariantAccess";
     let __qm_e_3: ref "core:serde//DeserializeError";
     let va_4: ref "core:json//JsonVariantAccess";
@@ -2275,6 +2281,10 @@ fn "core:serde/serde_json_synth_enum.wado/Color^Deserialize::deserialize<core:js
     __qm_v_56 = ref.as_non_null(__sroa___vr_6_1);
     __sroa___vr_33_1 = struct.new "core:serde//CaseKey::Name" { discriminant: 1, payload_0: __qm_v_56 };
     __qm_v_6 = ref.as_non_null(__sroa___vr_33_1);
+    if ref.is_null(global:core:serde::__const_obj_105) {
+        members = "serde_json_synth_enum.wado/serde_json_synth_enum.wado/Color^ReflectEnum::members"();
+        global:core:serde::__const_obj_105 = members;
+    }
     matched_12 = (if ref.test "core:serde//CaseKey::Disc"(__qm_v_6) -> bool {
         ref.cast "core:serde//CaseKey::Disc"(__qm_v_6).payload_0 == 0;
     } else {
