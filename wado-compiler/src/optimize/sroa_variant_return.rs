@@ -2182,7 +2182,11 @@ fn rewrite_call_sites(
             for (&local, &f) in &bound {
                 let tuple_type = candidates[&f].layout.tuple_type;
                 func.locals[local as usize].type_id = tuple_type;
+                let init = let_value_of(&body, local);
                 retype_let(&mut body, local, tuple_type);
+                if let Some(init) = init {
+                    retype_value_spine(&mut body, init, tuple_type);
+                }
             }
             let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
             let root = body.root;
@@ -2245,6 +2249,73 @@ fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) {
             node.type_id = tuple_type;
         }
     }
+}
+
+/// Retype the branch spine a binding's value flows through. `tail_call_sites`
+/// admits a call reached through an `if` / `match` / `switch` arm, so the nodes
+/// carrying that value to the binding yield the tuple now and have to say so —
+/// otherwise the block's declared result still names the variant its arms
+/// stopped producing.
+fn retype_value_spine(body: &mut Body, op: Operand, tuple_type: TypeId) {
+    let Some(e) = op.as_expr() else {
+        return;
+    };
+    match &body.exprs[e].kind {
+        ExprKind::Call { .. } => {}
+        ExprKind::Block(b) => {
+            let b = *b;
+            body.exprs[e].type_id = tuple_type;
+            retype_block_tail_spine(body, b, tuple_type);
+        }
+        ExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            let (then_branch, else_branch) = (*then_branch, *else_branch);
+            body.exprs[e].type_id = tuple_type;
+            retype_block_tail_spine(body, then_branch, tuple_type);
+            if let Some(eb) = else_branch {
+                retype_block_tail_spine(body, eb, tuple_type);
+            }
+        }
+        ExprKind::Match { arms, .. } => {
+            let bodies: Vec<Operand> = arms.iter().map(|a| a.body).collect();
+            body.exprs[e].type_id = tuple_type;
+            for arm_body in bodies {
+                retype_value_spine(body, arm_body, tuple_type);
+            }
+        }
+        ExprKind::Switch { arms, default, .. } => {
+            let (arms, default) = (arms.clone(), *default);
+            body.exprs[e].type_id = tuple_type;
+            for arm in arms {
+                retype_block_tail_spine(body, arm, tuple_type);
+            }
+            retype_block_tail_spine(body, default, tuple_type);
+        }
+        _ => {}
+    }
+}
+
+fn retype_block_tail_spine(body: &mut Body, block: BlockId, tuple_type: TypeId) {
+    let Some(&last) = body.blocks[block].stmts.last() else {
+        return;
+    };
+    if let StmtKind::Expr(inner) = body.stmts[last].kind {
+        retype_value_spine(body, inner, tuple_type);
+    }
+}
+
+/// The initializer a local is bound to, so the rewrite can retype the branch
+/// spine that carries the value to it.
+fn let_value_of(body: &Body, local: u32) -> Option<Operand> {
+    body.stmts.values().find_map(|stmt| match &stmt.kind {
+        StmtKind::Let {
+            local_index, value, ..
+        } if *local_index == local => Some(*value),
+        _ => None,
+    })
 }
 
 /// Read-only context for the call-site rewrite over one body.
