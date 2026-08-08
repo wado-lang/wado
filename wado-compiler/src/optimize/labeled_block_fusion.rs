@@ -1390,8 +1390,6 @@ fn transform_lb_stmt(engine: &mut Engine, s: StmtId, f: &Fusion, out: &mut Vec<S
         };
 
         if selected {
-            // Emit a fresh clone of `then_block`'s stmts, with the temp's reads
-            // redirected to the locals just bound.
             let subst_then = engine.clone_block(f.then_block);
             subst_temp_reads_in_block(engine, subst_then, f);
             // Move the cloned stmts into `out` and empty the source block.

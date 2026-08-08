@@ -41,11 +41,6 @@
 //!
 //! A pad is never read — every reader tests the tag first.
 //!
-//! ## Termination
-//!
-//! A rewritten function returns a tuple, so it can never be a candidate again.
-//! The candidate set strictly shrinks, and the pass cannot keep the loop alive.
-//!
 //! ## Soundness does not rest on validation
 //!
 //! Validation is a snapshot of the call sites that exist when it runs, and
@@ -2129,9 +2124,6 @@ fn rewrite_call_sites(
             continue;
         };
         let span = func.span;
-        // Every call to a rewritten callee now yields the tuple, wherever it
-        // sits — a `let` initializer, a tail `return`, or the scrutinee about
-        // to be hoisted into a `let`.
         let mut changed = retype_candidate_calls(&mut body, candidates);
         // Hoisting appends the tuple temps; it never renumbers an existing
         // local, so a `Rebind` taken here still describes every payload binding.

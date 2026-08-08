@@ -114,68 +114,11 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
         .collect();
 
     let candidates = loop {
-        // Phase 1: candidate identification — body-only checks.
-        let mut candidates: IndexMap<usize, CandidateInfo> = IndexMap::default();
-        for (idx, func_rc) in project.functions.iter().enumerate() {
-            let func = func_rc.borrow();
-            if let Some(info) = candidate_info(&func, &type_table, structs, &tail_ok) {
-                candidates.insert(idx, info);
-            }
-        }
+        let candidates = collect_candidates(project, &type_table, structs, &tail_ok);
         if candidates.is_empty() {
             return false;
         }
-
-        // Phase 2: call-site validation across every function body.
-        let candidate_ids: IndexMap<FuncId, usize> = candidates
-            .keys()
-            .filter_map(|&idx| {
-                let func = project.functions[idx].borrow();
-                func.id.map(|id| (id, idx))
-            })
-            .collect();
-
-        let mut invalid: IndexSet<usize> = IndexSet::default();
-        for func_rc in &project.functions {
-            let func = func_rc.borrow();
-            let Some(body) = &func.body else {
-                continue;
-            };
-            // A `return g(x)` is only a pass-through when this function has the
-            // same N results to pass it through; otherwise the call has no
-            // aggregate to bind and stays an escape.
-            //
-            // Read from `tail_ok`, never from this round's candidate set: a
-            // candidate can still be invalidated *later in this same round*, and
-            // sparing `g` on behalf of a caller that then does not take the ABI
-            // leaves the caller pushing N results through a one-ref signature.
-            // At the fixed point `tail_ok` is exactly the surviving set, so the
-            // two sides of the rule agree.
-            let passes_through = func.id.and_then(|id| tail_ok.get(&id)).copied();
-            validate_uses_in_block(
-                body,
-                body.root,
-                &candidate_ids,
-                &candidates,
-                passes_through,
-                &mut invalid,
-            );
-        }
-        // Global initializers are arena bodies too; scan them so a candidate consumed
-        // there is validated with the same let-tracking logic (matching dae / drve's
-        // coverage). Benign today — lower hoisting keeps aggregate builders out of
-        // initializers — but the coverage is now uniform across every body.
-        for global in &project.globals {
-            let body = global.init.slot_expr().body();
-            validate_uses_in_block(
-                body,
-                body.root,
-                &candidate_ids,
-                &candidates,
-                None,
-                &mut invalid,
-            );
-        }
+        let invalid = refute_candidates(project, &candidates, &tail_ok);
 
         // Intersected with the assumed set, so the chain strictly decreases and
         // the loop terminates. Both halves of the tail-call rule read `tail_ok`,
@@ -206,7 +149,6 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
         tail_ok = survivors;
     };
 
-    // Phase 3: apply.
     drop(type_table);
     let mut changed = false;
     for (idx, info) in candidates {
@@ -218,6 +160,76 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
         changed = true;
     }
     changed
+}
+
+fn collect_candidates(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    structs: &[NirStruct],
+    tail_ok: &IndexMap<FuncId, TypeId>,
+) -> IndexMap<usize, CandidateInfo> {
+    let mut out = IndexMap::default();
+    for (idx, func_rc) in project.functions.iter().enumerate() {
+        let func = func_rc.borrow();
+        if let Some(info) = candidate_info(&func, type_table, structs, tail_ok) {
+            out.insert(idx, info);
+        }
+    }
+    out
+}
+
+/// The candidates some call site refutes, over every function body and every
+/// global initializer — the latter carry arena bodies too, and are scanned with
+/// the same let-tracking as `dae` and `drve` do.
+///
+/// A `return g(x)` is only a pass-through when the enclosing function has the
+/// same N results to pass it through; otherwise the call has no aggregate to
+/// bind and stays an escape. That reads `tail_ok`, never this round's candidate
+/// set: a candidate can still be invalidated later in the same round, and
+/// sparing `g` on behalf of a caller that then does not take the ABI leaves the
+/// caller pushing N results through a one-ref signature. At the fixed point
+/// `tail_ok` is exactly the surviving set, so the two sides of the rule agree.
+fn refute_candidates(
+    project: &NirPackage,
+    candidates: &IndexMap<usize, CandidateInfo>,
+    tail_ok: &IndexMap<FuncId, TypeId>,
+) -> IndexSet<usize> {
+    let candidate_ids: IndexMap<FuncId, usize> = candidates
+        .keys()
+        .filter_map(|&idx| {
+            let func = project.functions[idx].borrow();
+            func.id.map(|id| (id, idx))
+        })
+        .collect();
+
+    let mut invalid: IndexSet<usize> = IndexSet::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let Some(body) = &func.body else {
+            continue;
+        };
+        let passes_through = func.id.and_then(|id| tail_ok.get(&id)).copied();
+        validate_uses_in_block(
+            body,
+            body.root,
+            &candidate_ids,
+            candidates,
+            passes_through,
+            &mut invalid,
+        );
+    }
+    for global in &project.globals {
+        let body = global.init.slot_expr().body();
+        validate_uses_in_block(
+            body,
+            body.root,
+            &candidate_ids,
+            candidates,
+            None,
+            &mut invalid,
+        );
+    }
+    invalid
 }
 
 /// Body-only candidate check.

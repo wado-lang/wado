@@ -471,7 +471,7 @@ confirmed behind the NIR one on the run that cleared `widen.rs` for deletion:
 | `fts`              | 0     | 0            |
 | `http_routing`     | 0     | 0            |
 
-The one slot-flatten on `gale_gen` is by design — that pass stays (step 4).
+The one slot-flatten on `gale_gen` is by design — that pass stays.
 `widen` is dead on every workload, which is what made deleting it safe.
 
 The NIR pass pays for padding and `Some(_)` / `None` nodes at return sites that
@@ -480,7 +480,7 @@ workload.
 
 Read a widened-function count only from a paired run — same build, flag on and
 off. An earlier draft recorded `sqlite_parse` dropping from 67 to 1 and blamed
-step 2; a merge-base build widens 1 too.
+the `multi_value_return` gate lift; a merge-base build widens 1 too.
 
 ### Termination and monotonicity
 
@@ -496,8 +496,7 @@ Validation sees the call sites that exist when it runs. `nir/inline` runs later
 in the same iteration and can plant new ones — a `let mut t = <block ending in
 a candidate call>` whose local still carries the variant the callee no longer
 returns. The signature is already committed by then, so this is invalid Wasm,
-not a missed optimization, and it is the reason the pass is staged off today
-(`serde_json_synth_variant.wado`).
+not a missed optimization (`serde_json_synth_variant.wado`).
 
 Placing the pass _after_ `nir/inline` does not fix it: a callee rewritten in one
 iteration cannot be un-rewritten when the next iteration plants a site, whatever
@@ -539,10 +538,8 @@ Three rules make it work, and all three were learned by getting them wrong:
   the site rewrite retypes _every_ call to a rewritten callee before deciding
   which consumers it can rewrite, so that type says nothing about the consumer.
 
-With those in place the E2E suite runs clean with the pass enabled, and emits
-no invalid Wasm anywhere. The failures left are `opt_sroa_variant_*` fixtures
-pinning WIR-pass local names this pass does not produce — expectation churn,
-which step 3 updates.
+With those in place the E2E suite runs clean and emits no invalid Wasm
+anywhere.
 
 ### A payload binding that is a reference cell
 
@@ -586,77 +583,43 @@ re-pads into the caller's own layout. Each function's returns are rewritten to
 its own layout independently, so no cross-function agreement beyond "same
 variant type" is needed — which is what the tail-call rule already requires.
 
-## Staging
+### `slot_flatten` stays in WIR
 
-Each step lands and is measured before the next.
+It splits a `ref W` result slot whose `W` is itself a small variant, and it
+fires 1–2 times per benchmark — once across `gale_gen`, twice on `cbor_twitter`.
+A NIR analogue means a tree-shaped layout through `compute_layout`,
+`build_result_tuple`, the call-site reconstruction and the arity cap, for those
+one or two functions. This pass _declines_ the shape instead, which restores the
+WIR splits it had been displacing.
 
-- [x] Step 1 — the pass behind a staging flag, off by default. The
-      candidate-set comparison is done (see above): the two passes together
-      scalarize more than the WIR pass alone on every serde workload.
-- [x] Step 2 — lift the `is_trait_method` gate and the arity cap in
-      `multi_value_return`, on their own. Landed: full E2E green.
-      `i128^Mul::mul` and its siblings now return `[u64, i64]` instead of
-      allocating an `i128` struct per operation.
-- [x] Step 3 — the pass is on and the flag is gone, with
-      `wir_optimize::sroa_variant_returns` still running behind it. What it
-      still found was the worklist, and
-      [closing it](#how-the-87-function-gap-closed) took it to zero.
-- [x] Step 4 — `slot_flatten` stays in WIR, and the measurement is why. It
-      splits a `ref W` result slot whose `W` is itself a small variant, and it
-      fires 1–2 times per benchmark — once across `gale_gen`, twice on
-      `cbor_twitter`. A NIR analogue means a tree-shaped layout through
-      `compute_layout`, `build_result_tuple`, the call-site reconstruction and
-      the arity cap, for those one or two functions. Instead this pass
-      _declines_ the shape, which restores the WIR splits it had been
-      displacing.
+### A settled binding is not a `mut` binding
 
-## How the 87-function gap closed
-
-At step 3 `widen.rs` still widened 87 functions on `cbor_twitter` — more than
-the 74 this pass took — and the retire table was premature. Joining the WIR
-pass's applied list against this pass's decline reasons split them three ways,
-and each turned out to be one shape, not dozens of problems:
-
-| group                          | count | what it actually was                                          |
-| ------------------------------ | ----- | ------------------------------------------------------------- |
-| no layout                      | 30    | `Result<Option<i32>, E>` — a payload that is itself a variant |
-| refuted at a call site         | 32    | a `let mut` binding the call, never assigned again            |
-| never reached this pass at all | 25    | nothing — a join artifact                                     |
-
-The 25 were not a gap. WIR function names carry their module path and NIR names
-are bare, so the join dropped them; they were candidates all along.
-
-The 32 were one rule. A `let mut t = f(x)` that nothing ever assigns is an
-immutable binding, and both this pass and `multi_value_return` were refusing it
-on the `mut` alone. `settled_locals` accepts it, and the two passes share the
+A `let mut t = f(x)` that nothing ever assigns is an immutable binding, and
+refusing it on the `mut` alone left 32 functions on `cbor_twitter` boxed.
+`settled_locals` accepts it, and this pass and `multi_value_return` share the
 predicate — a site only one of them accepts leaves the tuple boxed, which is
-worse than the variant it replaced. The rule has to count writes _through_ a
-local, not just assignments to it: `h.seen = h.inner.next()` makes `h`'s `mut`
-load-bearing, and treating `h` as settled split a local the field write then had
-nowhere to land in, trapping at `-O0`.
+worse than the variant it replaced.
 
-The 30 were the payload rule. `Option<i32>` as a case payload was declined and
-handed to the WIR side by design. Giving the
-inner variant its own tag and slots in the outer tuple takes them here instead.
+The rule counts writes _through_ a local, not just assignments to it:
+`h.seen = h.inner.next()` makes `h`'s `mut` load-bearing, and treating `h` as
+settled splits a local the field write then has nowhere to land in, trapping at
+`-O0`.
+
+### A variant payload takes its own tag and slots
+
+`Result<Option<i32>, E>` — a payload that is itself a variant — accounted for 30
+more. The inner variant gets its own tag and slots in the outer tuple.
+
 A nested layout that _reconstructs_ the inner value at the call site was
 implemented first and discarded: it produced exactly the intended signatures and
 cost more than it recovered, because a site binding the whole inner value has to
-rebuild what the callee just took apart. The form that pays
-pushes the destructure into the call site, which is what `slot_flatten` does —
-so a payload the split would still reach is left to it.
+rebuild what the callee just took apart. The form that pays pushes the
+destructure into the call site, which is what `slot_flatten` does — so a payload
+the split would still reach is left to it.
 
-The last four functions on `gale_gen` were the reference-cell refusal above:
-39 arm bindings declined for an address-taken local, none of them nested.
+### The return temp belongs to `field_scalarize`
 
-Nothing in that list argued the design was wrong; it argued the measurement had
-to come before the deletion.
-
-## Open questions
-
-### The return temp — resolved in `field_scalarize`
-
-Recorded here because the answer is not where this WEP first looked. The temp is
-not this pass's to sink: `field_scalarize` hoists the field write-back _after_
+The temp is not this pass's to sink: `field_scalarize` hoists the field write-back _after_
 the returns are already tuple literals, one `let` per branch, so the local
 carries two defs and two reads and no single-def rule in this pass reaches it.
 Sinking the `VariantConstruct` wrapper at this pass's own rewrite site was tried

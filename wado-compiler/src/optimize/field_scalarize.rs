@@ -1845,8 +1845,7 @@ fn bind_for_sync(
             is_reactive: false,
             type_id,
             value,
-            // The temp captures a fresh r-value; no deep value-copy is
-            // appropriate (we just bind whatever was produced).
+            // The temp captures a fresh r-value, so no deep value-copy applies.
             skip_value_copy: true,
         },
         span,
@@ -3195,7 +3194,6 @@ fn emit_convergence_at_expr_end(
         body.exprs[arm_e].kind = ExprKind::Block(blk);
         return;
     }
-    // Non-unit body: bind the value so the Block evaluates to it after sync.
     let original_kind = std::mem::replace(&mut body.exprs[arm_e].kind, ExprKind::Dead);
     let original = push_expr(body, original_kind, body_type, body_span);
     let assigned = sync_assigned_locals(body, &sync_stmts);
