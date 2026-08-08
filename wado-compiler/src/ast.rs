@@ -2593,10 +2593,9 @@ pub struct TupleComprehensionExpr {
     pub id: AstId,
     /// Element binding: an ident, or `[i, v]` under `.enumerate()`.
     pub binding: Pattern,
-    /// The source tuple. `.enumerate()` is stripped into `is_enumerate`.
+    /// The source tuple, as written — `t.enumerate()` included, so the form is
+    /// recognised where the statement for-of recognises it.
     pub iterable: Expr,
-    /// Whether the iterable was spelled `tuple.enumerate()`.
-    pub is_enumerate: bool,
     /// The per-element expression, written inside braces.
     pub body: Expr,
     pub span: Span,

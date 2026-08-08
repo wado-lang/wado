@@ -3915,7 +3915,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
 
         let span = comp.span;
-        let iterable = self.reify_expr(&comp.iterable, ctx, None);
+        let (source, is_enumerate) = super::Elaborator::<H>::split_enumerate(&comp.iterable);
+        let iterable = self.reify_expr(source, ctx, None);
         let unique_id = ctx.next_local;
 
         let elem_type = super::Elaborator::<H>::comprehension_pack_elem(
@@ -3923,7 +3924,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             iterable.type_id,
         )
         .unwrap_or(TypeTable::UNKNOWN);
-        let binding_type = if comp.is_enumerate {
+        let binding_type = if is_enumerate {
             self.tysys
                 .type_table
                 .borrow_mut()
@@ -3989,8 +3990,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
-        let index_binding = comp
-            .is_enumerate
+        let index_binding = is_enumerate
             .then(|| super::Elaborator::<H>::enumerate_index_binding_name(&comp.binding))
             .flatten();
         if let Some(name) = &index_binding {
@@ -4010,7 +4010,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 destructure,
                 body: Box::new(body),
                 unique_id,
-                is_enumerate: comp.is_enumerate,
+                is_enumerate,
             },
             recorded_type,
             span,

@@ -4506,12 +4506,6 @@ impl Parser {
         let binding = self.parse_pattern()?;
         self.expect(&TokenKind::Of)?;
         let iterable = self.parse_expr_no_struct_literal()?;
-        let (iterable, is_enumerate) = match iterable {
-            Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
-                (mc.receiver, true)
-            }
-            other => (other, false),
-        };
         self.expect(&TokenKind::LBrace)?;
         let body = self.parse_expr()?;
         self.expect(&TokenKind::RBrace)?;
@@ -4522,7 +4516,6 @@ impl Parser {
                 id,
                 binding,
                 iterable,
-                is_enumerate,
                 body,
                 span: start_span.merge(&end_span),
             },

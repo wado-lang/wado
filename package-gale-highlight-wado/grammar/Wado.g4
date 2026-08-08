@@ -576,7 +576,8 @@ fieldInit
     ;
 
 tupleOrArrayLiteral
-    : '[' (arrayElement (',' arrayElement)* ','?)? ']'
+    : '[' 'for' 'let' pattern 'of' exprNoStruct '{' expression '}' ']'
+    | '[' (arrayElement (',' arrayElement)* ','?)? ']'
     ;
 
 arrayElement

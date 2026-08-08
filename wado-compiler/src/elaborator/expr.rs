@@ -4113,6 +4113,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Split a `t.enumerate()` iterable into its receiver and the flag, leaving
+    /// any other expression alone. The suffix stays in the AST so the formatter
+    /// round-trips it, matching how the statement for-of reads it.
+    pub(super) fn split_enumerate(iterable: &Expr) -> (&Expr, bool) {
+        match iterable {
+            Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
+                (&mc.receiver, true)
+            }
+            other => (other, false),
+        }
+    }
+
     /// The pack a comprehension's iterable walks: its `(name, index)` and the
     /// type the binding takes for one element.
     ///
@@ -4159,7 +4171,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         comp: &ast::TupleComprehensionExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        let iterable_type = self.resolve_expr(&comp.iterable, ctx, None);
+        let (source, is_enumerate) = Self::split_enumerate(&comp.iterable);
+        let iterable_type = self.resolve_expr(source, ctx, None);
         let Some((pack_name, pack_index, elem_type)) = self.comprehension_pack(iterable_type)
         else {
             let type_name = self.tysys.type_table.borrow().type_name(iterable_type);
@@ -4172,7 +4185,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         };
 
-        let binding_type = if comp.is_enumerate {
+        let binding_type = if is_enumerate {
             self.tysys
                 .type_table
                 .borrow_mut()
@@ -4183,8 +4196,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         ctx.enter_scope();
         self.bind_comprehension_pattern(&comp.binding, binding_type, comp.span, ctx);
-        let index_binding = comp
-            .is_enumerate
+        let index_binding = is_enumerate
             .then(|| Self::enumerate_index_binding_name(&comp.binding))
             .flatten();
         if let Some(name) = &index_binding {

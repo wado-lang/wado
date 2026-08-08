@@ -1707,9 +1707,6 @@ impl<'a> Unparser<'a> {
         self.unparse_pattern(&c.binding);
         self.output.push_str(" of ");
         self.unparse_expr(&c.iterable);
-        if c.is_enumerate {
-            self.output.push_str(".enumerate()");
-        }
         self.output.push_str(" { ");
         self.unparse_expr(&c.body);
         self.output.push_str(" }]");
@@ -3331,9 +3328,6 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
             unparse_pattern_into(&c.binding, output);
             output.push_str(" of ");
             unparse_expr_into(&c.iterable, output);
-            if c.is_enumerate {
-                output.push_str(".enumerate()");
-            }
             output.push_str(" { ");
             unparse_expr_into(&c.body, output);
             output.push_str(" }]");
