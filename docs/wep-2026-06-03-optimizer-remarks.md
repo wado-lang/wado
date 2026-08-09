@@ -96,9 +96,9 @@ shallow spine copy, lowered as a `builtin::array_clone` /
 `array_clone_shallow` call on the backing array. So a value copy that survives
 optimization appears in the final NIR as one of: a remaining `$value_copy$T(...)`
 call, or an `array_clone` / `array_clone_shallow` / `copy_value` call. The remark
-collects all of these in entry-module functions. (`array_copy` is excluded — it
-is bulk buffer movement inside stdlib helpers like `String::push`, not a
-value-semantic copy.) Example output (`--log-level info`), where `b` is a
+collects all of these in the entry package's functions. (`array_copy` is
+excluded — it is bulk buffer movement inside stdlib helpers like `String::push`,
+not a value-semantic copy.) Example output (`--log-level info`), where `b` is a
 `List<i32>` copied then mutated:
 
 ```
@@ -169,10 +169,10 @@ the first two kinds.
 ### MVP scope
 
 Shipped: surviving value copies. `remarks::collect_value_copy_remarks` walks the
-optimized NIR's entry-module functions, collects residual `$value_copy$T` calls
+optimized NIR's entry-package functions, collects residual `$value_copy$T` calls
 and `array_clone` / `array_clone_shallow` / `copy_value` calls, and emits one
 info-level remark per survivor anchored to the enclosing statement.
-`logger.remark` carries the span and the entry filename; tests
+`logger.remark` carries the span and the module's own filename; tests
 (`wado-compiler/tests/remarks.rs`) pin the behavior at `-O2` — a `List<i32>`
 copied then mutated fires one remark on the copy line; a `Point` that SROA
 scalarizes fires none. No size threshold yet: a synthesized copy helper only
@@ -196,9 +196,14 @@ Shipped:
 
 - [x] Remark surface: info-level `remark:` diagnostic via `logger.remark`, gated
       by `--log-level` (no dedicated flag). `Code::Remark`.
-- [x] Final-NIR walk (`remarks::collect_value_copy_remarks`) over entry-module
-      functions, detecting `$value_copy$T` and `array_clone` / `array_clone_shallow`
-      / `copy_value` survivors, anchored to the enclosing statement span.
+- [x] Final-NIR walk (`remarks::collect_value_copy_remarks`) over the entry
+      package's functions, detecting `$value_copy$T` and `array_clone` /
+      `array_clone_shallow` / `copy_value` survivors, anchored to the enclosing
+      statement span.
+- [x] The whole entry package, not just its entry point:
+      `ModuleSource::is_entry_package` draws the line at the package boundary, so
+      a dependency and the stdlib stay out. A `Remark` carries its module, since
+      a span alone cannot say which file it is in.
 - [x] Surviving value-copy remarks with why + where, plus the survives / elided
       test pair at `-O2` (`wado-compiler/tests/remarks.rs`).
 
@@ -209,7 +214,6 @@ Next:
 - [ ] Classify each survivor's actionability (read-only copy → suggest `&`;
       removable escape → suggest restructuring; otherwise explain why the cost is
       required) so a suggestion is offered only when a fix would actually help.
-- [ ] Broaden beyond the entry module to all user (non-stdlib) modules.
 
 Trade-offs and boundaries:
 

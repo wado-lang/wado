@@ -1524,9 +1524,16 @@ fn compile_after_load<H: CompilerHost>(
             .into_iter()
             .chain(remarks::collect_param_gate_remarks(&nir));
         for remark in residual {
+            // The entry point's own `source_path` is empty for a synthetic name
+            // (`<stdin>`), so it keeps the filename the caller supplied; every
+            // other module in the package names itself.
+            let file = match remark.module {
+                module_source::ModuleSource::EntryPoint { .. } => entry_filename.clone(),
+                other => other.source_path(),
+            };
             logger.remark(
                 remark.message,
-                compiler_host::DiagnosticSpan::from_span(&remark.span, Some(&entry_filename)),
+                compiler_host::DiagnosticSpan::from_span(&remark.span, Some(&file)),
             );
         }
     }

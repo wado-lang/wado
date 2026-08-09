@@ -228,8 +228,9 @@ wado check --log-level info file.wado              # no Wasm emitted; fastest
 wado check --world test --log-level info lib.wado  # a library with test blocks
 ```
 
-Two kinds are reported, both only for the entry module — stdlib internals would
-drown out your own code:
+Two kinds are reported, both across the whole entry package — its entry point
+and every local module it reaches. A dependency, `core:` and `wasi:` are someone
+else's source and stay out, so their internals cannot drown out yours:
 
 - A **value-semantic copy that survived**. Wado deep-copies aggregates on
   assignment, argument passing, and return; most are optimized away, and the

@@ -17,11 +17,11 @@
 //! walking the optimized NIR yields the residual-copy set with exact source
 //! locations.
 //!
-//! Detection is restricted to the entry module's functions. This excludes the
-//! pervasive buffer copies inside stdlib helpers (`String::push` growth, …) and,
-//! as a current limitation, also copies in other user modules of a multi-file
-//! program (see the WEP's "broaden beyond the entry module" item). `array_copy`
-//! is excluded regardless: it is bulk buffer movement, not a value-semantic copy.
+//! Detection covers the entry package — the entry point and the local modules
+//! it reaches — and nothing else. A dependency, `core:` and `wasi:` are someone
+//! else's source, and their internals (`String::push` growth, …) would drown
+//! out the program under compilation. `array_copy` is excluded regardless: it
+//! is bulk buffer movement, not a value-semantic copy.
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -35,12 +35,15 @@ use crate::token::Span;
 pub struct Remark {
     /// The remark text, without the `remark:` prefix the logger adds.
     pub message: String,
-    /// Where the copy survives, in the original source.
+    /// The module the span belongs to. A span carries no file, and the entry
+    /// package is more than one.
+    pub module: ModuleSource,
+    /// Where the cost survives, in the original source.
     pub span: Span,
 }
 
 /// Collect remarks for value-semantic copies that survive optimization,
-/// restricted to functions defined in the entry module.
+/// restricted to functions the entry package defines.
 pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
     let value_copy_set = package.value_copy_helper_types();
     // Callee descriptor by `func_id` (the call node carries no `FunctionRef`).
@@ -58,11 +61,9 @@ pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
     let mut remarks = Vec::new();
     for func_rc in &package.functions {
         let func = func_rc.borrow();
-        // A value-copy helper is synthesized in the module that defines the
-        // copied type, so a helper for an entry-module type also lives in the
-        // entry module. Skipping helper *bodies* keeps the copies inside a
-        // helper from being reported against the helper itself.
-        if func.module_source != package.entry_module_source || func.is_value_copy() {
+        // Skipping helper *bodies* keeps the copies inside a value-copy helper
+        // from being reported against the helper itself.
+        if !func.module_source.is_entry_package() || func.is_value_copy() {
             continue;
         }
         let Some(body) = &func.body else {
@@ -72,6 +73,7 @@ pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
             value_copy_set: &value_copy_set,
             callees: &callees,
             type_table,
+            module: func.module_source.clone(),
             remarks: &mut remarks,
             current_span: body.blocks[body.root].span,
             in_value_block: false,
@@ -86,6 +88,7 @@ struct Collector<'a> {
     /// Callee descriptor indexed by `func_id.index()`. See [`collect_value_copy_remarks`].
     callees: &'a [FunctionRef],
     type_table: &'a TypeTable,
+    module: ModuleSource,
     remarks: &'a mut Vec<Remark>,
     /// Span of the enclosing real statement. Synthesized copy nodes
     /// (`array_clone`, demoted spine copies) carry placeholder spans, so the
@@ -164,6 +167,7 @@ impl Collector<'_> {
                     let type_name = self.type_table.type_name(type_id);
                     self.remarks.push(Remark {
                         message: format!("a copy of `{type_name}` survives optimization"),
+                        module: self.module.clone(),
                         span: self.current_span,
                     });
                 }
@@ -243,17 +247,19 @@ pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
 
     let mut scan = ParamGateScan {
         params: &params,
+        module: package.entry_module_source.clone(),
         reported: crate::hashmap::IndexSet::default(),
         remarks: Vec::new(),
     };
     for func_rc in &package.functions {
         let func = func_rc.borrow();
-        if func.module_source != package.entry_module_source {
+        if !func.module_source.is_entry_package() {
             continue;
         }
         let Some(body) = &func.body else {
             continue;
         };
+        scan.module = func.module_source.clone();
         scan.walk(body);
     }
     scan.remarks
@@ -362,10 +368,15 @@ type GlobalKey = (ModuleSource, String);
 
 struct ParamGateScan<'a> {
     params: &'a IndexMap<GlobalKey, ParamOrigin>,
-    /// `(parameter, gate span)` pairs already remarked on. A scrutinee may read
-    /// the parameter twice and inlining copies one gate into every caller; the
-    /// set spans the package so one source gate yields one remark.
-    reported: crate::hashmap::IndexSet<(String, Span)>,
+    /// The module currently being walked; a `Remark` records where it was
+    /// found, since one span means nothing without its file.
+    module: ModuleSource,
+    /// `(parameter, file, gate span)` triples already remarked on. A scrutinee
+    /// may read the parameter twice and inlining copies one gate into every
+    /// caller; the set spans the package so one source gate yields one remark.
+    /// The module is part of the key because a span carries no file, and two
+    /// modules can hold the same offsets.
+    reported: crate::hashmap::IndexSet<(String, ModuleSource, Span)>,
     remarks: Vec<Remark>,
 }
 
@@ -406,7 +417,10 @@ impl ParamGateScan<'_> {
             return;
         };
         let param = &origin.param;
-        if !self.reported.insert((param.clone(), span)) {
+        if !self
+            .reported
+            .insert((param.clone(), self.module.clone(), span))
+        {
             return;
         }
         let read = match &origin.via {
@@ -418,6 +432,7 @@ impl ParamGateScan<'_> {
                 "compile-time parameter `{param}` {read}, so this branch is \
                  decided at run time; the code it guards was not stripped"
             ),
+            module: self.module.clone(),
             span,
         });
     }

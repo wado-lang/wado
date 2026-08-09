@@ -306,6 +306,99 @@ export fn run() with Stdout {
     );
 }
 
+/// A `CompilerHost` serving a fixed set of in-memory modules, so a multi-file
+/// program can be compiled without touching the filesystem.
+struct MultiFileHost {
+    files: std::collections::HashMap<String, String>,
+    diagnostics: std::sync::Mutex<Vec<wado_compiler::Diagnostic>>,
+}
+
+impl wado_compiler::CompilerHost for MultiFileHost {
+    fn load_source(
+        &self,
+        path: &str,
+    ) -> impl std::future::Future<Output = Result<Vec<u8>, wado_compiler::SourceError>> + Send {
+        let found = self.files.get(path).map(|s| s.as_bytes().to_vec());
+        let path = path.to_string();
+        async move { found.ok_or(wado_compiler::SourceError::NotFound { path }) }
+    }
+
+    fn emit_diagnostic(&self, diagnostic: wado_compiler::Diagnostic) {
+        self.diagnostics.lock().unwrap().push(diagnostic);
+    }
+}
+
+/// Compile `entry` at `-O2` alongside `files`, and return the `remark:`
+/// diagnostics as `"file:line:col message"` strings.
+fn remarks_across_modules(entry: &str, files: &[(&str, &str)]) -> Vec<String> {
+    let host = MultiFileHost {
+        files: files
+            .iter()
+            .map(|(p, s)| ((*p).to_string(), (*s).to_string()))
+            .collect(),
+        diagnostics: std::sync::Mutex::new(Vec::new()),
+    };
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        ..CompilerOptions::default()
+    };
+    let _ = runtime().block_on(wado_compiler::compile_with_options(
+        entry,
+        &host,
+        Some("test.wado"),
+        options,
+    ));
+    let diagnostics = host.diagnostics.lock().unwrap().clone();
+    diagnostics
+        .into_iter()
+        .filter(|d| d.message.starts_with("remark:"))
+        .map(|d| {
+            let loc = d
+                .span
+                .as_ref()
+                .map(|s| format!("{}:{}:{}", s.file, s.line, s.column))
+                .unwrap_or_default();
+            format!("{loc} {}", d.message)
+        })
+        .collect()
+}
+
+#[test]
+fn a_copy_in_another_module_of_the_entry_package_is_remarked() {
+    // The entry package is more than its entry point. A copy in a local module
+    // is the program's own cost, and the remark must name that module's file —
+    // a span carries no filename of its own.
+    // `seed` keeps the list out of reach of constant folding, which would
+    // otherwise evaluate the whole helper away and leave no copy to report.
+    let remarks = remarks_across_modules(
+        r#"
+use { println, Stdout, Environment, args } from "core:cli";
+use { grow } from "./helper.wado";
+
+export fn run() with Stdout, Environment {
+    println(`${grow(args().len() as i32)}`);
+}
+"#,
+        &[(
+            "./helper.wado",
+            r#"
+pub fn grow(seed: i32) -> i32 {
+    let a: List<i32> = [seed, seed + 1];
+    let mut b = a;
+    b.push(seed + 2);
+    return a.len() + b.len();
+}
+"#,
+        )],
+    );
+    assert!(
+        remarks
+            .iter()
+            .any(|r| r.starts_with("./helper.wado:") && r.contains("a copy of")),
+        "expected a remark attributed to the local module, got {remarks:?}"
+    );
+}
+
 #[test]
 fn a_gate_on_a_param_derived_global_is_remarked() {
     // `core:log`'s shape: the gate reads a global derived from the parameter,
