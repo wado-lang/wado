@@ -219,32 +219,28 @@ wado compile --log-level debug file.wado
 ## Optimizer Remarks
 
 A `remark:` reports a cost the optimizer could not remove, at the exact source
-span. They are info-level, so the default `warn` hides them — ask for them when
-you are chasing why something is slower or larger than expected, not on every
-build.
+span. They are info-level, so the default `warn` hides them — ask when chasing
+why something is slower or larger than expected, not on every build.
 
 ```sh
 wado check --log-level info file.wado              # no Wasm emitted; fastest
 wado check --world test --log-level info lib.wado  # a library with test blocks
 ```
 
-Two kinds are reported, both across the whole entry package — its entry point
-and every local module it reaches. A dependency, `core:` and `wasi:` are someone
-else's source and stay out, so their internals cannot drown out yours:
+Two kinds are reported, across the whole entry package — its entry point and
+every local module it reaches. A dependency, `core:` and `wasi:` stay out:
 
 - A **value-semantic copy that survived**. Wado deep-copies aggregates on
-  assignment, argument passing, and return; most are optimized away, and the
-  ones left are invisible while reading the source.
+  assignment, argument passing, and return; the ones no pass removed are
+  invisible in the source.
 
   ```
   file.wado:6:5: info: remark: a copy of `List<i32>` survives optimization
   ```
 
-- A **compile-time parameter that still decides a branch**. A `#[param]` global
-  exists to be settled at build time, so a surviving read means the build kept a
-  run-time test it was told to decide — `-D log.level=info` not stripping what it
-  was supposed to strip. The remark names the parameter, and the intermediate
-  global when the gate reads a derived one rather than the parameter itself.
+- A **compile-time parameter that still decides a branch**. `-D log.level=info`
+  did not strip what it was told to. The remark names the parameter, and the
+  intermediate global when the gate reads a derived one instead.
 
   ```
   file.wado:111:5: info: remark: compile-time parameter `log.level` is still read
@@ -252,6 +248,5 @@ else's source and stay out, so their internals cannot drown out yours:
   the code it guards was not stripped
   ```
 
-Design: `docs/wep-2026-06-03-optimizer-remarks.md`. What is not yet removable —
-and so what a remark is currently expected to report — is listed under "Not yet
-implemented" in `docs/optimizer.md`.
+Design: `docs/wep-2026-06-03-optimizer-remarks.md`. What a remark is currently
+expected to report is the "Not yet implemented" list in `docs/optimizer.md`.

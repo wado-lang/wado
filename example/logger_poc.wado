@@ -1,21 +1,12 @@
-//! Logger PoC — validates the `core:log` WEP design against the real compiler.
-//! Shaped as `core:log` will be, so what compiles here is what the module can
-//! be written from. See `docs/wep-2026-06-25-core-log.md`.
+//! Logger PoC — validates the `core:log` WEP design against the real compiler,
+//! shaped as the module will be. See `docs/wep-2026-06-25-core-log.md`.
 //!
-//! Two things the WEP specifies are not reproduced here, both waiting on the
-//! optimizer items the WEP lists:
-//!
-//! - Tier 1 is a run-time read, not a fold. `LOG_STATIC_LEVEL` derives from a
-//!   `#[param]` `String` through `level_from_str`, and a `String` binding is a
-//!   deep copy no pass removes, so the parameter never reaches the comparison.
-//!   The compiler says so rather than staying silent:
-//!   `wado check --world test --log-level info example/logger_poc.wado`
-//!   reports the surviving gate as a `remark:`.
-//! - The arguments of a dropped event are still built in front of the gate,
-//!   which is what sinking pure definitions into a branch would fix.
-//!
-//! `-D log.level=<level>` does take effect — at run time — so the whole suite
-//! below assumes the default `trace`.
+//! Two things the WEP specifies wait on the optimizer items it lists, so they
+//! are honest here rather than faked: tier 1 decides at run time, and a dropped
+//! event's arguments are still built in front of its gate. The surviving gate
+//! is reported, not silent — `wado check --world test --log-level info` on this
+//! file prints it. `-D log.level` works, at run time, so the suite below
+//! assumes the default `trace`.
 
 use { Serialize } from "core:serde";
 use { Value, to_value } from "core:value";

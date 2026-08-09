@@ -252,11 +252,9 @@ fn test_format_closure_return_type_roundtrips() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
-/// `-> ()` declares the same function as no return type at all, and dropping it
-/// is the canonical form. The parser normalizes it away so one spelling reaches
-/// the AST — otherwise the formatter's canonicalization shows up as an AST
-/// change and `test_roundtrip_ast_all_fixtures` fails on any source that writes
-/// it. A closure is excluded: there `None` means "infer", not unit.
+/// Dropping `-> ()` is the canonical form, and the parser normalizes it away so
+/// the canonicalization is not an AST change `test_roundtrip_ast_all_fixtures`
+/// trips on. A closure is excluded: `None` means "infer" there, not unit.
 #[test]
 fn test_format_drops_explicit_unit_return_type() {
     let source = concat!(

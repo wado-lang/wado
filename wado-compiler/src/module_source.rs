@@ -606,11 +606,9 @@ impl ModuleSource {
         matches!(self, Self::Wasi { .. })
     }
 
-    /// Whether this module is source the entry package owns — the entry point
-    /// and the local modules it reaches. A dependency, a `core:` / `wasi:`
-    /// module, a remote module and a Kiln-generated one all belong to someone
-    /// else, and are not what a diagnostic about the program under compilation
-    /// should point at.
+    /// Whether the entry package owns this module: the entry point and the
+    /// local modules it reaches. A dependency, `core:` / `wasi:`, a remote and
+    /// a Kiln-generated module are all someone else's source.
     #[must_use]
     pub fn is_entry_package(&self) -> bool {
         matches!(self, Self::EntryPoint { .. } | Self::Local { .. })

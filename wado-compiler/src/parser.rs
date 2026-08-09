@@ -4543,16 +4543,11 @@ impl Parser {
 
     /// Parse an optional `-> Type` closure return-type annotation, mirroring
     /// the function-signature form (`|x| -> i32 x + 1`, `|x| -> T { ... }`).
-    /// `-> T` on a declaration, or `None` when absent.
-    ///
-    /// `-> ()` yields `None` too: it declares the same function as writing no
-    /// return type, and dropping it is the canonical form, so one spelling
-    /// reaches the AST and the formatter has nothing left to canonicalize. The
-    /// `()` is matched on its two tokens rather than parsed and thrown away,
-    /// which would mint an `AstId` the canonical spelling does not have.
-    ///
-    /// A closure is not the same — there `None` means "infer" — so
-    /// [`Self::parse_optional_closure_return_type`] keeps what it is given.
+    /// `-> T` on a declaration, or `None` when absent — and for `-> ()`, whose
+    /// canonical form is to write nothing. Matched on its two tokens rather
+    /// than parsed and discarded, which would mint an `AstId` the canonical
+    /// spelling does not have. A closure keeps its `-> ()`: `None` means
+    /// "infer" there.
     fn parse_optional_return_type(&mut self) -> ParseResult<Option<crate::ast::Type>> {
         if !self.check(&TokenKind::Arrow) {
             return Ok(None);

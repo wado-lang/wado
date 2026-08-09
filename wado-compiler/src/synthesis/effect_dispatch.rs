@@ -169,13 +169,10 @@ fn identify_uncovered_effects(
     // still leaves the plain one unlowered, and the infrastructure covers the
     // whole interface either way.
     //
-    // One bare name, one owner. A call site carries no declaring module, so it
-    // reaches whichever dispatch triple that name was synthesised for, and the
-    // triple is named after the name alone — activating a second declaration
-    // under it emits `__Dispatch_<E>` twice into the entry module, which
-    // `monomorphize` rejects. A name an active instantiation already owns is
-    // left to it; the call lands on that dispatch and traps there if no handler
-    // is installed, which is what an uncovered call wanted anyway.
+    // One bare name, one owner: the triple is named after the name alone, so
+    // activating a second declaration under it emits `__Dispatch_<E>` twice.
+    // A name an active instantiation owns is left to it — the call lands on
+    // that dispatch and traps there when no handler is installed.
     let owned: IndexSet<&String> = active
         .iter()
         .filter(|(_, _, type_args)| type_args.is_empty())

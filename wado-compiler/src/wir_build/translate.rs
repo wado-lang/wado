@@ -2308,9 +2308,8 @@ impl FunctionTranslator<'_, '_> {
                     self.local_get(*index)
                 }
             }
-            // A unit global holds nothing and `register_globals` gives it no
-            // slot, so a read is nothing and a write is its value alone —
-            // evaluated for its effects, storing nowhere.
+            // `register_globals` gives a unit global no slot, so a read is
+            // nothing and a write is its value alone, evaluated for effect.
             ExprKind::GlobalVarGet { .. } if self.is_stackless_type(expr.type_id) => WirInstr::Nop,
             ExprKind::GlobalVarGet {
                 module_source,

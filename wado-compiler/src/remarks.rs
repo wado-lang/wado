@@ -237,8 +237,8 @@ fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
 /// and consulting the parameter at run time.
 ///
 /// A read outside a scrutinee is an ordinary use of the value, not a gate that
-/// failed, and is not reported. Restricted to the entry module's functions,
-/// like the value-copy remarks.
+/// failed, and is not reported. Scoped to the entry package, like the
+/// value-copy remarks.
 pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
     let params = parameter_decided_globals(package);
     if params.is_empty() {
@@ -265,15 +265,13 @@ pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
     scan.remarks
 }
 
-/// Every global a build-time parameter decides the value of, and how.
+/// Every global a build-time parameter decides the value of, and how: the
+/// `#[param]` globals, plus any global assigned from one.
 ///
-/// The `#[param]` globals themselves, plus any global assigned from one —
-/// which is what `core:log` reads at its gate
-/// (`global LOG_STATIC_LEVEL: Level = level_from_str(LOG_LEVEL)`), so a scan
-/// knowing only the parameter globals stayed silent on the very shape the
-/// remark exists for. `globals::extract` has moved such an initializer into
-/// `__initialize_module` by now, so the assignment is an ordinary
-/// `GlobalVarSet` in a function body.
+/// The second kind is what `core:log` reads at its gate
+/// (`global LOG_STATIC_LEVEL: Level = level_from_str(LOG_LEVEL)`).
+/// `globals::extract` has moved such an initializer into `__initialize_module`
+/// by now, so the assignment is an ordinary `GlobalVarSet` in a body.
 fn parameter_decided_globals(package: &NirPackage) -> IndexMap<GlobalKey, ParamOrigin> {
     let mut decided: IndexMap<GlobalKey, ParamOrigin> = package
         .globals
@@ -371,11 +369,10 @@ struct ParamGateScan<'a> {
     /// The module currently being walked; a `Remark` records where it was
     /// found, since one span means nothing without its file.
     module: ModuleSource,
-    /// `(parameter, file, gate span)` triples already remarked on. A scrutinee
-    /// may read the parameter twice and inlining copies one gate into every
-    /// caller; the set spans the package so one source gate yields one remark.
-    /// The module is part of the key because a span carries no file, and two
-    /// modules can hold the same offsets.
+    /// `(parameter, file, gate span)` triples already remarked on, so one
+    /// source gate yields one remark however many times a scrutinee reads the
+    /// parameter and however many callers inlining copied it into. The module
+    /// is in the key because a span carries no file.
     reported: crate::hashmap::IndexSet<(String, ModuleSource, Span)>,
     remarks: Vec<Remark>,
 }

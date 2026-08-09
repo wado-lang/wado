@@ -1524,9 +1524,8 @@ fn compile_after_load<H: CompilerHost>(
             .into_iter()
             .chain(remarks::collect_param_gate_remarks(&nir));
         for remark in residual {
-            // The entry point's own `source_path` is empty for a synthetic name
-            // (`<stdin>`), so it keeps the filename the caller supplied; every
-            // other module in the package names itself.
+            // `source_path` is empty for a synthetic entry name (`<stdin>`),
+            // so the entry point keeps the caller's filename.
             let file = match remark.module {
                 module_source::ModuleSource::EntryPoint { .. } => entry_filename.clone(),
                 other => other.source_path(),
