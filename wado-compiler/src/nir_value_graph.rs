@@ -175,15 +175,18 @@ fn const_identity_eq(a: &crate::const_eval::Value, b: &crate::const_eval::Value)
                     (None, Some(_)) | (Some(_), None) => false,
                 }
         }
-        (Value::Int { .. }, _)
-        | (Value::Float { .. }, _)
-        | (Value::Bool(_), _)
-        | (Value::Char(_), _)
-        | (Value::Null, _)
-        | (Value::Unit, _)
-        | (Value::Aggregate { .. }, _)
-        | (Value::Seq { .. }, _)
-        | (Value::Variant { .. }, _) => false,
+        (
+            Value::Int { .. }
+            | Value::Float { .. }
+            | Value::Bool(_)
+            | Value::Char(_)
+            | Value::Null
+            | Value::Unit
+            | Value::Aggregate { .. }
+            | Value::Seq { .. }
+            | Value::Variant { .. },
+            _,
+        ) => false,
     }
 }
 
