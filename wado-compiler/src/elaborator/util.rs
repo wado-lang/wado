@@ -233,9 +233,11 @@ pub(super) fn unescape_template_string(raw: &str) -> Result<String, String> {
 
     while let Some(ch) = chars.next() {
         if ch == '\\' {
-            // Handle template-specific escapes first
+            // Handle template-specific escapes first — the interpolation
+            // syntax and the delimiter itself, none of which a plain string
+            // literal has to escape.
             if let Some(&next) = chars.peek()
-                && (next == '{' || next == '}' || next == '$')
+                && (next == '{' || next == '}' || next == '$' || next == '`')
             {
                 if pending_high.is_some() {
                     return Err(

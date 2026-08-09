@@ -1,0 +1,117 @@
+//! Flags ⇄ text, derived over `ReflectFlags`.
+//!
+//! One blanket impl serves every `flags` type: the members carry each bit and
+//! its boundary-facing name, and `bits` / `from_bits` cross between a value
+//! and its raw bits. Neither type below declares anything.
+//!
+//!     wado run example/flags_text.wado
+
+use { println, Stdout } from "core:cli";
+use { wire_name } from "core:serde";
+
+trait FlagsText {
+    /// The set bits joined by `|`, or `-` when none is set.
+    fn render(&self) -> String;
+
+    /// The inverse. An unknown name names the type it is missing from.
+    fn parse(text: String) -> Result<Self, String>;
+}
+
+impl<L: ReflectFlags<Members = [..M]>, ..M> FlagsText for L {
+    fn render(&self) -> String {
+        let policy = ReflectFlags::<L>::wire_name_policy();
+        let mut out = "";
+        for let bit of ReflectFlags::<L>::members() {
+            if bit.is_set(self) {
+                if !out.is_empty() {
+                    out.push('|');
+                }
+                out.push_str(&wire_name(&bit, policy));
+            }
+        }
+        if out.is_empty() {
+            return "-";
+        }
+        return out;
+    }
+
+    fn parse(text: String) -> Result<L, String> {
+        let policy = ReflectFlags::<L>::wire_name_policy();
+        let mut raw: u64 = 0;
+        if text != "-" {
+            for let name of text.split("|") {
+                let mut found = false;
+                for let bit of ReflectFlags::<L>::members() {
+                    if wire_name(&bit, policy) == name {
+                        raw = raw | bit.bit();
+                        found = true;
+                    }
+                }
+                if !found {
+                    return Result::Err(
+                        `${ReflectFlags::<L>::type_name()} has no member \`${name}\``,
+                    );
+                }
+            }
+        }
+        let Some(value) = ReflectFlags::<L>::from_bits(raw) else {
+            return Result::Err(`unknown bits for ${ReflectFlags::<L>::type_name()}`);
+        };
+        return Result::Ok(value);
+    }
+}
+
+flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+/// The naming policy is a member fact too, so `wire_name` applies it and both
+/// directions stay in step.
+#[wire(name_policy = "kebab-case")]
+flags Watch {
+    FileCreated,
+    FileDeleted,
+    DirRenamed,
+}
+
+export fn run() with Stdout {
+    println((Perms::Read | Perms::Write).render());
+    println(Perms::all().render());
+    println(Perms::none().render());
+    println((Watch::FileCreated | Watch::DirRenamed).render());
+
+    match Perms::parse("Read|Execute") {
+        Ok(p) => println(`parsed: ${p.render()}`),
+        Err(e) => println(`error: ${e}`),
+    }
+    match Watch::parse("file-created|file-moved") {
+        Ok(w) => println(`parsed: ${w.render()}`),
+        Err(e) => println(`error: ${e}`),
+    }
+}
+
+test "render lists the set bits in declaration order" {
+    assert (Perms::Write | Perms::Read).render() == "Read|Write";
+    assert Perms::all().render() == "Read|Write|Execute";
+    assert Perms::none().render() == "-";
+}
+
+test "the naming policy reaches both directions" {
+    let w = Watch::FileCreated | Watch::DirRenamed;
+    assert w.render() == "file-created|dir-renamed";
+    assert Watch::parse("file-created|dir-renamed").unwrap() == w;
+}
+
+test "every value round-trips through its text" {
+    for let mut raw = 0; raw < 8; raw += 1 {
+        let value = raw as Perms;
+        assert Perms::parse(value.render()).unwrap() == value;
+    }
+}
+
+test "an unknown name names the type it is missing from" {
+    let message = Perms::parse("Read|Fly").unwrap_err();
+    assert message == "Perms has no member `Fly`";
+}
