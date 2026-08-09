@@ -700,6 +700,13 @@ fn register_globals(ctx: &mut WirContext<'_>) {
 
         let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
 
+        // A unit global gets no slot, the way a unit local, parameter and result
+        // get none. Its initializer still runs: `globals::extract` moved it into
+        // `__initialize_module`, where the store lowers to the value alone.
+        if matches!(wir_type, WirType::Unit) {
+            continue;
+        }
+
         // Both cases need a nullable slot, but only a deferred one narrows its
         // reads: a declared `null` is a value the program observes, and
         // narrowing would trap on every `None`.

@@ -1,19 +1,26 @@
-// A global holds a value between reads and `()` has none, so the declaration
-// is rejected rather than given a Wasm slot nothing reads back.
+// A unit global is accepted — Rust accepts `static X: () = ();` — and gets no
+// Wasm slot, the way a unit local or parameter gets none. Both its initializer
+// and a later assignment still run for their effects.
 use { println, Stdout } from "core:cli";
 
-fn announce() -> () with Stdout {
-    println(`init`);
+fn announce(tag: String) with Stdout {
+    println(tag);
 }
 
-global READY: () = announce();
+fn take(u: ()) -> i32 {
+    return 7;
+}
+
+global READY: () = announce(`init`);
+global mut LATER: () = ();
 
 export fn run() with Stdout {
     let _ = READY;
-    println(`ok`);
+    LATER = announce(`assigned`);
+    println(`${take(LATER)}`);
 }
 
 __DATA__
 {
-    "compile_error": "global `READY` has type `()`, which has no values to store"
+    "stdout": "init\nassigned\n7\n"
 }

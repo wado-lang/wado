@@ -531,14 +531,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A global declared at a type with no values (`()` or `Never`). It can
-    /// hold no state, so the declaration only names its initializer's effects.
-    GlobalHasNoState {
-        name: String,
-        type_name: String,
-        span: Span,
-    },
-
     PrivateFieldAccess {
         struct_name: String,
         field_name: String,
@@ -1217,18 +1209,6 @@ impl TypeError {
             TypeError::InvalidStores { message, span } => {
                 (Code::InvalidSyntax, message.clone(), *span)
             }
-            TypeError::GlobalHasNoState {
-                name,
-                type_name,
-                span,
-            } => (
-                Code::TypeMismatch,
-                format!(
-                    "global `{name}` has type `{type_name}`, which has no values to store; \
-                     call the initializer where its effect is wanted instead"
-                ),
-                *span,
-            ),
             TypeError::PrivateFieldAccess {
                 struct_name,
                 field_name,

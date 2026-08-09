@@ -1557,17 +1557,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_global(&mut self, global_decl: &GlobalDecl) {
         let ty = self.resolve_type(&global_decl.ty);
 
-        // A global's whole purpose is to hold a value between reads. `()` and
-        // `Never` have none to hold, and every later phase erases them — the
-        // Wasm slot would be a lie the reads then trip over.
-        if ty == TypeTable::UNIT || ty == TypeTable::NEVER {
-            let _ = self.emit(TypeError::GlobalHasNoState {
-                name: global_decl.name.clone(),
-                type_name: self.tysys.type_table.borrow().type_name(ty),
-                span: global_decl.span,
-            });
-        }
-
         // Global initialization has no locals; the context only carries the
         // `#function` label. Reify must reproduce it byte-for-byte so the
         // per-`AstId` expression types line up, so both route through
