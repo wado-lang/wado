@@ -2108,15 +2108,41 @@ fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
     collect.0
 }
 
-/// Locals some reachable expression mentions. A binding absent here is never
-/// read: an assignment target, a borrow and a capture all mention their local,
-/// so the census over-approximates and only ever keeps a statement alive.
+/// Locals some reachable node mentions. A binding absent here is never read:
+/// an assignment target, a borrow and a capture all mention their local, so the
+/// census over-approximates and only ever keeps a statement alive.
+///
+/// A promoted operand ([`Operand::Value`]) reads its locals in the pool rather
+/// than the skeleton, so every reachable operand contributes the
+/// `Opaque(Local)` leaves of its value. The pool-wide `opaque_local_sources`
+/// cannot stand in for that: it is append-only, and still names the locals of
+/// promoted reads that folded away long ago.
 fn mentioned_locals(body: &Body) -> IndexSet<u32> {
     let mut out = IndexSet::default();
-    for e in crate::nir_visitor::reachable_exprs(body) {
-        if let ExprKind::Local { index, .. } = &body.exprs[e].kind {
+    let visit = |node: NodeRef, out: &mut IndexSet<u32>| {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::Local { index, .. } = &body.exprs[e].kind
+        {
             out.insert(*index);
         }
+        body.for_each_operand(node, |op| {
+            if let Some(v) = op.as_value() {
+                body.values.collect_opaque_locals(v, out);
+            }
+        });
+    };
+    // A body with no block structure is a bare expression — a global
+    // initializer — and everything it holds is reachable by construction.
+    if body.blocks.is_empty() {
+        for (e, _) in &body.exprs {
+            visit(NodeRef::Expr(e), &mut out);
+        }
+        return out;
+    }
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        visit(node, &mut out);
+        body.for_each_child(node, |c| stack.push(c));
     }
     out
 }
@@ -2585,6 +2611,8 @@ fn remove_dead_global_sets_expr(
 mod tests {
     use super::*;
     use crate::module_source::ModuleSourceInterner;
+    use crate::nir_arena::BlockNode;
+    use crate::token::Span;
 
     fn free_fn(interner: &mut ModuleSourceInterner, name: &str) -> FunctionId {
         FunctionId::Free(FreeFunctionName::from_strs(interner, &["test"], name))
@@ -2623,5 +2651,47 @@ mod tests {
         assert!(reachable.contains(&free_fn(&mut interner, "foo")));
         assert!(reachable.contains(&free_fn(&mut interner, "bar")));
         assert!(!reachable.contains(&free_fn(&mut interner, "unused")));
+    }
+
+    /// A statement whose value is a promoted read of `local_index`, plus the
+    /// block holding it.
+    fn body_reading_promoted_local(local_index: u32) -> (Body, StmtId) {
+        let mut body = Body::empty();
+        let value = body.values.canonical_local(local_index, TypeId(0));
+        let stmt = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Value(value)),
+            span: Span::default(),
+        });
+        body.root = body.blocks.push(BlockNode {
+            stmts: vec![stmt],
+            span: Span::default(),
+        });
+        (body, stmt)
+    }
+
+    #[test]
+    fn mentioned_locals_sees_a_local_read_through_a_promoted_value() {
+        let (body, _) = body_reading_promoted_local(3);
+        assert!(
+            mentioned_locals(&body).contains(&3),
+            "a read living in the value pool is still a read"
+        );
+    }
+
+    #[test]
+    fn mentioned_locals_ignores_a_promoted_value_no_reachable_slot_carries() {
+        let (mut body, live) = body_reading_promoted_local(3);
+        // The pool is append-only: a promoted read whose statement is no longer
+        // reachable still names its local there, and must not count.
+        let stale = body.values.canonical_local(4, TypeId(0));
+        body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Value(stale)),
+            span: Span::default(),
+        });
+        body.blocks[body.root].stmts = vec![live];
+
+        let mentioned = mentioned_locals(&body);
+        assert!(mentioned.contains(&3));
+        assert!(!mentioned.contains(&4));
     }
 }

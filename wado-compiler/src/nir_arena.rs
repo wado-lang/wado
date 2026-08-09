@@ -90,6 +90,16 @@ pub enum NodeRef {
     Pat(PatId),
 }
 
+/// A child slot of an arena node: an operand position — which may hold a
+/// promoted value carrying no skeleton id — or a structural / non-operand id
+/// child. The single description of a node's shape, walked by
+/// [`Body::for_each_child`] and [`Body::for_each_operand`] alike.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Slot {
+    Operand(Operand),
+    Node(NodeRef),
+}
+
 /// An expression node.
 #[derive(Debug, Clone)]
 pub struct ExprNode {
@@ -1129,9 +1139,6 @@ impl Body {
 
 /// Structural navigation used by the rewrite engine (parent map + worklist).
 impl Body {
-    /// Invoke `f` on every id-bearing child of `node`, in source order.
-    /// Arms / fields / call args are transparent (their inline child ids are
-    /// visited directly). Leaf nodes invoke `f` zero times.
     /// Collect every local with a live `&local` / `&mut local` in the body.
     /// The canonical `address_taken_locals` / `stores_aliased_locals` sets
     /// go stale after `inline` / `ref_elim` copy reference nodes, so
@@ -1155,7 +1162,7 @@ impl Body {
 
     /// Replace every direct operand child of `node` equal to `Operand::Expr(target)`
     /// with `new`, returning whether any slot changed. Covers exactly the operand
-    /// positions [`Body::for_each_child`] descends through as `op_child`; non-operand
+    /// positions [`Body::for_each_operand`] yields; non-operand
     /// `ExprId` slots (`Assign::target`) and structural children (blocks, patterns)
     /// are untouched. Used by the engine to promote a folded subtree to an
     /// `Operand::Value` in its parent (WEP: The Live `ValueGraph`).
@@ -1252,26 +1259,53 @@ impl Body {
         changed
     }
 
+    /// Invoke `f` on every id-bearing child of `node`, in source order.
+    /// Arms / fields / call args are transparent (their inline child ids are
+    /// visited directly). Leaf nodes invoke `f` zero times.
+    ///
+    /// A promoted pure value (`Operand::Value`) has no skeleton child, so an
+    /// operand slot yields one only when it holds an `Operand::Expr`; a pass
+    /// whose census must also see what a promoted value reads walks
+    /// [`Body::for_each_operand`] beside this.
     pub fn for_each_child(&self, node: NodeRef, mut f: impl FnMut(NodeRef)) {
-        // A promoted pure value (`Operand::Value`) has no skeleton child; only an
-        // `Operand::Expr` yields one.
-        fn op_child<F: FnMut(NodeRef)>(o: Operand, f: &mut F) {
-            if let Operand::Expr(e) = o {
-                f(NodeRef::Expr(e));
+        self.for_each_slot(node, &mut |slot| match slot {
+            Slot::Operand(Operand::Expr(e)) => f(NodeRef::Expr(e)),
+            Slot::Operand(Operand::Value(_)) => {}
+            Slot::Node(child) => f(child),
+        });
+    }
+
+    /// Invoke `f` on every operand slot of `node`, in source order — including
+    /// a promoted [`Operand::Value`], which [`Body::for_each_child`] drops for
+    /// want of a skeleton node. Non-operand id slots (`Assign::target`) and
+    /// structural children (blocks, patterns) are not operands and are skipped.
+    ///
+    /// Both walks share one description of the node structure ([`Slot`]), so a
+    /// variant added to the arena cannot be missed by one and not the other.
+    pub fn for_each_operand(&self, node: NodeRef, mut f: impl FnMut(Operand)) {
+        self.for_each_slot(node, &mut |slot| {
+            if let Slot::Operand(o) = slot {
+                f(o);
             }
-        }
+        });
+    }
+
+    /// The node's shape, in source order: every operand slot and every
+    /// structural / non-operand id child. The sole place a node's children are
+    /// spelled out; the two public walks above filter this.
+    fn for_each_slot(&self, node: NodeRef, f: &mut impl FnMut(Slot)) {
         match node {
             NodeRef::Block(b) => {
                 for s in &self.blocks[b].stmts {
-                    f(NodeRef::Stmt(*s));
+                    f(Slot::Node(NodeRef::Stmt(*s)));
                 }
             }
             NodeRef::Stmt(s) => match &self.stmts[s].kind {
-                StmtKind::Let { value, .. } => op_child(*value, &mut f),
-                StmtKind::Expr(e) => op_child(*e, &mut f),
+                StmtKind::Let { value, .. } => f(Slot::Operand(*value)),
+                StmtKind::Expr(e) => f(Slot::Operand(*e)),
                 StmtKind::Return { value } => {
                     if let Some(o) = value {
-                        op_child(*o, &mut f);
+                        f(Slot::Operand(*o));
                     }
                 }
                 StmtKind::If {
@@ -1279,23 +1313,23 @@ impl Body {
                     then_block,
                     else_block,
                 } => {
-                    op_child(*condition, &mut f);
-                    f(NodeRef::Block(*then_block));
+                    f(Slot::Operand(*condition));
+                    f(Slot::Node(NodeRef::Block(*then_block)));
                     if let Some(b) = else_block {
-                        f(NodeRef::Block(*b));
+                        f(Slot::Node(NodeRef::Block(*b)));
                     }
                 }
-                StmtKind::Loop { body } => f(NodeRef::Block(*body)),
+                StmtKind::Loop { body } => f(Slot::Node(NodeRef::Block(*body))),
                 StmtKind::Break { value, .. } => {
                     if let Some(o) = value {
-                        op_child(*o, &mut f);
+                        f(Slot::Operand(*o));
                     }
                 }
                 StmtKind::Continue => {}
-                StmtKind::LabeledBlock { block, .. } => f(NodeRef::Block(*block)),
+                StmtKind::LabeledBlock { block, .. } => f(Slot::Node(NodeRef::Block(*block))),
                 StmtKind::LetDestructure { pattern, value, .. } => {
-                    f(NodeRef::Pat(*pattern));
-                    op_child(*value, &mut f);
+                    f(Slot::Node(NodeRef::Pat(*pattern)));
+                    f(Slot::Operand(*value));
                 }
             },
             NodeRef::Pat(p) => match &self.pats[p].kind {
@@ -1306,20 +1340,20 @@ impl Body {
                 | PatKind::Range { .. } => {}
                 PatKind::Tuple(ps, _) | PatKind::Or(ps) => {
                     for p in ps {
-                        f(NodeRef::Pat(*p));
+                        f(Slot::Node(NodeRef::Pat(*p)));
                     }
                 }
                 PatKind::Variant { bindings, .. } => {
                     for p in bindings {
-                        f(NodeRef::Pat(*p));
+                        f(Slot::Node(NodeRef::Pat(*p)));
                     }
                 }
                 PatKind::Struct { fields, .. } => {
                     for fld in fields {
-                        f(NodeRef::Pat(fld.pattern));
+                        f(Slot::Node(NodeRef::Pat(fld.pattern)));
                     }
                 }
-                PatKind::ConstantValue { expr } => op_child(*expr, &mut f),
+                PatKind::ConstantValue { expr } => f(Slot::Operand(*expr)),
             },
             NodeRef::Expr(e) => match &self.exprs[e].kind {
                 ExprKind::PackedArray(_)
@@ -1327,93 +1361,163 @@ impl Body {
                 | ExprKind::Local { .. }
                 | ExprKind::GlobalVarGet { .. }
                 | ExprKind::EnumConstruct { .. } => {}
-                ExprKind::GlobalVarSet { value, .. } => op_child(*value, &mut f),
+                ExprKind::GlobalVarSet { value, .. } => f(Slot::Operand(*value)),
                 ExprKind::Binary { left, right, .. } => {
-                    op_child(*left, &mut f);
-                    op_child(*right, &mut f);
+                    f(Slot::Operand(*left));
+                    f(Slot::Operand(*right));
                 }
                 ExprKind::Unary { expr, .. }
                 | ExprKind::Cast { expr, .. }
                 | ExprKind::FieldAccess { expr, .. }
                 | ExprKind::VariantTag { expr }
                 | ExprKind::VariantTest { expr, .. }
-                | ExprKind::VariantPayload { expr, .. } => op_child(*expr, &mut f),
+                | ExprKind::VariantPayload { expr, .. } => f(Slot::Operand(*expr)),
                 ExprKind::Assign { target, value } => {
-                    f(NodeRef::Expr(*target));
-                    op_child(*value, &mut f);
+                    f(Slot::Node(NodeRef::Expr(*target)));
+                    f(Slot::Operand(*value));
                 }
                 ExprKind::Index { expr, index } => {
-                    op_child(*expr, &mut f);
-                    op_child(*index, &mut f);
+                    f(Slot::Operand(*expr));
+                    f(Slot::Operand(*index));
                 }
                 ExprKind::Call { args, .. } => {
                     for a in args {
-                        op_child(a.expr, &mut f);
+                        f(Slot::Operand(a.expr));
                     }
                 }
                 ExprKind::CmRawCall { args, .. } => {
                     for a in args {
-                        op_child(*a, &mut f);
+                        f(Slot::Operand(*a));
                     }
                 }
-                ExprKind::Block(b) => f(NodeRef::Block(*b)),
+                ExprKind::Block(b) => f(Slot::Node(NodeRef::Block(*b))),
                 ExprKind::If {
                     condition,
                     then_branch,
                     else_branch,
                 } => {
-                    op_child(*condition, &mut f);
-                    f(NodeRef::Block(*then_branch));
+                    f(Slot::Operand(*condition));
+                    f(Slot::Node(NodeRef::Block(*then_branch)));
                     if let Some(b) = else_branch {
-                        f(NodeRef::Block(*b));
+                        f(Slot::Node(NodeRef::Block(*b)));
                     }
                 }
                 ExprKind::Match { expr, arms } => {
-                    op_child(*expr, &mut f);
+                    f(Slot::Operand(*expr));
                     for arm in arms {
-                        f(NodeRef::Pat(arm.pattern));
+                        f(Slot::Node(NodeRef::Pat(arm.pattern)));
                         if let Some(g) = arm.guard {
-                            op_child(g, &mut f);
+                            f(Slot::Operand(g));
                         }
-                        op_child(arm.body, &mut f);
+                        f(Slot::Operand(arm.body));
                     }
                 }
                 ExprKind::StructLiteral { fields, .. } => {
                     for fld in fields {
-                        op_child(fld.value, &mut f);
+                        f(Slot::Operand(fld.value));
                     }
                 }
                 ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                     for el in elements {
-                        op_child(*el, &mut f);
+                        f(Slot::Operand(*el));
                     }
                 }
                 ExprKind::IndirectCall { callee, args } => {
-                    op_child(*callee, &mut f);
+                    f(Slot::Operand(*callee));
                     for a in args {
-                        op_child(*a, &mut f);
+                        f(Slot::Operand(*a));
                     }
                 }
-                ExprKind::ClosureToCanonical { functor, .. } => op_child(*functor, &mut f),
+                ExprKind::ClosureToCanonical { functor, .. } => f(Slot::Operand(*functor)),
                 ExprKind::VariantConstruct { payload, .. } => {
                     if let Some(p) = payload {
-                        op_child(*p, &mut f);
+                        f(Slot::Operand(*p));
                     }
                 }
-                ExprKind::LabeledBlock { block, .. } => f(NodeRef::Block(*block)),
+                ExprKind::LabeledBlock { block, .. } => f(Slot::Node(NodeRef::Block(*block))),
                 ExprKind::Switch {
                     scrutinee,
                     arms,
                     default,
                     ..
                 } => {
-                    op_child(*scrutinee, &mut f);
+                    f(Slot::Operand(*scrutinee));
                     for a in arms {
-                        f(NodeRef::Block(*a));
+                        f(Slot::Node(NodeRef::Block(*a)));
                     }
-                    f(NodeRef::Block(*default));
+                    f(Slot::Node(NodeRef::Block(*default)));
                 }
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn expr(body: &mut Body, kind: ExprKind) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind,
+            type_id: TypeId(0),
+            span: Span::default(),
+        })
+    }
+
+    #[test]
+    fn for_each_operand_yields_the_promoted_value_for_each_child_drops() {
+        let mut body = Body::empty();
+        let left = expr(
+            &mut body,
+            ExprKind::Local {
+                index: 0,
+                name: "a".to_string(),
+            },
+        );
+        let right = body.values.canonical_local(1, TypeId(0));
+        let add = expr(
+            &mut body,
+            ExprKind::Binary {
+                left: Operand::Expr(left),
+                op: NirBinaryOp::Add,
+                right: Operand::Value(right),
+            },
+        );
+
+        let mut children = Vec::new();
+        body.for_each_child(NodeRef::Expr(add), |c| children.push(c));
+        assert_eq!(children, vec![NodeRef::Expr(left)]);
+
+        let mut operands = Vec::new();
+        body.for_each_operand(NodeRef::Expr(add), |o| operands.push(o));
+        assert_eq!(
+            operands,
+            vec![Operand::Expr(left), Operand::Value(right)],
+            "operand order must match the skeleton child order"
+        );
+    }
+
+    #[test]
+    fn for_each_operand_skips_non_operand_id_slots() {
+        let mut body = Body::empty();
+        let target = expr(
+            &mut body,
+            ExprKind::Local {
+                index: 0,
+                name: "a".to_string(),
+            },
+        );
+        let value = body.values.canonical_local(1, TypeId(0));
+        let assign = expr(
+            &mut body,
+            ExprKind::Assign {
+                target,
+                value: Operand::Value(value),
+            },
+        );
+
+        let mut operands = Vec::new();
+        body.for_each_operand(NodeRef::Expr(assign), |o| operands.push(o));
+        assert_eq!(operands, vec![Operand::Value(value)]);
     }
 }
