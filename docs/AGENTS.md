@@ -131,7 +131,7 @@ history is the SSoT for how the design got here.
 - [Reference Representation and Mutation Write-Back](./wep-2026-06-13-reference-representation.md)
 - [Jade — JSON Schema for Wado](./wep-2026-06-13-jade.md)
 - [Library-Defined Derivation: `ReflectStruct` Extensions and the `#[validate]` Attribute](./wep-2026-06-13-reflect-derivation.md)
-- [Bundled ICU — the `core:icu` Facade and Compile-Time Data Providers](./wep-2026-06-13-compile-time-data-providers.md)
+- [Compile-Time Data Providers](./wep-2026-06-13-compile-time-data-providers.md)
 - [Symbol Notation](./wep-2026-06-14-symbol-notation.md)
 - [The Live ValueGraph — ValueGraph as the Pure-Value IR](./wep-2026-06-15-live-value-graph.md)
 - [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md)
@@ -158,3 +158,4 @@ history is the SSoT for how the design got here.
 - [Name Namespaces as Types](./wep-2026-07-29-name-namespaces.md)
 - [Overload Resolution](./wep-2026-07-31-overload-resolution.md)
 - [Variant Return Scalarization at NIR](./wep-2026-08-03-variant-return-abi.md)
+- [`core:icu` — Internationalization as One Facade](./wep-2026-08-09-core-icu.md)
