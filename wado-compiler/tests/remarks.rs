@@ -166,9 +166,8 @@ fn remarks_for_params(source: &str, overrides: &[(&str, &str)]) -> Vec<String> {
 
 #[test]
 fn param_reaching_a_branch_is_remarked() {
-    // The helper takes the parameter by value, and a constant does not reach a
-    // `String` parameter compared with `==`, so the gate survives to run time
-    // even though `-D log.level=info` settles it at build time.
+    // A constant does not reach a `String` parameter compared with `==`, so the
+    // gate survives to run time even though `-D log.level=info` settles it.
     let remarks = remarks_for_params(
         r#"
 use { println, Stdout } from "core:cli";
@@ -258,6 +257,52 @@ export fn run() with Stdout {
         gate_remarks.len(),
         1,
         "one gate should yield one remark, got {remarks:?}"
+    );
+}
+
+#[test]
+fn one_source_gate_inlined_into_two_callers_is_remarked_once() {
+    // Inlining copies the gate into every caller, but there is one gate in the
+    // source and one line:column to point at.
+    let remarks = remarks_for_params(
+        r#"
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: String = "trace";
+
+fn is_level(s: String, want: String) -> bool {
+    if s == want {
+        return true;
+    }
+    return false;
+}
+
+fn gated() -> i32 {
+    if is_level(LOG_LEVEL, "trace") {
+        return 1;
+    }
+    return 0;
+}
+
+export fn other() -> i32 {
+    return gated();
+}
+
+export fn run() with Stdout {
+    println(`${gated() + other()}`);
+}
+"#,
+        &[("log.level", "info")],
+    );
+    let gate_remarks: Vec<&String> = remarks
+        .iter()
+        .filter(|r| r.contains("compile-time parameter `log.level`"))
+        .collect();
+    assert_eq!(
+        gate_remarks.len(),
+        1,
+        "one source gate should yield one remark, got {remarks:?}"
     );
 }
 

@@ -228,23 +228,13 @@ fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
     }
 }
 
-/// Collect remarks for compile-time parameters that reach a branch condition in
-/// the optimized NIR.
+/// Collect remarks for compile-time parameters that still decide a branch in
+/// the optimized NIR — a build asked to strip `trace` and `debug` shipping them
+/// and consulting the parameter at run time.
 ///
-/// A `#[param]` global exists to be decided at build time: the param-resolution
-/// pass replaces its initializer with the override's literal, and every gate
-/// reading it is expected to constant-fold away. When a read survives *into a
-/// branch condition*, the build kept a run-time test it was told to settle —
-/// the failure mode `core:log`'s level gate has, where a build asked to strip
-/// `trace` and `debug` ships them and consults the parameter at run time
-/// instead.
-///
-/// A read outside a scrutinee is not reported: passing a parameter to
-/// `println` is an ordinary use of its value, not a gate that failed.
-///
-/// Restricted to the entry module's functions, like the value-copy remarks, and
-/// silent unless it can name the parameter — a remark that cannot say *which*
-/// one is exactly the vague remark the WEP rules out.
+/// A read outside a scrutinee is an ordinary use of the value, not a gate that
+/// failed, and is not reported. Restricted to the entry module's functions,
+/// like the value-copy remarks.
 pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
     let params: IndexMap<(ModuleSource, String), String> = package
         .globals
@@ -258,7 +248,11 @@ pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
         return Vec::new();
     }
 
-    let mut remarks = Vec::new();
+    let mut scan = ParamGateScan {
+        params: &params,
+        reported: crate::hashmap::IndexSet::default(),
+        remarks: Vec::new(),
+    };
     for func_rc in &package.functions {
         let func = func_rc.borrow();
         if func.module_source != package.entry_module_source {
@@ -267,36 +261,27 @@ pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
         let Some(body) = &func.body else {
             continue;
         };
-        let mut scan = ParamGateScan {
-            params: &params,
-            reported: crate::hashmap::IndexSet::default(),
-            remarks: &mut remarks,
-        };
         scan.walk(body);
     }
-    remarks
+    scan.remarks
 }
 
 struct ParamGateScan<'a> {
     params: &'a IndexMap<(ModuleSource, String), String>,
-    /// `(parameter, gate span)` pairs already remarked on. One scrutinee often
-    /// reads the same parameter more than once (`L >= 1 && L <= 3`); the gate
-    /// failed once, so it is reported once.
+    /// `(parameter, gate span)` pairs already remarked on. A scrutinee may read
+    /// the parameter twice and inlining copies one gate into every caller; the
+    /// set spans the package so one source gate yields one remark.
     reported: crate::hashmap::IndexSet<(String, Span)>,
-    remarks: &'a mut Vec<Remark>,
+    remarks: Vec<Remark>,
 }
 
 impl ParamGateScan<'_> {
-    /// Walk from the root, not over the arena: a detached `If` still occupies
-    /// its slot — `StmtKind` has no tombstone — and remarking on a branch that
-    /// no longer reaches the output is exactly the vague remark the WEP rules
-    /// out.
+    /// Walk from the root, not over the arena: `StmtKind` has no tombstone, so
+    /// a detached `If` still occupies its slot.
     ///
-    /// Each node carries the span of the innermost branch whose scrutinee it
-    /// sits inside, or `None` outside every scrutinee. It passes to children
-    /// unchanged — a read nested anywhere under a scrutinee still decides that
-    /// branch — and is replaced, never cleared, on entering a nested
-    /// scrutinee, so a remark names the closest gate the read decides.
+    /// Each node carries the span of the innermost scrutinee it sits inside, or
+    /// `None` outside every scrutinee. It passes to children unchanged and is
+    /// replaced, never cleared, on entering a nested scrutinee.
     fn walk(&mut self, body: &Body) {
         let mut stack = vec![(NodeRef::Block(body.root), None)];
         while let Some((node, gate)) = stack.pop() {
