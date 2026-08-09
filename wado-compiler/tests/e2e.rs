@@ -573,157 +573,6 @@ fn verify_http_result(result: &HttpTestResult, spec: &HttpServiceSpec, fixture_n
 }
 
 // ---------------------------------------------------------------------------
-// Test world runner
-// ---------------------------------------------------------------------------
-
-/// Sentinel panic payload signalling that a `#[TODO]` test passed unexpectedly.
-///
-/// The test-world runner raises this via `std::panic::panic_any` (rather than
-/// `anyhow::bail!`) so the outer `#![TODO]` module wrapper can distinguish a
-/// resolved-but-still-marked TODO (hard failure) from a genuine pending test
-/// (silent OK). The runner identifies it by downcasting the panic payload;
-/// all other panics fall back to the "pending" path.
-#[derive(Debug)]
-struct TodoResolved(String);
-
-/// Format a trap-producing error with the full diagnostic chain.
-///
-/// `func.call_async` returns `wasmtime::Error` for traps. Its `Display` (`{e}`)
-/// only shows the top-level "error while executing at wasm backtrace" wrapper
-/// and the backtrace lines, but loses the specific trap kind (e.g.
-/// `CannotBlockSyncTask`, `AsyncDeadlock`) which lives further down the source
-/// chain as a `wasmtime::Trap`. The Debug format prints the whole chain
-/// including the Trap variant; we also fish the `Trap` out explicitly so the
-/// trap kind appears on its own line for quick scanning.
-fn format_wasm_trap(e: &wasmtime::Error) -> String {
-    let trap_kind = e
-        .downcast_ref::<wasmtime::Trap>()
-        .map(|trap| format!(" (trap: {trap:?} — {trap})"))
-        .unwrap_or_default();
-    format!("{e:?}{trap_kind}")
-}
-
-/// Run all test exports from a Wasm component compiled with the `test` world.
-/// Each test function is called in its own Store. All tests must pass.
-fn run_test_world(
-    wasm: &[u8],
-    test_id: &str,
-    outgoing_mocks: indexmap::IndexMap<String, common::OutgoingMockResponse>,
-    tls_mocks: indexmap::IndexMap<String, common::TlsMockResponse>,
-) -> anyhow::Result<common::WasmRunResult> {
-    use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
-
-    let rt = common::runtime();
-    let engine = common::engine();
-
-    rt.block_on(async {
-        let component = Component::new(engine, wasm)?;
-        let linker = common::linker(engine)?;
-
-        // Find test exports
-        let component_ty = component.component_type();
-        let mut test_names: Vec<String> = component_ty
-            .exports(engine)
-            .filter_map(|(name, _)| {
-                if name.starts_with("test-") {
-                    Some(name.to_string())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        test_names.sort();
-
-        anyhow::ensure!(!test_names.is_empty(), "no test exports found");
-
-        let mut all_stdout = String::new();
-        let mut all_stderr = String::new();
-
-        for test_name in &test_names {
-            let expect_trap = test_name.starts_with("test-trap-");
-            let is_todo = test_name.starts_with("test-todo-");
-
-            let stdout_pipe = MemoryOutputPipe::new(65536);
-            let stdout_clone = stdout_pipe.clone();
-            let stderr_pipe = MemoryOutputPipe::new(65536);
-            let stderr_clone = stderr_pipe.clone();
-
-            let mut state = common::WasiState::new_with_pipes(stdout_pipe, stderr_pipe);
-            state.http_hooks.mocks = outgoing_mocks.clone();
-            state.tls_ctx = common::build_tls_ctx(tls_mocks.clone());
-            let mut store = Store::new(engine, state);
-            // Parse per-test timeout from export name (e.g., "test-tm2000-0-slow")
-            // and set epoch deadline for timeout enforcement
-            let timeout_ms =
-                parse_test_timeout_ms(test_name).unwrap_or(common::DEFAULT_TIMEOUT_MS);
-            let deadline_ticks = (timeout_ms / 1000).max(1);
-            store.set_epoch_deadline(deadline_ticks);
-
-            let instance = linker.instantiate_async(&mut store, &component).await?;
-            let func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, test_name)?;
-
-            match func.call_async(&mut store, ()).await {
-                Ok((Ok(()),)) => {
-                    if is_todo {
-                        // TODO test passed — the feature may now work. This must surface
-                        // as a hard failure even inside an outer `#![TODO]` catch_unwind,
-                        // so we panic with a typed sentinel rather than bailing through
-                        // the generic `anyhow::Result` channel.
-                        std::panic::panic_any(TodoResolved(format!(
-                            "[{test_id}] TODO test '{test_name}' resolved — \
-                             remove the #[TODO] attribute"
-                        )));
-                    } else if expect_trap {
-                        anyhow::bail!(
-                            "[{test_id}] test '{test_name}' was expected to trap but returned Ok(())"
-                        );
-                    }
-                    // passed
-                }
-                Ok((Err(()),)) => {
-                    let stderr_text = String::from_utf8_lossy(&stderr_clone.contents()).to_string();
-                    anyhow::bail!(
-                        "[{test_id}] test '{test_name}' returned error. stderr: {stderr_text}"
-                    );
-                }
-                Err(e) => {
-                    if !expect_trap && !is_todo {
-                        let stderr_text =
-                            String::from_utf8_lossy(&stderr_clone.contents()).to_string();
-                        let detail = format_wasm_trap(&e);
-                        anyhow::bail!(
-                            "[{test_id}] test '{test_name}' trapped: {detail}\n  stderr: {stderr_text}"
-                        );
-                    }
-                    // expected trap (expect_trap or TODO): pending
-                }
-            }
-
-            all_stdout.push_str(&String::from_utf8_lossy(&stdout_clone.contents()));
-            all_stderr.push_str(&String::from_utf8_lossy(&stderr_clone.contents()));
-        }
-
-        Ok(common::WasmRunResult {
-            stdout: all_stdout,
-            stderr: all_stderr,
-            trapped: false,
-            exit_code: None,
-        })
-    })
-}
-
-/// Parse per-test timeout from export name (e.g., "test-tm2000-0-slow" → Some(2000)).
-fn parse_test_timeout_ms(test_name: &str) -> Option<u64> {
-    let rest = test_name
-        .strip_prefix("test-trap-")
-        .or_else(|| test_name.strip_prefix("test-todo-"))
-        .or_else(|| test_name.strip_prefix("test-"))?;
-    let rest = rest.strip_prefix("tm")?;
-    let end = rest.find('-')?;
-    rest[..end].parse::<u64>().ok()
-}
-
-// ---------------------------------------------------------------------------
 // Main test dispatch
 // ---------------------------------------------------------------------------
 
@@ -798,7 +647,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
                 // A `test-todo-*` export that returned Ok signals a resolved TODO via
                 // `TodoResolved`. Re-raise it so the test framework reports the failure;
                 // everything else is treated as a still-pending TODO.
-                if let Some(resolved) = err.downcast_ref::<TodoResolved>() {
+                if let Some(resolved) = err.downcast_ref::<common::TodoResolved>() {
                     panic!("{}", resolved.0);
                 }
                 let msg = err
@@ -962,7 +811,7 @@ fn run_normal_test(
             }
         }
     } else if spec.test_world.is_some() {
-        let result = run_test_world(
+        let result = common::run_test_world(
             &compile_result.wasm,
             test_id,
             spec.outgoing_mocks.clone(),
@@ -1206,7 +1055,7 @@ test "passes unexpectedly" {
         .expect("compilation should succeed");
 
     let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_test_world(
+        common::run_test_world(
             &compile_result.wasm,
             "synthetic-todo-resolved",
             indexmap::IndexMap::new(),
@@ -1216,7 +1065,7 @@ test "passes unexpectedly" {
     .expect_err("a resolved #[TODO] test must panic, not return");
 
     let resolved = payload
-        .downcast_ref::<TodoResolved>()
+        .downcast_ref::<common::TodoResolved>()
         .expect("panic payload should be TodoResolved");
     assert!(
         resolved.0.contains("resolved"),
