@@ -557,7 +557,10 @@ impl<'a> NirUnparser<'a> {
                     self.output.push_str("()");
                 } else if let Some(value) =
                     crate::const_eval::Value::from_operand(body, op, self.type_table)
+                        .filter(crate::const_eval::Value::is_scalar)
                 {
+                    // Scalars only: an aggregate constant has no NIR literal
+                    // form, and `format_repr` panics rather than invent one.
                     self.output.push_str(&value.format_repr());
                 } else {
                     self.output.push_str(&format!("%{}", v.index()));

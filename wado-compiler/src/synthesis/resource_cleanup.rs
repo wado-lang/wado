@@ -251,17 +251,11 @@ pub fn elaborate_resource_drops(project: &mut Package) {
     let tt = type_table.borrow();
 
     // The receiver of a method call is consumed only when the method takes
-    // `self` by value; collect those methods up front. Methods live both as
-    // free `functions` and inside `impls`.
+    // `self` by value; collect those methods up front.
     let mut owned_self: IndexSet<String> = IndexSet::default();
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
             record_owned_self(&func_rc.borrow(), &tt, &mut owned_self);
-        }
-        for imp in &module.impls {
-            for method in &imp.methods {
-                record_owned_self(method, &tt, &mut owned_self);
-            }
         }
     }
 
@@ -274,11 +268,6 @@ pub fn elaborate_resource_drops(project: &mut Package) {
                 &struct_fields,
                 &owned_self,
             );
-        }
-        for imp in &mut module.impls {
-            for method in &mut imp.methods {
-                elaborate_function(method, &tt, reg, &struct_fields, &owned_self);
-            }
         }
     }
 }

@@ -52,6 +52,7 @@ use crate::tir::{
     TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
     TirTemplatePart, TypeId, TypeTable,
 };
+use crate::tir_visitor::TirRefVisitor;
 
 /// Canonical identity of an effect or resource **declaration**:
 /// `(defining_module, base_name)`.
@@ -152,6 +153,80 @@ fn identify_active_effects(
         .collect()
 }
 
+/// Effects whose call sites nothing else in the pipeline would lower.
+///
+/// [`identify_active_effects`] keys on handler impls and `cm_binding` lowers
+/// only `#[cm]`-tagged operations, so an effect called with no `impl` anywhere
+/// falls through both — reachable because `#[ambient]` bypasses effect-check.
+/// The ordinary dispatch triple lowers the call to its wrapper, whose
+/// no-handler branch traps like any uninstalled handler.
+fn identify_uncovered_effects(
+    project: &Package,
+    effect_index: &IndexMap<EffectKey, EffectMeta>,
+    active: &IndexSet<InstantiationKey>,
+) -> IndexSet<InstantiationKey> {
+    // Per-operation: an interface mixing a `#[cm]` operation with a plain one
+    // still leaves the plain one unlowered, and the infrastructure covers the
+    // whole interface either way.
+    //
+    // One bare name, one owner: the triple is named after the name alone, so
+    // activating a second declaration under it emits `__Dispatch_<E>` twice.
+    // A name an active instantiation owns is left to it — the call lands on
+    // that dispatch and traps there when no handler is installed.
+    let owned: IndexSet<&String> = active
+        .iter()
+        .filter(|(_, _, type_args)| type_args.is_empty())
+        .map(|(_, name, _)| name)
+        .collect();
+    let mut uncovered: IndexMap<String, InstantiationKey> = IndexMap::default();
+    for ((module, name), meta) in effect_index {
+        if meta.is_resource
+            || !meta.operations.iter().any(|op| op.cm_name.is_none())
+            || owned.contains(name)
+        {
+            continue;
+        }
+        uncovered
+            .entry(name.clone())
+            .or_insert_with(|| (module.clone(), name.clone(), Vec::new()));
+    }
+    if uncovered.is_empty() {
+        return IndexSet::default();
+    }
+
+    let mut collector = UncoveredEffectCallCollector {
+        uncovered: &uncovered,
+        called: IndexSet::default(),
+    };
+    for module in project.tir_modules.values() {
+        for func_rc in &module.functions {
+            if let Some(body) = &func_rc.borrow().body {
+                collector.visit_block(body);
+            }
+        }
+    }
+    collector.called
+}
+
+/// Records which uncovered effects are actually called, so a declared but
+/// never-performed effect costs no dispatch infrastructure.
+struct UncoveredEffectCallCollector<'a> {
+    uncovered: &'a IndexMap<String, InstantiationKey>,
+    called: IndexSet<InstantiationKey>,
+}
+
+impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Call { func, .. } = &expr.kind
+            && let Some(interface) = func.module_source.interface_name()
+            && let Some(key) = self.uncovered.get(interface.as_str())
+        {
+            self.called.insert(key.clone());
+        }
+        self.walk_expr(expr);
+    }
+}
+
 /// All the bookkeeping needed to emit / refer to the dispatch
 /// infrastructure for a single effect.
 ///
@@ -207,7 +282,10 @@ fn instantiation_label(base: &str, type_args: &[TypeId], type_table: &TypeTable)
     }
 }
 
-fn handler_return_type(op: &TirEffectOp, type_table: &TypeTable) -> TypeId {
+/// The type an `impl E for T` method returns for one operation: the resolved
+/// `T` for an async operation, which reads `AsyncCall<T>` at its call site.
+/// Every other dispatch boundary stays at the call-site type.
+fn impl_method_return_type(op: &TirEffectOp, type_table: &TypeTable) -> TypeId {
     if op.is_async {
         type_table.as_async_call(op.return_type).unwrap_or_else(|| {
             panic!(
@@ -321,8 +399,7 @@ fn synthesize_dispatch_struct(
         nullable_ref_type_id = tt.make_option(inner_ref_type_id);
         for op in &meta.operations {
             let param_types: Vec<TypeId> = op.params.iter().map(|p| p.type_id).collect();
-            let closure_ret = handler_return_type(op, &tt);
-            let op_func_type = tt.make_function(param_types, closure_ret, vec![], vec![]);
+            let op_func_type = tt.make_function(param_types, op.return_type, vec![], vec![]);
             op_field_types.push(op_func_type);
         }
     }
@@ -563,11 +640,10 @@ fn build_dispatch_wrapper_function(
     }
     let saved_local = alloc_local(&mut next_local, &mut locals, nullable_ref_type_id);
     let d_local = alloc_local(&mut next_local, &mut locals, inner_ref_type_id);
-    let closure_ret = handler_return_type(op, &type_table.borrow());
-    let result_local = if closure_ret == TypeTable::UNIT {
+    let result_local = if return_type == TypeTable::UNIT {
         None
     } else {
-        Some(alloc_local(&mut next_local, &mut locals, closure_ret))
+        Some(alloc_local(&mut next_local, &mut locals, return_type))
     };
 
     let arg_exprs: Vec<TirExpr> = params
@@ -666,7 +742,7 @@ fn build_dispatch_wrapper_function(
             callee: Box::new(closure_field_access),
             args: arg_exprs.clone(),
         },
-        closure_ret,
+        return_type,
         span,
     );
 
@@ -677,7 +753,7 @@ fn build_dispatch_wrapper_function(
                 local_index: rl,
                 is_mut: false,
                 is_reactive: false,
-                type_id: closure_ret,
+                type_id: return_type,
                 value: indirect_call,
                 skip_value_copy: false,
             },
@@ -710,48 +786,7 @@ fn build_dispatch_wrapper_function(
     ));
 
     // return __result;  /  return;
-    if op.is_async {
-        assert!(
-            op.cm_name.is_some() && !is_resource,
-            "handled async op `{op_name}` without a CM import binding \
-             (the elaborator rejects handler impls for user-defined async effects)"
-        );
-        let wrap_args = match result_local {
-            Some(rl) => vec![CallArg::new(
-                TirExpr::new(
-                    TirExprKind::Local {
-                        index: rl,
-                        name: "__result".to_string(),
-                    },
-                    closure_ret,
-                    span,
-                ),
-                false,
-            )],
-            None => vec![],
-        };
-        let wrap_call = TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(FunctionRef {
-                    module_source: entry_source.clone(),
-                    name: crate::name::cm_wrap_async_func_name(base_name, op_name),
-                    monomorph_info: None,
-                    method_info: None,
-                }),
-                type_args: vec![],
-                args: wrap_args,
-                has_receiver: false,
-            },
-            return_type,
-            span,
-        );
-        then_stmts.push(TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(wrap_call),
-            },
-            span,
-        ));
-    } else if let Some(rl) = result_local {
+    if let Some(rl) = result_local {
         let result_expr = TirExpr::new(
             TirExprKind::Local {
                 index: rl,
@@ -1240,11 +1275,6 @@ fn lower_with_handler_dispatch_in_modules(
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
             lower_with_handler_dispatch_in_func(&mut func, &env);
-        }
-        for impl_block in &mut module.impls {
-            for method in &mut impl_block.methods {
-                lower_with_handler_dispatch_in_func(method, &env);
-            }
         }
     }
 }
@@ -1781,8 +1811,8 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             field_index: 0,
         });
         for op in &plan.operations {
-            // Ops the impl defines get a forwarding closure; the rest (`..trap`)
-            // get a trapping stub.
+            // An op the impl defines calls into the handler; the rest are the
+            // block's rest clause, defaulting to a trap.
             let closure_expr = if impl_info.methods.contains_key(&op.name) {
                 build_handler_op_closure(
                     op,
@@ -1790,8 +1820,12 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                     handler_type,
                     h_local,
                     &h_name,
+                    &interface_name,
+                    &env.entry_source,
                     &env.type_table,
                 )
+            } else if impl_info.rest == Some(crate::ast::RestClause::Forward) {
+                build_forward_closure(op, plan, &env.entry_source, &env.type_table)
             } else {
                 build_trap_closure(op, &env.type_table)
             };
@@ -2259,6 +2293,60 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
     }
 }
 
+/// Repackage a handler method's resolved `T` as the `AsyncCall<T>` its call
+/// site reads, through the interface's `__cm_wrap_async__<E>__<op>` adapter.
+/// The adapter takes no argument when `T` is unit, so the method call becomes a
+/// statement and the wrap is the block's trailing expression.
+fn wrap_async_result(
+    op: &TirEffectOp,
+    method_call: TirExpr,
+    method_ret: TypeId,
+    base_name: &str,
+    entry_source: &ModuleSource,
+    span: crate::token::Span,
+) -> TirExpr {
+    assert!(
+        op.cm_name.is_some(),
+        "handled async op `{}` without a CM import binding — no \
+         `__cm_wrap_async__` adapter exists to repackage the handler's result \
+         (the elaborator rejects handler impls for user-defined async effects)",
+        op.name
+    );
+    let (wrap_args, prelude) = if method_ret == TypeTable::UNIT {
+        (
+            vec![],
+            vec![TirStmt::new(TirStmtKind::Expr(method_call), span)],
+        )
+    } else {
+        (vec![CallArg::new(method_call, false)], vec![])
+    };
+    let wrap_call = TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef {
+                module_source: entry_source.clone(),
+                name: crate::name::cm_wrap_async_func_name(base_name, &op.name),
+                monomorph_info: None,
+                method_info: None,
+            }),
+            type_args: vec![],
+            args: wrap_args,
+            has_receiver: false,
+        },
+        op.return_type,
+        span,
+    );
+    if prelude.is_empty() {
+        return wrap_call;
+    }
+    let mut stmts = prelude;
+    stmts.push(TirStmt::new(TirStmtKind::Expr(wrap_call), span));
+    TirExpr::new(
+        TirExprKind::Block(TirBlock::new(stmts, span)),
+        op.return_type,
+        span,
+    )
+}
+
 /// Build the `op_<n>` closure for a single (effect, op, handler-impl)
 /// triple.
 ///
@@ -2273,12 +2361,21 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
 /// receiver is a `TirExprKind::Capture { index: 0 }` that the
 /// lower-phase closure pass converts into a field access on the
 /// generated functor struct.
+///
+/// The closure is typed at the call-site type, so an async operation's body
+/// wraps the method result:
+///
+/// ```text
+/// |<op_params>| __cm_wrap_async__<E>__<op>(__h_<E>.<E>::<op>(<op_params>))
+/// ```
 fn build_handler_op_closure(
     op: &TirEffectOp,
     impl_info: &HandlerImplInfo,
     handler_type: TypeId,
     h_local_index: u32,
     h_name: &str,
+    base_name: &str,
+    entry_source: &ModuleSource,
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
 ) -> TirExpr {
     let span = synth_span();
@@ -2325,7 +2422,7 @@ fn build_handler_op_closure(
         .methods
         .get(&op.name)
         .expect("caller checked impl_info.methods.contains_key(&op.name)");
-    let closure_ret = handler_return_type(op, &type_table.borrow());
+    let method_ret = impl_method_return_type(op, &type_table.borrow());
     let method_call = TirExpr::new(
         TirExprKind::method_call(
             Box::new(receiver),
@@ -2338,9 +2435,16 @@ fn build_handler_op_closure(
             vec![],
             arg_call_args,
         ),
-        closure_ret,
+        method_ret,
         span,
     );
+
+    let closure_ret = op.return_type;
+    let body = if op.is_async {
+        wrap_async_result(op, method_call, method_ret, base_name, entry_source, span)
+    } else {
+        method_call
+    };
 
     let captures = vec![TirCapture {
         name: h_name.to_string(),
@@ -2357,7 +2461,7 @@ fn build_handler_op_closure(
     TirExpr::new(
         TirExprKind::Closure {
             params: closure_params,
-            body: Box::new(method_call),
+            body: Box::new(body),
             captures,
             functor_id: None,
             address_taken_locals: crate::hashmap::IndexSet::default(),
@@ -2394,7 +2498,7 @@ fn build_trap_closure(
         .iter()
         .map(|p| (p.name.clone(), p.type_id))
         .collect();
-    let closure_ret = handler_return_type(op, &type_table.borrow());
+    let closure_ret = op.return_type;
     let trap_call = TirExpr::new(
         TirExprKind::Call {
             func: Box::new(FunctionRef {
@@ -2422,6 +2526,68 @@ fn build_trap_closure(
             functor_id: None,
             address_taken_locals: crate::hashmap::IndexSet::default(),
             // Synthetic trap stub; no body-level let-bindings.
+            body_locals: Vec::new(),
+            declared_effects: None,
+        },
+        func_type,
+        span,
+    )
+}
+
+/// Build the stub for an operation a `..forward` block leaves out: call the
+/// operation's own dispatch wrapper, which by then has installed `outer`, so
+/// the call lands on the next handler out. Named directly rather than emitted
+/// as `E::op(...)` because call-site rewriting has already run.
+fn build_forward_closure(
+    op: &TirEffectOp,
+    plan: &DispatchPlan,
+    entry_source: &ModuleSource,
+    type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
+) -> TirExpr {
+    let span = synth_span();
+    let closure_params: Vec<(String, TypeId)> = op
+        .params
+        .iter()
+        .map(|p| (p.name.clone(), p.type_id))
+        .collect();
+    let args: Vec<CallArg> = op
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            CallArg::new(
+                TirExpr::new(
+                    TirExprKind::Local {
+                        index: i as u32,
+                        name: p.name.clone(),
+                    },
+                    p.type_id,
+                    span,
+                ),
+                false,
+            )
+        })
+        .collect();
+    let closure_ret = op.return_type;
+    let wrapper_name = plan
+        .wrapper_names
+        .get(&op.name)
+        .expect("wrapper name registered for every op in the plan")
+        .clone();
+    let body = wrapper_call(wrapper_name, args, closure_ret, span, entry_source);
+
+    let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+    let func_type = type_table
+        .borrow_mut()
+        .make_function(param_types, closure_ret, vec![], vec![]);
+    TirExpr::new(
+        TirExprKind::Closure {
+            params: closure_params,
+            body: Box::new(body),
+            captures: Vec::new(),
+            functor_id: None,
+            address_taken_locals: crate::hashmap::IndexSet::default(),
+            // Synthetic forwarding stub; no body-level let-bindings.
             body_locals: Vec::new(),
             declared_effects: None,
         },
@@ -2526,16 +2692,6 @@ fn rewrite_call_sites_to_wrappers(
             }
             if let Some(body) = &mut func.body {
                 rewrite_calls_in_block(body, &ctx);
-            }
-        }
-        for impl_block in &mut module.impls {
-            for method in &mut impl_block.methods {
-                if method.is_dispatch_wrapper {
-                    continue;
-                }
-                if let Some(body) = &mut method.body {
-                    rewrite_calls_in_block(body, &ctx);
-                }
             }
         }
     }
@@ -2969,7 +3125,12 @@ pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String
 
     let effect_index = build_effect_index(&project);
     let impl_index = build_handler_impl_index(&project, &effect_index);
-    let active_effects = identify_active_effects(&impl_index);
+    let mut active_effects = identify_active_effects(&impl_index);
+    active_effects.extend(identify_uncovered_effects(
+        &project,
+        &effect_index,
+        &active_effects,
+    ));
 
     if active_effects.is_empty() {
         return Ok(project);
@@ -3136,6 +3297,10 @@ struct HandlerImplInfo {
     impl_module: ModuleSource,
     /// Per-operation call target, keyed by operation name.
     methods: IndexMap<String, HandlerMethodTarget>,
+    /// The block's `..trap` / `..forward`, deciding what an operation absent
+    /// from `methods` does. `None` behaves as `..trap`: a block that lists
+    /// every operation never reaches the stub either way.
+    rest: Option<crate::ast::RestClause>,
 }
 
 /// The TIR function a synthesised dispatch call must target for
@@ -3203,6 +3368,7 @@ fn build_handler_impl_index(
             let entry = out.entry(key).or_insert_with(|| HandlerImplInfo {
                 impl_module: module_source.clone(),
                 methods: IndexMap::default(),
+                rest: None,
             });
             entry.methods.insert(
                 method_info.method_name.clone(),
@@ -3211,6 +3377,32 @@ fn build_handler_impl_index(
                     method_info: method_info.clone(),
                 },
             );
+        }
+
+        // The rest clause lives on the block, not on any method, so it comes
+        // from `module.impls`. A block whose only content is a rest clause has
+        // no method to be discovered through, so this is also what registers
+        // it as a handler at all.
+        for tir_impl in &module.impls {
+            let Some((effect_module, base_trait_name)) = &tir_impl.trait_canonical else {
+                continue;
+            };
+            if !effect_index.contains_key(&(effect_module.clone(), base_trait_name.clone())) {
+                continue;
+            }
+            let key: HandlerImplKey = (
+                tir_impl.struct_name.clone(),
+                effect_module.clone(),
+                base_trait_name.clone(),
+                tir_impl.trait_type_args.clone(),
+            );
+            out.entry(key)
+                .or_insert_with(|| HandlerImplInfo {
+                    impl_module: module_source.clone(),
+                    methods: IndexMap::default(),
+                    rest: None,
+                })
+                .rest = tir_impl.rest;
         }
     }
     out

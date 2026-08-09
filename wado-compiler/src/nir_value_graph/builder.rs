@@ -345,24 +345,12 @@ pub(crate) fn build_scoped(
     out
 }
 
-/// Whether `id`'s value is a constant literal — a build-context-free value safe
-/// to freeze into an operand at the early freeze (see
-/// `extract::freeze_pure_arith`'s constant-leaf promotion).
+/// Whether `id`'s value is a build-context-free constant safe to freeze into an
+/// operand at the early freeze (see `extract::freeze_pure_arith`'s constant-leaf
+/// promotion). Not every constant qualifies — see
+/// [`ValueKind::is_operand_constant`].
 pub(crate) fn is_const_value(pool: &ValuePool, id: ValueId) -> bool {
-    is_const_kind(pool.kind(id))
-}
-
-/// Whether a `ValueKind` is a constant literal (carries no build-local context).
-fn is_const_kind(k: &ValueKind) -> bool {
-    matches!(
-        k,
-        ValueKind::Int(..)
-            | ValueKind::Float(..)
-            | ValueKind::Bool(_)
-            | ValueKind::Char(_)
-            | ValueKind::Null
-            | ValueKind::Unit
-    )
+    pool.kind(id).is_operand_constant()
 }
 
 /// Re-intern a constant `ValueKind` into `pool`, returning its id there.
@@ -374,7 +362,16 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
         ValueKind::Char(c) => pool.char(c),
         ValueKind::Null => pool.null(),
         ValueKind::Unit => pool.unit(),
-        _ => unreachable!("is_const_kind gates this"),
+        ValueKind::Const(key, t) => pool.constant(key.value(), t),
+        ValueKind::Opaque(_)
+        | ValueKind::Binary { .. }
+        | ValueKind::Unary { .. }
+        | ValueKind::Cast { .. }
+        | ValueKind::Select { .. }
+        | ValueKind::LoopPhi { .. }
+        | ValueKind::FieldAccess { .. } => {
+            unreachable!("the caller's match admits only constant kinds")
+        }
     }
 }
 
@@ -408,7 +405,8 @@ fn reintern_live_rooted(
         | ValueKind::Bool(_)
         | ValueKind::Char(_)
         | ValueKind::Null
-        | ValueKind::Unit => reintern_const(live, kind),
+        | ValueKind::Unit
+        | ValueKind::Const(..) => reintern_const(live, kind),
         ValueKind::Binary { op, lhs, rhs, ty } => {
             let l = reintern_live_rooted(scratch, live, lhs, live_base, type_table)?;
             let r = reintern_live_rooted(scratch, live, rhs, live_base, type_table)?;
@@ -583,8 +581,8 @@ impl<'a> Builder<'a> {
         // `true || x → true`, `true && x → x`, `false && x → false` (and the
         // mirror cases with the constant on the right).
         if matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
-            let lb = as_bool(self.pool.kind(lhs));
-            let rb = as_bool(self.pool.kind(rhs));
+            let lb = self.pool.kind(lhs).as_bool();
+            let rb = self.pool.kind(rhs).as_bool();
             let folded = match op {
                 NirBinaryOp::Or => match (lb, rb) {
                     (Some(true), _) | (_, Some(true)) => {
@@ -1208,7 +1206,29 @@ impl<'a> Builder<'a> {
             }
 
             // ---- Other Skel-side leaves ----
-            ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => None,
+            // The backing bytes of a `String` / `List<u8>` literal are a
+            // constant the pool can name, so a literal keeps its identity
+            // through a binding instead of going opaque at the first `let`.
+            // Bounded by `MAX_SEQ_ELEMENTS`: past it the walk would cost more
+            // than any fold it enables, and `Value::seq` declines.
+            ExprKind::PackedArray(bytes) => {
+                // Length first: `Value::seq` declines past `MAX_SEQ_ELEMENTS`,
+                // and building a `Value` per byte only to throw the vector away
+                // would walk an embedded asset on every graph build.
+                if bytes.len() > crate::const_eval::MAX_SEQ_ELEMENTS {
+                    return None;
+                }
+                let elements = bytes
+                    .iter()
+                    .map(|b| crate::const_eval::Value::Int {
+                        value: u64::from(*b),
+                        prim: crate::tir::PrimitiveType::U8,
+                    })
+                    .collect();
+                let ty = self.body.exprs[expr].type_id;
+                crate::const_eval::Value::seq(ty, elements).map(|seq| self.pool.constant(&seq, ty))
+            }
+            ExprKind::GlobalVarGet { .. } => None,
         }
     }
 
@@ -2176,14 +2196,6 @@ fn collect_writes_in_pattern(
                 _ => {}
             }
         }
-    }
-}
-
-/// The boolean a constant `Bool` value carries, if any.
-fn as_bool(kind: &super::ValueKind) -> Option<bool> {
-    match kind {
-        super::ValueKind::Bool(b) => Some(*b),
-        _ => None,
     }
 }
 

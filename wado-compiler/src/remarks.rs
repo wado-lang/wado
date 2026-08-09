@@ -17,11 +17,11 @@
 //! walking the optimized NIR yields the residual-copy set with exact source
 //! locations.
 //!
-//! Detection is restricted to the entry module's functions. This excludes the
-//! pervasive buffer copies inside stdlib helpers (`String::push` growth, …) and,
-//! as a current limitation, also copies in other user modules of a multi-file
-//! program (see the WEP's "broaden beyond the entry module" item). `array_copy`
-//! is excluded regardless: it is bulk buffer movement, not a value-semantic copy.
+//! Detection covers the entry package — the entry point and the local modules
+//! it reaches — and nothing else. A dependency, `core:` and `wasi:` are someone
+//! else's source, and their internals (`String::push` growth, …) would drown
+//! out the program under compilation. `array_copy` is excluded regardless: it
+//! is bulk buffer movement, not a value-semantic copy.
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -35,12 +35,15 @@ use crate::token::Span;
 pub struct Remark {
     /// The remark text, without the `remark:` prefix the logger adds.
     pub message: String,
-    /// Where the copy survives, in the original source.
+    /// The module the span belongs to. A span carries no file, and the entry
+    /// package is more than one.
+    pub module: ModuleSource,
+    /// Where the cost survives, in the original source.
     pub span: Span,
 }
 
 /// Collect remarks for value-semantic copies that survive optimization,
-/// restricted to functions defined in the entry module.
+/// restricted to functions the entry package defines.
 pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
     let value_copy_set = package.value_copy_helper_types();
     // Callee descriptor by `func_id` (the call node carries no `FunctionRef`).
@@ -58,11 +61,9 @@ pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
     let mut remarks = Vec::new();
     for func_rc in &package.functions {
         let func = func_rc.borrow();
-        // A value-copy helper is synthesized in the module that defines the
-        // copied type, so a helper for an entry-module type also lives in the
-        // entry module. Skipping helper *bodies* keeps the copies inside a
-        // helper from being reported against the helper itself.
-        if func.module_source != package.entry_module_source || func.is_value_copy() {
+        // Skipping helper *bodies* keeps the copies inside a value-copy helper
+        // from being reported against the helper itself.
+        if !func.module_source.is_entry_package() || func.is_value_copy() {
             continue;
         }
         let Some(body) = &func.body else {
@@ -72,6 +73,7 @@ pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
             value_copy_set: &value_copy_set,
             callees: &callees,
             type_table,
+            module: func.module_source.clone(),
             remarks: &mut remarks,
             current_span: body.blocks[body.root].span,
             in_value_block: false,
@@ -86,6 +88,7 @@ struct Collector<'a> {
     /// Callee descriptor indexed by `func_id.index()`. See [`collect_value_copy_remarks`].
     callees: &'a [FunctionRef],
     type_table: &'a TypeTable,
+    module: ModuleSource,
     remarks: &'a mut Vec<Remark>,
     /// Span of the enclosing real statement. Synthesized copy nodes
     /// (`array_clone`, demoted spine copies) carry placeholder spans, so the
@@ -164,6 +167,7 @@ impl Collector<'_> {
                     let type_name = self.type_table.type_name(type_id);
                     self.remarks.push(Remark {
                         message: format!("a copy of `{type_name}` survives optimization"),
+                        module: self.module.clone(),
                         span: self.current_span,
                     });
                 }
@@ -225,5 +229,228 @@ fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
             .as_expr()
             .map_or(body.exprs[inner_e].type_id, |e| body.exprs[e].type_id),
         _ => body.exprs[inner_e].type_id,
+    }
+}
+
+/// Collect remarks for compile-time parameters that still decide a branch in
+/// the optimized NIR — a build asked to strip `trace` and `debug` shipping them
+/// and consulting the parameter at run time.
+///
+/// A read outside a scrutinee is an ordinary use of the value, not a gate that
+/// failed, and is not reported. Scoped to the entry package, like the
+/// value-copy remarks.
+pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
+    let params = parameter_decided_globals(package);
+    if params.is_empty() {
+        return Vec::new();
+    }
+
+    let mut scan = ParamGateScan {
+        params: &params,
+        module: package.entry_module_source.clone(),
+        reported: crate::hashmap::IndexSet::default(),
+        remarks: Vec::new(),
+    };
+    for func_rc in &package.functions {
+        let func = func_rc.borrow();
+        if !func.module_source.is_entry_package() {
+            continue;
+        }
+        let Some(body) = &func.body else {
+            continue;
+        };
+        scan.module = func.module_source.clone();
+        scan.walk(body);
+    }
+    scan.remarks
+}
+
+/// Every global a build-time parameter decides the value of, and how: the
+/// `#[param]` globals, plus any global assigned from one.
+///
+/// The second kind is what `core:log` reads at its gate
+/// (`global LOG_STATIC_LEVEL: Level = level_from_str(LOG_LEVEL)`).
+/// `globals::extract` has moved such an initializer into `__initialize_module`
+/// by now, so the assignment is an ordinary `GlobalVarSet` in a body.
+fn parameter_decided_globals(package: &NirPackage) -> IndexMap<GlobalKey, ParamOrigin> {
+    let mut decided: IndexMap<GlobalKey, ParamOrigin> = package
+        .globals
+        .iter()
+        .filter_map(|g| {
+            let param = g.param_name.clone()?;
+            let key = (g.module_source.clone(), g.name.clone());
+            Some((key, ParamOrigin { param, via: None }))
+        })
+        .collect();
+    if decided.is_empty() {
+        return decided;
+    }
+
+    // A chain (`A = f(PARAM); B = g(A)`) settles in as many rounds as it is
+    // long, and each round only grows the map, so this terminates.
+    loop {
+        let mut grew = false;
+        for func_rc in &package.functions {
+            let func = func_rc.borrow();
+            let Some(body) = &func.body else {
+                continue;
+            };
+            for (assigned, value) in global_assignments(body) {
+                if decided.contains_key(&assigned) {
+                    continue;
+                }
+                let Some(param) = reads_decided_global(body, value, &decided) else {
+                    continue;
+                };
+                let via = Some(assigned.1.clone());
+                decided.insert(assigned, ParamOrigin { param, via });
+                grew = true;
+            }
+        }
+        if !grew {
+            return decided;
+        }
+    }
+}
+
+/// Which parameter decides a global, and the global's own name when the gate
+/// will not name the parameter itself.
+struct ParamOrigin {
+    param: String,
+    via: Option<String>,
+}
+
+/// Every `GlobalVarSet` reachable from `body`'s root, as the global it writes
+/// and the operand it writes there.
+fn global_assignments(body: &Body) -> Vec<(GlobalKey, crate::nir_arena::Operand)> {
+    let mut out = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value,
+            } = &body.exprs[e].kind
+        {
+            out.push(((module_source.clone(), name.clone()), *value));
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
+}
+
+/// The parameter deciding some global that the expression rooted at `op` reads.
+fn reads_decided_global(
+    body: &Body,
+    op: crate::nir_arena::Operand,
+    decided: &IndexMap<GlobalKey, ParamOrigin>,
+) -> Option<String> {
+    let mut stack = vec![NodeRef::Expr(op.as_expr()?)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } = &body.exprs[e].kind
+            && let Some(origin) = decided.get(&(module_source.clone(), name.clone()))
+        {
+            return Some(origin.param.clone());
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    None
+}
+
+type GlobalKey = (ModuleSource, String);
+
+struct ParamGateScan<'a> {
+    params: &'a IndexMap<GlobalKey, ParamOrigin>,
+    /// The module currently being walked; a `Remark` records where it was
+    /// found, since one span means nothing without its file.
+    module: ModuleSource,
+    /// `(parameter, file, gate span)` triples already remarked on, so one
+    /// source gate yields one remark however many times a scrutinee reads the
+    /// parameter and however many callers inlining copied it into. The module
+    /// is in the key because a span carries no file.
+    reported: crate::hashmap::IndexSet<(String, ModuleSource, Span)>,
+    remarks: Vec<Remark>,
+}
+
+impl ParamGateScan<'_> {
+    /// Walk from the root, not over the arena: `StmtKind` has no tombstone, so
+    /// a detached `If` still occupies its slot.
+    ///
+    /// Each node carries the span of the innermost scrutinee it sits inside, or
+    /// `None` outside every scrutinee. It passes to children unchanged and is
+    /// replaced, never cleared, on entering a nested scrutinee.
+    fn walk(&mut self, body: &Body) {
+        let mut stack = vec![(NodeRef::Block(body.root), None)];
+        while let Some((node, gate)) = stack.pop() {
+            if let (NodeRef::Expr(e), Some(span)) = (node, gate) {
+                self.report(body, e, span);
+            }
+            let scrutinee = branch_gate(body, node)
+                .and_then(|(op, span)| Some((NodeRef::Expr(op.as_expr()?), span)));
+            body.for_each_child(node, |c| {
+                let child_gate = match scrutinee {
+                    Some((s, span)) if s == c => Some(span),
+                    _ => gate,
+                };
+                stack.push((c, child_gate));
+            });
+        }
+    }
+
+    fn report(&mut self, body: &Body, expr: ExprId, span: Span) {
+        let ExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } = &body.exprs[expr].kind
+        else {
+            return;
+        };
+        let Some(origin) = self.params.get(&(module_source.clone(), name.clone())) else {
+            return;
+        };
+        let param = &origin.param;
+        if !self
+            .reported
+            .insert((param.clone(), self.module.clone(), span))
+        {
+            return;
+        }
+        let read = match &origin.via {
+            Some(global) => format!("is still read here through global `{global}`"),
+            None => "is still read here".to_string(),
+        };
+        self.remarks.push(Remark {
+            message: format!(
+                "compile-time parameter `{param}` {read}, so this branch is \
+                 decided at run time; the code it guards was not stripped"
+            ),
+            module: self.module.clone(),
+            span,
+        });
+    }
+}
+
+/// The operand whose value picks a branch, with the span a remark about it
+/// should point at. `None` for every non-branching node.
+fn branch_gate(body: &Body, node: NodeRef) -> Option<(crate::nir_arena::Operand, Span)> {
+    match node {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
+            crate::nir_arena::StmtKind::If { condition, .. } => {
+                Some((*condition, body.stmts[s].span))
+            }
+            _ => None,
+        },
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::If { condition, .. } => Some((*condition, body.exprs[e].span)),
+            ExprKind::Match { expr, .. } => Some((*expr, body.exprs[e].span)),
+            ExprKind::Switch { scrutinee, .. } => Some((*scrutinee, body.exprs[e].span)),
+            _ => None,
+        },
+        NodeRef::Block(_) | NodeRef::Pat(_) => None,
     }
 }

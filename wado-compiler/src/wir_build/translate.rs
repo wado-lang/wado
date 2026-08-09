@@ -2317,6 +2317,9 @@ impl FunctionTranslator<'_, '_> {
                     self.local_get(*index)
                 }
             }
+            // `register_globals` gives a unit global no slot, so a read is
+            // nothing and a write is its value alone, evaluated for effect.
+            ExprKind::GlobalVarGet { .. } if self.is_stackless_type(expr.type_id) => WirInstr::Nop,
             ExprKind::GlobalVarGet {
                 module_source,
                 name,
@@ -2338,6 +2341,9 @@ impl FunctionTranslator<'_, '_> {
                 }
                 let val = self.translate_operand(*value);
                 self.force_fixed_string_repr = prev_force;
+                if self.is_stackless_type(self.operand_type_id(*value)) {
+                    return val;
+                }
                 WirInstr::GlobalSet {
                     name: WirName {
                         fq: global_name(module_source, name),

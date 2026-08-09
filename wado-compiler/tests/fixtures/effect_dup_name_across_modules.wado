@@ -1,0 +1,33 @@
+// Two modules declare `interface Log`, only this one handles it. A call site
+// carries no declaring module and the dispatch triple is named after the bare
+// name, so exactly one declaration may own that name — activating both emits
+// `__Dispatch_Log` twice and monomorphization rejects the duplicate.
+use { println, Stdout } from "core:cli";
+use { helper } from "./sub/effect_dup_name_other.wado";
+
+interface Log {
+    fn emit(message: String);
+}
+
+struct Sink {
+    lines: List<String> = [],
+}
+
+impl Log for Sink {
+    fn emit(&mut self, message: String) {
+        self.lines.push(message);
+    }
+}
+
+export fn run() with Stdout {
+    let mut sink = Sink {};
+    with Log => &mut sink do {
+        Log::emit(`hello`);
+    };
+    println(`${sink.lines.len()} ${helper()}`);
+}
+
+__DATA__
+{
+    "stdout": "1 7\n"
+}

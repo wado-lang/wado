@@ -274,6 +274,8 @@ impl Interpreter<'_> {
                         Value::Int { .. }
                         | Value::Float { .. }
                         | Value::Char(_)
+                        | Value::Null
+                        | Value::Unit
                         | Value::Aggregate { .. }
                         | Value::Seq { .. }
                         | Value::Variant { .. },

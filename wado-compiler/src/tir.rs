@@ -5396,17 +5396,6 @@ pub struct TirTraitMethod {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
-pub struct TirImpl {
-    /// Generic type parameters for the impl block (e.g., `impl<T> Box<T>`)
-    pub type_params: Vec<TirTypeParam>,
-    /// The trait being implemented, if any (e.g., "Display" for `impl Display for Type`)
-    pub trait_name: Option<String>,
-    pub target_type: TypeId,
-    pub methods: Vec<TirFunction>,
-    pub span: Span,
-}
-
 /// Which compiler-synthesizable trait an `impl Trait for Type;` request names.
 ///
 /// The set is closed: the elaborator classifies the requested trait at the
@@ -5418,6 +5407,30 @@ pub enum SynthTrait {
     From { source: TypeId },
     Serialize,
     Deserialize,
+}
+
+/// An `impl` block as declared — its identity, not its methods, which live in
+/// [`TirModule::functions`] linked back by [`TirFunction::method_info`]. The
+/// record exists for a block whose only content is a rest clause
+/// (`impl Log for Passthrough { ..forward }`), which produces no methods at
+/// all. Consumed by the effect-dispatch synthesis; nothing past it sees an
+/// impl block.
+#[derive(Debug, Clone)]
+pub struct TirImpl {
+    /// Canonical `(declaring_module, base_trait_name)`; `None` for an inherent
+    /// impl. Matches `LocalMethodName::{base_trait_module, base_trait_name}`,
+    /// so a block and its methods agree on which declaration they target.
+    pub trait_canonical: Option<(ModuleSource, String)>,
+    /// Trait / resource type arguments at the impl site (`impl Stream<u8>` →
+    /// `[u8]`). Matches `LocalMethodName::trait_type_args`.
+    pub trait_type_args: Vec<TypeId>,
+    /// The target type's name, derived exactly as `reify_method` derives it
+    /// for this block's methods, so a block and its methods produce the same
+    /// key in the effect-dispatch handler index.
+    pub struct_name: String,
+    /// `..trap` / `..forward`, when the block ends with a rest clause.
+    pub rest: Option<crate::ast::RestClause>,
+    pub span: Span,
 }
 
 /// `impl Trait for Type;` — request the compiler to synthesize the trait implementation.
@@ -5541,6 +5554,8 @@ pub struct TirModule {
     pub effects: Vec<TirEffect>,
     pub resources: Vec<TirResource>,
     pub traits: Vec<TirTrait>,
+    /// `impl` blocks as declared (identity + rest clause); their methods are
+    /// in `functions`.
     pub impls: Vec<TirImpl>,
     /// `impl Trait for Type;` — synthesis requests (populated by elaborator, consumed by synthesis)
     pub synthesis_requests: Vec<SynthesisRequest>,

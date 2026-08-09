@@ -371,38 +371,20 @@ impl<'a> Engine<'a> {
             .copied()
     }
 
-    /// The reaching constant of every bare scalar read in `scalars`, computed by a
+    /// Every read whose reaching value the use site can re-emit, recovered by a
     /// scratch re-walk (the same splice-point growth `inline` uses — no live
-    /// rebuild) — without writing them into `value_of`.
+    /// rebuild) and without writing anything into `value_of`.
     ///
-    /// A structural pass (SROA) that introduces bare scalar stores
-    /// (`__sroa_x = 99; … __sroa_x …`) leaves the build-once graph — built, and by
-    /// `inline` coarsened, before the pass — with no value for the new reads, so
-    /// store→load forwarding misses them. Bare-local forwarding is immune to the
-    /// call/heap bumps that defeat the pre-SROA *field* form, so a re-walk recovers
-    /// each read's reaching constant. The born-as-operands path
-    /// (`store_load_forward`) promotes these directly into operand slots, so the
-    /// constant forwarding no longer round-trips through the persisted side-table
-    /// (WEP item 3). Returns `(read, value)` pairs; empty when there is no built
-    /// graph to grow.
-    pub fn bare_local_constants(
-        &mut self,
-        scalars: &IndexSet<u32>,
-    ) -> Vec<(ExprId, crate::nir_value_graph::ValueId)> {
-        self.scoped_const_reads(scalars, /* include_fields */ false)
-    }
-
-    /// Every constant read recovered by the scratch re-walk
-    /// [`Self::bare_local_constants`] uses, covering both bare scalar `Local`
-    /// reads (in `scalars`) and — when `include_fields` — `FieldAccess` reads.
-    /// A field read is admitted only when the walk gives it a constant `ValueId`;
-    /// under the conservative session alias sets an aliased / address-taken
-    /// receiver never carries one, so the same upstream safety
-    /// `store_load_forward` relies on holds here. Used by the born-as-operands
-    /// path to promote field constants without consulting `value_of` (WEP item 3).
+    /// Covers a `Local` read of any local in `forwardable`, and — when
+    /// `include_fields` — a `FieldAccess` read. What disqualifies a local is
+    /// being address-taken or `stores`-aliased, not being an aggregate.
+    ///
+    /// The re-walk exists because SROA introduces stores after the build-once
+    /// graph was built, so the new reads carry no value. Returns `(read, value)`
+    /// pairs; empty when there is no built graph to grow.
     pub fn scoped_const_reads(
         &mut self,
-        scalars: &IndexSet<u32>,
+        forwardable: &IndexSet<u32>,
         include_fields: bool,
     ) -> Vec<(ExprId, crate::nir_value_graph::ValueId)> {
         use crate::nir_value_graph::builder;
@@ -410,7 +392,7 @@ impl<'a> Engine<'a> {
         // session's alias config, which is sound only when the caller has set the
         // real sets (`store_load_forward` does). A missing graph is left for the
         // natural lazy build at the next query.
-        if self.body.value_graph.is_none() || (scalars.is_empty() && !include_fields) {
+        if self.body.value_graph.is_none() || (forwardable.is_empty() && !include_fields) {
             return Vec::new();
         }
         let root = self.body.root;
@@ -419,8 +401,8 @@ impl<'a> Engine<'a> {
         let empty = IndexMap::default();
         // The real alias sets, not a maximally-conservative `all`: with `all` as
         // `mut_escaped`, every call would bump every local to a fresh opaque
-        // (`bump_call_effects`), destroying a bare scalar's reaching constant
-        // across the calls between its store and a later read. A SROA scalar is
+        // (`bump_call_effects`), destroying a local's reaching value across the
+        // calls between its store and a later read. A SROA scalar is
         // non-escaping, so the real sets leave it untouched by calls — exactly
         // the forwarding we need to recover. (`pure_calls` is left empty here:
         // bumping at every call is conservative — it only forgoes a forward.)
@@ -445,7 +427,7 @@ impl<'a> Engine<'a> {
                 continue;
             }
             let keep = match &self.body.exprs[e].kind {
-                ExprKind::Local { index, .. } => scalars.contains(index),
+                ExprKind::Local { index, .. } => forwardable.contains(index),
                 ExprKind::FieldAccess { .. } => include_fields,
                 _ => false,
             };
@@ -816,6 +798,10 @@ impl<'a> Engine<'a> {
             Value::Float { value, .. } => ValueKind::Float(value.to_bits(), type_id),
             Value::Bool(b) => ValueKind::Bool(b),
             Value::Char(c) => ValueKind::Char(c),
+            // `null` and `()` are constants the pool can name, but promoting
+            // one is an extraction question this path does not answer: `()` has
+            // no Wasm representation at all. Keep the skeleton form.
+            Value::Null | Value::Unit => return false,
             Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => return false,
         };
         let vid = self.body.values.alloc_unshared(kind, type_id);
