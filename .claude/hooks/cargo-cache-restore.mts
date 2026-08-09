@@ -2,9 +2,9 @@
 // SessionStart hook: restore the shared cargo caches from GCS.
 //
 // Two objects are restored (both produced by .github/workflows/cargo-cache.yml):
-//   registry  -> $CARGO_HOME (registry/index + registry/cache; saves the download)
+//   registry  -> $CARGO_HOME (index, .crate files, unpacked sources)
 //   sccache   -> $SCCACHE_DIR (content-addressed compile cache; the `warm-cache`
-//                mise task turns it into a warm target/ in ~80s instead of ~8min)
+//                mise task turns it into a warm target/)
 // Neither object contains credentials.
 //
 // Best-effort: any failure (no key, no object yet, network) is logged and the
@@ -18,7 +18,7 @@
 //   WADO_CACHE_SCCACHE_OBJECT, SCCACHE_DIR.
 
 import { createSign } from "node:crypto";
-import { readFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, openSync, rmSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -35,6 +35,9 @@ const CARGO_HOME = process.env.CARGO_HOME ?? join(homedir(), ".cargo");
 const SCCACHE_DIR = process.env.SCCACHE_DIR ?? join(CARGO_HOME, "sccache");
 const SCOPE = "https://www.googleapis.com/auth/devstorage.read_only";
 const TIMEOUT_MS = 60_000;
+// `AbortSignal.timeout` covers the streamed body, not just the response
+// headers, so this bounds the whole multi-gigabyte download.
+const DOWNLOAD_TIMEOUT_MS = 900_000;
 
 type ServiceAccountKey = { client_email: string; private_key: string; token_uri: string };
 
@@ -75,9 +78,9 @@ async function accessToken({ client_email, private_key, token_uri }: ServiceAcco
   return (await res.json()).access_token;
 }
 
-// Unpack straight from the network into destDir. Staging the tarball on disk
-// first would cost a peak of ~500 MB (sccache) of the session's fixed disk
-// allowance, which is the resource under pressure here.
+// Unpack straight from the network into destDir. Staging the tarball first
+// would double the peak draw on the session's fixed disk allowance, which is
+// the resource under pressure here.
 async function untar(body: ReadableStream<Uint8Array>, destDir: string): Promise<void> {
   const tar = spawn("tar", ["-xzf", "-", "-C", destDir], { stdio: ["pipe", "ignore", "inherit"] });
   const exited = new Promise<void>((resolve, reject) => {
@@ -93,7 +96,7 @@ async function restore(token: string, object: string, destDir: string): Promise<
     `/o/${encodeURIComponent(object)}?alt=media`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
   });
   if (res.status === 404) {
     log(`no cache object yet (gs://${BUCKET}/${object}); skipping`);
@@ -123,7 +126,51 @@ function launchBackgroundWarm(): void {
   }
 }
 
+const DETACH_MARKER = "WADO_CACHE_RESTORE_DETACHED";
+const LOG_FILE = join(homedir(), ".cache", "wado", "warm-cache.log");
+// Read by a second SessionStart and by the `warm-cache` task. A pid rather
+// than a flag keeps a killed restore from wedging either of them.
+const RESTORE_MARKER = join(homedir(), ".cache", "wado", "cargo-cache-restore.running");
+
+function restoreInFlight(): boolean {
+  try {
+    const pid = Number(readFileSync(RESTORE_MARKER, "utf8").trim());
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// The download outlives the harness's hook timeout, which would kill this
+// script; re-exec detached so the session starts immediately instead.
+function relaunchDetached(): boolean {
+  if (process.env[DETACH_MARKER] === "1" || process.env.CLAUDE_CODE_REMOTE !== "true") return false;
+  if (restoreInFlight()) {
+    log("a cache restore is already running; leaving it to finish");
+    return true;
+  }
+  try {
+    mkdirSync(dirname(LOG_FILE), { recursive: true });
+    const out = openSync(LOG_FILE, "a");
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url)], {
+      detached: true,
+      stdio: ["ignore", out, out],
+      env: { ...process.env, [DETACH_MARKER]: "1" },
+    });
+    child.unref();
+    log(`restoring caches in the background; progress in ${LOG_FILE}`);
+    return true;
+  } catch (e) {
+    log(`background restore launch failed, restoring inline: ${(e as Error).message}`);
+    return false;
+  }
+}
+
 async function main(): Promise<void> {
+  if (relaunchDetached()) return;
+
   const key = loadKey();
   if (!key) {
     log("no service-account key in env; skipping cache restore");
@@ -131,16 +178,24 @@ async function main(): Promise<void> {
   }
 
   const token = await accessToken(key);
-  // Independent and best-effort: a missing sccache object must not stop the
-  // registry restore, and vice versa.
-  const [registry, sccache] = await Promise.allSettled([
-    restore(token, REGISTRY_OBJECT, CARGO_HOME),
-    restore(token, SCCACHE_OBJECT, SCCACHE_DIR),
-  ]);
-  for (const r of [registry, sccache]) {
-    if (r.status === "rejected") log(`skipped: ${(r.reason as Error).message}`);
+  mkdirSync(dirname(RESTORE_MARKER), { recursive: true });
+  writeFileSync(RESTORE_MARKER, String(process.pid));
+  let sccacheRestored = false;
+  try {
+    // Independent and best-effort: a missing sccache object must not stop the
+    // registry restore, and vice versa.
+    const [registry, sccache] = await Promise.allSettled([
+      restore(token, REGISTRY_OBJECT, CARGO_HOME),
+      restore(token, SCCACHE_OBJECT, SCCACHE_DIR),
+    ]);
+    for (const r of [registry, sccache]) {
+      if (r.status === "rejected") log(`skipped: ${(r.reason as Error).message}`);
+    }
+    sccacheRestored = sccache.status === "fulfilled" && sccache.value;
+  } finally {
+    rmSync(RESTORE_MARKER, { force: true });
   }
-  if (sccache.status === "fulfilled" && sccache.value) launchBackgroundWarm();
+  if (sccacheRestored) launchBackgroundWarm();
 }
 
 main().catch((e: Error) => log(`skipped: ${e.message}`));

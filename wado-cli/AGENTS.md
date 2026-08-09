@@ -30,6 +30,6 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
 
 ## Tests
 
-`tests/cli_parse.rs` covers argument parsing without running a compile; the
+`tests/integration/cli_parse.rs` covers argument parsing without running a compile; the
 rest (`cli.rs`, `serve.rs`, `lsp.rs`, `kiln_*.rs`, `dependency_resolution.rs`,
 `git_dependency.rs`, `run_inprocess.rs`) drive the subcommands end to end.

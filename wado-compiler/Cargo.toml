@@ -9,6 +9,13 @@ license = { workspace = true }
 name = "wado_compiler"
 path = "src/lib.rs"
 
+# Shared helpers, not a test target: without this cargo auto-discovers
+# tests/common.rs and links a binary holding zero tests.
+[[test]]
+name = "common"
+path = "tests/common.rs"
+test = false
+
 [dependencies]
 cranelift-entity = { workspace = true }
 fluent-uri = { workspace = true }
