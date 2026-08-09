@@ -150,6 +150,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         hoistable_pure: &hoistable_pure,
         structs: &project.structs,
         param_readonly: RefCell::new(IndexMap::default()),
+        param_readonly_in_progress: RefCell::new(IndexSet::default()),
         string_inline_max_bytes: project.string_inline_max_bytes,
     };
     let mut candidates: Vec<Candidate> = Vec::new();
@@ -958,6 +959,12 @@ struct Gate<'a> {
     /// Each verdict costs two walks of the callee body, and one helper taking a
     /// constant is typically called from many sites.
     param_readonly: RefCell<IndexMap<(usize, usize), bool>>,
+    /// Verdicts currently being computed. [`Gate::callee_param_readonly`] runs
+    /// the callee's own read-only gate, which asks the same question of the
+    /// callees *it* reaches, so a recursive or mutually recursive callee would
+    /// otherwise re-enter its own in-flight query. Re-entry answers `false`:
+    /// nothing is proven yet, and read-only is the claim that needs proving.
+    param_readonly_in_progress: RefCell<IndexSet<(usize, usize)>>,
     /// The opt-level's `NirPackage::string_inline_max_bytes`, the eager
     /// `array.new_fixed` bound `translate_packed_array` applies to a `let`-shape
     /// global's value.
@@ -1086,9 +1093,31 @@ impl Gate<'_> {
         if let Some(&cached) = self.param_readonly.borrow().get(&key) {
             return cached;
         }
+        if !self.param_readonly_in_progress.borrow_mut().insert(key) {
+            return false;
+        }
         let verdict = self.compute_param_readonly(func_id, param_pos);
+        self.param_readonly_in_progress
+            .borrow_mut()
+            .swap_remove(&key);
         self.param_readonly.borrow_mut().insert(key, verdict);
         verdict
+    }
+
+    /// Whether a call can reach the candidate through `func_id`'s receiver
+    /// without writing it.
+    ///
+    /// `&mut self` writes the caller's storage outright, and an unknown callee
+    /// proves nothing. `&self` cannot write. A *by-value* receiver used to pass
+    /// on the strength of its type alone, which is not enough: `sroa_param`
+    /// rewrites a `&mut S` receiver whose struct has a single field into that
+    /// field by value, and a field that is itself a reference — a `String`, a
+    /// `List` — still writes the caller's storage when the callee mutates it.
+    /// So a by-value receiver clears the same body gate a by-value argument
+    /// does.
+    fn receiver_cannot_write(&self, func_id: crate::nir::FuncId) -> bool {
+        self.callee_mutates_self(func_id) == Some(false)
+            && (self.callee_borrows_self(func_id) || self.callee_param_readonly(func_id, 0))
     }
 
     fn compute_param_readonly(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
@@ -1422,14 +1451,14 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             if let Some(receiver) = receiver {
                 let recv = receiver.as_expr().map(|e| strip_refs(body, e));
                 if recv.is_some_and(|r| is_local(body, r, idx)) {
-                    if gate.callee_mutates_self(callee_id) != Some(false) {
+                    if !gate.receiver_cannot_write(callee_id) {
                         return false;
                     }
                 } else if receiver
                     .as_expr()
                     .is_some_and(|e| expr_mentions_local(body, e, idx))
                 {
-                    if gate.callee_mutates_self(callee_id) != Some(false) {
+                    if !gate.receiver_cannot_write(callee_id) {
                         return false;
                     }
                     if !expr_readonly_operand(body, receiver, idx, gate) {
@@ -1439,7 +1468,10 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
                     return false;
                 }
             }
-            rest.iter().all(|&a| call_arg_readonly(body, a, idx, gate))
+            let first_rest = usize::from(has_receiver);
+            rest.iter().enumerate().all(|(pos, &a)| {
+                call_arg_readonly(body, a, idx, gate, Some((callee_id, first_rest + pos)))
+            })
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
@@ -1447,7 +1479,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             expr_readonly_operand(body, callee, idx, gate)
                 && args
                     .iter()
-                    .all(|&a| call_arg_readonly_operand(body, a, idx, gate))
+                    .all(|&a| call_arg_readonly_operand(body, a, idx, gate, None))
         }
 
         // `&mut <…xs…>` — a mutable reference into the binding escapes.
@@ -1532,14 +1564,29 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
     }
 }
 
-fn call_arg_readonly_operand(body: &Body, op: Operand, idx: u32, gate: &Gate<'_>) -> bool {
+fn call_arg_readonly_operand(
+    body: &Body,
+    op: Operand,
+    idx: u32,
+    gate: &Gate<'_>,
+    param: Option<(crate::nir::FuncId, usize)>,
+) -> bool {
     op.as_expr()
-        .is_none_or(|e| call_arg_readonly(body, e, idx, gate))
+        .is_none_or(|e| call_arg_readonly(body, e, idx, gate, param))
 }
 
 /// A binding handed to a call as an argument. `&` borrow is a read; `&mut`
 /// escapes; passing the binding itself by value is a consuming use (rejected).
-fn call_arg_readonly(body: &Body, arg: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
+///
+/// `param` names the parameter the argument lands in, and `None` means the
+/// callee is unknown.
+fn call_arg_readonly(
+    body: &Body,
+    arg: ExprId,
+    idx: u32,
+    gate: &Gate<'_>,
+    param: Option<(crate::nir::FuncId, usize)>,
+) -> bool {
     match &body.exprs[arg].kind {
         ExprKind::Local { index, .. } => *index != idx,
         ExprKind::Unary {
@@ -1556,7 +1603,25 @@ fn call_arg_readonly(body: &Body, arg: ExprId, idx: u32, gate: &Gate<'_>) -> boo
             inner.as_expr().is_some_and(|e| is_local(body, e, idx))
                 || expr_readonly_operand(body, inner, idx, gate)
         }
-        _ => expr_readonly(body, arg, idx, gate),
+        // A *projection* of the binding whose type is itself a reference —
+        // `writer.buf`, a `String` — hands the callee the binding's own
+        // storage even though it crosses by value, so a callee that writes it
+        // writes the shared global. `sroa_param` produces exactly this shape:
+        // it rewrites a `&mut S` receiver whose struct has a single field into
+        // that field, and the mutation that used to travel through `&mut S`
+        // now travels through the field. Reading the projection is a read
+        // (`expr_readonly`); handing it over is only safe once the callee's own
+        // gate clears the parameter it lands in. A scalar projection copies its
+        // value outright and needs none of this.
+        _ => {
+            if gate.is_reference_type(body.exprs[arg].type_id)
+                && expr_mentions_local(body, arg, idx)
+                && !param.is_some_and(|(func_id, pos)| gate.callee_param_readonly(func_id, pos))
+            {
+                return false;
+            }
+            expr_readonly(body, arg, idx, gate)
+        }
     }
 }
 
