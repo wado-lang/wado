@@ -268,7 +268,8 @@ mod tests {
 
     fn run_elide(body: &mut Body, locals: &mut Vec<NirLocal>) {
         let stores_aliased = IndexSet::default();
-        let rule = ElideRule::new(&stores_aliased);
+        // No callees in these bodies, so the summaries are unused.
+        let rule = ElideRule::new(&stores_aliased, &[]);
         let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.run(&[&rule]);
