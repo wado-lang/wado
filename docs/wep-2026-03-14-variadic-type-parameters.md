@@ -361,7 +361,11 @@ occurred.
 
 ### Out of Scope (Future Work)
 
-- **Pack indexing**: `T[0]` to extract the first type from a pack — useful but complex
+- **Pack indexing**: `T[0]` to extract the first type from a pack — useful but complex.
+  A literal index landing on a pack (`t.0` where `t: [..T]`) is rejected: neither the
+  bound nor the per-position type is decidable before the pack expands. A scalar ahead
+  of the pack (`[A, ..T]`.0) keeps its fixed position, and the `.enumerate()` subscript
+  stays the way to reach an element.
 - **Definition-time trait bound checking**: checking `..T: Trait` at definition time
   rather than at monomorphization (requires a richer trait solver)
 - **Fold operations**: `(v op ... op init)` C++-style fold expressions

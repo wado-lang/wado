@@ -704,9 +704,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A turbofish on a case path (`Maybe::<i32>::Nothing`) must name exactly
-    /// the declaring type's parameters. An enum or a flags type declares none,
-    /// so an argument there is an error rather than something silently
-    /// dropped.
+    /// the declaring type's parameters; an enum or a flags type declares none.
     fn check_case_turbofish_arity(
         &mut self,
         ident: &ast::IdentExpr,
@@ -723,9 +721,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let found = ident.type_args.len();
         let _ = self.emit(TypeError::InvalidLiteral {
-            message: format!(
-                "`{type_name}` takes {expected_text}, the turbofish supplies {found}"
-            ),
+            message: format!("`{type_name}` takes {expected_text}, the turbofish supplies {found}"),
             span: ident.span,
         });
     }
@@ -1199,8 +1195,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// An index that lands on the pack is rejected: the pack's arity and its
     /// per-position types are only known once it expands, so neither the bound
     /// nor the element type can be decided here. Only the scalar prefix ahead
-    /// of the pack (`[i32, ..T]`.0) has a fixed position. `Err` carries the
-    /// diagnostic.
+    /// of the pack (`[i32, ..T]`.0) has a fixed position.
     pub(super) fn tuple_literal_index_type(
         type_table: &std::cell::RefCell<TypeTable>,
         elements: &[TypeId],
@@ -1278,11 +1273,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if TypeTable::is_tuple_type(&name)
                     && let Ok(index) = field_name.parse::<usize>()
                 {
-                    match Self::tuple_literal_index_type(
-                        &self.tysys.type_table,
-                        &type_args,
-                        index,
-                    ) {
+                    match Self::tuple_literal_index_type(&self.tysys.type_table, &type_args, index)
+                    {
                         Ok(elem) => return (index as u32, elem),
                         Err(message) => {
                             let _ = self.emit(TypeError::InvalidLiteral { message, span });

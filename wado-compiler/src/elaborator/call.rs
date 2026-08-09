@@ -2376,11 +2376,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // synthesis phase that runs after elaboration, so the
                         // registry is empty here; compute the subject's.
                         let resolved = resolved.or_else(|| {
-                            self.concrete_reflect_assoc_type(
-                                owner_ty,
-                                &bound.name,
-                                &assoc.name,
-                            )
+                            self.concrete_reflect_assoc_type(owner_ty, &bound.name, &assoc.name)
                         });
                         if let Some(resolved) = resolved {
                             args[target_idx] = resolved;

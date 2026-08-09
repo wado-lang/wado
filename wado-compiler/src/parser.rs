@@ -7293,7 +7293,10 @@ line 2
         for (source, params) in [
             ("fn f(x: i32, y: i32,) {}", 2),
             ("fn f(x: i32, mut g: fn mut() -> i32,) {}", 2),
-            ("fn f<effect E>(x: i32, mut g: fn mut() with E,) with E {}", 2),
+            (
+                "fn f<effect E>(x: i32, mut g: fn mut() with E,) with E {}",
+                2,
+            ),
             // `with E, Stdout` is the parameter type's own effect list — a
             // comma after `with` continues it, so this declares one parameter.
             (

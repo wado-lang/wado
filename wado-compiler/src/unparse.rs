@@ -3217,9 +3217,7 @@ pub fn unparse_expr_simple(expr: &Expr) -> String {
     output
 }
 
-/// Emit `::<T1, T2, ...>` turbofish into `output`. Unlike the `Unparser`
-/// method it does not skip an empty list, and no caller hands it one: the
-/// prefix form is only built with arguments, and the plain form checks.
+/// Emit `::<T1, T2, ...>` turbofish into `output`.
 fn unparse_turbofish_into(type_args: &[Type], output: &mut String) {
     output.push_str("::<");
     for (idx, ty) in type_args.iter().enumerate() {

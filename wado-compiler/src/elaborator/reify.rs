@@ -6024,11 +6024,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && let ast::Expr::Literal(lit) = &index.index
             && let ast::Literal::Number(repr) = &lit.value
             && let Ok(idx) = repr.parse::<usize>()
-            && let Ok(elem) = super::Elaborator::<H>::tuple_literal_index_type(
-                &self.tysys.type_table,
-                elems,
-                idx,
-            )
+            && let Ok(elem) =
+                super::Elaborator::<H>::tuple_literal_index_type(&self.tysys.type_table, elems, idx)
         {
             return TirExpr::new(
                 TirExprKind::FieldAccess {

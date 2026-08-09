@@ -1396,9 +1396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// Synthesis registers these after elaboration, so a call site needing one
     /// — projecting a pack out of `T: ReflectFlags<Members = [..M]>` — finds
-    /// nothing in the registry and must compute it. `None` for a subject of
-    /// the wrong kind, an unknown trait / associated name, or a subject that
-    /// is still a type parameter (nothing concrete to read).
+    /// nothing in the registry and must compute it.
     pub(super) fn concrete_reflect_assoc_type(
         &mut self,
         subject: TypeId,
