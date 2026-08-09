@@ -6028,6 +6028,20 @@ impl Parser {
         let mut lex_result = crate::lexer::lex(expr_str);
         for token in &mut lex_result.tokens {
             token.span = rebase_span(token.span, origin);
+            // A template nested in this one — `${ cond ? `${x}` : … }` — had its
+            // parts scanned by the same fragment lexer, so the origin each
+            // interpolation recorded is relative to the fragment too and has to
+            // travel with the spans.
+            if let TokenKind::TemplateStringLit(parts) = &mut token.kind {
+                for part in parts {
+                    if let crate::token::TemplateTokenPart::Interpolation {
+                        origin: nested, ..
+                    } = part
+                    {
+                        *nested = rebase_position(*nested, origin);
+                    }
+                }
+            }
         }
         // Lex errors inside the interpolation surface alongside the outer
         // parser's diagnostics, at the offending byte rather than the whole
@@ -6183,12 +6197,28 @@ fn advance_position(origin: crate::token::Position, text: &str) -> crate::token:
     }
 }
 
-/// Rebase a span produced by lexing a fragment on its own onto the file the
+/// Rebase a position produced by lexing a fragment on its own onto the file the
 /// fragment came from.
 ///
 /// The fragment starts at line 1, column 1, offset 0, so only its first line
 /// needs the column shift — every later line already begins at column 1 where
 /// the file's does.
+fn rebase_position(
+    position: crate::token::Position,
+    origin: crate::token::Position,
+) -> crate::token::Position {
+    crate::token::Position {
+        offset: origin.offset + position.offset,
+        line: origin.line + position.line - 1,
+        column: if position.line == 1 {
+            origin.column + position.column - 1
+        } else {
+            position.column
+        },
+    }
+}
+
+/// Rebase a span the same way [`rebase_position`] rebases a point.
 fn rebase_span(span: Span, origin: crate::token::Position) -> Span {
     let shift_column = |line: usize, column: usize| {
         if line == 1 {
@@ -7139,28 +7169,7 @@ mod tests {
             "fn f() {\n    let s = `a: ${alpha} b: ${ beta } c: ${\n        gamma\n    }`;\n}\n";
         let module = parse(source).unwrap();
 
-        struct Idents<'a> {
-            source: &'a str,
-            found: Vec<(String, usize, usize)>,
-        }
-        impl AstVisitor for Idents<'_> {
-            fn visit_expr(&mut self, expr: &Expr) {
-                if let Expr::Ident(ident) = expr {
-                    let span = ident.span;
-                    self.found.push((
-                        self.source[span.start..span.end].to_string(),
-                        span.line,
-                        span.column,
-                    ));
-                }
-                crate::ast::walk_expr(self, expr);
-            }
-        }
-
-        let mut idents = Idents {
-            source,
-            found: Vec::new(),
-        };
+        let mut idents = ident_positions(source);
         for item in &module.items {
             idents.visit_item(item);
         }
@@ -7172,6 +7181,56 @@ mod tests {
                 ("beta".to_string(), 2, 32),
                 ("gamma".to_string(), 3, 9),
             ]
+        );
+    }
+
+    /// Collects each identifier as the text its span slices out of `source`,
+    /// plus the line and column it reports. Slicing is the point: a span that
+    /// does not index the file names the wrong text, or none at all.
+    struct IdentPositions<'a> {
+        source: &'a str,
+        found: Vec<(String, usize, usize)>,
+    }
+
+    impl AstVisitor for IdentPositions<'_> {
+        fn visit_expr(&mut self, expr: &Expr) {
+            if let Expr::Ident(ident) = expr {
+                let span = ident.span;
+                self.found.push((
+                    self.source[span.start..span.end].to_string(),
+                    span.line,
+                    span.column,
+                ));
+            }
+            crate::ast::walk_expr(self, expr);
+        }
+    }
+
+    fn ident_positions(source: &str) -> IdentPositions<'_> {
+        IdentPositions {
+            source,
+            found: Vec::new(),
+        }
+    }
+
+    /// A template nested inside an interpolation is scanned by the same
+    /// fragment lexer as the interpolation holding it, so the position *it*
+    /// records for its own interpolations is fragment-relative too and has to
+    /// be rebased along with the spans. Rebasing only the spans left this case
+    /// pointing into unrelated text.
+    #[test]
+    fn nested_interpolation_spans_index_the_file() {
+        let source = "fn f(c: bool) {\n    let s = `${ if c { `${inner}` } else { `x` } }`;\n}\n";
+        let module = parse(source).unwrap();
+
+        let mut idents = ident_positions(source);
+        for item in &module.items {
+            idents.visit_item(item);
+        }
+
+        assert_eq!(
+            idents.found,
+            vec![("c".to_string(), 2, 20), ("inner".to_string(), 2, 27)]
         );
     }
 
