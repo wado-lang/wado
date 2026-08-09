@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786256932934,
+  "lastUpdate": 1786270883775,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46653,6 +46653,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/384e69c61353cddee971c4a4cf9f57b7b82788b4"
         },
         "date": 1786256932062,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271633,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cea2e09d354aebdde42334950bd94b16bff47c0e",
+          "message": "Merge pull request #1775 from wado-lang/claude/reflection-api-examples-cjtouv\n\nfeat(example): property-based testing and flags⇄text over the reflection API",
+          "timestamp": "2026-08-09T19:09:45+09:00",
+          "tree_id": "6c42efee6f6ceb0b3f6eae78cc511be2086f8f27",
+          "url": "https://github.com/wado-lang/wado/commit/cea2e09d354aebdde42334950bd94b16bff47c0e"
+        },
+        "date": 1786270882919,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
