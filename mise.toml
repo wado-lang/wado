@@ -43,20 +43,40 @@ run = """
 # No-ops cleanly when sccache or the cache is absent (e.g. local dev).
 set -e -o pipefail
 export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cargo/sccache}"
+# Match the ceiling cargo-cache.yml publishes under. sccache LRU-trims to its
+# limit as it runs, and the default 10 GiB is below what the cache now weighs
+# with the test targets in it — the server would punch holes in the very
+# entries we just downloaded.
+export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-30G}"
 if ! command -v sccache >/dev/null 2>&1; then
   echo "sccache not installed; skipping warm-cache (normal cold build applies)"
   exit 0
 fi
 # The SessionStart hook warms in the background and `on-task-started` warms on
 # demand, so two runs can overlap. Serialize them: the second one then observes
-# the finished state below and exits instead of duplicating the build.
-lock="$HOME/.cache/wado/warm-cache.lock"
-mkdir -p "$(dirname "${lock}")"
-exec 9>"${lock}"
-if ! flock -n 9; then
-  echo "warm-cache: another run holds the lock; waiting for it to finish"
-  flock 9
+# the finished state below and exits instead of duplicating the build. `flock`
+# is util-linux and absent on macOS, where nothing restores a cache anyway.
+if command -v flock >/dev/null 2>&1; then
+  lock="$HOME/.cache/wado/warm-cache.lock"
+  mkdir -p "$(dirname "${lock}")"
+  exec 9>"${lock}"
+  if ! flock -n 9; then
+    echo "warm-cache: another run holds the lock; waiting for it to finish"
+    flock 9
+  fi
 fi
+# The restore hook streams gigabytes in the background and no longer blocks
+# session start, so this can begin while $SCCACHE_DIR is still half-extracted —
+# which would build against a fraction of the cache and then delete the tree
+# tar is writing into. The marker carries the restoring pid, so a killed
+# restore cannot wedge us here.
+marker="$HOME/.cache/wado/cargo-cache-restore.running"
+if [ -e "${marker}" ]; then
+  echo "warm-cache: a cache restore is in flight; waiting for it to finish"
+fi
+while [ -e "${marker}" ] && kill -0 "$(cat "${marker}" 2>/dev/null)" 2>/dev/null; do
+  sleep 5
+done
 if [ ! -d "$SCCACHE_DIR" ] || [ -z "$(ls -A "$SCCACHE_DIR" 2>/dev/null)" ]; then
   echo "no sccache cache at $SCCACHE_DIR; skipping warm-cache (already warmed, or none published)"
   exit 0
@@ -108,10 +128,15 @@ fi
 
 # Nothing reads the restored cache once target/ is warm, and carrying the test
 # targets has pushed it to a couple of gigabytes of the session's fixed disk
-# allowance. Reclaim it. A later `cargo clean` therefore costs a full cold
-# build; drop these two lines if that trade is wrong for you.
-sccache --stop-server >/dev/null 2>&1 || true
-rm -rf "${SCCACHE_DIR}"
+# allowance. Reclaim it — but only in the cloud container, where the cache is a
+# disposable download this session produced. Elsewhere $SCCACHE_DIR belongs to
+# the developer and may back every other project on the machine.
+# A later `cargo clean` in the container therefore costs a full cold build;
+# drop this block if that trade is wrong for you.
+if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
+  sccache --stop-server >/dev/null 2>&1 || true
+  rm -rf "${SCCACHE_DIR}"
+fi
 """
 
 [tasks.on-task-done]

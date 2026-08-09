@@ -18,7 +18,7 @@
 //   WADO_CACHE_SCCACHE_OBJECT, SCCACHE_DIR.
 
 import { createSign } from "node:crypto";
-import { readFileSync, mkdirSync, openSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, openSync, rmSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -135,9 +135,31 @@ function launchBackgroundWarm(): void {
 // session starts immediately and the cache lands behind it.
 const DETACH_MARKER = "WADO_CACHE_RESTORE_DETACHED";
 const LOG_FILE = join(homedir(), ".cache", "wado", "warm-cache.log");
+// Holds the restoring process's pid for as long as the extraction runs. Two
+// readers depend on it: a second SessionStart (resume, /clear, container
+// restart) must not untar into the same directories concurrently, and
+// `warm-cache` must not build against — or delete — a half-extracted tree.
+// Storing the pid rather than a bare flag keeps a killed restore from wedging
+// either of them.
+const RESTORE_MARKER = join(homedir(), ".cache", "wado", "cargo-cache-restore.running");
+
+function restoreInFlight(): boolean {
+  try {
+    const pid = Number(readFileSync(RESTORE_MARKER, "utf8").trim());
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function relaunchDetached(): boolean {
   if (process.env[DETACH_MARKER] === "1" || process.env.CLAUDE_CODE_REMOTE !== "true") return false;
+  if (restoreInFlight()) {
+    log("a cache restore is already running; leaving it to finish");
+    return true;
+  }
   try {
     mkdirSync(dirname(LOG_FILE), { recursive: true });
     const out = openSync(LOG_FILE, "a");
@@ -165,16 +187,24 @@ async function main(): Promise<void> {
   }
 
   const token = await accessToken(key);
-  // Independent and best-effort: a missing sccache object must not stop the
-  // registry restore, and vice versa.
-  const [registry, sccache] = await Promise.allSettled([
-    restore(token, REGISTRY_OBJECT, CARGO_HOME),
-    restore(token, SCCACHE_OBJECT, SCCACHE_DIR),
-  ]);
-  for (const r of [registry, sccache]) {
-    if (r.status === "rejected") log(`skipped: ${(r.reason as Error).message}`);
+  mkdirSync(dirname(RESTORE_MARKER), { recursive: true });
+  writeFileSync(RESTORE_MARKER, String(process.pid));
+  let sccacheRestored = false;
+  try {
+    // Independent and best-effort: a missing sccache object must not stop the
+    // registry restore, and vice versa.
+    const [registry, sccache] = await Promise.allSettled([
+      restore(token, REGISTRY_OBJECT, CARGO_HOME),
+      restore(token, SCCACHE_OBJECT, SCCACHE_DIR),
+    ]);
+    for (const r of [registry, sccache]) {
+      if (r.status === "rejected") log(`skipped: ${(r.reason as Error).message}`);
+    }
+    sccacheRestored = sccache.status === "fulfilled" && sccache.value;
+  } finally {
+    rmSync(RESTORE_MARKER, { force: true });
   }
-  if (sccache.status === "fulfilled" && sccache.value) launchBackgroundWarm();
+  if (sccacheRestored) launchBackgroundWarm();
 }
 
 main().catch((e: Error) => log(`skipped: ${e.message}`));
