@@ -606,7 +606,7 @@ matchExpr
     ;
 
 matchArm
-    : pattern ('&&' expression)? '=>' (block | ifStatement | expression)
+    : pattern ('&&' expression)? '=>' (block | ifStatement | 'return' expression? | expression)
     ;
 
 // Or-patterns: `A | B | C`, as used in `match` arms and `matches { ... }`.

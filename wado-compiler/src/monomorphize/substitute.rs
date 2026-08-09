@@ -374,6 +374,11 @@ impl Monomorphizer {
                                         let pack_elems = type_table
                                             .as_tuple(pack_type)
                                             .unwrap_or_else(|| vec![pack_type]);
+                                        // The element binding must not reach a
+                                        // splice position nested in `elem`: one
+                                        // still spells the whole pack, so it
+                                        // reads the pack's tuple, not `pe`.
+                                        let displaced = self.bind_pack_splice(index, pack_type);
                                         for pe in pack_elems {
                                             let mut elem_substitution = substitution.clone();
                                             elem_substitution.insert(index, pe);
@@ -383,6 +388,7 @@ impl Monomorphizer {
                                                 type_table,
                                             ));
                                         }
+                                        self.restore_pack_splice(index, displaced);
                                     }
                                     None => {
                                         if let Some(pack_elems) = type_table.as_tuple(pack_type) {
