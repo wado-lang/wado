@@ -683,6 +683,40 @@ fn write_report(results: &Results, total: usize) {
     );
 }
 
+/// Write the canonical form and the empty-guard mutant of every fixture
+/// `WADO_EMI_FILTER` selects, so a rejection or a divergence can be read as
+/// source instead of inferred from a line and column.
+///
+/// ```sh
+/// WADO_EMI_FILTER=if_merged cargo test --test emi -- --ignored --nocapture dump_mutants
+/// ```
+#[test]
+#[ignore = "inspection aid — writes files, asserts nothing"]
+fn dump_mutants() {
+    let dir = out_dir().join("dump");
+    for path in fixture_paths() {
+        let name = path
+            .file_stem()
+            .expect("fixture path has a file name")
+            .to_string_lossy()
+            .to_string();
+        let source = std::fs::read_to_string(&path).expect("fixture is readable");
+        let Ok(canonical) = wado_compiler::format(&source) else {
+            eprintln!("[emi] {name}: the formatter rejected it");
+            continue;
+        };
+        let sites = injection_sites(&canonical);
+        let mutant = inject(&canonical, &sites, "");
+
+        let into = dir.join(&name);
+        std::fs::create_dir_all(&into)
+            .unwrap_or_else(|e| panic!("cannot create {}: {e}", into.display()));
+        std::fs::write(into.join("canonical.wado"), &canonical).expect("cannot write canonical");
+        std::fs::write(into.join("mutant.wado"), &mutant).expect("cannot write mutant");
+        eprintln!("[emi] {name}: {} sites — {}", sites.len(), into.display());
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Harness self-tests
 // ---------------------------------------------------------------------------
