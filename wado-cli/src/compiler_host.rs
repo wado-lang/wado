@@ -293,12 +293,9 @@ impl CompilerHost for FilesystemCompilerHost {
         let (outcome, diagnostics) =
             kiln_runtime::run_generator(&engine, &component, request, KilnRunPolicy::default())
                 .await;
-        // Relay generator-emitted diagnostics through `self` so they are both
-        // collected and printed. `run_generator` takes no host, so it hands
-        // the diagnostics back for the printing wrapper here to surface
-        // them — this is what makes e.g.
-        // Gale's prediction warnings visible at build time. Relay before
-        // propagating `outcome` so diagnostics survive a generator failure.
+        // `run_generator` has no host to print through, so its diagnostics
+        // surface here — before `outcome` propagates, so a failing generator
+        // does not swallow the explanation.
         for diag in diagnostics {
             kiln_runtime::relay_diagnostic(self, diag);
         }

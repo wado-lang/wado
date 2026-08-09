@@ -495,15 +495,11 @@ struct CompileArtifacts {
     source_hash: String,
 }
 
-/// Generator-component ABI generation. The compiled component embeds the
-/// `core:kiln` world types, so bump this on any `core:kiln/generator.wit` /
-/// `emit_kiln_world_types` change to invalidate caches built against the old
-/// ABI even when the generator source is unchanged. `v2`: `raw-request.options`
-/// became `list<u8>` (CBOR). `v3`: the world is import-only,
-/// `raw-request` is gone, and `generate` takes typed `(primary, inputs,
-/// options)` parameters. `v4`: `kiln-host` lost `read-file` and
-/// `host-error`, so a component built against `v3` imports a function the
-/// linker no longer provides.
+/// Generator-component ABI generation. A compiled component embeds the
+/// `core:kiln` world types and links against its imports, so a cached one
+/// outlives a world change that would make it fail at link time. Bump this
+/// on any `core:kiln/generator.wit` / `emit_kiln_world_types` change, even
+/// when no generator source moved.
 const KILN_GENERATOR_ABI_TAG: &[u8] = b"kiln-generator-v4\n";
 
 /// `CompilerHost` wrapper used by `compile_local` for two reasons:
@@ -514,8 +510,9 @@ const KILN_GENERATOR_ABI_TAG: &[u8] = b"kiln-generator-v4\n";
 /// 2. Record every `load_source` call into `loaded` (path + content
 ///    hash) so the transitive *load closure* — `.wado` modules **and**
 ///    raw assets pulled via `#include_bytes` — is persisted into the
-///    index, letting an edit to either kind invalidate the cache. The recording is best-effort: duplicate paths from the
-///    compiler are collapsed by the dedup step in `compile_local`.
+///    index, letting an edit to either kind invalidate the cache. The
+///    recording is best-effort: duplicate paths from the compiler are
+///    collapsed by the dedup step in `compile_local`.
 struct SilentHost {
     inner: FilesystemCompilerHost,
     loaded: Arc<Mutex<Vec<(String, [u8; 32])>>>,

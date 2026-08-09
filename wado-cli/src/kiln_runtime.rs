@@ -334,14 +334,9 @@ pub async fn run_generator(
 ) {
     let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
 
-    // Run the generator in an inner future that yields the typed outcome, then
-    // drain the diagnostics and return them alongside it — on both the success
-    // and the failure path. `emit_diagnostic` guarantees they are printed even
-    // when the generator returns successfully; relaying on the error path too
-    // keeps a failing generator from swallowing the diagnostics that explain
-    // the failure. This function has no host to print through, so the relay
-    // (print + collect) is the caller's job (see
-    // `FilesystemCompilerHost::run_generator`).
+    // Diagnostics are drained on both the success and the failure path, so a
+    // failing generator cannot swallow the ones explaining why. Printing them
+    // is the caller's job — see `FilesystemCompilerHost::run_generator`.
     let diagnostics_inner = diagnostics.clone();
     let outcome: Result<GeneratorResponse, GeneratorRunnerError> = async move {
         let state = KilnHostState {

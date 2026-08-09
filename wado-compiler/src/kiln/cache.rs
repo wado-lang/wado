@@ -39,15 +39,8 @@ fn hex(bytes: &[u8; 32]) -> String {
     out
 }
 
-/// Magic + version prefix. Bump when the canonical layout changes in a
-/// way that must invalidate every existing lockfile entry. `v2` marked
-/// the M6.4 switch from the binary options encoder to canonical JSON;
-/// `v3` dropped NFC normalization on string values so cache keys reflect
-/// the literal UTF-8 bytes the user supplied; `v4` switched the options
-/// encoding to CBOR; `v5` replaced CBOR with a
-/// tagged length-prefixed hash-only encoding when options became a typed
-/// WIT argument; `v6` dropped the prior-run read list when `read-file`
-/// was retired, so the key no longer depends on a previous run.
+/// Magic + version prefix. Bump whenever the canonical layout below
+/// changes, so every recorded key is invalidated.
 const MAGIC: &[u8] = b"kiln-cache-key-v6\0";
 
 /// The core:kiln world version the generator was built against. Part of the

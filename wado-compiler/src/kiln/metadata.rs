@@ -13,12 +13,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Schema version of the `<primary>.kiln.json` file. Bumped only on
-/// incompatible changes; older files are silently ignored (treated as a
-/// cache miss) when the version differs.
-///
-/// v3 (current): dropped `reads`, the transitive-read list a generator
-/// accumulated through the retired `read-file` host import.
+/// Schema version of the `<primary>.kiln.json` file. Bump on any
+/// incompatible change; a file at a different version is treated as a
+/// cache miss rather than migrated.
 pub const METADATA_VERSION: u32 = 3;
 
 /// Suffix appended to the primary input's basename to form the metadata

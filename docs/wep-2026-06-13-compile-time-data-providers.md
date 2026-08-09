@@ -47,12 +47,11 @@ rather than a widening of Kiln's charter.
 
 A package may ship three things instead of one:
 
-- **Implementation components** — prebuilt wasm components holding the code with
-  no data baked in. They receive their data when the consuming program is built.
-- **A provider component** — a wasm component exporting the `data-provider`
-  world, which turns a set of used symbols into the data those implementation
-  components need.
-- **Data assets** — opaque files in the package that only the provider reads.
+- Implementation components: prebuilt wasm components holding the code with no
+  data baked in. They receive their data when the consuming program is built.
+- A provider component: a wasm component exporting the `data-provider` world,
+  which turns a set of used symbols into the data those components need.
+- Data assets: opaque files in the package that only the provider reads.
 
 The package's Wado surface is ordinary Wado source importing those
 implementation components. Nothing about being provider-backed appears in the
