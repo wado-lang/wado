@@ -210,8 +210,47 @@ uploading.
 ## Compilation Log and Timing
 
 The compiler emits timestamped diagnostics to stderr. Use `--log-level` to
-control verbosity.
+control verbosity (`debug`, `info`, `warn` — the default — `error`, `off`).
 
 ```sh
 wado compile --log-level debug file.wado
 ```
+
+## Optimizer Remarks
+
+A `remark:` reports a cost the optimizer could not remove, at the exact source
+span. They are info-level, so the default `warn` hides them — ask for them when
+you are chasing why something is slower or larger than expected, not on every
+build.
+
+```sh
+wado check --log-level info file.wado              # no Wasm emitted; fastest
+wado check --world test --log-level info lib.wado  # a library with test blocks
+```
+
+Two kinds are reported, both only for the entry module — stdlib internals would
+drown out your own code:
+
+- A **value-semantic copy that survived**. Wado deep-copies aggregates on
+  assignment, argument passing, and return; most are optimized away, and the
+  ones left are invisible while reading the source.
+
+  ```
+  file.wado:6:5: info: remark: a copy of `List<i32>` survives optimization
+  ```
+
+- A **compile-time parameter that still decides a branch**. A `#[param]` global
+  exists to be settled at build time, so a surviving read means the build kept a
+  run-time test it was told to decide — `-D log.level=info` not stripping what it
+  was supposed to strip. The remark names the parameter, and the intermediate
+  global when the gate reads a derived one rather than the parameter itself.
+
+  ```
+  file.wado:111:5: info: remark: compile-time parameter `log.level` is still read
+  here through global `LOG_STATIC_LEVEL`, so this branch is decided at run time;
+  the code it guards was not stripped
+  ```
+
+Design: `docs/wep-2026-06-03-optimizer-remarks.md`. What is not yet removable —
+and so what a remark is currently expected to report — is listed under "Not yet
+implemented" in `docs/optimizer.md`.
