@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786281995427,
+  "lastUpdate": 1786284603063,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46829,6 +46829,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ca49ed4047ff91c644e2076c014755b16821a86f"
         },
         "date": 1786281994757,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271633,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b6135bc98c5ceab1ab8a224ec80fe6df78aa7921",
+          "message": "Merge pull request #1779 from wado-lang/claude/logger-poc-completion-rseqlz\n\nfeat(effect): `..forward` rest clause, and optimizer remarks across the entry package",
+          "timestamp": "2026-08-09T22:58:25+09:00",
+          "tree_id": "483c1a9f4cf655ced55bc40f0a07ae12ee9a245c",
+          "url": "https://github.com/wado-lang/wado/commit/b6135bc98c5ceab1ab8a224ec80fe6df78aa7921"
+        },
+        "date": 1786284602493,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
