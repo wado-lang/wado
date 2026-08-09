@@ -343,8 +343,10 @@ impl Value {
 
     /// Render the value as a NIR-compatible literal repr string.
     ///
-    /// Scalars only: an aggregate has no literal form in NIR, and never
-    /// reaches the pool this renders from.
+    /// Scalars only: an aggregate has no literal form in NIR. It *can* reach
+    /// the pool — `ValuePool::constant` interns a `PackedArray` as a `Seq` —
+    /// so a caller holding an arbitrary `Value` must filter on
+    /// [`Self::is_scalar`] first.
     #[must_use]
     pub fn format_repr(&self) -> String {
         match self {

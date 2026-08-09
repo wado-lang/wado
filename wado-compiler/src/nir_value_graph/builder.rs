@@ -1212,6 +1212,12 @@ impl<'a> Builder<'a> {
             // Bounded by `MAX_SEQ_ELEMENTS`: past it the walk would cost more
             // than any fold it enables, and `Value::seq` declines.
             ExprKind::PackedArray(bytes) => {
+                // Length first: `Value::seq` declines past `MAX_SEQ_ELEMENTS`,
+                // and building a `Value` per byte only to throw the vector away
+                // would walk an embedded asset on every graph build.
+                if bytes.len() > crate::const_eval::MAX_SEQ_ELEMENTS {
+                    return None;
+                }
                 let elements = bytes
                     .iter()
                     .map(|b| crate::const_eval::Value::Int {
