@@ -454,12 +454,14 @@ binding:
 fn level_from_str(s: String) -> Level { ... }   // s is `let s = LOG_LEVEL`
 ```
 
-The value graph names the read (`ValueKind::GlobalRead`), so the binding is
-transparent there, but the read of `s` is never promoted into an operand and the
-evaluator never reaches the value. Promotion admits only context-free constants;
-re-emitting a global read at the read site is sound only while the global
-generation there still equals the one the value carries — the check
-`FieldAccess` promotion makes by version, and the one the local-read path lacks.
+The value graph has no node for a global read, so the binding is opaque in it:
+the read reaches the comparison only when copy propagation removes the binding,
+which it does only for a trivial copy. A `String` is deep-copied through
+`array_clone_prefix`, which no pass removes, so the read stays where it is.
+Naming the read in the graph would make the binding transparent, but re-emitting
+it at the read site is sound only while the global generation there still equals
+the one the value carries — the check `FieldAccess` promotion makes by version,
+and the one the local-read path would need.
 
 Until it lands, a `#[param]` routed through a helper decides its gate at run
 time. That is reported rather than silent: see

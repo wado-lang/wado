@@ -1,7 +1,11 @@
-// A compile-time parameter bound to a local still settles the gate. The value
-// graph names the global read, so the binding is transparent and the branch
-// folds — `guarded` must not survive at `-O2`, and the local must not appear as
-// a runtime read of the parameter.
+// A compile-time parameter bound to a local still settles the gate: the binding
+// is a trivial copy, so copy propagation drops it and leaves the parameter read
+// in the condition, which folds. `guarded` must not survive at `-O2`.
+//
+// This does not hold for a binding whose copy is not trivial — a `String`
+// parameter is deep-copied through `array_clone_prefix`, which no pass removes,
+// so the gate is still decided at run time there. `remarks.rs` reports that
+// case rather than leaving it silent.
 use { println, Stdout } from "core:cli";
 
 #[param(name = "log.level")]

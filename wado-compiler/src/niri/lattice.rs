@@ -20,7 +20,7 @@ use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind,
 };
-use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::nir_value_graph::ValueId;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 
 use super::CtfeBuiltin;
@@ -40,20 +40,15 @@ impl Interpreter<'_> {
 
     /// A promoted pure value as a `Lattice`.
     ///
-    /// A global read is answered from the `GlobalEnv`: the graph names such a
-    /// read but does not evaluate it, which is what keeps the builder free of a
-    /// program-wide view of every initializer. Everything else goes through the
-    /// one projection, [`crate::nir_value_graph::value_kind_to_const`].
+    /// Goes through the one projection,
+    /// [`crate::nir_value_graph::value_kind_to_const`], rather than repeating
+    /// it: a copy here is a copy that silently drops whatever kind it was not
+    /// taught about, which is how `Unit` stayed unevaluated after the evaluator
+    /// gained a value for it.
     fn value_to_lattice(&self, body: &Body, v: ValueId) -> Lattice {
         let Some(ty) = body.values.type_of(v) else {
             return Lattice::Unevaluated;
         };
-        if let ValueKind::GlobalRead { global, .. } = body.values.kind(v) {
-            let Some((module_source, name)) = body.values.global_of(*global) else {
-                return Lattice::Unevaluated;
-            };
-            return self.global_lattice(module_source, name);
-        }
         // An enum case is promoted under the enum's own type, so the pool holds
         // an `i32` that `prim_of` cannot name.
         let prim = prim_of(ty, self.type_table).or_else(|| {

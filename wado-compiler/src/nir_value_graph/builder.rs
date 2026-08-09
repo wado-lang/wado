@@ -69,11 +69,6 @@ struct HeapState {
     field_global: IndexMap<u32, HeapVersion>,
     /// Version covering slots in none of the maps above.
     default_version: HeapVersion,
-    /// Version covering module-scope globals. Separate from `default_version`
-    /// because what invalidates a global is not what invalidates a field: a
-    /// call bumps this whether or not it touches any caller local, since the
-    /// callee may write a `global mut`.
-    global_version: HeapVersion,
 }
 
 impl HeapState {
@@ -84,17 +79,7 @@ impl HeapState {
             per_local: IndexMap::default(),
             field_global: IndexMap::default(),
             default_version: HeapVersion::INITIAL,
-            global_version: HeapVersion::INITIAL,
         }
-    }
-
-    /// The version a read of any global sees.
-    fn global_version(&self) -> HeapVersion {
-        self.global_version
-    }
-
-    fn bump_globals(&mut self) {
-        self.global_version = self.fresh();
     }
 
     fn fresh(&mut self) -> HeapVersion {
@@ -144,7 +129,6 @@ impl HeapState {
         self.per_local.clear();
         self.field_global.clear();
         self.default_version = v;
-        self.global_version = v;
     }
 
     /// Snapshot the read-visible state only. `next` is a monotonic counter
@@ -156,7 +140,6 @@ impl HeapState {
             per_local: self.per_local.clone(),
             field_global: self.field_global.clone(),
             default_version: self.default_version,
-            global_version: self.global_version,
         }
     }
 
@@ -165,7 +148,6 @@ impl HeapState {
         self.per_local = snap.per_local;
         self.field_global = snap.field_global;
         self.default_version = snap.default_version;
-        self.global_version = snap.global_version;
     }
 
     /// Seed a fresh `HeapState` (as in [`build_scoped`]) with a snapshot taken at
@@ -179,14 +161,12 @@ impl HeapState {
         self.per_local.clone_from(&snap.per_local);
         self.field_global.clone_from(&snap.field_global);
         self.default_version = snap.default_version;
-        self.global_version = snap.global_version;
         let max = snap
             .per_slot
             .values()
             .chain(snap.per_local.values())
             .chain(snap.field_global.values())
             .chain(std::iter::once(&snap.default_version))
-            .chain(std::iter::once(&snap.global_version))
             .copied()
             .max()
             .unwrap_or(HeapVersion::INITIAL);
@@ -200,7 +180,6 @@ pub(crate) struct HeapSnapshot {
     per_local: IndexMap<u32, HeapVersion>,
     field_global: IndexMap<u32, HeapVersion>,
     default_version: HeapVersion,
-    global_version: HeapVersion,
 }
 
 /// A snapshot of *all* flow-sensitive builder state at a program point:
@@ -366,17 +345,12 @@ pub(crate) fn build_scoped(
     out
 }
 
-/// Whether `id`'s value is safe to freeze into an operand slot — the use site
-/// can re-emit it without the surrounding flow.
-///
-/// Constants qualify by being context-free; not every constant does, see
-/// [`ValueKind::is_operand_constant`]. A [`ValueKind::GlobalRead`] qualifies by
-/// invariant instead: [`Builder::bump_heap_globals`] drops a local's value the
-/// moment anything may have written a global, so a global read that still
-/// reaches a use is one that use may re-emit as a `global.get`.
+/// Whether `id`'s value is a build-context-free constant safe to freeze into an
+/// operand at the early freeze (see `extract::freeze_pure_arith`'s constant-leaf
+/// promotion). Not every constant qualifies — see
+/// [`ValueKind::is_operand_constant`].
 pub(crate) fn is_const_value(pool: &ValuePool, id: ValueId) -> bool {
-    let kind = pool.kind(id);
-    kind.is_operand_constant() || matches!(kind, ValueKind::GlobalRead { .. })
+    pool.kind(id).is_operand_constant()
 }
 
 /// Re-intern a constant `ValueKind` into `pool`, returning its id there.
@@ -395,7 +369,6 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
         | ValueKind::Cast { .. }
         | ValueKind::Select { .. }
         | ValueKind::LoopPhi { .. }
-        | ValueKind::GlobalRead { .. }
         | ValueKind::FieldAccess { .. } => {
             unreachable!("the caller's match admits only constant kinds")
         }
@@ -461,11 +434,7 @@ fn reintern_live_rooted(
             let e = reintern_live_rooted(scratch, live, else_, live_base, type_table)?;
             live.select(c, t, e)
         }
-        // A global read carries the walk's own heap version, which names
-        // nothing in the caller's pool.
-        ValueKind::GlobalRead { .. } | ValueKind::Opaque(_) | ValueKind::LoopPhi { .. } => {
-            return None;
-        }
+        ValueKind::Opaque(_) | ValueKind::LoopPhi { .. } => return None,
     })
 }
 
@@ -748,18 +717,6 @@ impl<'a> Builder<'a> {
     /// bumped (conservative). Skipping the bump for a pure accessor keeps a
     /// `mut_escaped` receiver's field version stable across it.
     fn bump_call_effects(&mut self, call: ExprId) {
-        // A global read survives only across a call the graph knows writes
-        // nothing. `pure_calls` is about caller locals, so it cannot answer
-        // this — a callee that touches no argument may still write a global.
-        let writes_globals = match &self.body.exprs[call].kind {
-            ExprKind::Call { func_id, .. } => {
-                !is_builtin_pure_call(&self.pure_builtin_callees, *func_id)
-            }
-            _ => true,
-        };
-        if writes_globals {
-            self.bump_heap_globals();
-        }
         let pure = self.pure_calls.contains(&call);
         // Iterate ascending local index, not `mut_escaped`'s insertion order:
         // opaque `ValueId`s and heap versions are handed out in visit order, so
@@ -869,7 +826,7 @@ impl<'a> Builder<'a> {
                 // writes.
                 self.walk_block(block);
                 self.dirty_all_writes_in_block(block);
-                self.bump_heap_all();
+                self.heap_state.bump_all();
             }
         }
     }
@@ -1054,7 +1011,7 @@ impl<'a> Builder<'a> {
                         }
                     }
                     _ => {
-                        self.bump_heap_all();
+                        self.heap_state.bump_all();
                     }
                 }
                 None
@@ -1062,7 +1019,7 @@ impl<'a> Builder<'a> {
             ExprKind::GlobalVarSet { value, .. } => {
                 self.walk_operand(value);
                 // Globals share the heap from the optimizer's perspective.
-                self.bump_heap_all();
+                self.heap_state.bump_all();
                 None
             }
 
@@ -1121,7 +1078,7 @@ impl<'a> Builder<'a> {
                 // Same break-only-write hazard as the `StmtKind::LabeledBlock` arm.
                 self.walk_block(block);
                 self.dirty_all_writes_in_block(block);
-                self.bump_heap_all();
+                self.heap_state.bump_all();
                 None
             }
             ExprKind::Match { expr: scrut, arms } => {
@@ -1236,7 +1193,7 @@ impl<'a> Builder<'a> {
                     self.walk_operand(a);
                 }
                 // Raw CM calls have opaque captures; stay fully conservative.
-                self.bump_heap_all();
+                self.heap_state.bump_all();
                 None
             }
             ExprKind::IndirectCall { callee, args } => {
@@ -1244,7 +1201,7 @@ impl<'a> Builder<'a> {
                 for a in args {
                     self.walk_operand(a);
                 }
-                self.bump_heap_all();
+                self.heap_state.bump_all();
                 None
             }
 
@@ -1265,19 +1222,7 @@ impl<'a> Builder<'a> {
                 let ty = self.body.exprs[expr].type_id;
                 crate::const_eval::Value::seq(ty, elements).map(|seq| self.pool.constant(&seq, ty))
             }
-            // Name the read, do not evaluate it: what the global holds is the
-            // evaluator's question. Naming alone is what makes `let s = G`
-            // transparent and what lets two reads of one global share an id.
-            ExprKind::GlobalVarGet {
-                module_source,
-                name,
-            } => {
-                let slot = self.pool.global_slot(&module_source, &name);
-                let ver = self.heap_state.global_version();
-                let id = self.pool.global_read(slot, ver);
-                self.pool.set_type(id, self.body.exprs[expr].type_id);
-                Some(id)
-            }
+            ExprKind::GlobalVarGet { .. } => None,
         }
     }
 
@@ -1422,51 +1367,6 @@ impl<'a> Builder<'a> {
         for (field, stored) in live {
             let dst_ver = self.heap_state.version_of(Some(dst_root), field);
             self.field_store.insert((dst_recv, field, dst_ver), stored);
-        }
-    }
-
-    /// Bump every heap generation, and forget what any local holding a global
-    /// read holds. See [`Builder::bump_heap_globals`].
-    fn bump_heap_all(&mut self) {
-        self.heap_state.bump_all();
-        self.forget_global_valued_locals();
-    }
-
-    /// Bump the global generation, and forget what any local holding a global
-    /// read holds.
-    ///
-    /// The forgetting is what makes a `GlobalRead` value mean "re-emittable
-    /// here". A local bound from a global holds the value the global had *at
-    /// the binding*; once anything may have written a global, re-reading gives
-    /// something else, so promoting the local's read to a `global.get` would
-    /// change what the program computes. Dropping the value to an `Opaque`
-    /// keeps the graph honest — it says "I no longer know" rather than naming a
-    /// value that is no longer there — and leaves promotion with the invariant
-    /// it needs: a `GlobalRead` reaching a use is a `GlobalRead` that use may
-    /// re-emit.
-    fn bump_heap_globals(&mut self) {
-        self.heap_state.bump_globals();
-        self.forget_global_valued_locals();
-    }
-
-    /// Drop every local whose current value is a global read to a fresh
-    /// `Opaque`. Computed from `current_value` rather than tracked alongside
-    /// it: `current_value` is snapshotted, restored and joined as one unit, and
-    /// a parallel set would be one more component a join could forget.
-    fn forget_global_valued_locals(&mut self) {
-        let stale: Vec<u32> = self
-            .current_value
-            .iter()
-            .filter(|(_, v)| {
-                matches!(
-                    self.pool.kind(**v),
-                    crate::nir_value_graph::ValueKind::GlobalRead { .. }
-                )
-            })
-            .map(|(idx, _)| *idx)
-            .collect();
-        for idx in stale {
-            self.invalidate_local_with_source(idx, Some(OpaqueSource::Local(idx)));
         }
     }
 
@@ -1748,18 +1648,10 @@ impl<'a> Builder<'a> {
             pre.default_version,
             live.iter().map(|a| (&a.field_global, a.default_version)),
         );
-        // A global read survives the join only if no arm touched a global; the
-        // versions carry no overlay, so the test is direct.
-        let globals_changed = live.iter().any(|a| a.global_version != pre.global_version);
         self.heap_state.per_slot = new_per_slot;
         self.heap_state.per_local = new_per_local;
         self.heap_state.field_global = new_field_global;
         self.heap_state.default_version = new_default;
-        if globals_changed {
-            self.bump_heap_globals();
-        } else {
-            self.heap_state.global_version = pre.global_version;
-        }
     }
 
     /// Join one overlay map across the live arms. A key keeps its pre version
@@ -1873,7 +1765,7 @@ impl<'a> Builder<'a> {
         }
         self.drop_ref_targets_for(&guard_writes);
         if any_guard {
-            self.bump_heap_all();
+            self.heap_state.bump_all();
         }
 
         let pre = self.flow_snapshot();

@@ -112,7 +112,6 @@ impl FieldConst {
             | ValueKind::Cast { .. }
             | ValueKind::Select { .. }
             | ValueKind::LoopPhi { .. }
-            | ValueKind::GlobalRead { .. }
             | ValueKind::FieldAccess { .. } => None,
         }
     }
