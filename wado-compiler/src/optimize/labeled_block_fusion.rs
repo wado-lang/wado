@@ -41,7 +41,8 @@ use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::{
-    block_contains_loop, has_break_to, is_local, is_local_operand, single_payload_binding,
+    block_contains_loop, has_break_to, is_local, is_local_operand, promoted_read_count_at,
+    single_payload_binding,
 };
 
 /// The slot `sroa_variant_return` reserves for the tag in every scalarized
@@ -974,8 +975,11 @@ fn slot_reads_in_operand(body: &Body, op: Operand, local_idx: u32) -> Option<Vec
         direct_uses: 0,
         slot_uses: 0,
     };
-    if let Operand::Expr(e) = op {
-        v.visit_node(body, NodeRef::Expr(e));
+    match op {
+        Operand::Expr(e) => v.visit_node(body, NodeRef::Expr(e)),
+        // The operand itself is the read: no `FieldAccess` slot to hand it.
+        Operand::Value(value) if body.values.value_reads_local(value, local_idx) => return None,
+        Operand::Value(_) => {}
     }
     if v.direct_uses != v.slot_uses {
         return None;
@@ -1018,6 +1022,10 @@ impl NirRefVisitor for SlotReadCollector {
                 self.slots.insert(*field_index, body.exprs[e].type_id);
             }
         }
+        // A promoted read is a direct use like a skeleton `Local` node: as a
+        // slot receiver it balances the `slot_uses` bump above, and in any other
+        // position it unbalances the tally, which rejects the fusion.
+        self.direct_uses += promoted_read_count_at(body, node, self.local_idx);
         self.walk_node(body, node);
     }
 }
@@ -1034,6 +1042,11 @@ impl NirRefVisitor for LocalUseCounter {
         {
             self.count += 1;
         }
+        // A promoted operand reads the local from the value pool, so the walk
+        // below never reaches it. The gates that compare this total against a
+        // shape-specific tally must see it, or a read they cannot rewrite goes
+        // uncounted and the temp is fused away under it.
+        self.count += promoted_read_count_at(body, node, self.local_idx);
         self.walk_node(body, node);
     }
 }
@@ -1062,8 +1075,13 @@ fn count_local_uses_in_operand(body: &Body, op: Operand, local_idx: u32) -> usiz
         local_idx,
         count: 0,
     };
-    if let Operand::Expr(e) = op {
-        v.visit_node(body, NodeRef::Expr(e));
+    match op {
+        Operand::Expr(e) => v.visit_node(body, NodeRef::Expr(e)),
+        Operand::Value(value) => {
+            if body.values.value_reads_local(value, local_idx) {
+                v.count += 1;
+            }
+        }
     }
     v.count
 }

@@ -1160,44 +1160,36 @@ impl Body {
         }
     }
 
-    /// Replace every direct operand child of `node` equal to `Operand::Expr(target)`
-    /// with `new`, returning whether any slot changed. Covers exactly the operand
-    /// positions [`Body::for_each_operand`] yields; non-operand
-    /// `ExprId` slots (`Assign::target`) and structural children (blocks, patterns)
-    /// are untouched. Used by the engine to promote a folded subtree to an
-    /// `Operand::Value` in its parent (WEP: The Live `ValueGraph`).
-    pub fn replace_operand_to(&mut self, node: NodeRef, target: ExprId, new: Operand) -> bool {
-        let mut changed = false;
-        let mut swap = |o: &mut Operand| {
-            if *o == Operand::Expr(target) {
-                *o = new;
-                changed = true;
-            }
-        };
+    /// Invoke `f` on every operand slot of `node`, in source order — the
+    /// mutable twin of [`Body::for_each_operand`], and the only place the
+    /// writable operand positions are spelled out. Non-operand `ExprId` slots
+    /// (`Assign::target`) and structural children (blocks, patterns) are not
+    /// operands and are not visited.
+    pub fn for_each_operand_mut(&mut self, node: NodeRef, mut f: impl FnMut(&mut Operand)) {
         match node {
             NodeRef::Block(_) => {}
             NodeRef::Pat(p) => {
                 if let PatKind::ConstantValue { expr } = &mut self.pats[p].kind {
-                    swap(expr);
+                    f(expr);
                 }
             }
             NodeRef::Stmt(s) => match &mut self.stmts[s].kind {
                 StmtKind::Let { value, .. }
                 | StmtKind::Expr(value)
-                | StmtKind::LetDestructure { value, .. } => swap(value),
+                | StmtKind::LetDestructure { value, .. } => f(value),
                 StmtKind::Return { value } | StmtKind::Break { value, .. } => {
                     if let Some(o) = value {
-                        swap(o);
+                        f(o);
                     }
                 }
-                StmtKind::If { condition, .. } => swap(condition),
+                StmtKind::If { condition, .. } => f(condition),
                 StmtKind::Loop { .. } | StmtKind::Continue | StmtKind::LabeledBlock { .. } => {}
             },
             NodeRef::Expr(e) => match &mut self.exprs[e].kind {
-                ExprKind::GlobalVarSet { value, .. } => swap(value),
+                ExprKind::GlobalVarSet { value, .. } => f(value),
                 ExprKind::Binary { left, right, .. } => {
-                    swap(left);
-                    swap(right);
+                    f(left);
+                    f(right);
                 }
                 ExprKind::Unary { expr, .. }
                 | ExprKind::Cast { expr, .. }
@@ -1205,58 +1197,89 @@ impl Body {
                 | ExprKind::VariantTag { expr }
                 | ExprKind::VariantTest { expr, .. }
                 | ExprKind::VariantPayload { expr, .. }
-                | ExprKind::Assign { value: expr, .. } => swap(expr),
+                | ExprKind::Assign { value: expr, .. } => f(expr),
                 ExprKind::Index { expr, index } => {
-                    swap(expr);
-                    swap(index);
+                    f(expr);
+                    f(index);
                 }
                 ExprKind::Call { args, .. } => {
                     for a in args {
-                        swap(&mut a.expr);
+                        f(&mut a.expr);
                     }
                 }
                 ExprKind::CmRawCall { args, .. } => {
                     for a in args {
-                        swap(a);
+                        f(a);
                     }
                 }
-                ExprKind::If { condition, .. } => swap(condition),
+                ExprKind::If { condition, .. } => f(condition),
                 ExprKind::Match { expr, arms } => {
-                    swap(expr);
+                    f(expr);
                     for arm in arms {
                         if let Some(g) = &mut arm.guard {
-                            swap(g);
+                            f(g);
                         }
-                        swap(&mut arm.body);
+                        f(&mut arm.body);
                     }
                 }
                 ExprKind::StructLiteral { fields, .. } => {
                     for fld in fields {
-                        swap(&mut fld.value);
+                        f(&mut fld.value);
                     }
                 }
                 ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                     for el in elements {
-                        swap(el);
+                        f(el);
                     }
                 }
                 ExprKind::IndirectCall { callee, args } => {
-                    swap(callee);
+                    f(callee);
                     for a in args {
-                        swap(a);
+                        f(a);
                     }
                 }
-                ExprKind::ClosureToCanonical { functor, .. } => swap(functor),
+                ExprKind::ClosureToCanonical { functor, .. } => f(functor),
                 ExprKind::VariantConstruct { payload, .. } => {
                     if let Some(p) = payload {
-                        swap(p);
+                        f(p);
                     }
                 }
-                ExprKind::Switch { scrutinee, .. } => swap(scrutinee),
-                _ => {}
+                ExprKind::Switch { scrutinee, .. } => f(scrutinee),
+                ExprKind::PackedArray(_)
+                | ExprKind::Dead
+                | ExprKind::Local { .. }
+                | ExprKind::GlobalVarGet { .. }
+                | ExprKind::EnumConstruct { .. }
+                | ExprKind::Block(_)
+                | ExprKind::LabeledBlock { .. } => {}
             },
         }
+    }
+
+    /// Replace every direct operand child of `node` equal to `Operand::Expr(target)`
+    /// with `new`, returning whether any slot changed. Used by the engine to promote
+    /// a folded subtree to an `Operand::Value` in its parent (WEP: The Live
+    /// `ValueGraph`).
+    pub fn replace_operand_to(&mut self, node: NodeRef, target: ExprId, new: Operand) -> bool {
+        let mut changed = false;
+        self.for_each_operand_mut(node, |o| {
+            if *o == Operand::Expr(target) {
+                *o = new;
+                changed = true;
+            }
+        });
         changed
+    }
+
+    /// The span of any arena node, so a rewrite that mints a node in a slot can
+    /// keep the position of what it replaces.
+    pub fn span_of(&self, node: NodeRef) -> Span {
+        match node {
+            NodeRef::Expr(e) => self.exprs[e].span,
+            NodeRef::Stmt(s) => self.stmts[s].span,
+            NodeRef::Block(b) => self.blocks[b].span,
+            NodeRef::Pat(p) => self.pats[p].span,
+        }
     }
 
     /// Invoke `f` on every id-bearing child of `node`, in source order.

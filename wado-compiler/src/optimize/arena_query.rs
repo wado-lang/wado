@@ -13,6 +13,7 @@ use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
+use crate::nir_value_graph::{OpaqueSource, ValueKind};
 
 /// Every block reachable from the body root, in DFS pop order (a block precedes
 /// the blocks nested under it). The NIR block graph is a tree, so no visited set
@@ -24,6 +25,108 @@ pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
         if let NodeRef::Block(b) = node {
             out.push(b);
         }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
+}
+
+/// Collect into `out` every local a *reachable* promoted operand reads — the
+/// `Opaque(Local)` leaves of every [`Operand::Value`] the skeleton still
+/// carries. These reads live in the value pool, so a skeleton-only census
+/// ([`collect_reads`], the engine's use index) cannot see them, and a pass that
+/// decides a local is unused must union this in.
+///
+/// Reachability is the whole point: the pool is append-only, so its
+/// `opaque_local_sources` also names the locals of promoted reads that folded
+/// away long ago. Seeding from the pool keeps those locals alive forever, which
+/// costs real copies and blocks real elisions; walking the operands instead
+/// counts exactly the reads that survive.
+///
+/// A body with no block structure is a bare expression — a global initializer —
+/// and everything it holds is reachable by construction.
+pub(super) fn promoted_local_reads(body: &Body, out: &mut IndexSet<u32>) {
+    let mut seen = IndexSet::default();
+    for node in reachable_nodes(body) {
+        body.for_each_operand(node, |op| {
+            if let Some(v) = op.as_value() {
+                body.values.collect_opaque_locals_seen(v, &mut seen, out);
+            }
+        });
+    }
+}
+
+/// How many of `node`'s own operand slots read `idx` through a promoted value —
+/// the reads a skeleton walk cannot see, since they live in the value pool.
+///
+/// A use census that walks the skeleton adds this at each node to stay honest.
+/// A buried read (`Binary(Opaque(Local x), 1)`) counts like a bare one: a census
+/// that pairs a total against a specific-shape tally reads the imbalance as
+/// "a read this rewrite cannot reach", which is exactly right for both.
+pub(super) fn promoted_read_count_at(body: &Body, node: NodeRef, idx: u32) -> usize {
+    let mut count = 0;
+    body.for_each_operand(node, |op| {
+        if let Some(v) = op.as_value()
+            && body.values.value_reads_local(v, idx)
+        {
+            count += 1;
+        }
+    });
+    count
+}
+
+/// Every reachable operand that is exactly the promoted read `Opaque(Local
+/// idx)` — the form a rewrite can replace with another operand, since the local
+/// occupies the whole slot.
+///
+/// A pass that rewrites *every* read of `idx` (globalizing it, renaming it)
+/// must handle its promoted reads too, and can only do so for these: a local
+/// buried inside a compound value (`Binary(Opaque(Local x), 1)`) has no slot of
+/// its own. Compare the count against [`promoted_local_reads`] to tell "all
+/// rewritable" from "some buried".
+pub(super) fn bare_promoted_reads(
+    body: &Body,
+    idx: u32,
+) -> IndexSet<crate::nir_value_graph::ValueId> {
+    let mut out = IndexSet::default();
+    for node in reachable_nodes(body) {
+        body.for_each_operand(node, |op| {
+            if bare_promoted_local(body, op) == Some(idx)
+                && let Some(v) = op.as_value()
+            {
+                out.insert(v);
+            }
+        });
+    }
+    out
+}
+
+/// Whether any reachable operand buries `idx` inside a compound promoted value
+/// — a read [`bare_promoted_reads`] cannot hand a rewrite a slot for.
+pub(super) fn has_buried_promoted_read(body: &Body, idx: u32) -> bool {
+    reachable_nodes(body).into_iter().any(|node| {
+        let mut buried = false;
+        body.for_each_operand(node, |op| {
+            if let Some(v) = op.as_value()
+                && body.values.value_reads_local(v, idx)
+                && !is_local_operand(body, op, idx)
+            {
+                buried = true;
+            }
+        });
+        buried
+    })
+}
+
+/// Every node reachable from the body root. A body with no block structure is a
+/// bare expression — a global initializer — and holds only expressions.
+pub(super) fn reachable_nodes(body: &Body) -> Vec<NodeRef> {
+    if body.blocks.is_empty() {
+        return body.exprs.iter().map(|(e, _)| NodeRef::Expr(e)).collect();
+    }
+    let mut out = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        out.push(node);
         body.for_each_child(node, |c| stack.push(c));
     }
     out
@@ -223,17 +326,39 @@ pub(super) fn is_local(body: &Body, id: ExprId, idx: u32) -> bool {
     matches!(&body.exprs[id].kind, ExprKind::Local { index, .. } if *index == idx)
 }
 
-/// Whether `op` is a bare `Local(idx)` reference. A promoted constant
-/// (`Operand::Value`) is never a local.
+/// Whether `op` reads exactly `Local(idx)` and nothing else — a bare skeleton
+/// `Local`, or the promoted value that extracts back to one (`Opaque(Local idx)`
+/// is `local.get idx`). The two forms are interchangeable in an operand slot, so
+/// a rewrite that substitutes one substitutes the other.
 pub(super) fn is_local_operand(body: &Body, op: Operand, idx: u32) -> bool {
-    op.as_expr().is_some_and(|e| is_local(body, e, idx))
+    match op {
+        Operand::Expr(e) => is_local(body, e, idx),
+        Operand::Value(_) => bare_promoted_local(body, op) == Some(idx),
+    }
 }
 
-/// Whether `idx` appears anywhere in the operand. A promoted constant mentions
-/// no local.
+/// The local a promoted operand reads whole: `Some(idx)` when the operand is
+/// exactly `Opaque(Local idx)`, which extracts back to `local.get idx` and so
+/// substitutes like a bare skeleton `Local`. `None` for a skeleton operand or a
+/// value that is anything more than that leaf.
+pub(super) fn bare_promoted_local(body: &Body, op: Operand) -> Option<u32> {
+    let ValueKind::Opaque(oid) = body.values.kind(op.as_value()?) else {
+        return None;
+    };
+    match body.values.opaque_source(*oid)? {
+        OpaqueSource::Local(idx) => Some(idx),
+        OpaqueSource::Expr(_) => None,
+    }
+}
+
+/// Whether `idx` appears anywhere in the operand — in its skeleton subtree, or
+/// among the `Opaque(Local)` leaves of a promoted value, whose reads live in the
+/// value pool rather than the skeleton.
 pub(super) fn operand_mentions_local(body: &Body, op: Operand, idx: u32) -> bool {
-    op.as_expr()
-        .is_some_and(|e| expr_mentions_local(body, e, idx))
+    match op {
+        Operand::Expr(e) => expr_mentions_local(body, e, idx),
+        Operand::Value(v) => body.values.value_reads_local(v, idx),
+    }
 }
 
 /// Whether `idx` appears anywhere in the expression subtree at `id`. Matches
@@ -254,7 +379,18 @@ fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
     {
         return true;
     }
+    // A promoted operand's read lives in the value pool, not the skeleton, so
+    // the child walk below cannot see it — and a guard that misses a mention
+    // lets a rewrite move or drop code the local is still read by.
     let mut found = false;
+    body.for_each_operand(node, |op| {
+        if !found && let Some(v) = op.as_value() {
+            found = body.values.value_reads_local(v, idx);
+        }
+    });
+    if found {
+        return true;
+    }
     body.for_each_child(node, |c| {
         if !found {
             found = node_mentions_local(body, c, idx);

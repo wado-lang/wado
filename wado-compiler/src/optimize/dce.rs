@@ -2113,37 +2113,16 @@ fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
 /// census over-approximates and only ever keeps a statement alive.
 ///
 /// A promoted operand ([`Operand::Value`]) reads its locals in the pool rather
-/// than the skeleton, so every reachable operand contributes the
-/// `Opaque(Local)` leaves of its value. The pool-wide `opaque_local_sources`
-/// cannot stand in for that: it is append-only, and still names the locals of
-/// promoted reads that folded away long ago.
+/// than the skeleton, so the census unions in
+/// [`super::arena_query::promoted_local_reads`].
 fn mentioned_locals(body: &Body) -> IndexSet<u32> {
     let mut out = IndexSet::default();
-    let visit = |node: NodeRef, out: &mut IndexSet<u32>| {
-        if let NodeRef::Expr(e) = node
-            && let ExprKind::Local { index, .. } = &body.exprs[e].kind
-        {
+    for e in crate::nir_visitor::reachable_exprs(body) {
+        if let ExprKind::Local { index, .. } = &body.exprs[e].kind {
             out.insert(*index);
         }
-        body.for_each_operand(node, |op| {
-            if let Some(v) = op.as_value() {
-                body.values.collect_opaque_locals(v, out);
-            }
-        });
-    };
-    // A body with no block structure is a bare expression — a global
-    // initializer — and everything it holds is reachable by construction.
-    if body.blocks.is_empty() {
-        for (e, _) in &body.exprs {
-            visit(NodeRef::Expr(e), &mut out);
-        }
-        return out;
     }
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        visit(node, &mut out);
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    super::arena_query::promoted_local_reads(body, &mut out);
     out
 }
 
@@ -2176,7 +2155,7 @@ fn global_reads_in(body: &Body, expr: ExprId) -> Vec<(ExprId, (String, String))>
 /// literal aggregate. Failing that the tree is walked: it refuses every call on
 /// sight, while the initializer globalization hoists for a reflect member walk
 /// *is* a call, so each one is answered by its whole-function summary instead.
-fn deletable_value(
+pub(super) fn deletable_value(
     body: &Body,
     value: Operand,
     types: &TypeTable,

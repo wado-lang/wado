@@ -747,6 +747,38 @@ impl<'a> Engine<'a> {
         ) = parent;
     }
 
+    /// Edit API: redirect one operand slot of `node` holding the promoted value
+    /// `from` to `new`, returning whether a slot changed. The `Operand::Value`
+    /// twin of [`Engine::redirect_expr`], which keys on the `ExprId` a skeleton
+    /// operand carries — a promoted value has none.
+    ///
+    /// One slot per call, so a caller planting an expression mints a fresh node
+    /// for each and never hangs one id under two parents; loop until it returns
+    /// `false` to cover a node that holds `from` twice.
+    pub fn redirect_value_operand(
+        &mut self,
+        node: NodeRef,
+        from: crate::nir_value_graph::ValueId,
+        new: Operand,
+    ) -> bool {
+        let mut done = false;
+        self.body.for_each_operand_mut(node, |o| {
+            if !done && *o == Operand::Value(from) {
+                *o = new;
+                done = true;
+            }
+        });
+        if !done {
+            return false;
+        }
+        if let Operand::Expr(e) = new {
+            self.set_parent(NodeRef::Expr(e), Some(node));
+            self.enqueue(NodeRef::Expr(e));
+        }
+        self.enqueue(node);
+        true
+    }
+
     /// Edit API: rewrite an expression node's kind in place. The id is stable,
     /// so parent links and worklist entries survive. Keeps the use index
     /// coherent (if the node was / becomes a `Local`), re-parents the new

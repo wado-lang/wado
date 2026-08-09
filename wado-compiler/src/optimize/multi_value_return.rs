@@ -655,7 +655,22 @@ fn validate_stmt(
             walk_expr_for_uses_operand(body, value, cx, invalid, tracked);
         }
         StmtKind::Expr(e) => {
-            walk_expr_for_uses_operand(body, *e, cx, invalid, tracked);
+            let e = *e;
+            // A call whose result is dropped (`f(x);`, what `elide_local`
+            // leaves when the binding's last read folds away) is a call site
+            // like any other: `wir_build` binds the N results to wildcards.
+            // Only its arguments are ordinary uses.
+            let mut prefix: Vec<StmtId> = Vec::new();
+            if let Some((func_id, _, call)) = block_tail_call(body, e, &mut prefix)
+                && cx.candidate_ids.contains_key(&func_id)
+            {
+                for s in prefix {
+                    validate_stmt(body, s, cx, invalid, tracked);
+                }
+                walk_call_args_for_uses(body, call, cx, invalid, tracked);
+                return;
+            }
+            walk_expr_for_uses_operand(body, e, cx, invalid, tracked);
         }
         StmtKind::Return { value: Some(e) } => {
             let e = *e;

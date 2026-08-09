@@ -45,6 +45,12 @@ struct CopyBinding {
     /// in the function (e.g. a loop counter copied inside the loop body).
     /// Always `true` for a promoted-value source.
     source_scope_stable: bool,
+    /// Whether every promoted read of the target can be substituted: each fills
+    /// its operand slot whole (`Opaque(Local target)`), and the source is one an
+    /// operand slot can hold — a pooled value, or a bare local the substitution
+    /// mints a read node for. Decided per binding in [`analyze_function_body`],
+    /// where the body is still in hand.
+    promoted_reads_substitutable: bool,
 }
 
 impl CopySource {
@@ -153,6 +159,7 @@ fn analyze_copy_binding(
             source: CopySource::Promoted(v),
             type_id: let_type_id,
             source_scope_stable: true,
+            promoted_reads_substitutable: false,
         });
     }
     if skip_value_copy {
@@ -205,6 +212,8 @@ fn analyze_copy_binding(
         type_id: value_type,
         // Filled in by `analyze_block`, which knows the binding's position.
         source_scope_stable: false,
+        // Filled in by `analyze_function_body`, which sees the whole body.
+        promoted_reads_substitutable: false,
     })
 }
 
@@ -301,6 +310,25 @@ fn scan_node(
         }
         return;
     }
+    // A promoted operand reads its locals from the value pool, so the skeleton
+    // walk never reaches them. The scope-stability interval below is only
+    // meaningful if it sees those reads too.
+    let mut promoted: IndexSet<u32> = IndexSet::default();
+    body.for_each_operand(node, |op| {
+        if let Some(v) = op.as_value() {
+            body.values.collect_opaque_locals(v, &mut promoted);
+        }
+    });
+    for index in &promoted {
+        for &(b, i) in frames.iter() {
+            scans
+                .get_mut(&b)
+                .expect("enclosing block was scanned")
+                .first_read
+                .entry(*index)
+                .or_insert(i);
+        }
+    }
     if let NodeRef::Expr(id) = node {
         if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
             for &(b, i) in frames.iter() {
@@ -344,16 +372,27 @@ fn analyze_function_body(body: &Body, ctx: &AnalysisCtx<'_>) -> AnalysisResult {
     // invisible to the skeleton walk above; count it so copy-prop does not treat
     // the local as dead / single-use and eliminate it out from under the promoted
     // read. Empty (behavior-neutral) until operand promotion runs.
-    for idx in promoted_reads_set(body) {
+    let mut promoted = IndexSet::default();
+    super::arena_query::promoted_local_reads(body, &mut promoted);
+    for &idx in &promoted {
         result.usage.entry(idx).or_default().read_count += 2;
+    }
+    for binding in &mut result.bindings {
+        binding.promoted_reads_substitutable = promoted_reads_substitutable(body, binding);
     }
     result
 }
 
-/// Locals read through a promoted `Operand::Value`. The pool-wide set is
-/// over-conservative (only ever keeps too many) — sound, costs a few copies.
-fn promoted_reads_set(body: &crate::nir_arena::Body) -> crate::hashmap::IndexSet<u32> {
-    body.values.opaque_local_sources().collect()
+/// Whether the target's promoted reads are ones [`substitute_promoted_reads`]
+/// can rewrite: none buried inside a compound value, and a source an operand
+/// slot can hold — a pooled value, or a bare local it mints a read node for.
+/// A reference source re-materializes a whole expression, which the promoted
+/// slot has no node to host, so it stays refused.
+fn promoted_reads_substitutable(body: &Body, binding: &CopyBinding) -> bool {
+    matches!(
+        binding.source,
+        CopySource::Promoted(_) | CopySource::Local { .. }
+    ) && !super::arena_query::has_buried_promoted_read(body, binding.target_local)
 }
 
 fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: &AnalysisCtx<'_>) {
@@ -547,11 +586,12 @@ fn can_propagate_copy(
     type_table: &TypeTable,
     promoted_reads: &IndexSet<u32>,
 ) -> bool {
-    // A target read through a promoted `Opaque(Local)` value cannot be
-    // propagated: `apply_in_expr` substitutes only skeleton reads, and the
-    // binding's `let` is then removed (`dead_locals`), so the promoted read
-    // would dangle on a deleted local. Leave the copy in place.
-    if promoted_reads.contains(&binding.target_local) {
+    // Every read must be substitutable, since the binding's `let` is removed
+    // (`dead_locals`) and a read left behind would dangle on a deleted local.
+    // A promoted read is substitutable when it fills its operand slot whole
+    // (`Opaque(Local target)`) and the source is one an operand can hold; a read
+    // buried inside a compound value has no slot of its own.
+    if promoted_reads.contains(&binding.target_local) && !binding.promoted_reads_substitutable {
         return false;
     }
     let Some(target_usage) = usage.get(&binding.target_local) else {
@@ -643,6 +683,41 @@ fn can_propagate_copy(
         // A pooled value is immutable, so forwarding it to every read is always
         // sound; the read becomes `Operand::Value(v)`, re-emitted by the extractor.
         CopySource::Promoted(_) => true,
+    }
+}
+
+/// Substitute the reads that live in the value pool: an operand that is exactly
+/// `Opaque(Local target)` becomes the target's source. Runs before the skeleton
+/// pass drops the bindings, and only for targets
+/// [`promoted_reads_substitutable`] approved.
+fn substitute_promoted_reads(engine: &mut Engine, substitutions: &IndexMap<u32, CopySource>) {
+    let mut plan: Vec<(NodeRef, crate::nir_value_graph::ValueId, CopySource)> = Vec::new();
+    for node in super::arena_query::reachable_nodes(engine.body) {
+        let body = &*engine.body;
+        body.for_each_operand(node, |op| {
+            if let Some(v) = op.as_value()
+                && let Some(target) = super::arena_query::bare_promoted_local(body, op)
+                && let Some(source) = substitutions.get(&target)
+            {
+                plan.push((node, v, source.clone()));
+            }
+        });
+    }
+    for (node, value, source) in plan {
+        let new = match source {
+            CopySource::Promoted(v) => Operand::Value(v),
+            CopySource::Local { index, name } => {
+                let type_id = engine.locals()[index as usize].type_id;
+                let span = engine.body.span_of(node);
+                Operand::Expr(engine.alloc_expr(ExprKind::Local { index, name }, type_id, span))
+            }
+            CopySource::Ref { .. }
+            | CopySource::MutRef { .. }
+            | CopySource::RefProjection { .. } => {
+                unreachable!("`promoted_reads_substitutable` admits only value and local sources")
+            }
+        };
+        engine.redirect_value_operand(node, value, new);
     }
 }
 
@@ -808,7 +883,8 @@ fn propagate_at_root(
         if analysis.bindings.is_empty() {
             break;
         }
-        let promoted_reads = promoted_reads_set(engine.body);
+        let mut promoted_reads = IndexSet::default();
+        super::arena_query::promoted_local_reads(engine.body, &mut promoted_reads);
         let eliminable: Vec<CopyBinding> = analysis
             .bindings
             .into_iter()
@@ -839,6 +915,7 @@ fn propagate_at_root(
             break;
         }
         let dead_locals: IndexSet<u32> = substitutions.keys().copied().collect();
+        substitute_promoted_reads(engine, &substitutions);
         let root = engine.body.root;
         apply_in_block(engine, root, &substitutions, &dead_locals);
         ever_changed = true;

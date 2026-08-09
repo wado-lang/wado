@@ -59,7 +59,10 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-use super::arena_query::{collect_reads, expr_mentions_local, is_local, strip_refs};
+use super::arena_query::{
+    bare_promoted_reads, collect_reads, expr_mentions_local, has_buried_promoted_read, is_local,
+    promoted_local_reads, reachable_nodes, strip_refs,
+};
 
 /// A hoisting candidate, identified by its owning function. Resolved in an
 /// immutable analysis phase, applied in a later mutation phase to avoid
@@ -268,11 +271,13 @@ fn collect_candidates(
 ) {
     let single_decl_locals = locals_declared_once(body);
     let siblings = sibling_const_locals(body, gate, &single_decl_locals);
-    // Skeleton mentions only: the pool-wide `opaque_local_sources` cannot
-    // stand in for the missing pool reads, since the append-only pool also
-    // names locals whose promoted reads have long folded away.
+    // Promoted reads count: they decide "unread" (a dead binding is not a hoist
+    // target) and, more sharply, they are reads `rewrite_reads` must reach —
+    // the mutation drops the `let`, so a read it misses would extract a
+    // `local.get` of a local nothing defines.
     let mut read_locals = IndexSet::default();
     collect_reads(body, &mut read_locals);
+    promoted_local_reads(body, &mut read_locals);
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
@@ -613,6 +618,12 @@ fn let_stmt_qualifies(
     // An unread binding is dead code on its way out, not a hoist target:
     // hoisting it manufactures a live global no WIR cleanup deletes.
     if !read_locals.contains(&local_index) {
+        return None;
+    }
+    // The mutation replaces the `let` with a `GlobalVarSet`, so every read must
+    // become a `GlobalVarGet`. A promoted read buried inside a compound value
+    // has no slot to rewrite — the local would outlive its definition.
+    if has_buried_promoted_read(body, local_index) {
         return None;
     }
     // A sibling-const read (the flattened builder-temp pair `let mut __b =
@@ -1641,6 +1652,59 @@ fn rewrite_reads(
             name: name.to_string(),
         };
         body.exprs[id].type_id = ty;
+    }
+    rewrite_promoted_reads(body, local_index, module_source, name, ty);
+}
+
+/// Rewrite the reads that live in the value pool: an operand that is exactly
+/// `Opaque(Local local_index)` becomes a fresh `GlobalVarGet` expression.
+/// Candidacy already refused a local buried inside a compound value
+/// ([`has_buried_promoted_read`]), so these are all of them.
+///
+/// Each slot gets its own expression id — one node in two operand slots would
+/// break the single-parent invariant — so the ids are minted up front and
+/// handed out as the mutable walk finds the slots.
+fn rewrite_promoted_reads(
+    body: &mut Body,
+    local_index: u32,
+    module_source: &ModuleSource,
+    name: &str,
+    ty: TypeId,
+) {
+    let promoted = bare_promoted_reads(body, local_index);
+    if promoted.is_empty() {
+        return;
+    }
+    let nodes = reachable_nodes(body);
+    let mut slots = Vec::new();
+    for &node in &nodes {
+        body.for_each_operand(node, |op| {
+            if op.as_value().is_some_and(|v| promoted.contains(&v)) {
+                slots.push(node);
+            }
+        });
+    }
+    let reads: Vec<ExprId> = slots
+        .iter()
+        .map(|&node| {
+            let span = body.span_of(node);
+            body.exprs.push(ExprNode {
+                kind: ExprKind::GlobalVarGet {
+                    module_source: module_source.clone(),
+                    name: name.to_string(),
+                },
+                type_id: ty,
+                span,
+            })
+        })
+        .collect();
+    let mut reads = reads.into_iter();
+    for node in nodes {
+        body.for_each_operand_mut(node, |op| {
+            if op.as_value().is_some_and(|v| promoted.contains(&v)) {
+                *op = Operand::Expr(reads.next().expect("one read id per promoted slot"));
+            }
+        });
     }
 }
 

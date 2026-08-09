@@ -1214,6 +1214,26 @@ impl FunctionTranslator<'_, '_> {
         Some(WirInstr::Seq(instrs))
     }
 
+    /// A statement-position call to a `ReturnAbi::MultiValue` function: bind its
+    /// N results to wildcards, the `MultiValueLocalBind` form of dropping them.
+    /// `None` for anything else, which falls through to the ordinary `Drop`.
+    fn try_emit_multi_value_discard(&mut self, value: Operand) -> Option<WirInstr> {
+        let mut prefix: Vec<StmtId> = Vec::new();
+        let (func_id, _, call) =
+            crate::optimize::multi_value_return::block_tail_call(self.body, value, &mut prefix)?;
+        let func = self.callee_descriptor(func_id);
+        let key = (func.name.clone(), func.module_source);
+        let fields = self.ctx.multi_value_return_funcs.get(&key)?.clone();
+
+        let mut instrs: Vec<WirInstr> = self.translate_stmts(&prefix);
+        let call_instr = self.translate_expr(call);
+        instrs.push(WirInstr::MultiValueLocalBind {
+            instr: Box::new(call_instr),
+            locals: vec![None; fields.len()],
+        });
+        Some(WirInstr::Seq(instrs))
+    }
+
     /// Resolve the WIR tuple struct type and translate its non-unit field
     /// initialisers, applying `cast_nonnull_fields` to honour non-nullable
     /// field declarations. Used by `TupleLiteral` lowering (the resulting
@@ -1758,6 +1778,13 @@ impl FunctionTranslator<'_, '_> {
             }
             StmtKind::Expr(expr) => {
                 let expr = *expr;
+                // A discarded call to a multi-value-ABI function leaves N
+                // results on the stack, which a single `Drop` cannot consume —
+                // bind them to wildcards instead (`optimize::multi_value_return`
+                // admits the call site on the same recogniser).
+                if let Some(instrs) = self.try_emit_multi_value_discard(expr) {
+                    return Some(instrs);
+                }
                 let ty = self.operand_type_id(expr);
                 let instr = self.translate_operand(expr);
                 // If the expression has a non-unit type, drop it.

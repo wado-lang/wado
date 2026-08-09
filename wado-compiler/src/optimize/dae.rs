@@ -240,7 +240,7 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
     // A promoted `Opaque(Local idx)` value reads `idx` from the value pool, not
     // the skeleton — count those so a param read only through a promoted value
     // is not seen as dead.
-    reads.extend(body.values.opaque_local_sources());
+    arena_query::promoted_local_reads(body, &mut reads);
     let kept_locals = &func.address_taken_locals;
     let stores_aliased = &func.stores_aliased_locals;
 

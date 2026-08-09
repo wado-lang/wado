@@ -91,6 +91,9 @@ pub(super) fn run_peephole(
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
 
+    // Whole-function effect summaries, computed once for the run: `ElideRule`
+    // asks them whether a dead binding's call may go with the binding.
+    let effects = super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     // The pre- and post-inline runs apply different rule sets, so they keep
@@ -106,7 +109,7 @@ pub(super) fn run_peephole(
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is
         // rebuilt for each body.
         let stores_aliased = func.stores_aliased_locals.clone();
-        let elide_rule = ElideRule::new(&stores_aliased);
+        let elide_rule = ElideRule::new(&stores_aliased, &effects);
         // Reference elimination runs post-inline only (it cleans up the ref
         // bindings inlining exposes). Its maps are built from the pristine
         // post-inline body.
