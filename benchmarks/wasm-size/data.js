@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786270883775,
+  "lastUpdate": 1786274918611,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46697,6 +46697,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cea2e09d354aebdde42334950bd94b16bff47c0e"
         },
         "date": 1786270882919,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271633,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2ed97d2fdfa6c7db9334ff149c37e0ce06c7d0cd",
+          "message": "Merge pull request #1776 from wado-lang/claude/wado-compiler-lean-proof-pds5k3\n\nfeat(emi): differential-test the optimizer with an unreachable guard",
+          "timestamp": "2026-08-09T20:17:05+09:00",
+          "tree_id": "6113419435843dcbf7d0439de71f7a2099069eef",
+          "url": "https://github.com/wado-lang/wado/commit/2ed97d2fdfa6c7db9334ff149c37e0ce06c7d0cd"
+        },
+        "date": 1786274917770,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
