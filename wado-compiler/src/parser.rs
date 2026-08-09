@@ -2002,8 +2002,16 @@ impl Parser {
         let mut effect_ids = vec![(self.alloc_ast_id(), first_span)];
 
         while self.check(&TokenKind::Comma) {
-            // Lookahead: if the token after comma is `ident:`, this is a parameter
-            // in the enclosing parameter list, not another effect. Stop here.
+            // Only an effect name or `stores[...]` continues the list. Anything
+            // else after the comma belongs to the enclosing list: a trailing
+            // comma before its terminator, or the `ident:` that starts the next
+            // parameter.
+            if !matches!(
+                self.peek_nth(1).kind,
+                TokenKind::Ident(_) | TokenKind::Stores
+            ) {
+                break;
+            }
             if matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
                 && self.peek_nth(2).kind == TokenKind::Colon
             {
@@ -7275,6 +7283,40 @@ line 2
         if let Item::Function(func) = &module.items[0] {
             assert!(func.params.is_empty());
         }
+    }
+
+    #[test]
+    fn test_param_list_trailing_comma() {
+        // A `fn(...) with E` parameter type ends its effect list at the
+        // enclosing list's terminator, not just before a following `ident:`.
+        // The formatter emits exactly this shape when it folds a signature.
+        for (source, params) in [
+            ("fn f(x: i32, y: i32,) {}", 2),
+            ("fn f(x: i32, mut g: fn mut() -> i32,) {}", 2),
+            ("fn f<effect E>(x: i32, mut g: fn mut() with E,) with E {}", 2),
+            // `with E, Stdout` is the parameter type's own effect list — a
+            // comma after `with` continues it, so this declares one parameter.
+            (
+                "fn f<effect E>(mut g: fn mut() with E, Stdout,) with E, Stdout {}",
+                1,
+            ),
+        ] {
+            let module = parse(source).unwrap_or_else(|e| panic!("{source}: {e:?}"));
+            let Item::Function(func) = &module.items[0] else {
+                panic!("{source}: expected a function");
+            };
+            assert_eq!(func.params.len(), params, "{source}");
+        }
+    }
+
+    #[test]
+    fn test_param_list_effect_list_still_takes_several_effects() {
+        // The terminator rule must not cut a genuine multi-effect list short.
+        let module = parse("fn f(mut g: fn mut() with Stdout, Stderr) {}").unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected a function");
+        };
+        assert_eq!(func.params.len(), 1);
     }
 
     #[test]
