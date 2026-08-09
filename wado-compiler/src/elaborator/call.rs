@@ -17,6 +17,21 @@ use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::placeholder;
 
+/// The parameter an associated-type equality binds: a bare parameter
+/// (`Builder<Output = T>`) or a pack spelt as the whole tuple
+/// (`ReflectFlags<Members = [..M]>`). A pack binds to the projected tuple,
+/// which is what the pack stands for everywhere else.
+fn assoc_bound_target_param(ty: &Type) -> Option<&str> {
+    match ty {
+        Type::Named(named) => Some(&named.name),
+        Type::Tuple(elems) => match elems.as_slice() {
+            [Type::TypePackSpread(name, _)] => Some(name),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// Per-position `_` mask for a turbofish: `holes[i]` is true when argument `i`
 /// was written `_`. Slots past the end count as holes too (omitted trailing
 /// args), so the mask need only cover the supplied args.
@@ -2313,10 +2328,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 for bound in &param.bounds {
                     for assoc in &bound.assoc_types {
-                        let Type::Named(named) = &assoc.ty else {
+                        let Some(target_name) = assoc_bound_target_param(&assoc.ty) else {
                             continue;
                         };
-                        let Some(target_idx) = params.iter().position(|p| p.name == named.name)
+                        let Some(target_idx) = params.iter().position(|p| p.name == target_name)
                         else {
                             continue;
                         };

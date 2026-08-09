@@ -1,0 +1,68 @@
+// A free function may bind a pack through another parameter's associated type
+// (`<T: Trait<Assoc = [..P]>, ..P>`), the shape a blanket impl already allowed.
+// The call-site bound check resolved the binding `[..P]` as a type in the
+// *caller's* scope, where the callee's pack is not registered ("unknown type
+// `..P`"), and the associated-type projection only recognised a bare parameter
+// as a binding target, so `P` was never pinned.
+
+trait Parts {
+    type Items;
+    fn items(&self) -> Self::Items;
+}
+
+struct Tri {
+    a: i32,
+    b: i32,
+    c: i32,
+}
+
+impl Parts for Tri {
+    type Items = [i32, i32, i32];
+    fn items(&self) -> [i32, i32, i32] {
+        return [self.a, self.b, self.c];
+    }
+}
+
+struct Pair {
+    left: String,
+    right: bool,
+}
+
+impl Parts for Pair {
+    type Items = [String, bool];
+    fn items(&self) -> [String, bool] {
+        return [self.left, self.right];
+    }
+}
+
+/// The body stays pack-agnostic: it walks the tuple, never assuming an
+/// element type.
+fn arity<T: Parts<Items = [..P]>, ..P>(t: &T) -> i32 {
+    let mut n = 0;
+    for let v of t.items() {
+        n += 1;
+    }
+    return n;
+}
+
+/// A bound on the pack itself constrains every element.
+fn rendered<T: Parts<Items = [..P]>, ..P: Inspect>(t: &T) -> String {
+    let mut out = "";
+    for let v of t.items() {
+        out = `${out}${v:?};`;
+    }
+    return out;
+}
+
+test "the pack is inferred from the argument, with no turbofish" {
+    assert arity(&Tri { a: 1, b: 2, c: 3 }) == 3;
+    assert arity(&Pair { left: "x", right: true }) == 2;
+}
+
+test "a bound on the pack reaches every element" {
+    assert rendered(&Tri { a: 1, b: 2, c: 3 }) == "1;2;3;";
+    assert rendered(&Pair { left: "x", right: true }) == "\"x\";true;";
+}
+
+__DATA__
+{"test": {}}
