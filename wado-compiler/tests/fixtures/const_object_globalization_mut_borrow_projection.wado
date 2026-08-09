@@ -14,11 +14,17 @@
 // pass order without changing what the program computes. Reproduces at -O3.
 use { println, Stdout } from "core:cli";
 struct SerializeError {
+    message: String,
 }
 trait Serialize {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
+trait SerializeSeq {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
+}
 trait SerializeStruct {
+    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError>;
+    fn end(&mut self) -> Result<(), SerializeError>;
 }
 trait Serializer {
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
@@ -49,6 +55,7 @@ struct JsonStructSerializer {
     count: i32,
 }
 impl Serializer for JsonSerializer {
+    type SeqSerializer = JsonSeqSerializer;
     type StructSerializer = JsonStructSerializer;
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
         self.w.write(&`${v}`);

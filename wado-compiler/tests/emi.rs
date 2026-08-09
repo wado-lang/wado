@@ -33,18 +33,16 @@
 //! most likely to be wrong — alias, mod/ref, loop — actually rest on.
 //!
 //! - [ ] Payload: `x = builtin::black_box(x)` for each `let mut` in scope. It
-//!       is an opaque write to a real binding and needs no type inference,
-//!       since `black_box` is generic and the assignment is the identity.
-//!       Attacks `licm`, `store_load_forward`, `field_scalarize`, `copy_prop`,
-//!       `sroa`.
+//!   is an opaque write to a real binding and needs no type inference, since
+//!   `black_box` is generic and the assignment is the identity. Attacks `licm`,
+//!   `store_load_forward`, `field_scalarize`, `copy_prop`, `sroa`.
 //! - [ ] Payload: statements harvested from elsewhere in the same function,
-//!       type-correct by construction wherever their free variables are in
-//!       scope.
+//!   type-correct by construction wherever their free variables are in scope.
 //! - [ ] `while builtin::black_box(false) { … }` as a second guard shape, for
-//!       the loop passes.
+//!   the loop passes.
 //! - [ ] Reduction: delta-debug the injection set to the guard that matters,
-//!       then bisect `WADO_LIST_PASSES` with `WADO_SKIP_PASS` to name the pass,
-//!       and write the reduced program out as a fixture.
+//!   then bisect `WADO_LIST_PASSES` with `WADO_SKIP_PASS` to name the pass, and
+//!   write the reduced program out as a fixture.
 //! - [ ] A bounded CI run over a rotating slice of the corpus.
 //!
 //! One more gap the calibration cannot see: a site whose offset lands inside a
@@ -647,6 +645,31 @@ struct Results {
 ///
 /// `#[ignore]`d because it compiles and runs the whole corpus several times
 /// over; run it on demand with `cargo test --test emi -- --ignored --nocapture`.
+/// Silences the panic hook for as long as it is alive.
+///
+/// The campaign's workers are meant to panic: a mutant that crashes the
+/// compiler is a finding, and [`evaluate`] catches it, so the default hook
+/// would print a backtrace for every one. Restoring on drop is what keeps a
+/// panic that escapes a worker — an unreadable fixture, a bad offset — from
+/// leaving the rest of the test binary silent.
+struct SilencedPanics(Option<Box<dyn Fn(&std::panic::PanicHookInfo<'_>) + Sync + Send + 'static>>);
+
+impl SilencedPanics {
+    fn install() -> Self {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        Self(Some(previous))
+    }
+}
+
+impl Drop for SilencedPanics {
+    fn drop(&mut self) {
+        if let Some(previous) = self.0.take() {
+            std::panic::set_hook(previous);
+        }
+    }
+}
+
 #[test]
 #[ignore = "EMI campaign — minutes to hours over the full corpus"]
 fn calibrate_corpus() {
@@ -658,11 +681,7 @@ fn calibrate_corpus() {
     let next = AtomicUsize::new(0);
     let done = AtomicUsize::new(0);
 
-    // A mutant is expected to panic the compiler only if there is a bug, so the
-    // default hook's output would be noise on every excluded fixture. Payloads
-    // are captured either way.
-    let previous_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
+    let _silenced = SilencedPanics::install();
 
     std::thread::scope(|scope| {
         for _ in 0..jobs().min(total) {
@@ -699,8 +718,6 @@ fn calibrate_corpus() {
             });
         }
     });
-
-    std::panic::set_hook(previous_hook);
 
     let mut results = results.into_inner().expect("results lock");
     results.eligible.sort_by(|a, b| a.name.cmp(&b.name));

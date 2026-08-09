@@ -1067,19 +1067,6 @@ impl Gate<'_> {
             )
     }
 
-    /// Whether parameter `pos` writes the caller's argument storage. An
-    /// unresolvable callee answers `true`: nothing here can prove it does not.
-    fn param_pos_borrows_mutably(&self, func_id: crate::nir::FuncId, pos: usize) -> bool {
-        use cranelift_entity::EntityRef;
-        let Some(f) = self.funcs.get(func_id.index()) else {
-            return true;
-        };
-        let f = f.borrow();
-        f.params
-            .get(pos)
-            .is_none_or(|param| self.param_borrows_mutably(param))
-    }
-
     /// Whether the callee takes its receiver by `&self` — the only receiver
     /// convention that neither writes the caller's storage (`&mut self`) nor
     /// takes it over (a by-value `self`). An unknown callee answers `false`.
@@ -1441,9 +1428,16 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
         } => {
             let callee_id = *func_id;
             let has_receiver = *has_receiver;
-            let mut rest = args.iter();
-            let receiver = has_receiver.then(|| rest.next()).flatten().map(|a| a.expr);
-            let rest: Vec<ExprId> = rest.filter_map(|a| a.expr.as_expr()).collect();
+            let receiver = has_receiver.then(|| args.first()).flatten().map(|a| a.expr);
+            // Paired with its own `is_mut`, not with a position: an argument
+            // promoted to `Operand::Value` carries no `ExprId`, so counting
+            // surviving expressions would put every later argument against the
+            // wrong parameter.
+            let rest: Vec<(Operand, bool)> = args
+                .iter()
+                .skip(usize::from(has_receiver))
+                .map(|a| (a.expr, a.is_mut))
+                .collect();
             if let Some(receiver) = receiver {
                 let recv = receiver.as_expr().map(|e| strip_refs(body, e));
                 if recv.is_some_and(|r| is_local(body, r, idx)) {
@@ -1464,18 +1458,19 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
                     return false;
                 }
             }
-            let first_rest = usize::from(has_receiver);
-            rest.iter().enumerate().all(|(pos, &a)| {
-                call_arg_readonly(body, a, idx, gate, Some((callee_id, first_rest + pos)))
+            rest.iter().all(|&(arg, borrows_mutably)| {
+                call_arg_readonly_operand(body, arg, idx, gate, borrows_mutably)
             })
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let args = args.clone();
             expr_readonly_operand(body, callee, idx, gate)
+                // An indirect callee's parameters are unknown, so every
+                // argument is treated as one that could be written.
                 && args
                     .iter()
-                    .all(|&a| call_arg_readonly_operand(body, a, idx, gate, None))
+                    .all(|&a| call_arg_readonly_operand(body, a, idx, gate, true))
         }
 
         // `&mut <…xs…>` — a mutable reference into the binding escapes.
@@ -1565,23 +1560,23 @@ fn call_arg_readonly_operand(
     op: Operand,
     idx: u32,
     gate: &Gate<'_>,
-    param: Option<(crate::nir::FuncId, usize)>,
+    borrows_mutably: bool,
 ) -> bool {
     op.as_expr()
-        .is_none_or(|e| call_arg_readonly(body, e, idx, gate, param))
+        .is_none_or(|e| call_arg_readonly(body, e, idx, gate, borrows_mutably))
 }
 
 /// A binding handed to a call as an argument. `&` borrow is a read; `&mut`
 /// escapes; passing the binding itself by value is a consuming use (rejected).
 ///
-/// `param` names the parameter the argument lands in, and `None` means the
-/// callee is unknown.
+/// `borrows_mutably` is the argument's own `ArenaCallArg::is_mut` — whether it
+/// lands in a parameter that writes the caller's storage.
 fn call_arg_readonly(
     body: &Body,
     arg: ExprId,
     idx: u32,
     gate: &Gate<'_>,
-    param: Option<(crate::nir::FuncId, usize)>,
+    borrows_mutably: bool,
 ) -> bool {
     match &body.exprs[arg].kind {
         ExprKind::Local { index, .. } => *index != idx,
@@ -1608,9 +1603,7 @@ fn call_arg_readonly(
         // every other parameter — a by-value argument is the callee's own copy,
         // so what it does with it cannot reach the binding.
         _ => {
-            if param.is_none_or(|(func_id, pos)| gate.param_pos_borrows_mutably(func_id, pos))
-                && expr_mentions_local(body, arg, idx)
-            {
+            if borrows_mutably && expr_mentions_local(body, arg, idx) {
                 return false;
             }
             expr_readonly(body, arg, idx, gate)
