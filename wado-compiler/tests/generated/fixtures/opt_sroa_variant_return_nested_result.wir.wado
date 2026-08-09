@@ -37,88 +37,103 @@ struct opt_sroa_variant_return_nested_result.wado//Cursor {  // TypeId(6)
 
 array Array<i64> (mut i64);  // TypeId(7)
 
-struct core:prelude//List<i64> {  // TypeId(8)
+variant core:prelude/types.wado//Result<i64,i32> {  // TypeId(8)
+    Ok(i64),
+    Err(i32),
+}
+
+struct core:prelude/types.wado//Result<i64,i32>::Ok {  // TypeId(9)
+    discriminant: i32,
+    payload_0: i64,
+}
+
+struct core:prelude/types.wado//Result<i64,i32>::Err {  // TypeId(10)
+    discriminant: i32,
+    payload_0: i32,
+}
+
+struct core:prelude//List<i64> {  // TypeId(11)
     mut repr: ref Array<i64>,
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(9)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(10)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(11)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(14)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(12)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(15)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(13)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(16)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(14)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(17)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//opt_sroa_variant_return_nested_result.wado/run" = fn();  // TypeId(17)
+type "functype//opt_sroa_variant_return_nested_result.wado/sum_all" = fn(ref "core:prelude//List<i64>") -> [i32, i64, ref null "opt_sroa_variant_return_nested_result.wado//OuterErr"];  // TypeId(20)
 
-type "functype//opt_sroa_variant_return_nested_result.wado/__cm_export__run" = fn();  // TypeId(18)
+type "functype//opt_sroa_variant_return_nested_result.wado/run" = fn();  // TypeId(21)
 
-type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(19)
+type "functype//opt_sroa_variant_return_nested_result.wado/__cm_export__run" = fn();  // TypeId(22)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(20)
+type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(23)
 
-type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(21)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(24)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(22)
+type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(25)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(23)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(26)
 
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(24)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(27)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(25)
+type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(28)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(26)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(29)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(27)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(30)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(28)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(31)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(29)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(32)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(30)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(33)
 
-type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(31)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(32)
+type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(33)
+type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(34)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(37)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(35)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(38)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(39)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(37)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(38)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(41)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(39)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(42)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(40)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(43)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(41)
+type "functype//opt_sroa_variant_return_nested_result.wado/opt_sroa_variant_return_nested_result.wado/Cursor::step" = fn(ref "opt_sroa_variant_return_nested_result.wado//Cursor") -> [i32, ref null "core:prelude/types.wado//Result<i64,i32>", ref null "opt_sroa_variant_return_nested_result.wado//OuterErr"];  // TypeId(44)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(42)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(45)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(46)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(44)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(47)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(45)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
 
-type "functype//opt_sroa_variant_return_nested_result.wado/sum_all" = fn(ref "core:prelude//List<i64>") -> [i32, i64, ref null "opt_sroa_variant_return_nested_result.wado//OuterErr"];  // TypeId(46)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
 
-type "functype//opt_sroa_variant_return_nested_result.wado/opt_sroa_variant_return_nested_result.wado/Cursor::step" = fn(ref "opt_sroa_variant_return_nested_result.wado//Cursor") -> [i32, i32, i64, i32, ref null "opt_sroa_variant_return_nested_result.wado//OuterErr"];  // TypeId(47)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(50)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -143,36 +158,40 @@ global global:opt_sroa_variant_return_nested_result.wado::__const_obj_5: ref nul
 global global:opt_sroa_variant_return_nested_result.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
 global global:opt_sroa_variant_return_nested_result.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
 global global:opt_sroa_variant_return_nested_result.wado::__const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 101, 109, 112, 116, 121, 32, 109, 97, 116, 99, 104, 101, 115, 32, 123, 32, 79, 107, 40, 48, 41, 32, 125, 10), used: 36 };
-global global:opt_sroa_variant_return_nested_result.wado::__const_obj_9: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 63 };
+global global:opt_sroa_variant_return_nested_result.wado::__const_obj_9: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 68 };
 global global:opt_sroa_variant_return_nested_result.wado::__const_obj_10: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 112, 116, 95, 115, 114, 111, 97, 95, 118, 97, 114, 105, 97, 110, 116, 95, 114, 101, 116, 117, 114, 110, 95, 110, 101, 115, 116, 101, 100, 95, 114, 101, 115, 117, 108, 116, 46, 119, 97, 100, 111), used: 42 };
 global global:opt_sroa_variant_return_nested_result.wado::__const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 98, 97, 100, 32, 109, 97, 116, 99, 104, 101, 115, 32, 123, 32, 69, 114, 114, 40, 79, 117, 116, 101, 114, 69, 114, 114, 58, 58, 66, 97, 100, 41, 32, 125, 10), used: 47 };
-global global:opt_sroa_variant_return_nested_result.wado::__const_obj_13: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 59 };
+global global:opt_sroa_variant_return_nested_result.wado::__const_obj_13: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 64 };
 global global:opt_sroa_variant_return_nested_result.wado::__const_obj_16: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 111, 107, 32, 109, 97, 116, 99, 104, 101, 115, 32, 123, 32, 79, 107, 40, 49, 48, 48, 41, 32, 125, 10), used: 35 };
-global global:opt_sroa_variant_return_nested_result.wado::__const_obj_17: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 55 };
+global global:opt_sroa_variant_return_nested_result.wado::__const_obj_17: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 60 };
 
 fn "opt_sroa_variant_return_nested_result.wado/sum_all"(data) {
     let cur: ref "opt_sroa_variant_return_nested_result.wado//Cursor";
     let total: i64;
+    let __qm_v: ref "core:prelude/types.wado//Result<i64,i32>";
     let __qm_e: ref "opt_sroa_variant_return_nested_result.wado//OuterErr";
+    let inner: ref "core:prelude/types.wado//Result<i64,i32>";
     let v: i64;
     cur = struct.new "opt_sroa_variant_return_nested_result.wado//Cursor" { data: data, pos: 0 };
     total = 0_i64;
     b0: block {
         l1: loop {
-            let __sroa___match_scrut_0_discriminant: i32;
-            let __sroa___match_scrut_0_case1_payload_0: ref null "opt_sroa_variant_return_nested_result.wado//OuterErr";
-            let __sroa___match_scrut_0_case0_payload_0__n_discriminant: i32;
-            let __sroa___match_scrut_0_case0_payload_0__n_case0_payload_0: i64;
-            let __sroa___match_scrut_0_case0_payload_0__n_case1_payload_0: i32;
-            multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0__n_discriminant, __sroa___match_scrut_0_case0_payload_0__n_case0_payload_0, __sroa___match_scrut_0_case0_payload_0__n_case1_payload_0, __sroa___match_scrut_0_case1_payload_0] = "opt_sroa_variant_return_nested_result.wado/opt_sroa_variant_return_nested_result.wado/Cursor::step"(cur);
-            if @likely(__sroa___match_scrut_0_discriminant == 0) {
-            } else {
-                __qm_e = ref.as_non_null(__sroa___match_scrut_0_case1_payload_0);
+            let __vr_7_mv_0: i32;
+            let __vr_7_mv_1: ref null "core:prelude/types.wado//Result<i64,i32>";
+            let __vr_7_mv_2: ref null "opt_sroa_variant_return_nested_result.wado//OuterErr";
+            multivalue_bind [__vr_7_mv_0, __vr_7_mv_1, __vr_7_mv_2] = "opt_sroa_variant_return_nested_result.wado/opt_sroa_variant_return_nested_result.wado/Cursor::step"(cur);
+            inner = (if __vr_7_mv_0 == 0 -> ref "core:prelude/types.wado//Result<i64,i32>" {
+                __qm_v = ref.as_non_null(__vr_7_mv_1);
+                __qm_v;
+            } else if @unlikely(__vr_7_mv_0 == 1) -> ref "core:prelude/types.wado//Result<i64,i32>" {
+                __qm_e = ref.as_non_null(__vr_7_mv_2);
                 cold_path;
                 return 1, 0_i64, __qm_e;
-            }
-            if __sroa___match_scrut_0_case0_payload_0__n_discriminant == 0 {
-                v = __sroa___match_scrut_0_case0_payload_0__n_case0_payload_0;
+            } else {
+                unreachable;
+            });
+            if ref.test "core:prelude/types.wado//Result<i64,i32>::Ok"(inner) {
+                v = ref.cast "core:prelude/types.wado//Result<i64,i32>::Ok"(inner).payload_0;
                 total = total + v;
             } else {
                 break b0;
@@ -193,21 +212,23 @@ fn "opt_sroa_variant_return_nested_result.wado/run"() {
     let __local_12: ref "core:prelude/format.wado//Formatter";
     let __local_13: ref "core:prelude/string.wado//String";
     let __local_14: ref "core:prelude/format.wado//Formatter";
-    let __local_15: i64;
     let __local_16: ref "opt_sroa_variant_return_nested_result.wado//OuterErr";
-    let __local_17: i64;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:opt_sroa_variant_return_nested_result.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_sroa_variant_return_nested_result.wado::__modules_initialized = 1;
     };
-    let __sroa_ok_discriminant: i32;
-    let __sroa_ok_case0_payload_0: i64;
-    let __sroa_ok_case1_payload_0: ref null "opt_sroa_variant_return_nested_result.wado//OuterErr";
-    multivalue_bind [__sroa_ok_discriminant, __sroa_ok_case0_payload_0, __sroa_ok_case1_payload_0] = "opt_sroa_variant_return_nested_result.wado/sum_all"(struct.new "core:prelude//List<i64>" { repr: array.new_fixed<i64>(10_i64, 20_i64, 30_i64, 40_i64), used: 4 });
-    __cond_2 = (if __sroa_ok_discriminant == 0 -> i32 {
-        local.tee __local_15(__sroa_ok_case0_payload_0) == 100_i64;
+    let ok_mv_0: i32;
+    let ok_mv_1: i64;
+    let ok_mv_2: ref null "opt_sroa_variant_return_nested_result.wado//OuterErr";
+    multivalue_bind [ok_mv_0, ok_mv_1, ok_mv_2] = "opt_sroa_variant_return_nested_result.wado/sum_all"(struct.new "core:prelude//List<i64>" { repr: array.new_fixed<i64>(10_i64, 20_i64, 30_i64, 40_i64), used: 4 });
+    __cond_2 = (if (if ok_mv_0 == 0 -> i32 {
+        ok_mv_1 == 100_i64;
+    } else {
+        0;
+    }) -> bool {
+        1;
     } else {
         0;
     });
@@ -216,13 +237,18 @@ fn "opt_sroa_variant_return_nested_result.wado/run"() {
         "core:rt/panic"(__local_9 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(108); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, global:opt_sroa_variant_return_nested_result.wado::__const_obj_7); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 114); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 117); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 110); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, global:opt_sroa_variant_return_nested_result.wado::__const_obj_10); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 58); __local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_9); "core:prelude/primitive.wado/i32^Display::fmt"(global:opt_sroa_variant_return_nested_result.wado::__const_obj_17, __local_10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, global:opt_sroa_variant_return_nested_result.wado::__const_obj_16); __local_9);
         unreachable;
     }
-    let __sroa_bad_discriminant: i32;
-    let __sroa_bad_case0_payload_0: i64;
-    let __sroa_bad_case1_payload_0: ref null "opt_sroa_variant_return_nested_result.wado//OuterErr";
-    multivalue_bind [__sroa_bad_discriminant, __sroa_bad_case0_payload_0, __sroa_bad_case1_payload_0] = "opt_sroa_variant_return_nested_result.wado/sum_all"(struct.new "core:prelude//List<i64>" { repr: array.new_fixed<i64>(10_i64, -5_i64, 30_i64), used: 3 });
-    __cond_5 = (if __sroa_bad_discriminant == 1 -> i32 {
-        __local_16 = ref.as_non_null(__sroa_bad_case1_payload_0);
+    let bad_mv_0: i32;
+    let bad_mv_1: i64;
+    let bad_mv_2: ref null "opt_sroa_variant_return_nested_result.wado//OuterErr";
+    multivalue_bind [bad_mv_0, bad_mv_1, bad_mv_2] = "opt_sroa_variant_return_nested_result.wado/sum_all"(struct.new "core:prelude//List<i64>" { repr: array.new_fixed<i64>(10_i64, -5_i64, 30_i64), used: 3 });
+    __cond_5 = (if (if bad_mv_0 == 1 -> i32 {
+        __local_16 = ref.as_non_null(bad_mv_2);
         __local_16.discriminant == 0;
+    } else {
+        0;
+    }) -> bool {
+        __local_16 = ref.as_non_null(bad_mv_2);
+        1;
     } else {
         0;
     });
@@ -231,12 +257,16 @@ fn "opt_sroa_variant_return_nested_result.wado/run"() {
         "core:rt/panic"(__local_11 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(120); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:opt_sroa_variant_return_nested_result.wado::__const_obj_7); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 114); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 117); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 110); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:opt_sroa_variant_return_nested_result.wado::__const_obj_10); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 58); __local_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_11); "core:prelude/primitive.wado/i32^Display::fmt"(global:opt_sroa_variant_return_nested_result.wado::__const_obj_13, __local_12); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:opt_sroa_variant_return_nested_result.wado::__const_obj_12); __local_11);
         unreachable;
     }
-    let __sroa_empty_discriminant: i32;
-    let __sroa_empty_case0_payload_0: i64;
-    let __sroa_empty_case1_payload_0: ref null "opt_sroa_variant_return_nested_result.wado//OuterErr";
-    multivalue_bind [__sroa_empty_discriminant, __sroa_empty_case0_payload_0, __sroa_empty_case1_payload_0] = "opt_sroa_variant_return_nested_result.wado/sum_all"(struct.new "core:prelude//List<i64>" { repr: builtin::array_new<i64>(0), used: 0 });
-    __cond_8 = (if __sroa_empty_discriminant == 0 -> i32 {
-        local.tee __local_17(__sroa_empty_case0_payload_0) == 0_i64;
+    let empty_mv_0: i32;
+    let empty_mv_1: i64;
+    let empty_mv_2: ref null "opt_sroa_variant_return_nested_result.wado//OuterErr";
+    multivalue_bind [empty_mv_0, empty_mv_1, empty_mv_2] = "opt_sroa_variant_return_nested_result.wado/sum_all"(struct.new "core:prelude//List<i64>" { repr: builtin::array_new<i64>(0), used: 0 });
+    __cond_8 = (if (if empty_mv_0 == 0 -> i32 {
+        empty_mv_1 == 0_i64;
+    } else {
+        0;
+    }) -> bool {
+        1;
     } else {
         0;
     });
@@ -266,12 +296,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b11: block {
-        l12: loop {
-            break_if b11 t <= 0_i64;
+    b15: block {
+        l16: loop {
+            break_if b15 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l12;
+            continue l16;
         };
     };
     return n;
@@ -285,13 +315,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b14: block {
-            l15: loop {
-                break_if b14 temp <= 0_i64;
+        b18: block {
+            l19: loop {
+                break_if b18 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l15;
+                continue l19;
             };
         };
     }
@@ -323,12 +353,12 @@ fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b19: block {
-        l20: loop {
-            break_if b19 i >= len;
+    b23: block {
+        l24: loop {
+            break_if b23 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l20;
+            continue l24;
         };
     };
 }
@@ -407,20 +437,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b22: block {
-        l23: loop {
-            break_if b22 offset >= count;
+    b26: block {
+        l27: loop {
+            break_if b26 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b22 (if (result >> 4) == 0 -> i32 {
+            break_if b26 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l23;
+            continue l27;
         };
     };
 }
@@ -523,7 +553,7 @@ fn "opt_sroa_variant_return_nested_result.wado/opt_sroa_variant_return_nested_re
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     if self.pos >= self.data.used {
-        return 0, 1, 0_i64, -1, ref.null none;
+        return 0, struct.new "core:prelude/types.wado//Result<i64,i32>::Err" { discriminant: 1, payload_0: -1 }, ref.null none;
     }
     index_4 = self.pos;
     __v1 = self.data.used;
@@ -534,10 +564,10 @@ fn "opt_sroa_variant_return_nested_result.wado/opt_sroa_variant_return_nested_re
     }
     v = builtin::array_get<i64>(self.data.repr, index_4);
     if v < 0_i64 {
-        return 1, 2, 0_i64, 0, struct.new "opt_sroa_variant_return_nested_result.wado//OuterErr" { 0 };
+        return 1, ref.null none, struct.new "opt_sroa_variant_return_nested_result.wado//OuterErr" { 0 };
     }
     self.pos = self.pos + 1;
-    return 0, 0, v, 0, ref.null none;
+    return 0, struct.new "core:prelude/types.wado//Result<i64,i32>::Ok" { discriminant: 0, payload_0: v }, ref.null none;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
@@ -549,12 +579,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n"(s
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b34: block {
-        l35: loop {
-            break_if b34 i >= n;
+    b38: block {
+        l39: loop {
+            break_if b38 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l35;
+            continue l39;
         };
     };
 }

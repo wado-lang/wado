@@ -242,6 +242,9 @@ fn expr_references_var(expr: &Expr, name: &str) -> bool {
             }
         }),
         Expr::TupleLiteral(t) => t.elements.iter().any(|e| expr_references_var(e, name)),
+        Expr::TupleComprehension(c) => {
+            expr_references_var(&c.iterable, name) || expr_references_var(&c.body, name)
+        }
         Expr::StructLiteral(s) => {
             s.fields.iter().any(|f| expr_references_var(&f.value, name))
                 || s.spreads
@@ -959,6 +962,14 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 for element in &tuple_lit.elements {
                     self.bind_expr(element)?;
                 }
+            }
+
+            Expr::TupleComprehension(c) => {
+                self.bind_expr(&c.iterable)?;
+                self.enter_scope();
+                self.bind_pattern(&c.binding, c.span)?;
+                self.bind_expr(&c.body)?;
+                self.exit_scope();
             }
 
             Expr::LabeledBlock(lb) => {

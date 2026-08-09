@@ -576,6 +576,7 @@ impl Translator<'_> {
             export_name: func.export_name.clone(),
             allocator_tag: func.allocator_tag.clone(),
             kind: convert_function_kind(&func.kind),
+            scalarized_from: None,
             return_abi: convert_return_abi(&func.return_abi),
         }
     }
@@ -1584,6 +1585,9 @@ impl FunctionTranslator<'_, '_> {
             ),
             TirExprKind::TypePackExpansion { .. } => unreachable!(
                 "TirExprKind::TypePackExpansion should be expanded by monomorphize before lower::translate runs"
+            ),
+            TirExprKind::VariadicTupleComprehension { .. } => unreachable!(
+                "TirExprKind::VariadicTupleComprehension should be expanded by monomorphize before lower::translate runs"
             ),
             TirExprKind::Capture { .. } => unreachable!(
                 "TirExprKind::Capture should be lowered to FieldAccess by lower::plan::closure before lower::translate runs"

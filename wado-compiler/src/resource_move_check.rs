@@ -522,6 +522,10 @@ impl MoveWalker<'_> {
                     self.visit_value(el);
                 }
             }
+            Expr::TupleComprehension(c) => {
+                self.visit_value(&c.iterable);
+                self.visit_value(&c.body);
+            }
             Expr::TemplateString(ts) => {
                 for part in &ts.parts {
                     if let ast::TemplatePart::Interpolation { expr, .. } = part {

@@ -1,34 +1,10 @@
 //! Resolving a call-site value through the `Block` / `Seq` wrappers lowering
 //! and inlining leave around it.
-//!
-//! One shape definition shared by validation and rewrite, so accept and rewrite
-//! cannot disagree on where the call and its prefix statements live.
 
-use crate::hashmap::IndexSet;
 use crate::wir::WirInstr;
 
-/// One step of the path from a wrapped call-site value to its result leaf.
-/// `value_idx` is the index of the value-producing element in the wrapper's
-/// instruction list; earlier elements are prefix statements the rewriter
-/// hoists out of the wrapper.
-#[derive(Clone, Copy)]
-pub(super) enum ResultStep {
-    /// `Seq(body)`: value is `body[value_idx]` (the last element).
-    Seq { value_idx: usize },
-    /// `Block { body }`: value is `body[value_idx]` (the effective last
-    /// element after trimming a trailing `Unreachable`).
-    Block { value_idx: usize },
-    /// A `Seq([.., value, Br(0)])` break-with-value at a `Block`'s result
-    /// position: value is `seq[value_idx]` (`seq.len() - 2`).
-    BreakValue { value_idx: usize },
-}
-
-/// Resolve the value-producing leaf of a call-site RHS through `Block` /
-/// `Seq` wrappers, verifying that stripping the wrappers is sound. The one
-/// shape definition shared by validation (`unwrap_to_candidate_call`,
-/// `unwrap_to_inner_call`, `validate_wrapper_prefixes`) and the
-/// rewriter (`take_call_from_local_set`), so accept and rewrite cannot
-/// diverge.
+/// Resolve the value-producing leaf of a call-site RHS through `Block` / `Seq`
+/// wrappers, verifying that stripping the wrappers is sound.
 ///
 /// Soundness of stripping requires:
 /// - No prefix statement may branch to *any* `Block` frame being stripped
@@ -42,27 +18,14 @@ pub(super) enum ResultStep {
 ///   value) is dead code — skipped in `Block` bodies only; a `Seq` has no
 ///   such emitter convention, so its trailing `Unreachable` means "then
 ///   trap" and blocks unwrapping.
-pub(super) fn resolve_wrapped_result(instr: &WirInstr) -> Option<(Vec<ResultStep>, &WirInstr)> {
-    let mut steps = Vec::new();
-    let leaf = resolve_wrapped_result_inner(instr, 0, &mut steps)?;
-    Some((steps, leaf))
-}
-
-fn resolve_wrapped_result_inner<'a>(
-    instr: &'a WirInstr,
-    stripped_blocks: u32,
-    steps: &mut Vec<ResultStep>,
-) -> Option<&'a WirInstr> {
+fn resolve_wrapped_result(instr: &WirInstr, stripped_blocks: u32) -> Option<&WirInstr> {
     match instr {
         WirInstr::Seq(body) => {
             let (last, prefix) = body.split_last()?;
             if any_branch_targets_enclosing(prefix, stripped_blocks) {
                 return None;
             }
-            steps.push(ResultStep::Seq {
-                value_idx: body.len() - 1,
-            });
-            resolve_wrapped_result_inner(last, stripped_blocks, steps)
+            resolve_wrapped_result(last, stripped_blocks)
         }
         WirInstr::Block { body, .. } => {
             let effective_len = if matches!(body.last(), Some(WirInstr::Unreachable)) {
@@ -74,7 +37,6 @@ fn resolve_wrapped_result_inner<'a>(
             if any_branch_targets_enclosing(&body[..value_idx], stripped_blocks + 1) {
                 return None;
             }
-            steps.push(ResultStep::Block { value_idx });
             let last = &body[value_idx];
             if let WirInstr::Seq(seq) = last
                 && let Some((WirInstr::Br { depth }, rest)) = seq.split_last()
@@ -86,10 +48,9 @@ fn resolve_wrapped_result_inner<'a>(
                 if any_branch_targets_enclosing(&rest[..value_idx], stripped_blocks + 1) {
                     return None;
                 }
-                steps.push(ResultStep::BreakValue { value_idx });
-                return resolve_wrapped_result_inner(&rest[value_idx], stripped_blocks + 1, steps);
+                return resolve_wrapped_result(&rest[value_idx], stripped_blocks + 1);
             }
-            resolve_wrapped_result_inner(last, stripped_blocks + 1, steps)
+            resolve_wrapped_result(last, stripped_blocks + 1)
         }
         other => Some(other),
     }
@@ -98,7 +59,7 @@ fn resolve_wrapped_result_inner<'a>(
 /// True when any instruction in `instrs` branches to one of the `frame_count`
 /// innermost enclosing block frames (relative depths `0..frame_count` at this
 /// position; nested control frames shift the window by one per level).
-pub(super) fn any_branch_targets_enclosing(instrs: &[WirInstr], frame_count: u32) -> bool {
+fn any_branch_targets_enclosing(instrs: &[WirInstr], frame_count: u32) -> bool {
     if frame_count == 0 {
         return false;
     }
@@ -158,73 +119,11 @@ fn instr_branches_into_range(instr: &WirInstr, base: u32, count: u32) -> bool {
     }
 }
 
-/// Look through trivial `Block` / `Seq` wrappers to find a `Call` to a
-/// candidate function at the result position. Returns the `func_id` index.
-///
-/// `LocalSet`-from-`Call` site-effects are often wrapped in a `Seq` in WIR —
-/// e.g. `LocalSet(name, Seq([prefix..., Call(f)]))` — and inlining wraps
-/// results in labeled `Block`s. Without unwrapping,
-/// `find_nested_candidate_calls` would mis-classify every such site as a
-/// "nested candidate call" and invalidate `f`, even though the pattern is the
-/// idiomatic LocalSet-bound call we want to support.
-pub(super) fn unwrap_to_candidate_call(
-    instr: &WirInstr,
-    candidate_ids: &IndexSet<u32>,
-) -> Option<u32> {
-    match resolve_wrapped_result(instr)?.1 {
-        WirInstr::Call { func_id, .. } if candidate_ids.contains(&func_id.index()) => {
-            Some(func_id.index())
-        }
-        _ => None,
-    }
-}
-
-/// Unwrap through `Block` / `Seq` wrappers to the inner `Call` instruction
-/// (for arg checking). Shares [`resolve_wrapped_result`] with the candidate
-/// check and the rewriter, so it sees exactly the call they see — including
-/// through a trailing `Unreachable` after a break-with-value.
+/// Unwrap through `Block` / `Seq` wrappers to the inner `Call` instruction, for
+/// arg checking.
 pub(super) fn unwrap_to_inner_call(instr: &WirInstr) -> Option<&WirInstr> {
-    match resolve_wrapped_result(instr) {
-        Some((_, call @ WirInstr::Call { .. })) => Some(call),
+    match resolve_wrapped_result(instr, 0) {
+        Some(call @ WirInstr::Call { .. }) => Some(call),
         _ => None,
-    }
-}
-
-/// Take the Call instruction out of a `LocalSet`, unwrapping trivial
-/// `Block` / `Seq` wrappers. Replaces the instruction with Nop. Returns
-/// `(prefix_instrs, call_instr)` where prefix instructions are statements
-/// from inside the wrappers that must be emitted before the call (e.g.
-/// initialization of locals used as call arguments). Consumes the same
-/// [`resolve_wrapped_result`] path validation used, so the two cannot
-/// disagree on where the call and its prefixes live.
-pub(super) fn take_call_from_local_set(instr: &mut WirInstr) -> (Vec<WirInstr>, Box<WirInstr>) {
-    let WirInstr::LocalSet { value, .. } = std::mem::replace(instr, WirInstr::Nop) else {
-        unreachable!()
-    };
-    let (steps, _) = resolve_wrapped_result(&value)
-        .unwrap_or_else(|| unreachable!("SROA call-site take on a shape validation rejected"));
-    let mut prefix = Vec::new();
-    let mut current = *value;
-    for step in steps {
-        let (mut list, value_idx) = match (step, current) {
-            (
-                ResultStep::Seq { value_idx } | ResultStep::BreakValue { value_idx },
-                WirInstr::Seq(body),
-            )
-            | (ResultStep::Block { value_idx }, WirInstr::Block { body, .. }) => (body, value_idx),
-            _ => unreachable!("resolve_wrapped_result path mismatch"),
-        };
-        for item in list.drain(..value_idx) {
-            if !matches!(item, WirInstr::Nop) {
-                prefix.push(item);
-            }
-        }
-        // The value now sits at index 0; the rest (a break `Br`, a trailing
-        // `Unreachable`) is dropped with the wrapper.
-        current = list.swap_remove(0);
-    }
-    match current {
-        call @ WirInstr::Call { .. } => (prefix, Box::new(call)),
-        _ => unreachable!("expected Call at SROA call-site result leaf"),
     }
 }

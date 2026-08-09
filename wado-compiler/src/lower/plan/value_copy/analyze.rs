@@ -412,10 +412,15 @@ fn scan_stmt_for_breaks(
     type_table: &TypeTable,
 ) -> bool {
     match &stmt.kind {
+        // A `skip_value_copy` binding takes its source's storage over, so it
+        // owns the value whatever the source expression looks like.
         TirStmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value,
+            skip_value_copy,
+            ..
         } => {
-            if is_owned_value(value, fresh_locals, oracle, type_table) {
+            if *skip_value_copy || is_owned_value(value, fresh_locals, oracle, type_table) {
                 fresh_locals.insert(*local_index);
             }
             true

@@ -193,11 +193,16 @@ The `wado format` command formats Wado source code.
 wado format -w file.wado  # rewrite in place
 ```
 
-In the wado repository, `mise run format-wado` formats all the fixtures used by
-compiler tests.
+In the wado repository, `mise run format-wado` formats the whole workspace,
+honouring each package's `[format] exclude`. `wado-compiler` excludes
+`tests/**`, so the e2e fixtures and the golden format fixtures keep the
+hand-authored layouts that are part of the test.
 
-**Caution:** `mise run format-wado` may break uncommitted test fixtures. When the
-syntax is updated, make sure to add tests to `wado-compiler/tests/format.rs`.
+**Caution:** the exclusion applies to the directory walk, not to a path you
+name. `wado format -w wado-compiler/tests/fixtures/x.wado` — or `-w` on that
+directory — reformats it anyway, silently discarding a layout the test depends
+on. When the syntax is updated, make sure to add tests to
+`wado-compiler/tests/format.rs`.
 
 ## Publish
 

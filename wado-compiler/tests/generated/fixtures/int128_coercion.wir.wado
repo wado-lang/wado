@@ -100,7 +100,7 @@ type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128^Sub::sub"
 
 type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128^Shl::shl" = fn(ref "core:prelude/int128.wado//u128", u32) -> ref "core:prelude/int128.wado//u128";  // TypeId(38)
 
-type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> ref "core:prelude/int128.wado//i128";  // TypeId(39)
+type "functype//core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub" = fn(ref "core:prelude/int128.wado//i128", ref "core:prelude/int128.wado//i128") -> [u64, i64];  // TypeId(39)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(40)
 
@@ -195,7 +195,6 @@ fn "int128_coercion.wado/run"() with Stdout {
     let __local_23: ref "core:prelude/format.wado//Formatter";
     let __local_24: ref "core:prelude/string.wado//String";
     let __local_25: ref "core:prelude/format.wado//Formatter";
-    let val_113: ref "core:prelude/int128.wado//i128";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:int128_coercion.wado::__modules_initialized);
         cold_path;
@@ -205,7 +204,7 @@ fn "int128_coercion.wado/run"() with Stdout {
     "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(39), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_10, global:int128_coercion.wado::__const_obj_27); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0"(global:int128_coercion.wado::__const_obj_28, __local_11, 0); __local_10);
     "core:cli/println"(__local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(39), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_12, global:int128_coercion.wado::__const_obj_26); __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 }; "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0"(struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 }, __local_13, 0); __local_12);
     c = struct.new "core:prelude/int128.wado//i128" { low: -100_i64, high: -1_i64 };
-    "core:cli/println"(__local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_14, global:int128_coercion.wado::__const_obj_25); __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_14 }; "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0"(val_113 = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:int128_coercion.wado::__const_obj_24, c); struct.new "core:prelude/int128.wado//u128" { low: val_113.low, high: val_113.high }, __local_15, 1); __local_14);
+    "core:cli/println"(__local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_14, global:int128_coercion.wado::__const_obj_25); __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_14 }; "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0"(let val_113_mv_low: u64; let val_113_mv_high: i64; multivalue_bind [val_113_mv_low, val_113_mv_high] = "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(global:int128_coercion.wado::__const_obj_24, c); struct.new "core:prelude/int128.wado//u128" { low: val_113_mv_low, high: val_113_mv_high }, __local_15, 1); __local_14);
     "core:cli/println"(__local_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_16, global:int128_coercion.wado::__const_obj_22); __local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_16 }; "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0"(global:int128_coercion.wado::__const_obj_23, __local_17, 0); __local_16);
     "core:cli/println"(__local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_18, global:int128_coercion.wado::__const_obj_21); __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_18 }; "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0"(struct.new "core:prelude/int128.wado//u128" { low: 300_i64, high: 0_i64 }, __local_19, 0); __local_18);
     "core:cli/println"(__local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_20, global:int128_coercion.wado::__const_obj_19); __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_20 }; "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0"(global:int128_coercion.wado::__const_obj_20, __local_21, 0); __local_20);
@@ -555,7 +554,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/i128^Sub::sub"(self, other
     let lo: i64;
     let hi: i64;
     multivalue_bind [lo, hi] = i64.sub128(self.low, self.high, other.low, other.high);
-    return struct.new "core:prelude/int128.wado//i128" { low: lo, high: hi };
+    return lo, hi;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {

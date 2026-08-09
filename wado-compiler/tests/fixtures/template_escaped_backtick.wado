@@ -1,0 +1,22 @@
+// `\`` is a template-specific escape — the delimiter itself. The lexer
+// accepted it, but the unescaper had no arm for it and the reify path turned
+// that error into an empty string, so every literal segment of the template
+// silently vanished: `has no member \`${name}\`` rendered as just the
+// interpolation.
+
+test "an escaped backtick keeps the surrounding literal text" {
+    let name = "Fly";
+    assert `has no member \`${name}\`` == "has no member `Fly`";
+}
+
+test "an escaped backtick with no interpolation" {
+    assert `a \`b\` c` == "a `b` c";
+}
+
+test "an escaped backtick beside the other template escapes" {
+    let v = 1;
+    assert `\`\$\{${v}\}\`` == "`${1}`";
+}
+
+__DATA__
+{"test": {}}

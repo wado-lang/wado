@@ -125,19 +125,19 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::push" =
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^FromIterator::from_iter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/ArrayIter<i32>>>" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/ArrayIter<i32>>") -> ref "core:prelude//List<i32>";  // TypeId(47)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(48)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/ArrayIter<i32>>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/ArrayIter<i32>>") -> [i32, i32];  // TypeId(48)
 
-type "functype//iterator_assoc_type_chain.wado/iterator_assoc_type_chain.wado/__Closure_2::__call" = fn(ref "iterator_assoc_type_chain.wado//__Closure_2", i32) -> bool;  // TypeId(49)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(49)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(50)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(50)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(51)
+type "functype//iterator_assoc_type_chain.wado/iterator_assoc_type_chain.wado/__Closure_2::__call" = fn(ref "iterator_assoc_type_chain.wado//__Closure_2", i32) -> bool;  // TypeId(51)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(52)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/ArrayIter<i32>>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/ArrayIter<i32>>") -> [i32, i32];  // TypeId(53)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(53)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(54)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(54)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -621,11 +621,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^FromIterator::from_i
     result = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     b46: block {
         l47: loop {
-            let __sroa___match_4_discriminant: i32;
-            let __sroa___match_4_payload_0: i32;
-            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/ArrayIter<i32>>^Iterator::next"(iter);
-            if __sroa___match_4_discriminant == 0 {
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __sroa___match_4_payload_0);
+            let __match_4_mv_0: i32;
+            let __match_4_mv_1: i32;
+            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/ArrayIter<i32>>^Iterator::next"(iter);
+            if __match_4_mv_0 == 0 {
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __match_4_mv_1);
             } else {
                 break b46;
             }
@@ -642,16 +642,16 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
     _licm_pred_4 = self.pred;
     block {
         l50: loop {
-            let __sroa___match_2_discriminant: i32;
-            let __sroa___match_2_payload_0: i32;
-            multivalue_bind [__sroa___match_2_discriminant, __sroa___match_2_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(_licm_inner_3);
-            if __sroa___match_2_discriminant == 0 {
+            let __match_2_mv_0: i32;
+            let __match_2_mv_1: i32;
+            multivalue_bind [__match_2_mv_0, __match_2_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(_licm_inner_3);
+            if __match_2_mv_0 == 0 {
                 if block -> bool {
                     let __indirect_call_0: ref "canonical//CanonicalClosure_0";
                     __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(_licm_pred_4);
-                    call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, __sroa___match_2_payload_0);
+                    call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, __match_2_mv_1);
                 } {
-                    return 0, __sroa___match_2_payload_0;
+                    return 0, __match_2_mv_1;
                 }
             } else {
                 return 1, 0;

@@ -1,0 +1,77 @@
+// A pass-through `return g(x)` reached through a branch.
+//
+// The return-side shape check accepts a tail call in an `if` branch, a `match`
+// arm and their nestings, but the call-site walk saw one only at a bare
+// `return`. It counted the rest as escapes, invalidated `g`, and the fix-point
+// then withdrew the callers too — so every function here kept the heap-tuple
+// ABI and allocated per call.
+use { println, Stdout } from "core:cli";
+
+// `mut`, so the argument stays opaque and the calls are not folded away.
+global mut SEED: i32 = 3;
+
+#[inline("never")]
+internal fn g(n: i32) -> [i32, i32] {
+    return [n * 2, n * 3];
+}
+
+#[inline("never")]
+internal fn via_match(n: i32) -> [i32, i32] {
+    return match n {
+        0 => [7, 8],
+        _ => g(n),
+    };
+}
+
+#[inline("never")]
+internal fn via_if(n: i32) -> [i32, i32] {
+    if n > 0 {
+        return g(n);
+    }
+    return [1, 2];
+}
+
+#[inline("never")]
+internal fn via_nested(n: i32) -> [i32, i32] {
+    return match n {
+        0 => [7, 8],
+        1 => match n {
+            1 => g(n + 10),
+            _ => [0, 0],
+        },
+        _ => via_match(n),
+    };
+}
+
+export fn run() with Stdout {
+    let a = via_match(SEED);
+    assert a.0 == 6 && a.1 == 9;
+    let a0 = via_match(0);
+    assert a0.0 == 7 && a0.1 == 8;
+
+    let b = via_if(SEED);
+    assert b.0 == 6 && b.1 == 9;
+    let b0 = via_if(-1);
+    assert b0.0 == 1 && b0.1 == 2;
+
+    let c = via_nested(1);
+    assert c.0 == 22 && c.1 == 33;
+    let c0 = via_nested(0);
+    assert c0.0 == 7 && c0.1 == 8;
+    let c3 = via_nested(SEED);
+    assert c3.0 == 6 && c3.1 == 9;
+
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O2": [
+        "opt_multi_value_tail_in_branches.wado/g\" = fn(i32) -> [i32, i32]",
+        "opt_multi_value_tail_in_branches.wado/via_match\" = fn(i32) -> [i32, i32]",
+        "opt_multi_value_tail_in_branches.wado/via_if\" = fn(i32) -> [i32, i32]",
+        "opt_multi_value_tail_in_branches.wado/via_nested\" = fn(i32) -> [i32, i32]"
+    ],
+    "wir_not_expect:O2": ["struct.new \"tuple//"]
+}

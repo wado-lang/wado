@@ -171,6 +171,53 @@ fn run() {
     assert_eq!(formatted1, formatted2, "format should be idempotent");
 }
 
+/// A tuple comprehension `[for let v of t { expr }]` must round-trip: the
+/// `.enumerate()` suffix stays part of the iterable, so the formatter reprints
+/// what was written instead of reconstructing it.
+#[test]
+fn test_format_tuple_comprehension_roundtrips() {
+    let source = concat!(
+        "impl<..T: Clone> Clone for [..T] {\n",
+        "    fn clone(&self) -> [..T] {\n",
+        "        let indexed = [for let [i, v] of (*self).enumerate() { v.clone() }];\n",
+        "        return [for let v of indexed { v }];\n",
+        "    }\n",
+        "}\n"
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("[for let [i, v] of (*self).enumerate() { v.clone() }]"),
+        "expected the comprehension to survive formatting, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+/// A comment inside a comprehension body keeps its place: the one-line form has
+/// no slot for it, so the body moves onto its own line rather than losing it.
+#[test]
+fn test_format_tuple_comprehension_keeps_body_comment() {
+    let source = concat!(
+        "impl<..T: Clone> Clone for [..T] {\n",
+        "    fn clone(&self) -> [..T] {\n",
+        "        return [for let v of *self {\n",
+        "            // deep copy\n",
+        "            v.clone()\n",
+        "        }];\n",
+        "    }\n",
+        "}\n"
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("// deep copy"),
+        "expected the comment to survive formatting, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// A byte-string literal `b"..."` must round-trip through the formatter with
 /// its `b` prefix and raw escapes intact.
 #[test]
@@ -195,6 +242,53 @@ fn test_format_turbofish_wildcard_roundtrips() {
     assert!(
         formatted.contains("make::<_, MyErr>"),
         "expected `_` to survive formatting, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+/// A turbofish on a case path sits on the path's *prefix*
+/// (`Maybe::<i32>::Nothing`). Appending it to the whole name would emit
+/// `Maybe::Nothing::<i32>`, which re-parses as the identifier's own turbofish
+/// and changes the AST.
+#[test]
+fn test_format_case_path_turbofish_stays_on_the_prefix() {
+    let source = concat!(
+        "variant Maybe<T> {\n    Just(T),\n    Nothing,\n}\n",
+        "\n",
+        "fn run() {\n    let a = Option::<i32>::None;\n    let b = Maybe::<String>::Nothing;\n}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("Option::<i32>::None"),
+        "expected the turbofish to stay on the prefix, got:\n{formatted}"
+    );
+    assert!(
+        formatted.contains("Maybe::<String>::Nothing"),
+        "expected the turbofish to stay on the prefix, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+/// A folded parameter list ends with a trailing comma, and the last parameter
+/// may carry a `with` clause. The effect list stopped at the enclosing list's
+/// terminator only for a following `ident:`, so the formatter's own output —
+/// `mut f: fn mut() with E,` before `)` — did not re-parse.
+#[test]
+fn test_format_folded_params_keep_a_trailing_comma() {
+    let source = concat!(
+        "fn a_function_with_a_very_long_name_indeed<effect E>(",
+        "first_parameter_name: i32, second_parameter_name: String, ",
+        "third_parameter_name: bool, mut the_callback_parameter: fn mut() with E",
+        ") -> i32 with E {\n    the_callback_parameter();\n    return first_parameter_name;\n}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("mut the_callback_parameter: fn mut() with E,\n)"),
+        "expected a folded list with a trailing comma, got:\n{formatted}"
     );
     assert_format_preserves_ast(source);
     let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");

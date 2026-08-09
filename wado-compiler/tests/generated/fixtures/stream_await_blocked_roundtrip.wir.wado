@@ -157,24 +157,24 @@ struct core:prelude/slice.wado//ArrayIter<u8> {  // TypeId(23)
     mut end: i32,
 }
 
-variant core:prelude/types.wado//Option<u16> {  // TypeId(24)
-    Some(u16),
-    None,
-}
-
-struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(25)
-    discriminant: i32,
-    payload_0: u16,
-}
-
-variant core:prelude/types.wado//Option<u8> {  // TypeId(26)
+variant core:prelude/types.wado//Option<u8> {  // TypeId(24)
     Some(u8),
     None,
 }
 
-struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(27)
+struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(25)
     discriminant: i32,
     payload_0: u8,
+}
+
+variant core:prelude/types.wado//Option<u16> {  // TypeId(26)
+    Some(u16),
+    None,
+}
+
+struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(27)
+    discriminant: i32,
+    payload_0: u16,
 }
 
 variant core:prelude/types.wado//Option<u32> {  // TypeId(28)
@@ -304,25 +304,25 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(68)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(69)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(69)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(70)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(70)
 
-type "functype//wasi/future-new:transmission-http" = fn() -> i64;  // TypeId(71)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(71)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(72)
+type "functype//wasi/future-new:transmission-http" = fn() -> i64;  // TypeId(72)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(73)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(73)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(74)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(74)
 
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(75)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(75)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(76)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(76)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(77)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(77)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(78)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(78)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -516,11 +516,11 @@ fn "stream_await_blocked_roundtrip.wado/handle"(request) {
             __iter_8 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: chunk.repr, index: 0, end: chunk.used };
             b2: block {
                 l3: loop {
-                    let __sroa___match_192_discriminant: i32;
-                    let __sroa___match_192_payload_0: u8;
-                    multivalue_bind [__sroa___match_192_discriminant, __sroa___match_192_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(__iter_8);
-                    if __sroa___match_192_discriminant == 0 {
-                        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(body, __sroa___match_192_payload_0);
+                    let __match_192_mv_0: i32;
+                    let __match_192_mv_1: u8;
+                    multivalue_bind [__match_192_mv_0, __match_192_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(__iter_8);
+                    if __match_192_mv_0 == 0 {
+                        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(body, __match_192_mv_1);
                     } else {
                         break b2;
                     }
@@ -914,11 +914,11 @@ fn "stream_await_blocked_roundtrip.wado/handle"(request) {
     __iter_17 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: body.repr, index: 0, end: body.used };
     b96: block {
         l97: loop {
-            let __sroa___match_196_discriminant: i32;
-            let __sroa___match_196_payload_0: u8;
-            multivalue_bind [__sroa___match_196_discriminant, __sroa___match_196_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(__iter_17);
-            if __sroa___match_196_discriminant == 0 {
-                one = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(__sroa___match_196_payload_0), used: 1 };
+            let __match_196_mv_0: i32;
+            let __match_196_mv_1: u8;
+            multivalue_bind [__match_196_mv_0, __match_196_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(__iter_17);
+            if __match_196_mv_0 == 0 {
+                one = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(__match_196_mv_1), used: 1 };
                 "core:rt/cm_stream_write_u8"(tx_213, one);
             } else {
                 break b96;

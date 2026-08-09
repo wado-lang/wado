@@ -1,0 +1,52 @@
+// Multi-value return ABI for a *trait method* returning a tuple.
+//
+// `optimize::multi_value_return` used to reject every trait method outright.
+// The gate was unnecessary: after monomorphization a trait method is an
+// ordinary direct-call target, and the pinned set (exports, closure functors,
+// value-copy helpers) already covers the cases whose address escapes.
+//
+// The gate also capped `nir/sroa_variant_return`, whose whole traffic is
+// `Iterator::next` / `Deserializer::*`-shaped trait methods — 78-82% of every
+// function the WIR variant-return SROA widens on the parser benchmarks.
+
+trait Split {
+    fn halves(&self) -> [i32, i32];
+}
+
+struct Pair {
+    lo: i32,
+    hi: i32,
+}
+
+impl Split for Pair {
+    #[inline("never")]
+    fn halves(&self) -> [i32, i32] {
+        return [self.lo, self.hi];
+    }
+}
+
+#[inline("never")]
+fn total(p: &Pair) -> i32 {
+    let h = p.halves();
+    return h.0 + h.1;
+}
+
+export fn run() {
+    let p = Pair {
+        lo: builtin::black_box(10),
+        hi: builtin::black_box(20),
+    };
+    assert total(&p) == 30;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "Pair^Split::halves\" = fn(ref \"opt_multi_value_trait_method.wado//Pair\") -> [i32, i32]",
+        "multivalue_bind ["
+    ],
+    "wir_not_expect:O2": [
+        "struct.new \"tuple//[i32, i32]\""
+    ]
+}

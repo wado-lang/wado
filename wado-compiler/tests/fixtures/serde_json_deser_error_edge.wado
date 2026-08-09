@@ -217,7 +217,7 @@ test "struct from array" {
 test "struct missing required field" {
     let r = from_string::<Point>(`\{"x":1\}`);
     if let Err(e) = r {
-        assert e.message == "required field missing";
+        assert e.message == "missing field: y";
     } else {
         panic("expected error for missing field");
     }

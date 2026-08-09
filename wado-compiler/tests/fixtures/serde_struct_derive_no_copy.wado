@@ -1,0 +1,28 @@
+// The derived struct deserializer moves each field out of the slot tuple. A
+// `List` field parsed once must not be deep-copied on the way into the struct,
+// so no `array_clone_deep_prefix` survives this module — which deserializes and
+// reads, and never aliases a field past a read.
+
+use { DeserializeError } from "core:serde";
+use { from_string } from "core:json";
+
+struct Bag {
+    tags: List<String>,
+    id: i32,
+}
+
+test "a list field survives the slot round trip" {
+    let back: Result<Bag, DeserializeError> = from_string("{\"tags\":[\"a\",\"b\"],\"id\":5}");
+    if let Ok(v) = back {
+        assert v.tags == ["a", "b"];
+        assert v.id == 5;
+    } else {
+        assert false;
+    }
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O2": ["array_clone_deep_prefix<ref \"core:prelude/string.wado//String\">"]
+}

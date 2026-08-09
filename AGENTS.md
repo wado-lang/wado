@@ -55,6 +55,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.
 - Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. `--release` is only for distributing binaries, not for the inner dev loop.
 - Cloud sessions run with `CARGO_INCREMENTAL=0`: `target/debug/incremental` does not fit the session's fixed disk allowance. Every rebuild is a full recompile of the touched crates, so scope the inner loop with `cargo check` and `-p <crate>` instead of relying on incremental relinks. Never set `CARGO_INCREMENTAL=1` in a task or script.
+- Add a new integration test to `tests/integration/` and declare it in that directory's `main.rs`. A file dropped directly in `tests/` becomes its own target, and each one statically links the compiler and wasmtime for another ~150 MB.
 - Use the `rust` skill when writing Rust.
 - Use the `wado` skill when writing Wado code or designing Wado language features.
 
@@ -138,7 +139,7 @@ Behaviour that no `--help` will remind you of:
 - A program targets a Wasm _world_: `wasi:cli/command` (default), `wasi:http/service`, or the synthetic `test` world. `--world test` exports the entry module's `test` blocks and drops everything else; `serve` and `test` pick their world automatically.
 - The world selects the allocator: `bump` for CLI (never frees), `freelist` for HTTP (long-running), `debug` for the test world (never reuses freed memory, poisons it with `0xFF`). E2E tests rely on the test world picking `debug`.
 - `wado run` reaches only the directories granted to it: the current one, or exactly the `--dir` grants once any is given. Paths open relative to a grant, so an absolute path never opens.
-- `mise run format-wado` formats every compiler test fixture and may break uncommitted ones. When the syntax changes, add tests to `wado-compiler/tests/format.rs`.
+- `mise run format-wado` skips `wado-compiler/tests/**` (`[format] exclude` in its `wado.toml`), so an e2e fixture keeps its hand-authored layout. Naming a file or a directory _inside_ an excluded tree bypasses the exclusion, so never `wado format -w` a fixture path directly. When the syntax changes, add tests to `wado-compiler/tests/format.rs`.
 
 ## Dependencies
 

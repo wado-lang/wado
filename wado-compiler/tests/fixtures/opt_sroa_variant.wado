@@ -1,8 +1,7 @@
 // Test: variant SROA decomposes Option<T> returns into multi-value scalars
 //
-// Verifies that the WIR-level SROA pass rewrites variant-returning functions
-// to use multi-value returns [i32 discriminant, payload...] instead of
-// heap-allocated GC variant structs.
+// Verifies that variant-returning functions use multi-value returns
+// [i32 discriminant, payload...] instead of heap-allocated GC variant structs.
 //
 // At O1: StrCharIter::next (Option<char>) is SROA'd to [i32, char].
 //        StrUtf8ByteIter::next is inlined (body ~20 exprs, #[inline] gives
@@ -49,8 +48,8 @@ __DATA__
     "stdout": "ok\n",
     "wir_expect:O1": [
         "-> [i32, char]",
-        "multivalue_bind [__sroa_",
-        "__sroa___match_4_discriminant == 0"
+        "multivalue_bind [__match_4_mv_0, __match_4_mv_1] = \"core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next\"(",
+        "__match_4_mv_0 == 0"
     ],
     "wir_not_expect:O1": [
         "ref.test"

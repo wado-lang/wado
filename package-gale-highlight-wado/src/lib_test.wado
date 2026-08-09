@@ -125,6 +125,10 @@ test "highlight chained tuple index" {
     assert_highlights(&"fn f() { let t = [[1, 2], [3, 4]]; assert t.0.0 == 1; }\n");
 }
 
+test "highlight match arm diverging with a bare return" {
+    assert_highlights(&"fn f(o: Option<i32>) -> i32 { return match o { Some(v) => v, None => return 0 }; }\n");
+}
+
 test "highlight fn-type effect before next param" {
     assert_highlights(&"fn a(f: fn() with Stdout, x: i32) with Stdout { f(); }\n");
 }

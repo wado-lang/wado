@@ -81,19 +81,19 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(32)
+type "functype//core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(32)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
+type "functype//core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(33)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(36)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
 
-type "functype//core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(37)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(37)
 
-type "functype//core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(38)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(38)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -137,11 +137,11 @@ fn "const_object_globalization_pure_call.wado/byte_sum"(s) {
     _licm_repr_12 = s.repr;
     b0: block {
         l1: loop {
-            let __sroa___match_4_discriminant: i32;
-            let __sroa___match_4_payload_0: i32;
-            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(__iter_2);
-            if __sroa___match_4_discriminant == 0 {
-                total = total + builtin::array_get<u8>(_licm_repr_12, __sroa___match_4_payload_0);
+            let __match_4_mv_0: i32;
+            let __match_4_mv_1: i32;
+            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(__iter_2);
+            if __match_4_mv_0 == 0 {
+                total = total + builtin::array_get<u8>(_licm_repr_12, __match_4_mv_1);
             } else {
                 break b0;
             }
@@ -166,10 +166,10 @@ fn "const_object_globalization_pure_call.wado/run"() with Stdout {
     __iter_1 = struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 0, end: 3 };
     b3: block {
         l4: loop {
-            let __sroa___match_6_discriminant: i32;
-            let __sroa___match_6_payload_0: i32;
-            multivalue_bind [__sroa___match_6_discriminant, __sroa___match_6_payload_0] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0"(__iter_1);
-            if __sroa___match_6_discriminant == 0 {
+            let __match_6_mv_0: i32;
+            let __match_6_mv_1: i32;
+            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0"(__iter_1);
+            if __match_6_mv_0 == 0 {
                 if ref.is_null(global:const_object_globalization_pure_call.wado::__const_obj_0) {
                     global:const_object_globalization_pure_call.wado::__const_obj_0 = "const_object_globalization_pure_call.wado/encode_key"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 });
                 }
@@ -385,14 +385,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
 fn "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(self) {
     let current: i32;
     let other: i32;
-    let __sroa_self_value_8: i32;
+    let __sroa_self_value_9: i32;
     if __inline_i32_Ord__cmp_0: block -> "core:prelude/traits.wado//enum:Ordering" {
-        __sroa_self_value_8 = self.start;
+        __sroa_self_value_9 = self.start;
         other = self.end;
-        if __sroa_self_value_8 < other {
+        if __sroa_self_value_9 < other {
             break __inline_i32_Ord__cmp_0: 0;
         }
-        if __sroa_self_value_8 > other {
+        if __sroa_self_value_9 > other {
             break __inline_i32_Ord__cmp_0: 2;
         }
         break __inline_i32_Ord__cmp_0: 1;
@@ -413,13 +413,13 @@ fn "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator
 
 fn "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next$spec0"(self) {
     let current: i32;
-    let __sroa_self_value_8: i32;
+    let __sroa_self_value_9: i32;
     if __inline_i32_Ord__cmp_0: block -> "core:prelude/traits.wado//enum:Ordering" {
-        __sroa_self_value_8 = self.start;
-        if __sroa_self_value_8 < 3 {
+        __sroa_self_value_9 = self.start;
+        if __sroa_self_value_9 < 3 {
             break __inline_i32_Ord__cmp_0: 0;
         }
-        if __sroa_self_value_8 > 3 {
+        if __sroa_self_value_9 > 3 {
             break __inline_i32_Ord__cmp_0: 2;
         }
         break __inline_i32_Ord__cmp_0: 1;

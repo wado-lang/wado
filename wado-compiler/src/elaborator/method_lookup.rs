@@ -2721,6 +2721,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Expr::Spread(_, _)
             | Expr::Range(_)
             | Expr::TupleLiteral(_)
+            | Expr::TupleComprehension(_)
             | Expr::WithHandler(_)
             | Expr::Resume(_)
             | Expr::Error(_) => ProbeClass::Admit,

@@ -1050,11 +1050,23 @@ impl Gate<'_> {
     fn callee_mutates_self(&self, func_id: crate::nir::FuncId) -> Option<bool> {
         use cranelift_entity::EntityRef;
         let f = self.funcs.get(func_id.index())?.borrow();
-        let p0 = f.params.first()?;
-        Some(matches!(
-            self.type_table.borrow().get(p0.type_id),
-            ResolvedType::MutRef(_)
-        ))
+        Some(self.param_borrows_mutably(f.params.first()?))
+    }
+
+    /// Whether `param` writes the caller's argument storage.
+    ///
+    /// The type alone does not answer this. `sroa_param` rewrites a `&mut S`
+    /// parameter whose struct has a single field into that field, leaving a
+    /// parameter that reads as by-value and still borrows what the caller
+    /// passed — the write that used to travel through `&mut S` travels through
+    /// the field. [`NirParam::is_mut_ref`] is captured before that rewrite (and
+    /// before boxing) and outlives it, so it is the reliable half of the test.
+    fn param_borrows_mutably(&self, param: &crate::nir::NirParam) -> bool {
+        param.is_mut_ref
+            || matches!(
+                self.type_table.borrow().get(param.type_id),
+                ResolvedType::MutRef(_)
+            )
     }
 
     /// Whether the callee takes its receiver by `&self` — the only receiver
@@ -1418,9 +1430,16 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
         } => {
             let callee_id = *func_id;
             let has_receiver = *has_receiver;
-            let mut rest = args.iter();
-            let receiver = has_receiver.then(|| rest.next()).flatten().map(|a| a.expr);
-            let rest: Vec<ExprId> = rest.filter_map(|a| a.expr.as_expr()).collect();
+            let receiver = has_receiver.then(|| args.first()).flatten().map(|a| a.expr);
+            // Paired with its own `is_mut`, not with a position: an argument
+            // promoted to `Operand::Value` carries no `ExprId`, so counting
+            // surviving expressions would put every later argument against the
+            // wrong parameter.
+            let rest: Vec<(Operand, bool)> = args
+                .iter()
+                .skip(usize::from(has_receiver))
+                .map(|a| (a.expr, a.is_mut))
+                .collect();
             if let Some(receiver) = receiver {
                 let recv = receiver.as_expr().map(|e| strip_refs(body, e));
                 if recv.is_some_and(|r| is_local(body, r, idx)) {
@@ -1441,15 +1460,19 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
                     return false;
                 }
             }
-            rest.iter().all(|&a| call_arg_readonly(body, a, idx, gate))
+            rest.iter().all(|&(arg, borrows_mutably)| {
+                call_arg_readonly_operand(body, arg, idx, gate, borrows_mutably)
+            })
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let args = args.clone();
             expr_readonly_operand(body, callee, idx, gate)
+                // An indirect callee's parameters are unknown, so every
+                // argument is treated as one that could be written.
                 && args
                     .iter()
-                    .all(|&a| call_arg_readonly_operand(body, a, idx, gate))
+                    .all(|&a| call_arg_readonly_operand(body, a, idx, gate, true))
         }
 
         // `&mut <…xs…>` — a mutable reference into the binding escapes.
@@ -1534,14 +1557,29 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
     }
 }
 
-fn call_arg_readonly_operand(body: &Body, op: Operand, idx: u32, gate: &Gate<'_>) -> bool {
+fn call_arg_readonly_operand(
+    body: &Body,
+    op: Operand,
+    idx: u32,
+    gate: &Gate<'_>,
+    borrows_mutably: bool,
+) -> bool {
     op.as_expr()
-        .is_none_or(|e| call_arg_readonly(body, e, idx, gate))
+        .is_none_or(|e| call_arg_readonly(body, e, idx, gate, borrows_mutably))
 }
 
 /// A binding handed to a call as an argument. `&` borrow is a read; `&mut`
 /// escapes; passing the binding itself by value is a consuming use (rejected).
-fn call_arg_readonly(body: &Body, arg: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
+///
+/// `borrows_mutably` is the argument's own `ArenaCallArg::is_mut` — whether it
+/// lands in a parameter that writes the caller's storage.
+fn call_arg_readonly(
+    body: &Body,
+    arg: ExprId,
+    idx: u32,
+    gate: &Gate<'_>,
+    borrows_mutably: bool,
+) -> bool {
     match &body.exprs[arg].kind {
         ExprKind::Local { index, .. } => *index != idx,
         ExprKind::Unary {
@@ -1558,7 +1596,20 @@ fn call_arg_readonly(body: &Body, arg: ExprId, idx: u32, gate: &Gate<'_>) -> boo
             inner.as_expr().is_some_and(|e| is_local(body, e, idx))
                 || expr_readonly_operand(body, inner, idx, gate)
         }
-        _ => expr_readonly(body, arg, idx, gate),
+        // A *projection* of the binding — `writer.buf` — reads it, which
+        // `expr_readonly` rightly allows. Handing that read to a parameter that
+        // borrows mutably is not a read: `sroa_param` rewrites a `&mut S`
+        // parameter whose struct has a single field into that field, so the
+        // write that used to travel through `&mut S` travels through the
+        // projection and lands in the shared global. Value semantics cover
+        // every other parameter — a by-value argument is the callee's own copy,
+        // so what it does with it cannot reach the binding.
+        _ => {
+            if borrows_mutably && expr_mentions_local(body, arg, idx) {
+                return false;
+            }
+            expr_readonly(body, arg, idx, gate)
+        }
     }
 }
 

@@ -409,7 +409,7 @@ Done (R1–R3, each gated by the full E2E suite):
   carries an `ImportKind` (`SharedTypes`, `FunctionInterface`,
   `ResourceUsingInterface`, `ResourceSource`, `ResourceGetter`, `HttpTypes`,
   `HttpClient`) so codegen knows the encoding without re-deriving any
-  interface/world decision. `tests/wit_import_plan.rs` asserts the plan equals
+  interface/world decision. `tests/integration/wit_import_plan.rs` asserts the plan equals
   the compiled component's CM imports across the CLI corpus, the HTTP service,
   and a pure-compute program.
 - The WIT emitter reads it via `WitEmitOptions::world_imports`; `wado wit`
@@ -438,7 +438,7 @@ embedded section is consumed by tools that read it explicitly (`wkg`,
 `wasm-tools metadata`, relink flows) and decodes standalone as a WIT package.
 Round-trip verification therefore splits: (a) `decode(component)` matches
 `wado wit` semantically, and (b) the embedded payload decodes as a
-`DecodedWasm::WitPackage`. Both are covered by `tests/wit_bundle.rs`.
+`DecodedWasm::WitPackage`. Both are covered by `tests/integration/wit_bundle.rs`.
 
 ### Embedding policy
 
@@ -555,7 +555,7 @@ Each phase ends with green E2E tests for the listed fixtures.
       `Semantics::is_complete()` is false. `wado-compiler/src/wit_emit.rs`
       (`emit_wit_text`) does type mapping, kebabification, interface grouping,
       transitive-type closure, and both `full` / `local` scopes; no-entry-point
-      files emit an empty world. `tests/wit.rs` asserts the rendered text per
+      files emit an empty world. `tests/integration/wit.rs` asserts the rendered text per
       shape (empty world, functions-only direct exports, record default
       interface, CLI `run`, full-scope resources/interfaces, string/list/option)
       and re-parses each with `wit-parser`.
@@ -587,7 +587,7 @@ Each phase ends with green E2E tests for the listed fixtures.
         the `wado wit` path uses; `Semantics` is re-derived with one extra
         frontend pass (`wado_compiler::semantics`), since
         `compile_with_options` consumes its own `Semantics` into `Package`.
-  - [x] Tests: `tests/wit_bundle.rs` asserts, per world shape, that the
+  - [x] Tests: `tests/integration/wit_bundle.rs` asserts, per world shape, that the
         un-embedded component already self-describes (`decode` →
         `DecodedWasm::Component`), that embedding is byte-additive and leaves
         the component decodable, and that the encoded payload decodes as a
@@ -702,7 +702,7 @@ The codegen mirrors this without world-specific special-casing:
    or as top-level component defined types for direct world exports — one
    engine, no parallel export-side reimplementation.
 3. `package-cm-catalog` is the corpus enumerating the value-type ABI surface;
-   `tests/cm_catalog.rs` round-trips a crafted value through every `id_*`
+   `tests/integration/cm_catalog.rs` round-trips a crafted value through every `id_*`
    export (`lift(lower(x)) == x`) at `-O0`/`-O2`, and the same fixture runs
    under the test world via `e2e.rs`.
 
@@ -787,7 +787,7 @@ will get one when work starts.
       default interface) matching the WIT producer. Plumbing and primitive sync
       exports landed (M1–M2); containers, `result`/`string` returns, lib-local
       named-type registration + emission, and default-interface grouping remain.
-      `package-cm-catalog` + `tests/cm_catalog.rs` track and drive the surface.
+      `package-cm-catalog` + `tests/integration/cm_catalog.rs` track and drive the surface.
 - [ ] Close the binding-synthesis gaps for arbitrary exports: container and
       user-named-type lift/lower, `result`/`string` returns, and
       return-via-outptr when flat count exceeds `MAX_FLAT_RESULTS`. Sync export
@@ -823,7 +823,7 @@ WIR import plan and registry-derived descriptors with no `package == "http"`,
   `resolve_import_plan`; the HTTP constructors are declared in
   `lib/wasi/http/types.wado` with `#[cm(...)]` and lowered generically. The dead
   `has_http_handler_export` field is removed (`WorldInfo::has_http_handler_export`
-  survives only as the allocator-default heuristic); `tests/wit_import_plan.rs`
+  survives only as the allocator-default heuristic); `tests/integration/wit_import_plan.rs`
   keeps the plan faithful to the emitted bytes.
 
 Scope was the stdlib-derived registry path only; external `.wasm` consumption is

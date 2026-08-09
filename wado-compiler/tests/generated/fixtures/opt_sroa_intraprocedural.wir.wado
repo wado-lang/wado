@@ -136,7 +136,9 @@ fn "opt_sroa_intraprocedural.wado/mutable_field_write"(seed) {
 }
 
 fn "opt_sroa_intraprocedural.wado/build_and_return"(x, y) {
-    return struct.new "opt_sroa_intraprocedural.wado//Point" { x: x, y: y };
+    let p: ref "opt_sroa_intraprocedural.wado//Point";
+    p = struct.new "opt_sroa_intraprocedural.wado//Point" { x: x, y: y };
+    return p;
 }
 
 fn "opt_sroa_intraprocedural.wado/run"() {

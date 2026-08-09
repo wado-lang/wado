@@ -13,7 +13,20 @@ pub enum TemplateTokenPart {
     Interpolation {
         expr: String,
         format: Option<String>,
+        /// Where `expr`'s first byte sits in the source file. The parser lexes
+        /// `expr` on its own, which would leave every node inside it carrying a
+        /// position relative to the fragment; this is what puts those spans
+        /// back on the file they came from.
+        origin: Position,
     },
+}
+
+/// A byte offset paired with the 1-based line and column it falls on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Position {
+    pub offset: usize,
+    pub line: usize,
+    pub column: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -358,7 +371,7 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
                     TemplateTokenPart::Literal(s) => {
                         write_payload(out, b'P', "Literal", s.as_bytes());
                     }
-                    TemplateTokenPart::Interpolation { expr, format } => {
+                    TemplateTokenPart::Interpolation { expr, format, .. } => {
                         write_payload(out, b'P', "Interpolation", expr.as_bytes());
                         if let Some(spec) = format {
                             write_payload(out, b'P', "FormatSpec", spec.as_bytes());
@@ -442,7 +455,7 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
 
 #[cfg(test)]
 mod canonical_token_bytes_tests {
-    use super::{TemplateTokenPart, TokenKind, canonical_token_bytes};
+    use super::{Position, TemplateTokenPart, TokenKind, canonical_token_bytes};
 
     fn enc(kind: &TokenKind) -> Vec<u8> {
         let mut out = Vec::new();
@@ -475,6 +488,7 @@ mod canonical_token_bytes_tests {
         let interp = TokenKind::TemplateStringLit(vec![TemplateTokenPart::Interpolation {
             expr: "hi".into(),
             format: None,
+            origin: Position::default(),
         }]);
         assert_ne!(enc(&lit), enc(&interp));
     }

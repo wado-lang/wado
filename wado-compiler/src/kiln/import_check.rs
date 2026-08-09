@@ -172,6 +172,7 @@ pub fn inject_kiln_request_adapter(
             span,
             segments: Vec::new(),
             type_args: Vec::new(),
+            type_args_on_prefix: false,
         }),
         is_shorthand: false,
         span,

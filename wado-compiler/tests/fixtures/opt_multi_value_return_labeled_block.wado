@@ -1,0 +1,60 @@
+// A multi-value return whose value arrives through `break L: <aggregate>`.
+//
+// Inlining a helper that returns early leaves `return L: { if … { break L:
+// [1, 0]; } break L: [0, n * 2]; }`. Under the multi-value ABI every exit has
+// to become a `Return` of its N fields; the block's result type is dropped, so
+// an exit left yielding a struct makes the function fall out returning nothing
+// and trap on `unreachable`.
+//
+// Both exit positions are load-bearing: one nested in an `if`, one at the block
+// tail — the tail is what a walk stopping before the last instruction misses.
+global mut SEED: i32 = 3;
+
+#[inline("always")]
+internal fn inner(n: i32) -> [i32, i32] {
+    if n < 0 {
+        return [1, 0];
+    }
+    return [0, n * 2];
+}
+
+#[inline("never")]
+internal fn outer(n: i32) -> [i32, i32] {
+    return inner(n);
+}
+
+// The same shape with the exit under a loop, which nests two label entries
+// rather than one.
+#[inline("always")]
+internal fn first_hit(limit: i32) -> [i32, i32] {
+    for let mut i = 0; i < limit; i += 1 {
+        if i * i > limit {
+            return [0, i];
+        }
+    }
+    return [1, 0];
+}
+
+#[inline("never")]
+internal fn scan(limit: i32) -> [i32, i32] {
+    return first_hit(limit);
+}
+
+export fn run() {
+    let a = outer(SEED);
+    assert a.0 == 0 && a.1 == 6;
+    let b = outer(-1);
+    assert b.0 == 1 && b.1 == 0;
+
+    let c = scan(SEED);
+    assert c.0 == 0 && c.1 == 2;
+    let d = scan(0);
+    assert d.0 == 1 && d.1 == 0;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["opt_multi_value_return_labeled_block.wado/outer\" = fn(i32) -> [i32, i32]"],
+    "wir_not_expect:O2": ["struct.new \"tuple//"]
+}

@@ -2113,12 +2113,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let Some((elems, has_type_pack, by_ref)) = tuple_info {
             if has_type_pack || is_zip_variadic {
-                assert!(
-                    !is_enumerate,
-                    "variadic for-of with .enumerate() is not yet supported"
-                );
                 self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfVariadic);
-                self.resolve_variadic_for_of(for_of, iterable, by_ref, ctx);
+                self.resolve_variadic_for_of(for_of, iterable, is_enumerate, by_ref, ctx);
             } else {
                 self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfTuple);
                 self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, by_ref, ctx);
@@ -2187,6 +2183,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         for_of: &ForOfStmt,
         iterable: TirExpr,
+        is_enumerate: bool,
         by_ref: bool,
         ctx: &mut FunctionContext,
     ) {
@@ -2233,10 +2230,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             // By reference (`for v of &[..T]`), the loop variable is `&T_k`,
             // resolved here as `&TypePack`; expansion wraps each element in `&`.
-            if by_ref {
+            let bound = if by_ref {
                 self.tysys.type_table.borrow_mut().make_ref(inner)
             } else {
                 inner
+            };
+            // Expansion supplies the index literal per unrolled element.
+            if is_enumerate {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_tuple(vec![TypeTable::I32, bound])
+            } else {
+                bound
             }
         };
 
@@ -2289,10 +2295,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        let index_binding = Self::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
+        if let Some(local) = index_binding {
+            ctx.variadic_enumerate_indices.push(local);
+        }
         for stmt in &for_of.body.stmts {
             self.resolve_stmt(stmt, ctx);
         }
+        if index_binding.is_some() {
+            ctx.variadic_enumerate_indices.pop();
+        }
         ctx.exit_scope();
+    }
+
+    /// The name bound to the index of `for let [i, v] of t.enumerate()`, if the
+    /// binding spells one.
+    pub(super) fn enumerate_index_binding_name(binding: &crate::ast::Pattern) -> Option<String> {
+        let crate::ast::Pattern::Tuple(elems, _) = binding else {
+            return None;
+        };
+        match elems.first()? {
+            crate::ast::Pattern::Ident { name, .. } => Some(name.clone()),
+            _ => None,
+        }
     }
 
     fn resolve_tuple_for_of(

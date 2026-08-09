@@ -125,15 +125,15 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(50)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(51)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(51)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(52)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(53)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(53)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(54)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(54)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(55)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(55)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -221,12 +221,12 @@ fn "labeled_block.wado/labeled_block_expr_value"() with Stdout {
         __iter_0 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: self_7.repr, index: 0, end: 3 };
         b1: block {
             l2: loop {
-                let __sroa___local_6_discriminant: i32;
-                let __sroa___local_6_payload_0: i32;
-                multivalue_bind [__sroa___local_6_discriminant, __sroa___local_6_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(__iter_0);
-                if __sroa___local_6_discriminant == 0 {
-                    if (__sroa___local_6_payload_0 % 2) == 0 {
-                        break foo: __sroa___local_6_payload_0;
+                let __local_6_mv_0: i32;
+                let __local_6_mv_1: i32;
+                multivalue_bind [__local_6_mv_0, __local_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(__iter_0);
+                if __local_6_mv_0 == 0 {
+                    if (__local_6_mv_1 % 2) == 0 {
+                        break foo: __local_6_mv_1;
                     }
                 } else {
                     break b1;

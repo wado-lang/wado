@@ -1,0 +1,37 @@
+// A wildcard in the index position: the sub-binding reads the field its pattern
+// position names, not its position in the destructure list.
+
+trait Rendered {
+    fn rendered(&self) -> String;
+    fn rendered_comprehension(&self) -> String;
+}
+
+impl<..T: Display> Rendered for [..T] {
+    fn rendered(&self) -> String {
+        let mut parts: List<String> = [];
+        for let [_, v] of (*self).enumerate() {
+            parts.push(`${v}`);
+        }
+        return parts.join(",");
+    }
+
+    fn rendered_comprehension(&self) -> String {
+        let rendered = [for let [_, v] of (*self).enumerate() { `${v}` }];
+        let mut parts: List<String> = [];
+        for let s of rendered {
+            parts.push(s);
+        }
+        return parts.join(",");
+    }
+}
+
+test "a wildcard index still binds the value" {
+    assert [1, "a", 2].rendered() == "1,a,2";
+}
+
+test "a wildcard index in a comprehension still binds the value" {
+    assert [1, "a", 2].rendered_comprehension() == "1,a,2";
+}
+
+__DATA__
+{"test": {}}

@@ -200,6 +200,11 @@ impl StringCollector {
             } => {
                 self.collect_expr(inner);
             }
+            TirExprKind::VariadicTupleComprehension { .. } => {
+                unreachable!(
+                    "VariadicTupleComprehension should be expanded during monomorphization"
+                )
+            }
             TirExprKind::Index { expr: array, index } => {
                 self.collect_expr(array);
                 self.collect_expr(index);

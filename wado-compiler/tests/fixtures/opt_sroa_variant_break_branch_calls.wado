@@ -1,0 +1,51 @@
+// Test: scalarized calls reached through a labeled-block exit
+//
+// `pick`'s `return if c { … } else { … }` becomes `break L: if c { … }` once
+// inlined, and the label carries the callee's tuple type. The calls in the
+// branches are read as tuples there, so the repair must leave them alone
+// instead of reboxing a variant into a tuple-typed exit.
+
+#[inline("never")]
+fn leaf_a(n: i32) -> Result<i32, String> {
+    if n < 0 {
+        return Result::<i32, String>::Err("neg");
+    }
+    return Result::<i32, String>::Ok(n * 2);
+}
+
+#[inline("never")]
+fn leaf_b(n: i32) -> Result<i32, String> {
+    if n > 100 {
+        return Result::<i32, String>::Err("big");
+    }
+    return Result::<i32, String>::Ok(n + 1);
+}
+
+#[inline("always")]
+fn pick(n: i32) -> Result<i32, String> {
+    if n == 999 {
+        return Result::<i32, String>::Err("magic");
+    }
+    return if n % 2 == 0 { leaf_a(n) } else { leaf_b(n) };
+}
+
+#[inline("never")]
+fn run_one(n: i32) -> i32 {
+    let picked = pick(n);
+    if let Ok(v) = picked {
+        return v;
+    }
+    return -1;
+}
+
+export fn run() {
+    assert run_one(4) == 8;
+    assert run_one(7) == 8;
+    assert run_one(-2) == -1;
+    assert run_one(101) == -1;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

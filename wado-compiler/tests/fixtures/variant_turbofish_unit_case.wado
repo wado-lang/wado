@@ -1,0 +1,39 @@
+// A turbofish-qualified path selecting a payload-less case: `Option::<i32>::None`.
+// The payload form `Option::<i32>::Some(1)` already parsed; the unit form hit
+// `expected LParen` because the parser only continued a turbofished path into a
+// static method call.
+
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+test "turbofish selects a payload-less case of a generic variant" {
+    let a = Option::<i32>::None;
+    assert a != Option::<i32>::Some(7);
+
+    let b = Maybe::<String>::Nothing;
+    assert b matches { Nothing };
+}
+
+test "turbofish pins the type parameter of a payload-less case" {
+    let mut list = List::<Maybe<i32>>::with_capacity(2);
+    list.push(Maybe::<i32>::Nothing);
+    list.push(Maybe::<i32>::Just(3));
+    assert list.len() == 2;
+    assert `${list[0]:?}` == "Maybe::Nothing";
+    assert `${list[1]:?}` == "Maybe::Just(3)";
+}
+
+test "a `_` slot still infers from the expected type" {
+    let a: Maybe<i32> = Maybe::<_>::Nothing;
+    assert a matches { Nothing };
+}
+
+test "the payload form still parses" {
+    let a = Option::<i32>::Some(1);
+    assert `${a:?}` == "Option::Some(1)";
+}
+
+__DATA__
+{"test": {}}

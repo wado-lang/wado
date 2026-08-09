@@ -204,9 +204,12 @@ impl Interpreter<'_> {
         if !self.type_table.is_seq_container(*type_id) {
             return false;
         }
-        // The literal is written over `e` but typed from the value, and a node
-        // yielding nothing can hold neither.
-        if sink.body().exprs[e].type_id == TypeTable::UNIT {
+        // The literal is written over `e` but typed from the value, and
+        // `replace_kind` keeps `e`'s own type: writing it over a node the rest
+        // of the tree reads as something else would emit the container's
+        // fields under that node's type. A node yielding nothing can hold
+        // neither.
+        if sink.body().exprs[e].type_id != *type_id {
             return false;
         }
         let Some(Value::Seq { elements, .. }) = value.field(SeqField::Backing.index()) else {

@@ -36,13 +36,13 @@ struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(7)
     mut end: i32,
 }
 
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(8)
-    mut repr: ref "Array<core:prelude/string.wado/String>",
+struct core:prelude//List<i32> {  // TypeId(8)
+    mut repr: ref Array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//List<i32> {  // TypeId(9)
-    mut repr: ref Array<i32>,
+struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(9)
+    mut repr: ref "Array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
@@ -131,19 +131,19 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(50)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(51)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(51)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(52)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(52)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(53)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(53)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(54)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(54)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(55)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(55)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(56)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(56)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(57)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(57)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -175,11 +175,11 @@ fn "from_literal_fn_arg.wado/sum_values"(m) {
     __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: m.values.repr, index: 0, end: m.values.used };
     b0: block {
         l1: loop {
-            let __sroa___match_4_discriminant: i32;
-            let __sroa___match_4_payload_0: i32;
-            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
-            if __sroa___match_4_discriminant == 0 {
-                total = total + __sroa___match_4_payload_0;
+            let __match_4_mv_0: i32;
+            let __match_4_mv_1: i32;
+            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
+            if __match_4_mv_0 == 0 {
+                total = total + __match_4_mv_1;
             } else {
                 break b0;
             }

@@ -1,11 +1,8 @@
 // Test: per-case variant SROA decomposes Result<T, E> returns
 //
-// When Ok and Err payload types differ, the SROA pass uses per-case slot
-// allocation: the return becomes [i32 discriminant, Ok_payload..., Err_payload...].
-// At call sites, ref.test/ref.cast are replaced by i32 discriminant checks.
-//
-// Also exercises the pre-SROA copy propagation pass that inlines trivial copies
-// like `__match_scrut = result` so SROA can see direct variant access patterns.
+// When Ok and Err payload types differ, the layout is per-case: the return
+// becomes [i32 discriminant, Ok_payload, Err_payload]. At call sites,
+// ref.test/ref.cast are replaced by i32 discriminant checks.
 
 // --- Case 1: Result<value, ref> — Ok is i32, Err is String ---
 
@@ -80,10 +77,10 @@ __DATA__
 {
     "stdout": "",
     "wir_expect:O1": [
-        "multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = ",
+        "multivalue_bind [result_mv_0, result_mv_1, result_mv_2] = ",
         "/divide\"(",
         "/make_payload\"(",
-        "__sroa_result_discriminant == 0"
+        "result_mv_0 == 0"
     ],
     "wir_not_expect:O2": [
         "ref.test Result<i32,String>",

@@ -94,6 +94,7 @@ fn "newtype_string_coercion.wado/greet"(name) {
 
 fn "newtype_string_coercion.wado/run"() with Stdout {
     let greeting: ref "core:prelude/string.wado//String";
+    let label2: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:newtype_string_coercion.wado::__modules_initialized);
         cold_path;
@@ -101,9 +102,10 @@ fn "newtype_string_coercion.wado/run"() with Stdout {
         global:newtype_string_coercion.wado::__modules_initialized = 1;
     };
     greeting = "newtype_string_coercion.wado/greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 });
+    label2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello world"), used: 11 };
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
     "core:cli/println"(greeting);
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello world"), used: 11 });
+    "core:cli/println"(label2);
 }
 
 fn "newtype_string_coercion.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

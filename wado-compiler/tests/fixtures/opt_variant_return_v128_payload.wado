@@ -1,9 +1,15 @@
-// Test: variant SROA of an `Option<v128>` return.
+// Test: a `v128` payload is declined by variant return scalarization.
 //
-// A v128 payload passes SROA eligibility, so the multi-value layout carries
-// a v128 result slot. Padding that slot for the `None` case must emit
-// `v128.const 0`, not the scalar-default `i32.const 0` — the wrong-typed pad
+// A `v128` is a scalar at Wasm level, so the layout rule would give it a direct
+// result slot — but padding that slot for the `None` case needs a zero constant,
+// and `ValueKind` has no `v128` literal to promote. `slot_shape` declines the
+// payload rather than emit a wrong-typed pad: `i32.const 0` in a `v128` slot
 // compiled to invalid Wasm ("type mismatch: expected v128, found i32").
+//
+// The WIR pass this replaced could pad it — `default_value_for_type` works on
+// `WirType`, after lowering — so retiring that pass gave up the shape. No
+// workload exercises it. Recovering it means a `v128` value in the graph, which
+// is where the pad would have to come from.
 
 use { i32x4 } from "core:simd";
 
@@ -33,6 +39,6 @@ __DATA__
 {
     "stdout": "",
     "wir_expect:O2": [
-        "-> [i32, v128]"
+        "/make\" = fn(i32) -> ref \"core:prelude/types.wado//Option<v128>\""
     ]
 }

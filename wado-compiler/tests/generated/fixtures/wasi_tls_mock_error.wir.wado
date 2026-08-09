@@ -232,6 +232,7 @@ fn "wasi_tls_mock_error.wado/__cm_binding__Connector_connect"(this, server_name)
 
 fn "wasi_tls_mock_error.wado/__cm_binding__Error_to_debug_string"(self) with Error {
     let __outptr: i32;
+    let __lifted_result_2: ref "core:prelude/string.wado//String";
     let ptr: i32;
     let len_4: i32;
     let arr: ref Array<u8>;
@@ -240,8 +241,9 @@ fn "wasi_tls_mock_error.wado/__cm_binding__Error_to_debug_string"(self) with Err
     ptr = builtin::load_i32(__outptr);
     len_4 = builtin::load_i32(__outptr + 4);
     arr = "core:rt/memory_to_gc_array"(ptr, len_4);
+    __lifted_result_2 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_4 };
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "core:prelude/string.wado//String" { repr: arr, used: len_4 };
+    return __lifted_result_2;
 }
 
 fn "wasi_tls_mock_error.wado/__cm_lift__Connector_connect"(__outptr) {

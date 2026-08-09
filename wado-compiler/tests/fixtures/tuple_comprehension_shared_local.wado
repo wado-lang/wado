@@ -1,0 +1,30 @@
+// The comprehension body is unrolled once per element, so a local it reads is
+// live on every copy — the first must not take it as a last use.
+
+fn tag(base: String, v: String) -> String {
+    let mut b = base;
+    b.push_str(&v);
+    return b;
+}
+
+trait Tagged {
+    fn tagged(&self, base: String) -> String;
+}
+
+impl<..T: Display> Tagged for [..T] {
+    fn tagged(&self, base: String) -> String {
+        let parts = [for let v of *self { tag(base, `${v}`) }];
+        let mut out: List<String> = [];
+        for let s of parts {
+            out.push(s);
+        }
+        return out.join("|");
+    }
+}
+
+test "a comprehension body does not move a shared local" {
+    assert [1, 2].tagged("x") == "x1|x2";
+}
+
+__DATA__
+{"test": {}}

@@ -82,15 +82,15 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(31)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(32)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next$spec0" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(32)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(35)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next$spec0" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(36)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(36)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -434,11 +434,11 @@ fn "match_char_range_switch.wado/run"() with Stdout {
     __iter_2 = struct.new "core:prelude/string.wado//StrCharIter" { repr: __sroa_s_repr, used: 5, byte_index: 0 };
     b77: block {
         l78: loop {
-            let __sroa___match_6_discriminant: i32;
-            let __sroa___match_6_payload_0: char;
-            multivalue_bind [__sroa___match_6_discriminant, __sroa___match_6_payload_0] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next$spec0"(__iter_2);
-            if __sroa___match_6_discriminant == 0 {
-                sum = sum + "match_char_range_switch.wado/classify"(__sroa___match_6_payload_0);
+            let __match_6_mv_0: i32;
+            let __match_6_mv_1: char;
+            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next$spec0"(__iter_2);
+            if __match_6_mv_0 == 0 {
+                sum = sum + "match_char_range_switch.wado/classify"(__match_6_mv_1);
             } else {
                 break b77;
             }

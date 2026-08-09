@@ -1,15 +1,20 @@
-// Test: variant-slot flattening generalizes past `Option<scalar>` to any
-// eligible inner variant. Here the inner slot is a `Result<i64, i32>` — two
-// payload-bearing cases, a per-case inner layout — which the original
-// Option-only nested pass could not flatten. The unified layout engine expands
-// the `ref Result<i64, i32>` slot into `[inner_disc, i64, i32]` in place.
+// Test: a variant return whose payload is itself a variant stays boxed at the
+// inner level, and the outer level is still scalarized.
 //
-// After single-level SROA, `step` returns `[outer_disc, ref Result<i64,i32>,
-// ref OuterErr]` and still builds a `struct.new Result<i64,i32>::{Ok,Err}` at
-// every return. The flatten pass splits the inner slot away, so `step` returns
-// a fully scalarised vector with no inner allocation, and the `if let Ok(v)`
-// at the call site reads the flattened locals directly.
-
+// `Cursor::step` returns `Result<Result<i64, i32>, OuterErr>` (the serde
+// `next_element<Result>` shape). `optimize::sroa_variant_return` gives it
+// `[outer_disc, ref Result<i64,i32>, ref OuterErr]` — the outer variant flattened,
+// the inner `Result<i64, i32>` left as one slot it still builds at each return.
+//
+// Splitting that slot into `[inner_disc, i64, i32]` is what `wir_optimize`'s
+// `slot_flatten` used to do, and it is deliberately not done here. Doing it in
+// NIR was implemented and discarded: the callee stops allocating, but a call
+// site that binds the whole inner value has to rebuild it, and the rebuild cost
+// more than the allocation it removed. Recovering it needs the destructure
+// pushed down into the call site, not the inner value reconstructed — see the
+// WEP.
+//
+// `#[inline("never")]` keeps `step` a real SROA'd call site.
 variant OuterErr {
     Bad,
 }
@@ -68,9 +73,6 @@ __DATA__
     "stdout": "",
     "wir_expect:O2": [
         "Cursor::step\" = fn(ref \"",
-        "-> [i32, i32, i64, i32, ref null \""
-    ],
-    "wir_not_expect:O2": [
-        "struct.new \"core:prelude/types.wado//Result<i64,i32>"
+        "-> [i32, ref null \"core:prelude/types.wado//Result<i64,i32>\", ref null \""
     ]
 }

@@ -119,13 +119,13 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::push" =
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(47)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(48)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(49)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(50)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(50)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(51)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(51)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -194,11 +194,11 @@ fn "allocator_freelist_churn_mixed.wado/run"() with Stdout {
     __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: sizes.repr, index: 0, end: 8 };
     b0: block {
         l1: loop {
-            let __sroa___match_22_discriminant: i32;
-            let __sroa___match_22_payload_0: i32;
-            multivalue_bind [__sroa___match_22_discriminant, __sroa___match_22_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(__iter_4);
-            if __sroa___match_22_discriminant == 0 {
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(primed, "mem/realloc"(0, 0, 8, __sroa___match_22_payload_0));
+            let __match_22_mv_0: i32;
+            let __match_22_mv_1: i32;
+            multivalue_bind [__match_22_mv_0, __match_22_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(__iter_4);
+            if __match_22_mv_0 == 0 {
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(primed, "mem/realloc"(0, 0, 8, __match_22_mv_1));
             } else {
                 break b0;
             }
@@ -231,11 +231,11 @@ fn "allocator_freelist_churn_mixed.wado/run"() with Stdout {
             __iter_11 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: _licm_repr_92, index: 0, end: 8 };
             b8: block {
                 l9: loop {
-                    let __sroa___match_23_discriminant: i32;
-                    let __sroa___match_23_payload_0: i32;
-                    multivalue_bind [__sroa___match_23_discriminant, __sroa___match_23_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(__iter_11);
-                    if __sroa___match_23_discriminant == 0 {
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(live, "mem/realloc"(0, 0, 8, __sroa___match_23_payload_0));
+                    let __match_23_mv_0: i32;
+                    let __match_23_mv_1: i32;
+                    multivalue_bind [__match_23_mv_0, __match_23_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next$spec0"(__iter_11);
+                    if __match_23_mv_0 == 0 {
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(live, "mem/realloc"(0, 0, 8, __match_23_mv_1));
                     } else {
                         break b8;
                     }

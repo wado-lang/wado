@@ -11,7 +11,7 @@ use crate::compiler_host::CompilerHost;
 use crate::tir::{TemplateFormatSpec, TypeId};
 
 use super::Elaborator;
-use super::types::FunctionContext;
+use super::types::{FunctionContext, TypeError};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_template_string(
@@ -27,8 +27,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // template's actual TIR shape (`StringLiteral` /
         // `TemplateString`) from the AST + these facts.
         for part in &template.parts {
-            if let ast::TemplatePart::Interpolation { expr, .. } = part {
-                self.resolve_expr(expr, ctx, None);
+            match part {
+                ast::TemplatePart::Interpolation { expr, .. } => {
+                    self.resolve_expr(expr, ctx, None);
+                }
+                // Reify decodes the literal segments and has no diagnostic
+                // channel, so a bad escape there would drop the segment
+                // silently. Report it here, where a string literal's is
+                // reported.
+                ast::TemplatePart::String(raw) => {
+                    if let Err(message) = super::util::unescape_template_string(raw) {
+                        let _ = self.emit(TypeError::InvalidLiteral {
+                            message,
+                            span: template.span,
+                        });
+                    }
+                }
             }
         }
 

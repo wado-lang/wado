@@ -93,7 +93,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(32)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>") -> ref null "core:prelude/types.wado//Option<i32>";  // TypeId(33)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>") -> [i32, ref null "core:prelude/types.wado//Option<i32>"];  // TypeId(33)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
@@ -132,7 +132,6 @@ fn "let_else_loop.wado/run"() with Stdout {
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
-    let __match_12: ref null "core:prelude/types.wado//Option<i32>";
     let i_33: i32;
     let start_37: i32;
     let start_46: i32;
@@ -147,9 +146,11 @@ fn "let_else_loop.wado/run"() with Stdout {
     __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>" { repr: items.repr, index: 0, end: 3 };
     b0: block {
         l1: loop {
-            __match_12 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next"(__iter_3);
-            if ref.is_null(__match_12) == 0 {
-                it = ref.as_non_null(__match_12);
+            let __match_12_mv_0: i32;
+            let __match_12_mv_1: ref null "core:prelude/types.wado//Option<i32>";
+            multivalue_bind [__match_12_mv_0, __match_12_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next"(__iter_3);
+            if __match_12_mv_0 == 0 {
+                it = ref.as_non_null(__match_12_mv_1);
                 if ref.test "core:prelude/types.wado//Option<i32>::Some"(it) {
                     n = ref.cast "core:prelude/types.wado//Option<i32>::Some"(it).payload_0;
                     sum = sum + n;
@@ -382,11 +383,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next"(self) {
     let item: ref "core:prelude/types.wado//Option<i32>";
     if self.index >= self.end {
-        return ref.null none;
+        return 1, ref.null none;
     }
     item = builtin::array_get<ref "core:prelude/types.wado//Option<i32>">(self.repr, self.index);
     self.index = self.index + 1;
-    return item;
+    return 0, item;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {

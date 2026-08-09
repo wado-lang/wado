@@ -14,6 +14,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
+use super::call::turbofish_holes;
 use super::infer::InferCtx;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
@@ -225,6 +226,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Binary(binary) => self.resolve_binary(binary, ctx, expected_type),
             Expr::Unary(unary) => self.resolve_unary(unary, ctx, expected_type),
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
+            Expr::TupleComprehension(comp) => self.resolve_tuple_comprehension(comp, ctx),
             Expr::Call(call) => self.resolve_call(call, ctx, expected_type),
             Expr::MethodCall(method_call) => {
                 self.resolve_method_call(method_call, ctx, expected_type)
@@ -493,6 +495,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name: canon,
                 segments: ident.segments.clone(),
                 type_args: ident.type_args.clone(),
+                type_args_on_prefix: ident.type_args_on_prefix,
                 span: ident.span,
             };
             &canonical_ident
@@ -700,6 +703,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// A turbofish on a case path (`Maybe::<i32>::Nothing`) must name exactly
+    /// the declaring type's parameters; an enum or a flags type declares none.
+    fn check_case_turbofish_arity(
+        &mut self,
+        ident: &ast::IdentExpr,
+        type_name: &str,
+        expected: usize,
+    ) {
+        if ident.type_args.is_empty() || ident.type_args.len() == expected {
+            return;
+        }
+        let expected_text = match expected {
+            0 => "no type arguments".to_string(),
+            1 => "1 type argument".to_string(),
+            n => format!("{n} type arguments"),
+        };
+        let found = ident.type_args.len();
+        let _ = self.emit(TypeError::InvalidLiteral {
+            message: format!("`{type_name}` takes {expected_text}, the turbofish supplies {found}"),
+            span: ident.span,
+        });
+    }
+
     /// Resolve a qualified case reference `Type::Case` — a payload-less
     /// variant case, an enum case, or a flags member. With `in_module: None`
     /// the type name resolves in the current scope (imports + local); with
@@ -744,6 +770,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|(i, c)| (i, c.clone()))
             {
                 self.record_qualified_case(ident, prefix, case_data.ast_id);
+                self.check_case_turbofish_arity(ident, prefix, variant_info.type_params.len());
                 // Unit variant - payload must be unit type
                 let payload_is_unit = matches!(
                     self.tysys.type_table.borrow().get(case_data.payload),
@@ -766,6 +793,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_id_of_decl(variant_info.defined_at)
                 } else {
                     {
+                        // `Maybe::<i32>::Nothing` pins its slots here: a
+                        // payload-less case has no payload to infer from, so
+                        // the turbofish is the only source besides the
+                        // expected type.
+                        let holes = turbofish_holes(&ident.type_args);
+                        let explicit_args: Vec<TypeId> = ident
+                            .type_args
+                            .iter()
+                            .enumerate()
+                            .map(|(i, t)| {
+                                if holes[i] {
+                                    TypeTable::UNKNOWN
+                                } else {
+                                    self.resolve_type(t)
+                                }
+                            })
+                            .collect();
                         let inferred = self.tysys.infer_variant_type_args(
                             &self.annotate_ctx,
                             prefix,
@@ -773,8 +817,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &case_data,
                             None,
                             expected_type,
-                            &[],
-                            &[],
+                            &explicit_args,
+                            &holes,
                         );
                         self.defer_uninferable_variant(inferred, prefix, &variant_info, ident.span)
                     }
@@ -802,6 +846,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(case_data) = enum_info.find_case(suffix).cloned()
         {
             self.record_qualified_case(ident, prefix, case_data.ast_id);
+            self.check_case_turbofish_arity(ident, prefix, 0);
             let enum_type = self
                 .tysys
                 .type_table
@@ -823,6 +868,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
         {
             self.record_qualified_case(ident, prefix, member.ast_id);
+            self.check_case_turbofish_arity(ident, prefix, 0);
             // Stage 7-B: reify rebuilds the flags-member `IntLiteral`.
             return Some(flags_info.type_id);
         }
@@ -1143,6 +1189,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Element type at a literal index into a tuple, which may carry a
+    /// variadic pack.
+    ///
+    /// An index that lands on the pack is rejected: the pack's arity and its
+    /// per-position types are only known once it expands, so neither the bound
+    /// nor the element type can be decided here. Only the scalar prefix ahead
+    /// of the pack (`[i32, ..T]`.0) has a fixed position.
+    pub(super) fn tuple_literal_index_type(
+        type_table: &std::cell::RefCell<TypeTable>,
+        elements: &[TypeId],
+        index: usize,
+    ) -> Result<TypeId, String> {
+        let table = type_table.borrow();
+        let Some(pack_pos) = elements
+            .iter()
+            .position(|&t| matches!(table.get(t), ResolvedType::TypePack { .. }))
+        else {
+            return elements.get(index).copied().ok_or_else(|| {
+                format!(
+                    "tuple index {index} out of bounds, tuple has {} elements",
+                    elements.len()
+                )
+            });
+        };
+        if index < pack_pos {
+            return Ok(elements[index]);
+        }
+        Err(format!(
+            "tuple index {index} lands on a variadic pack, whose arity and element \
+             types are only known once it expands; walk the tuple with `for-of` or \
+             a comprehension instead"
+        ))
+    }
+
     /// Look up field type from a struct or tuple type
     pub(super) fn lookup_field_type(
         &mut self,
@@ -1193,18 +1273,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if TypeTable::is_tuple_type(&name)
                     && let Ok(index) = field_name.parse::<usize>()
                 {
-                    if index < type_args.len() {
-                        return (index as u32, type_args[index]);
+                    match Self::tuple_literal_index_type(&self.tysys.type_table, &type_args, index)
+                    {
+                        Ok(elem) => return (index as u32, elem),
+                        Err(message) => {
+                            let _ = self.emit(TypeError::InvalidLiteral { message, span });
+                            return (0, TypeTable::UNKNOWN);
+                        }
                     }
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!(
-                            "tuple index {} out of bounds, tuple has {} elements",
-                            index,
-                            type_args.len()
-                        ),
-                        span,
-                    });
-                    return (0, TypeTable::UNKNOWN);
                 }
                 // Clone fields to avoid borrow issues
                 let fields_clone = self.lookup_struct_fields_in(&name, &module_source).cloned();
@@ -1384,6 +1460,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The element type of `t[i]` where `t` is a pack-typed tuple and `i` is
+    /// the index of an enclosing variadic `.enumerate()` — the one non-literal
+    /// subscript a tuple admits, since unrolling fixes it per element.
+    ///
+    /// A mapped pack (`[..Option<F>]`) yields its mapped element, matching how
+    /// the variadic for-of binds one.
+    pub(super) fn variadic_enumerate_subscript_type(
+        type_table: &std::cell::RefCell<TypeTable>,
+        elements: &[TypeId],
+        index_expr: &ast::Expr,
+        ctx: &FunctionContext,
+    ) -> Option<TypeId> {
+        let ast::Expr::Ident(ident) = index_expr else {
+            return None;
+        };
+        let local = ctx.lookup(&ident.name)?;
+        if !ctx.variadic_enumerate_indices.contains(&local.index) {
+            return None;
+        }
+        let type_table = type_table.borrow();
+        elements.iter().find_map(|&e| match type_table.get(e) {
+            ResolvedType::TypePack {
+                mapped_elem: Some(elem),
+                ..
+            } => Some(*elem),
+            ResolvedType::TypePack { .. } => Some(e),
+            _ => None,
+        })
+    }
+
     /// Resolve an index expression
     pub(super) fn resolve_index(
         &mut self,
@@ -1414,20 +1520,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && !util::is_float_only_literal(repr)
                 && let Ok(idx) = repr.parse::<usize>()
             {
-                if idx < elements.len() {
-                    let field_type = elements[idx];
-                    return field_type;
-                } else {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!(
-                            "tuple index {} out of bounds, tuple has {} elements",
-                            idx,
-                            elements.len()
-                        ),
-                        span: index.span,
-                    });
-                    return TypeTable::UNKNOWN;
+                match Self::tuple_literal_index_type(&self.tysys.type_table, elements, idx) {
+                    Ok(elem) => return elem,
+                    Err(message) => {
+                        let _ = self.emit(TypeError::InvalidLiteral {
+                            message,
+                            span: index.span,
+                        });
+                        return TypeTable::UNKNOWN;
+                    }
                 }
+            }
+            // Unrolling fixes the index to a literal per element.
+            if let Some(elem) = Self::variadic_enumerate_subscript_type(
+                &self.tysys.type_table,
+                elements,
+                &index.index,
+                ctx,
+            ) {
+                return elem;
             }
             // Non-constant index on tuple
             let _ = self.emit(TypeError::InvalidLiteral {
@@ -3231,7 +3342,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } if *name == struct_name => Some(type_args.clone()),
                 _ => None,
             });
-        let struct_field_types: Vec<(String, TypeId)> = self
+        let resolved_struct_fields: Option<Vec<(String, TypeId)>> = self
             .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .map(|info| {
                 let params = info.type_param_type_ids.clone();
@@ -3259,8 +3370,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         (name, tt.substitute_type_params(type_id, &substitution))
                     })
                     .collect()
-            })
-            .unwrap_or_default();
+            });
+        // A struct that did not resolve has unknown fields, not zero of them —
+        // its own diagnostic covers that, and the field checks below must stay
+        // quiet. A struct that resolved to zero fields accepts none.
+        let struct_fields_known = resolved_struct_fields.is_some();
+        let struct_field_types: Vec<(String, TypeId)> = resolved_struct_fields.unwrap_or_default();
 
         // A named struct base is a complete `S`, so any field before the spread
         // (or a second spread) is fully overwritten and unused.
@@ -3370,8 +3485,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Check field name exists in struct definition
-                if !struct_field_types.iter().any(|(n, _)| n == &field.name)
-                    && !struct_field_types.is_empty()
+                if struct_fields_known && !struct_field_types.iter().any(|(n, _)| n == &field.name)
                 {
                     let _ = self.emit(TypeError::ExtraField {
                         struct_name: struct_name.clone(),
@@ -4070,6 +4184,162 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args.iter().any(|e| self.type_contains_pack(*e))
             }
             _ => false,
+        }
+    }
+
+    /// The local slot bound to the index of `for let [i, v] of t.enumerate()`,
+    /// once the binding is in scope. `None` when the form is not an enumerate
+    /// or the index position is a wildcard.
+    pub(super) fn enumerate_index_local(
+        is_enumerate: bool,
+        binding: &ast::Pattern,
+        ctx: &FunctionContext,
+    ) -> Option<u32> {
+        if !is_enumerate {
+            return None;
+        }
+        let name = Self::enumerate_index_binding_name(binding)?;
+        ctx.lookup(&name).map(|local| local.index)
+    }
+
+    /// Split a `t.enumerate()` iterable into its receiver and the flag, leaving
+    /// any other expression alone. The suffix stays in the AST so the formatter
+    /// round-trips it, matching how the statement for-of reads it.
+    pub(super) fn split_enumerate(iterable: &Expr) -> (&Expr, bool) {
+        match iterable {
+            Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
+                (&mc.receiver, true)
+            }
+            other => (other, false),
+        }
+    }
+
+    /// The pack a comprehension's iterable walks: its `(name, index)` and the
+    /// type the binding takes for one element.
+    ///
+    /// A mapped pack (`[..StructField<T, F>]`) binds the mapped element, the
+    /// same choice the variadic for-of makes.
+    pub(super) fn comprehension_pack_elem(
+        type_table: &std::cell::RefCell<TypeTable>,
+        iterable_type: TypeId,
+    ) -> Option<TypeId> {
+        Self::comprehension_pack_of(type_table, iterable_type).map(|(_, _, elem)| elem)
+    }
+
+    pub(super) fn comprehension_pack(
+        &self,
+        iterable_type: TypeId,
+    ) -> Option<(String, u32, TypeId)> {
+        Self::comprehension_pack_of(&self.tysys.type_table, iterable_type)
+    }
+
+    fn comprehension_pack_of(
+        type_table: &std::cell::RefCell<TypeTable>,
+        iterable_type: TypeId,
+    ) -> Option<(String, u32, TypeId)> {
+        let type_table = type_table.borrow();
+        let (elems, _) = type_table.as_tuple_through_ref(iterable_type)?;
+        elems.iter().find_map(|&e| match type_table.get(e) {
+            ResolvedType::TypePack {
+                name,
+                index,
+                mapped_elem,
+            } => Some((name.clone(), *index, mapped_elem.unwrap_or(e))),
+            _ => None,
+        })
+    }
+
+    /// Resolve `[for let v of tuple { expr }]`.
+    ///
+    /// Only a pack-typed tuple is walkable: a concrete tuple's elements have
+    /// unrelated types, so the body would need resolving once per element.
+    /// The result is the mapped pack `[..body_type]` — one element per source
+    /// element, each carrying the body's type at that element.
+    pub(super) fn resolve_tuple_comprehension(
+        &mut self,
+        comp: &ast::TupleComprehensionExpr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let (source, is_enumerate) = Self::split_enumerate(&comp.iterable);
+        let iterable_type = self.resolve_expr(source, ctx, None);
+        let Some((pack_name, pack_index, elem_type)) = self.comprehension_pack(iterable_type)
+        else {
+            let type_name = self.tysys.type_table.borrow().type_name(iterable_type);
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: format!(
+                    "a tuple comprehension walks a variadic tuple (`[..T]`); `{type_name}` is not one"
+                ),
+                span: comp.span,
+            });
+            return TypeTable::UNKNOWN;
+        };
+
+        let binding_type = if is_enumerate {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_tuple(vec![TypeTable::I32, elem_type])
+        } else {
+            elem_type
+        };
+
+        ctx.enter_scope();
+        self.bind_comprehension_pattern(&comp.binding, binding_type, comp.span, ctx);
+        let index_binding = Self::enumerate_index_local(is_enumerate, &comp.binding, ctx);
+        if let Some(local) = index_binding {
+            ctx.variadic_enumerate_indices.push(local);
+        }
+        let body_type = self.resolve_expr(&comp.body, ctx, None);
+        if index_binding.is_some() {
+            ctx.variadic_enumerate_indices.pop();
+        }
+        ctx.exit_scope();
+
+        // A body that yields the element unchanged reproduces the source shape;
+        // anything else maps the pack through the body's type.
+        if body_type == elem_type {
+            return iterable_type;
+        }
+        let mut type_table = self.tysys.type_table.borrow_mut();
+        let mapped = type_table.make_mapped_type_pack(pack_name, pack_index, body_type);
+        type_table.make_tuple(vec![mapped])
+    }
+
+    /// Bind a comprehension's element pattern: an ident, or the sub-idents of a
+    /// tuple pattern (`[i, v]`).
+    fn bind_comprehension_pattern(
+        &mut self,
+        binding: &ast::Pattern,
+        binding_type: TypeId,
+        fallback_span: Span,
+        ctx: &mut FunctionContext,
+    ) {
+        match binding {
+            ast::Pattern::Ident { id, name, span } => {
+                ctx.add_local(name.clone(), binding_type, false, Some(*id));
+                self.record_local_symbol(*id, name, *span, false, binding_type);
+            }
+            ast::Pattern::Tuple(elems, _) => {
+                let inner = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .as_tuple(binding_type)
+                    .unwrap_or_else(|| vec![binding_type]);
+                for (i, elem) in elems.iter().enumerate() {
+                    if let ast::Pattern::Ident { id, name, span } = elem {
+                        let elem_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
+                        ctx.add_local(name.clone(), elem_type, false, Some(*id));
+                        self.record_local_symbol(*id, name, *span, false, elem_type);
+                    }
+                }
+            }
+            _ => {
+                let _ = self.emit(TypeError::InvalidPattern {
+                    message: "a tuple comprehension binds an identifier or `[i, v]`".to_string(),
+                    span: fallback_span,
+                });
+            }
         }
     }
 

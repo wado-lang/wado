@@ -196,6 +196,7 @@ pub fn compute_move_eligible(
         exits: Vec::new(),
         all_locals,
         place_cands: Vec::new(),
+        declared_owned: IndexSet::default(),
     };
     let mut live = IndexSet::default();
     a.walk_block(body, &mut live, true);
@@ -225,6 +226,7 @@ pub fn compute_move_eligible(
         .let_sources
         .keys()
         .copied()
+        .chain(a.declared_owned.iter().copied())
         .chain(a.match_sources.iter().map(|(l, _)| *l))
         .chain(
             func.params
@@ -757,6 +759,9 @@ struct Analyzer<'a> {
     /// materialized span)` found at literals, filtered by the owned-storage
     /// guards after the walk. `None` field = a whole-value materialization.
     place_cands: Vec<(u32, Option<u32>, crate::token::Span)>,
+    /// Locals bound by a `skip_value_copy` `let` — storage handed over by the
+    /// binding's producer, so owned without a source to prove it.
+    declared_owned: IndexSet<u32>,
 }
 
 /// Which fields of a local an escaped borrow reaches. `Whole` (a `&local` or an
@@ -1053,9 +1058,10 @@ impl Analyzer<'_> {
         }
     }
 
-    /// Record place-level move candidates at a struct/tuple literal. A direct
-    /// child that materializes a whole value / clean field of an aggregate root
-    /// `base` aliases it out of the aggregate instead of deep-copying, when:
+    /// Record place-level move candidates at a struct/tuple literal or a `let`
+    /// binding. A direct child that materializes a whole value / clean field of
+    /// an aggregate root `base` aliases it out of the aggregate instead of
+    /// deep-copying, when:
     ///
     /// - `base` is dead after the literal (`!live_out.contains(base)`);
     /// - the materialization sites of `base` are non-overlapping owners (one
@@ -1231,16 +1237,29 @@ impl Analyzer<'_> {
     fn walk_stmt(&mut self, stmt: &TirStmt, live: &mut IndexSet<u32>, record: bool) {
         match &stmt.kind {
             TirStmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value,
+                skip_value_copy,
+                ..
             } => {
                 if record {
-                    self.record_alias(*local_index, value, live);
-                    self.let_sources
-                        .entry(*local_index)
-                        .or_default()
-                        .push(value.clone());
+                    // A `skip_value_copy` binding takes the storage over: its
+                    // producer proved the source dead, so the binding owns fresh
+                    // storage no matter what the source expression looks like.
+                    if *skip_value_copy {
+                        self.declared_owned.insert(*local_index);
+                    } else {
+                        self.record_alias(*local_index, value, live);
+                        self.let_sources
+                            .entry(*local_index)
+                            .or_default()
+                            .push(value.clone());
+                    }
                 }
                 live.swap_remove(local_index);
+                if record {
+                    self.collect_place_moves(&[value], live);
+                }
                 self.walk_expr(value, live, record);
             }
             TirStmtKind::LetDestructure { pattern, value, .. } => {

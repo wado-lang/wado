@@ -1,0 +1,49 @@
+// Test: a pass-through tail call in a dense-match arm
+//
+// `dispatch` returns `Pair` under the multi-value ABI, and each arm tails into
+// `base`, which returns the same aggregate under the same ABI. The dense arms
+// lower to a `br_table` whose exits carry the callee's results directly, so
+// the lowering has to return them rather than expect the aggregate.
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+#[inline("never")]
+fn base(n: i32) -> Pair {
+    return Pair { a: n, b: n * 2 };
+}
+
+#[inline("never")]
+fn dispatch(n: i32) -> Pair {
+    return match n {
+        0 => base(10),
+        1 => base(11),
+        2 => base(12),
+        3 => base(13),
+        4 => base(14),
+        5 => base(15),
+        6 => base(16),
+        7 => base(17),
+        8 => base(18),
+        9 => base(19),
+        _ => Pair { a: -1, b: -1 },
+    };
+}
+
+export fn run() {
+    for let mut i = 0; i < 10; i += 1 {
+        let p = dispatch(i);
+        assert p.a == i + 10;
+        assert p.b == (i + 10) * 2;
+    }
+    let q = dispatch(99);
+    assert q.a == -1;
+    assert q.b == -1;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

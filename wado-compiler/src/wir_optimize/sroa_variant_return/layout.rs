@@ -5,7 +5,6 @@
 //! nested result slot.
 
 use crate::hashmap::IndexMap;
-use crate::hashmap::IndexSet;
 use crate::wir::{WirAbstractHeapType, WirInstr, WirPackage, WirType, WirVariantType};
 
 /// Result-vector cap for the shared (homogeneous) layout:
@@ -30,9 +29,6 @@ pub(super) struct VariantLayout {
     pub(super) field_names: Vec<String>,
     /// Per-case slot layout.
     pub(super) variant_info: VariantSroaInfo,
-    /// Every case struct type index plus the base variant type — the valid
-    /// `StructNew` targets at a `Return` leaf.
-    pub(super) valid_case_type_indices: IndexSet<u32>,
 }
 
 /// Additional info needed for variant SROA.
@@ -197,16 +193,6 @@ pub(super) fn compute_variant_layout(
 
     let payload_slot_count = field_types.len() - 1;
 
-    // Collect ALL case type indices (including unit cases) for return validation
-    let mut all_case_type_indices: IndexSet<u32> = IndexSet::default();
-    for &opt in &case_type_indices {
-        if let Some(idx) = opt {
-            all_case_type_indices.insert(idx);
-        }
-    }
-    // Also include StructNew of the base variant type (for unit cases like None)
-    all_case_type_indices.insert(variant_type_idx);
-
     Some(VariantLayout {
         field_types,
         field_names,
@@ -215,7 +201,6 @@ pub(super) fn compute_variant_layout(
             payload_slot_count,
             case_slot_offsets,
         },
-        valid_case_type_indices: all_case_type_indices,
     })
 }
 

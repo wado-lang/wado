@@ -1,0 +1,66 @@
+// `.enumerate()` over a variadic (pack-typed) for-of: the index is a
+// compile-time constant per unrolled element (WEP 2026-03-14).
+
+trait IndexedLabel {
+    fn indexed_label(&self) -> String;
+}
+
+impl<..T: Display> IndexedLabel for [..T] {
+    fn indexed_label(&self) -> String {
+        let mut parts: List<String> = [];
+        for let [i, v] of (*self).enumerate() {
+            parts.push(`${i}:${v}`);
+        }
+        return parts.join(",");
+    }
+}
+
+// The enumerate index is the one non-literal a pack-typed tuple takes as a
+// subscript: unrolling fixes it per element, for reads and writes alike.
+trait Rebuild {
+    fn same_as(&self, other: &Self) -> bool;
+    fn doubled(&self) -> Self;
+}
+
+impl<..T: Eq> Rebuild for [..T] {
+    fn same_as(&self, other: &Self) -> bool {
+        let mut equal = true;
+        for let [i, v] of (*self).enumerate() {
+            if v != (*other)[i] {
+                equal = false;
+            }
+        }
+        return equal;
+    }
+
+    fn doubled(&self) -> [..T] {
+        let mut out = *self;
+        for let [i, v] of (*self).enumerate() {
+            out[i] = v;
+        }
+        return out;
+    }
+}
+
+test "a variadic for-of binds the element index" {
+    assert [1, "a", 2].indexed_label() == "0:1,1:a,2:2";
+}
+
+test "a single-element pack still enumerates" {
+    assert [7].indexed_label() == "0:7";
+}
+
+test "the enumerate index subscripts a pack-typed tuple" {
+    assert [1, "a", 2].same_as(&[1, "a", 2]);
+    assert ![1, "a", 2].same_as(&[1, "b", 2]);
+}
+
+test "the enumerate index also writes a pack-typed tuple" {
+    let out = [1, "a", 2].doubled();
+    assert out.0 == 1;
+    assert out.1 == "a";
+    assert out.2 == 2;
+}
+
+__DATA__
+{"test": {}}

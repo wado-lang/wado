@@ -1,0 +1,57 @@
+// A `return` whose value is a block ending in a tail call.
+//
+// The tail-call rule accepts `return g(x)` without binding, and looks through
+// the block `let_block_flatten` leaves around the call. But the block's leading
+// statements are ordinary code: here one of them binds `h(n)` and hands the
+// whole aggregate to `sink`, which must refuse `h` the multi-value ABI.
+//
+// Skipping the prefix let `h` take it anyway. The call site then split into
+// `[t_mv_0, t_mv_1]` while `sink(t)` still read `t`, which nothing assigned —
+// `-O0` ran clean and `-O2` trapped on a null reference.
+#[inline("never")]
+internal fn h(n: i32) -> [i32, i32] {
+    return [n, n + 10];
+}
+
+#[inline("never")]
+internal fn sink(p: [i32, i32]) -> i32 {
+    return p.0 + p.1;
+}
+
+#[inline("never")]
+internal fn g(n: i32) -> [i32, i32] {
+    return [n * 2, n * 3];
+}
+
+#[inline("always")]
+internal fn wrapper(n: i32) -> [i32, i32] {
+    let t = h(n);
+    let s = sink(t);
+    return g(n + s);
+}
+
+#[inline("never")]
+internal fn f(n: i32) -> [i32, i32] {
+    return wrapper(n);
+}
+
+// `mut`, so the seeds are not folded away — a constant one collapses every
+// assert and leaves `f(1);` as a bare call statement, which refuses `f` the ABI
+// and stops the shortcut this fixture is about from firing at all.
+global mut SEED_A: i32 = 1;
+global mut SEED_B: i32 = 2;
+
+export fn run() {
+    let a = f(SEED_A);
+    assert a.0 == 26;
+    assert a.1 == 39;
+
+    let b = f(SEED_B);
+    assert b.0 == 32;
+    assert b.1 == 48;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

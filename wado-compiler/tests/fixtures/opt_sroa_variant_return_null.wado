@@ -1,0 +1,47 @@
+// `return null` is Wado's `Option::None`, and it reaches NIR as a promoted
+// pure value rather than a `VariantConstruct` node — the shape every hand-written
+// `Iterator::next` uses for exhaustion.
+internal struct CountDown {
+    i: i32,
+}
+
+impl Iterator for CountDown {
+    type Item = i32;
+
+    pub fn next(&mut self) -> Option<Self::Item> {
+        if self.i <= 0 {
+            return null;
+        }
+        self.i -= 1;
+        return Option::Some(self.i);
+    }
+}
+
+internal fn first_even(it: &mut CountDown) -> Option<i32> {
+    while let Some(v) = it.next() {
+        if v % 2 == 0 {
+            return Option::Some(v);
+        }
+    }
+    return null;
+}
+
+test "an iterator whose exhaustion is `return null`" {
+    let mut it = CountDown { i: 5 };
+    let mut total = 0;
+    while let Some(v) = it.next() {
+        total += v;
+    }
+    assert total == 10;
+}
+
+test "a `return null` reached from a loop" {
+    let mut it = CountDown { i: 5 };
+    assert first_even(&mut it) == Option::Some(4);
+
+    let mut empty = CountDown { i: 0 };
+    assert first_even(&mut empty) == null;
+}
+
+__DATA__
+{ "test": {} }

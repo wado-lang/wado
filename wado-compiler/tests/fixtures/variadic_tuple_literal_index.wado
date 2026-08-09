@@ -1,0 +1,69 @@
+// A literal index into a tuple that carries a variadic pack. Only the scalar
+// prefix ahead of the pack has a fixed position; the pack's own elements are
+// reached by walking. Indexing into the pack used to resolve to the pack
+// itself — `.1` reported a bogus "tuple has 1 elements" and `.0` typed the
+// element as the whole substituted tuple, which niri then miscompiled (see
+// `variadic_tuple_literal_index_error.wado` for the rejection).
+
+fn head<A, ..T>(t: &[A, ..T]) -> A {
+    return t.0;
+}
+
+fn joined<..T>(t: &[..T]) -> String {
+    let all = [for let v of t { "tag" }];
+    let mut out = "";
+    for let s of all {
+        out = `${out}${s};`;
+    }
+    return out;
+}
+
+fn rendered<..T: Inspect>(t: &[..T]) -> String {
+    let all = [for let v of t { `${v:?}` }];
+    let mut out = "";
+    for let s of all {
+        out = `${out}${s};`;
+    }
+    return out;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+trait Names {
+    fn names(&self) -> String;
+}
+
+impl<S: ReflectStruct<FieldTypes = [..F]>, ..F> Names for S {
+    fn names(&self) -> String {
+        let all = [for let f of ReflectStruct::<S>::members() { f.name() }];
+        let mut out = "";
+        for let n of all {
+            out = `${out}${n};`;
+        }
+        return out;
+    }
+}
+
+test "the scalar prefix ahead of a pack keeps its position" {
+    assert head(&[7, "a", true]) == 7;
+    assert head(&["lead", 1]) == "lead";
+}
+
+test "a constant element of a pack comprehension survives the walk" {
+    assert joined(&[1, 2]) == "tag;tag;";
+    assert joined(&["a", true, 3]) == "tag;tag;tag;";
+}
+
+test "a computed element of a pack comprehension survives the walk" {
+    assert rendered(&[1, "two"]) == "1;\"two\";";
+}
+
+test "a member walk's names survive the walk" {
+    assert Point { x: 1, y: 2 }.names() == "x;y;";
+}
+
+__DATA__
+{"test": {}}

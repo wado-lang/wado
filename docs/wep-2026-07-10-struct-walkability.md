@@ -159,15 +159,13 @@ implements:
   impl is allowed — it uses direct field access under normal visibility, a
   deliberate act, and may choose constant-time comparison.
 
-Why not plug the leak in `serde_synth` now: serde is slated to become
-`ReflectStruct`-based library code (WEP 2026-06-13 §5), so a secret-skip written into
-the bespoke synthesizer is thrown away at that migration. The skip belongs in
-the `ReflectStruct`-based serde, where it reads `StructField::is_secret` and is correct by
-construction. The whole contract — serialize skip, `Eq`/`Ord` refusal,
-`Secret<T>` — therefore lands as one change on top of `ReflectStruct`, not dribbled
-into the synthesizers ahead of the rest (which would leave a half-migrated
-semantics: serialize still leaking while inspect is already hardened). The
-accepted cost is that serde keeps serializing secret fields until the migration
+Where the skip belongs: the `ReflectStruct`-based serde, where it reads
+`StructField::is_secret` and is correct by construction. Serde is now library
+code (WEP 2026-06-13), so the whole contract — serialize skip, `Eq`/`Ord`
+refusal, `Secret<T>` — lands as one change on the blankets rather than dribbled
+in piecemeal (which would leave a half-migrated semantics: serialize still
+leaking while inspect is already hardened). The accepted cost is that serde
+keeps serializing secret fields until that change
 lands — a known-open leak we choose over throwaway code.
 
 One mechanism stays unresolved, shared by every generic derivation that must
@@ -219,10 +217,8 @@ coherence Rules 1–2). Struct walkability needs nothing beyond them; the
 - A struct with a secret field loses derived `Eq`/`Ord` and (without a default)
   `Serialize`; users must opt back in manually. This friction is the point, but
   it is friction.
-- The security upgrade is deferred to the `ReflectStruct`-based serde rather than
-  patched into `serde_synth` now, so secret fields stay serializable until the
-  migration lands. Deliberate: an interim bespoke patch would be thrown away at
-  that migration.
+- The security upgrade lands on the `ReflectStruct`-based serde blankets as one
+  change, so secret fields stay serializable until it does.
 
 ## Related WEPs
 

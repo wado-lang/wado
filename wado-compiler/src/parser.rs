@@ -1997,8 +1997,16 @@ impl Parser {
         let mut effect_ids = vec![(self.alloc_ast_id(), first_span)];
 
         while self.check(&TokenKind::Comma) {
-            // Lookahead: if the token after comma is `ident:`, this is a parameter
-            // in the enclosing parameter list, not another effect. Stop here.
+            // Only an effect name or `stores[...]` continues the list. Anything
+            // else after the comma belongs to the enclosing list: a trailing
+            // comma before its terminator, or the `ident:` that starts the next
+            // parameter.
+            if !matches!(
+                self.peek_nth(1).kind,
+                TokenKind::Ident(_) | TokenKind::Stores
+            ) {
+                break;
+            }
             if matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
                 && self.peek_nth(2).kind == TokenKind::Colon
             {
@@ -3799,12 +3807,13 @@ impl Parser {
             spec_ok = self.expect_gt().is_ok();
         }
 
-        // After `Name::<…>`, only `::method(…)` continues the static-method-call
-        // path. A bare `Name::<…>` (used as a value) backtracks below so the
-        // outer postfix loop sees the `::<…>` again and either parses it as a
-        // turbofish-attached identifier or rejects a duplicate turbofish.
-        // `Name::<A>::<B>` falls into the same backtrack: the second `<` is
-        // not a method identifier.
+        // After `Name::<…>`, `::method(…)` continues the static-method-call path
+        // and `::Case` (no call) is a turbofish-qualified path selecting a
+        // payload-less case. A bare `Name::<…>` (used as a value) backtracks
+        // below so the outer postfix loop sees the `::<…>` again and either
+        // parses it as a turbofish-attached identifier or rejects a duplicate
+        // turbofish. `Name::<A>::<B>` falls into the same backtrack: the second
+        // `<` is not a method identifier.
         if spec_ok
             && self.check(&TokenKind::ColonColon)
             && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
@@ -3820,6 +3829,33 @@ impl Parser {
                 } else {
                     Vec::new()
                 };
+
+            // `Name::<Args>::Case` with no call: the qualified path the
+            // untargeted `Name::Case` produces, with the type args pinned on
+            // it. A method-level turbofish rules this out — `method::<U>` is
+            // never a case name — so that keeps expecting the call.
+            if method_type_args.is_empty() && !self.check(&TokenKind::LParen) {
+                let path_span = start_span.merge(&method_span);
+                return Ok(Expr::Ident(IdentExpr {
+                    id: self.alloc_ast_id(),
+                    name: format!("{name}::{method}"),
+                    span: path_span,
+                    segments: vec![
+                        PathSegment {
+                            id: self.alloc_ast_id(),
+                            name,
+                            span: start_span,
+                        },
+                        PathSegment {
+                            id: self.alloc_ast_id(),
+                            name: method,
+                            span: method_span,
+                        },
+                    ],
+                    type_args,
+                    type_args_on_prefix: true,
+                }));
+            }
 
             self.expect(&TokenKind::LParen)?;
             let (args, has_trailing_comma) = self.parse_arg_list()?;
@@ -3850,6 +3886,7 @@ impl Parser {
             span: start_span,
             segments: Vec::new(),
             type_args: Vec::new(),
+            type_args_on_prefix: false,
         }))
     }
 
@@ -3904,6 +3941,7 @@ impl Parser {
             span: path_span,
             segments,
             type_args: Vec::new(),
+            type_args_on_prefix: false,
         }))
     }
 
@@ -3956,6 +3994,7 @@ impl Parser {
                 name,
                 segments: Vec::new(),
                 type_args: Vec::new(),
+                type_args_on_prefix: false,
                 span: start_span,
             }));
         }
@@ -4471,6 +4510,9 @@ impl Parser {
 
     /// Parse tuple literal: `[expr, expr, ...]` or `[]`
     fn parse_tuple_literal(&mut self, start_span: Span) -> ParseResult<Expr> {
+        if self.check(&TokenKind::For) {
+            return self.parse_tuple_comprehension(start_span);
+        }
         let elements = self.parse_comma_separated_recovering(
             &TokenKind::RBracket,
             Self::parse_tuple_element,
@@ -4485,6 +4527,33 @@ impl Parser {
             elements,
             span: start_span.merge(&end_span),
         })))
+    }
+
+    /// Parse tuple comprehension: `[for let v of tuple { expr }]`.
+    ///
+    /// The braces hold one expression — the element's value — not a statement
+    /// block: a comprehension produces a tuple, so every element has a value.
+    fn parse_tuple_comprehension(&mut self, start_span: Span) -> ParseResult<Expr> {
+        let id = self.alloc_ast_id();
+        self.expect(&TokenKind::For)?;
+        self.expect(&TokenKind::Let)?;
+        let binding = self.parse_pattern()?;
+        self.expect(&TokenKind::Of)?;
+        let iterable = self.parse_expr_no_struct_literal()?;
+        self.expect(&TokenKind::LBrace)?;
+        let body = self.parse_expr()?;
+        self.expect(&TokenKind::RBrace)?;
+        let end_span = self.expect(&TokenKind::RBracket)?.span;
+
+        Ok(Expr::TupleComprehension(Box::new(
+            crate::ast::TupleComprehensionExpr {
+                id,
+                binding,
+                iterable,
+                body,
+                span: start_span.merge(&end_span),
+            },
+        )))
     }
 
     /// Parse a tuple element: either a spread `..expr` or a regular expression.
@@ -5940,11 +6009,18 @@ impl Parser {
                 TemplateTokenPart::Literal(s) => {
                     parts.push(TemplatePart::String(s));
                 }
-                TemplateTokenPart::Interpolation { expr, format } => {
+                TemplateTokenPart::Interpolation {
+                    expr,
+                    format,
+                    origin,
+                } => {
                     // The lexer already split off the format specifier, so the
                     // expression source is parsed as-is (trimmed of surrounding
-                    // whitespace).
-                    let parsed = self.parse_interpolation_expr(expr.trim(), span)?;
+                    // whitespace). Trimming moves the origin with it, or every
+                    // span inside a `${ x }` would sit one column early.
+                    let trimmed = expr.trim_start();
+                    let origin = advance_position(origin, &expr[..expr.len() - trimmed.len()]);
+                    let parsed = self.parse_interpolation_expr(trimmed.trim_end(), span, origin)?;
                     let format_spec = match format {
                         Some(spec) if spec.is_empty() => {
                             return Err(ParseError {
@@ -5971,7 +6047,18 @@ impl Parser {
     }
 
     /// Parse an interpolation expression string.
-    fn parse_interpolation_expr(&mut self, expr_str: &str, span: Span) -> ParseResult<Expr> {
+    ///
+    /// `origin` is where `expr_str`'s first byte sits in the file. The fragment
+    /// is lexed on its own, so every span it produces is relative to it; each
+    /// one is rebased before it can reach the AST, or a node inside `${…}`
+    /// would carry an offset that indexes unrelated text and a column measured
+    /// from the wrong place.
+    fn parse_interpolation_expr(
+        &mut self,
+        expr_str: &str,
+        span: Span,
+        origin: crate::token::Position,
+    ) -> ParseResult<Expr> {
         if expr_str.is_empty() {
             return Err(ParseError {
                 message: "empty interpolation expression in template string".to_string(),
@@ -5979,15 +6066,31 @@ impl Parser {
             });
         }
 
-        let lex_result = crate::lexer::lex_with_line(expr_str, span.line);
+        let mut lex_result = crate::lexer::lex(expr_str);
+        for token in &mut lex_result.tokens {
+            token.span = rebase_span(token.span, origin);
+            // A template nested in this one — `${ cond ? `${x}` : … }` — had its
+            // parts scanned by the same fragment lexer, so the origin each
+            // interpolation recorded is relative to the fragment too and has to
+            // travel with the spans.
+            if let TokenKind::TemplateStringLit(parts) = &mut token.kind {
+                for part in parts {
+                    if let crate::token::TemplateTokenPart::Interpolation {
+                        origin: nested, ..
+                    } = part
+                    {
+                        *nested = rebase_position(*nested, origin);
+                    }
+                }
+            }
+        }
         // Lex errors inside the interpolation surface alongside the outer
-        // parser's diagnostics. Use the lex error's own span — carefully
-        // line-shifted by `lex_with_line` — so the editor highlights the
-        // offending byte, not the whole `{…}`.
+        // parser's diagnostics, at the offending byte rather than the whole
+        // `{…}`.
         for e in &lex_result.errors {
             self.errors.push(ParseError {
                 message: format!("error parsing template interpolation: {e}"),
-                span: e.span,
+                span: rebase_span(e.span, origin),
             });
         }
 
@@ -6073,6 +6176,7 @@ impl Parser {
                             name: field_name.clone(),
                             segments: Vec::new(),
                             type_args: Vec::new(),
+                            type_args_on_prefix: false,
                             span: field_name_span,
                         }),
                         true,
@@ -6120,6 +6224,59 @@ impl Parser {
             span: start_span.merge(&end_span),
         })))
     }
+}
+
+/// Move `origin` past `text`, counting the lines and columns it covers.
+fn advance_position(origin: crate::token::Position, text: &str) -> crate::token::Position {
+    let lines = text.matches('\n').count();
+    crate::token::Position {
+        offset: origin.offset + text.len(),
+        line: origin.line + lines,
+        column: match text.rsplit_once('\n') {
+            Some((_, tail)) => 1 + tail.chars().count(),
+            None => origin.column + text.chars().count(),
+        },
+    }
+}
+
+/// Rebase a position produced by lexing a fragment on its own onto the file the
+/// fragment came from.
+///
+/// The fragment starts at line 1, column 1, offset 0, so only its first line
+/// needs the column shift — every later line already begins at column 1 where
+/// the file's does.
+fn rebase_position(
+    position: crate::token::Position,
+    origin: crate::token::Position,
+) -> crate::token::Position {
+    crate::token::Position {
+        offset: origin.offset + position.offset,
+        line: origin.line + position.line - 1,
+        column: if position.line == 1 {
+            origin.column + position.column - 1
+        } else {
+            position.column
+        },
+    }
+}
+
+/// Rebase a span the same way [`rebase_position`] rebases a point.
+fn rebase_span(span: Span, origin: crate::token::Position) -> Span {
+    let shift_column = |line: usize, column: usize| {
+        if line == 1 {
+            origin.column + column - 1
+        } else {
+            column
+        }
+    };
+    Span::with_end(
+        origin.offset + span.start,
+        origin.offset + span.end,
+        origin.line + span.line - 1,
+        shift_column(span.line, span.column),
+        origin.line + span.end_line - 1,
+        shift_column(span.end_line, span.end_column),
+    )
 }
 
 /// Populate `Attribute::cm_boundary` based on the attribute name.
@@ -6258,6 +6415,7 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::AstVisitor;
     use crate::lexer::lex;
 
     /// Parse helper for tests: maps the error-recovering parser back to a
@@ -7042,6 +7200,82 @@ mod tests {
         }
     }
 
+    /// Every span inside a `${…}` must index the file, not the fragment the
+    /// parser re-lexes it from. Positions on the fragment's first line are what
+    /// break first — the later lines start at column 1 in both — so the check
+    /// covers a single-line interpolation, a leading-space one, and a
+    /// multi-line one at once.
+    #[test]
+    fn interpolation_spans_index_the_file() {
+        let source =
+            "fn f() {\n    let s = `a: ${alpha} b: ${ beta } c: ${\n        gamma\n    }`;\n}\n";
+        let module = parse(source).unwrap();
+
+        let mut idents = ident_positions(source);
+        for item in &module.items {
+            idents.visit_item(item);
+        }
+
+        assert_eq!(
+            idents.found,
+            vec![
+                ("alpha".to_string(), 2, 19),
+                ("beta".to_string(), 2, 32),
+                ("gamma".to_string(), 3, 9),
+            ]
+        );
+    }
+
+    /// Collects each identifier as the text its span slices out of `source`,
+    /// plus the line and column it reports. Slicing is the point: a span that
+    /// does not index the file names the wrong text, or none at all.
+    struct IdentPositions<'a> {
+        source: &'a str,
+        found: Vec<(String, usize, usize)>,
+    }
+
+    impl AstVisitor for IdentPositions<'_> {
+        fn visit_expr(&mut self, expr: &Expr) {
+            if let Expr::Ident(ident) = expr {
+                let span = ident.span;
+                self.found.push((
+                    self.source[span.start..span.end].to_string(),
+                    span.line,
+                    span.column,
+                ));
+            }
+            crate::ast::walk_expr(self, expr);
+        }
+    }
+
+    fn ident_positions(source: &str) -> IdentPositions<'_> {
+        IdentPositions {
+            source,
+            found: Vec::new(),
+        }
+    }
+
+    /// A template nested inside an interpolation is scanned by the same
+    /// fragment lexer as the interpolation holding it, so the position *it*
+    /// records for its own interpolations is fragment-relative too and has to
+    /// be rebased along with the spans. Rebasing only the spans left this case
+    /// pointing into unrelated text.
+    #[test]
+    fn nested_interpolation_spans_index_the_file() {
+        let source = "fn f(c: bool) {\n    let s = `${ if c { `${inner}` } else { `x` } }`;\n}\n";
+        let module = parse(source).unwrap();
+
+        let mut idents = ident_positions(source);
+        for item in &module.items {
+            idents.visit_item(item);
+        }
+
+        assert_eq!(
+            idents.found,
+            vec![("c".to_string(), 2, 20), ("inner".to_string(), 2, 27)]
+        );
+    }
+
     #[test]
     fn test_assert_simple() {
         let source = r"
@@ -7215,6 +7449,43 @@ line 2
         if let Item::Function(func) = &module.items[0] {
             assert!(func.params.is_empty());
         }
+    }
+
+    #[test]
+    fn test_param_list_trailing_comma() {
+        // A `fn(...) with E` parameter type ends its effect list at the
+        // enclosing list's terminator, not just before a following `ident:`.
+        // The formatter emits exactly this shape when it folds a signature.
+        for (source, params) in [
+            ("fn f(x: i32, y: i32,) {}", 2),
+            ("fn f(x: i32, mut g: fn mut() -> i32,) {}", 2),
+            (
+                "fn f<effect E>(x: i32, mut g: fn mut() with E,) with E {}",
+                2,
+            ),
+            // `with E, Stdout` is the parameter type's own effect list — a
+            // comma after `with` continues it, so this declares one parameter.
+            (
+                "fn f<effect E>(mut g: fn mut() with E, Stdout,) with E, Stdout {}",
+                1,
+            ),
+        ] {
+            let module = parse(source).unwrap_or_else(|e| panic!("{source}: {e:?}"));
+            let Item::Function(func) = &module.items[0] else {
+                panic!("{source}: expected a function");
+            };
+            assert_eq!(func.params.len(), params, "{source}");
+        }
+    }
+
+    #[test]
+    fn test_param_list_effect_list_still_takes_several_effects() {
+        // The terminator rule must not cut a genuine multi-effect list short.
+        let module = parse("fn f(mut g: fn mut() with Stdout, Stderr) {}").unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected a function");
+        };
+        assert_eq!(func.params.len(), 1);
     }
 
     #[test]

@@ -128,7 +128,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             member_types: field_types,
         } = subject;
 
-        let (reflect_trait_name, members_method, from_fields_method, wire_name_policy_method) = {
+        let (
+            reflect_trait_name,
+            members_method,
+            from_fields_method,
+            defaults_method,
+            wire_name_policy_method,
+        ) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -140,6 +146,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .to_string(),
                 items
                     .method_name(crate::compiler_item::CompilerItem::ReflectStructFromFields)
+                    .to_string(),
+                items
+                    .method_name(crate::compiler_item::CompilerItem::ReflectStructDefaults)
                     .to_string(),
                 items
                     .method_name(crate::compiler_item::CompilerItem::ReflectStructWireNamePolicy)
@@ -163,6 +172,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let return_type = if method == from_fields_method {
             self_ty
+        } else if method == defaults_method {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let slots: Vec<TypeId> = field_types.iter().map(|&f| tt.make_option(f)).collect();
+            tt.make_tuple(slots)
         } else if method == members_method {
             let mut tt = self.tysys.type_table.borrow_mut();
             let (field_module, field_name) = {
@@ -278,6 +291,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_name_method,
             members_method,
             from_fields_method,
+            defaults_method,
             wire_name_policy_method,
         ) = {
             let tt = self.tysys.type_table.borrow();
@@ -292,6 +306,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .to_string(),
                 items
                     .method_name(CompilerItem::ReflectStructFromFields)
+                    .to_string(),
+                items
+                    .method_name(CompilerItem::ReflectStructDefaults)
                     .to_string(),
                 items
                     .method_name(CompilerItem::ReflectStructWireNamePolicy)
@@ -319,6 +336,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow_mut()
                 .make_compiler_enum(CompilerItem::CaseStyle)
+        } else if method == defaults_method {
+            let Some(slots_ty) =
+                self.struct_defaults_bound_ty(type_param_name, &reflect_trait_name)
+            else {
+                let _ = self.emit(TypeError::UnknownFunction {
+                    name: format!(
+                        "ReflectStruct::<{type_param_name}>::{method} (no `FieldTypes = [..F]` bound on {type_param_name})"
+                    ),
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            };
+            slots_ty
         } else if method == members_method {
             let Some(members_ty) =
                 self.struct_members_bound_ty(self_ty, type_param_name, &reflect_trait_name)
@@ -691,6 +721,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             || method
                 == items.method_name(crate::compiler_item::CompilerItem::ReflectStructFromFields)
             || method
+                == items.method_name(crate::compiler_item::CompilerItem::ReflectStructDefaults)
+            || method
                 == items
                     .method_name(crate::compiler_item::CompilerItem::ReflectStructWireNamePolicy)
     }
@@ -1031,6 +1063,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(tt.make_tuple(vec![member_pack]))
     }
 
+    /// The slot pack `[..Option<F>]` — the type of `defaults()` under a
+    /// `T: ReflectStruct<FieldTypes = [..F]>` bound. Maps the field-type pack
+    /// through `Option`, as [`Self::struct_members_bound_ty`] maps it through
+    /// the member constructor.
+    fn struct_defaults_bound_ty(
+        &mut self,
+        type_param_name: &str,
+        reflect_trait_name: &str,
+    ) -> Option<TypeId> {
+        let fields_ty = self.reflect_pack_bound_ty(
+            type_param_name,
+            reflect_trait_name,
+            crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
+        )?;
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let elems = tt.as_tuple(fields_ty)?;
+        let (pack_ty, pack_name, pack_index) = elems.iter().find_map(|&e| match tt.get(e) {
+            crate::tir::ResolvedType::TypePack {
+                name,
+                index,
+                mapped_elem: None,
+            } => Some((e, name.clone(), *index)),
+            _ => None,
+        })?;
+        // The slot names the pack itself, not a `TypeParam` placeholder: a
+        // derivation infers `Option<F>`'s payload from it, and inference binds
+        // through the pack.
+        let slot = tt.make_option(pack_ty);
+        let slot_pack = tt.make_mapped_type_pack(pack_name, pack_index, slot);
+        Some(tt.make_tuple(vec![slot_pack]))
+    }
+
     /// Whether `prefix::method` names a member of the scalar-kind reflection
     /// trait `spec` describes (`ReflectEnum` / `ReflectFlags`). Same scope
     /// discipline as [`Self::is_reflect_trait_call`].
@@ -1325,6 +1389,112 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         };
         Some(members_ty)
+    }
+
+    /// A reflect trait's associated type for a *concrete* subject, computed
+    /// the way the synthesized impl would.
+    ///
+    /// Synthesis registers these after elaboration, so a call site needing one
+    /// — projecting a pack out of `T: ReflectFlags<Members = [..M]>` — finds
+    /// nothing in the registry and must compute it.
+    pub(super) fn concrete_reflect_assoc_type(
+        &mut self,
+        subject: TypeId,
+        trait_name: &str,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        use crate::synthesis::traits::{
+            REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_SLOTS_ASSOC, REFLECT_FIELD_TYPES_ASSOC,
+            REFLECT_MEMBERS_ASSOC,
+        };
+        if matches!(
+            self.tysys.type_table.borrow().get(subject),
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+        ) {
+            return None;
+        }
+        let (struct_trait, variant_trait, enum_trait, flags_trait) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::ReflectStruct).to_string(),
+                items.trait_name(CompilerItem::ReflectVariant).to_string(),
+                items.trait_name(CompilerItem::ReflectEnum).to_string(),
+                items.trait_name(CompilerItem::ReflectFlags).to_string(),
+            )
+        };
+        if trait_name == struct_trait {
+            let members = self.reflect_struct_subject(subject)?.member_types;
+            return match assoc_name {
+                REFLECT_FIELD_TYPES_ASSOC => {
+                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
+                }
+                REFLECT_FIELD_SLOTS_ASSOC => {
+                    let mut tt = self.tysys.type_table.borrow_mut();
+                    let slots: Vec<TypeId> = members.iter().map(|&m| tt.make_option(m)).collect();
+                    Some(tt.make_tuple(slots))
+                }
+                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                    CompilerItem::ReflectStructField,
+                    subject,
+                    &members,
+                )),
+                _ => None,
+            };
+        }
+        if trait_name == variant_trait {
+            let members = self.reflect_variant_subject(subject)?.member_types;
+            return match assoc_name {
+                REFLECT_CASE_PAYLOADS_ASSOC => {
+                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
+                }
+                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                    CompilerItem::ReflectVariantCase,
+                    subject,
+                    &members,
+                )),
+                _ => None,
+            };
+        }
+        if assoc_name != REFLECT_MEMBERS_ASSOC {
+            return None;
+        }
+        let spec = if trait_name == enum_trait {
+            ScalarReflectSpec::ENUM
+        } else if trait_name == flags_trait {
+            ScalarReflectSpec::FLAGS
+        } else {
+            return None;
+        };
+        let subject_ty = self.tysys.type_table.borrow().get(subject).clone();
+        if !spec.subject_matches(&subject_ty) {
+            return None;
+        }
+        let name = self.tysys.type_table.borrow().type_name(subject);
+        Some(self.scalar_concrete_members_ty(spec, subject, &name))
+    }
+
+    /// The member tuple for a kind whose handle carries a payload type:
+    /// `[StructField<T, F_0>, ...]` / `[VariantCase<T, P_0>, ...]`.
+    fn payload_members_ty(
+        &mut self,
+        member_struct_item: CompilerItem,
+        subject: TypeId,
+        member_types: &[TypeId],
+    ) -> TypeId {
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let (module, name) = {
+            let items = tt.compiler_items();
+            let (m, n) = items.require_struct(member_struct_item);
+            (m.clone(), n.to_string())
+        };
+        let handles: Vec<TypeId> = member_types
+            .iter()
+            .map(|&payload| {
+                tt.make_generic_instance(name.clone(), module.clone(), vec![subject, payload])
+            })
+            .collect();
+        tt.make_tuple(handles)
     }
 
     /// The concrete N-tuple `[M<Self>; N]` for `members()`, N being the

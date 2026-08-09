@@ -127,13 +127,13 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>>") -> ref null "tuple//[i32, i32]";  // TypeId(48)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(49)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(49)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(50)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(50)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(51)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(51)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(52)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(52)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -636,13 +636,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>>^Iterator::next"(self) {
     let idx: i32;
-    let __sroa___match_3_discriminant: i32;
-    let __sroa___match_3_payload_0: i32;
-    multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self.inner);
-    if __sroa___match_3_discriminant == 0 {
+    let __match_3_mv_0: i32;
+    let __match_3_mv_1: i32;
+    multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self.inner);
+    if __match_3_mv_0 == 0 {
         idx = self.count;
         self.count = self.count + 1;
-        return struct.new "tuple//[i32, i32]" { 0: idx, 1: __sroa___match_3_payload_0 };
+        return struct.new "tuple//[i32, i32]" { 0: idx, 1: __match_3_mv_1 };
     } else {
     }
     return ref.null none;

@@ -1,10 +1,8 @@
-// Test: copy propagation + variant SROA with nested variant matching
+// Test: variant-return scalarization through nested variant matching
 //
-// Exercises the pattern that caused the json_value_test crash: when copy
-// propagation inlines `__match_scrut = result`, SROA decomposes the call into
-// multivalue, but `ref.cast` on the temp gets stored to an intermediate local
-// (__cast_N) that StructGet then reads. The rewriting must handle this
-// separated RefCast+StructGet pattern via alias tracking.
+// Exercises the pattern that caused the json_value_test crash: a call whose
+// result is matched one level and then matched again on the payload, with the
+// scrutinee reaching the match through a copy.
 //
 // Tests several nesting patterns:
 // 1. Result<Option<T>, E> with nested match (the json_value bug)
@@ -150,6 +148,6 @@ __DATA__
 {
     "stdout": "",
     "wir_expect:O1": [
-        "multivalue_bind [__sroa_result_discriminant"
+        "multivalue_bind [result_mv_0, result_mv_1, result_mv_2] = \"opt_copy_prop_nested_variant.wado/find_item\"("
     ]
 }

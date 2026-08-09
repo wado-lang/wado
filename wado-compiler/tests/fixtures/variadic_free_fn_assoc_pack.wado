@@ -1,0 +1,173 @@
+// A free function may bind a pack through another parameter's associated type
+// (`<T: Trait<Assoc = [..P]>, ..P>`), the shape a blanket impl already allowed.
+// The call-site bound check resolved the binding `[..P]` as a type in the
+// *caller's* scope, where the callee's pack is not registered ("unknown type
+// `..P`"), and the associated-type projection only recognised a bare parameter
+// as a binding target, so `P` was never pinned.
+
+trait Parts {
+    type Items;
+    fn items(&self) -> Self::Items;
+}
+
+struct Tri {
+    a: i32,
+    b: i32,
+    c: i32,
+}
+
+impl Parts for Tri {
+    type Items = [i32, i32, i32];
+    fn items(&self) -> [i32, i32, i32] {
+        return [self.a, self.b, self.c];
+    }
+}
+
+struct Pair {
+    left: String,
+    right: bool,
+}
+
+impl Parts for Pair {
+    type Items = [String, bool];
+    fn items(&self) -> [String, bool] {
+        return [self.left, self.right];
+    }
+}
+
+/// The body stays pack-agnostic: it walks the tuple, never assuming an
+/// element type.
+fn arity<T: Parts<Items = [..P]>, ..P>(t: &T) -> i32 {
+    let mut n = 0;
+    for let v of t.items() {
+        n += 1;
+    }
+    return n;
+}
+
+/// A bound on the pack itself constrains every element.
+fn rendered<T: Parts<Items = [..P]>, ..P: Inspect>(t: &T) -> String {
+    let mut out = "";
+    for let v of t.items() {
+        out = `${out}${v:?};`;
+    }
+    return out;
+}
+
+struct Point {
+    x: i32,
+    label: String,
+}
+
+variant Shape {
+    Circle(i32),
+    Empty,
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+flags Perms {
+    Read,
+    Write,
+}
+
+/// Reflection's own traits project the same way. Their associated types are
+/// registered by a synthesis phase that runs after elaboration, so the
+/// projection computes the concrete subject's rather than reading a registry.
+fn field_names<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> String {
+    let mut out = "";
+    for let f of ReflectStruct::<S>::members() {
+        out = `${out}${f.name()};`;
+    }
+    return out;
+}
+
+fn rebuilt<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> S {
+    return ReflectStruct::<S>::from_fields(
+        [for let f of ReflectStruct::<S>::members() { f.get(v) }],
+    );
+}
+
+fn live_case<V: ReflectVariant<CasePayloads = [..Q]>, ..Q>(v: &V) -> String {
+    let mut out = "";
+    for let c of ReflectVariant::<V>::members() {
+        if c.holds(v) {
+            out = c.name();
+        }
+    }
+    return out;
+}
+
+fn case_count<E: ReflectEnum<Members = [..M]>, ..M>(v: &E) -> i32 {
+    return ReflectEnum::<E>::members().len();
+}
+
+fn set_bits<L: ReflectFlags<Members = [..M]>, ..M>(v: &L) -> i32 {
+    let mut n = 0;
+    for let b of ReflectFlags::<L>::members() {
+        if b.is_set(v) {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+/// An effect parameter sits in the declared list but consumes no type-argument
+/// slot, so seeding a missing slot must walk the dense space — walking the
+/// declared list would push a placeholder for `E` and shift every argument
+/// past it.
+fn bits_with<L: ReflectFlags<Members = [..M]>, ..M, effect E>(v: &L, mut f: fn mut() with E) -> i32
+with E {
+    f();
+    return ReflectFlags::<L>::members().len();
+}
+
+fn bits_effect_first<effect E, L: ReflectFlags<Members = [..M]>, ..M>(v: &L) -> i32 {
+    return ReflectFlags::<L>::members().len();
+}
+
+/// The subject appears only in the return type, so the caller pins it — and
+/// the turbofish names just that one param, leaving the pack slot to the
+/// projection.
+fn all_bits<L: ReflectFlags<Members = [..M]>, ..M>() -> i32 {
+    return ReflectFlags::<L>::members().len();
+}
+
+test "the pack is inferred from the argument, with no turbofish" {
+    assert arity(&Tri { a: 1, b: 2, c: 3 }) == 3;
+    assert arity(&Pair { left: "x", right: true }) == 2;
+}
+
+test "a bound on the pack reaches every element" {
+    assert rendered(&Tri { a: 1, b: 2, c: 3 }) == "1;2;3;";
+    assert rendered(&Pair { left: "x", right: true }) == "\"x\";true;";
+}
+
+test "each reflection kind projects its member channel" {
+    let p = Point { x: 1, label: "hi" };
+    assert field_names(&p) == "x;label;";
+    assert rebuilt(&p) == p;
+    assert live_case(&Shape::Circle(3)) == "Circle";
+    assert live_case(&Shape::Empty) == "Empty";
+    assert case_count(&Color::Red) == 3;
+    assert set_bits(&(Perms::Read | Perms::Write)) == 2;
+    assert set_bits(&Perms::none()) == 0;
+}
+
+test "a turbofish naming only the subject leaves the pack to the projection" {
+    assert all_bits::<Perms>() == 2;
+}
+
+test "an effect parameter consumes no type-argument slot" {
+    let mut ran = false;
+    assert bits_with(&Perms::Read, || { ran = true; }) == 2;
+    assert ran;
+    assert bits_effect_first(&Perms::Read) == 2;
+}
+
+__DATA__
+{"test": {}}

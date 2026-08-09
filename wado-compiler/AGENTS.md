@@ -38,7 +38,7 @@ wherever the environment restarts.
 Do not narrow niri's trackability read-position whitelist to the reachable
 tree — two attempts each lost the string-builder folds. The rule, its
 mechanism, and its measurement live on `aggregate_safe_locals`; the two
-`still_vouches` tests in `tests/niri.rs` pin it.
+`still_vouches` tests in `tests/integration/niri.rs` pin it.
 
 Details: `docs/wep-2026-06-15-live-value-graph.md`.
 

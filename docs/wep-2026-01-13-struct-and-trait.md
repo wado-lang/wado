@@ -192,7 +192,7 @@ fn process<T: Display + Default>(value: Option<T>) -> String {
 // Where clause for complex bounds
 fn merge<T, U>(a: T, b: U) -> String
 where
-    T: Display + Clone,
+    T: Display,
     U: Display,
 {
     return `${a.display()} and ${b.display()}`;
@@ -216,99 +216,40 @@ let boxed: Box<dyn Display> = Box::new(point);
 
 **Implementation Note**: `dyn` trait objects map to Wasm GC reference types with a vtable struct.
 
-### 9. Copy and Clone Semantics
+### 9. Copy Semantics
 
-Building on the value semantics WEP:
-
-#### Rules
-
-1. **Primitives**: Bitwise copy (implicit, no trait needed)
-2. **Structs**:
-   - All fields bitwise-copyable → bitwise copy
-   - Any field implements `Clone` → automatically call `.clone()` on those fields
-3. **`move` operator**: Explicit ownership transfer, no copy/clone
-4. **Compiler optimization**: MAY move instead of clone when safe
-
-#### The Clone Trait
+Building on the value semantics WEP: every value is deeply copied when assigned
+or passed, so there is no opt-in trait to request a copy and no way to ask for a
+shallow one. A primitive copies bitwise; an aggregate copies its fields.
 
 ```wado
-trait Clone {
-    fn clone(&self) -> Self;
-}
-```
-
-#### Examples
-
-```wado
-// Primitives - bitwise copy
 let a: i32 = 42;
-let b = a;  // bitwise copy, both valid
+let b = a;  // both valid
 
-// Simple struct - bitwise copy (all fields are primitives)
-struct Point { x: i32, y: i32 }
-
-let p1 = Point { x: 1, y: 2 };
-let p2 = p1;  // bitwise copy
-
-// Struct with Clone field - automatic deep copy
 struct User {
-    name: String,  // String: Clone
-    age: i32,      // primitive
+    name: String,
+    age: i32,
 }
 
 let u1 = User { name: "Alice", age: 30 };
-let u2 = u1;  // Compiler generates: User { name: u1.name.clone(), age: u1.age }
-
-// Explicit move - no clone
-let u3 = move u1;  // u1 invalidated
-println(u1.name);  // ERROR: u1 has been moved
+let u2 = u1;  // deep copy — `u1` stays valid
 ```
 
-#### Compiler Move Optimization
+#### Compiler Copy Elision
 
-The compiler MAY optimize clone to move when safe (value not used after):
-
-```wado
-// Compiler WILL move (s1 not used after)
-let s1 = String::from(bytes);
-let s2 = s1;
-// s1 not used anymore → compiler moves, no clone
-println(s2);
-
-// Compiler MUST clone (s1 used after)
-let s1 = String::from(bytes);
-let s2 = s1;
-println(s1);  // s1 used here → must clone
-println(s2);
-```
+The copy is semantic, not mandatory work: the compiler elides it wherever the
+source is not read again.
 
 | Pattern                       | Compiler Action |
 | ----------------------------- | --------------- |
 | Last use before assignment    | Move            |
-| Used after assignment         | Clone           |
+| Used after assignment         | Copy            |
 | Passed to function (last use) | Move            |
 | Returned from function        | Move (RVO)      |
-| Explicit `move`               | Move (enforced) |
 
 ### 10. Built-in Traits
 
 Wado provides several built-in traits in the prelude:
-
-#### Clone
-
-For types that can be deeply copied:
-
-```wado
-trait Clone {
-    fn clone(&self) -> Self;
-}
-
-// Standard library implementations
-impl Clone for String { ... }
-impl<T: Clone> Clone for List<T> { ... }
-impl<T: Clone> Clone for Option<T> { ... }
-impl<K: Clone, V: Clone> Clone for TreeMap<K, V> { ... }
-```
 
 #### Drop
 
@@ -503,12 +444,12 @@ trait Sized {}
 
 ### Negative
 
-1. **Hidden clones**: Implicit cloning may surprise developers expecting move semantics
-   - **Mitigation**: Compiler warnings for expensive implicit clones
+1. **Hidden copies**: an implicit deep copy may surprise developers expecting move semantics
+   - **Mitigation**: Compiler warnings for expensive implicit copies
 2. **Orphan rule limitations**: Cannot extend external types with external traits
    - **Mitigation**: Newtype pattern (`struct MyString(String)`)
-3. **No Copy trait**: Unlike Rust, no distinction between bitwise-copy and clone
-   - **Mitigation**: Compiler handles this automatically
+3. **A type cannot decline the deep copy** or define its own
+   - **Mitigation**: a reference (`&T`) is how a value is shared rather than copied
 4. **One trait per receiver at one argument list**: a call names only the method, and
    method resolution reads neither the argument nor the expected type, so
    `impl Take<A> for bool` beside `impl Take<B> for bool` makes `f.take(..)` ambiguous.
@@ -527,15 +468,14 @@ trait Sized {}
 
 ### Comparison with Rust
 
-| Aspect                | Rust          | Wado                      |
-| --------------------- | ------------- | ------------------------- |
-| Default on assignment | Move          | Clone (value semantics)   |
-| Explicit copy         | `.clone()`    | `move` for avoiding clone |
-| Bitwise copy          | `Copy` trait  | Automatic for primitives  |
-| Deep copy             | `Clone` trait | `Clone` trait             |
-| Memory cleanup        | `Drop` trait  | GC (Drop for resources)   |
-| Trait syntax          | Same          | Same                      |
-| impl blocks           | Same          | Same                      |
+| Aspect                 | Rust                    | Wado                        |
+| ---------------------- | ----------------------- | --------------------------- |
+| Default on assignment  | Move                    | Deep copy (value semantics) |
+| Opting out of the copy | (the default)           | `move`, or share via `&T`   |
+| Copying a value        | `Copy` / `Clone` traits | Automatic, and deep         |
+| Memory cleanup         | `Drop` trait            | GC (Drop for resources)     |
+| Trait syntax           | Same                    | Same                        |
+| impl blocks            | Same                    | Same                        |
 
 ## Examples
 
@@ -564,12 +504,6 @@ impl Point {
     }
 }
 
-impl Clone for Point {
-    fn clone(&self) -> Point {
-        return Point { x: self.x, y: self.y };
-    }
-}
-
 impl Default for Point {
     fn default() -> Point {
         return Point { x: 0, y: 0 };
@@ -584,7 +518,7 @@ impl Display for Point {
 
 fn run() with Stdout {
     let p1 = Point::new(3, 4);
-    let p2 = p1;  // clone (both valid)
+    let p2 = p1;  // deep copy (both valid)
 
     println(`p1 = ${p1}`);  // p1 = (3, 4)
     println(`p2 = ${p2}`);  // p2 = (3, 4)
@@ -625,12 +559,6 @@ impl<T> Stack<T> {
     }
 }
 
-impl<T: Clone> Clone for Stack<T> {
-    fn clone(&self) -> Stack<T> {
-        return Stack { items: self.items.clone() };
-    }
-}
-
 impl<T: Display> Display for Stack<T> {
     fn display(&self) -> String {
         let parts = self.items.iter().map(|x| x.display()).collect::<List<String>>();
@@ -642,6 +570,5 @@ impl<T: Display> Display for Stack<T> {
 ## References
 
 - [Rust Traits](https://doc.rust-lang.org/book/ch10-02-traits.html)
-- [Rust Clone vs Copy](https://doc.rust-lang.org/std/clone/trait.Clone.html)
 - [Rust Drop](https://doc.rust-lang.org/std/ops/trait.Drop.html)
 - [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)

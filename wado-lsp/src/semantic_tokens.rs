@@ -576,6 +576,10 @@ fn visit_expr(spans: &mut TypeSpans, expr: &Expr) {
                 visit_expr(spans, elem);
             }
         }
+        Expr::TupleComprehension(c) => {
+            visit_expr(spans, &c.iterable);
+            visit_expr(spans, &c.body);
+        }
         Expr::LabeledBlock(lb) => visit_block(spans, &lb.block),
         Expr::TryOp(t) => visit_expr(spans, &t.expr),
         Expr::Spread(inner, _) => visit_expr(spans, inner),

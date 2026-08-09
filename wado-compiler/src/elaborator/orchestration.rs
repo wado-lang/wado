@@ -40,7 +40,6 @@ use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::world_registry::WorldRegistry;
 
 use super::Elaborator;
-use super::trait_env::TraitEnv;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ResourceInfo,
     StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
@@ -115,52 +114,6 @@ pub(crate) struct AnnotateState {
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
-    /// Run the full resolve pipeline: annotate, then lower to TIR.
-    ///
-    /// This is a thin wrapper over [`Elaborator::annotate_modules`] +
-    /// [`Elaborator::build_tir_from_state`]. Callers that want access to the
-    /// annotate output (e.g. LSP) should call the two phases separately.
-    /// The returned move spans belong in `Package::moved_local_spans`.
-    pub(crate) fn elaborate_all_modules(
-        symbols: &'a SymbolTable,
-        modules: &'a IndexMap<ModuleSource, Module>,
-        entry_module_source: ModuleSource,
-        logger: &'a Logger<'a, H>,
-        included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
-        invocations: crate::kiln::InvocationIndex,
-        interner: Rc<RefCell<ModuleSourceInterner>>,
-    ) -> Result<
-        (
-            IndexMap<ModuleSource, TirModule>,
-            Arc<TraitEnv>,
-            IndexMap<ModuleSource, IndexSet<crate::token::Span>>,
-        ),
-        Bail,
-    > {
-        let mut state = Self::annotate_modules(
-            symbols,
-            modules,
-            &entry_module_source,
-            logger,
-            included_files,
-            invocations,
-            interner,
-            None,
-        )?;
-        let trait_env = state.tysys.trait_env.clone();
-        let tir_modules = Self::build_tir_from_state(
-            &mut state,
-            symbols,
-            modules,
-            entry_module_source,
-            logger,
-            None,
-            true,
-        )?;
-        let moved_spans = std::mem::take(&mut state.liveness.moved_spans);
-        Ok((tir_modules, trait_env, moved_spans))
-    }
-
     /// Annotate phase: collect decl-level type information and intern every
     /// declaration in the shared [`TypeTable`]. Produces an [`AnnotateState`]
     /// that downstream phases (`build_tir`, LSP queries) consume read-mostly
@@ -2871,6 +2824,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     )?;
                 }
             }
+            ast::Expr::TupleComprehension(c) => {
+                for elem in [&c.iterable, &c.body] {
+                    Self::validate_expr_type_names(
+                        elem,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
             ast::Expr::TemplateString(ts) => {
                 for part in &ts.parts {
                     if let ast::TemplatePart::Interpolation { expr, .. } = part {
@@ -2962,17 +2926,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 )?;
             }
             ast::Expr::Ident(ident) => {
-                // A bare turbofish value (`pair::<_, bool>`) has no call to
-                // infer from, so a `_` slot here is unresolvable — validate its
-                // type args strictly.
+                // A bare turbofish value (`pair::<_, bool>`, `ns::pair::<_>`)
+                // has no call to infer from, so a `_` slot here is
+                // unresolvable — validate its type args strictly. A turbofish
+                // on the path's prefix (`Maybe::<_>::Nothing`) does have one:
+                // the expected type fills the slot.
                 for ty in &ident.type_args {
-                    Self::validate_ast_type_names(
-                        ty,
-                        known_type_names,
-                        resource_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    if ident.type_args_on_prefix {
+                        Self::validate_turbofish_type_arg(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    } else {
+                        Self::validate_ast_type_names(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
                 }
             }
             ast::Expr::Literal(_) | ast::Expr::Error(_) => {}

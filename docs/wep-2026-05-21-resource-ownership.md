@@ -208,7 +208,15 @@ where it cannot prove move / share / fresh; no elision pass):
   `S { data, n: data.len() }` past a read-only reuse, both move. A method
   receiver borrow escapes only if the callee stores its receiver specifically
   (`receiver_storing_methods`), so a `&mut self` mutation like `List::push`
-  (which stores only its value) no longer pins the receiver local.
+  (which stores only its value) no longer pins the receiver local. A `let` is
+  the same site: `let v = p.a` over a dead `p` moves, which is what keeps an
+  unrolled variadic body from deep-copying the element it binds.
+- Declared hand-over — a `let` marked `skip_value_copy` owns its storage by
+  construction, so the freshness fixpoint seeds it instead of asking what the
+  source expression looks like, and the ownership chain reaches the `match` arms
+  and literals downstream of it. A tuple unroll marks its element bindings that
+  way: the temp it reads is private to the unroll and each field has exactly one
+  reader, so the field is the binding's to take.
 - Freshness — `ownership.rs` return conventions (a call is fresh iff the callee
   returns owned), plus the literals that materialize their own storage: a string
   _and_ a bytes literal, both of which lower to a fresh aggregate over a packed

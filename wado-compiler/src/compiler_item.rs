@@ -309,6 +309,8 @@ pub enum CompilerItem {
     ReflectStructMembers,
     /// `ReflectStruct::from_fields` — assemble a struct from its field-value tuple.
     ReflectStructFromFields,
+    /// `ReflectStruct::defaults` — the declared field defaults as `[..Option<F>]`.
+    ReflectStructDefaults,
     /// `ReflectStruct::wire_name_policy` — the struct's `#[wire(name_policy)]` policy.
     ReflectStructWireNamePolicy,
     /// `Member::name` — the member's source field name.
@@ -551,6 +553,7 @@ impl CompilerItem {
         Self::ReflectStructTypeName,
         Self::ReflectStructMembers,
         Self::ReflectStructFromFields,
+        Self::ReflectStructDefaults,
         Self::ReflectStructWireNamePolicy,
         Self::MemberName,
         Self::MemberWireNameOverride,
@@ -701,6 +704,7 @@ impl CompilerItem {
             Self::ReflectStructTypeName => "reflect_struct_type_name",
             Self::ReflectStructMembers => "reflect_struct_members",
             Self::ReflectStructFromFields => "reflect_struct_from_fields",
+            Self::ReflectStructDefaults => "reflect_struct_defaults",
             Self::ReflectStructWireNamePolicy => "reflect_struct_wire_name_policy",
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
@@ -823,6 +827,7 @@ impl CompilerItem {
             | Self::ReflectStructTypeName
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
+            | Self::ReflectStructDefaults
             | Self::ReflectStructWireNamePolicy
             | Self::MemberName
             | Self::MemberWireNameOverride
@@ -1007,6 +1012,7 @@ impl CompilerItem {
             | Self::ReflectStructTypeName
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
+            | Self::ReflectStructDefaults
             | Self::ReflectStructWireNamePolicy
             | Self::MemberName
             | Self::MemberWireNameOverride

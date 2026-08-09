@@ -17,6 +17,21 @@ use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::placeholder;
 
+/// The parameter an associated-type equality binds: a bare parameter
+/// (`Builder<Output = T>`) or a pack spelt as the whole tuple
+/// (`ReflectFlags<Members = [..M]>`). A pack binds to the projected tuple,
+/// which is what the pack stands for everywhere else.
+fn assoc_bound_target_param(ty: &Type) -> Option<&str> {
+    match ty {
+        Type::Named(named) => Some(&named.name),
+        Type::Tuple(elems) => match elems.as_slice() {
+            [Type::TypePackSpread(name, _)] => Some(name),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// Per-position `_` mask for a turbofish: `holes[i]` is true when argument `i`
 /// was written `_`. Slots past the end count as holes too (omitted trailing
 /// args), so the mask need only cover the supplied args.
@@ -1961,8 +1976,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// this, `T` would survive monomorphization and trap codegen as an
     /// unsubstituted type parameter. Iterates to a fixpoint so chained
     /// bounds resolve regardless of declaration order.
-    fn infer_type_args_from_assoc_bounds(&mut self, callee: &CalleeRef, type_args: &mut [TypeId]) {
-        let params = self.lookup_function_type_params(callee);
+    fn infer_type_args_from_assoc_bounds(
+        &mut self,
+        callee: &CalleeRef,
+        type_args: &mut Vec<TypeId>,
+    ) {
+        // The dense type-argument space: non-effect, non-`fn`-bound params in
+        // declaration order, the same space `type_args` is indexed by. An
+        // effect param sits in the declared list but consumes no slot, so
+        // walking the declared list would misalign every index past it.
+        let params: Vec<ast::GenericParam> = self
+            .lookup_function_type_params(callee)
+            .into_iter()
+            .filter(super::super::ast::GenericParam::is_real_type_param)
+            .collect();
+        // A turbofish naming only the non-pack params (`parse::<Perms>()`,
+        // where the subject appears solely in the return type) leaves the
+        // trailing pack slot absent. Seed it with its declared, still-unbound
+        // form so the projection below can pin it from the owner's bound.
+        for (i, param) in params.iter().enumerate().skip(type_args.len()) {
+            let declared = {
+                let mut tt = self.tysys.type_table.borrow_mut();
+                if param.is_pack {
+                    tt.make_type_pack(param.name.clone(), i as u32)
+                } else {
+                    tt.make_type_param(param.name.clone(), i as u32)
+                }
+            };
+            type_args.push(declared);
+        }
         self.resolve_assoc_bound_args(&params, type_args);
     }
 
@@ -2297,7 +2339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Used by both free-function calls ([`Self::infer_type_args_from_assoc_bounds`])
     /// and method calls (`infer_method_type_args`).
     pub(super) fn resolve_assoc_bound_args(
-        &self,
+        &mut self,
         params: &[ast::GenericParam],
         args: &mut [TypeId],
     ) {
@@ -2313,10 +2355,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 for bound in &param.bounds {
                     for assoc in &bound.assoc_types {
-                        let Type::Named(named) = &assoc.ty else {
+                        let Some(target_name) = assoc_bound_target_param(&assoc.ty) else {
                             continue;
                         };
-                        let Some(target_idx) = params.iter().position(|p| p.name == named.name)
+                        let Some(target_idx) = params.iter().position(|p| p.name == target_name)
                         else {
                             continue;
                         };
@@ -2330,6 +2372,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 None => tt.resolve_generic_assoc_type_mono(owner_ty, &assoc.name),
                             }
                         };
+                        // Reflection's associated types are registered by a
+                        // synthesis phase that runs after elaboration, so the
+                        // registry is empty here; compute the subject's.
+                        let resolved = resolved.or_else(|| {
+                            self.concrete_reflect_assoc_type(owner_ty, &bound.name, &assoc.name)
+                        });
                         if let Some(resolved) = resolved {
                             args[target_idx] = resolved;
                             progressed = true;

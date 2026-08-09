@@ -521,6 +521,9 @@ struct ReflectFieldInfo {
     wire_name_override: Option<String>,
     is_secret: bool,
     has_default: bool,
+    /// The declared default (`f: T = expr`), reified in the struct's own
+    /// context — `defaults()` relocates its locals into the synthesized body.
+    default_expr: Option<Box<TirExpr>>,
 }
 
 /// A struct selected for `ReflectStruct` synthesis. `type_params` is empty for
@@ -554,6 +557,7 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
                     wire_name_override: f.wire_name_override.clone(),
                     is_secret: f.is_secret,
                     has_default: f.default_expr.is_some(),
+                    default_expr: f.default_expr.clone(),
                 })
                 .collect(),
             wire_name_policy: s.wire_name_policy.clone(),
@@ -595,7 +599,15 @@ fn generate_struct_reflect_methods(
         span,
     );
 
-    let (struct_type, ref_struct_type, member_types, members_tuple_type, fields_tuple_type) = {
+    let (
+        struct_type,
+        ref_struct_type,
+        member_types,
+        members_tuple_type,
+        fields_tuple_type,
+        slot_types,
+        slots_tuple_type,
+    ) = {
         let mut tt = type_table.borrow_mut();
         let struct_type = if is_generic {
             let param_ids = make_type_param_ids(type_params, &mut tt);
@@ -605,6 +617,8 @@ fn generate_struct_reflect_methods(
         };
         let ref_struct_type = tt.make_ref(struct_type);
         let fields_tuple_type = tt.make_tuple(fields.iter().map(|f| f.type_id).collect());
+        let slot_types: Vec<TypeId> = fields.iter().map(|f| tt.make_option(f.type_id)).collect();
+        let slots_tuple_type = tt.make_tuple(slot_types.clone());
         let member_types: Vec<TypeId> = fields
             .iter()
             .map(|f| {
@@ -623,6 +637,7 @@ fn generate_struct_reflect_methods(
             is_generic,
             &[
                 (REFLECT_FIELD_TYPES_ASSOC, fields_tuple_type),
+                (REFLECT_FIELD_SLOTS_ASSOC, slots_tuple_type),
                 (REFLECT_MEMBERS_ASSOC, members_tuple_type),
             ],
         );
@@ -632,6 +647,8 @@ fn generate_struct_reflect_methods(
             member_types,
             members_tuple_type,
             fields_tuple_type,
+            slot_types,
+            slots_tuple_type,
         )
     };
 
@@ -656,6 +673,17 @@ fn generate_struct_reflect_methods(
         fields_tuple_type,
         span,
     );
+    let defaults_fn = generate_struct_defaults_fn(
+        module_source,
+        type_table,
+        env,
+        reflect_trait_name,
+        name,
+        fields,
+        &slot_types,
+        slots_tuple_type,
+        span,
+    );
     let wire_name_policy_fn = generate_wire_name_policy_fn(
         module_source,
         name,
@@ -670,6 +698,7 @@ fn generate_struct_reflect_methods(
         type_name_fn,
         members_fn,
         from_fields_fn,
+        defaults_fn,
         wire_name_policy_fn,
     ];
     for f in &mut functions {
@@ -731,6 +760,10 @@ pub(crate) const REFLECT_MEMBERS_ASSOC: &str = "Members";
 /// derivation.
 pub(crate) const REFLECT_FIELD_TYPES_ASSOC: &str = "FieldTypes";
 
+/// `ReflectStruct`'s slot associated type (`type FieldSlots`): the field types
+/// under `Option`, the shape `defaults()` returns and a streaming build fills.
+pub(crate) const REFLECT_FIELD_SLOTS_ASSOC: &str = "FieldSlots";
+
 /// Module-level types and method names resolved once from the compiler-item
 /// registry and reused across every struct's `ReflectStruct` synthesis in that
 /// module.
@@ -742,6 +775,7 @@ struct ReflectSynthEnv {
     type_name_method: String,
     members_method: String,
     from_fields_method: String,
+    defaults_method: String,
     wire_name_policy_method: String,
 }
 
@@ -767,6 +801,9 @@ impl ReflectSynthEnv {
                 .to_string(),
             from_fields_method: items
                 .method_name(CompilerItem::ReflectStructFromFields)
+                .to_string(),
+            defaults_method: items
+                .method_name(CompilerItem::ReflectStructDefaults)
                 .to_string(),
             wire_name_policy_method: items
                 .method_name(CompilerItem::ReflectStructWireNamePolicy)
@@ -1005,6 +1042,75 @@ fn generate_struct_members_fn(
         members_tuple_type,
         body,
         vec![],
+    )
+}
+
+/// Build `S^ReflectStruct::defaults() -> [Option<F_0>, …]`:
+/// `return [Option::Some(<default_0>), Option::None, …];`.
+///
+/// A default expression is reified in the struct's own context, numbered from
+/// zero, so its locals are re-allocated into this function's table before they
+/// are embedded — otherwise two fields' defaults would share slot 0.
+fn generate_struct_defaults_fn(
+    module_source: &ModuleSource,
+    type_table: &RefCell<TypeTable>,
+    env: &ReflectSynthEnv,
+    reflect_trait_name: &str,
+    struct_name: &str,
+    fields: &[ReflectFieldInfo],
+    slot_types: &[TypeId],
+    slots_tuple_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(
+        module_source,
+        struct_name,
+        reflect_trait_name,
+        &env.defaults_method,
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let mut next_local: u32 = 0;
+    let mut locals: Vec<TirLocal> = Vec::new();
+    let items = type_table.borrow().compiler_items().clone();
+    let elements = fields
+        .iter()
+        .zip(slot_types)
+        .map(|(f, &slot_type)| match &f.default_expr {
+            Some(default) => {
+                let mut value = default.as_ref().clone();
+                crate::synthesis::common::relocate_synthetic_locals(
+                    &mut value,
+                    &mut next_local,
+                    &mut locals,
+                );
+                crate::synthesis::common::option_some(value, slot_type, &items)
+            }
+            None => crate::synthesis::common::option_none(slot_type, &items),
+        })
+        .collect();
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(TirExpr::new(
+                    TirExprKind::TupleLiteral { elements },
+                    slots_tuple_type,
+                    span,
+                )),
+            },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![],
+        slots_tuple_type,
+        body,
+        locals,
     )
 }
 
