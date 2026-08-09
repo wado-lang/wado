@@ -41,8 +41,8 @@ use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::{
-    block_contains_loop, has_break_to, is_local, is_local_operand, promoted_read_count_at,
-    single_payload_binding,
+    block_contains_loop, has_break_to, is_local, is_local_operand, promoted_read_count,
+    promoted_read_count_at, single_payload_binding,
 };
 
 /// The slot `sroa_variant_return` reserves for the tag in every scalarized
@@ -93,9 +93,14 @@ impl Rule for LabeledBlockFusionRule {
             // (a later statement, another branch) would then read a deleted
             // local. Fuse only when every mention of the temp lives inside the
             // consumer statement.
+            // Both tallies count promoted reads: the use index sees the
+            // skeleton only, so without the whole-body count a promoted read in
+            // the consumer would balance a skeleton read outside it.
             let consumer_uses =
                 count_local_uses_in_stmt(engine.body, stmts[i + 1], info.temp_local);
-            if engine.local_reads(info.temp_local).len() != consumer_uses {
+            let body_uses = engine.local_reads(info.temp_local).len()
+                + promoted_read_count(engine.body, info.temp_local);
+            if body_uses != consumer_uses {
                 continue;
             }
             if yields && i + 2 == stmts.len() {

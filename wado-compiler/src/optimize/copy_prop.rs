@@ -377,22 +377,17 @@ fn analyze_function_body(body: &Body, ctx: &AnalysisCtx<'_>) -> AnalysisResult {
     for &idx in &promoted {
         result.usage.entry(idx).or_default().read_count += 2;
     }
+    // One census for the round: which locals a promoted operand reads without
+    // filling its slot, so no rewrite can reach them. Per-binding queries would
+    // re-walk the body (and every operand's value DAG) inside the fixpoint.
+    let buried = super::arena_query::buried_promoted_reads(body);
     for binding in &mut result.bindings {
-        binding.promoted_reads_substitutable = promoted_reads_substitutable(body, binding);
+        binding.promoted_reads_substitutable = matches!(
+            binding.source,
+            CopySource::Promoted(_) | CopySource::Local { .. }
+        ) && !buried.contains(&binding.target_local);
     }
     result
-}
-
-/// Whether the target's promoted reads are ones [`substitute_promoted_reads`]
-/// can rewrite: none buried inside a compound value, and a source an operand
-/// slot can hold — a pooled value, or a bare local it mints a read node for.
-/// A reference source re-materializes a whole expression, which the promoted
-/// slot has no node to host, so it stays refused.
-fn promoted_reads_substitutable(body: &Body, binding: &CopyBinding) -> bool {
-    matches!(
-        binding.source,
-        CopySource::Promoted(_) | CopySource::Local { .. }
-    ) && !super::arena_query::has_buried_promoted_read(body, binding.target_local)
 }
 
 fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: &AnalysisCtx<'_>) {
@@ -902,8 +897,14 @@ fn propagate_at_root(
                 | CopySource::Ref { index, .. }
                 | CopySource::MutRef { index, .. } => target_set.contains(index),
                 CopySource::RefProjection { root_local, .. } => target_set.contains(root_local),
-                // A promoted value has no source local to conflict.
-                CopySource::Promoted(_) => false,
+                // A promoted value has no source *binding*, but its
+                // `Opaque(Local)` leaves read locals: planting it at the
+                // target's reads strands them if this round deletes one.
+                CopySource::Promoted(v) => {
+                    let mut leaves = IndexSet::default();
+                    engine.body.values.collect_opaque_locals(*v, &mut leaves);
+                    leaves.iter().any(|l| target_set.contains(l))
+                }
             };
             if source_conflicts {
                 has_deferred = true;

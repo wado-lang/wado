@@ -61,7 +61,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{
     bare_promoted_reads, collect_reads, expr_mentions_local, has_buried_promoted_read, is_local,
-    promoted_local_reads, reachable_nodes, strip_refs,
+    promoted_local_reads, promoted_read_count_at, reachable_nodes, strip_refs,
 };
 
 /// A hoisting candidate, identified by its owning function. Resolved in an
@@ -807,6 +807,15 @@ fn count_reads_of(body: &Body, node: NodeRef, wanted: &IndexSet<u32>) -> IndexMa
             && wanted.contains(index)
         {
             *counts.entry(*index).or_default() += 1;
+        }
+        // The confinement tally below compares a whole-body count against an
+        // in-initializer one; a promoted read the skeleton walk cannot see
+        // would make a sibling read outside the initializer invisible.
+        for &idx in wanted {
+            let n = promoted_read_count_at(body, node, idx);
+            if n > 0 {
+                *counts.entry(idx).or_default() += n;
+            }
         }
         body.for_each_child(node, |c| stack.push(c));
     }
@@ -1675,36 +1684,26 @@ fn rewrite_promoted_reads(
     if promoted.is_empty() {
         return;
     }
-    let nodes = reachable_nodes(body);
-    let mut slots = Vec::new();
-    for &node in &nodes {
-        body.for_each_operand(node, |op| {
-            if op.as_value().is_some_and(|v| promoted.contains(&v)) {
-                slots.push(node);
+    for node in reachable_nodes(body) {
+        for value in &promoted {
+            loop {
+                let span = body.span_of(node);
+                let read = body.exprs.push(ExprNode {
+                    kind: ExprKind::GlobalVarGet {
+                        module_source: module_source.clone(),
+                        name: name.to_string(),
+                    },
+                    type_id: ty,
+                    span,
+                });
+                if !body.replace_value_operand_once(node, *value, Operand::Expr(read)) {
+                    // No slot left: the node just minted is unreferenced, and
+                    // DCE reclaims it like any other orphan.
+                    body.exprs[read].kind = ExprKind::Dead;
+                    break;
+                }
             }
-        });
-    }
-    let reads: Vec<ExprId> = slots
-        .iter()
-        .map(|&node| {
-            let span = body.span_of(node);
-            body.exprs.push(ExprNode {
-                kind: ExprKind::GlobalVarGet {
-                    module_source: module_source.clone(),
-                    name: name.to_string(),
-                },
-                type_id: ty,
-                span,
-            })
-        })
-        .collect();
-    let mut reads = reads.into_iter();
-    for node in nodes {
-        body.for_each_operand_mut(node, |op| {
-            if op.as_value().is_some_and(|v| promoted.contains(&v)) {
-                *op = Operand::Expr(reads.next().expect("one read id per promoted slot"));
-            }
-        });
+        }
     }
 }
 

@@ -761,14 +761,7 @@ impl<'a> Engine<'a> {
         from: crate::nir_value_graph::ValueId,
         new: Operand,
     ) -> bool {
-        let mut done = false;
-        self.body.for_each_operand_mut(node, |o| {
-            if !done && *o == Operand::Value(from) {
-                *o = new;
-                done = true;
-            }
-        });
-        if !done {
+        if !self.body.replace_value_operand_once(node, from, new) {
             return false;
         }
         if let Operand::Expr(e) = new {

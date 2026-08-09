@@ -690,14 +690,58 @@ impl ValuePool {
         self.collect_opaque_locals_seen(v, &mut IndexSet::default(), out);
     }
 
+    /// Push the pure-value children of `v` — the edges both leaf walks follow.
+    /// An `Opaque` is a leaf: it stands for what the graph cannot reconstruct.
+    fn push_value_children(&self, v: ValueId, stack: &mut Vec<ValueId>) {
+        match self.kind(v) {
+            ValueKind::Binary { lhs, rhs, .. } => {
+                stack.push(*lhs);
+                stack.push(*rhs);
+            }
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                stack.push(*operand);
+            }
+            ValueKind::Select { cond, then, else_ } => {
+                stack.push(*cond);
+                stack.push(*then);
+                stack.push(*else_);
+            }
+            ValueKind::LoopPhi { entry, body_iter } => {
+                stack.push(*entry);
+                stack.push(*body_iter);
+            }
+            ValueKind::FieldAccess { receiver, .. } => stack.push(*receiver),
+            ValueKind::Opaque(_)
+            | ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::Const(..) => {}
+        }
+    }
+
     /// Whether an `Opaque(Local idx)` is reachable from `v` — i.e. the promoted
     /// value reads local `idx` when extracted. The early-exit form of
     /// [`ValuePool::collect_opaque_locals`], for the "does this mention the
     /// local?" guards that decide whether a rewrite may move or drop code.
     pub fn value_reads_local(&self, v: ValueId, idx: u32) -> bool {
-        let mut leaves = IndexSet::default();
-        self.collect_opaque_locals(v, &mut leaves);
-        leaves.contains(&idx)
+        let mut stack = vec![v];
+        let mut seen: IndexSet<ValueId> = IndexSet::default();
+        while let Some(v) = stack.pop() {
+            if !seen.insert(v) {
+                continue;
+            }
+            if let ValueKind::Opaque(oid) = self.kind(v) {
+                if self.opaque_source(*oid) == Some(OpaqueSource::Local(idx)) {
+                    return true;
+                }
+                continue;
+            }
+            self.push_value_children(v, &mut stack);
+        }
+        false
     }
 
     /// [`ValuePool::collect_opaque_locals`] carrying its visited set across
@@ -719,31 +763,13 @@ impl ValuePool {
             if !seen.insert(v) {
                 continue;
             }
-            match self.kind(v).clone() {
-                ValueKind::Opaque(oid) => {
-                    if let Some(OpaqueSource::Local(idx)) = self.opaque_source(oid) {
-                        out.insert(idx);
-                    }
+            if let ValueKind::Opaque(oid) = self.kind(v) {
+                if let Some(OpaqueSource::Local(idx)) = self.opaque_source(*oid) {
+                    out.insert(idx);
                 }
-                ValueKind::Binary { lhs, rhs, .. } => {
-                    stack.push(lhs);
-                    stack.push(rhs);
-                }
-                ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
-                    stack.push(operand);
-                }
-                ValueKind::Select { cond, then, else_ } => {
-                    stack.push(cond);
-                    stack.push(then);
-                    stack.push(else_);
-                }
-                ValueKind::LoopPhi { entry, body_iter } => {
-                    stack.push(entry);
-                    stack.push(body_iter);
-                }
-                ValueKind::FieldAccess { receiver, .. } => stack.push(receiver),
-                _ => {}
+                continue;
             }
+            self.push_value_children(v, &mut stack);
         }
     }
 

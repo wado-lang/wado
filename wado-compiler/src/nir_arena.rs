@@ -1256,6 +1256,22 @@ impl Body {
         }
     }
 
+    /// Replace one operand slot of `node` holding `Operand::Value(from)` with
+    /// `new`, returning whether a slot changed. One slot per call, so a caller
+    /// planting an expression mints a fresh node for each and never pairs a
+    /// list of ids positionally against a second walk; loop until it returns
+    /// `false`.
+    pub fn replace_value_operand_once(&mut self, node: NodeRef, from: ValueId, new: Operand) -> bool {
+        let mut done = false;
+        self.for_each_operand_mut(node, |o| {
+            if !done && *o == Operand::Value(from) {
+                *o = new;
+                done = true;
+            }
+        });
+        done
+    }
+
     /// Replace every direct operand child of `node` equal to `Operand::Expr(target)`
     /// with `new`, returning whether any slot changed. Used by the engine to promote
     /// a folded subtree to an `Operand::Value` in its parent (WEP: The Live

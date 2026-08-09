@@ -74,6 +74,17 @@ pub(super) fn promoted_read_count_at(body: &Body, node: NodeRef, idx: u32) -> us
     count
 }
 
+/// How many reachable operands read `idx` through a promoted value, over the
+/// whole body — the [`promoted_read_count_at`] total. A gate that compares a
+/// whole-function tally against a scoped one must add this to *both* sides, or
+/// the equality stops meaning "every mention is in scope".
+pub(super) fn promoted_read_count(body: &Body, idx: u32) -> usize {
+    reachable_nodes(body)
+        .into_iter()
+        .map(|node| promoted_read_count_at(body, node, idx))
+        .sum()
+}
+
 /// Every reachable operand that is exactly the promoted read `Opaque(Local
 /// idx)` — the form a rewrite can replace with another operand, since the local
 /// occupies the whole slot.
@@ -100,21 +111,29 @@ pub(super) fn bare_promoted_reads(
     out
 }
 
+/// Every local a reachable operand reads *without* filling its slot — a leaf of
+/// a compound promoted value (`Binary(Opaque(Local x), 1)`). A rewrite that
+/// replaces reads of a local has no slot for these, so a pass that then drops
+/// the local must refuse them. One walk answers for every local.
+pub(super) fn buried_promoted_reads(body: &Body) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
+    let mut seen = IndexSet::default();
+    for node in reachable_nodes(body) {
+        body.for_each_operand(node, |op| {
+            if let Some(v) = op.as_value()
+                && bare_promoted_local(body, op).is_none()
+            {
+                body.values.collect_opaque_locals_seen(v, &mut seen, &mut out);
+            }
+        });
+    }
+    out
+}
+
 /// Whether any reachable operand buries `idx` inside a compound promoted value
 /// — a read [`bare_promoted_reads`] cannot hand a rewrite a slot for.
 pub(super) fn has_buried_promoted_read(body: &Body, idx: u32) -> bool {
-    reachable_nodes(body).into_iter().any(|node| {
-        let mut buried = false;
-        body.for_each_operand(node, |op| {
-            if let Some(v) = op.as_value()
-                && body.values.value_reads_local(v, idx)
-                && !is_local_operand(body, op, idx)
-            {
-                buried = true;
-            }
-        });
-        buried
-    })
+    buried_promoted_reads(body).contains(&idx)
 }
 
 /// Every node reachable from the body root. A body with no block structure is a
