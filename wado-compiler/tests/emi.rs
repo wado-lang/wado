@@ -25,6 +25,32 @@
 //! ```
 //!
 //! Knobs: `WADO_EMI_JOBS`, `WADO_EMI_FILTER`, `WADO_EMI_LIMIT`, `WADO_EMI_OUT`.
+//!
+//! ## Next
+//!
+//! An empty guard only changes the shape a pass sees. A guard with a body makes
+//! the dead region read and write the live program, which is what the analyses
+//! most likely to be wrong — alias, mod/ref, loop — actually rest on.
+//!
+//! - [ ] Payload: `x = builtin::black_box(x)` for each `let mut` in scope. It
+//!       is an opaque write to a real binding and needs no type inference,
+//!       since `black_box` is generic and the assignment is the identity.
+//!       Attacks `licm`, `store_load_forward`, `field_scalarize`, `copy_prop`,
+//!       `sroa`.
+//! - [ ] Payload: statements harvested from elsewhere in the same function,
+//!       type-correct by construction wherever their free variables are in
+//!       scope.
+//! - [ ] `while builtin::black_box(false) { … }` as a second guard shape, for
+//!       the loop passes.
+//! - [ ] Reduction: delta-debug the injection set to the guard that matters,
+//!       then bisect `WADO_LIST_PASSES` with `WADO_SKIP_PASS` to name the pass,
+//!       and write the reduced program out as a fixture.
+//! - [ ] A bounded CI run over a rotating slice of the corpus.
+//!
+//! One more gap the calibration cannot see: a site whose offset lands inside a
+//! string literal still parses, so [`injection_sites`] would keep it. Nothing
+//! produces such an offset now that interpolation spans are rebased, but
+//! checking a site against the token boundaries would close it by construction.
 
 mod common;
 
