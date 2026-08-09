@@ -2002,8 +2002,16 @@ impl Parser {
         let mut effect_ids = vec![(self.alloc_ast_id(), first_span)];
 
         while self.check(&TokenKind::Comma) {
-            // Lookahead: if the token after comma is `ident:`, this is a parameter
-            // in the enclosing parameter list, not another effect. Stop here.
+            // Only an effect name or `stores[...]` continues the list. Anything
+            // else after the comma belongs to the enclosing list: a trailing
+            // comma before its terminator, or the `ident:` that starts the next
+            // parameter.
+            if !matches!(
+                self.peek_nth(1).kind,
+                TokenKind::Ident(_) | TokenKind::Stores
+            ) {
+                break;
+            }
             if matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
                 && self.peek_nth(2).kind == TokenKind::Colon
             {
@@ -3804,12 +3812,13 @@ impl Parser {
             spec_ok = self.expect_gt().is_ok();
         }
 
-        // After `Name::<…>`, only `::method(…)` continues the static-method-call
-        // path. A bare `Name::<…>` (used as a value) backtracks below so the
-        // outer postfix loop sees the `::<…>` again and either parses it as a
-        // turbofish-attached identifier or rejects a duplicate turbofish.
-        // `Name::<A>::<B>` falls into the same backtrack: the second `<` is
-        // not a method identifier.
+        // After `Name::<…>`, `::method(…)` continues the static-method-call path
+        // and `::Case` (no call) is a turbofish-qualified path selecting a
+        // payload-less case. A bare `Name::<…>` (used as a value) backtracks
+        // below so the outer postfix loop sees the `::<…>` again and either
+        // parses it as a turbofish-attached identifier or rejects a duplicate
+        // turbofish. `Name::<A>::<B>` falls into the same backtrack: the second
+        // `<` is not a method identifier.
         if spec_ok
             && self.check(&TokenKind::ColonColon)
             && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
@@ -3825,6 +3834,33 @@ impl Parser {
                 } else {
                     Vec::new()
                 };
+
+            // `Name::<Args>::Case` with no call: the qualified path the
+            // untargeted `Name::Case` produces, with the type args pinned on
+            // it. A method-level turbofish rules this out — `method::<U>` is
+            // never a case name — so that keeps expecting the call.
+            if method_type_args.is_empty() && !self.check(&TokenKind::LParen) {
+                let path_span = start_span.merge(&method_span);
+                return Ok(Expr::Ident(IdentExpr {
+                    id: self.alloc_ast_id(),
+                    name: format!("{name}::{method}"),
+                    span: path_span,
+                    segments: vec![
+                        PathSegment {
+                            id: self.alloc_ast_id(),
+                            name,
+                            span: start_span,
+                        },
+                        PathSegment {
+                            id: self.alloc_ast_id(),
+                            name: method,
+                            span: method_span,
+                        },
+                    ],
+                    type_args,
+                    type_args_on_prefix: true,
+                }));
+            }
 
             self.expect(&TokenKind::LParen)?;
             let (args, has_trailing_comma) = self.parse_arg_list()?;
@@ -3855,6 +3891,7 @@ impl Parser {
             span: start_span,
             segments: Vec::new(),
             type_args: Vec::new(),
+            type_args_on_prefix: false,
         }))
     }
 
@@ -3909,6 +3946,7 @@ impl Parser {
             span: path_span,
             segments,
             type_args: Vec::new(),
+            type_args_on_prefix: false,
         }))
     }
 
@@ -3961,6 +3999,7 @@ impl Parser {
                 name,
                 segments: Vec::new(),
                 type_args: Vec::new(),
+                type_args_on_prefix: false,
                 span: start_span,
             }));
         }
@@ -6101,6 +6140,7 @@ impl Parser {
                             name: field_name.clone(),
                             segments: Vec::new(),
                             type_args: Vec::new(),
+                            type_args_on_prefix: false,
                             span: field_name_span,
                         }),
                         true,
@@ -7243,6 +7283,43 @@ line 2
         if let Item::Function(func) = &module.items[0] {
             assert!(func.params.is_empty());
         }
+    }
+
+    #[test]
+    fn test_param_list_trailing_comma() {
+        // A `fn(...) with E` parameter type ends its effect list at the
+        // enclosing list's terminator, not just before a following `ident:`.
+        // The formatter emits exactly this shape when it folds a signature.
+        for (source, params) in [
+            ("fn f(x: i32, y: i32,) {}", 2),
+            ("fn f(x: i32, mut g: fn mut() -> i32,) {}", 2),
+            (
+                "fn f<effect E>(x: i32, mut g: fn mut() with E,) with E {}",
+                2,
+            ),
+            // `with E, Stdout` is the parameter type's own effect list — a
+            // comma after `with` continues it, so this declares one parameter.
+            (
+                "fn f<effect E>(mut g: fn mut() with E, Stdout,) with E, Stdout {}",
+                1,
+            ),
+        ] {
+            let module = parse(source).unwrap_or_else(|e| panic!("{source}: {e:?}"));
+            let Item::Function(func) = &module.items[0] else {
+                panic!("{source}: expected a function");
+            };
+            assert_eq!(func.params.len(), params, "{source}");
+        }
+    }
+
+    #[test]
+    fn test_param_list_effect_list_still_takes_several_effects() {
+        // The terminator rule must not cut a genuine multi-effect list short.
+        let module = parse("fn f(mut g: fn mut() with Stdout, Stderr) {}").unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected a function");
+        };
+        assert_eq!(func.params.len(), 1);
     }
 
     #[test]

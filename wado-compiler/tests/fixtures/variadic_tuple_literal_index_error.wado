@@ -1,0 +1,16 @@
+// A literal index landing on a variadic pack is rejected: neither the bound
+// nor the element type is decidable before the pack expands. Accepting it let
+// `all.2` alias field 0 on a two-element expansion, and typed `all.0` as the
+// whole substituted tuple.
+
+fn lengths<..T>(t: &[..T]) -> i32 {
+    let all = [for let v of t { 5 }];
+    return all.0 + all.1 + all.2;
+}
+
+test "unreachable: the index above is rejected" {
+    assert lengths(&[1, 2]) == 15;
+}
+
+__DATA__
+{"test": {}, "compile_error": "lands on a variadic pack"}

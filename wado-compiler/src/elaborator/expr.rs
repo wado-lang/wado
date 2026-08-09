@@ -14,6 +14,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
+use super::call::turbofish_holes;
 use super::infer::InferCtx;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
@@ -494,6 +495,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name: canon,
                 segments: ident.segments.clone(),
                 type_args: ident.type_args.clone(),
+                type_args_on_prefix: ident.type_args_on_prefix,
                 span: ident.span,
             };
             &canonical_ident
@@ -701,6 +703,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// A turbofish on a case path (`Maybe::<i32>::Nothing`) must name exactly
+    /// the declaring type's parameters; an enum or a flags type declares none.
+    fn check_case_turbofish_arity(
+        &mut self,
+        ident: &ast::IdentExpr,
+        type_name: &str,
+        expected: usize,
+    ) {
+        if ident.type_args.is_empty() || ident.type_args.len() == expected {
+            return;
+        }
+        let expected_text = match expected {
+            0 => "no type arguments".to_string(),
+            1 => "1 type argument".to_string(),
+            n => format!("{n} type arguments"),
+        };
+        let found = ident.type_args.len();
+        let _ = self.emit(TypeError::InvalidLiteral {
+            message: format!("`{type_name}` takes {expected_text}, the turbofish supplies {found}"),
+            span: ident.span,
+        });
+    }
+
     /// Resolve a qualified case reference `Type::Case` — a payload-less
     /// variant case, an enum case, or a flags member. With `in_module: None`
     /// the type name resolves in the current scope (imports + local); with
@@ -745,6 +770,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|(i, c)| (i, c.clone()))
             {
                 self.record_qualified_case(ident, prefix, case_data.ast_id);
+                self.check_case_turbofish_arity(ident, prefix, variant_info.type_params.len());
                 // Unit variant - payload must be unit type
                 let payload_is_unit = matches!(
                     self.tysys.type_table.borrow().get(case_data.payload),
@@ -767,6 +793,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_id_of_decl(variant_info.defined_at)
                 } else {
                     {
+                        // `Maybe::<i32>::Nothing` pins its slots here: a
+                        // payload-less case has no payload to infer from, so
+                        // the turbofish is the only source besides the
+                        // expected type.
+                        let holes = turbofish_holes(&ident.type_args);
+                        let explicit_args: Vec<TypeId> = ident
+                            .type_args
+                            .iter()
+                            .enumerate()
+                            .map(|(i, t)| {
+                                if holes[i] {
+                                    TypeTable::UNKNOWN
+                                } else {
+                                    self.resolve_type(t)
+                                }
+                            })
+                            .collect();
                         let inferred = self.tysys.infer_variant_type_args(
                             &self.annotate_ctx,
                             prefix,
@@ -774,8 +817,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &case_data,
                             None,
                             expected_type,
-                            &[],
-                            &[],
+                            &explicit_args,
+                            &holes,
                         );
                         self.defer_uninferable_variant(inferred, prefix, &variant_info, ident.span)
                     }
@@ -803,6 +846,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(case_data) = enum_info.find_case(suffix).cloned()
         {
             self.record_qualified_case(ident, prefix, case_data.ast_id);
+            self.check_case_turbofish_arity(ident, prefix, 0);
             let enum_type = self
                 .tysys
                 .type_table
@@ -824,6 +868,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
         {
             self.record_qualified_case(ident, prefix, member.ast_id);
+            self.check_case_turbofish_arity(ident, prefix, 0);
             // Stage 7-B: reify rebuilds the flags-member `IntLiteral`.
             return Some(flags_info.type_id);
         }
@@ -1144,6 +1189,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Element type at a literal index into a tuple, which may carry a
+    /// variadic pack.
+    ///
+    /// An index that lands on the pack is rejected: the pack's arity and its
+    /// per-position types are only known once it expands, so neither the bound
+    /// nor the element type can be decided here. Only the scalar prefix ahead
+    /// of the pack (`[i32, ..T]`.0) has a fixed position.
+    pub(super) fn tuple_literal_index_type(
+        type_table: &std::cell::RefCell<TypeTable>,
+        elements: &[TypeId],
+        index: usize,
+    ) -> Result<TypeId, String> {
+        let table = type_table.borrow();
+        let Some(pack_pos) = elements
+            .iter()
+            .position(|&t| matches!(table.get(t), ResolvedType::TypePack { .. }))
+        else {
+            return elements.get(index).copied().ok_or_else(|| {
+                format!(
+                    "tuple index {index} out of bounds, tuple has {} elements",
+                    elements.len()
+                )
+            });
+        };
+        if index < pack_pos {
+            return Ok(elements[index]);
+        }
+        Err(format!(
+            "tuple index {index} lands on a variadic pack, whose arity and element \
+             types are only known once it expands; walk the tuple with `for-of` or \
+             a comprehension instead"
+        ))
+    }
+
     /// Look up field type from a struct or tuple type
     pub(super) fn lookup_field_type(
         &mut self,
@@ -1194,18 +1273,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if TypeTable::is_tuple_type(&name)
                     && let Ok(index) = field_name.parse::<usize>()
                 {
-                    if index < type_args.len() {
-                        return (index as u32, type_args[index]);
+                    match Self::tuple_literal_index_type(&self.tysys.type_table, &type_args, index)
+                    {
+                        Ok(elem) => return (index as u32, elem),
+                        Err(message) => {
+                            let _ = self.emit(TypeError::InvalidLiteral { message, span });
+                            return (0, TypeTable::UNKNOWN);
+                        }
                     }
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!(
-                            "tuple index {} out of bounds, tuple has {} elements",
-                            index,
-                            type_args.len()
-                        ),
-                        span,
-                    });
-                    return (0, TypeTable::UNKNOWN);
                 }
                 // Clone fields to avoid borrow issues
                 let fields_clone = self.lookup_struct_fields_in(&name, &module_source).cloned();
@@ -1445,19 +1520,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && !util::is_float_only_literal(repr)
                 && let Ok(idx) = repr.parse::<usize>()
             {
-                if idx < elements.len() {
-                    let field_type = elements[idx];
-                    return field_type;
-                } else {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!(
-                            "tuple index {} out of bounds, tuple has {} elements",
-                            idx,
-                            elements.len()
-                        ),
-                        span: index.span,
-                    });
-                    return TypeTable::UNKNOWN;
+                match Self::tuple_literal_index_type(&self.tysys.type_table, elements, idx) {
+                    Ok(elem) => return elem,
+                    Err(message) => {
+                        let _ = self.emit(TypeError::InvalidLiteral {
+                            message,
+                            span: index.span,
+                        });
+                        return TypeTable::UNKNOWN;
+                    }
                 }
             }
             // Unrolling fixes the index to a literal per element.

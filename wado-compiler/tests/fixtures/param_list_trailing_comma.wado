@@ -1,0 +1,41 @@
+// A trailing comma in a parameter list. The effect list of a `fn(...) with E`
+// parameter type stopped at the enclosing list's terminator only when an
+// `ident:` followed, so a trailing comma after such a parameter was read as
+// the start of another effect name and the list ran into the `)`. The
+// formatter emits exactly that shape when it folds a long signature.
+//
+// The layout here is the point of the test, so do not run `wado format -w` on
+// this file — `[format] exclude = ["tests/**"]` keeps the directory walk off
+// it, but naming the file explicitly bypasses that.
+
+fn plain(x: i32, y: i32,) -> i32 {
+    return x + y;
+}
+
+fn with_closure(x: i32, mut f: fn mut() -> i32,) -> i32 {
+    return x + f();
+}
+
+fn with_effect<effect E>(x: i32, mut f: fn mut() with E,) -> i32 with E {
+    f();
+    return x;
+}
+
+// A comma inside the clause still continues it: this declares one parameter
+// carrying two effects, not two parameters.
+fn two_effects<effect E>(mut f: fn mut() with E, Stdout,) -> i32 with E, Stdout {
+    f();
+    return 1;
+}
+
+test "a trailing comma closes the list, whatever the last parameter is" {
+    assert plain(1, 2) == 3;
+    assert with_closure(1, || 2) == 3;
+
+    let mut n = 0;
+    assert with_effect(5, || { n += 1; }) == 5;
+    assert n == 1;
+}
+
+__DATA__
+{"test": {}}

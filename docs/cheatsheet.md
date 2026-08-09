@@ -397,9 +397,11 @@ let none_val: Option<i32> = null;                        // Option::None
 let ok_val: Result<i32, String> = Result::Ok(42);
 let err_val: Result<i32, String> = Result::Err("fail");
 
-// Explicit turbofish (required when inference is insufficient)
+// Explicit turbofish (required when inference is insufficient). It sits on the
+// path's prefix, and a payload-less case takes it the same way.
 let opt = Option::<i32>::Some(42);
 let res = Result::<i32, String>::Ok(42);
+let none = Option::<i32>::None;
 ```
 
 See Control Flow for pattern matching with `match`, `if let`, and `matches`.
@@ -768,6 +770,19 @@ impl<..T: Doubled> Doubled for [..T] {
         return [for let v of *self { v.doubled() }];
     }
 }
+
+// A pack is walked, never indexed by a literal: its arity and per-position
+// types are only known once it expands. Only a scalar ahead of the pack has a
+// fixed position.
+fn head<A, ..T>(t: &[A, ..T]) -> A {
+    return t.0;          // OK: ahead of the pack
+    // return t.1;       // Error: lands on the pack
+}
+
+// A pack bound through another parameter's associated type is projected from
+// it, so the call site names neither.
+fn arity<T: Parts<Items = [..P]>, ..P>(t: &T) -> i32 { ... }
+arity(&tri);             // ..P comes from `Tri::Items`
 ```
 
 ### Reference Storage

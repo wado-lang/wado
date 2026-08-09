@@ -176,6 +176,21 @@ pub(crate) fn decl_identity_core(
     None
 }
 
+/// Whether `ty` spells one of the declaration's own type packs
+/// (`Trait<Assoc = [..P]>`). Such a binding names a parameter to project into,
+/// not an expectation to enforce — and `..P` belongs to the declaration's
+/// scope, so resolving it at a use site would not find it.
+fn mentions_type_pack(ty: &ast::Type) -> bool {
+    match ty {
+        ast::Type::TypePackSpread(..) => true,
+        ast::Type::NamespacedGeneric(ns) => ns.args.iter().any(mentions_type_pack),
+        ast::Type::Generic(generic) => generic.args.iter().any(mentions_type_pack),
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => mentions_type_pack(inner),
+        ast::Type::Tuple(elements) => elements.iter().any(mentions_type_pack),
+        _ => false,
+    }
+}
+
 /// Whether an AST type is phrased against `Self` anywhere, and so only means
 /// something where an implementing type is bound.
 fn mentions_self(ty: &ast::Type) -> bool {
@@ -1882,7 +1897,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for constraint in &bound.assoc_types {
             // `Self` means the implementing type, which this site has no
             // binding for; `enforce_impl_assoc_type_bounds` owns those.
-            if mentions_self(&constraint.ty) {
+            if mentions_self(&constraint.ty) || mentions_type_pack(&constraint.ty) {
                 continue;
             }
             let Some(actual) = self.tysys.type_table.borrow().resolve_assoc_type_of_trait(

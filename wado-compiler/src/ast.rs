@@ -2651,6 +2651,11 @@ pub struct IdentExpr {
     /// Call-site turbofish (`identity::<i32>(x)`) is recorded on `CallExpr.type_args`
     /// instead, so this is empty for identifiers used directly as a call callee.
     pub type_args: Vec<Type>,
+    /// Whether `type_args` were written on the path's *prefix* rather than on
+    /// the identifier itself — `Maybe::<i32>::Nothing` (a turbofish-qualified
+    /// case) as against `ns::f::<i32>` (a generic function reference). Only the
+    /// former admits a `_` slot, which the expected type fills.
+    pub type_args_on_prefix: bool,
 }
 
 #[derive(Debug, Clone)]

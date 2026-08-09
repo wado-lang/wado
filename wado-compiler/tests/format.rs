@@ -248,6 +248,53 @@ fn test_format_turbofish_wildcard_roundtrips() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// A turbofish on a case path sits on the path's *prefix*
+/// (`Maybe::<i32>::Nothing`). Appending it to the whole name would emit
+/// `Maybe::Nothing::<i32>`, which re-parses as the identifier's own turbofish
+/// and changes the AST.
+#[test]
+fn test_format_case_path_turbofish_stays_on_the_prefix() {
+    let source = concat!(
+        "variant Maybe<T> {\n    Just(T),\n    Nothing,\n}\n",
+        "\n",
+        "fn run() {\n    let a = Option::<i32>::None;\n    let b = Maybe::<String>::Nothing;\n}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("Option::<i32>::None"),
+        "expected the turbofish to stay on the prefix, got:\n{formatted}"
+    );
+    assert!(
+        formatted.contains("Maybe::<String>::Nothing"),
+        "expected the turbofish to stay on the prefix, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+/// A folded parameter list ends with a trailing comma, and the last parameter
+/// may carry a `with` clause. The effect list stopped at the enclosing list's
+/// terminator only for a following `ident:`, so the formatter's own output —
+/// `mut f: fn mut() with E,` before `)` — did not re-parse.
+#[test]
+fn test_format_folded_params_keep_a_trailing_comma() {
+    let source = concat!(
+        "fn a_function_with_a_very_long_name_indeed<effect E>(",
+        "first_parameter_name: i32, second_parameter_name: String, ",
+        "third_parameter_name: bool, mut the_callback_parameter: fn mut() with E",
+        ") -> i32 with E {\n    the_callback_parameter();\n    return first_parameter_name;\n}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("mut the_callback_parameter: fn mut() with E,\n)"),
+        "expected a folded list with a trailing comma, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// The visibility ladder (`internal` / `pub` / file-private) and the
 /// orthogonal `export` flag must survive formatting. `export` implies `pub`,
 /// so the canonical form drops the redundant `pub` (never `pub export`).

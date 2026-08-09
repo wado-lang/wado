@@ -99,6 +99,12 @@ entry (`T::from_wire(…)`) dispatches the same way a walk does. A variant is no
 exception: `Variant::Case` owns that namespace, but a name that is not a case
 falls through to the blanket.
 
+A free function may carry the same bound (`fn render<L: ReflectFlags<Members =
+[..M]>, ..M>(v: &L)`) and is called without naming either parameter: the pack
+projects from the subject's member channel, which the call site computes since
+the synthesized impls are not registered until after elaboration. A derivation
+itself stays an `impl` — only that is picked up by a bound.
+
 A derivation's method may carry type parameters of its own — serde's
 `serialize<S: Serializer>`. The instance keys on the receiver, the bound's pack,
 and the method's own arguments together, so one blanket body serves every

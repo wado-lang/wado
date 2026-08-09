@@ -1,0 +1,70 @@
+// A pack walk nested inside another walk over the same pack. The outer unroll
+// pins the pack's substitution to the one element it binds, so the inner
+// unroll could no longer read the source tuple and fell back to the mapped
+// element: a body call returning the pack element (`StructField<S, F>::get`)
+// was typed as the member handle, and the element block declared that as its
+// result type — invalid Wasm at -O0.
+
+trait Rebuild {
+    fn rebuild(&self) -> List<Self>;
+}
+
+/// One rebuilt copy per field: the outer walk picks the field, the inner
+/// comprehension reads every field's value back.
+impl<S: ReflectStruct<FieldTypes = [..F]>, ..F> Rebuild for S {
+    fn rebuild(&self) -> List<S> {
+        let members = ReflectStruct::<S>::members();
+        let mut out = List::<S>::with_capacity(4);
+        for let [i, field] of members.enumerate() {
+            let fields = [for let f of members { f.get(self) }];
+            out.push(ReflectStruct::<S>::from_fields(fields));
+        }
+        return out;
+    }
+}
+
+trait Zero {
+    fn zeroed(&self) -> List<Self>;
+}
+
+/// The same nesting with a write into the rebuilt tuple, so the inner walk's
+/// element type has to survive a per-index slot assignment too.
+impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Default> Zero for S {
+    fn zeroed(&self) -> List<S> {
+        let members = ReflectStruct::<S>::members();
+        let mut out = List::<S>::with_capacity(4);
+        for let [i, field] of members.enumerate() {
+            let mut fields = [for let f of members { f.get(self) }];
+            fields[i] = F::default();
+            out.push(ReflectStruct::<S>::from_fields(fields));
+        }
+        return out;
+    }
+}
+
+struct Mixed {
+    count: i32,
+    label: String,
+    on: bool,
+}
+
+test "a nested walk over the same pack rebuilds every field" {
+    let m = Mixed { count: 7, label: "hi", on: true };
+    let copies = m.rebuild();
+    assert copies.len() == 3;
+    for let c of copies {
+        assert c == m;
+    }
+}
+
+test "a nested walk writes one slot per outer element" {
+    let m = Mixed { count: 7, label: "hi", on: true };
+    let zeroed = m.zeroed();
+    assert zeroed.len() == 3;
+    assert zeroed[0] == Mixed { count: 0, label: "hi", on: true };
+    assert zeroed[1] == Mixed { count: 7, label: "", on: true };
+    assert zeroed[2] == Mixed { count: 7, label: "hi", on: false };
+}
+
+__DATA__
+{"test": {}}
