@@ -13,8 +13,7 @@
 
 use std::fs;
 
-mod common;
-use common::wado_in;
+use crate::common::wado_in;
 use predicates::prelude::*;
 
 /// A pass-through generator: it emits the primary schema's contents verbatim as

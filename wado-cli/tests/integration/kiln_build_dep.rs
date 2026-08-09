@@ -10,8 +10,7 @@
 use predicates::prelude::*;
 use std::fs;
 
-mod common;
-use common::wado_in;
+use crate::common::wado_in;
 
 #[test]
 fn generator_resolved_by_build_dependency_nickname() {

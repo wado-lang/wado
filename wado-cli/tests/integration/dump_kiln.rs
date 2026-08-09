@@ -9,8 +9,7 @@
 
 use std::fs;
 
-mod common;
-use common::wado_in;
+use crate::common::wado_in;
 use predicates::prelude::*;
 
 /// Ignores the schema content and always emits the same fixed Wado module —

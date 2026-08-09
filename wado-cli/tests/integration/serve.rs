@@ -4,8 +4,6 @@
 //! send Unix signals — none of which port to Windows, so the file is gated
 //! `#[cfg(unix)]`.
 
-#![cfg(unix)]
-
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
@@ -13,8 +11,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-mod common;
-use common::{project_root, wado_bin};
+use crate::common::{project_root, wado_bin};
 
 fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

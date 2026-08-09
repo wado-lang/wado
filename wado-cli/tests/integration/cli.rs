@@ -5,8 +5,7 @@
 
 use predicates::prelude::*;
 
-mod common;
-use common::{custom_sections, wado, wado_in};
+use crate::common::{custom_sections, wado, wado_in};
 
 /// A project under a directory whose name contains a space must compile. The
 /// entry is passed by ABSOLUTE path so the Kiln harvest uses an absolute

@@ -15,8 +15,7 @@
 use predicates::prelude::*;
 use std::fs;
 
-mod common;
-use common::wado_in;
+use crate::common::wado_in;
 
 /// Lay out an `app` package that depends, via a relative `path` dependency,
 /// on a sibling `greet` library package, and import `greet`'s exported

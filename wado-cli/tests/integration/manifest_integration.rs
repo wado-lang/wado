@@ -3,8 +3,7 @@
 use predicates::prelude::*;
 use std::fs;
 
-mod common;
-use common::wado_in;
+use crate::common::wado_in;
 
 #[test]
 fn test_init_creates_manifest() {

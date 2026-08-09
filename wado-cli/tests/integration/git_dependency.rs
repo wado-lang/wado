@@ -9,8 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-mod common;
-use common::wado_in;
+use crate::common::wado_in;
 
 fn git(dir: &Path, args: &[&str]) {
     let status = Command::new("git")

@@ -9,8 +9,7 @@
 
 use std::fs;
 
-mod common;
-use common::{custom_sections, wado_in};
+use crate::common::{custom_sections, wado_in};
 use predicates::prelude::*;
 
 /// A generator that emits a fixed valid-Wado parser, ignoring its input. The

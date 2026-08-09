@@ -12,8 +12,6 @@
 //!
 //! See WEP 2026-04-12 §"M6.7" (the `wado-cli/tests/kiln_compile.rs` bullet).
 
-#![allow(unused_crate_dependencies)]
-
 use std::path::PathBuf;
 
 use wado_cli::compiler_host::{FilesystemCompilerHost, KilnComponentCache};
@@ -22,8 +20,7 @@ use wado_cli::kiln_provider::{CACHE_DIR, CliGeneratorProvider, INDEX_FILE};
 use wado_compiler::kiln::{GeneratorModule, InvocationPath};
 use wado_compiler::{CompilerHost, GeneratorInputFile, GeneratorRequest, LogLevel};
 
-mod common;
-use common::runtime;
+use crate::common::runtime;
 
 const MINIMAL_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";

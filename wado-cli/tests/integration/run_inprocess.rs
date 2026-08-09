@@ -9,10 +9,8 @@ use std::sync::{Mutex, OnceLock};
 use wado_cli::args::CliExit;
 use wado_cli::compile::{self, CompileOptions, OptLevel, OutputFormat};
 
-mod common;
-
 fn fixture(rel: &str) -> PathBuf {
-    common::project_root().join(rel)
+    crate::common::project_root().join(rel)
 }
 
 // `set_current_dir` is process-wide, so cwd-mutating tests serialize on this.

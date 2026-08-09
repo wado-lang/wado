@@ -10,8 +10,7 @@ use std::time::Duration;
 use predicates::prelude::*;
 use serde_json::{Value, json};
 
-mod common;
-use common::{project_root, wado, wado_bin, wado_in};
+use crate::common::{project_root, wado, wado_bin, wado_in};
 
 /// Cap on `read_message` so a regression that stops the LSP from
 /// responding fails the test in seconds rather than hanging until the

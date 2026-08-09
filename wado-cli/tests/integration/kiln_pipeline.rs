@@ -20,8 +20,7 @@ use wado_compiler::compiler_host::{
 use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
 use wado_manifest::Manifest;
 
-mod common;
-use common::runtime;
+use crate::common::runtime;
 
 struct StubProvider {
     bytes: Vec<u8>,

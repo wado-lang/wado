@@ -6,12 +6,9 @@
 //! ad-hoc use. This test pins that surface so a regression in main.wado
 //! is caught even though no production caller depends on it.
 
-#![allow(unused_crate_dependencies)]
-
 use predicates::prelude::*;
 
-mod common;
-use common::wado;
+use crate::common::wado;
 
 #[test]
 fn gale_gen_calculator_emits_generated_parser() {
