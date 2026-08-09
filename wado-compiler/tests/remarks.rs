@@ -307,6 +307,43 @@ export fn run() with Stdout {
 }
 
 #[test]
+fn a_gate_on_a_param_derived_global_is_remarked() {
+    // `core:log`'s shape: the gate reads a global derived from the parameter,
+    // never the parameter itself, so nothing at the branch names `log.level`.
+    let remarks = remarks_for_params(
+        r#"
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: String = "trace";
+
+global STATIC_LEVEL: i32 = level_from_str(LOG_LEVEL);
+
+fn level_from_str(s: String) -> i32 {
+    if s == "trace" {
+        return 0;
+    }
+    return 2;
+}
+
+export fn run() with Stdout {
+    if STATIC_LEVEL < 2 {
+        println(`tracing`);
+    }
+}
+"#,
+        &[("log.level", "info")],
+    );
+    assert!(
+        remarks.iter().any(|r| r.contains(
+            "compile-time parameter `log.level` is still read here through global \
+             `STATIC_LEVEL`"
+        )),
+        "expected a remark naming the derived global, got {remarks:?}"
+    );
+}
+
+#[test]
 fn param_used_outside_a_gate_is_not_remarked() {
     // Printing a parameter is an ordinary use of its value. The read survives
     // by design, and the branch it sits under is decided by something else.

@@ -236,14 +236,7 @@ fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
 /// failed, and is not reported. Restricted to the entry module's functions,
 /// like the value-copy remarks.
 pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
-    let params: IndexMap<(ModuleSource, String), String> = package
-        .globals
-        .iter()
-        .filter_map(|g| {
-            let name = g.param_name.clone()?;
-            Some(((g.module_source.clone(), g.name.clone()), name))
-        })
-        .collect();
+    let params = parameter_decided_globals(package);
     if params.is_empty() {
         return Vec::new();
     }
@@ -266,8 +259,109 @@ pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
     scan.remarks
 }
 
+/// Every global a build-time parameter decides the value of, and how.
+///
+/// The `#[param]` globals themselves, plus any global assigned from one —
+/// which is what `core:log` reads at its gate
+/// (`global LOG_STATIC_LEVEL: Level = level_from_str(LOG_LEVEL)`), so a scan
+/// knowing only the parameter globals stayed silent on the very shape the
+/// remark exists for. `globals::extract` has moved such an initializer into
+/// `__initialize_module` by now, so the assignment is an ordinary
+/// `GlobalVarSet` in a function body.
+fn parameter_decided_globals(package: &NirPackage) -> IndexMap<GlobalKey, ParamOrigin> {
+    let mut decided: IndexMap<GlobalKey, ParamOrigin> = package
+        .globals
+        .iter()
+        .filter_map(|g| {
+            let param = g.param_name.clone()?;
+            let key = (g.module_source.clone(), g.name.clone());
+            Some((key, ParamOrigin { param, via: None }))
+        })
+        .collect();
+    if decided.is_empty() {
+        return decided;
+    }
+
+    // A chain (`A = f(PARAM); B = g(A)`) settles in as many rounds as it is
+    // long, and each round only grows the map, so this terminates.
+    loop {
+        let mut grew = false;
+        for func_rc in &package.functions {
+            let func = func_rc.borrow();
+            let Some(body) = &func.body else {
+                continue;
+            };
+            for (assigned, value) in global_assignments(body) {
+                if decided.contains_key(&assigned) {
+                    continue;
+                }
+                let Some(param) = reads_decided_global(body, value, &decided) else {
+                    continue;
+                };
+                let via = Some(assigned.1.clone());
+                decided.insert(assigned, ParamOrigin { param, via });
+                grew = true;
+            }
+        }
+        if !grew {
+            return decided;
+        }
+    }
+}
+
+/// Which parameter decides a global, and the global's own name when the gate
+/// will not name the parameter itself.
+struct ParamOrigin {
+    param: String,
+    via: Option<String>,
+}
+
+/// Every `GlobalVarSet` reachable from `body`'s root, as the global it writes
+/// and the operand it writes there.
+fn global_assignments(body: &Body) -> Vec<(GlobalKey, crate::nir_arena::Operand)> {
+    let mut out = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value,
+            } = &body.exprs[e].kind
+        {
+            out.push(((module_source.clone(), name.clone()), *value));
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
+}
+
+/// The parameter deciding some global that the expression rooted at `op` reads.
+fn reads_decided_global(
+    body: &Body,
+    op: crate::nir_arena::Operand,
+    decided: &IndexMap<GlobalKey, ParamOrigin>,
+) -> Option<String> {
+    let mut stack = vec![NodeRef::Expr(op.as_expr()?)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } = &body.exprs[e].kind
+            && let Some(origin) = decided.get(&(module_source.clone(), name.clone()))
+        {
+            return Some(origin.param.clone());
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    None
+}
+
+type GlobalKey = (ModuleSource, String);
+
 struct ParamGateScan<'a> {
-    params: &'a IndexMap<(ModuleSource, String), String>,
+    params: &'a IndexMap<GlobalKey, ParamOrigin>,
     /// `(parameter, gate span)` pairs already remarked on. A scrutinee may read
     /// the parameter twice and inlining copies one gate into every caller; the
     /// set spans the package so one source gate yields one remark.
@@ -308,15 +402,20 @@ impl ParamGateScan<'_> {
         else {
             return;
         };
-        let Some(param) = self.params.get(&(module_source.clone(), name.clone())) else {
+        let Some(origin) = self.params.get(&(module_source.clone(), name.clone())) else {
             return;
         };
+        let param = &origin.param;
         if !self.reported.insert((param.clone(), span)) {
             return;
         }
+        let read = match &origin.via {
+            Some(global) => format!("is still read here through global `{global}`"),
+            None => "is still read here".to_string(),
+        };
         self.remarks.push(Remark {
             message: format!(
-                "compile-time parameter `{param}` is still read here, so this branch is \
+                "compile-time parameter `{param}` {read}, so this branch is \
                  decided at run time; the code it guards was not stripped"
             ),
             span,
