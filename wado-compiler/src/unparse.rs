@@ -1608,18 +1608,15 @@ impl<'a> Unparser<'a> {
                     .type_args_on_prefix
                     .then(|| i.name.split_once("::"))
                     .flatten();
-                match split {
-                    Some((prefix, suffix)) => {
-                        self.output.push_str(prefix);
+                if let Some((prefix, suffix)) = split {
+                    self.output.push_str(prefix);
+                    self.unparse_turbofish(&i.type_args);
+                    self.output.push_str("::");
+                    self.output.push_str(suffix);
+                } else {
+                    self.output.push_str(&i.name);
+                    if !i.type_args.is_empty() {
                         self.unparse_turbofish(&i.type_args);
-                        self.output.push_str("::");
-                        self.output.push_str(suffix);
-                    }
-                    None => {
-                        self.output.push_str(&i.name);
-                        if !i.type_args.is_empty() {
-                            self.unparse_turbofish(&i.type_args);
-                        }
                     }
                 }
             }
@@ -3240,18 +3237,15 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
                 .type_args_on_prefix
                 .then(|| i.name.split_once("::"))
                 .flatten();
-            match split {
-                Some((prefix, suffix)) => {
-                    output.push_str(prefix);
+            if let Some((prefix, suffix)) = split {
+                output.push_str(prefix);
+                unparse_turbofish_into(&i.type_args, output);
+                output.push_str("::");
+                output.push_str(suffix);
+            } else {
+                output.push_str(&i.name);
+                if !i.type_args.is_empty() {
                     unparse_turbofish_into(&i.type_args, output);
-                    output.push_str("::");
-                    output.push_str(suffix);
-                }
-                None => {
-                    output.push_str(&i.name);
-                    if !i.type_args.is_empty() {
-                        unparse_turbofish_into(&i.type_args, output);
-                    }
                 }
             }
         }

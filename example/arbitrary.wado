@@ -121,7 +121,7 @@ impl<..T: Arbitrary> Arbitrary for [..T] {
 /// A unit case's payload. `CasePayloads` spells it `()`, so every variant
 /// with a payload-less case needs it.
 impl Arbitrary for () {
-    fn arbitrary(g: &mut Gen) -> () {
+    fn arbitrary(g: &mut Gen) {
         return ();
     }
 }
@@ -160,8 +160,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Arbitrary> Arbitrary for V {
 impl<E: ReflectEnum<Members = [..M]>, ..M> Arbitrary for E {
     fn arbitrary(g: &mut Gen) -> E {
         let count = ReflectEnum::<E>::members().len();
-        return ReflectEnum::<E>::from_discriminant(g.below(count))
-            .expect("the chosen discriminant is in range");
+        return ReflectEnum::<E>::from_discriminant(g.below(count)).expect("the chosen discriminant is in range");
     }
 }
 
@@ -230,7 +229,9 @@ impl Shrink for String {
 
 impl<T: Shrink> Shrink for Option<T> {
     fn shrink(&self) -> List<Option<T>> {
-        let Some(value) = self else { return []; };
+        let Some(value) = self else {
+            return [];
+        };
         let mut out: List<Option<T>> = [null];
         for let candidate of value.shrink() {
             out.push(Option::Some(candidate));
@@ -332,9 +333,7 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Shrink for L {
         let live = ReflectFlags::<L>::bits(self);
         let mut out = List::<L>::with_capacity(2);
         for let bit of ReflectFlags::<L>::members() {
-            if bit.is_set(self)
-                && let Some(cleared) = ReflectFlags::<L>::from_bits(live ^ bit.bit())
-            {
+            if bit.is_set(self) && let Some(cleared) = ReflectFlags::<L>::from_bits(live ^ bit.bit()) {
                 out.push(cleared);
             }
         }
@@ -423,7 +422,9 @@ fn join_tags(tags: &List<String>) -> String {
 }
 
 fn split_tags(encoded: &String) -> List<String> {
-    let Some(rest) = encoded.strip_prefix(",") else { return []; };
+    let Some(rest) = encoded.strip_prefix(",") else {
+        return [];
+    };
     return rest.split(",").collect();
 }
 
@@ -436,8 +437,12 @@ export fn run() with Stdout {
     println("");
 
     check::<Event>("json round-trip", 200, 0x5EED, |e: &Event| {
-        let Ok(text) = to_string(e) else { return false; };
-        let Ok(back) = from_string::<Event>(text) else { return false; };
+        let Ok(text) = to_string(e) else {
+            return false;
+        };
+        let Ok(back) = from_string::<Event>(text) else {
+            return false;
+        };
         return back == *e;
     });
 

@@ -1988,7 +1988,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let params: Vec<ast::GenericParam> = self
             .lookup_function_type_params(callee)
             .into_iter()
-            .filter(|p| p.is_real_type_param())
+            .filter(super::super::ast::GenericParam::is_real_type_param)
             .collect();
         // A turbofish naming only the non-pack params (`parse::<Perms>()`,
         // where the subject appears solely in the return type) leaves the
