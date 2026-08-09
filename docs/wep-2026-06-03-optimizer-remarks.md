@@ -173,7 +173,7 @@ optimized NIR's entry-module functions, collects residual `$value_copy$T` calls
 and `array_clone` / `array_clone_shallow` / `copy_value` calls, and emits one
 info-level remark per survivor anchored to the enclosing statement.
 `logger.remark` carries the span and the entry filename; tests
-(`wado-compiler/tests/remarks.rs`) pin the behavior at `-O2` — a `List<i32>`
+(`wado-compiler/tests/integration/remarks.rs`) pin the behavior at `-O2` — a `List<i32>`
 copied then mutated fires one remark on the copy line; a `Point` that SROA
 scalarizes fires none. No size threshold yet: a synthesized copy helper only
 exists for non-trivial aggregates, so survivors are already non-trivial.
@@ -200,7 +200,7 @@ Shipped:
       functions, detecting `$value_copy$T` and `array_clone` / `array_clone_shallow`
       / `copy_value` survivors, anchored to the enclosing statement span.
 - [x] Surviving value-copy remarks with why + where, plus the survives / elided
-      test pair at `-O2` (`wado-compiler/tests/remarks.rs`).
+      test pair at `-O2` (`wado-compiler/tests/integration/remarks.rs`).
 
 Next:
 

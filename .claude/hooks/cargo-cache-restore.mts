@@ -78,9 +78,9 @@ async function accessToken({ client_email, private_key, token_uri }: ServiceAcco
   return (await res.json()).access_token;
 }
 
-// Unpack straight from the network into destDir. Staging the tarball on disk
-// first would cost a peak of ~500 MB (sccache) of the session's fixed disk
-// allowance, which is the resource under pressure here.
+// Unpack straight from the network into destDir. Staging the tarball first
+// would double the peak draw on the session's fixed disk allowance, which is
+// the resource under pressure here.
 async function untar(body: ReadableStream<Uint8Array>, destDir: string): Promise<void> {
   const tar = spawn("tar", ["-xzf", "-", "-C", destDir], { stdio: ["pipe", "ignore", "inherit"] });
   const exited = new Promise<void>((resolve, reject) => {

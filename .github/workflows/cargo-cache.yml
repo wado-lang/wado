@@ -58,7 +58,8 @@ env:
   CARGO_TARGET_DIR: /home/user/wado/target
   RUSTC_WRAPPER: sccache
   CARGO_INCREMENTAL: "0"
-  # The default 10 GiB would evict entries and publish a cache with holes.
+  # Keep a cache that outgrows sccache's 10 GiB default from being LRU-trimmed
+  # into one with holes.
   SCCACHE_CACHE_SIZE: 30G
   # RUSTFLAGS is a sccache cache-key input; keep it identical to the container's
   # mise [env] (both unset).
@@ -72,8 +73,8 @@ jobs:
         with:
           submodules: false
 
-      # `--all-targets` peaks near 13 GB, and path parity pins target/ to the
-      # root filesystem. Dropping the preinstalled SDKs buys ~25 GB.
+      # `--all-targets` builds every test binary, and path parity pins target/
+      # to the root filesystem. Dropping the preinstalled SDKs buys the headroom.
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
@@ -106,7 +107,7 @@ jobs:
         run: |
           sccache --stop-server || true
           mkdir -p out/registry out/sccache
-          # `registry/src` too: without it cargo re-unpacks 374 .crate files
+          # `registry/src` too: without it cargo re-unpacks every .crate file
           # on the container's first build.
           tar -C "$CARGO_HOME" -czf out/registry/linux-x86_64.tar.gz \
             registry/index registry/cache registry/src

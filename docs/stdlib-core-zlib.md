@@ -19,7 +19,7 @@ references in the comments below point at those documents. The RFCs define
 only the bitstream formats, not encoder heuristics, and they ship no
 conformance vectors, so `zlib_test.wado` pairs hand-built, spec-anchored
 decode vectors (verified against a reference zlib) with cross-validation in
-`tests/zlib_interop.rs`.
+`tests/integration/zlib_interop.rs`.
 
 Features:
 

@@ -42,8 +42,8 @@ run = """
 # No-ops cleanly when sccache or the cache is absent (e.g. local dev).
 set -e -o pipefail
 export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cargo/sccache}"
-# Match the ceiling cargo-cache.yml publishes under; the default 10 GiB would
-# LRU-trim the entries we just downloaded.
+# Match the ceiling cargo-cache.yml publishes under, so a cache that outgrows
+# sccache's 10 GiB default is not LRU-trimmed after we restore it.
 export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-30G}"
 if ! command -v sccache >/dev/null 2>&1; then
   echo "sccache not installed; skipping warm-cache (normal cold build applies)"
