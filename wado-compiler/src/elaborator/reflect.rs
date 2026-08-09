@@ -1391,6 +1391,114 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(members_ty)
     }
 
+    /// A reflect trait's associated type for a *concrete* subject, computed
+    /// the way the synthesized impl would.
+    ///
+    /// Synthesis registers these after elaboration, so a call site needing one
+    /// — projecting a pack out of `T: ReflectFlags<Members = [..M]>` — finds
+    /// nothing in the registry and must compute it. `None` for a subject of
+    /// the wrong kind, an unknown trait / associated name, or a subject that
+    /// is still a type parameter (nothing concrete to read).
+    pub(super) fn concrete_reflect_assoc_type(
+        &mut self,
+        subject: TypeId,
+        trait_name: &str,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        use crate::synthesis::traits::{
+            REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_SLOTS_ASSOC, REFLECT_FIELD_TYPES_ASSOC,
+            REFLECT_MEMBERS_ASSOC,
+        };
+        if matches!(
+            self.tysys.type_table.borrow().get(subject),
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+        ) {
+            return None;
+        }
+        let (struct_trait, variant_trait, enum_trait, flags_trait) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::ReflectStruct).to_string(),
+                items.trait_name(CompilerItem::ReflectVariant).to_string(),
+                items.trait_name(CompilerItem::ReflectEnum).to_string(),
+                items.trait_name(CompilerItem::ReflectFlags).to_string(),
+            )
+        };
+        if trait_name == struct_trait {
+            let members = self.reflect_struct_subject(subject)?.member_types;
+            return match assoc_name {
+                REFLECT_FIELD_TYPES_ASSOC => {
+                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
+                }
+                REFLECT_FIELD_SLOTS_ASSOC => {
+                    let mut tt = self.tysys.type_table.borrow_mut();
+                    let slots: Vec<TypeId> = members.iter().map(|&m| tt.make_option(m)).collect();
+                    Some(tt.make_tuple(slots))
+                }
+                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                    CompilerItem::ReflectStructField,
+                    subject,
+                    &members,
+                )),
+                _ => None,
+            };
+        }
+        if trait_name == variant_trait {
+            let members = self.reflect_variant_subject(subject)?.member_types;
+            return match assoc_name {
+                REFLECT_CASE_PAYLOADS_ASSOC => {
+                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
+                }
+                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                    CompilerItem::ReflectVariantCase,
+                    subject,
+                    &members,
+                )),
+                _ => None,
+            };
+        }
+        if assoc_name != REFLECT_MEMBERS_ASSOC {
+            return None;
+        }
+        let spec = if trait_name == enum_trait {
+            ScalarReflectSpec::ENUM
+        } else if trait_name == flags_trait {
+            ScalarReflectSpec::FLAGS
+        } else {
+            return None;
+        };
+        let subject_ty = self.tysys.type_table.borrow().get(subject).clone();
+        if !spec.subject_matches(&subject_ty) {
+            return None;
+        }
+        let name = self.tysys.type_table.borrow().type_name(subject);
+        Some(self.scalar_concrete_members_ty(spec, subject, &name))
+    }
+
+    /// The member tuple for a kind whose handle carries a payload type:
+    /// `[StructField<T, F_0>, ...]` / `[VariantCase<T, P_0>, ...]`.
+    fn payload_members_ty(
+        &mut self,
+        member_struct_item: CompilerItem,
+        subject: TypeId,
+        member_types: &[TypeId],
+    ) -> TypeId {
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let (module, name) = {
+            let items = tt.compiler_items();
+            let (m, n) = items.require_struct(member_struct_item);
+            (m.clone(), n.to_string())
+        };
+        let handles: Vec<TypeId> = member_types
+            .iter()
+            .map(|&payload| {
+                tt.make_generic_instance(name.clone(), module.clone(), vec![subject, payload])
+            })
+            .collect();
+        tt.make_tuple(handles)
+    }
+
     /// The concrete N-tuple `[M<Self>; N]` for `members()`, N being the
     /// subject's case / bit count.
     fn scalar_concrete_members_ty(

@@ -54,6 +54,75 @@ fn rendered<T: Parts<Items = [..P]>, ..P: Inspect>(t: &T) -> String {
     return out;
 }
 
+struct Point {
+    x: i32,
+    label: String,
+}
+
+variant Shape {
+    Circle(i32),
+    Empty,
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+flags Perms {
+    Read,
+    Write,
+}
+
+/// Reflection's own traits project the same way. Their associated types are
+/// registered by a synthesis phase that runs after elaboration, so the
+/// projection computes the concrete subject's rather than reading a registry.
+fn field_names<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> String {
+    let mut out = "";
+    for let f of ReflectStruct::<S>::members() {
+        out = `${out}${f.name()};`;
+    }
+    return out;
+}
+
+fn rebuilt<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> S {
+    return ReflectStruct::<S>::from_fields(
+        [for let f of ReflectStruct::<S>::members() { f.get(v) }],
+    );
+}
+
+fn live_case<V: ReflectVariant<CasePayloads = [..Q]>, ..Q>(v: &V) -> String {
+    let mut out = "";
+    for let c of ReflectVariant::<V>::members() {
+        if c.holds(v) {
+            out = c.name();
+        }
+    }
+    return out;
+}
+
+fn case_count<E: ReflectEnum<Members = [..M]>, ..M>(v: &E) -> i32 {
+    return ReflectEnum::<E>::members().len();
+}
+
+fn set_bits<L: ReflectFlags<Members = [..M]>, ..M>(v: &L) -> i32 {
+    let mut n = 0;
+    for let b of ReflectFlags::<L>::members() {
+        if b.is_set(v) {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+/// The subject appears only in the return type, so the caller pins it — and
+/// the turbofish names just that one param, leaving the pack slot to the
+/// projection.
+fn all_bits<L: ReflectFlags<Members = [..M]>, ..M>() -> i32 {
+    return ReflectFlags::<L>::members().len();
+}
+
 test "the pack is inferred from the argument, with no turbofish" {
     assert arity(&Tri { a: 1, b: 2, c: 3 }) == 3;
     assert arity(&Pair { left: "x", right: true }) == 2;
@@ -62,6 +131,21 @@ test "the pack is inferred from the argument, with no turbofish" {
 test "a bound on the pack reaches every element" {
     assert rendered(&Tri { a: 1, b: 2, c: 3 }) == "1;2;3;";
     assert rendered(&Pair { left: "x", right: true }) == "\"x\";true;";
+}
+
+test "each reflection kind projects its member channel" {
+    let p = Point { x: 1, label: "hi" };
+    assert field_names(&p) == "x;label;";
+    assert rebuilt(&p) == p;
+    assert live_case(&Shape::Circle(3)) == "Circle";
+    assert live_case(&Shape::Empty) == "Empty";
+    assert case_count(&Color::Red) == 3;
+    assert set_bits(&(Perms::Read | Perms::Write)) == 2;
+    assert set_bits(&Perms::none()) == 0;
+}
+
+test "a turbofish naming only the subject leaves the pack to the projection" {
+    assert all_bits::<Perms>() == 2;
 }
 
 __DATA__
