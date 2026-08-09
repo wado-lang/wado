@@ -1738,12 +1738,7 @@ impl Parser {
             });
         }
 
-        let return_type = if self.check(&TokenKind::Arrow) {
-            self.advance();
-            Some(self.parse_type()?)
-        } else {
-            None
-        };
+        let return_type = self.parse_optional_return_type()?;
 
         let (effects, effect_ids, stores) = self.parse_with_clause()?;
 
@@ -4548,6 +4543,32 @@ impl Parser {
 
     /// Parse an optional `-> Type` closure return-type annotation, mirroring
     /// the function-signature form (`|x| -> i32 x + 1`, `|x| -> T { ... }`).
+    /// `-> T` on a declaration, or `None` when absent.
+    ///
+    /// `-> ()` yields `None` too: it declares the same function as writing no
+    /// return type, and dropping it is the canonical form, so one spelling
+    /// reaches the AST and the formatter has nothing left to canonicalize. The
+    /// `()` is matched on its two tokens rather than parsed and thrown away,
+    /// which would mint an `AstId` the canonical spelling does not have.
+    ///
+    /// A closure is not the same — there `None` means "infer" — so
+    /// [`Self::parse_optional_closure_return_type`] keeps what it is given.
+    fn parse_optional_return_type(&mut self) -> ParseResult<Option<crate::ast::Type>> {
+        if !self.check(&TokenKind::Arrow) {
+            return Ok(None);
+        }
+        if matches!(self.peek_nth(1).kind, TokenKind::LParen)
+            && matches!(self.peek_nth(2).kind, TokenKind::RParen)
+        {
+            self.advance();
+            self.advance();
+            self.advance();
+            return Ok(None);
+        }
+        self.advance();
+        Ok(Some(self.parse_type()?))
+    }
+
     fn parse_optional_closure_return_type(&mut self) -> ParseResult<Option<crate::ast::Type>> {
         if self.check(&TokenKind::Arrow) {
             self.advance();
@@ -4833,12 +4854,7 @@ impl Parser {
         let params = self.parse_param_list()?;
         self.expect(&TokenKind::RParen)?;
 
-        let return_type = if self.check(&TokenKind::Arrow) {
-            self.advance();
-            Some(self.parse_type()?)
-        } else {
-            None
-        };
+        let return_type = self.parse_optional_return_type()?;
 
         self.expect(&TokenKind::Semicolon)?;
 
@@ -5902,12 +5918,7 @@ impl Parser {
         let params = self.parse_param_list()?;
         self.expect(&TokenKind::RParen)?;
 
-        let return_type = if self.check(&TokenKind::Arrow) {
-            self.advance();
-            Some(self.parse_type()?)
-        } else {
-            None
-        };
+        let return_type = self.parse_optional_return_type()?;
 
         let close_span = self.peek().span;
         self.expect(&TokenKind::Semicolon)?;

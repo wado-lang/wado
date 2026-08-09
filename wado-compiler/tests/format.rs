@@ -252,6 +252,38 @@ fn test_format_closure_return_type_roundtrips() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// `-> ()` declares the same function as no return type at all, and dropping it
+/// is the canonical form. The parser normalizes it away so one spelling reaches
+/// the AST — otherwise the formatter's canonicalization shows up as an AST
+/// change and `test_roundtrip_ast_all_fixtures` fails on any source that writes
+/// it. A closure is excluded: there `None` means "infer", not unit.
+#[test]
+fn test_format_drops_explicit_unit_return_type() {
+    let source = concat!(
+        "interface Sink {\n",
+        "    fn emit(message: String) -> ();\n",
+        "}\n",
+        "\n",
+        "fn announce(tag: String) -> () {\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        !formatted.contains("-> ()"),
+        "the explicit unit return type should be dropped, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+
+    // The closure form keeps it: `None` there means the type is inferred.
+    let closure = "fn run() {\n    let f = || -> () {\n    };\n}\n";
+    let formatted = wado_compiler::format(closure).expect("format failed");
+    assert!(
+        formatted.contains("|| -> ()"),
+        "a closure's unit return type is not the same declaration, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(closure);
+}
+
 /// `reactive` is a prefix keyword that must precede `let`. The formatter used
 /// to emit `let reactive ...`, which the parser rejects ("expected pattern,
 /// found Reactive"), so formatting any `reactive let` binding produced output

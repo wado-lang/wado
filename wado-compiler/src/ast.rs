@@ -2982,6 +2982,12 @@ pub enum Type {
 }
 
 impl Type {
+    /// Whether this is the unit type, spelled `()`.
+    #[must_use]
+    pub fn is_unit(&self) -> bool {
+        matches!(self, Type::Named(n) if n.name == "()")
+    }
+
     /// Returns the [`AstId`] for types that carry one (named types and
     /// generics). Structural types (tuple, reference, function) aggregate
     /// children that each carry their own ids.

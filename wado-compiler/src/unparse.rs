@@ -30,7 +30,7 @@ fn effective_start_line(attrs: &[Attribute], span_line: usize) -> usize {
 /// Returns true if `ty` is the unit type `()`, which is the default return type
 /// and therefore omitted from rendered signatures.
 fn is_unit_type(ty: &Type) -> bool {
-    matches!(ty, Type::Named(n) if n.name == "()")
+    ty.is_unit()
 }
 
 /// The namespace name of a `use name from "..."` import, if this declaration is
