@@ -3271,7 +3271,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } if *name == struct_name => Some(type_args.clone()),
                 _ => None,
             });
-        let struct_field_types: Vec<(String, TypeId)> = self
+        let resolved_struct_fields: Option<Vec<(String, TypeId)>> = self
             .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .map(|info| {
                 let params = info.type_param_type_ids.clone();
@@ -3299,8 +3299,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         (name, tt.substitute_type_params(type_id, &substitution))
                     })
                     .collect()
-            })
-            .unwrap_or_default();
+            });
+        // A struct that did not resolve has unknown fields, not zero of them —
+        // its own diagnostic covers that, and the field checks below must stay
+        // quiet. A struct that resolved to zero fields accepts none.
+        let struct_fields_known = resolved_struct_fields.is_some();
+        let struct_field_types: Vec<(String, TypeId)> = resolved_struct_fields.unwrap_or_default();
 
         // A named struct base is a complete `S`, so any field before the spread
         // (or a second spread) is fully overwritten and unused.
@@ -3410,8 +3414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Check field name exists in struct definition
-                if !struct_field_types.iter().any(|(n, _)| n == &field.name)
-                    && !struct_field_types.is_empty()
+                if struct_fields_known && !struct_field_types.iter().any(|(n, _)| n == &field.name)
                 {
                     let _ = self.emit(TypeError::ExtraField {
                         struct_name: struct_name.clone(),

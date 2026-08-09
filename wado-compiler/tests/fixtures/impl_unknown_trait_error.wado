@@ -1,0 +1,17 @@
+// `impl X for T` resolves `X` where the impl's own declaration facts are
+// recorded. Without that, nothing resolves the name at all: the impl indexes
+// under the written string, matches no query, and reaches the back end as an
+// impl of a trait that does not exist.
+struct S {
+}
+
+impl NoSuchTrait for S {
+    fn m(&self) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "cannot implement `NoSuchTrait`: no trait, effect or resource by that name"}

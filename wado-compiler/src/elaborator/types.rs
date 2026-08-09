@@ -525,6 +525,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `impl X for T` where `X` resolves to no trait, effect or resource in
+    /// the impl's frame.
+    UnknownTraitImpl {
+        name: String,
+        span: Span,
+    },
+
     /// Invalid stores declaration
     InvalidStores {
         message: String,
@@ -1204,6 +1211,11 @@ impl TypeError {
                 format!(
                     "method `{method_name}` takes {found} parameter(s) but `{trait_name}` declares {expected}"
                 ),
+                *span,
+            ),
+            TypeError::UnknownTraitImpl { name, span } => (
+                Code::UnknownType,
+                format!("cannot implement `{name}`: no trait, effect or resource by that name"),
                 *span,
             ),
             TypeError::InvalidStores { message, span } => {
