@@ -223,3 +223,65 @@ export fn run() with Stdout {
         "a folded parameter should not be remarked, got {remarks:?}"
     );
 }
+
+#[test]
+fn one_gate_reading_a_param_twice_is_remarked_once() {
+    // The gate failed once, so it is reported once — however many times the
+    // condition reads the parameter.
+    let remarks = remarks_for_params(
+        r#"
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: String = "trace";
+
+fn is_level(s: String, want: String) -> bool {
+    if s == want {
+        return true;
+    }
+    return false;
+}
+
+export fn run() with Stdout {
+    if is_level(LOG_LEVEL, "trace") || is_level(LOG_LEVEL, "debug") {
+        println(`verbose`);
+    }
+}
+"#,
+        &[("log.level", "info")],
+    );
+    let gate_remarks: Vec<&String> = remarks
+        .iter()
+        .filter(|r| r.contains("compile-time parameter `log.level`"))
+        .collect();
+    assert_eq!(
+        gate_remarks.len(),
+        1,
+        "one gate should yield one remark, got {remarks:?}"
+    );
+}
+
+#[test]
+fn param_used_outside_a_gate_is_not_remarked() {
+    // Printing a parameter is an ordinary use of its value. The read survives
+    // by design, and the branch it sits under is decided by something else.
+    let remarks = remarks_for_params(
+        r#"
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: String = "trace";
+
+export fn run(args: List<String>) with Stdout {
+    if args.len() > 0 {
+        println(LOG_LEVEL);
+    }
+}
+"#,
+        &[("log.level", "info")],
+    );
+    assert!(
+        !remarks.iter().any(|r| r.contains("compile-time parameter")),
+        "a parameter outside a scrutinee should not be remarked, got {remarks:?}"
+    );
+}

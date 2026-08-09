@@ -239,7 +239,7 @@ fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
 /// `trace` and `debug` ships them and consults the parameter at run time
 /// instead.
 ///
-/// A read outside a condition is not reported: passing a parameter to
+/// A read outside a scrutinee is not reported: passing a parameter to
 /// `println` is an ordinary use of its value, not a gate that failed.
 ///
 /// Restricted to the entry module's functions, like the value-copy remarks, and
@@ -267,81 +267,94 @@ pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
         let Some(body) = &func.body else {
             continue;
         };
-        for stmt in body.stmts.values() {
-            let crate::nir_arena::StmtKind::If { condition, .. } = &stmt.kind else {
-                continue;
-            };
-            collect_param_reads(body, *condition, &params, stmt.span, &mut remarks);
-        }
-        for expr in body.exprs.values() {
-            let ExprKind::If { condition, .. } = &expr.kind else {
-                continue;
-            };
-            collect_param_reads(body, *condition, &params, expr.span, &mut remarks);
-        }
+        let mut scan = ParamGateScan {
+            params: &params,
+            reported: crate::hashmap::IndexSet::default(),
+            remarks: &mut remarks,
+        };
+        scan.walk(body);
     }
     remarks
 }
 
-/// Report every `#[param]` global the condition rooted at `op` still reads.
-fn collect_param_reads(
-    body: &Body,
-    op: crate::nir_arena::Operand,
-    params: &IndexMap<(ModuleSource, String), String>,
-    span: Span,
-    out: &mut Vec<Remark>,
-) {
-    let mut report = |param: &String| {
-        out.push(Remark {
+struct ParamGateScan<'a> {
+    params: &'a IndexMap<(ModuleSource, String), String>,
+    /// `(parameter, gate span)` pairs already remarked on. One scrutinee often
+    /// reads the same parameter more than once (`L >= 1 && L <= 3`); the gate
+    /// failed once, so it is reported once.
+    reported: crate::hashmap::IndexSet<(String, Span)>,
+    remarks: &'a mut Vec<Remark>,
+}
+
+impl ParamGateScan<'_> {
+    /// Walk from the root, not over the arena: a detached `If` still occupies
+    /// its slot — `StmtKind` has no tombstone — and remarking on a branch that
+    /// no longer reaches the output is exactly the vague remark the WEP rules
+    /// out.
+    ///
+    /// Each node carries the span of the innermost branch whose scrutinee it
+    /// sits inside, or `None` outside every scrutinee. It passes to children
+    /// unchanged — a read nested anywhere under a scrutinee still decides that
+    /// branch — and is replaced, never cleared, on entering a nested
+    /// scrutinee, so a remark names the closest gate the read decides.
+    fn walk(&mut self, body: &Body) {
+        let mut stack = vec![(NodeRef::Block(body.root), None)];
+        while let Some((node, gate)) = stack.pop() {
+            if let (NodeRef::Expr(e), Some(span)) = (node, gate) {
+                self.report(body, e, span);
+            }
+            let scrutinee = branch_gate(body, node)
+                .and_then(|(op, span)| Some((NodeRef::Expr(op.as_expr()?), span)));
+            body.for_each_child(node, |c| {
+                let child_gate = match scrutinee {
+                    Some((s, span)) if s == c => Some(span),
+                    _ => gate,
+                };
+                stack.push((c, child_gate));
+            });
+        }
+    }
+
+    fn report(&mut self, body: &Body, expr: ExprId, span: Span) {
+        let ExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } = &body.exprs[expr].kind
+        else {
+            return;
+        };
+        let Some(param) = self.params.get(&(module_source.clone(), name.clone())) else {
+            return;
+        };
+        if !self.reported.insert((param.clone(), span)) {
+            return;
+        }
+        self.remarks.push(Remark {
             message: format!(
                 "compile-time parameter `{param}` is still read here, so this branch is \
                  decided at run time; the code it guards was not stripped"
             ),
             span,
         });
-    };
-    // The condition itself may be nothing but a promoted read.
-    if let Some(param) = promoted_param_read(body, op, params) {
-        report(param);
-    }
-    let Some(root) = op.as_expr() else {
-        return;
-    };
-    let mut stack = vec![NodeRef::Expr(root)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(e) = node {
-            if let ExprKind::GlobalVarGet {
-                module_source,
-                name,
-            } = &body.exprs[e].kind
-                && let Some(param) = params.get(&(module_source.clone(), name.clone()))
-            {
-                report(param);
-            }
-            // A promoted read is an `Operand::Value`, which `for_each_child`
-            // does not reach — and promotion is exactly what a folded gate's
-            // read goes through, so missing it would make the remark silent on
-            // the case it exists for.
-            body.for_each_expr_operand(e, &mut |child| {
-                if let Some(param) = promoted_param_read(body, child, params) {
-                    report(param);
-                }
-            });
-        }
-        body.for_each_child(node, |c| stack.push(c));
     }
 }
 
-/// The `#[param]` name a promoted global-read operand names, if any.
-fn promoted_param_read<'a>(
-    body: &Body,
-    op: crate::nir_arena::Operand,
-    params: &'a IndexMap<(ModuleSource, String), String>,
-) -> Option<&'a String> {
-    let v = op.as_value()?;
-    let crate::nir_value_graph::ValueKind::GlobalRead { global, .. } = body.values.kind(v) else {
-        return None;
-    };
-    let (module_source, name) = body.values.global_of(*global)?;
-    params.get(&(module_source.clone(), name.clone()))
+/// The operand whose value picks a branch, with the span a remark about it
+/// should point at. `None` for every non-branching node.
+fn branch_gate(body: &Body, node: NodeRef) -> Option<(crate::nir_arena::Operand, Span)> {
+    match node {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
+            crate::nir_arena::StmtKind::If { condition, .. } => {
+                Some((*condition, body.stmts[s].span))
+            }
+            _ => None,
+        },
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::If { condition, .. } => Some((*condition, body.exprs[e].span)),
+            ExprKind::Match { expr, .. } => Some((*expr, body.exprs[e].span)),
+            ExprKind::Switch { scrutinee, .. } => Some((*scrutinee, body.exprs[e].span)),
+            _ => None,
+        },
+        NodeRef::Block(_) | NodeRef::Pat(_) => None,
+    }
 }
