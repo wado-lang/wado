@@ -332,7 +332,6 @@ pub async fn execute_with_mode<H: CompilerHost>(
 /// SHA-256 of the canonical options encoding — produced by
 /// [`wado_compiler::kiln::hash_options_canonical`] so it stays stable
 /// across the M3 provisional encoder and the M4 lifted-form encoder.
-///
 #[must_use]
 pub fn build_metadata(
     invocation_name: &str,
@@ -404,9 +403,8 @@ pub enum CacheCheck {
 /// given invocation.
 ///
 /// Re-hashes the primary + declared inputs via `host.load_source`, then
-/// then re-hashes every output
-/// file from disk (via `manifest_root` joined with the recorded output
-/// path). Returns:
+/// re-hashes every output file from disk (via `manifest_root` joined with
+/// the recorded output path). Returns:
 ///
 /// - [`CacheCheck::Hit`] when every hash matches.
 /// - [`CacheCheck::HitButModified`] when the cache key matches but an
@@ -414,8 +412,8 @@ pub enum CacheCheck {
 ///   The user has hand-edited a generated file; honor the edit and skip
 ///   the generator. A `Code::KilnGeneratedModified` warning is emitted
 ///   for each modified file before returning.
-/// - [`CacheCheck::Miss`] when an input/read hash drifted, or an output
-///   file is missing/unreadable.
+/// - [`CacheCheck::Miss`] when an input hash drifted, or an output file is
+///   missing/unreadable.
 ///
 /// Load or read failures on inputs are treated as a cache miss; on outputs
 /// the missing file produces a brief log warning before returning miss,

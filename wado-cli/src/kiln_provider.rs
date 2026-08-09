@@ -501,8 +501,10 @@ struct CompileArtifacts {
 /// ABI even when the generator source is unchanged. `v2`: `raw-request.options`
 /// became `list<u8>` (CBOR). `v3`: the world is import-only,
 /// `raw-request` is gone, and `generate` takes typed `(primary, inputs,
-/// options)` parameters.
-const KILN_GENERATOR_ABI_TAG: &[u8] = b"kiln-generator-v3\n";
+/// options)` parameters. `v4`: `kiln-host` lost `read-file` and
+/// `host-error`, so a component built against `v3` imports a function the
+/// linker no longer provides.
+const KILN_GENERATOR_ABI_TAG: &[u8] = b"kiln-generator-v4\n";
 
 /// `CompilerHost` wrapper used by `compile_local` for two reasons:
 ///

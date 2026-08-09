@@ -1,7 +1,7 @@
 //! Native wasmtime runtime for Kiln generators.
 //!
-//! Instantiates a compiled generator component, linking only the two host
-//! import (`emit-diagnostic`). Everything else — WASI, clocks,
+//! Instantiates a compiled generator component, linking only the single
+//! host import (`emit-diagnostic`). Everything else — WASI, clocks,
 //! random, http — is unlinked; a generator that imports any of those fails at
 //! link time, which is the determinism guarantee.
 //!
@@ -318,7 +318,9 @@ pub fn compile_component(
 }
 
 /// Instantiate a pre-built [`Component`] against the
-/// `core:kiln/generator` world, invoke `generate`, and return the
+/// `core:kiln/generator` world, invoke `generate`, and return its typed
+/// outcome alongside every diagnostic the generator emitted.
+///
 /// Always pass a [`Component`] obtained from the host's cache rather
 /// than building one inline — see [`compile_component`].
 pub async fn run_generator(
@@ -337,8 +339,8 @@ pub async fn run_generator(
     // and the failure path. `emit_diagnostic` guarantees they are printed even
     // when the generator returns successfully; relaying on the error path too
     // keeps a failing generator from swallowing the diagnostics that explain
-    // the failure. The only host reachable here is the collect-only inner
-    // host, so the relay (print + collect) is the caller's job (see
+    // the failure. This function has no host to print through, so the relay
+    // (print + collect) is the caller's job (see
     // `FilesystemCompilerHost::run_generator`).
     let diagnostics_inner = diagnostics.clone();
     let outcome: Result<GeneratorResponse, GeneratorRunnerError> = async move {
