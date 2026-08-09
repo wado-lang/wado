@@ -199,14 +199,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
-        // Shallow per-argument classes for argument-directed selection among
-        // one trait's argument lists (WEP 2026-07-31 phase 3). Computed before
-        // lookup — cheap, side-effect-free — because selection must run before
-        // any candidate's signature shapes the arguments.
-        let probe_classes: Vec<super::method_lookup::ProbeClass> = args_ast
-            .iter()
-            .map(|a| self.probe_arg_class(a, ctx))
-            .collect();
+        // The handle argument-directed selection classifies through (WEP
+        // 2026-07-31). Constructing it costs nothing: a class is synthesized
+        // only if the candidate set turns out to be an overload set, and the
+        // memo is what keeps the lookup attempts below from re-synthesizing.
+        let mut probe = super::synth::ArgProbe::new(args_ast, ctx);
 
         // Base (non-ref) type for method lookup. `mut`: deferred-inference may
         // concretise the receiver below.
@@ -337,7 +334,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(base_type_id),
                     span,
                     required_trait,
-                    Some(&probe_classes),
+                    Some(&mut probe),
                 );
                 // Only use ref-type impls that target a concrete container type
                 // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
@@ -373,7 +370,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(base_type_id),
                 span,
                 required_trait,
-                Some(&probe_classes),
+                Some(&mut probe),
             )
         {
             matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
@@ -385,6 +382,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             trait_impl_module_source = Some(trait_match.impl_module_source);
             blanket_type_param = trait_match.blanket_type_param;
         }
+
+        // Selection is over; the classes come out of the probe so the
+        // arguments can be elaborated (which needs `ctx` mutably) and then
+        // checked against what synthesis claimed.
+        let synthesized = probe.take_classes();
 
         // If still not found and receiver is a TypeParam, try trait bounds
         // e.g., T: Ord -> look up cmp() in Ord trait declaration
@@ -704,6 +706,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let arg_span = args_ast.get(i).map_or(span, super::ast::Expr::span);
             self.typecheck(arg.type_id, expected_type, arg_span);
         }
+
+        self.verify_arg_synthesis(&synthesized, &args, span);
 
         // Substitute return type for inherited newtype methods
         // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
@@ -2932,8 +2936,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return false;
         }
-        let probe = self.probe_arg_class(arg, ctx);
-        match self.conversion_preselect(recv_name, method_name, &probe) {
+        let class = self.synthesize_arg_class(arg, ctx);
+        match self.conversion_preselect(recv_name, method_name, &class) {
             ConversionPreselect::Selected(source) => {
                 *param_types = vec![source];
                 false
@@ -2998,11 +3002,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Selection must run before the argument is elaborated: the expected
     /// type that shapes a literal comes from the selected impl, and picking
     /// it afterwards is the circular ordering the WEP diagnoses. Only the
-    /// literal classes participate — a concrete argument's resolved type
-    /// already selects deterministically through the name hint, and `Admit`
-    /// arguments carry their own type.
+    /// literal classes participate — an argument with a type of its own
+    /// already selects deterministically through the name hint.
     ///
-    /// Admissibility is [`Elaborator::probe_admits`] over each impl's
+    /// Admissibility is [`Elaborator::class_admits`] over each impl's
     /// *resolved* source type — the same table argument-directed selection
     /// uses — so an integer newtype admits an integer literal here exactly as
     /// it does there. A spelling table would under-admit newtypes, and
@@ -3011,12 +3014,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
-        probe: &super::method_lookup::ProbeClass,
+        class: &super::synth::ArgClass,
     ) -> ConversionPreselect {
-        use super::method_lookup::ProbeClass;
+        use super::synth::ArgClass;
         if !matches!(
-            probe,
-            ProbeClass::IntLit | ProbeClass::FloatLit | ProbeClass::StrLit
+            class,
+            ArgClass::IntLit | ArgClass::FloatLit | ArgClass::StrLit
         ) {
             return ConversionPreselect::Pass;
         }
@@ -3026,7 +3029,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|c| {
                 c.source != TypeTable::UNKNOWN
                     && c.source != TypeTable::ERROR
-                    && self.probe_admits(c.source, probe)
+                    && self.class_admits(c.source, class)
             })
             .collect();
         match admitted.as_slice() {

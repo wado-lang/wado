@@ -86,10 +86,10 @@ pub(super) fn merge_turbofish_type_args(
 
 /// View of a `ResolvedType::Function` after peeling references and
 /// fn-type newtypes. Returned by [`Elaborator::as_fn_signature`].
-struct FnSignature {
+pub(super) struct FnSignature {
     is_mut: bool,
     params: Vec<TypeId>,
-    return_type: TypeId,
+    pub(super) return_type: TypeId,
 }
 
 /// Classification of an `Ident`-form call callee after resolving any
@@ -142,7 +142,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// If `type_id` is a function type — possibly behind references or
     /// fn-type newtypes such as `type Handler = fn(...);` — return its
     /// signature. Otherwise return `None`. Borrows the type table once.
-    fn as_fn_signature(&self, type_id: TypeId) -> Option<FnSignature> {
+    pub(super) fn as_fn_signature(&self, type_id: TypeId) -> Option<FnSignature> {
         let table = self.tysys.type_table.borrow();
         let peeled_ref = table.peel_refs(type_id);
         let base = table.get_ultimate_base_type(peeled_ref);

@@ -93,6 +93,20 @@ pub struct Logger<'a, H: CompilerHost> {
     host: &'a H,
     level: LogLevel,
     error_count: Cell<usize>,
+    /// Nesting depth of [`Logger::quiet`] scopes. While non-zero, an error is
+    /// dropped instead of emitted and does not count.
+    quiet_depth: Cell<usize>,
+}
+
+/// Drops error diagnostics for as long as it lives. See [`Logger::quiet`].
+pub struct QuietScope<'l> {
+    depth: &'l Cell<usize>,
+}
+
+impl Drop for QuietScope<'_> {
+    fn drop(&mut self) {
+        self.depth.set(self.depth.get() - 1);
+    }
 }
 
 impl<'a, H: CompilerHost> Logger<'a, H> {
@@ -102,6 +116,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             host,
             level,
             error_count: Cell::new(0),
+            quiet_depth: Cell::new(0),
         }
     }
 
@@ -114,8 +129,28 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
 
     // === Compilation error methods (counted, may bail) ===
 
+    /// Drop error diagnostics until the returned scope is dropped, leaving the
+    /// error count untouched.
+    ///
+    /// For a *query* that answers a question by running machinery which also
+    /// reports — argument synthesis walking a nested method call through the
+    /// same lookup the real elaboration will run. The real walk reaches the
+    /// same node afterwards and reports there, so emitting from the query
+    /// would duplicate the diagnostic and fail the compilation on an argument
+    /// that still compiles. Never use it to silence a decision the compiler
+    /// actually commits to.
+    pub fn quiet(&self) -> QuietScope<'_> {
+        self.quiet_depth.set(self.quiet_depth.get() + 1);
+        QuietScope {
+            depth: &self.quiet_depth,
+        }
+    }
+
     /// Count the diagnostic, emit it, and signal `Bail` at `MAX_ERRORS`.
     fn emit_error(&self, diag: Diagnostic) -> Result<(), Bail> {
+        if self.quiet_depth.get() > 0 {
+            return Ok(());
+        }
         let count = self.error_count.get() + 1;
         self.error_count.set(count);
         self.host.emit_diagnostic(diag);

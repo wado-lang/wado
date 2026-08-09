@@ -1,0 +1,27 @@
+// An argument whose type the parameter is what supplies — a closure — carries
+// no information for selection, so the overload set stays ambiguous. The
+// message says which argument gave nothing rather than only listing the
+// candidates (WEP 2026-07-31).
+trait Run<S> {
+    fn run(&self, s: S) -> i32;
+}
+
+impl Run<fn(i32) -> i32> for bool {
+    fn run(&self, s: fn(i32) -> i32) -> i32 {
+        return s(1);
+    }
+}
+
+impl Run<fn(i64) -> i64> for bool {
+    fn run(&self, s: fn(i64) -> i64) -> i32 {
+        return 2;
+    }
+}
+
+export fn run() {
+    let f = true;
+    assert f.run(|x| x + 1) == 2;
+}
+
+__DATA__
+{"compile_error": "note: argument 1 is a closure, so the parameter is what would type it"}

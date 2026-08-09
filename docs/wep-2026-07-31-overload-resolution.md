@@ -234,46 +234,52 @@ applies only when its premises produce `Exact` / `Head`, and yields
 `Opaque(Inference)` otherwise. A type mentioning an unsubstituted type parameter
 yields `Head` when its head is known and `Opaque(Inference)` when it is not.
 
-| Expression                                   | Class                                                             |
-| -------------------------------------------- | ----------------------------------------------------------------- |
-| integer / byte literal                       | `IntLit`                                                          |
-| float-only literal                           | `FloatLit`                                                        |
-| string, template string, `#include_str`      | `StrLit`                                                          |
-| `#file`, `#function`, `#data`                | `StrLit`; `#line` → `IntLit`                                      |
-| char / bool / unit literal                   | `Exact`                                                           |
-| `null`                                       | `NullLit`                                                         |
-| bytes literal, `#include_bytes`              | `Exact(List<u8>)` — the elaborator ignores the expected type here |
-| identifier — local, parameter, global, const | `Exact` of its declared type                                      |
-| identifier — enum / flags / variant case     | `Exact` of the declaring type                                     |
-| identifier — named function                  | `Exact` of its `fn` type when non-generic                         |
-| identifier — resolves to nothing             | `Opaque(Unresolved)`                                              |
-| `&e` / `&mut e`                              | the reference over `e`'s class                                    |
-| `*e`                                         | the referent of `e`'s class                                       |
-| `-e`, `!e`, `~e`                             | primitive: `e`'s class; otherwise the operator impl's `Output`    |
-| `e as T`                                     | `Exact` / `Head` of `T`, including generic `T`                    |
-| comparison, logical, `matches`, chain        | `Exact(bool)`                                                     |
-| arithmetic / bitwise                         | primitive: the operand classes met; otherwise the impl's `Output` |
-| shift                                        | the left operand's class                                          |
-| assignment, compound assignment              | `Exact(unit)`                                                     |
-| call — named function, variant constructor   | the declared return type                                          |
-| call — `fn`-typed value                      | the function type's return type                                   |
-| method call, static method call              | the resolved method's return type                                 |
-| field access, tuple field                    | the field's type                                                  |
-| `e[i]`                                       | the `IndexValue` / `IndexRef` `Output` for `i`'s class            |
-| `a..<b`, `a..=b`                             | `Exact` when both endpoints agree; otherwise `Head(Range*)`       |
-| named struct literal                         | `Exact` when non-generic, else `Head`                             |
-| anonymous struct / tuple literal / spread    | `Opaque(CompoundLiteral)`                                         |
-| block, labeled block, `with … do`            | the tail expression's class; no tail → `Exact(unit)`              |
-| `if`, `match`                                | the join of the branch classes                                    |
-| closure                                      | `Exact` of its `fn` type when fully annotated, else `Opaque`      |
-| `e?`, `resume`, tuple comprehension          | `Opaque(Inference)`                                               |
-| parse-error placeholder                      | `Opaque(Unresolved)`                                              |
+| Expression                                   | Class                                                                                    |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| integer / byte literal                       | `IntLit`                                                                                 |
+| float-only literal                           | `FloatLit`                                                                               |
+| string, template string, `#include_str`      | `StrLit`                                                                                 |
+| `#file`, `#function`, `#data`                | `StrLit`; `#line` → `IntLit`                                                             |
+| char / bool / unit literal                   | `Exact`                                                                                  |
+| `null`                                       | `NullLit`                                                                                |
+| bytes literal, `#include_bytes`              | `Exact(List<u8>)` — the elaborator ignores the expected type here                        |
+| identifier — local, parameter, global, const | `Exact` of its declared type                                                             |
+| identifier — enum / flags / variant case     | `Exact` of the declaring type                                                            |
+| identifier — named function                  | `Opaque(Inference)` — a function reference is instantiated by the expected type          |
+| identifier — resolves to nothing             | `Opaque(Unresolved)`                                                                     |
+| `&e` / `&mut e`                              | the reference over `e`'s class                                                           |
+| `*e`                                         | the referent of `e`'s class                                                              |
+| `-e`, `!e`, `~e`                             | primitive: `e`'s class; otherwise the operator impl's `Output`                           |
+| `e as T`                                     | `Exact` / `Head` of `T`, including generic `T`                                           |
+| comparison, logical, `matches`, chain        | `Exact(bool)`                                                                            |
+| arithmetic / bitwise                         | primitive: the operand classes met; otherwise the impl's `Output`                        |
+| shift                                        | the left operand's class                                                                 |
+| assignment, compound assignment              | `Exact(unit)`                                                                            |
+| call — named function, variant constructor   | the declared return type                                                                 |
+| call — `fn`-typed value                      | the function type's return type                                                          |
+| method call                                  | the resolved method's return type                                                        |
+| static method call                           | `Opaque(Inference)` — a generic receiver head takes its arguments from the expected type |
+| field access, tuple field                    | the field's type                                                                         |
+| `e[i]`                                       | the `IndexValue` / `IndexRef` `Output` for the key's type                                |
+| `a..<b`, `a..=b`                             | `Exact` when both endpoints agree; otherwise `Head(Range*)`                              |
+| named struct literal                         | `Exact` when non-generic, else `Head`                                                    |
+| anonymous struct / tuple literal / spread    | `Opaque(CompoundLiteral)`                                                                |
+| block, labeled block, `with … do`            | the tail expression's class; no tail → `Exact(unit)`                                     |
+| `if`, `match`                                | the join of the branch classes                                                           |
+| closure                                      | `Opaque(Closure)`                                                                        |
+| `e?`, `resume`, tuple comprehension          | `Opaque(Inference)`                                                                      |
+| parse-error placeholder                      | `Opaque(Unresolved)`                                                                     |
+
+A subscript is the one position read differently from an argument: its key is
+resolved with no expected type before the indexing impl is selected, so a
+literal key takes its default type there and synthesis must read it the same
+way.
 
 Branches widen and operands sharpen, so the two composite rules move opposite
 ways through the lattice. The join for `if` / `match` is the least upper bound:
-equal `Exact` classes join to themselves, `Exact` classes sharing a head join to
-that `Head`, equal literal classes join to themselves, anything else joins to
-`Opaque(Inference)`. The meet for a primitive binary operator is the greatest
+when one side's set contains the other's the wider wins (an integer literal
+beside an `i32` is an integer literal), two exact types sharing a head widen to
+that `Head`, and anything else widens to the top. The meet for a primitive binary operator is the greatest
 lower bound, admissible because both operands and the result share one type
 there: an `Exact` operand pins the result, two literals keep the literal class.
 
@@ -551,33 +557,30 @@ Where the pieces live:
   `Take::<A>::take(&f, x)` already parse, and the AST retains the turbofish.
 - Conversions: `conversion_preselect` and `conversion_impl_survey`
   (`elaborator/method_call.rs`).
+- Argument synthesis: `elaborator/synth.rs` — `ArgClass`, the admissibility
+  table, the judgement, and `ArgProbe`, the per-call handle holding the
+  argument ASTs, the `FunctionContext` and the memo. It is threaded through
+  `find_trait_method_for_type` so `select_trait_match` classifies on demand,
+  and the classes come back out (`take_classes`) to be checked against the
+  elaborated arguments.
+- The side-effect discipline: `Logger::quiet` (`logger.rs`) and, in debug
+  builds, `ModuleSemantics::fact_count` asserted unchanged across a synthesis.
 
 Remaining work:
 
-- [ ] Extract classification into `elaborator/synth.rs`: the class enum (today
-      `ProbeClass` in `method_lookup.rs`, which also owns the unrelated
-      `probe_trait_impls` scan), the admissibility table and the judgement.
-      Introduce the per-call handle holding the argument ASTs, the
-      `FunctionContext` and the memo, and thread it through
-      `find_trait_method_for_type` in place of the precomputed
-      `&[ProbeClass]`, so `select_trait_match` classifies on demand.
-- [ ] Add `Head`, `Opaque(reason)`, the join and the meet, replacing `Admit`.
-      Add `Logger`'s suppression scope and the debug-only annotation-map
-      snapshot.
-- [ ] Implement the rule table. Each rule lands with the fixture that fails
-      without it.
-- [ ] Assert the soundness invariant where selection ran, comparing each
-      `Exact` / `Head` position with the type the argument received. A
-      `WADO_VERIFY_ARG_SYNTHESIS=1` mode extends the comparison to every
-      method-call argument, for a CI job over the fixture corpus — the drift
-      detector for a judgement that necessarily restates typing rules the
-      elaborator also implements.
-- [ ] Rewrite `AmbiguousTraitArguments` as a reason chain, reporting per
-      argument what it contributed.
+- [ ] Extend the soundness check beyond the calls where selection ran: a
+      `WADO_VERIFY_ARG_SYNTHESIS=1` mode classifying every method-call argument
+      and comparing it with the type the argument received, for a CI job over
+      the fixture corpus — a wider drift detector for a judgement that
+      necessarily restates typing rules the elaborator also implements.
 - [ ] Retire the index path's `expected_index_type` pre-resolve in favour of
       synthesis, removing the second `resolve_expr` of an index expression that
       runs whenever the selected key type differs from the first resolve's
-      result.
+      result. Synthesis currently reads a subscript the way that path does — a
+      literal key takes its default type — which is the coupling the move would
+      remove.
+- [ ] Let an argument that synthesizes a type drive `conversion_preselect`
+      too, instead of passing through to the name hint.
 - [ ] Operator-trait parameterization (`trait Add<Rhs = Self>`), which is what
       would make RHS-directed operator selection expressible at all.
 

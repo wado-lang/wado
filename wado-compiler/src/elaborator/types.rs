@@ -307,6 +307,11 @@ pub enum TypeError {
         method: String,
         /// The competing trait spellings, in candidate order.
         traits: Vec<String>,
+        /// What each argument contributed to selection, in argument order —
+        /// its synthesized type, its literal class, or the reason it carried
+        /// none. Empty when the call never reached argument-directed
+        /// selection.
+        arguments: Vec<String>,
         span: Span,
     },
 
@@ -921,20 +926,24 @@ impl TypeError {
             TypeError::AmbiguousTraitArguments {
                 method,
                 traits,
+                arguments,
                 span,
             } => (
                 Code::TypeMismatch,
-                format!(
-                    "ambiguous call to '{method}': the arguments do not select between {}; annotate an argument (e.g. '42 as i64') or pin the trait, e.g. '{}::{method}(&value, …)'",
-                    traits
-                        .iter()
-                        .map(|t| format!("'{t}'"))
-                        .collect::<Vec<_>>()
-                        .join(" and "),
-                    traits
-                        .first()
-                        .map(|t| t.replacen('<', "::<", 1))
-                        .expect("ambiguity reported with no candidate traits")
+                append_reason_chain(
+                    format!(
+                        "ambiguous call to '{method}': the arguments do not select between {}; annotate an argument (e.g. '42 as i64') or pin the trait, e.g. '{}::{method}(&value, …)'",
+                        traits
+                            .iter()
+                            .map(|t| format!("'{t}'"))
+                            .collect::<Vec<_>>()
+                            .join(" and "),
+                        traits
+                            .first()
+                            .map(|t| t.replacen('<', "::<", 1))
+                            .expect("ambiguity reported with no candidate traits")
+                    ),
+                    arguments,
                 ),
                 *span,
             ),

@@ -2927,6 +2927,10 @@ f.take(B { v: 1 })          // OK: a named struct literal selects Take<B>
 f.take(a)                    // OK: the local's declared type selects Take<A>
 ```
 
+Any argument whose type the call site fixes selects: a local, a field read, a
+call's return type, an operator's result, a cast, an associated constant, an
+enum case, a range.
+
 Selection is unique-or-error, with no ranking. An argument whose type the
 call site does not pin — above all a bare literal, which could coerce to
 several widths — admits every candidate it could coerce to and never selects
@@ -2943,10 +2947,14 @@ Take::<i64>::take(&f, 42)    // OK: the trait turbofish pins the list
 
 This is deliberate: letting the literal's default type decide would make
 adding an `impl Take<i32>` silently retarget every existing call that meant
-`Take<i64>`. Operators resolve their impl by operand type on the same
-principle, which is why `List<T>` implements `IndexValue<i32>`,
-`IndexValue<RangeExclusive<i32>>`, and `IndexValue<RangeInclusive<i32>>` at
-once.
+`Take<i64>`. A closure or a compound literal is typed by the parameter it is
+passed to, so it carries nothing to select on either, and the error names the
+argument that came up empty.
+
+Operators resolve their impl by operand type on the same principle, which is
+why `List<T>` implements `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`,
+and `IndexValue<RangeInclusive<i32>>` at once — and why the same impls answer
+the method spelling, `l.index_value(i)`.
 
 Two _different_ traits declaring one method name for one receiver is a
 separate case and is always reported: name the trait

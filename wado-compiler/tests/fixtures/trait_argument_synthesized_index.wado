@@ -1,0 +1,58 @@
+// `List<T>` carries `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>` and
+// `IndexValue<RangeInclusive<i32>>`, so a named `index_value` call is an
+// overload set and the argument selects (WEP 2026-07-31). Argument synthesis
+// types the ordinary argument forms — a call, a method call, an operator, a
+// range, an associated constant, an `if` — so each of these picks one impl.
+
+fn pick() -> i32 {
+    return 1;
+}
+
+test "a free function call's return type selects the argument list" {
+    let l: List<i32> = [1, 2, 3];
+    assert l.index_value(pick()) == 2;
+}
+
+test "a method call's return type selects the argument list" {
+    let l: List<i32> = [1, 2, 3];
+    assert l.index_value(l.len() - 1) == 3;
+}
+
+test "an operator's operand type selects the argument list" {
+    let l: List<i32> = [1, 2, 3];
+    let i = 0;
+    assert l.index_value(i + 1) == 2;
+}
+
+test "a range literal selects the range argument lists by its head" {
+    let l: List<i32> = [1, 2, 3];
+    assert l.index_value(0..<2).len() == 2;
+    assert l.index_value(1..=2).len() == 2;
+}
+
+test "an if expression joins its branches" {
+    let l: List<i32> = [1, 2, 3];
+    let c = true;
+    assert l.index_value(if c { 0 } else { pick() }) == 1;
+}
+
+test "an index expression selects the argument list" {
+    let l: List<i32> = [1, 2, 3];
+    let idx: List<i32> = [2, 1, 0];
+    assert l.index_value(idx[0]) == 3;
+}
+
+// The operator path selects from the index's resolved type and this one from
+// its synthesized class. Two mechanisms, one question — they must agree.
+test "the operator and the named call select the same impl" {
+    let l: List<i32> = [1, 2, 3];
+    let i = 0;
+    assert l[pick()] == l.index_value(pick());
+    assert l[i + 1] == l.index_value(i + 1);
+    assert l[l.len() - 1] == l.index_value(l.len() - 1);
+    assert l[0..<2].len() == l.index_value(0..<2).len();
+    assert l[1..=2].len() == l.index_value(1..=2).len();
+}
+
+__DATA__
+{"test": {}}

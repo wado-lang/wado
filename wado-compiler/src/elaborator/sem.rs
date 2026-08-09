@@ -86,3 +86,47 @@ pub(crate) struct ModuleSemantics {
     /// sole producer of default-method TIR).
     pub(crate) default_method_semantics: IndexMap<(AstId, AstId), ModuleSemantics>,
 }
+
+#[cfg(debug_assertions)]
+impl ModuleSemantics {
+    /// How many facts have been recorded, for the guard that a *query* left no
+    /// trace (`Elaborator::synthesize_arg_class`). A count, not a hash: the
+    /// guard catches a query that records where it must only read, and every
+    /// such recording grows a map.
+    pub(crate) fn fact_count(&self) -> usize {
+        let b = &self.bindings;
+        let t = &self.types;
+        b.references.len()
+            + b.local_symbols.len()
+            + t.local_types.len()
+            + t.expression_types.len()
+            + t.method_dispatch.len()
+            + t.coercions.len()
+            + t.desugars.len()
+            + t.generic_instantiations.len()
+            + t.closure_captures.len()
+            + t.call_param_types.len()
+            + t.assert_captures.len()
+            + t.for_of_iterator.len()
+            + t.operator_dispatch.len()
+            + t.handler_bindings.len()
+            + t.impl_facts.len()
+            + t.function_effects.len()
+            + t.function_task_returns.len()
+            + t.static_method_dispatch.len()
+            + t.sequence_coercions.len()
+            + t.key_value_coercions.len()
+            + t.from_call_facts.len()
+            + t.index_assign_dispatch.len()
+            + t.tuple_overlays.len()
+            + t.method_impl_type_params.len()
+            + t.fn_param_types.len()
+            + t.fn_return_types.len()
+            + t.effect_ops.len()
+            + t.decl_type_params.len()
+            + t.method_names.len()
+            + t.let_annotated_types.len()
+            + t.struct_field_types.len()
+            + t.assign_places.len()
+    }
+}
