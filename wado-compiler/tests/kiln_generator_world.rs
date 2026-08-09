@@ -9,7 +9,8 @@
 //! - Import-refusal: adding `use { now } from "wasi:clocks";` to a
 //!   generator surfaces `Code::KilnGeneratorForbiddenImport`.
 //!
-//! See WEP 2026-04-12 §"Protocol revision 3".
+//! See WEP 2026-04-12 §"Options are a typed argument in each generator's own
+//! world".
 
 #![allow(unused_crate_dependencies)]
 

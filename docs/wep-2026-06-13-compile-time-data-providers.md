@@ -115,15 +115,20 @@ buys the same thing without exposing it.
 
 The unit of reachability is the imported symbol, and for a resource, the method.
 
-Method granularity is required, not a refinement. A segmentation type whose
-`graphemes` method needs a few kilobytes and whose `words` method pulls a
-multi-megabyte dictionary would otherwise charge every grapheme user for the
-dictionary. Where the difference is that stark the facade also splits the type
-along the same line, so that naming a type is already a data decision; method
-granularity then covers the residue.
+The facade carries the coarse split in its types. Where two operations differ in
+data by orders of magnitude — a grapheme pass needs kilobytes where word
+segmentation pulls a multi-megabyte dictionary — they belong to different types,
+so naming a type is already a data decision and the cheap user never mentions the
+expensive one. That much works with reachability as it stands.
 
-Over-keeping is safe by construction: it over-bundles data, never changes
-behaviour.
+Method granularity is the refinement on top, for the residue that type splitting
+would fragment absurdly. It is not available yet: the liveness pass seeds every
+method as a live root by design, so today a live type implies every one of its
+methods. Depending on it before that changes would silently over-bundle, which is
+why the type-level split is the load-bearing half and method granularity is
+tracked as work.
+
+Over-keeping is safe either way: it over-bundles data, never changes behaviour.
 
 ### Locales are a compile-time declaration
 
@@ -178,8 +183,18 @@ interface types {
   }
 }
 
+interface provider-host {
+  /// Read a bundled compiler asset — one entry of the ICU data archive — as
+  /// raw bytes, resolved in the toolchain's bundled namespace. Calls are
+  /// recorded and contribute to the cache key.
+  read-asset: func(name: string) -> result<list<u8>, host-error>;
+
+  /// Report a diagnostic, surfaced as an ordinary compile diagnostic.
+  emit-diagnostic: func(diagnostic: diagnostic);
+}
+
 world data-provider {
-  import core:kiln/kiln-host;  // emit-diagnostic + read-asset
+  import provider-host;
   use types.{request, response};
   export provide: func(req: request) -> response;
 }
@@ -191,24 +206,18 @@ single module, ICU is one invocation returning one blob per surviving component.
 The `with { ... }` options a use site declares are absent from the sketch on
 purpose; see "Options".
 
-The provider reuses Kiln's host interface unchanged except for one addition.
-Kiln's `read-file` returns UTF-8 text resolved relative to the user's declaration
-site; a data provider instead needs raw bytes from the toolchain's bundled asset
-namespace:
+The host interface is the provider's own, not Kiln's. It mirrors Kiln's
+diagnostic shapes so the two report identically, but `core:kiln/kiln-host` is
+left untouched: adding `read-asset` there would hand every Kiln generator a read
+into the toolchain's asset namespace it has no reason to hold, widening a sandbox
+whose narrowness is the point. The two capability sets are disjoint by intent — a
+generator reads user files at its declaration site and never bundled assets, a
+provider reads bundled assets and never user files.
 
-```wit
-// added to core:kiln/kiln-host
-/// Read a bundled compiler asset (e.g. one entry of the ICU data archive) as
-/// raw bytes. Distinct from `read-file` (UTF-8 user files at the declaration
-/// site): `read-asset` resolves a name in the toolchain's bundled namespace.
-/// Calls are recorded and contribute to the cache key.
-read-asset: func(name: string) -> result<list<u8>, host-error>;
-```
-
-Diagnostics go through the host's existing `emit-diagnostic`, so the response
-carries only data. The request has no dataset list: the provider pulls the
-archive entries it needs via `read-asset`, and those recorded reads join the
-cache key — mirroring how Kiln records `read-file`.
+Diagnostics go through `emit-diagnostic`, so the response carries only data. The
+request has no dataset list: the provider pulls the entries it needs via
+`read-asset`, and those recorded reads join the cache key — mirroring how Kiln
+records its own reads.
 
 The symbol→marker mapping lives entirely in the provider. It is
 ICU-version-specific (a collator's constructor also pulls the normalizer's NFD
@@ -239,10 +248,18 @@ which already computes the closure of items reachable from the export boundary
 and already feeds both `reify` and the
 [unused-import diagnostics](./wep-2026-05-16-unused-diagnostics.md). Data
 provisioning is a third consumer of the same result: take the live imported
-symbols by their Wado names, qualified by method for resources, and hand them to
-the provider. Because Wado uses explicit named imports, the imported names are
-themselves the usage signal — no separate whole-program call-graph pass is
-needed.
+symbols by their Wado names and hand them to the provider. For a free function
+this needs nothing new — Wado's explicit named imports make the imported name
+itself the usage signal, so no whole-program call-graph pass is added.
+
+Methods are the part that pass does not answer today. It classifies free
+functions and globals, and seeds every method as a production root so that no
+method is ever reported dead — a deliberate soundness choice that defers
+method-level detection to the follow-up slice its own design names. Until that
+lands, a live type means all of its methods are live, so the facade's type-level
+split carries the whole burden and a program touching only cheap methods of an
+expensive type over-bundles. That is the cost of the current pass, not of this
+design; see the implementation list.
 
 Because that pass also backs the unused-import diagnostics, the LSP knows
 "imported but unused" for ICU symbols with no extra work. Surfacing the data cost
@@ -439,7 +456,12 @@ marker-recording mechanism, and the zlib-versus-zstd comparison.
 - [ ] Build the ICU provider component with its symbol→marker map and the
       marker-recording drift test.
 - [ ] Build the bundled archive — per-marker zlib entries plus index — and the
-      `read-asset` capability on `core:kiln/kiln-host`.
+      provider host interface carrying `read-asset`, separate from
+      `core:kiln/kiln-host`.
+- [ ] Extend the `liveness` pass to method-level reachability, so a live type
+      stops implying every method. Until then the facade's type-level split is
+      the only granularity that holds, and expensive methods on a live type are
+      bundled whether or not they are called.
 - [ ] Wire the provisioning phase: aggregate live symbols and options off the
       `liveness` pass, invoke the provider, embed and compose the result, and
       cache by content.

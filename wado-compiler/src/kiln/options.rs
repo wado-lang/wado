@@ -7,7 +7,7 @@
 //! [`crate::kiln::cache::encode_options_canonical`] (the cache-key byte
 //! layout).
 //!
-//! See WEP 2026-04-12 §M4 for the full design.
+//! See WEP 2026-04-12 §"Authoring a generator" for the full design.
 //!
 //! The extractor is deliberately strict: only shapes that round-trip cleanly
 //! through the Component-Model canonical encoder are allowed. A generator

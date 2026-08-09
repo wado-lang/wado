@@ -10,12 +10,12 @@
 //! production caller depends on it: every in-tree consumer drives Gale
 //! through the Kiln invocation surface.
 //!
-//! v2 ergonomics (WEP 2026-04-12 §"M6.5 stage 2"): the author writes
-//! `fn generate(req: Request<Options>)` and the compiler's
-//! `inject_kiln_request_adapter` phase rewrites the signature to
-//! `fn generate(req: RawRequest)` with
-//! `let req = bind_request::<Options>(req)?;` prepended. The v1
-//! explicit form still compiles for packages that prefer it.
+//! The author writes `fn generate(req: Request<Options>)`; the
+//! compiler's `inject_kiln_request_adapter` phase rewrites it into the
+//! wire shape — a `primary` parameter, an `inputs` parameter, and a
+//! typed `options: Options` parameter — and rebuilds `req` as a local,
+//! so the body below sees `Request<Options>` unchanged. See WEP
+//! 2026-04-12 §"Authoring a generator".
 
 use { Request, Response, Error, OutputFile, KilnHost, Diagnostic as KilnDiagnostic, DiagnosticLevel } from "core:kiln";
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
@@ -23,9 +23,8 @@ use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { to_snake_case } from "./gen_util.wado";
 
-/// Generator-side options. Surfaced under `options = { ... }` on the
-/// consuming project's `[build.generators.<name>]` table or at an inline
-/// `use ... with { generator: { options: { ... } } }` site.
+/// Generator-side options. Surfaced under `options = { ... }` at a
+/// consuming `use ... with { generator: { options: { ... } } }` site.
 ///
 /// The shape mirrors the legacy `gale gen` CLI flags; extend here as new
 /// flags land (WEP 2026-04-12 M6.7 checklist).

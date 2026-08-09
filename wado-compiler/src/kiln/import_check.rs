@@ -15,7 +15,7 @@
 //! diagnostic points at the user's `use` statement with the same span
 //! machinery as any other import error.
 //!
-//! See WEP 2026-04-12 §"M6.5 stage 2".
+//! See WEP 2026-04-12 §"Authoring a generator".
 use crate::ast::{
     AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern,
     SelfKind, Stmt, StructLiteralExpr, StructLiteralField, Type, UseDecl, UseItem,

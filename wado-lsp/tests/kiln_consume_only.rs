@@ -1,7 +1,7 @@
 //! Integration tests for `Engine`'s consume-only Kiln support.
 //!
-//! Pins the consume-only contract from WEP 2026-04-12 §"Transitional
-//! consume-only mode". The consume-only host cannot run the generator,
+//! Pins the consume-only contract from WEP 2026-04-12 §"Consume-only
+//! mode". The consume-only host cannot run the generator,
 //! so it cannot re-derive any of the recorded hashes; strict cache
 //! validation there only makes the redirect silently die and breaks
 //! every query. Consume-only therefore **trusts the on-disk artifact**:

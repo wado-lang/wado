@@ -1,7 +1,7 @@
 //! Canonical, compiler-internal representation of a Kiln generator invocation.
 //!
 //! All invocations come from inline `use ... with { generator: ... }` clauses;
-//! the manifest no longer declares any. See WEP 2026-04-12 §"Use site syntax".
+//! the manifest no longer declares any. See WEP 2026-04-12 §"Use-site syntax".
 
 use std::fmt;
 

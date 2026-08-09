@@ -1,7 +1,7 @@
 //! Cache-key composition for Kiln generator invocations.
 //!
 //! The cache key is a SHA-256 over a canonical byte string described in
-//! WEP 2026-04-12 §"Cache-key composition". This module is the single
+//! WEP 2026-04-12 §"Caching". This module is the single
 //! authority for that layout: callers (the pipeline driver, the lockfile
 //! writer) go through [`compose_cache_key`] so a cache hit is bit-identical
 //! regardless of who computed it.
