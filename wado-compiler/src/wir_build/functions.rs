@@ -762,9 +762,8 @@ fn is_null_operand(body: &Body, op: Operand) -> bool {
 }
 
 /// The primitive a value of `type_id` is stored as. `enum` and `flags` hold a
-/// discriminant, so their slot is an `i32` even though the declared type is
-/// not a primitive — without this an enum-valued initializer is not constant
-/// and the global falls back to a runtime assignment.
+/// discriminant, so their slot is an `i32` even though the declared type is not
+/// a primitive.
 fn storage_prim_of(type_id: crate::tir::TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
     use crate::tir::ResolvedType;
 
@@ -828,9 +827,8 @@ fn global_init_value(body: &Body, op: Operand, type_table: &TypeTable) -> Option
 }
 
 /// The value a slot starts at when its initializer is assigned by the module
-/// initialization function instead of being reduced here. It has to inhabit
-/// the slot's own Wasm type: `ref.null` is a value only for a reference slot,
-/// and an `enum` or `flags` slot is an `i32`.
+/// initialization function instead of being reduced here. It has to inhabit the
+/// slot's own Wasm type: `ref.null` is a value only for a reference slot.
 fn init_placeholder(wir_type: &WirType) -> crate::wir::WirInstr {
     use crate::wir::WirInstr;
 
@@ -852,7 +850,8 @@ fn init_placeholder(wir_type: &WirType) -> crate::wir::WirInstr {
         | WirType::Enum { .. }
         | WirType::Flags { .. } => WirInstr::I32Const(0),
         WirType::V128 => WirInstr::V128Const(0),
-        // A unit global occupies no Wasm slot, so nothing reaches here.
+        // `resolve_global` rejects a global declared at `()` or `Never`, the
+        // only two types that lower to `WirType::Unit`.
         WirType::Unit => panic!("[WIR] unit-typed global has no Wasm slot to initialize"),
     }
 }
@@ -885,8 +884,7 @@ fn translate_global_init(
                 _ => WirInstr::F64Const(value),
             };
         }
-        // `null` at a reference slot *is* the placeholder, and a unit global
-        // has no slot at all — both land where the non-reducible case does.
+        // `null` at a reference slot is the placeholder itself.
         Value::Null | Value::Unit => return init_placeholder(wir_type),
         Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => {
             return init_placeholder(wir_type);

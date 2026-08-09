@@ -1,0 +1,19 @@
+// A global holds a value between reads and `()` has none, so the declaration
+// is rejected rather than given a Wasm slot nothing reads back.
+use { println, Stdout } from "core:cli";
+
+fn announce() -> () with Stdout {
+    println(`init`);
+}
+
+global READY: () = announce();
+
+export fn run() with Stdout {
+    let _ = READY;
+    println(`ok`);
+}
+
+__DATA__
+{
+    "compile_error": "global `READY` has type `()`, which has no values to store"
+}
