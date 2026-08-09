@@ -33,6 +33,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use wado_compiler::ast::{
     AstVisitor, Block, Function, Item, Module, Stmt, walk_block, walk_function, walk_item,
+    walk_stmt,
 };
 use wado_compiler::{CompilerOptions, OptLevel};
 
@@ -204,7 +205,34 @@ impl Excluded {
 // Injection sites
 // ---------------------------------------------------------------------------
 
-/// Byte offsets at which a guard may be inserted.
+/// A position a guard may be inserted at, and what stands there.
+struct Site {
+    offset: usize,
+    kind: &'static str,
+}
+
+fn stmt_kind(stmt: &Stmt) -> &'static str {
+    match stmt {
+        Stmt::Let(_) => "let",
+        Stmt::Expr(_) => "expr",
+        Stmt::Return(_) => "return",
+        Stmt::TaskReturn(_) => "task-return",
+        Stmt::If(_) => "if",
+        Stmt::While(_) => "while",
+        Stmt::For(_) => "for",
+        Stmt::ForOf(_) => "for-of",
+        Stmt::Loop(_) => "loop",
+        Stmt::Match(_) => "match",
+        Stmt::Break(_) => "break",
+        Stmt::Continue(_) => "continue",
+        Stmt::Assert(_) => "assert",
+        Stmt::LabeledBlock(_) => "labeled-block",
+        Stmt::Item(_) => "item",
+        Stmt::Error(_) => "error",
+    }
+}
+
+/// Collects the positions at which a guard may be inserted.
 ///
 /// A site is the start of a statement inside a function or `test` body. Only
 /// positions *before* a statement qualify: the end of a block may be the
@@ -212,12 +240,12 @@ impl Excluded {
 /// collected — a guard in a global initializer or another compile-time context
 /// stops it being constant, which is a compile error rather than a mutant.
 struct SiteCollector {
-    sites: Vec<usize>,
+    sites: Vec<Site>,
     body_depth: u32,
 }
 
 impl SiteCollector {
-    fn collect(module: &Module) -> Vec<usize> {
+    fn collect(module: &Module) -> Vec<Site> {
         let mut collector = Self {
             sites: Vec::new(),
             body_depth: 0,
@@ -225,8 +253,8 @@ impl SiteCollector {
         for item in &module.items {
             collector.visit_item(item);
         }
-        collector.sites.sort_unstable();
-        collector.sites.dedup();
+        collector.sites.sort_unstable_by_key(|site| site.offset);
+        collector.sites.dedup_by_key(|site| site.offset);
         collector.sites
     }
 }
@@ -251,6 +279,29 @@ impl AstVisitor for SiteCollector {
         self.body_depth -= 1;
     }
 
+    /// `else if` is an `else` block holding one `If`, and that `If`'s span
+    /// starts at the `if` keyword. Visiting the block would offer the keyword
+    /// as a site, and a guard there splits the chain into an `else` that takes
+    /// the guard and a stray `if` — so the nested statement is visited
+    /// directly, contributing its interior without the position in front of it.
+    /// An `else { if … }` written with braces has the same shape and loses that
+    /// one site too; the interior sites are unaffected.
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        let Stmt::If(if_stmt) = stmt else {
+            walk_stmt(self, stmt);
+            return;
+        };
+        self.visit_condition(&if_stmt.condition);
+        self.visit_block(&if_stmt.then_block);
+        let Some(else_block) = &if_stmt.else_block else {
+            return;
+        };
+        match else_block.stmts.as_slice() {
+            [nested @ Stmt::If(_)] => self.visit_stmt(nested),
+            _ => self.visit_block(else_block),
+        }
+    }
+
     fn visit_block(&mut self, block: &Block) {
         if self.body_depth > 0 {
             for stmt in &block.stmts {
@@ -259,25 +310,49 @@ impl AstVisitor for SiteCollector {
                 if matches!(stmt, Stmt::Item(_)) {
                     continue;
                 }
-                self.sites.push(stmt.span().start);
+                self.sites.push(Site {
+                    offset: stmt.span().start,
+                    kind: stmt_kind(stmt),
+                });
             }
         }
         walk_block(self, block);
     }
 }
 
-fn injection_sites(source: &str) -> Vec<usize> {
-    SiteCollector::collect(&wado_compiler::parse(source).ast)
+/// Collect the sites of `source`, keeping only those a guard can actually be
+/// written at.
+///
+/// A statement's span is not proof of a position: the parser re-lexes a
+/// template interpolation on its own, so a node inside `${…}` carries an offset
+/// relative to the fragment rather than to the file, and inserting there splices
+/// a guard into unrelated text. Rather than enumerate which spans to distrust,
+/// the collected set is checked against the parser — all at once, since a
+/// fixture normally has nothing wrong with it, and site by site only when that
+/// fails.
+fn injection_sites(source: &str) -> Vec<Site> {
+    let sites = SiteCollector::collect(&wado_compiler::parse(source).ast);
+    if parses(&inject(source, &sites, "")) {
+        return sites;
+    }
+    sites
+        .into_iter()
+        .filter(|site| parses(&inject(source, std::slice::from_ref(site), "")))
+        .collect()
+}
+
+fn parses(source: &str) -> bool {
+    wado_compiler::format(source).is_ok()
 }
 
 /// Insert `payload`, wrapped in a guard, at each of `sites`.
 ///
 /// Offsets are consumed back to front so the earlier ones stay valid.
-fn inject(source: &str, sites: &[usize], payload: &str) -> String {
+fn inject(source: &str, sites: &[Site], payload: &str) -> String {
     let text = guard(payload);
     let mut mutant = source.to_string();
-    for &offset in sites.iter().rev() {
-        mutant.insert_str(offset, &text);
+    for site in sites.iter().rev() {
+        mutant.insert_str(site.offset, &text);
     }
     mutant
 }
@@ -683,6 +758,24 @@ fn write_report(results: &Results, total: usize) {
     );
 }
 
+/// One line per site: offset, the line and column it lands on, the statement
+/// kind, and the text that follows it. A site whose text does not look like the
+/// statement it claims to be is a span the collector should not have trusted.
+fn describe_sites(source: &str, sites: &[Site]) -> String {
+    let mut out = String::new();
+    for site in sites {
+        let before = &source[..site.offset];
+        let line = before.matches('\n').count() + 1;
+        let column = before.len() - before.rfind('\n').map_or(0, |i| i + 1) + 1;
+        let tail: String = source[site.offset..].chars().take(48).collect();
+        out.push_str(&format!(
+            "{:>7}  {line}:{column}  {:<14} {:?}\n",
+            site.offset, site.kind, tail
+        ));
+    }
+    out
+}
+
 /// Write the canonical form and the empty-guard mutant of every fixture
 /// `WADO_EMI_FILTER` selects, so a rejection or a divergence can be read as
 /// source instead of inferred from a line and column.
@@ -713,6 +806,8 @@ fn dump_mutants() {
             .unwrap_or_else(|e| panic!("cannot create {}: {e}", into.display()));
         std::fs::write(into.join("canonical.wado"), &canonical).expect("cannot write canonical");
         std::fs::write(into.join("mutant.wado"), &mutant).expect("cannot write mutant");
+        std::fs::write(into.join("sites.txt"), describe_sites(&canonical, &sites))
+            .expect("cannot write sites");
         eprintln!("[emi] {name}: {} sites — {}", sites.len(), into.display());
     }
 }
@@ -740,11 +835,49 @@ test "t" {
 }
 "#;
     let sites = injection_sites(source);
-    let starts: Vec<&str> = sites
-        .iter()
-        .map(|&offset| source[offset..].split_whitespace().next().unwrap_or(""))
-        .collect();
-    assert_eq!(starts, vec!["let", "return", "assert"]);
+    let kinds: Vec<&str> = sites.iter().map(|site| site.kind).collect();
+    assert_eq!(kinds, vec!["let", "return", "assert"]);
+}
+
+/// A node inside a template interpolation carries a fragment-relative offset
+/// (the parser re-lexes `${…}` on its own), so its span is not a position in
+/// the file. Such a site must not reach the mutant.
+#[test]
+fn interpolation_relative_spans_are_dropped() {
+    let source = r#"use { println, Stdout } from "core:cli";
+
+fn f(n: i32) with Stdout {
+    println(`v: ${if n > 0 { `pos` } else { `neg` }}`);
+}
+"#;
+    let mutant = inject(source, &injection_sites(source), "");
+    assert!(
+        wado_compiler::format(&mutant).is_ok(),
+        "a mutant must still parse, got:\n{mutant}"
+    );
+}
+
+/// A guard in front of the `if` an `else if` desugars to would split the chain,
+/// so that one position is not a site — while the branches it joins still are.
+#[test]
+fn else_if_keyword_is_not_a_site() {
+    let source = r#"fn f(n: i32) -> i32 {
+    if n < 10 {
+        return 1;
+    } else if n < 20 {
+        return 2;
+    } else {
+        return 3;
+    }
+}
+"#;
+    let kinds: Vec<&str> = injection_sites(source).iter().map(|s| s.kind).collect();
+    assert_eq!(
+        kinds,
+        vec!["if", "return", "return", "return"],
+        "the statement the chain starts with and each arm's body, but not the \
+         `if` an `else if` holds"
+    );
 }
 
 #[test]
