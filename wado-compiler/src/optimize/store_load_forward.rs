@@ -92,27 +92,21 @@ fn forward_one(
     engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
-    // Grow the build-once graph with the reaching constant of every safe bare
-    // scalar local. SROA / field_scalarize introduce such scalars after the
-    // graph was built (and `inline` coarsened it), so their reads carry no value
-    // and forwarding would miss them; the scratch re-walk recovers each one's
-    // forwarded literal (bare-local forwarding is immune to the call/heap bumps
-    // that defeat the pre-SROA field form). Constants only — sound by refinement.
-    let safe_scalars: IndexSet<u32> = (0..engine.locals().len() as u32)
+    // The complement of the unsafe set: what disqualifies a local is being
+    // address-taken or `stores`-aliased, not being an aggregate.
+    let forwardable_locals: IndexSet<u32> = (0..engine.locals().len() as u32)
         .filter(|i| !unsafe_locals.contains(i))
         .collect();
-    // Born-as-operands (WEP item 3): take every reaching constant — bare-scalar
-    // `Local`s and `FieldAccess`es — straight from the scratch re-walk and promote
-    // them directly into operand slots, so the forwarding never round-trips
-    // through the persisted `value_of` side-table.
-    let consts: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId> = engine
-        .scoped_const_reads(&safe_scalars, /* include_fields */ true)
+    // Born-as-operands (WEP item 3): promote each re-emittable reaching value
+    // straight into its operand slot, never through the persisted `value_of`.
+    let forwarded: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId> = engine
+        .scoped_const_reads(&forwardable_locals, /* include_fields */ true)
         .into_iter()
         .collect();
     let rule = StoreLoadForwardRule {
         applied: Cell::new(false),
         unsafe_locals,
-        consts,
+        forwarded,
     };
     engine.run(&[&rule])
 }
@@ -122,9 +116,8 @@ fn forward_one(
 pub(super) struct StoreLoadForwardRule {
     applied: Cell<bool>,
     unsafe_locals: IndexSet<u32>,
-    /// Born-as-operands constants from the scratch re-walk: the reads in this map
-    /// promote from it directly, never consulting `value_of`.
-    consts: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
+    /// Reaching values from the scratch re-walk, promoted directly.
+    forwarded: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
 }
 
 impl Rule for StoreLoadForwardRule {
@@ -135,7 +128,7 @@ impl Rule for StoreLoadForwardRule {
         if self.applied.replace(true) {
             return false;
         }
-        forward_at_root(engine, &self.unsafe_locals, &self.consts)
+        forward_at_root(engine, &self.unsafe_locals, &self.forwarded)
     }
 }
 
@@ -145,11 +138,11 @@ impl Rule for StoreLoadForwardRule {
 fn forward_at_root(
     engine: &mut Engine,
     unsafe_locals: &IndexSet<u32>,
-    consts: &crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
+    forwarded: &crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
 ) -> bool {
     // Snapshot reads before rewriting. `FieldAccess` reads carry `None`:
     // their alias safety is upstream — the builder never seeds an aliased
-    // receiver, so such a read never carries a literal `ValueId`.
+    // receiver, so such a read never carries a re-emittable `ValueId`.
     let mut reads: Vec<(ExprId, Option<u32>)> = Vec::new();
     collect_candidate_reads(engine.body, &mut reads);
 
@@ -168,10 +161,8 @@ fn forward_at_root(
         if super::extract::is_place_read(engine, expr) {
             continue;
         }
-        // Born-as-operands: every forwardable read carries its reaching constant
-        // in `consts` (from the scratch re-walk), promoted without touching
-        // `value_of`. A read not in the map is non-constant — skip it.
-        let Some(vid) = consts.get(&expr).copied() else {
+        // A read not in `forwarded` has no re-emittable value.
+        let Some(vid) = forwarded.get(&expr).copied() else {
             continue;
         };
         // The constant promotes into `expr`'s parent operand slot (WEP: The Live

@@ -1,0 +1,27 @@
+// One `#[cm]` operation does not cover its neighbours: `cm_binding` lowers
+// `sink` and leaves `enabled` alone, so the criterion is per-operation.
+use { println, Stdout } from "core:cli";
+
+interface Log {
+    #[cm("wasi:cli/stdout@0.3.0#get-stdout")]
+    fn sink();
+    fn enabled(level: i32) -> bool;
+}
+
+#[ambient]
+fn probe(level: i32) -> bool {
+    return Log::enabled(level);
+}
+
+export fn run() with Stdout {
+    println(`before`);
+    if probe(2) {
+        println(`unreachable`);
+    }
+}
+
+__DATA__
+{
+    "stdout_contains": ["before"],
+    "trapped": true
+}

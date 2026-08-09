@@ -171,26 +171,6 @@ pub fn expand_templates(
             func.locals.extend(alloc.new_locals);
         }
     }
-    // Walk impl-block methods too. They aren't reachable via
-    // `module.functions` (which holds only free functions and
-    // synthesised wrappers), so a template string inside e.g.
-    // `impl Point { fn show(&self) -> String { return `..` } }` would
-    // otherwise survive as a raw `TirExprKind::TemplateString` node and
-    // hit later phases that don't know how to handle it.
-    for impl_block in &mut module.impls {
-        for method in &mut impl_block.methods {
-            let local_count = method.local_count;
-            if let Some(ref mut body) = method.body {
-                let mut alloc = FuncLocalAlloc {
-                    next_index: local_count,
-                    new_locals: Vec::new(),
-                };
-                expand_block(body, &mut alloc, &ctx);
-                method.local_count = alloc.next_index;
-                method.locals.extend(alloc.new_locals);
-            }
-        }
-    }
 }
 
 /// Read-only context shared across all template-expansion helpers.

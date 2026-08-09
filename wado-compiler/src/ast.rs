@@ -3020,6 +3020,12 @@ pub enum Type {
 }
 
 impl Type {
+    /// Whether this is the unit type, spelled `()`.
+    #[must_use]
+    pub fn is_unit(&self) -> bool {
+        matches!(self, Type::Named(n) if n.name == "()")
+    }
+
     /// Returns the [`AstId`] for types that carry one (named types and
     /// generics). Structural types (tuple, reference, function) aggregate
     /// children that each carry their own ids.
@@ -3475,6 +3481,15 @@ pub struct TraitDecl {
     pub span: Span,
 }
 
+/// What an effect handler does with an operation it does not implement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RestClause {
+    /// `..trap` — dispatching the operation traps.
+    Trap,
+    /// `..forward` — dispatching the operation reaches the outer handler.
+    Forward,
+}
+
 #[derive(Debug, Clone)]
 pub struct ImplBlock {
     pub id: AstId,
@@ -3491,11 +3506,10 @@ pub struct ImplBlock {
     pub methods: Vec<Function>,
     /// `impl Trait for Type;` — synthesis request (compiler generates the body)
     pub is_synthesize_request: bool,
-    /// `..trap` rest clause at the end of an effect handler `impl` block.
-    /// Indicates that any operation of the trait (effect) not implemented in
-    /// `methods` should trap when dispatched. Only meaningful for effect
-    /// handler impls; ignored for ordinary trait impls.
-    pub has_rest: bool,
+    /// Rest clause at the end of an effect handler `impl` block, deciding
+    /// what an operation absent from `methods` does when dispatched. Only
+    /// meaningful for effect handler impls; ignored for ordinary trait impls.
+    pub rest: Option<RestClause>,
     pub span: Span,
 }
 

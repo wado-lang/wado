@@ -110,13 +110,13 @@ The VS Code extension (`wado-vscode/src/extension.ts`) bridges this with a `Text
 
 ## Related Files in wado-cli
 
-| File                   | Role                                                                           |
-| ---------------------- | ------------------------------------------------------------------------------ |
-| `src/lsp.rs`           | `wado lsp` subcommand — delegates to `wado_lsp::server::run_stdio`             |
-| `src/compiler_host.rs` | CLI-side wrapper over `wado_lsp::FilesystemCompilerHost` (stderr + timestamps) |
-| `src/query.rs`         | `wado query` subcommand: arg parsing, dispatch                                 |
-| `src/query_adapter.rs` | Engine invocation, text/JSON output formatting                                 |
-| `tests/lsp.rs`         | Integration tests for both `wado lsp` and `wado query`                         |
+| File                       | Role                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------ |
+| `src/lsp.rs`               | `wado lsp` subcommand — delegates to `wado_lsp::server::run_stdio`             |
+| `src/compiler_host.rs`     | CLI-side wrapper over `wado_lsp::FilesystemCompilerHost` (stderr + timestamps) |
+| `src/query.rs`             | `wado query` subcommand: arg parsing, dispatch                                 |
+| `src/query_adapter.rs`     | Engine invocation, text/JSON output formatting                                 |
+| `tests/integration/lsp.rs` | Integration tests for both `wado lsp` and `wado query`                         |
 
 ## References
 

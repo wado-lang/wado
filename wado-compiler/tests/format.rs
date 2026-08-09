@@ -346,6 +346,36 @@ fn test_format_closure_return_type_roundtrips() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// Dropping `-> ()` is the canonical form, and the parser normalizes it away so
+/// the canonicalization is not an AST change `test_roundtrip_ast_all_fixtures`
+/// trips on. A closure is excluded: `None` means "infer" there, not unit.
+#[test]
+fn test_format_drops_explicit_unit_return_type() {
+    let source = concat!(
+        "interface Sink {\n",
+        "    fn emit(message: String) -> ();\n",
+        "}\n",
+        "\n",
+        "fn announce(tag: String) -> () {\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        !formatted.contains("-> ()"),
+        "the explicit unit return type should be dropped, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+
+    // The closure form keeps it: `None` there means the type is inferred.
+    let closure = "fn run() {\n    let f = || -> () {\n    };\n}\n";
+    let formatted = wado_compiler::format(closure).expect("format failed");
+    assert!(
+        formatted.contains("|| -> ()"),
+        "a closure's unit return type is not the same declaration, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(closure);
+}
+
 /// `reactive` is a prefix keyword that must precede `let`. The formatter used
 /// to emit `let reactive ...`, which the parser rejects ("expected pattern,
 /// found Reactive"), so formatting any `reactive let` binding produced output
@@ -650,6 +680,39 @@ fn run() {
     let formatted1 = wado_compiler::format(source).expect("format failed");
     let formatted2 = wado_compiler::format(&formatted1).expect("format failed");
     assert_eq!(formatted1, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_effect_handler_forward_rest() {
+    let source = r"impl Foo for Bar {
+    fn op(&self) -> i32 {
+        return 1;
+    }
+    ..forward
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("..forward"),
+        "rest clause should round-trip as `..forward`: {formatted}"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_effect_handler_rest_only_block() {
+    let source = r"impl Foo for Bar {
+    ..forward
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("..forward"),
+        "a rest-only block should keep its clause: {formatted}"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
 #[test]

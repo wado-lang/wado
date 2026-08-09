@@ -23,6 +23,12 @@ pub enum Value {
     Bool(bool),
     /// Unicode scalar value (`char`).
     Char(char),
+    /// The null reference. Equality is decided only against another `Null`: a
+    /// constant aggregate names a value, not the reference reaching it, so
+    /// `null == <aggregate>` stays unevaluated rather than answered `false`.
+    Null,
+    /// The unit value, `()`.
+    Unit,
     /// A struct or tuple whose every field is itself a compile-time value.
     ///
     /// Fields are keyed by `field_index` — the key `FieldAccess`,
@@ -209,6 +215,8 @@ impl Value {
             | Self::Float { .. }
             | Self::Bool(_)
             | Self::Char(_)
+            | Self::Null
+            | Self::Unit
             | Self::Aggregate { .. }
             | Self::Variant { .. } => None,
         }
@@ -280,7 +288,9 @@ impl Value {
                         .zip(b_elements.iter())
                         .all(|(a, b)| a.denotes_same(b))
             }
+            (Self::Null, Self::Null) | (Self::Unit, Self::Unit) => true,
             (Self::Int { .. } | Self::Bool(_) | Self::Char(_), _) => self == other,
+            (Self::Null | Self::Unit, _) => false,
             (
                 Self::Float { .. }
                 | Self::Aggregate { .. }
@@ -329,8 +339,8 @@ impl Value {
 
     /// Render the value as a NIR-compatible literal repr string.
     ///
-    /// Scalars only: an aggregate has no literal form in NIR, and never
-    /// reaches the pool this renders from.
+    /// Scalars only. An aggregate has no literal form in NIR but can reach the
+    /// pool, so an arbitrary `Value` must pass [`Self::is_scalar`] first.
     #[must_use]
     pub fn format_repr(&self) -> String {
         match self {
@@ -338,6 +348,8 @@ impl Value {
             Self::Float { value, .. } => format_float_repr(*value),
             Self::Bool(b) => b.to_string(),
             Self::Char(c) => format_char_repr(*c),
+            Self::Null => "null".to_string(),
+            Self::Unit => "()".to_string(),
             Self::Aggregate { .. } | Self::Seq { .. } | Self::Variant { .. } => {
                 panic!(
                     "an aggregate, sequence, or variant value has no NIR literal repr; none enters the value pool"
@@ -346,41 +358,17 @@ impl Value {
         }
     }
 
-    /// Project an [`Operand`] to a `Value` when it is a pure scalar constant.
-    /// The constant lives in the function's `ValuePool` (the source of truth for
-    /// pure scalars; WEP: The Live `ValueGraph`) — only `Operand::Value` can be one,
-    /// since scalars no longer occupy skeleton `ExprId` slots. Only `Int` (tracked
-    /// int prims), `Float` (`f32`/`f64`), `Bool`, and `Char` project; `i128` /
-    /// `u128` and non-primitive types yield `None`.
+    /// Project an [`Operand`] to the constant it denotes. Constants live in
+    /// the `ValuePool`, so only `Operand::Value` can be one.
     #[must_use]
     pub fn from_operand(
         body: &Body,
         op: crate::nir_arena::Operand,
         type_table: &TypeTable,
     ) -> Option<Self> {
-        use crate::nir_value_graph::ValueKind;
         let v = op.as_value()?;
         let ty = body.values.type_of(v)?;
-        match body.values.kind(v) {
-            ValueKind::Int(value, _) => {
-                let prim = prim_of(ty, type_table).filter(|p| is_int_prim(*p))?;
-                Some(Self::Int {
-                    value: *value,
-                    prim,
-                })
-            }
-            ValueKind::Float(bits, _) => {
-                let prim = prim_of(ty, type_table)
-                    .filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
-                Some(Self::Float {
-                    value: f64::from_bits(*bits),
-                    prim,
-                })
-            }
-            ValueKind::Bool(b) => Some(Self::Bool(*b)),
-            ValueKind::Char(c) => Some(Self::Char(*c)),
-            _ => None,
-        }
+        crate::nir_value_graph::value_kind_to_const(body.values.kind(v), prim_of(ty, type_table))
     }
 }
 
@@ -389,6 +377,7 @@ pub(crate) fn eval_binary(left: Value, op: NirBinaryOp, right: Value) -> Option<
     match (left, right) {
         (Value::Bool(l), Value::Bool(r)) => eval_bool_binary(l, op, r),
         (Value::Char(l), Value::Char(r)) => eval_char_binary(l, op, r),
+        (Value::Null, Value::Null) | (Value::Unit, Value::Unit) => eval_singleton_binary(op),
         (Value::Float { value: l, prim: lp }, Value::Float { value: r, prim: rp }) if lp == rp => {
             eval_float_binary(l, op, r, lp)
         }
@@ -415,6 +404,8 @@ pub(crate) fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
             }
             Value::Bool(_)
             | Value::Char(_)
+            | Value::Null
+            | Value::Unit
             | Value::Aggregate { .. }
             | Value::Seq { .. }
             | Value::Variant { .. } => None,
@@ -614,6 +605,16 @@ fn trunc_to_int(value: f64, target: PrimitiveType) -> Option<u64> {
         | PrimitiveType::I128
         | PrimitiveType::U128
         | PrimitiveType::V128 => panic!("trunc_to_int: non-integer target {target:?}"),
+    }
+}
+
+/// Equality between two single-inhabitant values: `null` with `null`, `()`
+/// with `()`. Every other operator is meaningless on them.
+pub(crate) fn eval_singleton_binary(op: NirBinaryOp) -> Option<Value> {
+    match op {
+        NirBinaryOp::Eq => Some(Value::Bool(true)),
+        NirBinaryOp::NotEq => Some(Value::Bool(false)),
+        _ => None,
     }
 }
 

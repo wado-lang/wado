@@ -87,7 +87,7 @@ unconditional trap — `crates/environ/src/fact/trampoline.rs:117-127`
 This over-approximates the spec's "trap recursive reentry" runtime guard: a
 donut parent→child call adapter is an ancestor-relation adapter, so **all**
 donut calls trap, not just recursive ones. Verified empirically with a
-hand-written donut component (`wado-compiler/tests/cm_donut_canary.rs`):
+hand-written donut component (`wado-compiler/tests/integration/cm_donut_canary.rs`):
 instantiation succeeds, the first parent→child call traps
 `cannot enter component instance`.
 

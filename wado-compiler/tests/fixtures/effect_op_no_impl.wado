@@ -1,0 +1,26 @@
+// An effect operation with no handler installed traps at run time. The call
+// must still lower to that trap when the program contains no `impl` of the
+// effect at all — what a stdlib facade hits when every handler is dead code.
+use { println, Stdout } from "core:cli";
+
+interface Log {
+    fn enabled(level: i32) -> bool;
+}
+
+#[ambient]
+fn probe(level: i32) -> bool {
+    return Log::enabled(level);
+}
+
+export fn run() with Stdout {
+    println(`before`);
+    if probe(2) {
+        println(`unreachable`);
+    }
+}
+
+__DATA__
+{
+    "stdout_contains": ["before"],
+    "trapped": true
+}

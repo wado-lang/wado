@@ -1,6 +1,6 @@
 global mut heap_offset: i32 = 8;
 
-global POW10: List<u64> = deferred %0;
+global POW10: List<u64> = deferred null;
 
 pub global PARSE_DIGITS_MAX: i32 = 19;
 
@@ -4102,7 +4102,7 @@ pub fn parse(d: u64, p: i32) -> f64 {
 
 pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     if (((start < 0) || (end > s."core:prelude/string.wado/String::len"())) || (start >= end)) {
-        return %1;
+        return null;
     }
     let len: i32 = end;
     let mut sign: f64 = 1.0;
@@ -4117,7 +4117,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         }
     }
     if (i >= len) {
-        return %8;
+        return null;
     }
     let remaining: i32 = (len - i);
     let c0: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"(i);
@@ -4140,7 +4140,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
                 }
             }
         }
-        return %39;
+        return null;
     }
     if (((c0 == 110) || (c0 == 78)) && (remaining == 3)) {
         core::builtin::cold_path();
@@ -4149,7 +4149,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         if (((c1 == 97) || (c1 == 65)) && ((c2 == 110) || (c2 == 78))) {
             return Option<f64>::Some((0.0 / 0.0));
         }
-        return %51;
+        return null;
     }
     let MAX_DIGITS: i32 = 19;
     let mut d: u64 = 0;
@@ -4167,7 +4167,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     let int_digits: i32 = (i - digit_start);
     if ((i < len) && (s."core:prelude/string.wado/String::get_byte_unchecked"(i) == 46)) {
         if (int_digits == 0) {
-            return %62;
+            return null;
         }
         i = (i + 1);
         let frac_start: i32 = i;
@@ -4182,12 +4182,12 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
             i = (i + 1);
         }
         if (i == frac_start) {
-            return %70;
+            return null;
         }
     }
     let total_digits: i32 = (int_digits + frac);
     if ((total_digits == 0) || (total_digits > MAX_DIGITS)) {
-        return %72;
+        return null;
     }
     let mut p: i32 = 0;
     if ((i < len) && ((s."core:prelude/string.wado/String::get_byte_unchecked"(i) == 101) || (s."core:prelude/string.wado/String::get_byte_unchecked"(i) == 69))) {
@@ -4205,7 +4205,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         }
         let exp_start: i32 = i;
         if ((i >= len) || ((len - i) > 3)) {
-            return %84;
+            return null;
         }
         loop {
             if !(((i < len) && (s."core:prelude/string.wado/String::get_byte_unchecked"(i) >= 48)) && (s."core:prelude/string.wado/String::get_byte_unchecked"(i) <= 57)) {
@@ -4217,12 +4217,12 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
             i = (i + 1);
         }
         if (i == exp_start) {
-            return %90;
+            return null;
         }
         p = (p * exp_sign);
     }
     if (i != len) {
-        return %91;
+        return null;
     }
     if (d == 0) {
         return Option<f64>::Some(core::builtin::f64_copysign(0.0, sign));
@@ -5495,7 +5495,7 @@ pub fn "f32^TryFrom<u128>::try_from"(value: u128) -> Result<f32, ConvertError> {
 fn "core:prelude/int128.wado/u128^Step::next_step"(self: &u128) -> Option<u128> {
     let max: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_pair"(18446744073709551615, 18446744073709551615);
     if *self."core:prelude/int128.wado/u128^Eq::eq"(&max) {
-        return %2;
+        return null;
     }
     return Option<u128>::Some(*self."core:prelude/int128.wado/u128^Add::add"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(1)));
 }
@@ -5503,7 +5503,7 @@ fn "core:prelude/int128.wado/u128^Step::next_step"(self: &u128) -> Option<u128> 
 fn "core:prelude/int128.wado/i128^Step::next_step"(self: &i128) -> Option<i128> {
     let max: i128 = "core::prelude/int128.wado::core:prelude/int128.wado/i128::from_pair"(18446744073709551615, 9223372036854775807);
     if *self."core:prelude/int128.wado/i128^Eq::eq"(&max) {
-        return %2;
+        return null;
     }
     return Option<i128>::Some(*self."core:prelude/int128.wado/i128^Add::add"(&"core::prelude/int128.wado::core:prelude/int128.wado/i128::from_i64"(1)));
 }
@@ -6418,17 +6418,17 @@ fn "bool^LenientFromStr::from_str_lenient"(s: &String) -> Result<bool, LenientPa
 
 pub fn char::from_u32(value: u32) -> Option<char> {
     if (value > 1114111) {
-        return %1;
+        return null;
     }
     if ((value >= 55296) && (value <= 57343)) {
-        return %4;
+        return null;
     }
     return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(value));
 }
 
 pub fn char::from_i32(value: i32) -> Option<char> {
     if (value < 0) {
-        return %1;
+        return null;
     }
     return "core::prelude/primitive.wado::char::from_u32"(value as u32);
 }
@@ -8910,56 +8910,56 @@ pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item
 
 fn "i8^Step::next_step"(self: Box<i8>) -> Option<i8> {
     if (self.value == 127) {
-        return %1;
+        return null;
     }
     return Option<i8>::Some((self.value + 1 as i8));
 }
 
 fn "i16^Step::next_step"(self: Box<i16>) -> Option<i16> {
     if (self.value == 32767) {
-        return %1;
+        return null;
     }
     return Option<i16>::Some((self.value + 1 as i16));
 }
 
 fn "i32^Step::next_step"(self: Box<i32>) -> Option<i32> {
     if (self.value == 2147483647) {
-        return %1;
+        return null;
     }
     return Option<i32>::Some((self.value + 1));
 }
 
 fn "i64^Step::next_step"(self: Box<i64>) -> Option<i64> {
     if (self.value == 9223372036854775807) {
-        return %1;
+        return null;
     }
     return Option<i64>::Some((self.value + 1 as i64));
 }
 
 fn "u8^Step::next_step"(self: Box<u8>) -> Option<u8> {
     if (self.value == 255) {
-        return %1;
+        return null;
     }
     return Option<u8>::Some((self.value + 1 as u8));
 }
 
 fn "u16^Step::next_step"(self: Box<u16>) -> Option<u16> {
     if (self.value == 65535) {
-        return %1;
+        return null;
     }
     return Option<u16>::Some((self.value + 1 as u16));
 }
 
 fn "u32^Step::next_step"(self: Box<u32>) -> Option<u32> {
     if (self.value == 4294967295) {
-        return %1;
+        return null;
     }
     return Option<u32>::Some((self.value + 1 as u32));
 }
 
 fn "u64^Step::next_step"(self: Box<u64>) -> Option<u64> {
     if (self.value == 18446744073709551615) {
-        return %1;
+        return null;
     }
     return Option<u64>::Some((self.value + 1 as u64));
 }
@@ -9285,7 +9285,7 @@ fn substring(repr: &Array<u8>, start: i32, len: i32) -> String {
 #[inline]
 pub fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::next"(self: &mut StrUtf8ByteIter) -> Option<u8> {
     if (self.index >= self.used) {
-        return %0;
+        return null;
     }
     let byte: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.index);
     self.index = (self.index + 1);
@@ -9336,7 +9336,7 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::find"(self: &mut StrU
             },
         };
     }
-    return %0;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::any"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> bool {
@@ -9374,7 +9374,7 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::all"(self: &mut StrUt
 }
 
 pub fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::last"(self: &mut StrUtf8ByteIter) -> Option<u8> {
-    let mut result: Option<u8> = %0;
+    let mut result: Option<u8> = null;
     loop {
         let __match_3: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^Iterator::next"();
         match __match_3 {
@@ -9405,7 +9405,7 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::nth"(self: &mut StrUt
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::position"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> Option<i32> {
@@ -9424,7 +9424,7 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::position"(self: &mut 
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::reduce"(self: &mut StrUtf8ByteIter, f: fn mut(u8, u8) -> u8) -> Option<u8> {
@@ -9447,7 +9447,7 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::reduce"(self: &mut St
         },
         _ => (),
     };
-    return %1;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::filter"(self: &StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> IterFilter<core:prelude/string.wado/StrUtf8ByteIter> {
@@ -9468,7 +9468,7 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::skip"(self: &StrUtf8B
 
 pub fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self: &mut StrCharIter) -> Option<char> {
     if (self.byte_index >= self.used) {
-        return %0;
+        return null;
     }
     let __pattern_temp_0: [u32, i32] = "core::prelude/string.wado::decode_char_at"(self.repr, self.byte_index);
     let code: u32 = __pattern_temp_0.0;
@@ -9521,7 +9521,7 @@ pub fn "core:prelude/string.wado/StrCharIter^Iterator::find"(self: &mut StrCharI
             },
         };
     }
-    return %0;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrCharIter^Iterator::any"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> bool {
@@ -9559,7 +9559,7 @@ pub fn "core:prelude/string.wado/StrCharIter^Iterator::all"(self: &mut StrCharIt
 }
 
 pub fn "core:prelude/string.wado/StrCharIter^Iterator::last"(self: &mut StrCharIter) -> Option<char> {
-    let mut result: Option<char> = %0;
+    let mut result: Option<char> = null;
     loop {
         let __match_3: Option<char> = self."core:prelude/string.wado/StrCharIter^Iterator::next"();
         match __match_3 {
@@ -9590,7 +9590,7 @@ pub fn "core:prelude/string.wado/StrCharIter^Iterator::nth"(self: &mut StrCharIt
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrCharIter^Iterator::position"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> Option<i32> {
@@ -9609,7 +9609,7 @@ pub fn "core:prelude/string.wado/StrCharIter^Iterator::position"(self: &mut StrC
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrCharIter^Iterator::reduce"(self: &mut StrCharIter, f: fn mut(char, char) -> char) -> Option<char> {
@@ -9632,7 +9632,7 @@ pub fn "core:prelude/string.wado/StrCharIter^Iterator::reduce"(self: &mut StrCha
         },
         _ => (),
     };
-    return %1;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrCharIter^Iterator::filter"(self: &StrCharIter, pred: fn mut(char) -> bool) -> IterFilter<core:prelude/string.wado/StrCharIter> {
@@ -9653,7 +9653,7 @@ pub fn "core:prelude/string.wado/StrCharIter^Iterator::skip"(self: &StrCharIter,
 
 pub fn "core:prelude/string.wado/StrCharIndicesIter^Iterator::next"(self: &mut StrCharIndicesIter) -> Option<[i32, char]> {
     if (self.byte_index >= self.used) {
-        return %0;
+        return null;
     }
     let idx: i32 = self.byte_index;
     let __pattern_temp_0: [u32, i32] = "core::prelude/string.wado::decode_char_at"(self.repr, self.byte_index);
@@ -9707,7 +9707,7 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^Iterator::find"(self: &mut S
             },
         };
     }
-    return %0;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> bool {
@@ -9745,7 +9745,7 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^Iterator::all"(self: &mut St
 }
 
 pub fn "core:prelude/string.wado/StrCharIndicesIter^Iterator::last"(self: &mut StrCharIndicesIter) -> Option<[i32, char]> {
-    let mut result: Option<[i32, char]> = %0;
+    let mut result: Option<[i32, char]> = null;
     loop {
         let __match_3: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^Iterator::next"();
         match __match_3 {
@@ -9776,7 +9776,7 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^Iterator::nth"(self: &mut St
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> Option<i32> {
@@ -9795,7 +9795,7 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^Iterator::position"(self: &m
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: fn mut([i32, char], [i32, char]) -> [i32, char]) -> Option<[i32, char]> {
@@ -9818,7 +9818,7 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^Iterator::reduce"(self: &mut
         },
         _ => (),
     };
-    return %1;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrCharIndicesIter^Iterator::filter"(self: &StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> IterFilter<core:prelude/string.wado/StrCharIndicesIter> {
@@ -9839,7 +9839,7 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^Iterator::skip"(self: &StrCh
 
 pub fn "core:prelude/string.wado/StrSplitIter^Iterator::next"(self: &mut StrSplitIter) -> Option<String> {
     if self.finished {
-        return %0;
+        return null;
     }
     let sep: &Array<u8> = &self.sep_repr as &Array<u8>;
     let limit: i32 = (self.used - self.sep_len);
@@ -9905,7 +9905,7 @@ pub fn "core:prelude/string.wado/StrSplitIter^Iterator::find"(self: &mut StrSpli
             },
         };
     }
-    return %0;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrSplitIter^Iterator::any"(self: &mut StrSplitIter, pred: fn mut(String) -> bool) -> bool {
@@ -9943,7 +9943,7 @@ pub fn "core:prelude/string.wado/StrSplitIter^Iterator::all"(self: &mut StrSplit
 }
 
 pub fn "core:prelude/string.wado/StrSplitIter^Iterator::last"(self: &mut StrSplitIter) -> Option<String> {
-    let mut result: Option<String> = %0;
+    let mut result: Option<String> = null;
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitIter^Iterator::next"();
         match __match_3 {
@@ -9974,7 +9974,7 @@ pub fn "core:prelude/string.wado/StrSplitIter^Iterator::nth"(self: &mut StrSplit
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrSplitIter^Iterator::position"(self: &mut StrSplitIter, pred: fn mut(String) -> bool) -> Option<i32> {
@@ -9993,7 +9993,7 @@ pub fn "core:prelude/string.wado/StrSplitIter^Iterator::position"(self: &mut Str
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrSplitIter^Iterator::reduce"(self: &mut StrSplitIter, f: fn mut(String, String) -> String) -> Option<String> {
@@ -10016,7 +10016,7 @@ pub fn "core:prelude/string.wado/StrSplitIter^Iterator::reduce"(self: &mut StrSp
         },
         _ => (),
     };
-    return %1;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrSplitIter^Iterator::filter"(self: &StrSplitIter, pred: fn mut(String) -> bool) -> IterFilter<core:prelude/string.wado/StrSplitIter> {
@@ -10037,7 +10037,7 @@ pub fn "core:prelude/string.wado/StrSplitIter^Iterator::skip"(self: &StrSplitIte
 
 pub fn "core:prelude/string.wado/StrSplitNIter^Iterator::next"(self: &mut StrSplitNIter) -> Option<String> {
     if self.finished {
-        return %0;
+        return null;
     }
     if (self.remaining <= 1) {
         self.finished = true;
@@ -10108,7 +10108,7 @@ pub fn "core:prelude/string.wado/StrSplitNIter^Iterator::find"(self: &mut StrSpl
             },
         };
     }
-    return %0;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrSplitNIter^Iterator::any"(self: &mut StrSplitNIter, pred: fn mut(String) -> bool) -> bool {
@@ -10146,7 +10146,7 @@ pub fn "core:prelude/string.wado/StrSplitNIter^Iterator::all"(self: &mut StrSpli
 }
 
 pub fn "core:prelude/string.wado/StrSplitNIter^Iterator::last"(self: &mut StrSplitNIter) -> Option<String> {
-    let mut result: Option<String> = %0;
+    let mut result: Option<String> = null;
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitNIter^Iterator::next"();
         match __match_3 {
@@ -10177,7 +10177,7 @@ pub fn "core:prelude/string.wado/StrSplitNIter^Iterator::nth"(self: &mut StrSpli
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrSplitNIter^Iterator::position"(self: &mut StrSplitNIter, pred: fn mut(String) -> bool) -> Option<i32> {
@@ -10196,7 +10196,7 @@ pub fn "core:prelude/string.wado/StrSplitNIter^Iterator::position"(self: &mut St
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrSplitNIter^Iterator::reduce"(self: &mut StrSplitNIter, f: fn mut(String, String) -> String) -> Option<String> {
@@ -10219,7 +10219,7 @@ pub fn "core:prelude/string.wado/StrSplitNIter^Iterator::reduce"(self: &mut StrS
         },
         _ => (),
     };
-    return %1;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrSplitNIter^Iterator::filter"(self: &StrSplitNIter, pred: fn mut(String) -> bool) -> IterFilter<core:prelude/string.wado/StrSplitNIter> {
@@ -10246,7 +10246,7 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::next"(self: &m
         self.pos = (self.pos + 1);
     }
     if (self.pos >= self.used) {
-        return %1;
+        return null;
     }
     let start: i32 = self.pos;
     loop {
@@ -10302,7 +10302,7 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::find"(self: &m
             },
         };
     }
-    return %0;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::any"(self: &mut StrSplitWhitespaceIter, pred: fn mut(String) -> bool) -> bool {
@@ -10340,7 +10340,7 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::all"(self: &mu
 }
 
 pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::last"(self: &mut StrSplitWhitespaceIter) -> Option<String> {
-    let mut result: Option<String> = %0;
+    let mut result: Option<String> = null;
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::next"();
         match __match_3 {
@@ -10371,7 +10371,7 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::nth"(self: &mu
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::position"(self: &mut StrSplitWhitespaceIter, pred: fn mut(String) -> bool) -> Option<i32> {
@@ -10390,7 +10390,7 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::position"(self
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::reduce"(self: &mut StrSplitWhitespaceIter, f: fn mut(String, String) -> String) -> Option<String> {
@@ -10413,7 +10413,7 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::reduce"(self: 
         },
         _ => (),
     };
-    return %1;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::filter"(self: &StrSplitWhitespaceIter, pred: fn mut(String) -> bool) -> IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter> {
@@ -10434,11 +10434,11 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^Iterator::skip"(self: &S
 
 pub fn "core:prelude/string.wado/StrLinesIter^Iterator::next"(self: &mut StrLinesIter) -> Option<String> {
     if self.finished {
-        return %0;
+        return null;
     }
     if (self.pos >= self.used) {
         self.finished = true;
-        return %2;
+        return null;
     }
     let start: i32 = self.pos;
     loop {
@@ -10465,7 +10465,7 @@ pub fn "core:prelude/string.wado/StrLinesIter^Iterator::next"(self: &mut StrLine
     if (self.pos > start) {
         return Option<String>::Some("core::prelude/string.wado::substring"(self.repr, start, (self.pos - start)));
     }
-    return %11;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrLinesIter^Iterator::count"(self: &mut StrLinesIter) -> i32 {
@@ -10512,7 +10512,7 @@ pub fn "core:prelude/string.wado/StrLinesIter^Iterator::find"(self: &mut StrLine
             },
         };
     }
-    return %0;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrLinesIter^Iterator::any"(self: &mut StrLinesIter, pred: fn mut(String) -> bool) -> bool {
@@ -10550,7 +10550,7 @@ pub fn "core:prelude/string.wado/StrLinesIter^Iterator::all"(self: &mut StrLines
 }
 
 pub fn "core:prelude/string.wado/StrLinesIter^Iterator::last"(self: &mut StrLinesIter) -> Option<String> {
-    let mut result: Option<String> = %0;
+    let mut result: Option<String> = null;
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrLinesIter^Iterator::next"();
         match __match_3 {
@@ -10581,7 +10581,7 @@ pub fn "core:prelude/string.wado/StrLinesIter^Iterator::nth"(self: &mut StrLines
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrLinesIter^Iterator::position"(self: &mut StrLinesIter, pred: fn mut(String) -> bool) -> Option<i32> {
@@ -10600,7 +10600,7 @@ pub fn "core:prelude/string.wado/StrLinesIter^Iterator::position"(self: &mut Str
             },
         };
     }
-    return %2;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrLinesIter^Iterator::reduce"(self: &mut StrLinesIter, f: fn mut(String, String) -> String) -> Option<String> {
@@ -10623,7 +10623,7 @@ pub fn "core:prelude/string.wado/StrLinesIter^Iterator::reduce"(self: &mut StrLi
         },
         _ => (),
     };
-    return %1;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/StrLinesIter^Iterator::filter"(self: &StrLinesIter, pred: fn mut(String) -> bool) -> IterFilter<core:prelude/string.wado/StrLinesIter> {
@@ -10786,10 +10786,10 @@ pub fn "core:prelude/string.wado/String::to_chars"(self: &String) -> List<char> 
 
 pub fn "core:prelude/string.wado/String::char_at_byte"(self: &String, byte_index: i32) -> Option<char> {
     if (byte_index >= self.used) {
-        return %0;
+        return null;
     }
     if ((byte_index + "core::prelude/string.wado::utf8_seq_len"(self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_index))) > self.used) {
-        return %1;
+        return null;
     }
     return Option<char>::Some(self."core:prelude/string.wado/String::char_at_byte_unchecked"(byte_index));
 }
@@ -10903,7 +10903,7 @@ pub fn "core:prelude/string.wado/String::is_char_boundary"(self: &String, byte_i
 
 pub fn "core:prelude/string.wado/String::pop"(self: &mut String) -> Option<char> {
     if (self.used == 0) {
-        return %1;
+        return null;
     }
     let pos: i32 = "core::prelude/string.wado::char_start_backward"(&self.repr as &Array<u8>, (self.used - 1));
     let code: u32 = "core::prelude/string.wado::decode_char_at"(&self.repr as &Array<u8>, pos).0;
@@ -11160,7 +11160,7 @@ pub fn "core:prelude/string.wado/String::ends_with"(self: &String, pat: String) 
 
 pub fn "core:prelude/string.wado/String::strip_prefix"(self: &String, prefix: String) -> Option<String> {
     if !self."core:prelude/string.wado/String::starts_with"("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(prefix)) {
-        return %0;
+        return null;
     }
     let start: i32 = prefix."core:prelude/string.wado/String::len"();
     return Option<String>::Some("core::prelude/string.wado::substring"(&self.repr as &Array<u8>, start, (self.used - start)));
@@ -11168,7 +11168,7 @@ pub fn "core:prelude/string.wado/String::strip_prefix"(self: &String, prefix: St
 
 pub fn "core:prelude/string.wado/String::strip_suffix"(self: &String, suffix: String) -> Option<String> {
     if !self."core:prelude/string.wado/String::ends_with"("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(suffix)) {
-        return %0;
+        return null;
     }
     return Option<String>::Some("core::prelude/string.wado::substring"(&self.repr as &Array<u8>, 0, (self.used - suffix."core:prelude/string.wado/String::len"())));
 }
@@ -11179,7 +11179,7 @@ pub fn "core:prelude/string.wado/String::find"(self: &String, pat: String) -> Op
         return Option<i32>::Some(0);
     }
     if (pat_len > self.used) {
-        return %2;
+        return null;
     }
     let self_repr: &Array<u8> = &self.repr as &Array<u8>;
     let pat_repr: &Array<u8> = &pat.repr as &Array<u8>;
@@ -11196,7 +11196,7 @@ pub fn "core:prelude/string.wado/String::find"(self: &String, pat: String) -> Op
         }
         i = (i + 1);
     }
-    return %5;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/String::rfind"(self: &String, pat: String) -> Option<i32> {
@@ -11205,7 +11205,7 @@ pub fn "core:prelude/string.wado/String::rfind"(self: &String, pat: String) -> O
         return Option<i32>::Some(self.used);
     }
     if (pat_len > self.used) {
-        return %1;
+        return null;
     }
     let self_repr: &Array<u8> = &self.repr as &Array<u8>;
     let pat_repr: &Array<u8> = &pat.repr as &Array<u8>;
@@ -11219,7 +11219,7 @@ pub fn "core:prelude/string.wado/String::rfind"(self: &String, pat: String) -> O
         }
         i = (i - 1);
     }
-    return %4;
+    return null;
 }
 
 pub fn "core:prelude/string.wado/String::contains_char"(self: &String, ch: char) -> bool {
@@ -11261,7 +11261,7 @@ pub fn "core:prelude/string.wado/String::find_char"(self: &String, pred: fn mut(
             },
         };
     }
-    return %1;
+    return null;
 }
 
 fn "core:prelude/string.wado/String::make_gap"(self: &mut String, byte_index: i32, width: i32) {
@@ -12753,7 +12753,7 @@ fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
     let code: i32 = core::builtin::waitable_set_poll(ws, out_ptr);
     if (code == 0) {
         let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
-        return %8;
+        return null;
     }
     let evt_handle: i32 = core::builtin::i32_load(out_ptr);
     let payload: i32 = core::builtin::i32_load((out_ptr + 4));
@@ -15156,7 +15156,7 @@ pub fn "core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u
 
 pub fn "core:prelude/list.wado/List<i32>::get"(self: &List<i32>, index: i32) -> Option<i32> {
     if ((index < 0) || (index >= self.used)) {
-        return %1;
+        return null;
     }
     return Option<i32>::Some(self.repr."Array<i32>^IndexValue<i32>::index_value"(index));
 }
@@ -15361,7 +15361,7 @@ fn "core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>^
         },
         _ => (),
     };
-    return %1;
+    return null;
 }
 
 fn "core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"(self: &IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
@@ -15503,7 +15503,7 @@ pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {
 
 fn "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(self: &mut ArrayIter<u8>) -> Option<u8> {
     if (self.index >= self.end) {
-        return %0;
+        return null;
     }
     let item: u8 = core::builtin::array_get::<u8>(self.repr, self.index);
     self.index = (self.index + 1);
@@ -15512,7 +15512,7 @@ fn "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(self: &mut ArrayIter<u
 
 fn "core:prelude/slice.wado/ArrayIter<u8,core:prelude/slice.wado/ArrayIter<u8>>^Iterator::next"(self: &mut ArrayIter<u8>) -> Option<u8> {
     if (self.index >= self.end) {
-        return %0;
+        return null;
     }
     let item: u8 = core::builtin::array_get::<u8>(self.repr, self.index);
     self.index = (self.index + 1);

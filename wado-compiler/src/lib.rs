@@ -76,7 +76,7 @@ pub use compiler_host::{
     KILN_GENERATOR_WIT, LogLevel, Severity, SourceError,
 };
 pub use logger::{Bail, Logger};
-pub use remarks::{Remark, collect_value_copy_remarks};
+pub use remarks::{Remark, collect_param_gate_remarks, collect_value_copy_remarks};
 pub use semantics::{
     Cursor, Definition, Semantics, SymbolResolveError, lex_error_diagnostic,
     parse_error_diagnostic, semantics, semantics_for_world, semantics_of,
@@ -1520,10 +1520,19 @@ fn compile_after_load<H: CompilerHost>(
     // level so the NIR walk is skipped entirely when remarks would be filtered
     // out (the default CLI level is `warn`).
     if logger.would_log(compiler_host::Severity::Info) {
-        for remark in remarks::collect_value_copy_remarks(&nir) {
+        let residual = remarks::collect_value_copy_remarks(&nir)
+            .into_iter()
+            .chain(remarks::collect_param_gate_remarks(&nir));
+        for remark in residual {
+            // `source_path` is empty for a synthetic entry name (`<stdin>`),
+            // so the entry point keeps the caller's filename.
+            let file = match remark.module {
+                module_source::ModuleSource::EntryPoint { .. } => entry_filename.clone(),
+                other => other.source_path(),
+            };
             logger.remark(
                 remark.message,
-                compiler_host::DiagnosticSpan::from_span(&remark.span, Some(&entry_filename)),
+                compiler_host::DiagnosticSpan::from_span(&remark.span, Some(&file)),
             );
         }
     }

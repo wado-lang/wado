@@ -700,6 +700,12 @@ fn register_globals(ctx: &mut WirContext<'_>) {
 
         let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
 
+        // No slot, the way a unit local, parameter and result get none. The
+        // initializer still runs — the store lowers to its value alone.
+        if matches!(wir_type, WirType::Unit) {
+            continue;
+        }
+
         // Both cases need a nullable slot, but only a deferred one narrows its
         // reads: a declared `null` is a value the program observes, and
         // narrowing would trap on every `None`.
@@ -726,6 +732,7 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             init_op,
             init_body.operand_type(init_op),
             type_table,
+            &wir_type,
         );
 
         let idx = u32::try_from(ctx.globals.len()).expect("too many globals");
@@ -760,6 +767,21 @@ fn is_null_operand(body: &Body, op: Operand) -> bool {
     }
 }
 
+/// The primitive a value of `type_id` is stored as. `enum` and `flags` hold a
+/// discriminant, so their slot is an `i32` even though the declared type is not
+/// a primitive.
+fn storage_prim_of(type_id: crate::tir::TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
+    use crate::tir::ResolvedType;
+
+    if let Some(prim) = prim_of(type_id, type_table) {
+        return Some(prim);
+    }
+    match type_table.get(type_id) {
+        ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => Some(PrimitiveType::I32),
+        _ => None,
+    }
+}
+
 /// Evaluate a global's initializer to a compile-time value.
 ///
 /// Every node is evaluated at its *own* type, which is what makes a cast a
@@ -775,7 +797,7 @@ fn global_init_value(body: &Body, op: Operand, type_table: &TypeTable) -> Option
                 ValueKind::Char(c) => Some(Value::Char(*c)),
                 ValueKind::Int(value, _) => Some(Value::Int {
                     value: *value,
-                    prim: prim_of(ty, type_table)?,
+                    prim: storage_prim_of(ty, type_table)?,
                 }),
                 ValueKind::Float(bits, _) => Some(Value::Float {
                     value: f64::from_bits(*bits),
@@ -810,25 +832,52 @@ fn global_init_value(body: &Body, op: Operand, type_table: &TypeTable) -> Option
     }
 }
 
+/// The value a slot starts at when its initializer is assigned by the module
+/// initialization function instead of being reduced here. It has to inhabit the
+/// slot's own Wasm type: `ref.null` is a value only for a reference slot.
+fn init_placeholder(wir_type: &WirType) -> crate::wir::WirInstr {
+    use crate::wir::WirInstr;
+
+    match wir_type {
+        WirType::Ref { .. } | WirType::AbstractRef { .. } => WirInstr::RefNull {
+            heap_type: crate::wir::WirAbstractHeapType::None,
+        },
+        WirType::I64 | WirType::U64 => WirInstr::I64Const(0),
+        WirType::F32 => WirInstr::F32Const(0.0),
+        WirType::F64 => WirInstr::F64Const(0.0),
+        WirType::I8
+        | WirType::I16
+        | WirType::I32
+        | WirType::U8
+        | WirType::U16
+        | WirType::U32
+        | WirType::Bool
+        | WirType::Char
+        | WirType::Enum { .. }
+        | WirType::Flags { .. } => WirInstr::I32Const(0),
+        WirType::V128 => WirInstr::V128Const(0),
+        // `register_globals` gives a unit global no slot, so it never gets here.
+        WirType::Unit => panic!("[WIR] unit-typed global has no Wasm slot to initialize"),
+    }
+}
+
 /// Convert a NIR global initializer operand to a WIR constant instruction.
 /// `type_id` is the global's declared type, which decides the constant's
-/// width.
+/// width; `wir_type` is the slot it has to inhabit.
 fn translate_global_init(
     body: &Body,
     op: Operand,
     type_id: crate::tir::TypeId,
     type_table: &TypeTable,
+    wir_type: &WirType,
 ) -> crate::wir::WirInstr {
     use crate::tir::ResolvedType;
     use crate::wir::WirInstr;
 
-    let ref_null = || WirInstr::RefNull {
-        heap_type: crate::wir::WirAbstractHeapType::None,
-    };
     // What the evaluator cannot reduce is assigned by the initialization
     // function instead, so the slot starts at a placeholder.
     let Some(value) = global_init_value(body, op, type_table) else {
-        return ref_null();
+        return init_placeholder(wir_type);
     };
     let bits = match value {
         Value::Int { value, .. } => value,
@@ -840,7 +889,11 @@ fn translate_global_init(
                 _ => WirInstr::F64Const(value),
             };
         }
-        Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => return ref_null(),
+        // `null` at a reference slot is the placeholder itself.
+        Value::Null | Value::Unit => return init_placeholder(wir_type),
+        Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => {
+            return init_placeholder(wir_type);
+        }
     };
     match type_table.get(type_id) {
         ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {

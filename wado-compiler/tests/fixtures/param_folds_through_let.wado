@@ -1,0 +1,27 @@
+// A compile-time parameter bound to a local still settles the gate: the binding
+// is a trivial copy, so copy propagation drops it and the read folds in the
+// condition. A `String` parameter's copy is not trivial and does not — that
+// case is reported by `remarks.rs` instead.
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: i32 = 0;
+
+fn guarded() -> String {
+    return `this text only exists inside the folded branch`;
+}
+
+export fn run() with Stdout {
+    let level = LOG_LEVEL;
+    if level < 2 {
+        println(guarded());
+    }
+    println(`done`);
+}
+
+__DATA__
+{
+    "params": { "log.level": "5" },
+    "stdout": "done\n",
+    "wir_not_expect:O2": ["this text only exists inside the folded branch"]
+}

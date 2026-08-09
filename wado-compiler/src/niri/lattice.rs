@@ -14,15 +14,13 @@
 use std::rc::Rc;
 
 use crate::compiler_item::SeqField;
-use crate::const_eval::{
-    MAX_SEQ_ELEMENTS, Value, eval_binary, eval_cast, eval_unary, is_f32_type, is_int_prim, prim_of,
-};
+use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, eval_binary, eval_cast, eval_unary, prim_of};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind,
 };
-use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::nir_value_graph::ValueId;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 
 use super::CtfeBuiltin;
@@ -40,44 +38,22 @@ impl Interpreter<'_> {
         }
     }
 
-    /// A promoted pure value as a `Lattice::Const` when it is a constant kind of
-    /// a known primitive type; `Unevaluated` otherwise.
+    /// A promoted pure value as a `Lattice`, through the one projection,
+    /// [`crate::nir_value_graph::value_kind_to_const`]. A copy here would
+    /// silently drop whatever kind it was not taught about.
     fn value_to_lattice(&self, body: &Body, v: ValueId) -> Lattice {
         let Some(ty) = body.values.type_of(v) else {
             return Lattice::Unevaluated;
         };
-        match body.values.kind(v) {
-            ValueKind::Bool(b) => Lattice::Const(Value::Bool(*b)),
-            ValueKind::Char(c) => Lattice::Const(Value::Char(*c)),
-            ValueKind::Int(value, _) => {
-                // An enum value is its discriminant, promoted under the enum's
-                // own type, so the pool holds an `i32` no primitive names.
-                let prim = prim_of(ty, self.type_table)
-                    .filter(|p| is_int_prim(*p))
-                    .or_else(|| {
-                        matches!(self.type_table.get(ty), ResolvedType::Enum { .. })
-                            .then_some(PrimitiveType::I32)
-                    });
-                let Some(prim) = prim else {
-                    return Lattice::Unevaluated;
-                };
-                Lattice::Const(Value::Int {
-                    value: *value,
-                    prim,
-                })
-            }
-            ValueKind::Float(bits, _) => {
-                let prim = if is_f32_type(ty, self.type_table) {
-                    PrimitiveType::F32
-                } else {
-                    PrimitiveType::F64
-                };
-                Lattice::Const(Value::Float {
-                    value: f64::from_bits(*bits),
-                    prim,
-                })
-            }
-            _ => Lattice::Unevaluated,
+        // An enum case is promoted under the enum's own type, so the pool holds
+        // an `i32` that `prim_of` cannot name.
+        let prim = prim_of(ty, self.type_table).or_else(|| {
+            matches!(self.type_table.get(ty), ResolvedType::Enum { .. })
+                .then_some(PrimitiveType::I32)
+        });
+        match crate::nir_value_graph::value_kind_to_const(body.values.kind(v), prim) {
+            Some(value) => Lattice::Const(value),
+            None => Lattice::Unevaluated,
         }
     }
 

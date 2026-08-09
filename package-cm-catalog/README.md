@@ -74,5 +74,5 @@ Full intended scope; checked items are implemented.
 wado wit package-cm-catalog/src/lib.wado > package-cm-catalog/cm-catalog.wit
 ```
 
-`wado-compiler/tests/wit.rs` re-emits this and asserts it matches the committed
+`wado-compiler/tests/integration/wit.rs` re-emits this and asserts it matches the committed
 file, so the artifact cannot drift from the source.

@@ -148,6 +148,19 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 - [ ] Dead store elimination.
 - [ ] Strength reduction; reassociation; jump threading; SimplifyCFG.
 - [ ] Cross-block copy propagation.
+- [ ] Sinking pure definitions into the branch that uses them (partial DCE). The
+      mirror of LICM, reusing its motion-safety predicates; past effectful code
+      it is sound where hoisting is not. `core:log`'s disabled path pays two
+      allocations for arguments its gate discards.
+- [ ] Forwarding a local bound to a global read. The graph names no global read,
+      so `let s = G` reaches the use only when copy propagation removes the
+      binding — never for a `String`. Naming it needs a generation check at the
+      read site, the one `FieldAccess` promotion makes by version. Until then
+      `remarks::collect_param_gate_remarks` reports the miss.
+- [ ] Devirtualizing effect dispatch. An operation costs a global load, an
+      `outer` save/restore, a `ref.cast` and a `call_ref`, none inlinable. A
+      single non-self-delegating `impl` can lower to a direct call; typing each
+      dispatch field precisely retires the `ref.cast` on its own.
 - [ ] `param_spec` profitability — specialize only when the constants can decide
       a branch, so a chain that never folds stops duplicating code.
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when
