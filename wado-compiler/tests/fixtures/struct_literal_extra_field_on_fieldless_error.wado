@@ -1,0 +1,12 @@
+// A struct that did not resolve and a struct that resolved to zero fields both
+// used to arrive as an empty field list, so the unknown-field check had to skip
+// both. Only the first is unknown.
+struct Empty {
+}
+
+export fn run() {
+    let e = Empty { nope: 1 };
+}
+
+__DATA__
+{"compile_error": "struct 'Empty' has no field 'nope'"}

@@ -748,6 +748,15 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .map(|t| scope.resolve_written_type_args(t))
             .unwrap_or_default();
 
+        // The one place the impl's trait is resolved. Everything downstream
+        // keys off the written name, so a name that resolves to nothing indexes
+        // an impl of a trait that does not exist — it matches no query and no
+        // phase objects. Resolving it here, in the frame, is what makes the
+        // impl's own declaration facts complete.
+        if let Some(trait_type) = &impl_block.trait_type {
+            scope.check_impl_trait_resolves(impl_block, trait_type);
+        }
+
         let mut associated_types = crate::hashmap::IndexMap::default();
         for binding in &impl_block.associated_types {
             let type_id = scope.resolve_type(&binding.ty);
@@ -767,6 +776,40 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 associated_types,
             },
         );
+    }
+
+    /// Require that the name an `impl` implements is declared.
+    ///
+    /// `impl X for T` names a trait, an effect or a resource — the latter two
+    /// install handlers through the same syntax — so all three declaration
+    /// kinds satisfy it. Nothing else resolves this name: every index downstream
+    /// keys off the written string, so an `impl` of a name nothing declares
+    /// registers happily, matches no query, and reaches the back end unmentioned.
+    ///
+    /// The check asks only whether *some* declaration bears the name, which is
+    /// the one question that survives shadowing. Asking *which* declaration —
+    /// to require its associated types, say — needs a resolution that
+    /// [`Elaborator::trait_decl_key_in_frame`] does not yet give: it prefers an
+    /// import over a local declaration, and the prelude reaches a module as an
+    /// import, so a module declaring its own `Add` resolves to the prelude's.
+    /// `trait_bound_add_generic.wado` binds `T: Add` to its own declaration
+    /// while that helper answers with the prelude's, and until the two agree
+    /// there is no reliable answer to build on.
+    fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
+        let name = super::trait_env::get_type_name_static(trait_type);
+        if self.trait_decl_header_in_frame(&name).is_some()
+            || self
+                .tysys
+                .trait_env
+                .find_effect_or_resource_decl_key(&name)
+                .is_some()
+        {
+            return;
+        }
+        let _ = self.emit(TypeError::UnknownTraitImpl {
+            name,
+            span: impl_block.span,
+        });
     }
 
     /// The type arguments a generic type reference writes, resolved in the
