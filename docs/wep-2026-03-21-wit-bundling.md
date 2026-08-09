@@ -102,7 +102,7 @@ This is the same format produced by `wit-component::metadata::encode()` in `wasm
 | Service (`wasi:http/service`)          | Yes (default) | Same as command                                                                   |
 | `-Os` (strip symbols)                  | No (default)  | Frontend-delivery build (`jco` → core wasm + JS); the WIT never reaches a CM host |
 
-The `-Os` row was revised during Phase 2: `-Os` is the production build for browser/frontend delivery, where the embedded WIT is dead weight that a CM host never reads. It therefore defaults to no embedding (as if `--no-embed-wit`); an explicit `--embed-wit` still forces it on. See [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md) §"Embedding policy".
+`-Os` is the production build for browser/frontend delivery, where the embedded WIT is dead weight that a CM host never reads. It therefore defaults to no embedding (as if `--no-embed-wit`); an explicit `--embed-wit` still forces it on. See [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md) §"Embedding policy".
 
 ### CLI Control
 
@@ -112,7 +112,7 @@ wado compile --no-embed-wit file.wado     # WIT omitted (smaller binary)
 wado compile --embed-wit file.wado        # force embedding (e.g. under -Os)
 ```
 
-`--embed-wit` and `--no-embed-wit` are mutually exclusive and take no value: the embedded section is always the self-contained full closure (a `local`, registry-referencing section is not encodable — §"Phase 2 finding" in the interop WEP). `--no-embed-wit` is an escape hatch for size-sensitive deployments where the consumer already has the WIT definition through other means.
+`--embed-wit` and `--no-embed-wit` are mutually exclusive and take no value: the embedded section is always the self-contained full closure (a `local`, registry-referencing section is not encodable — §"Text and section are different deliverables" in the interop WEP). `--no-embed-wit` is an escape hatch for size-sensitive deployments where the consumer already has the WIT definition through other means.
 
 ### Extraction and Verification
 
@@ -136,8 +136,8 @@ This enables any CM-compatible toolchain to consume Wado libraries without Wado-
 > (complete upstream interface bodies, exact package versions, a `producers`
 > record) for tools that read it explicitly (`wkg`, `wasm-tools metadata`,
 > relink), and it must be self-contained (full scope). See
-> [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md) §"Phase 2
-> finding" for the detail and the producer-side implementation.
+> [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md) §"Text and
+> section are different deliverables" for the detail and the producer side.
 
 ### Relationship to Wado-to-Wado Optimization
 

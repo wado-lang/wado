@@ -161,8 +161,8 @@ correct; `with Marl` was cheap because it was dishonest.
 Each supersession is scoped — host-satisfied (WASI) interfaces and host-provided
 resources are unchanged.
 
-- [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md) §"Pure
-  interfaces": "an interface with functions is conservatively treated as
+- [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md) §"Purity and
+  effects": "an interface with functions is conservatively treated as
   effectful by the call site" — superseded for imported components; a fused
   component's interface is effectful only insofar as its own host-leaf imports
   are.

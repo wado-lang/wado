@@ -1,7 +1,7 @@
 //! Embed a `component-type` custom section into a compiled component.
 //!
 //! Producer-side embedding step of WIT interoperability (WEP
-//! `wep-2026-05-02-wit-interoperability.md`, Phase 2). [`wit_emit`](crate::wit_emit)
+//! `wep-2026-05-02-wit-interoperability.md`). [`wit_emit`](crate::wit_emit)
 //! renders the WIT *text*; this module encodes it to the binary `component-type`
 //! section and appends it to the component codegen emitted.
 //!

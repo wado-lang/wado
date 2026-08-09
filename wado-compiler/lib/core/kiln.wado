@@ -6,7 +6,8 @@
 //! submodules under `lib/core/kiln/` and adds the Wado-only `Request<T>`
 //! wrapper that generator authors write against.
 //!
-//! See WEP 2026-04-12 (Kiln) §"The `kiln` world" and §"Protocol revision v0.3".
+//! See WEP 2026-04-12 (Kiln) §"The generator contract" and §"Options are a
+//! typed argument in each generator's own world".
 
 
 use { Deserialize } from "core:serde";
@@ -38,7 +39,7 @@ impl Deserialize for NoOptions;
 /// typed WIT argument, not a serialized blob. The `#[compiler_item("kiln_request")]`
 /// attribute is that rewrite's lookup anchor. `T` defaults to `NoOptions`, so
 /// a generator that takes no options writes `fn generate(req: Request)`.
-/// See WEP 2026-04-12 §"Protocol revision v0.3".
+/// See WEP 2026-04-12 §"Options are a typed argument in each generator's own world".
 #[compiler_item("kiln_request")]
 pub struct Request<T = NoOptions> {
     pub primary: InputFile,

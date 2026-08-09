@@ -11,7 +11,7 @@
 //! materialized into a typed value shaped by the component's own introspected
 //! parameter type.
 //!
-//! See WEP 2026-04-12 (Kiln) §"Host-delegated execution".
+//! See WEP 2026-04-12 (Kiln) §"The generator contract".
 
 use std::sync::{Arc, Mutex};
 

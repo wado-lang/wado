@@ -102,7 +102,7 @@ pub struct CompileOptions {
     /// `--embed-wit`: force embedding on, overriding the `-Os` default-off.
     /// Takes no value — the embedded section is always the self-contained full
     /// closure (a `local`, registry-referencing section is not encodable; see
-    /// WEP §"Phase 2 finding"). Mutually exclusive with `--no-embed-wit`.
+    /// WEP §"Text and section are different deliverables"). Mutually exclusive with `--no-embed-wit`.
     pub embed_wit: bool,
     /// `--no-embed-metadata`: opt out of embedding the `[package]` metadata.
     pub no_embed_metadata: bool,

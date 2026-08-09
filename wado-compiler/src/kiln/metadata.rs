@@ -9,7 +9,7 @@
 //! and `wasm32-wasip2`) does its own narrow read.
 //!
 //! See [WEP: Kiln](../../../docs/wep-2026-04-12-kiln.md), section
-//! "Caching and the `<primary>.kiln.json` cache file".
+//! "Caching".
 
 use serde::{Deserialize, Serialize};
 

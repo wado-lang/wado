@@ -10,7 +10,8 @@ Import the user-facing Kiln types and the `KilnHost` effect via
 submodules under `lib/core/kiln/` and adds the Wado-only `Request<T>`
 wrapper that generator authors write against.
 
-See WEP 2026-04-12 (Kiln) §"The `kiln` world" and §"Protocol revision v0.3".
+See WEP 2026-04-12 (Kiln) §"The generator contract" and §"Options are a
+typed argument in each generator's own world".
 
 ## Effects
 
@@ -18,7 +19,7 @@ See WEP 2026-04-12 (Kiln) §"The `kiln` world" and §"Protocol revision v0.3".
 
 Host interface exposed to Kiln generators. Deliberately narrow:
 no clocks, no random, no network, no filesystem beyond `read-file`.
-See WEP 2026-04-12 (Kiln) §"The `kiln` world".
+See WEP 2026-04-12 (Kiln) §"The generator contract".
 
 #### `fn read_file(path: String) -> Result<String, HostError>`
 
@@ -59,7 +60,7 @@ value so the author's body sees `req` unchanged. `options` crosses as a
 typed WIT argument, not a serialized blob. The `#[compiler_item("kiln_request")]`
 attribute is that rewrite's lookup anchor. `T` defaults to `NoOptions`, so
 a generator that takes no options writes `fn generate(req: Request)`.
-See WEP 2026-04-12 §"Protocol revision v0.3".
+See WEP 2026-04-12 §"Options are a typed argument in each generator's own world".
 
 #### `primary: InputFile`
 

@@ -1,8 +1,8 @@
 //! Per-invocation Kiln cache state, stored next to the generated outputs
 //! at `<manifest_root>/<output_dir>/<primary_basename>.kiln.json`.
 //!
-//! See [WEP: Kiln](../../docs/wep-2026-04-12-kiln.md), section
-//! "Caching and the `<primary>.kiln.json` cache file", for the design.
+//! See [WEP: Kiln](../../docs/wep-2026-04-12-kiln.md), section "Caching",
+//! for the design.
 //!
 //! The location is derived deterministically from `Invocation::output_dir`
 //! and the basename of `Invocation::from` (the primary input file). For

@@ -1,7 +1,7 @@
 //! WIT text emission from [`Semantics`].
 //!
 //! This is the producer side of WIT interoperability (WEP
-//! `wep-2026-05-02-wit-interoperability.md`, Phase 1). It takes the frontend
+//! `wep-2026-05-02-wit-interoperability.md`). It takes the frontend
 //! output — declared interfaces, exported items, the active world, and the
 //! type table — and renders a WIT document with [`wit_encoder`].
 //!
