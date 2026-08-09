@@ -2926,13 +2926,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 )?;
             }
             ast::Expr::Ident(ident) => {
-                // A bare turbofish value (`pair::<_, bool>`) has no call to
-                // infer from, so a `_` slot here is unresolvable — validate its
-                // type args strictly. A qualified path (`Maybe::<_>::Nothing`)
-                // does have one: the expected type fills the slot.
-                let qualified = !ident.segments.is_empty();
+                // A bare turbofish value (`pair::<_, bool>`, `ns::pair::<_>`)
+                // has no call to infer from, so a `_` slot here is
+                // unresolvable — validate its type args strictly. A turbofish
+                // on the path's prefix (`Maybe::<_>::Nothing`) does have one:
+                // the expected type fills the slot.
                 for ty in &ident.type_args {
-                    if qualified {
+                    if ident.type_args_on_prefix {
                         Self::validate_turbofish_type_arg(
                             ty,
                             known_type_names,

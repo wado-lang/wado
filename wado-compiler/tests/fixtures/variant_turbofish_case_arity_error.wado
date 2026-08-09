@@ -1,0 +1,15 @@
+// A turbofish on a case path must name exactly the declaring type's
+// parameters. An enum declares none, so `Color::<i32>::Red` is an error —
+// the path form accepted it and dropped the argument silently.
+
+enum Color {
+    Red,
+    Green,
+}
+
+test "unreachable: the turbofish above is rejected" {
+    assert Color::<i32>::Red matches { Red };
+}
+
+__DATA__
+{"test": {}, "compile_error": "`Color` takes no type arguments"}

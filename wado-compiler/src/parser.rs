@@ -3850,6 +3850,7 @@ impl Parser {
                         },
                     ],
                     type_args,
+                    type_args_on_prefix: true,
                 }));
             }
 
@@ -3882,6 +3883,7 @@ impl Parser {
             span: start_span,
             segments: Vec::new(),
             type_args: Vec::new(),
+            type_args_on_prefix: false,
         }))
     }
 
@@ -3936,6 +3938,7 @@ impl Parser {
             span: path_span,
             segments,
             type_args: Vec::new(),
+            type_args_on_prefix: false,
         }))
     }
 
@@ -3988,6 +3991,7 @@ impl Parser {
                 name,
                 segments: Vec::new(),
                 type_args: Vec::new(),
+                type_args_on_prefix: false,
                 span: start_span,
             }));
         }
@@ -6128,6 +6132,7 @@ impl Parser {
                             name: field_name.clone(),
                             segments: Vec::new(),
                             type_args: Vec::new(),
+                            type_args_on_prefix: false,
                             span: field_name_span,
                         }),
                         true,

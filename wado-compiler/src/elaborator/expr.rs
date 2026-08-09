@@ -495,6 +495,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name: canon,
                 segments: ident.segments.clone(),
                 type_args: ident.type_args.clone(),
+                type_args_on_prefix: ident.type_args_on_prefix,
                 span: ident.span,
             };
             &canonical_ident
@@ -702,6 +703,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// A turbofish on a case path (`Maybe::<i32>::Nothing`) must name exactly
+    /// the declaring type's parameters. An enum or a flags type declares none,
+    /// so an argument there is an error rather than something silently
+    /// dropped.
+    fn check_case_turbofish_arity(
+        &mut self,
+        ident: &ast::IdentExpr,
+        type_name: &str,
+        expected: usize,
+    ) {
+        if ident.type_args.is_empty() || ident.type_args.len() == expected {
+            return;
+        }
+        let expected_text = match expected {
+            0 => "no type arguments".to_string(),
+            1 => "1 type argument".to_string(),
+            n => format!("{n} type arguments"),
+        };
+        let found = ident.type_args.len();
+        let _ = self.emit(TypeError::InvalidLiteral {
+            message: format!(
+                "`{type_name}` takes {expected_text}, the turbofish supplies {found}"
+            ),
+            span: ident.span,
+        });
+    }
+
     /// Resolve a qualified case reference `Type::Case` — a payload-less
     /// variant case, an enum case, or a flags member. With `in_module: None`
     /// the type name resolves in the current scope (imports + local); with
@@ -746,6 +774,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|(i, c)| (i, c.clone()))
             {
                 self.record_qualified_case(ident, prefix, case_data.ast_id);
+                self.check_case_turbofish_arity(ident, prefix, variant_info.type_params.len());
                 // Unit variant - payload must be unit type
                 let payload_is_unit = matches!(
                     self.tysys.type_table.borrow().get(case_data.payload),
@@ -821,6 +850,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(case_data) = enum_info.find_case(suffix).cloned()
         {
             self.record_qualified_case(ident, prefix, case_data.ast_id);
+            self.check_case_turbofish_arity(ident, prefix, 0);
             let enum_type = self
                 .tysys
                 .type_table
@@ -842,6 +872,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
         {
             self.record_qualified_case(ident, prefix, member.ast_id);
+            self.check_case_turbofish_arity(ident, prefix, 0);
             // Stage 7-B: reify rebuilds the flags-member `IntLiteral`.
             return Some(flags_info.type_id);
         }
@@ -1163,10 +1194,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Element type at a literal index into a tuple, which may carry a
-    /// variadic pack. A pack's arity is only known at monomorphization, so an
-    /// index at or past it resolves through the pack's mapped element — every
-    /// expansion shares that type — and no bounds check applies. `Err` carries
-    /// the diagnostic for an index that cannot resolve.
+    /// variadic pack.
+    ///
+    /// An index that lands on the pack is rejected: the pack's arity and its
+    /// per-position types are only known once it expands, so neither the bound
+    /// nor the element type can be decided here. Only the scalar prefix ahead
+    /// of the pack (`[i32, ..T]`.0) has a fixed position. `Err` carries the
+    /// diagnostic.
     pub(super) fn tuple_literal_index_type(
         type_table: &std::cell::RefCell<TypeTable>,
         elements: &[TypeId],
@@ -1187,16 +1221,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if index < pack_pos {
             return Ok(elements[index]);
         }
-        match table.get(elements[pack_pos]) {
-            ResolvedType::TypePack {
-                mapped_elem: Some(elem),
-                ..
-            } => Ok(*elem),
-            _ => Err(format!(
-                "tuple index {index} lands on the variadic pack, whose elements have \
-                 different types; walk the tuple with `for-of` or a comprehension instead"
-            )),
-        }
+        Err(format!(
+            "tuple index {index} lands on a variadic pack, whose arity and element \
+             types are only known once it expands; walk the tuple with `for-of` or \
+             a comprehension instead"
+        ))
     }
 
     /// Look up field type from a struct or tuple type

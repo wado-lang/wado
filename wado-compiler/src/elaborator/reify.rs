@@ -8895,6 +8895,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 name: canon,
                 segments: ident.segments.clone(),
                 type_args: ident.type_args.clone(),
+                type_args_on_prefix: ident.type_args_on_prefix,
                 span: ident.span,
             };
             &canonical_ident
