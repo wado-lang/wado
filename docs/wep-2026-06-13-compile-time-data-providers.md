@@ -67,8 +67,6 @@ interface types {
   record request {
     module: string,         // "core:collation"
     symbols: list<string>,  // union of imported names across all use-sites
-    options: string,        // canonical-JSON union of mergeable `with { ... }`,
-                            // same encoding Kiln uses; provider decodes it
   }
   record response {
     data: list<u8>,         // the sliced per-program asset to embed
@@ -81,6 +79,10 @@ world data-provider {
   export provide: func(req: request) -> response;
 }
 ```
+
+The `with { ... }` options a use site declares are absent from the sketch on
+purpose: how a provider receives them is open, and is settled when the mechanism
+is implemented (see "Options: aggregation and merging").
 
 The provider reuses Kiln's host interface unchanged except for one added
 function. Kiln's `read-file` is UTF-8 text resolved relative to the user's
@@ -126,8 +128,8 @@ provider is invoked once per (feature, program):
    of imported symbol names and of `with { ... }` options. Each option must be
    _mergeable_: list options (e.g. `locales`) union; scalar options must agree
    (a conflict is a diagnostic).
-3. If the feature is reachable, invoke the provider with
-   `{ module, symbols, options }`; otherwise drop the feature entirely (its
+3. If the feature is reachable, invoke the provider with the module, the united
+   symbols, and the merged options; otherwise drop the feature entirely (its
    prebuilt component and data are never linked).
 4. Embed the returned `data` and wire it to the prebuilt data-free component
    (the `bdp-spike` composition). Cache key: `(module, sorted symbols, canonical
@@ -198,16 +200,19 @@ Locale option semantics:
 - Only locale-bearing modules consume it (today, collation; later datetime /
   number formatting). It is inert elsewhere.
 
-### Options: schema and merging
+### Options: aggregation and merging
 
-A provider-backed module declares its `with { ... }` options as a typed Options
-record on its bundled surface, reusing Kiln's Options-descriptor mechanism
-([Kiln](./wep-2026-04-12-kiln.md)). The compiler type-checks the `with` block
-against it and encodes the value as the same canonical JSON the cache key hashes;
-a Rust provider decodes that JSON directly (serde), a Wado provider gets the
-typed `Options` sugar.
+A provider-backed module's `with { ... }` options are typed against a
+declaration on its bundled surface, so the compiler validates a use site before
+any provider runs. How that declaration is written, and how the validated value
+reaches the provider, is unsettled. [Kiln](./wep-2026-04-12-kiln.md) solves the
+same problem for generator options, but not in a form this mechanism can adopt
+verbatim: a Kiln generator carries its options as a typed argument in a world it
+synthesizes for itself, whereas provider-backed modules all conform to one
+`data-provider` world. Decide it when the mechanism is implemented.
 
-Aggregation across use-sites (per the phase above) merges by type:
+What is settled is the aggregation, which is independent of how options are
+declared or carried. Merging across use-sites (per the phase above) is by type:
 
 - `list<T>` options merge by set-union (deduplicated, order-normalized) — e.g.
   `locales`, `dictionaries`.
@@ -307,9 +312,13 @@ The design above is settled and validated end-to-end by the spikes under
 `wado-bundled-icu/bdp-spike/`: data-free components running on runtime-loaded and
 composed-in blobs, the collator→normalizer marker dedup (37 KB), the
 casemap/properties/segmenter non-dedup (~0), the shared-infra floor (~10 KB), the
-marker-recording mechanism, and the zlib-vs-zstd comparison. What remains is
-implementation, roughly in order:
+marker-recording mechanism, and the zlib-vs-zstd comparison. The one part still
+open by design is how a use site's options reach the provider. What remains,
+roughly in order:
 
+- [ ] Settle the options protocol: how a provider-backed module declares its
+      `with { ... }` options on its bundled surface, and how the validated value
+      crosses to a provider that conforms to the shared `data-provider` world.
 - [ ] Promote the spike's data-free `text` / `collation` / `segmentation`
       components into first-party prebuilt artifacts with their `core:*` WIT
       surfaces.
