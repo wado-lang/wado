@@ -1,14 +1,7 @@
-//! Every wado-compiler integration test that is not named from CI, in one
-//! binary.
-//!
-//! Cargo links one executable per file under `tests/`, and each of these
-//! statically links the compiler and wasmtime. As separate targets the 41
-//! files here cost 4.16 GB and 41 links; merged they cost one of each.
-//!
-//! `e2e` and `format` stay separate: ci.yml shards `e2e` across five
-//! optimisation levels and `mise run test-format` drives `format`, both by
-//! target name. `common.rs` stays beside them because `e2e` uses it too, so
-//! it is reached from here by path.
+//! Every wado-compiler integration test except `e2e` and `format`, in one
+//! binary. Those two stay separate because ci.yml and `mise run test-format`
+//! select them by target name; `common.rs` stays beside them for `e2e`, so it
+//! is reached from here by path.
 
 #![allow(unused_crate_dependencies)]
 

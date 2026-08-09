@@ -2,9 +2,9 @@
 // SessionStart hook: restore the shared cargo caches from GCS.
 //
 // Two objects are restored (both produced by .github/workflows/cargo-cache.yml):
-//   registry  -> $CARGO_HOME (registry/index + registry/cache; saves the download)
+//   registry  -> $CARGO_HOME (index, .crate files, unpacked sources)
 //   sccache   -> $SCCACHE_DIR (content-addressed compile cache; the `warm-cache`
-//                mise task turns it into a warm target/ in ~80s instead of ~8min)
+//                mise task turns it into a warm target/)
 // Neither object contains credentials.
 //
 // Best-effort: any failure (no key, no object yet, network) is logged and the
@@ -35,10 +35,8 @@ const CARGO_HOME = process.env.CARGO_HOME ?? join(homedir(), ".cargo");
 const SCCACHE_DIR = process.env.SCCACHE_DIR ?? join(CARGO_HOME, "sccache");
 const SCOPE = "https://www.googleapis.com/auth/devstorage.read_only";
 const TIMEOUT_MS = 60_000;
-// `AbortSignal.timeout` on a fetch covers the streamed body, not just the
-// response headers, so this bounds the whole multi-GB download. The sccache
-// object grew past a gigabyte once it started carrying the test-target
-// entries; a 60 s budget would abort it mid-stream.
+// `AbortSignal.timeout` covers the streamed body, not just the response
+// headers, so this bounds the whole multi-gigabyte download.
 const DOWNLOAD_TIMEOUT_MS = 900_000;
 
 type ServiceAccountKey = { client_email: string; private_key: string; token_uri: string };
@@ -128,19 +126,15 @@ function launchBackgroundWarm(): void {
   }
 }
 
-// The SessionStart hook running this script is killed at the harness's own
-// hook timeout, which the sccache download can now outlive: the object carries
-// the test-target entries and runs to a couple of gigabytes. Re-exec detached
-// and return, the same way launchBackgroundWarm defers the build, so the
+// The download outlives the harness's hook timeout, which would kill this
+// script. Re-exec detached and return, as launchBackgroundWarm does, so the
 // session starts immediately and the cache lands behind it.
 const DETACH_MARKER = "WADO_CACHE_RESTORE_DETACHED";
 const LOG_FILE = join(homedir(), ".cache", "wado", "warm-cache.log");
-// Holds the restoring process's pid for as long as the extraction runs. Two
-// readers depend on it: a second SessionStart (resume, /clear, container
-// restart) must not untar into the same directories concurrently, and
-// `warm-cache` must not build against — or delete — a half-extracted tree.
-// Storing the pid rather than a bare flag keeps a killed restore from wedging
-// either of them.
+// Holds the restoring pid while the extraction runs. A second SessionStart
+// must not untar into the same directories, and `warm-cache` must not build
+// against — or delete — a half-extracted tree. A pid rather than a flag keeps
+// a killed restore from wedging either of them.
 const RESTORE_MARKER = join(homedir(), ".cache", "wado", "cargo-cache-restore.running");
 
 function restoreInFlight(): boolean {

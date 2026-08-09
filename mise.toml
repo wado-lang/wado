@@ -36,26 +36,22 @@ description = "Reconstruct target/ from the restored sccache cache"
 run = """
 #!/usr/bin/env bash
 # Turns the restored sccache cache (see .claude/hooks/cargo-cache-restore.mts)
-# into a warm target/: a ~4 min sccache-backed rebuild instead of the ~8 min
-# cold one. sccache is used ONLY here, because its cache key depends on the
-# CARGO_* set normalized below — a plain `cargo build` in this container has a
-# different set and would only add misses.
+# into a warm target/. sccache is used ONLY here, because its cache key depends
+# on the CARGO_* set normalized below — a plain `cargo build` in this container
+# has a different set and would only add misses.
 # No-ops cleanly when sccache or the cache is absent (e.g. local dev).
 set -e -o pipefail
 export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cargo/sccache}"
-# Match the ceiling cargo-cache.yml publishes under. sccache LRU-trims to its
-# limit as it runs, and the default 10 GiB is below what the cache now weighs
-# with the test targets in it — the server would punch holes in the very
-# entries we just downloaded.
+# Match the ceiling cargo-cache.yml publishes under; the default 10 GiB would
+# LRU-trim the entries we just downloaded.
 export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-30G}"
 if ! command -v sccache >/dev/null 2>&1; then
   echo "sccache not installed; skipping warm-cache (normal cold build applies)"
   exit 0
 fi
-# The SessionStart hook warms in the background and `on-task-started` warms on
-# demand, so two runs can overlap. Serialize them: the second one then observes
-# the finished state below and exits instead of duplicating the build. `flock`
-# is util-linux and absent on macOS, where nothing restores a cache anyway.
+# The SessionStart hook and `on-task-started` can both warm, so serialize:
+# the second run then sees the finished state below and exits. `flock` is
+# util-linux, absent on macOS, where nothing restores a cache anyway.
 if command -v flock >/dev/null 2>&1; then
   lock="$HOME/.cache/wado/warm-cache.lock"
   mkdir -p "$(dirname "${lock}")"
@@ -65,11 +61,10 @@ if command -v flock >/dev/null 2>&1; then
     flock 9
   fi
 fi
-# The restore hook streams gigabytes in the background and no longer blocks
-# session start, so this can begin while $SCCACHE_DIR is still half-extracted —
-# which would build against a fraction of the cache and then delete the tree
-# tar is writing into. The marker carries the restoring pid, so a killed
-# restore cannot wedge us here.
+# The restore hook streams in the background, so $SCCACHE_DIR may still be
+# half-extracted here — which would build against a fraction of the cache and
+# then delete the tree tar is writing into. The marker holds the restoring pid,
+# so a killed restore cannot wedge us.
 marker="$HOME/.cache/wado/cargo-cache-restore.running"
 if [ -e "${marker}" ]; then
   echo "warm-cache: a cache restore is in flight; waiting for it to finish"
@@ -90,23 +85,16 @@ warm() {
   env CARGO_HOME="$HOME/.cargo" CARGO_TARGET_DIR="$PWD/target" CARGO_INCREMENTAL=0 \
     RUSTC_WRAPPER=sccache "$@"
 }
-# Two disjoint artifact sets, and cargo derives neither from the other:
-# `check` emits .rmeta, `build` emits .rlib and the linked binaries.
-# `--all-targets` covers the plain `cargo build` units and adds the
-# dev-dependencies and the ~90 test binaries on top. Warming only a bare
-# `cargo build` left the first `cargo check` of a session paying a 3 min
-# metadata pass and the first `cargo test` a 17 min, 9 GB link. Keep this list
-# in step with cargo-cache.yml, which has to publish entries for both.
+# Disjoint artifact sets that cargo derives neither from the other: `check`
+# emits .rmeta, `build` .rlib and the linked binaries. Keep in step with
+# cargo-cache.yml, which publishes entries for both.
 warm cargo check --workspace --locked
 warm cargo build --workspace --locked --all-targets
-# The dev loop also runs with CARGO_INCREMENTAL=0 (see AGENTS.md), so these
-# artifacts are exactly what a later plain `cargo build` wants: no hand-off
-# build is needed, and target/debug/incremental never materializes.
+# The dev loop also runs with CARGO_INCREMENTAL=0 (see AGENTS.md), so a later
+# plain `cargo build` reuses these directly.
 
-# Report whether the restored cache actually matched. Every input to the key —
-# the toolchain, the profiles, the CARGO_* env, the absolute build paths — is
-# pinned in two places at once, so drift is invisible: warm-cache still exits 0
-# and just quietly costs a cold build. The hit rate is the only signal.
+# Every cache-key input is pinned in two places at once, so drift is otherwise
+# invisible: warm-cache still exits 0 and just quietly costs a cold build.
 stats=$(sccache --show-stats 2>/dev/null || true)
 echo "${stats}"
 hits=$(sed -n 's/^Cache hits  *\\([0-9][0-9]*\\)$/\\1/p' <<<"${stats}" | head -1)
@@ -115,10 +103,8 @@ total=$(( ${hits:-0} + ${misses:-0} ))
 if [ "${total}" -gt 0 ]; then
   rate=$(( ${hits:-0} * 100 / total ))
   echo "warm-cache: sccache hit rate ${rate}% (${hits} hits / ${misses} misses)"
-  # A full warm compiles ~600 cacheable units. Anything near that with a low
-  # hit rate means real drift; a handful of units means target/ was already
-  # warm and there was nothing for the cache to answer, so the rate says
-  # nothing either way.
+  # A full warm compiles ~600 units; a handful means target/ was already warm
+  # and the rate says nothing either way.
   if [ "${rate}" -lt 80 ] && [ "${total}" -ge 50 ]; then
     echo "warm-cache: WARNING — the restored cache barely matched this build." >&2
     echo "  The published cache is stale against HEAD. Re-run the 'Cargo caches'" >&2
@@ -126,13 +112,10 @@ if [ "${total}" -gt 0 ]; then
   fi
 fi
 
-# Nothing reads the restored cache once target/ is warm, and carrying the test
-# targets has pushed it to a couple of gigabytes of the session's fixed disk
-# allowance. Reclaim it — but only in the cloud container, where the cache is a
-# disposable download this session produced. Elsewhere $SCCACHE_DIR belongs to
-# the developer and may back every other project on the machine.
-# A later `cargo clean` in the container therefore costs a full cold build;
-# drop this block if that trade is wrong for you.
+# Nothing reads the cache once target/ is warm, so reclaim its gigabytes — but
+# only in the container, where it is a disposable download. Elsewhere
+# $SCCACHE_DIR is the developer's and may back every other project.
+# A later `cargo clean` in the container therefore costs a full cold build.
 if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
   sccache --stop-server >/dev/null 2>&1 || true
   rm -rf "${SCCACHE_DIR}"

@@ -1,14 +1,9 @@
 //! Every wado-cli integration test, in one binary.
 //!
-//! Cargo links one executable per file under `tests/`, and each of these
-//! pulls in wado-compiler and wasmtime. As separate targets they cost 0.69 GB
-//! and 15 links; merged they cost one of each.
-//!
-//! Tests here share a process, so anything process-wide — cwd, environment,
-//! signal handlers — is no longer isolated per file. `run_inprocess` is the
-//! only module that mutates such state, and it serializes on its own lock;
-//! every other module drives the CLI through `common::wado*`, which sets an
-//! absolute working directory on each command.
+//! Modules share a process, so cwd and environment are not isolated between
+//! them. `run_inprocess` is the only module that mutates such state and
+//! serializes on its own lock; the rest drive the CLI through `common::wado*`,
+//! which sets an absolute working directory on each command.
 
 #![allow(unused_crate_dependencies)]
 
