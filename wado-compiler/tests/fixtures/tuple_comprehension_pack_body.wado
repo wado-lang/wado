@@ -1,0 +1,48 @@
+// A comprehension body whose own type is a pack-typed tuple. The nested `[..T]`
+// still spells the whole pack, so each row is the full tuple — not the one
+// element the outer walk binds.
+
+trait Crossed {
+    fn crossed(&self) -> String;
+    fn rows(&self) -> String;
+}
+
+impl<..T: Display> Crossed for [..T] {
+    fn crossed(&self) -> String {
+        let grid = [for let x of *self { [for let v of *self { `${x}-${v}` }] }];
+        let mut parts: List<String> = [];
+        for let row of grid {
+            for let c of row {
+                parts.push(c);
+            }
+        }
+        return parts.join(",");
+    }
+
+    fn rows(&self) -> String {
+        let inner = [for let v of *self { `${v}` }];
+        let grid = [for let _x of *self { inner }];
+        let mut parts: List<String> = [];
+        for let row of grid {
+            for let c of row {
+                parts.push(c);
+            }
+        }
+        return parts.join(",");
+    }
+}
+
+test "a nested comprehension keeps the inner pack whole" {
+    assert [1, "a"].crossed() == "1-1,1-a,a-1,a-a";
+}
+
+test "a body yielding a pack-typed tuple repeats the whole tuple" {
+    assert [1, "a"].rows() == "1,a,1,a";
+}
+
+test "three elements" {
+    assert [1, 2, 3].rows() == "1,2,3,1,2,3,1,2,3";
+}
+
+__DATA__
+{"test": {}}

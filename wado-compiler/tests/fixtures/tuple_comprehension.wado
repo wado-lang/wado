@@ -1,0 +1,78 @@
+// `[for let v of tuple { expr }]` — one result element per source element,
+// unrolled once the pack is concrete (WEP 2026-03-14 §8b).
+
+trait Doubled {
+    fn doubled(&self) -> Self;
+}
+
+impl Doubled for i32 {
+    fn doubled(&self) -> i32 {
+        return *self * 2;
+    }
+}
+
+impl Doubled for String {
+    fn doubled(&self) -> String {
+        return `${*self}${*self}`;
+    }
+}
+
+trait DoubleAll {
+    fn double_all(&self) -> Self;
+}
+
+impl<..T: Doubled> DoubleAll for [..T] {
+    fn double_all(&self) -> [..T] {
+        return [for let v of *self { v.doubled() }];
+    }
+}
+
+// A body whose type differs from the element maps the pack through it: the
+// result is `[..String]`, walkable like any other pack-typed tuple.
+trait Labels {
+    fn labels(&self) -> String;
+    fn indexed_labels(&self) -> String;
+}
+
+impl<..T: Display> Labels for [..T] {
+    fn labels(&self) -> String {
+        let rendered = [for let v of *self { `${v}` }];
+        let mut parts: List<String> = [];
+        for let s of rendered {
+            parts.push(s);
+        }
+        return parts.join(",");
+    }
+
+    fn indexed_labels(&self) -> String {
+        let rendered = [for let [i, v] of (*self).enumerate() { `${i}=${v}` }];
+        let mut parts: List<String> = [];
+        for let s of rendered {
+            parts.push(s);
+        }
+        return parts.join(",");
+    }
+}
+
+test "a comprehension maps every element" {
+    let out = [2, "ab", 5].double_all();
+    assert out.0 == 4;
+    assert out.1 == "abab";
+    assert out.2 == 10;
+}
+
+test "a single-element pack maps too" {
+    let out = [7].double_all();
+    assert out.0 == 14;
+}
+
+test "a comprehension retypes the pack through its body" {
+    assert [1, "a", 2].labels() == "1,a,2";
+}
+
+test "a comprehension binds the element index" {
+    assert [1, "a", 2].indexed_labels() == "0=1,1=a,2=2";
+}
+
+__DATA__
+{"test": {}}

@@ -2343,6 +2343,11 @@ impl<'a> PatternLowerer<'a> {
             | TirExprKind::VariantPayload { expr: inner, .. } => {
                 self.lower_expr(inner, type_table);
             }
+            TirExprKind::VariadicTupleComprehension { .. } => {
+                unreachable!(
+                    "VariadicTupleComprehension should be expanded during monomorphization"
+                )
+            }
             TirExprKind::Call { args, .. } => {
                 for arg in args {
                     self.lower_expr(&mut arg.expr, type_table);

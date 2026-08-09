@@ -820,6 +820,11 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
                 v.visit_expr(el);
             }
         }
+        Expr::TupleComprehension(c) => {
+            v.visit_expr(&c.iterable);
+            v.visit_pattern(&c.binding);
+            v.visit_expr(&c.body);
+        }
         Expr::LabeledBlock(lb) => v.visit_block(&lb.block),
         Expr::TryOp(t) => v.visit_expr(&t.expr),
         Expr::Spread(inner, _) => v.visit_expr(inner),
@@ -2078,6 +2083,9 @@ pub enum Expr {
     Cast(Box<CastExpr>),
     StructLiteral(Box<StructLiteralExpr>),
     TupleLiteral(Box<TupleLiteralExpr>),
+    /// Tuple comprehension: `[for let v of tuple { expr }]`, one result element
+    /// per source element. See `docs/wep-2026-03-14-variadic-type-parameters.md`.
+    TupleComprehension(Box<TupleComprehensionExpr>),
     /// Labeled block expression: `label: { ... }` where the last expression is the value
     LabeledBlock(Box<LabeledBlockExpr>),
     /// Postfix `?` operator for error propagation on `Result<T, E>` and `Option<T>`.
@@ -2210,6 +2218,7 @@ impl Expr {
             Expr::Cast(e) => e.id,
             Expr::StructLiteral(e) => e.id,
             Expr::TupleLiteral(e) => e.id,
+            Expr::TupleComprehension(e) => e.id,
             Expr::LabeledBlock(e) => e.id,
             Expr::TryOp(e) => e.id,
             Expr::Spread(inner, _) => inner.id(),
@@ -2244,6 +2253,7 @@ impl Expr {
             Expr::Cast(e) => e.span,
             Expr::StructLiteral(e) => e.span,
             Expr::TupleLiteral(e) => e.span,
+            Expr::TupleComprehension(e) => e.span,
             Expr::LabeledBlock(e) => e.span,
             Expr::TryOp(e) => e.span,
             Expr::Spread(_, span) => *span,
@@ -2341,6 +2351,10 @@ impl Expr {
             Expr::TupleLiteral(mut e) => {
                 e.span = new_span;
                 Expr::TupleLiteral(e)
+            }
+            Expr::TupleComprehension(mut e) => {
+                e.span = new_span;
+                Expr::TupleComprehension(e)
             }
             Expr::LabeledBlock(mut e) => {
                 e.span = new_span;
@@ -2467,6 +2481,7 @@ impl Expr {
             | Expr::Matches(_)
             | Expr::Closure(_)
             | Expr::LabeledBlock(_)
+            | Expr::TupleComprehension(_)
             | Expr::WithHandler(_)
             | Expr::Resume(_)
             | Expr::Error(_) => {
@@ -2565,6 +2580,24 @@ pub struct StructLiteralField {
 pub struct TupleLiteralExpr {
     pub id: AstId,
     pub elements: Vec<Expr>,
+    pub span: Span,
+}
+
+/// Tuple comprehension: `[for let v of tuple { expr }]`.
+///
+/// The source tuple is walked at compile time and `body` evaluated once per
+/// element, so the result is a tuple of the same arity. `[for let [i, v] of
+/// tuple.enumerate() { expr }]` binds the element index alongside the value.
+#[derive(Debug, Clone)]
+pub struct TupleComprehensionExpr {
+    pub id: AstId,
+    /// Element binding: an ident, or `[i, v]` under `.enumerate()`.
+    pub binding: Pattern,
+    /// The source tuple, as written — `t.enumerate()` included, so the form is
+    /// recognised where the statement for-of recognises it.
+    pub iterable: Expr,
+    /// The per-element expression, written inside braces.
+    pub body: Expr,
     pub span: Span,
 }
 

@@ -2526,6 +2526,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirExpr::new(TirExprKind::Block(block_tir), recorded_type, span)
             }),
             ast::Expr::Ident(ident) => self.reify_ident(ident, recorded_type, expected_type, ctx),
+            ast::Expr::TupleComprehension(comp) => {
+                self.reify_tuple_comprehension(comp, ctx, recorded_type)
+            }
             ast::Expr::TupleLiteral(tuple_lit) => {
                 // SequenceLiteralBuilder coercion: when the elaborator
                 // recorded `sequence_coercions[tuple.id]`, the literal
@@ -3754,7 +3757,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{ResolvedType, TirExprKind, TirStmtKind, TypeTable};
 
         let span = for_of.span;
-        let iterable = self.reify_expr(&for_of.iterable, ctx, None);
+        let (actual_iterable, is_enumerate) = match &for_of.iterable {
+            ast::Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
+                (&mc.receiver, true)
+            }
+            other => (other, false),
+        };
+        let iterable = self.reify_expr(actual_iterable, ctx, None);
         let unique_id = ctx.next_local;
 
         // Look through a `&`/`&mut` wrapper: `for v of &[..T]` binds `&T_k`.
@@ -3784,10 +3793,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 None => (TypeTable::UNKNOWN, false),
             }
         };
-        let binding_type = if by_ref {
+        let bound_type = if by_ref {
             self.tysys.type_table.borrow_mut().make_ref(inner)
         } else {
             inner
+        };
+        // Expansion supplies the index literal per unrolled element.
+        let binding_type = if is_enumerate {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_tuple(vec![TypeTable::I32, bound_type])
+        } else {
+            bound_type
         };
 
         let (binding_name, binding_id) = match &for_of.binding {
@@ -3853,7 +3871,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
+        let index_binding =
+            super::Elaborator::<H>::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
+        if let Some(local) = index_binding {
+            ctx.variadic_enumerate_indices.push(local);
+        }
         let mut body = self.reify_block(&for_of.body, ctx, None);
+        if index_binding.is_some() {
+            ctx.variadic_enumerate_indices.pop();
+        }
         ctx.exit_scope();
         if !destruct_stmts.is_empty() {
             destruct_stmts.extend(body.stmts);
@@ -3869,9 +3895,123 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 body,
                 unique_id,
                 by_ref,
+                is_enumerate,
             },
             span,
         )]
+    }
+
+    /// Reify `[for let v of tuple { expr }]` into the deferred
+    /// `VariadicTupleComprehension` node the monomorphizer unrolls once the
+    /// pack is concrete. Mirrors [`Self::reify_variadic_for_of`]'s binding.
+    fn reify_tuple_comprehension(
+        &mut self,
+        comp: &ast::TupleComprehensionExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
+
+        let span = comp.span;
+        let (source, is_enumerate) = super::Elaborator::<H>::split_enumerate(&comp.iterable);
+        let iterable = self.reify_expr(source, ctx, None);
+        let unique_id = ctx.next_local;
+
+        let elem_type = super::Elaborator::<H>::comprehension_pack_elem(
+            &self.tysys.type_table,
+            iterable.type_id,
+        )
+        .unwrap_or(TypeTable::UNKNOWN);
+        let binding_type = if is_enumerate {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_tuple(vec![TypeTable::I32, elem_type])
+        } else {
+            elem_type
+        };
+
+        let binding_name = match &comp.binding {
+            ast::Pattern::Ident { name, .. } => name.clone(),
+            _ => format!("__comp_temp_{unique_id}"),
+        };
+        let binding_id = match &comp.binding {
+            ast::Pattern::Ident { id, .. } => Some(*id),
+            _ => None,
+        };
+
+        ctx.enter_scope();
+        let binding_local = ctx.add_local(binding_name.clone(), binding_type, false, binding_id);
+
+        let mut destructure: Vec<TirStmt> = Vec::new();
+        if let ast::Pattern::Tuple(elems, _) = &comp.binding {
+            let inner = self
+                .tysys
+                .type_table
+                .borrow()
+                .as_tuple(binding_type)
+                .unwrap_or_else(|| vec![binding_type]);
+            for (i, elem) in elems.iter().enumerate() {
+                let ast::Pattern::Ident { id, name, .. } = elem else {
+                    continue;
+                };
+                let sub_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
+                let local_index = ctx.add_local(name.clone(), sub_type, false, Some(*id));
+                let field_access = TirExpr::new(
+                    TirExprKind::FieldAccess {
+                        expr: Box::new(TirExpr::new(
+                            TirExprKind::Local {
+                                index: binding_local,
+                                name: binding_name.clone(),
+                            },
+                            binding_type,
+                            span,
+                        )),
+                        field_index: i as u32,
+                        field_name: i.to_string(),
+                    },
+                    sub_type,
+                    span,
+                );
+                destructure.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: sub_type,
+                        value: field_access,
+                        skip_value_copy: false,
+                    },
+                    span,
+                ));
+            }
+        }
+
+        let index_binding =
+            super::Elaborator::<H>::enumerate_index_local(is_enumerate, &comp.binding, ctx);
+        if let Some(local) = index_binding {
+            ctx.variadic_enumerate_indices.push(local);
+        }
+        let body = self.reify_expr(&comp.body, ctx, None);
+        if index_binding.is_some() {
+            ctx.variadic_enumerate_indices.pop();
+        }
+        ctx.exit_scope();
+
+        TirExpr::new(
+            TirExprKind::VariadicTupleComprehension {
+                iterable: Box::new(iterable),
+                binding_name,
+                binding_local,
+                destructure,
+                body: Box::new(body),
+                unique_id,
+                is_enumerate,
+            },
+            recorded_type,
+            span,
+        )
     }
 
     /// Reify a C-style `for init; cond; update { body }` loop into
@@ -5880,7 +6020,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             };
             tt.as_tuple(unwrapped)
         };
-        if let Some(elems) = tuple_elems
+        if let Some(elems) = &tuple_elems
             && let ast::Expr::Literal(lit) = &index.index
             && let ast::Literal::Number(repr) = &lit.value
             && let Ok(idx) = repr.parse::<usize>()
@@ -5893,6 +6033,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     field_name: idx.to_string(),
                 },
                 elems[idx],
+                index.span,
+            );
+        }
+
+        // Pack-typed tuple subscripted by an enclosing variadic
+        // `.enumerate()` index: kept as `Index` here and rewritten to the
+        // element's `FieldAccess` when the loop unrolls (WEP 2026-03-14).
+        if let Some(elems) = &tuple_elems
+            && let Some(elem_type) = super::Elaborator::<H>::variadic_enumerate_subscript_type(
+                &self.tysys.type_table,
+                elems,
+                &index.index,
+                ctx,
+            )
+        {
+            let idx_expr = self.reify_expr(&index.index, ctx, None);
+            return TirExpr::new(
+                TirExprKind::Index {
+                    expr: Box::new(receiver),
+                    index: Box::new(idx_expr),
+                },
+                elem_type,
                 index.span,
             );
         }

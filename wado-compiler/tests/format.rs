@@ -171,6 +171,53 @@ fn run() {
     assert_eq!(formatted1, formatted2, "format should be idempotent");
 }
 
+/// A tuple comprehension `[for let v of t { expr }]` must round-trip: the
+/// `.enumerate()` suffix stays part of the iterable, so the formatter reprints
+/// what was written instead of reconstructing it.
+#[test]
+fn test_format_tuple_comprehension_roundtrips() {
+    let source = concat!(
+        "impl<..T: Clone> Clone for [..T] {\n",
+        "    fn clone(&self) -> [..T] {\n",
+        "        let indexed = [for let [i, v] of (*self).enumerate() { v.clone() }];\n",
+        "        return [for let v of indexed { v }];\n",
+        "    }\n",
+        "}\n"
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("[for let [i, v] of (*self).enumerate() { v.clone() }]"),
+        "expected the comprehension to survive formatting, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+/// A comment inside a comprehension body keeps its place: the one-line form has
+/// no slot for it, so the body moves onto its own line rather than losing it.
+#[test]
+fn test_format_tuple_comprehension_keeps_body_comment() {
+    let source = concat!(
+        "impl<..T: Clone> Clone for [..T] {\n",
+        "    fn clone(&self) -> [..T] {\n",
+        "        return [for let v of *self {\n",
+        "            // deep copy\n",
+        "            v.clone()\n",
+        "        }];\n",
+        "    }\n",
+        "}\n"
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("// deep copy"),
+        "expected the comment to survive formatting, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// A byte-string literal `b"..."` must round-trip through the formatter with
 /// its `b` prefix and raw escapes intact.
 #[test]

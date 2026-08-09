@@ -401,6 +401,19 @@ fn expand_expr(expr: &mut TirExpr, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx
             expand_expr(value, alloc, ctx);
             return;
         }
+        TirExprKind::VariadicTupleComprehension {
+            iterable,
+            destructure,
+            body,
+            ..
+        } => {
+            expand_expr(iterable, alloc, ctx);
+            for stmt in destructure {
+                expand_stmt(stmt, alloc, ctx);
+            }
+            expand_expr(body, alloc, ctx);
+            return;
+        }
         _ => return,
     }
 

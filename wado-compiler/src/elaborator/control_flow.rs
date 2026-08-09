@@ -632,6 +632,9 @@ fn any_in_expr<P: AstTreeProbe>(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, probe: &
                 || s.spreads.iter().any(|sp| any_in_expr(ctx, &sp.expr, probe))
         }
         ast::Expr::TupleLiteral(t) => t.elements.iter().any(|e| any_in_expr(ctx, e, probe)),
+        ast::Expr::TupleComprehension(c) => {
+            any_in_expr(ctx, &c.iterable, probe) || any_in_expr(ctx, &c.body, probe)
+        }
         ast::Expr::Spread(inner, _) => any_in_expr(ctx, inner, probe),
         ast::Expr::Range(r) => any_in_expr(ctx, &r.start, probe) || any_in_expr(ctx, &r.end, probe),
         ast::Expr::TryOp(t) => any_in_expr(ctx, &t.expr, probe),

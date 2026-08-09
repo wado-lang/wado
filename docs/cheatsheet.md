@@ -760,6 +760,14 @@ let b = [..a, true];   // [i32, String, bool]
 fn make_defaults<..T: Default>() -> [..T] {
     return [..T::default()];   // expands to [T_0::default(), T_1::default(), ...]
 }
+
+// Tuple comprehension: one result element per source element; the braces hold
+// one expression. `.enumerate()` binds the index, which doubles as a subscript.
+impl<..T: Doubled> Doubled for [..T] {
+    fn doubled(&self) -> [..T] {
+        return [for let v of *self { v.doubled() }];
+    }
+}
 ```
 
 ### Reference Storage

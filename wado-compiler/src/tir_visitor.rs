@@ -155,6 +155,18 @@ pub trait TirMutVisitor {
             | TirExprKind::VariantPayload { expr: inner, .. } => {
                 self.visit_expr(inner);
             }
+            TirExprKind::VariadicTupleComprehension {
+                iterable,
+                destructure,
+                body,
+                ..
+            } => {
+                self.visit_expr(iterable);
+                for stmt in destructure {
+                    self.visit_stmt(stmt);
+                }
+                self.visit_expr(body);
+            }
             TirExprKind::Assign { target, value }
             | TirExprKind::Index {
                 expr: target,
@@ -383,6 +395,18 @@ pub trait TirRefVisitor {
             | TirExprKind::VariantTest { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. } => {
                 self.visit_expr(inner);
+            }
+            TirExprKind::VariadicTupleComprehension {
+                iterable,
+                destructure,
+                body,
+                ..
+            } => {
+                self.visit_expr(iterable);
+                for stmt in destructure {
+                    self.visit_stmt(stmt);
+                }
+                self.visit_expr(body);
             }
             TirExprKind::Assign { target, value }
             | TirExprKind::Index {
@@ -618,6 +642,18 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             changed |= visitor.visit_expr(inner);
         }
+        TirExprKind::VariadicTupleComprehension {
+            iterable,
+            destructure,
+            body,
+            ..
+        } => {
+            changed |= visitor.visit_expr(iterable);
+            for stmt in destructure {
+                changed |= visitor.visit_stmt(stmt);
+            }
+            changed |= visitor.visit_expr(body);
+        }
         TirExprKind::Assign { target, value } => {
             changed |= visitor.visit_expr(target);
             changed |= visitor.visit_expr(value);
@@ -791,6 +827,9 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
         }
         TirExprKind::Binary { left, right, .. } => {
             expr_has_break_to(label, left) || expr_has_break_to(label, right)
+        }
+        TirExprKind::VariadicTupleComprehension { iterable, body, .. } => {
+            expr_has_break_to(label, iterable) || expr_has_break_to(label, body)
         }
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }

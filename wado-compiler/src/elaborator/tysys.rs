@@ -238,6 +238,7 @@ impl TypeSystem {
             | Expr::Cast(_)
             | Expr::StructLiteral(_)
             | Expr::TupleLiteral(_)
+            | Expr::TupleComprehension(_)
             | Expr::LabeledBlock(_)
             | Expr::TryOp(_)
             | Expr::Spread(..)

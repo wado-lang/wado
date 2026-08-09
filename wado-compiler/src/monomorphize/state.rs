@@ -181,6 +181,23 @@ pub(super) struct Monomorphizer {
     /// this map — the receiver is the param named `base_struct_name`, not
     /// positionally the lowest-index param (which breaks for `fn f<U, T: Tr>`).
     pub current_param_substitution_key: IndexMap<String, u32>,
+    /// Pack index → the pack's own tuple, while a variadic for-of body is
+    /// substituted for one unrolled element.
+    ///
+    /// That substitution binds the pack to the element it walks, which is what
+    /// a bare `T` in the body means. A tuple *spelling* the pack (`[..T]` — the
+    /// type of a local declared outside the loop) still means the whole tuple,
+    /// so the splice reads this instead. Empty outside the expansion.
+    pub pack_splice_bindings: RefCell<IndexMap<u32, TypeId>>,
+    /// Template local slots already claimed by an unrolled copy in the function
+    /// being instantiated.
+    ///
+    /// Every unroll — a variadic for-of iteration, a comprehension element —
+    /// clones the same template body, so its locals collide with every other
+    /// copy's. The first copy keeps the template slot and the rest reallocate;
+    /// the claims must be shared, because an inner unroll nested in an outer
+    /// one competes for the very same slots. Cleared per instantiation.
+    pub unrolled_local_claims: RefCell<IndexSet<u32>>,
 }
 
 impl Monomorphizer {
@@ -204,6 +221,33 @@ impl Monomorphizer {
             current_impl_type_param_count: 0,
             current_impl_struct_name: None,
             current_param_substitution_key: IndexMap::default(),
+            pack_splice_bindings: RefCell::new(IndexMap::default()),
+            unrolled_local_claims: RefCell::new(IndexSet::default()),
+        }
+    }
+
+    /// Claim `local` for an unrolled copy, returning whether it was free. A
+    /// taken slot means a previous copy holds it and this one must reallocate.
+    pub fn claim_unrolled_local(&self, local: u32) -> bool {
+        self.unrolled_local_claims.borrow_mut().insert(local)
+    }
+
+    /// Bind `index`'s splice positions to `tuple` for the duration of one
+    /// unrolled element body, returning the binding it displaced so a nested
+    /// variadic for-of restores it (see [`Self::pack_splice_bindings`]).
+    pub fn bind_pack_splice(&self, index: u32, tuple: TypeId) -> Option<TypeId> {
+        self.pack_splice_bindings.borrow_mut().insert(index, tuple)
+    }
+
+    pub fn restore_pack_splice(&self, index: u32, previous: Option<TypeId>) {
+        let mut bindings = self.pack_splice_bindings.borrow_mut();
+        match previous {
+            Some(tuple) => {
+                bindings.insert(index, tuple);
+            }
+            None => {
+                bindings.shift_remove(&index);
+            }
         }
     }
 

@@ -623,6 +623,22 @@ for let v of t {
 
 `break` and `continue` are not allowed inside a tuple for-of body because the loop is unrolled at compile time into sequential blocks and these have no natural target. `.enumerate()` is supported and provides a compile-time index.
 
+#### Tuple comprehension
+
+Wrapping the same walk in `[...]` collects one result element per source element. The braces hold a single expression — the element's value — since every position of the result tuple has one.
+
+```wado
+impl<..T: Doubled> Doubled for [..T] {
+    fn doubled(&self) -> [..T] {
+        return [for let v of *self { v.doubled() }];
+    }
+}
+```
+
+The `.enumerate()` form binds the index alongside the value (`[for let [i, v] of t.enumerate() { ... }]`). The index is a compile-time constant, so it is also the one non-literal a tuple accepts as a subscript (`t[i]`), for reads and writes alike.
+
+The source must be a variadic tuple (`[..T]`); a concrete tuple is not walkable this way.
+
 ### Infinite Loop
 
 ```wado
@@ -2108,7 +2124,7 @@ let g: fn(i32) -> i32 = double;
 
 Key points:
 
-- Function values carry no observable identity at the Wado level. The runtime uses a Wasm `ref` under the hood, but the language does not let you distinguish "value vs reference to value" — there is no state to observe (Wado has no `Copy`/`Clone`/identity comparison for `fn`).
+- Function values carry no observable identity at the Wado level. The runtime uses a Wasm `ref` under the hood, but the language does not let you distinguish "value vs reference to value" — there is no state to observe, and no way to compare two `fn` values.
 - `&` and `&mut` apply to `fn`-typed values like to any other value, with no special-casing:
   - `&f` has type `&fn(...)`; `&mut f` (on a mutable binding) has type `&mut fn(...)`.
   - These references behave per the [Reference Types](#reference-types) rules. `&fn(...)` is _not_ a synonym for `fn(...)`; passing one where the other is expected is a type error.

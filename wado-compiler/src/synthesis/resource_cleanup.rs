@@ -764,6 +764,10 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
         TirExprKind::TypePackExpansion { call_expr, .. } => {
             scan_transfers(call_expr, true, consumed, cx);
         }
+        TirExprKind::VariadicTupleComprehension { iterable, body, .. } => {
+            scan_transfers(iterable, true, consumed, cx);
+            scan_transfers(body, true, consumed, cx);
+        }
         TirExprKind::TemplateString { parts } => {
             for part in parts {
                 if let crate::tir::TirTemplatePart::Interpolation { expr: inner, .. } = part {

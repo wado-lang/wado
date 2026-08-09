@@ -1,0 +1,42 @@
+// A nested unroll over the same pack: both bindings are typed by `..T`, so the
+// inner element's substitution must not reach a use of the outer binding. The
+// enclosing element is decided before the inner body is substituted.
+
+trait Crossed {
+    fn crossed(&self) -> String;
+    fn crossed_comprehension(&self) -> String;
+}
+
+impl<..T: Display> Crossed for [..T] {
+    fn crossed(&self) -> String {
+        let mut out: List<String> = [];
+        for let x of *self {
+            for let v of *self {
+                out.push(`${x}-${v}`);
+            }
+        }
+        return out.join(",");
+    }
+
+    fn crossed_comprehension(&self) -> String {
+        let mut out: List<String> = [];
+        for let x of *self {
+            let inner = [for let v of *self { `${x}-${v}` }];
+            for let s of inner {
+                out.push(s);
+            }
+        }
+        return out.join(",");
+    }
+}
+
+test "a nested for-of keeps the outer binding's own element" {
+    assert [1, "a"].crossed() == "1-1,1-a,a-1,a-a";
+}
+
+test "a nested comprehension keeps the outer binding's own element" {
+    assert [1, "a"].crossed_comprehension() == "1-1,1-a,a-1,a-a";
+}
+
+__DATA__
+{"test": {}}
