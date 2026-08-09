@@ -248,6 +248,31 @@ fn test_format_turbofish_wildcard_roundtrips() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// A turbofish on a case path sits on the path's *prefix*
+/// (`Maybe::<i32>::Nothing`). Appending it to the whole name would emit
+/// `Maybe::Nothing::<i32>`, which re-parses as the identifier's own turbofish
+/// and changes the AST.
+#[test]
+fn test_format_case_path_turbofish_stays_on_the_prefix() {
+    let source = concat!(
+        "variant Maybe<T> {\n    Just(T),\n    Nothing,\n}\n",
+        "\n",
+        "fn run() {\n    let a = Option::<i32>::None;\n    let b = Maybe::<String>::Nothing;\n}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("Option::<i32>::None"),
+        "expected the turbofish to stay on the prefix, got:\n{formatted}"
+    );
+    assert!(
+        formatted.contains("Maybe::<String>::Nothing"),
+        "expected the turbofish to stay on the prefix, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// The visibility ladder (`internal` / `pub` / file-private) and the
 /// orthogonal `export` flag must survive formatting. `export` implies `pub`,
 /// so the canonical form drops the redundant `pub` (never `pub export`).

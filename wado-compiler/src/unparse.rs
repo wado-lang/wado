@@ -1601,16 +1601,26 @@ impl<'a> Unparser<'a> {
     fn unparse_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Ident(i) => {
-                self.output.push_str(&i.name);
-                if !i.type_args.is_empty() {
-                    self.output.push_str("::<");
-                    for (idx, ty) in i.type_args.iter().enumerate() {
-                        if idx > 0 {
-                            self.output.push_str(", ");
-                        }
-                        self.unparse_type(ty);
+                // `Maybe::<i32>::Nothing` puts its turbofish on the path's
+                // prefix; appending it to the whole name would re-parse as the
+                // identifier's own (`Maybe::Nothing::<i32>`).
+                let split = i
+                    .type_args_on_prefix
+                    .then(|| i.name.split_once("::"))
+                    .flatten();
+                match split {
+                    Some((prefix, suffix)) => {
+                        self.output.push_str(prefix);
+                        self.unparse_turbofish(&i.type_args);
+                        self.output.push_str("::");
+                        self.output.push_str(suffix);
                     }
-                    self.output.push('>');
+                    None => {
+                        self.output.push_str(&i.name);
+                        if !i.type_args.is_empty() {
+                            self.unparse_turbofish(&i.type_args);
+                        }
+                    }
                 }
             }
             Expr::Literal(l) => self.unparse_literal(&l.value),
@@ -3211,19 +3221,37 @@ pub fn unparse_expr_simple(expr: &Expr) -> String {
 /// drops disambiguating parentheses around nested binary expressions: callers
 /// (error messages, simple symbol previews) prioritise readability over
 /// round-trip fidelity.
+fn unparse_turbofish_into(type_args: &[Type], output: &mut String) {
+    output.push_str("::<");
+    for (idx, ty) in type_args.iter().enumerate() {
+        if idx > 0 {
+            output.push_str(", ");
+        }
+        unparse_type_into(ty, output);
+    }
+    output.push('>');
+}
+
 fn unparse_expr_into(expr: &Expr, output: &mut String) {
     match expr {
         Expr::Ident(i) => {
-            output.push_str(&i.name);
-            if !i.type_args.is_empty() {
-                output.push_str("::<");
-                for (idx, ty) in i.type_args.iter().enumerate() {
-                    if idx > 0 {
-                        output.push_str(", ");
-                    }
-                    unparse_type_into(ty, output);
+            let split = i
+                .type_args_on_prefix
+                .then(|| i.name.split_once("::"))
+                .flatten();
+            match split {
+                Some((prefix, suffix)) => {
+                    output.push_str(prefix);
+                    unparse_turbofish_into(&i.type_args, output);
+                    output.push_str("::");
+                    output.push_str(suffix);
                 }
-                output.push('>');
+                None => {
+                    output.push_str(&i.name);
+                    if !i.type_args.is_empty() {
+                        unparse_turbofish_into(&i.type_args, output);
+                    }
+                }
             }
         }
         Expr::Literal(l) => unparse_literal_into(&l.value, output),
