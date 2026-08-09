@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786278326822,
+  "lastUpdate": 1786281995427,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46785,6 +46785,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/845d26eb0977f9673bf19cda240cd91c33056ce8"
         },
         "date": 1786278326316,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271633,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ca49ed4047ff91c644e2076c014755b16821a86f",
+          "message": "Merge pull request #1778 from wado-lang/claude/cargo-build-speed-9hvxov\n\ndocs(stdlib): keep the test layout out of the module docs",
+          "timestamp": "2026-08-09T22:14:45+09:00",
+          "tree_id": "86e26e77f7541815a326a96ecce86f68e45c01dc",
+          "url": "https://github.com/wado-lang/wado/commit/ca49ed4047ff91c644e2076c014755b16821a86f"
+        },
+        "date": 1786281994757,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
