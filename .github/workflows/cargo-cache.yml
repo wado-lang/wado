@@ -1,14 +1,14 @@
 # Publishes shared cargo caches to GCS so non-GitHub environments (e.g. the
 # Claude Code web container) can restore them. Two objects are produced:
 #
-#   cargo/registry/linux-x86_64.tar.gz  registry index + downloaded .crate files
+#   cargo/registry/linux-x86_64.tar.gz  registry index, .crate files, unpacked sources
 #   cargo/sccache/linux-x86_64.tar.gz   sccache content-addressed compile cache
 #
-# The registry cache saves the download; the sccache cache saves the compile of
-# the ~440 dependencies (an ~8 min cold build becomes an ~80s sccache-backed
-# rebuild in the container). See .claude/hooks/cargo-cache-restore.mts (consumer)
-# and the `warm-cache` task in mise.toml (which turns it into a warm target/ the
-# dev loop then builds on directly).
+# The registry cache saves the download and the unpack; the sccache cache saves
+# the compile of the ~440 dependencies (an ~8 min cold build becomes a ~4 min
+# sccache-backed one in the container). See .claude/hooks/cargo-cache-restore.mts
+# (consumer) and the `warm-cache` task in mise.toml (which turns it into a warm
+# target/ the dev loop then builds on directly).
 #
 # PATH PARITY IS LOAD-BEARING. sccache's Rust cache key is sensitive to the
 # absolute build paths (build-script OUT_DIR and dependency paths bake into it),
@@ -32,8 +32,17 @@ name: Cargo caches (registry + sccache)
 on:
   push:
     branches: [main]
+    # Every one of these feeds the sccache cache key, so a change to any of
+    # them invalidates the published cache wholesale. Cargo.lock alone is not
+    # enough: a `[profile.*]` edit or a toolchain bump changes the rustc
+    # command line for all ~440 dependencies, and without a republish the
+    # container silently falls back to a cold build. `warm-cache` reports the
+    # hit rate so that failure mode is at least visible.
     paths:
       - Cargo.lock
+      - Cargo.toml
+      - "*/Cargo.toml"
+      - rust-toolchain.toml
       - .github/workflows/cargo-cache.yml
   workflow_dispatch:
 
@@ -53,17 +62,29 @@ env:
   CARGO_TARGET_DIR: /home/user/wado/target
   RUSTC_WRAPPER: sccache
   CARGO_INCREMENTAL: "0"
+  # The test binaries push the cache past sccache's 10 GiB default, and an
+  # eviction here publishes a cache with holes in it.
+  SCCACHE_CACHE_SIZE: 30G
   # RUSTFLAGS is a sccache cache-key input; keep it identical to the container's
   # mise [env] (both unset).
 
 jobs:
   upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: false
+
+      # `--all-targets` links ~90 test binaries at 100-190 MB each, so target/
+      # peaks near 13 GB — and path parity pins it to /home/user/wado/target on
+      # the root filesystem, which cannot be moved to the larger /mnt. Dropping
+      # the preinstalled SDKs buys ~25 GB of headroom.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
 
       - name: Install sccache (distro build — same version as the container)
         run: sudo apt-get update && sudo apt-get install -y sccache
@@ -81,15 +102,32 @@ jobs:
         working-directory: /home/user/wado
         run: |
           cargo fetch --locked
-          cargo build --workspace --locked
+          # Both, because they emit different artifacts from different rustc
+          # command lines and so occupy separate cache entries: `check` emits
+          # .rmeta, `build` emits .rlib and the linked binaries.
+          # `--all-targets` covers the plain `cargo build` units and adds the
+          # dev-dependencies and the ~90 test binaries on top. Publishing only
+          # a bare `cargo build` left every session's first `cargo check` and
+          # first `cargo test` compiling from scratch. Keep in step with the
+          # `warm-cache` task, which replays exactly this list.
+          cargo check --workspace --locked
+          cargo build --workspace --locked --all-targets
           sccache --show-stats
 
       - name: Pack caches (public data only — never credentials.toml / config.toml)
         run: |
           sccache --stop-server || true
           mkdir -p out/registry out/sccache
-          tar -C "$CARGO_HOME" -czf out/registry/linux-x86_64.tar.gz registry/index registry/cache
-          tar -C "$SCCACHE_DIR" -czf out/sccache/linux-x86_64.tar.gz .
+          # `registry/src` as well as `registry/cache`: without it cargo
+          # re-unpacks 374 .crate files (73 MB -> 316 MB) at the head of the
+          # container's first build. Shipping the unpacked tree costs ~80 MB of
+          # download and skips that entirely.
+          tar -C "$CARGO_HOME" -czf out/registry/linux-x86_64.tar.gz \
+            registry/index registry/cache registry/src
+          # sccache already stores every entry compressed, so gzip only adds
+          # CPU here — `-1` keeps the .tar.gz envelope the restore hook expects
+          # without spending minutes re-compressing incompressible bytes.
+          tar -C "$SCCACHE_DIR" -I 'gzip -1' -cf out/sccache/linux-x86_64.tar.gz .
           ls -lh out/registry/linux-x86_64.tar.gz out/sccache/linux-x86_64.tar.gz
 
       - id: auth

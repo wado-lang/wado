@@ -36,10 +36,10 @@ description = "Reconstruct target/ from the restored sccache cache"
 run = """
 #!/usr/bin/env bash
 # Turns the restored sccache cache (see .claude/hooks/cargo-cache-restore.mts)
-# into a warm target/: an ~8 min cold dependency build becomes an ~80s
-# sccache-backed rebuild. sccache is used ONLY here, because its cache key
-# depends on the CARGO_* set normalized below — a plain `cargo build` in this
-# container has a different set and would only add misses.
+# into a warm target/: a ~4 min sccache-backed rebuild instead of the ~8 min
+# cold one. sccache is used ONLY here, because its cache key depends on the
+# CARGO_* set normalized below — a plain `cargo build` in this container has a
+# different set and would only add misses.
 # No-ops cleanly when sccache or the cache is absent (e.g. local dev).
 set -e -o pipefail
 export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cargo/sccache}"
@@ -47,8 +47,18 @@ if ! command -v sccache >/dev/null 2>&1; then
   echo "sccache not installed; skipping warm-cache (normal cold build applies)"
   exit 0
 fi
+# The SessionStart hook warms in the background and `on-task-started` warms on
+# demand, so two runs can overlap. Serialize them: the second one then observes
+# the finished state below and exits instead of duplicating the build.
+lock="$HOME/.cache/wado/warm-cache.lock"
+mkdir -p "$(dirname "${lock}")"
+exec 9>"${lock}"
+if ! flock -n 9; then
+  echo "warm-cache: another run holds the lock; waiting for it to finish"
+  flock 9
+fi
 if [ ! -d "$SCCACHE_DIR" ] || [ -z "$(ls -A "$SCCACHE_DIR" 2>/dev/null)" ]; then
-  echo "no restored sccache cache at $SCCACHE_DIR; skipping warm-cache"
+  echo "no sccache cache at $SCCACHE_DIR; skipping warm-cache (already warmed, or none published)"
   exit 0
 fi
 # Reconstruct dependency artifacts from the content-addressed cache. sccache
@@ -56,12 +66,52 @@ fi
 # CARGO_* set the cargo-cache.yml runner used — this container otherwise leaks
 # CARGO_HTTP_CAINFO and drops the runner's three.
 unset $(compgen -e | grep '^CARGO_' || true)
-env CARGO_HOME="$HOME/.cargo" CARGO_TARGET_DIR="$PWD/target" CARGO_INCREMENTAL=0 \
-  RUSTC_WRAPPER=sccache cargo build --workspace --locked
-sccache --show-stats || true
+warm() {
+  env CARGO_HOME="$HOME/.cargo" CARGO_TARGET_DIR="$PWD/target" CARGO_INCREMENTAL=0 \
+    RUSTC_WRAPPER=sccache "$@"
+}
+# Two disjoint artifact sets, and cargo derives neither from the other:
+# `check` emits .rmeta, `build` emits .rlib and the linked binaries.
+# `--all-targets` covers the plain `cargo build` units and adds the
+# dev-dependencies and the ~90 test binaries on top. Warming only a bare
+# `cargo build` left the first `cargo check` of a session paying a 3 min
+# metadata pass and the first `cargo test` a 17 min, 9 GB link. Keep this list
+# in step with cargo-cache.yml, which has to publish entries for both.
+warm cargo check --workspace --locked
+warm cargo build --workspace --locked --all-targets
 # The dev loop also runs with CARGO_INCREMENTAL=0 (see AGENTS.md), so these
 # artifacts are exactly what a later plain `cargo build` wants: no hand-off
 # build is needed, and target/debug/incremental never materializes.
+
+# Report whether the restored cache actually matched. Every input to the key —
+# the toolchain, the profiles, the CARGO_* env, the absolute build paths — is
+# pinned in two places at once, so drift is invisible: warm-cache still exits 0
+# and just quietly costs a cold build. The hit rate is the only signal.
+stats=$(sccache --show-stats 2>/dev/null || true)
+echo "${stats}"
+hits=$(sed -n 's/^Cache hits  *\\([0-9][0-9]*\\)$/\\1/p' <<<"${stats}" | head -1)
+misses=$(sed -n 's/^Cache misses  *\\([0-9][0-9]*\\)$/\\1/p' <<<"${stats}" | head -1)
+total=$(( ${hits:-0} + ${misses:-0} ))
+if [ "${total}" -gt 0 ]; then
+  rate=$(( ${hits:-0} * 100 / total ))
+  echo "warm-cache: sccache hit rate ${rate}% (${hits} hits / ${misses} misses)"
+  # A full warm compiles ~600 cacheable units. Anything near that with a low
+  # hit rate means real drift; a handful of units means target/ was already
+  # warm and there was nothing for the cache to answer, so the rate says
+  # nothing either way.
+  if [ "${rate}" -lt 80 ] && [ "${total}" -ge 50 ]; then
+    echo "warm-cache: WARNING — the restored cache barely matched this build." >&2
+    echo "  The published cache is stale against HEAD. Re-run the 'Cargo caches'" >&2
+    echo "  workflow (.github/workflows/cargo-cache.yml) on main to republish it." >&2
+  fi
+fi
+
+# Nothing reads the restored cache once target/ is warm, and carrying the test
+# targets has pushed it to a couple of gigabytes of the session's fixed disk
+# allowance. Reclaim it. A later `cargo clean` therefore costs a full cold
+# build; drop these two lines if that trade is wrong for you.
+sccache --stop-server >/dev/null 2>&1 || true
+rm -rf "${SCCACHE_DIR}"
 """
 
 [tasks.on-task-done]

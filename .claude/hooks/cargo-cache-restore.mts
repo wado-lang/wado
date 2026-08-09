@@ -18,7 +18,7 @@
 //   WADO_CACHE_SCCACHE_OBJECT, SCCACHE_DIR.
 
 import { createSign } from "node:crypto";
-import { readFileSync, mkdirSync } from "node:fs";
+import { readFileSync, mkdirSync, openSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -35,6 +35,11 @@ const CARGO_HOME = process.env.CARGO_HOME ?? join(homedir(), ".cargo");
 const SCCACHE_DIR = process.env.SCCACHE_DIR ?? join(CARGO_HOME, "sccache");
 const SCOPE = "https://www.googleapis.com/auth/devstorage.read_only";
 const TIMEOUT_MS = 60_000;
+// `AbortSignal.timeout` on a fetch covers the streamed body, not just the
+// response headers, so this bounds the whole multi-GB download. The sccache
+// object grew past a gigabyte once it started carrying the test-target
+// entries; a 60 s budget would abort it mid-stream.
+const DOWNLOAD_TIMEOUT_MS = 900_000;
 
 type ServiceAccountKey = { client_email: string; private_key: string; token_uri: string };
 
@@ -93,7 +98,7 @@ async function restore(token: string, object: string, destDir: string): Promise<
     `/o/${encodeURIComponent(object)}?alt=media`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
   });
   if (res.status === 404) {
     log(`no cache object yet (gs://${BUCKET}/${object}); skipping`);
@@ -123,7 +128,36 @@ function launchBackgroundWarm(): void {
   }
 }
 
+// The SessionStart hook running this script is killed at the harness's own
+// hook timeout, which the sccache download can now outlive: the object carries
+// the test-target entries and runs to a couple of gigabytes. Re-exec detached
+// and return, the same way launchBackgroundWarm defers the build, so the
+// session starts immediately and the cache lands behind it.
+const DETACH_MARKER = "WADO_CACHE_RESTORE_DETACHED";
+const LOG_FILE = join(homedir(), ".cache", "wado", "warm-cache.log");
+
+function relaunchDetached(): boolean {
+  if (process.env[DETACH_MARKER] === "1" || process.env.CLAUDE_CODE_REMOTE !== "true") return false;
+  try {
+    mkdirSync(dirname(LOG_FILE), { recursive: true });
+    const out = openSync(LOG_FILE, "a");
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url)], {
+      detached: true,
+      stdio: ["ignore", out, out],
+      env: { ...process.env, [DETACH_MARKER]: "1" },
+    });
+    child.unref();
+    log(`restoring caches in the background; progress in ${LOG_FILE}`);
+    return true;
+  } catch (e) {
+    log(`background restore launch failed, restoring inline: ${(e as Error).message}`);
+    return false;
+  }
+}
+
 async function main(): Promise<void> {
+  if (relaunchDetached()) return;
+
   const key = loadKey();
   if (!key) {
     log("no service-account key in env; skipping cache restore");
