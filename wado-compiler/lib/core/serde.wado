@@ -994,14 +994,14 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
         }
         sd.end()?;
         return Result::Ok(ReflectStruct::<T>::from_fields(
-            [for let [i, slot] of slots.enumerate() {
-                match slot {
-                    Some(value) => value,
-                    None => return Result::Err(missing_field_error(
+            [for let [i, slot] of slots.enumerate() { match slot {
+                Some(value) => value,
+                None => {
+                    return Result::Err(missing_field_error(
                         wire_name(&ReflectStruct::<T>::members()[i], policy),
-                    )),
-                }
-            }],
+                    ));
+                },
+            } }],
         ));
     }
 }

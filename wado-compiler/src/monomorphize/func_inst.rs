@@ -4103,8 +4103,7 @@ impl Monomorphizer {
         let template_destructure = destructure.clone();
         let template_body = body.clone();
         let inline_enumerate_pair = is_enumerate && !template_destructure.is_empty();
-        let temp_read =
-            !inline_enumerate_pair || Self::binds_element_field(&template_destructure);
+        let temp_read = !inline_enumerate_pair || Self::binds_element_field(&template_destructure);
 
         let (pack_index, pack_mapped) = type_table
             .as_tuple_through_ref(iterable.type_id)
