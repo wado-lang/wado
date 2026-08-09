@@ -28,8 +28,7 @@ use std::sync::Arc;
 
 use wado_compiler::ast::AttrValue;
 use wado_compiler::compiler_host::{
-    CompilerHost, GeneratorInputFile, GeneratorReadRecord, GeneratorRequest, GeneratorRunnerError,
-    SourceError,
+    CompilerHost, GeneratorInputFile, GeneratorRequest, GeneratorRunnerError, SourceError,
 };
 #[cfg(test)]
 use wado_compiler::kiln::DeclSite;
@@ -84,8 +83,7 @@ impl From<PlanError> for DriverError {
 ///
 /// Carries the information downstream layers (cache check, lockfile
 /// writer, GC) need: every path that was written to disk, each written
-/// file's content hash, and the list of `read-file` calls the generator
-/// made during this run.
+/// file's content hash.
 #[derive(Debug, Clone)]
 pub struct InvocationRun {
     /// Content hash of the primary schema at invocation time. Recorded in
@@ -97,10 +95,6 @@ pub struct InvocationRun {
     /// project-root-relative, normalized (`output_dir` joined with the
     /// generator-relative path and forward-slash-only).
     pub outputs: Vec<OutputHash>,
-    /// Every `host::read-file` call the generator made, relayed verbatim
-    /// from the runner. Fed into the next run's cache key so transitive
-    /// reads invalidate the cache when their contents change.
-    pub reads: Vec<GeneratorReadRecord>,
 }
 
 /// Output-file identity recorded after a generator run.
@@ -326,7 +320,6 @@ pub async fn execute_with_mode<H: CompilerHost>(
         primary: primary_hash,
         inputs: input_hashes,
         outputs,
-        reads: response.reads,
     })
 }
 
@@ -340,8 +333,6 @@ pub async fn execute_with_mode<H: CompilerHost>(
 /// [`wado_compiler::kiln::hash_options_canonical`] so it stays stable
 /// across the M3 provisional encoder and the M4 lifted-form encoder.
 ///
-/// Sorts the `reads` list lexicographically by path, mirroring what
-/// [`cache_matches`] expects on the next run.
 #[must_use]
 pub fn build_metadata(
     invocation_name: &str,
@@ -353,17 +344,6 @@ pub fn build_metadata(
     let generator = generator_identity(&invocation.module);
     let primary = to_meta_file_hash(&run.primary);
     let inputs: Vec<MetaFileHash> = run.inputs.iter().map(to_meta_file_hash).collect();
-
-    let mut reads: Vec<MetaFileHash> = run
-        .reads
-        .iter()
-        .map(|r| MetaFileHash {
-            path: InvocationPath::normalize(&r.path).as_str().to_string(),
-            hash: hex_digest(&r.content_hash),
-        })
-        .collect();
-    reads.sort_by(|a, b| a.path.cmp(&b.path));
-    reads.dedup_by(|a, b| a.path == b.path);
 
     let outputs: Vec<MetaOutputEntry> = run
         .outputs
@@ -383,7 +363,6 @@ pub fn build_metadata(
         primary,
         inputs,
         options_hash,
-        reads,
         outputs,
     }
 }
@@ -425,7 +404,7 @@ pub enum CacheCheck {
 /// given invocation.
 ///
 /// Re-hashes the primary + declared inputs via `host.load_source`, then
-/// re-hashes every `reads` entry the same way, then re-hashes every output
+/// then re-hashes every output
 /// file from disk (via `manifest_root` joined with the recorded output
 /// path). Returns:
 ///
@@ -470,13 +449,6 @@ pub async fn cache_matches<H: CompilerHost>(
             return CacheCheck::Miss;
         }
         if !matches_file(host, declared, &recorded.hash).await {
-            return CacheCheck::Miss;
-        }
-    }
-
-    for read in &metadata.reads {
-        let normalized = InvocationPath::normalize(&read.path);
-        if !matches_file(host, &normalized, &read.hash).await {
             return CacheCheck::Miss;
         }
     }
@@ -1558,7 +1530,6 @@ mod tests {
                         is_entry: false,
                     },
                 ],
-                reads: vec![],
             };
             let host = MockHost::new(
                 &[
@@ -1602,7 +1573,6 @@ mod tests {
                             .to_string(),
                     is_entry: true,
                 }],
-                reads: vec![],
             };
             let host = MockHost::new(
                 &[
@@ -1671,7 +1641,6 @@ mod tests {
                     content: "x".to_string(),
                     is_entry: true,
                 }],
-                reads: vec![],
             };
             let host = MockHost::new(&[("schema.proto", b"x"), ("dep.proto", b"y")], Ok(response));
             let err = runtime()
@@ -1686,10 +1655,7 @@ mod tests {
         #[test]
         fn options_are_forwarded_to_request() {
             let tmp = tempfile::tempdir().unwrap();
-            let response = GeneratorResponse {
-                files: vec![],
-                reads: vec![],
-            };
+            let response = GeneratorResponse { files: vec![] };
             let host = MockHost::new(&[("schema.proto", b"x"), ("dep.proto", b"y")], Ok(response));
             let mut inv = sample_invocation();
             let options = wado_compiler::kiln::CanonicalOptions {
@@ -1710,24 +1676,6 @@ mod tests {
             assert_eq!(reqs[0].primary.path, "schema.proto");
             assert_eq!(reqs[0].inputs.len(), 1);
             assert_eq!(reqs[0].inputs[0].path, "dep.proto");
-        }
-
-        #[test]
-        fn reads_from_response_are_relayed_into_run() {
-            let tmp = tempfile::tempdir().unwrap();
-            let response = GeneratorResponse {
-                files: vec![],
-                reads: vec![GeneratorReadRecord {
-                    path: "extra.proto".to_string(),
-                    content_hash: [7u8; 32],
-                }],
-            };
-            let host = MockHost::new(&[("schema.proto", b"x"), ("dep.proto", b"y")], Ok(response));
-            let run = runtime()
-                .block_on(async { execute(&sample_invocation(), b"wasm", tmp.path(), &host).await })
-                .unwrap();
-            assert_eq!(run.reads.len(), 1);
-            assert_eq!(run.reads[0].path, "extra.proto");
         }
     }
 
@@ -1842,10 +1790,6 @@ mod tests {
                     content: "pub fn hello() {}\n".to_string(),
                     is_entry: true,
                 }],
-                reads: vec![GeneratorReadRecord {
-                    path: "imported.proto".to_string(),
-                    content_hash: [7u8; 32],
-                }],
             };
             let run = run_execute_and_return(
                 tmp.path(),
@@ -1867,51 +1811,11 @@ mod tests {
             assert!(entry.primary.hash.chars().all(|c| c.is_ascii_hexdigit()));
             assert_eq!(entry.inputs.len(), 1);
             assert_eq!(entry.inputs[0].path, "dep.proto");
-            assert_eq!(entry.reads.len(), 1);
-            assert_eq!(entry.reads[0].path, "imported.proto");
             assert_eq!(entry.options_hash, "sha256:optdigest");
             assert_eq!(entry.outputs.len(), 1);
             assert_eq!(entry.outputs[0].path, "build/kiln/proto/lib.wado");
             assert!(entry.outputs[0].entry);
         }
-
-        #[test]
-        fn build_metadata_sorts_reads_lexicographically() {
-            let tmp = tempfile::tempdir().unwrap();
-            let response = GeneratorResponse {
-                files: vec![],
-                reads: vec![
-                    GeneratorReadRecord {
-                        path: "z.proto".to_string(),
-                        content_hash: [1u8; 32],
-                    },
-                    GeneratorReadRecord {
-                        path: "a.proto".to_string(),
-                        content_hash: [2u8; 32],
-                    },
-                    GeneratorReadRecord {
-                        path: "a.proto".to_string(),
-                        content_hash: [2u8; 32],
-                    },
-                ],
-            };
-            let run = run_execute_and_return(
-                tmp.path(),
-                response,
-                &[("schema.proto", b"p"), ("dep.proto", b"d")],
-            );
-            let entry = build_metadata(
-                "proto",
-                &sample_invocation(),
-                &run,
-                "sha256:o".to_string(),
-                String::new(),
-            );
-            assert_eq!(entry.reads.len(), 2);
-            assert_eq!(entry.reads[0].path, "a.proto");
-            assert_eq!(entry.reads[1].path, "z.proto");
-        }
-
         #[test]
         fn cache_matches_hits_when_everything_lines_up() {
             let tmp = tempfile::tempdir().unwrap();
@@ -1921,7 +1825,6 @@ mod tests {
                     content: "pub fn hello() {}\n".to_string(),
                     is_entry: true,
                 }],
-                reads: vec![],
             };
             let run = run_execute_and_return(
                 tmp.path(),
@@ -1945,10 +1848,7 @@ mod tests {
         #[test]
         fn cache_matches_misses_when_primary_changed() {
             let tmp = tempfile::tempdir().unwrap();
-            let response = GeneratorResponse {
-                files: vec![],
-                reads: vec![],
-            };
+            let response = GeneratorResponse { files: vec![] };
             let run = run_execute_and_return(
                 tmp.path(),
                 response,
@@ -1977,7 +1877,6 @@ mod tests {
                     content: "pub fn hello() {}\n".to_string(),
                     is_entry: true,
                 }],
-                reads: vec![],
             };
             let run = run_execute_and_return(
                 tmp.path(),
@@ -2008,7 +1907,6 @@ mod tests {
                     content: "pub fn hello() {}\n".to_string(),
                     is_entry: true,
                 }],
-                reads: vec![],
             };
             let run = run_execute_and_return(
                 tmp.path(),
@@ -2034,44 +1932,6 @@ mod tests {
             });
             assert_eq!(hit, CacheCheck::HitButModified);
         }
-
-        #[test]
-        fn cache_matches_misses_when_reads_drift() {
-            let tmp = tempfile::tempdir().unwrap();
-            let response = GeneratorResponse {
-                files: vec![],
-                reads: vec![GeneratorReadRecord {
-                    path: "imported.proto".to_string(),
-                    content_hash: wado_compiler::kiln::file_hash(
-                        &InvocationPath::normalize("imported.proto"),
-                        b"original",
-                    )
-                    .hash,
-                }],
-            };
-            let run = run_execute_and_return(
-                tmp.path(),
-                response,
-                &[("schema.proto", b"p"), ("dep.proto", b"d")],
-            );
-            let entry = build_metadata(
-                "proto",
-                &sample_invocation(),
-                &run,
-                "sha256:o".to_string(),
-                String::new(),
-            );
-            let host = HashOnlyHost::new(&[
-                ("schema.proto", b"p"),
-                ("dep.proto", b"d"),
-                ("imported.proto", b"mutated"),
-            ]);
-            let hit = runtime().block_on(async {
-                cache_matches(&entry, &sample_invocation(), tmp.path(), &host, "").await
-            });
-            assert_eq!(hit, CacheCheck::Miss);
-        }
-
         #[test]
         fn reconcile_outputs_deletes_orphaned_generated_files() {
             let tmp = tempfile::tempdir().unwrap();

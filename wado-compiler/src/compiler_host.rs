@@ -413,7 +413,7 @@ pub trait CompilerHost: Send + Sync {
     ///
     /// `component_wasm` is the compiled generator component. The host is
     /// responsible for instantiating it, linking `core:kiln/host` so that
-    /// `read-file` and `emit-diagnostic` forward back into this same host,
+    /// `emit-diagnostic` forwards back into this same host,
     /// and returning the generator's response.
     ///
     /// The default implementation returns `Unsupported`, which drives
@@ -500,10 +500,6 @@ pub struct GeneratorInputFile {
 pub struct GeneratorResponse {
     /// Generated Wado source files.
     pub files: Vec<GeneratorOutputFile>,
-    /// Every `host::read-file` call the generator made during this run, in
-    /// call order. The compiler feeds this list into the cache key so that
-    /// transitive schema reads invalidate the cache when they change.
-    pub reads: Vec<GeneratorReadRecord>,
 }
 
 /// One file produced by a Kiln generator.
@@ -515,14 +511,6 @@ pub struct GeneratorOutputFile {
     pub content: String,
     /// Whether this file is the invocation's entry module.
     pub is_entry: bool,
-}
-
-/// A single recorded `host::read-file` call.
-#[derive(Debug, Clone)]
-pub struct GeneratorReadRecord {
-    pub path: String,
-    /// SHA-256 of the file contents, as raw bytes.
-    pub content_hash: [u8; 32],
 }
 
 /// Generator-side error, mirroring `core:kiln/types::error`.

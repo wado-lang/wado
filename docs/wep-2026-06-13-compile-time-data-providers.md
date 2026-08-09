@@ -117,10 +117,9 @@ Two properties matter, and both are structural rather than policy:
 A provider reads its own package and nothing else. It cannot see the consuming
 program's source, its dependencies, or any path on the machine. It learns which
 of its own symbols were used — names from its own API — and nothing further about
-the program that used them. Kiln's `read-file`, which resolves user files
-relative to a declaration site, is deliberately absent: a data provider has no
-business in the consumer's tree, so the two host interfaces stay disjoint and
-`core:kiln/kiln-host` is left untouched.
+the program that used them. Nothing resolves a path in the consumer's tree — a
+data provider has no business there — so the two host interfaces stay disjoint
+and `core:kiln/kiln-host`, which grants only diagnostics, is left untouched.
 
 A provider is a pure function. No clocks, no randomness, no network, no sockets,
 no environment. Violating that would require exporting a different world, which
@@ -188,10 +187,12 @@ An invocation's cache key covers the package identity and version, the sorted
 symbol set, the canonical options, the provider component's hash, and the assets
 it read. Repeat builds skip the provider entirely.
 
-Recorded reads follow Kiln's model: the reads observed on the previous successful
-run participate in the next key. This is sound because a provider is
-deterministic — its read set is a function of the other key inputs — and it is
-the same technique build systems use for header dependencies.
+Recorded reads make the key converge rather than be exact: the reads observed on
+the previous successful run participate in the next key. This is sound because a
+provider is deterministic — its read set is a function of the other key inputs —
+and it is the technique build systems use for header dependencies. Kiln avoids
+needing it by having every input named at the use site, which a provider cannot
+do: only the provider knows which of its own assets a symbol set requires.
 
 ### Hosts that cannot run a provider
 

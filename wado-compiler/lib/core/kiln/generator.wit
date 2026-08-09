@@ -1,26 +1,15 @@
 package core:kiln@0.1.0;
 
-/// Host interface exposed to Kiln generators. Deliberately narrow:
-/// no clocks, no random, no network, no filesystem beyond `read-file`.
+/// Host interface exposed to Kiln generators. Deliberately narrow: a
+/// generator reports diagnostics and nothing else. Its inputs arrive by
+/// value, so it needs no filesystem, no clocks, no random, no network.
 /// See WEP 2026-04-12 (Kiln) §"The generator contract".
 interface kiln-host {
-    /// Read a file from the compiler's `CompilerHost`. Paths are resolved
-    /// relative to the invocation's declaration site (manifest directory
-    /// or the source file containing a `use ... with`). Every call is
-    /// recorded and contributes to the invocation cache key.
-    read-file: func(path: string) -> result<string, host-error>;
-
     /// Report a diagnostic that will be surfaced as a normal compile
     /// diagnostic. Multiple diagnostics may be reported; they are all
     /// printed even if the generator eventually returns a successful
     /// response.
     emit-diagnostic: func(diagnostic: diagnostic);
-
-    variant host-error {
-        not-found,
-        permission-denied,
-        io(string),
-    }
 
     record diagnostic {
         level: diagnostic-level,
@@ -30,9 +19,9 @@ interface kiln-host {
 
     enum diagnostic-level { error, warning, info, hint }
 
-    /// A span into any file the generator has read, or into a file the
-    /// generator knows about by other means. The compiler renders the
-    /// snippet by consulting `CompilerHost`.
+    /// A span into one of the files the generator received, identified by
+    /// the same path that file carried. The compiler renders the snippet
+    /// by consulting `CompilerHost`.
     record source-span {
         path: string,
         byte-start: u32,

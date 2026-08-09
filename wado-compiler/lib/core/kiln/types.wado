@@ -5,7 +5,7 @@
 /// The file is always supplied by value so that the initial input
 /// set is fully determined by the invocation declaration.
 #[cm("core:kiln/types@0.1.0#input-file")]
-internal struct InputFile {
+pub struct InputFile {
     #[cm("path")]
     pub path: String,
     #[cm("content")]
@@ -17,7 +17,7 @@ internal struct InputFile {
 /// Exactly one output file must be the entry module; supplementary
 /// files are referenced from the entry via ordinary Wado `use`.
 #[cm("core:kiln/types@0.1.0#output-file")]
-internal struct OutputFile {
+pub struct OutputFile {
     #[cm("path")]
     pub path: String,
     #[cm("content")]
@@ -27,13 +27,13 @@ internal struct OutputFile {
 }
 
 #[cm("core:kiln/types@0.1.0#response")]
-internal struct Response {
+pub struct Response {
     #[cm("files")]
     pub files: List<OutputFile>,
 }
 
 #[cm("core:kiln/types@0.1.0#error")]
-internal variant Error {
+pub variant Error {
     #[cm("invalid-schema")]
     InvalidSchema(String),
     #[cm("unsupported")]

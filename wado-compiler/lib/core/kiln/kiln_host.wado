@@ -1,18 +1,8 @@
 #![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/core/kiln/generator.wit"])]
 #![stdlib("core:kiln/kiln_host.wado")]
 
-#[cm("core:kiln/kiln-host@0.1.0#host-error")]
-internal variant HostError {
-    #[cm("not-found")]
-    NotFound,
-    #[cm("permission-denied")]
-    PermissionDenied,
-    #[cm("io")]
-    Io(String),
-}
-
 #[cm("core:kiln/kiln-host@0.1.0#diagnostic-level")]
-internal enum DiagnosticLevel {
+pub enum DiagnosticLevel {
     #[cm("error")]
     Error,
     #[cm("warning")]
@@ -23,11 +13,11 @@ internal enum DiagnosticLevel {
     Hint,
 }
 
-/// A span into any file the generator has read, or into a file the
-/// generator knows about by other means. The compiler renders the
-/// snippet by consulting `CompilerHost`.
+/// A span into one of the files the generator received, identified by
+/// the same path that file carried. The compiler renders the snippet
+/// by consulting `CompilerHost`.
 #[cm("core:kiln/kiln-host@0.1.0#source-span")]
-internal struct SourceSpan {
+pub struct SourceSpan {
     #[cm("path")]
     pub path: String,
     #[cm("byte-start")]
@@ -37,7 +27,7 @@ internal struct SourceSpan {
 }
 
 #[cm("core:kiln/kiln-host@0.1.0#diagnostic")]
-internal struct Diagnostic {
+pub struct Diagnostic {
     #[cm("level")]
     pub level: DiagnosticLevel,
     #[cm("span")]
@@ -46,18 +36,12 @@ internal struct Diagnostic {
     pub message: String,
 }
 
-/// Host interface exposed to Kiln generators. Deliberately narrow:
-/// no clocks, no random, no network, no filesystem beyond `read-file`.
+/// Host interface exposed to Kiln generators. Deliberately narrow: a
+/// generator reports diagnostics and nothing else. Its inputs arrive by
+/// value, so it needs no filesystem, no clocks, no random, no network.
 /// See WEP 2026-04-12 (Kiln) §"The generator contract".
 #[cm("core:kiln/kiln-host@0.1.0")]
-internal interface KilnHost {
-    /// Read a file from the compiler's `CompilerHost`. Paths are resolved
-    /// relative to the invocation's declaration site (manifest directory
-    /// or the source file containing a `use ... with`). Every call is
-    /// recorded and contributes to the invocation cache key.
-    #[cm("core:kiln/kiln-host@0.1.0#read-file")]
-    #[cm_params("path")]
-    fn read_file(path: String) -> Result<String, HostError>;
+pub interface KilnHost {
     /// Report a diagnostic that will be surfaced as a normal compile
     /// diagnostic. Multiple diagnostics may be reported; they are all
     /// printed even if the generator eventually returns a successful

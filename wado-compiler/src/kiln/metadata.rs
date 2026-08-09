@@ -17,9 +17,9 @@ use serde::{Deserialize, Serialize};
 /// incompatible changes; older files are silently ignored (treated as a
 /// cache miss) when the version differs.
 ///
-/// v2 (current): added `generator_source_hash` so a change to the
-/// generator's `.wado` source closure invalidates the cache.
-pub const METADATA_VERSION: u32 = 2;
+/// v3 (current): dropped `reads`, the transitive-read list a generator
+/// accumulated through the retired `read-file` host import.
+pub const METADATA_VERSION: u32 = 3;
 
 /// Suffix appended to the primary input's basename to form the metadata
 /// filename. Lives in `<manifest_root>/<output_dir>/`.
@@ -46,8 +46,6 @@ pub struct Metadata {
     pub primary: FileHash,
     #[serde(default)]
     pub inputs: Vec<FileHash>,
-    #[serde(default)]
-    pub reads: Vec<FileHash>,
     pub options_hash: String,
     pub outputs: Vec<OutputEntry>,
 }
@@ -102,7 +100,6 @@ mod tests {
                 hash: "sha256:aa".to_string(),
             },
             inputs: vec![],
-            reads: vec![],
             options_hash: "sha256:cc".to_string(),
             outputs: vec![OutputEntry {
                 path: "build/kiln/kiln-deadbeef/x.wado".to_string(),

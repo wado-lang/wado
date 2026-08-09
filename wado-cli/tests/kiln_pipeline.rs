@@ -14,8 +14,8 @@ use wado_cli::kiln_driver::{
 };
 use wado_cli::kiln_metadata;
 use wado_compiler::compiler_host::{
-    CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
-    GeneratorResponse, GeneratorRunnerError, SourceError,
+    CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
+    GeneratorRunnerError, SourceError,
 };
 use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
 use wado_manifest::Manifest;
@@ -155,7 +155,6 @@ fn simple_response(path: &str) -> GeneratorResponse {
             content: format!("pub fn from_{}() {{}}\n", path.replace('.', "_")),
             is_entry: true,
         }],
-        reads: Vec::<GeneratorReadRecord>::new(),
     }
 }
 
@@ -414,7 +413,6 @@ fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
                     content: generated_content.to_string(),
                     is_entry: true,
                 }],
-                reads: Vec::<GeneratorReadRecord>::new(),
             },
         )],
     );

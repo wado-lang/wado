@@ -154,7 +154,6 @@ mod tests {
                 path: "schemas/y.proto".to_string(),
                 hash: "sha256:bb".to_string(),
             }],
-            reads: vec![],
             options_hash: "sha256:cc".to_string(),
             outputs: vec![OutputEntry {
                 path: "build/kiln/kiln-deadbeef/x.wado".to_string(),

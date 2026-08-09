@@ -17,16 +17,10 @@ typed argument in each generator's own world".
 
 ### `pub interface KilnHost`
 
-Host interface exposed to Kiln generators. Deliberately narrow:
-no clocks, no random, no network, no filesystem beyond `read-file`.
+Host interface exposed to Kiln generators. Deliberately narrow: a
+generator reports diagnostics and nothing else. Its inputs arrive by
+value, so it needs no filesystem, no clocks, no random, no network.
 See WEP 2026-04-12 (Kiln) §"The generator contract".
-
-#### `fn read_file(path: String) -> Result<String, HostError>`
-
-Read a file from the compiler's `CompilerHost`. Paths are resolved
-relative to the invocation's declaration site (manifest directory
-or the source file containing a `use ... with`). Every call is
-recorded and contributes to the invocation cache key.
 
 #### `fn emit_diagnostic(diagnostic: Diagnostic)`
 
@@ -70,9 +64,9 @@ See WEP 2026-04-12 §"Options are a typed argument in each generator's own world
 
 ### `pub struct SourceSpan`
 
-A span into any file the generator has read, or into a file the
-generator knows about by other means. The compiler renders the
-snippet by consulting `CompilerHost`.
+A span into one of the files the generator received, identified by
+the same path that file carried. The compiler renders the snippet
+by consulting `CompilerHost`.
 
 #### `path: String`
 
@@ -116,14 +110,6 @@ files are referenced from the entry via ordinary Wado `use`.
 #### `files: List<OutputFile>`
 
 ## Variants
-
-### `pub variant HostError`
-
-#### `NotFound`
-
-#### `PermissionDenied`
-
-#### `Io(String)`
 
 ### `pub variant Error`
 

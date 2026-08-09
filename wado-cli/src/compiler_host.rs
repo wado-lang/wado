@@ -290,14 +290,9 @@ impl CompilerHost for FilesystemCompilerHost {
         request: GeneratorRequest,
     ) -> Result<GeneratorResponse, GeneratorRunnerError> {
         let (engine, component) = self.kiln_cache.get_or_compile(component_wasm)?;
-        let (outcome, diagnostics) = kiln_runtime::run_generator(
-            &engine,
-            self.inner.clone(),
-            &component,
-            request,
-            KilnRunPolicy::default(),
-        )
-        .await;
+        let (outcome, diagnostics) =
+            kiln_runtime::run_generator(&engine, &component, request, KilnRunPolicy::default())
+                .await;
         // Relay generator-emitted diagnostics through `self` so they are both
         // collected and printed. `run_generator` only has the collect-only
         // inner host on hand, so it hands the diagnostics back for the
