@@ -39,7 +39,6 @@ run = """
 # into a warm target/. sccache is used ONLY here, because its cache key depends
 # on the CARGO_* set normalized below — a plain `cargo build` in this container
 # has a different set and would only add misses.
-# No-ops cleanly when sccache or the cache is absent (e.g. local dev).
 set -e -o pipefail
 export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cargo/sccache}"
 # Match the ceiling cargo-cache.yml publishes under, so a cache that outgrows
@@ -49,29 +48,33 @@ if ! command -v sccache >/dev/null 2>&1; then
   echo "sccache not installed; skipping warm-cache (normal cold build applies)"
   exit 0
 fi
-# The SessionStart hook and `on-task-started` can both warm, so serialize:
-# the second run then sees the finished state below and exits. `flock` is
-# util-linux, absent on macOS, where nothing restores a cache anyway.
-if command -v flock >/dev/null 2>&1; then
-  lock="$HOME/.cache/wado/warm-cache.lock"
+# `flock` is util-linux, absent on macOS, where nothing restores a cache anyway.
+serialize_with_other_warm_runs() {
+  command -v flock >/dev/null 2>&1 || return 0
+  local lock="$HOME/.cache/wado/warm-cache.lock"
   mkdir -p "$(dirname "${lock}")"
   exec 9>"${lock}"
   if ! flock -n 9; then
     echo "warm-cache: another run holds the lock; waiting for it to finish"
     flock 9
   fi
-fi
-# The restore hook streams in the background, so $SCCACHE_DIR may still be
-# half-extracted here — which would build against a fraction of the cache and
-# then delete the tree tar is writing into. The marker holds the restoring pid,
-# so a killed restore cannot wedge us.
-marker="$HOME/.cache/wado/cargo-cache-restore.running"
-if [ -e "${marker}" ]; then
-  echo "warm-cache: a cache restore is in flight; waiting for it to finish"
-fi
-while [ -e "${marker}" ] && kill -0 "$(cat "${marker}" 2>/dev/null)" 2>/dev/null; do
-  sleep 5
-done
+}
+
+# Otherwise this builds against a fraction of the cache, then deletes the tree
+# tar is still writing into. The marker holds the restoring pid, so a killed
+# restore cannot wedge us.
+wait_for_background_restore() {
+  local marker="$HOME/.cache/wado/cargo-cache-restore.running"
+  if [ -e "${marker}" ]; then
+    echo "warm-cache: a cache restore is in flight; waiting for it to finish"
+  fi
+  while [ -e "${marker}" ] && kill -0 "$(cat "${marker}" 2>/dev/null)" 2>/dev/null; do
+    sleep 5
+  done
+}
+
+serialize_with_other_warm_runs
+wait_for_background_restore
 if [ ! -d "$SCCACHE_DIR" ] || [ -z "$(ls -A "$SCCACHE_DIR" 2>/dev/null)" ]; then
   echo "no sccache cache at $SCCACHE_DIR; skipping warm-cache (already warmed, or none published)"
   exit 0

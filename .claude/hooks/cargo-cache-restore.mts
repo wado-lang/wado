@@ -126,15 +126,10 @@ function launchBackgroundWarm(): void {
   }
 }
 
-// The download outlives the harness's hook timeout, which would kill this
-// script. Re-exec detached and return, as launchBackgroundWarm does, so the
-// session starts immediately and the cache lands behind it.
 const DETACH_MARKER = "WADO_CACHE_RESTORE_DETACHED";
 const LOG_FILE = join(homedir(), ".cache", "wado", "warm-cache.log");
-// Holds the restoring pid while the extraction runs. A second SessionStart
-// must not untar into the same directories, and `warm-cache` must not build
-// against — or delete — a half-extracted tree. A pid rather than a flag keeps
-// a killed restore from wedging either of them.
+// Read by a second SessionStart and by the `warm-cache` task. A pid rather
+// than a flag keeps a killed restore from wedging either of them.
 const RESTORE_MARKER = join(homedir(), ".cache", "wado", "cargo-cache-restore.running");
 
 function restoreInFlight(): boolean {
@@ -148,6 +143,8 @@ function restoreInFlight(): boolean {
   }
 }
 
+// The download outlives the harness's hook timeout, which would kill this
+// script; re-exec detached so the session starts immediately instead.
 function relaunchDetached(): boolean {
   if (process.env[DETACH_MARKER] === "1" || process.env.CLAUDE_CODE_REMOTE !== "true") return false;
   if (restoreInFlight()) {
