@@ -1326,22 +1326,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
-    /// Reify every method on an `impl` block. Reads the impl-block
-    /// resolution facts annotate recorded
-    /// (`sem.types.impl_facts[impl_block.id]`, Gap 12) and threads
-    /// them into [`Self::reify_method`] per AST `Function`.
-    ///
-    /// Synthesis-request impls (`impl Trait for Type;`) emit no
-    /// methods — the request itself lives on
-    /// `sem.decls.pending_synthesis_requests` and is forwarded to
-    /// `TirModule::synthesis_requests` at [`Self::reify_module`].
-    ///
-    /// Default-method synthesis is also out of scope here: the
-    /// synthesised `TirFunction`s live on
-    /// `sem.decls.pending_default_methods` and forward through the
-    /// per-module path. This keeps the responsibility split clean
-    /// (per-impl-block code in `reify_impl`, per-module aggregation
-    /// in `reify_module`).
     /// Reify the impl block's own declaration — its identity and rest
     /// clause, with no methods (those go through [`Self::reify_impl`] into
     /// `TirModule::functions`). A block whose only content is a rest clause
@@ -1376,6 +1360,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
+    /// Reify every method on an `impl` block. Reads the impl-block
+    /// resolution facts annotate recorded
+    /// (`sem.types.impl_facts[impl_block.id]`, Gap 12) and threads
+    /// them into [`Self::reify_method`] per AST `Function`.
+    ///
+    /// Synthesis-request impls (`impl Trait for Type;`) emit no
+    /// methods — the request itself lives on
+    /// `sem.decls.pending_synthesis_requests` and is forwarded to
+    /// `TirModule::synthesis_requests` at [`Self::reify_module`].
+    ///
+    /// Default-method synthesis is also out of scope here: the
+    /// synthesised `TirFunction`s live on
+    /// `sem.decls.pending_default_methods` and forward through the
+    /// per-module path. This keeps the responsibility split clean
+    /// (per-impl-block code in `reify_impl`, per-module aggregation
+    /// in `reify_module`).
     fn reify_impl(&mut self, impl_block: &ast::ImplBlock) -> Vec<TirFunction> {
         if impl_block.is_synthesize_request {
             return Vec::new();
