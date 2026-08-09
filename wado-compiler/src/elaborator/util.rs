@@ -225,7 +225,8 @@ pub(super) fn unescape_char(raw: &str) -> Result<char, String> {
 
 /// Unescape a template string literal part (raw text between backticks).
 ///
-/// Like `unescape_string` but also handles template-specific escapes: `\{` and `\}`.
+/// Like `unescape_string` but also handles the escapes only a template needs:
+/// the interpolation syntax (`\{`, `\}`, `\$`) and the delimiter (`` \` ``).
 pub(super) fn unescape_template_string(raw: &str) -> Result<String, String> {
     let mut result = String::new();
     let mut chars = raw.chars().peekable();

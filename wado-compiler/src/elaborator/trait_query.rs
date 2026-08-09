@@ -176,8 +176,6 @@ pub(crate) fn decl_identity_core(
     None
 }
 
-/// Whether an AST type is phrased against `Self` anywhere, and so only means
-/// something where an implementing type is bound.
 /// Whether `ty` spells one of the declaration's own type packs
 /// (`Trait<Assoc = [..P]>`). Such a binding names a parameter to project into,
 /// not an expectation to enforce — and `..P` belongs to the declaration's
@@ -193,6 +191,8 @@ fn mentions_type_pack(ty: &ast::Type) -> bool {
     }
 }
 
+/// Whether an AST type is phrased against `Self` anywhere, and so only means
+/// something where an implementing type is bound.
 fn mentions_self(ty: &ast::Type) -> bool {
     match ty {
         ast::Type::Named(named) => named.name == "Self",
