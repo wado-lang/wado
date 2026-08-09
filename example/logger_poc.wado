@@ -1,28 +1,26 @@
 //! Logger PoC — validates the `core:log` WEP design against the real compiler.
+//! Shaped as `core:log` will be, so what compiles here is what the module can
+//! be written from. See `docs/wep-2026-06-25-core-log.md`.
 //!
-//! The facade functions are `#[ambient]` (like `log_stdout`), so they perform
-//! `Log` without `with Log` infecting callers and are callable anywhere —
-//! modelling the ambient-effect ergonomics. The level wrappers (`info`, `warn`)
-//! gate on `Log::enabled` and forward to `event`. A handler must still be
-//! installed (`with Log => &sink do`), else `Log::*` traps; the ambient-effect
-//! extension adds the default-handler fallback that removes that requirement.
+//! Two things the WEP specifies are not reproduced here, both waiting on the
+//! optimizer items the WEP lists:
 //!
-//! Fields are passed as an anonymous struct bounded by `Serialize`
-//! (`info(msg, { user_id, ip })`) and boxed into a single `core:value::Value`
-//! at the ambient facade, before the effect boundary — so the `Log` effect
-//! itself stays non-generic. This retires the `Field` / `List<Field>` design.
-//! The field parameter defaults to an empty struct, so `info(msg)` logs with
-//! no fields; the default type param (`T: Serialize = NoFields`) supplies the
-//! type for the omitted argument.
+//! - Tier 1 is a run-time read, not a fold. `LOG_STATIC_LEVEL` derives from a
+//!   `#[param]` `String` through `level_from_str`, and a `String` binding is a
+//!   deep copy no pass removes, so the parameter never reaches the comparison.
+//!   The compiler says so rather than staying silent:
+//!   `wado check --world test --log-level info example/logger_poc.wado`
+//!   reports the surviving gate as a `remark:`.
+//! - The arguments of a dropped event are still built in front of the gate,
+//!   which is what sinking pure definitions into a branch would fix.
+//!
+//! `-D log.level=<level>` does take effect — at run time — so the whole suite
+//! below assumes the default `trace`.
 
 use { Serialize } from "core:serde";
 use { Value, to_value } from "core:value";
 use { TreeMap } from "core:collections";
 use { to_string } from "core:json";
-
-// Default field payload: serializes to an empty object `{}`.
-pub struct NoFields {
-}
 
 pub enum Level {
     Trace,
@@ -32,9 +30,17 @@ pub enum Level {
     Error,
 }
 
+pub type SpanId = u64;
+
+// Serializes to `{}`; the default field payload, so `info(msg)` needs no second
+// argument and the default type parameter supplies its type.
+pub struct NoFields {
+}
+
 pub struct Metadata {
     pub level: Level,
     pub target: String,
+    pub name: String = "",
     pub file: String,
     pub line: i32,
 }
@@ -43,7 +49,42 @@ pub struct Event {
     pub meta: Metadata,
     pub message: String,
     pub fields: Value = Value::Null,
-    pub parent: u64 = 0,  // 0 = no current span
+    pub parent: Option<SpanId> = null,
+}
+
+pub struct SpanAttrs {
+    pub meta: Metadata,
+    pub fields: Value = Value::Null,
+}
+
+// Tier 1: the build-time threshold. `-D log.level=info` settles it, and
+// `from_env` reads the build environment rather than the run-time one.
+#[param(name = "log.level", from_env = "WADO_LOG_LEVEL")]
+global LOG_LEVEL: String = "trace";
+
+global LOG_STATIC_LEVEL: Level = level_from_str(LOG_LEVEL);
+
+// Tier 2: the process-wide threshold, owned here rather than by the installed
+// sink, so there is no sink contract and no cache to invalidate.
+global mut RUNTIME_LEVEL: Level = Level::Trace;
+
+pub fn level_from_str(s: String) -> Level {
+    return match s {
+        "trace" => Level::Trace,
+        "debug" => Level::Debug,
+        "info" => Level::Info,
+        "warn" => Level::Warn,
+        "error" => Level::Error,
+        _ => Level::Trace,
+    };
+}
+
+pub fn set_log_level(level: Level) {
+    RUNTIME_LEVEL = level;
+}
+
+pub fn log_level() -> Level {
+    return RUNTIME_LEVEL;
 }
 
 fn box_fields<T: Serialize>(fields: T) -> Value {
@@ -53,17 +94,31 @@ fn box_fields<T: Serialize>(fields: T) -> Value {
     };
 }
 
-// The subscriber, as an effect (an `#[ambient]` effect in the real design).
+// The subscriber. Sinks and layers are handlers of it, so composition is
+// handler nesting and dispatch stays static.
 interface Log {
     fn enabled(level: Level) -> bool;
-    fn new_span(name: String) -> u64;
-    fn enter(id: u64);
-    fn exit(id: u64);
-    fn close(id: u64);
-    fn current_span() -> u64;
-    fn record_fields(id: u64, fields: Value);
-    fn follows_from(id: u64, cause: u64);
+    fn current_span() -> Option<SpanId>;
+    fn new_span(attrs: SpanAttrs) -> SpanId;
+    fn record_fields(span: SpanId, fields: Value);
+    fn follows_from(span: SpanId, cause: SpanId);
+    fn enter(span: SpanId);
+    fn exit(span: SpanId);
+    fn close(span: SpanId);
     fn event(event: Event);
+}
+
+// The three tiers, cheapest first, each narrowing what the one before admitted.
+// Exposed as a predicate too, for guarding fields too expensive to build.
+#[ambient]
+pub fn enabled(level: Level) -> bool {
+    if level < LOG_STATIC_LEVEL {
+        return false;
+    }
+    if level < RUNTIME_LEVEL {
+        return false;
+    }
+    return Log::enabled(level);
 }
 
 // Facade; location defaults resolve at the call site. `#[ambient]` (like
@@ -77,13 +132,42 @@ pub fn event<T: Serialize = NoFields>(
     file: String = #file,
     line: i32 = #line,
 ) {
-    let parent = Log::current_span();
     Log::event(Event {
         meta: Metadata { level, target, file, line },
         message,
         fields: box_fields(fields),
-        parent,
+        parent: Log::current_span(),
     });
+}
+
+// One wrapper per level: each knows its level as a literal, which is what lets
+// tier 1 fold the comparison away once a parameter reaches it.
+#[ambient]
+pub fn trace<T: Serialize = NoFields>(
+    message: String,
+    fields: T = NoFields {},
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) {
+    if !enabled(Level::Trace) {
+        return;
+    }
+    event(Level::Trace, message, fields, target, file, line);
+}
+
+#[ambient]
+pub fn debug<T: Serialize = NoFields>(
+    message: String,
+    fields: T = NoFields {},
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) {
+    if !enabled(Level::Debug) {
+        return;
+    }
+    event(Level::Debug, message, fields, target, file, line);
 }
 
 #[ambient]
@@ -94,7 +178,7 @@ pub fn info<T: Serialize = NoFields>(
     file: String = #file,
     line: i32 = #line,
 ) {
-    if !Log::enabled(Level::Info) {
+    if !enabled(Level::Info) {
         return;
     }
     event(Level::Info, message, fields, target, file, line);
@@ -108,47 +192,85 @@ pub fn warn<T: Serialize = NoFields>(
     file: String = #file,
     line: i32 = #line,
 ) {
-    if !Log::enabled(Level::Warn) {
+    if !enabled(Level::Warn) {
         return;
     }
     event(Level::Warn, message, fields, target, file, line);
 }
 
 #[ambient]
-pub fn span(name: String) -> u64 {
-    return Log::new_span(name);
+pub fn error<T: Serialize = NoFields>(
+    message: String,
+    fields: T = NoFields {},
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) {
+    if !enabled(Level::Error) {
+        return;
+    }
+    event(Level::Error, message, fields, target, file, line);
+}
+
+// A span is a first-class value, so a caller can carry one and re-enter it.
+pub struct Span {
+    id: SpanId,
+}
+
+impl Span {
+    pub fn id(&self) -> SpanId {
+        return self.id;
+    }
+
+    pub fn record<T: Serialize>(&self, fields: T) {
+        Log::record_fields(self.id, box_fields(fields));
+    }
+
+    pub fn follows_from(&self, cause: &Span) {
+        Log::follows_from(self.id, cause.id);
+    }
 }
 
 #[ambient]
-pub fn record<T: Serialize = NoFields>(id: u64, fields: T = NoFields {}) {
-    Log::record_fields(id, box_fields(fields));
+pub fn span<T: Serialize = NoFields>(
+    level: Level,
+    name: String,
+    fields: T = NoFields {},
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) -> Span {
+    let id = Log::new_span(SpanAttrs {
+        meta: Metadata { level, target, name, file, line },
+        fields: box_fields(fields),
+    });
+    return Span { id };
 }
 
 #[ambient]
-pub fn follows(id: u64, cause: u64) {
-    Log::follows_from(id, cause);
-}
-
-#[ambient]
-pub fn current() -> u64 {
-    return Log::current_span();
+pub fn current() -> Option<Span> {
+    return match Log::current_span() {
+        Some(id) => Option::<Span>::Some(Span { id }),
+        None => null,
+    };
 }
 
 // A closure can't skip the exit/close calls, so they run on every body exit path.
 #[ambient]
-fn in_span<T, effect E>(id: u64, body: fn() -> T with E) -> T with E {
-    Log::enter(id);
+pub fn in_span<T, effect E>(s: &Span, body: fn() -> T with E) -> T with E {
+    Log::enter(s.id());
     let r = body();
-    Log::exit(id);
-    Log::close(id);
+    Log::exit(s.id());
+    Log::close(s.id());
     return r;
 }
 
-// Capturing subscriber: span stack, event parenting, lifecycle trace, level filter.
+// A sink terminates the chain: it implements every operation, so an operation
+// forwarded from an inner layer ends here instead of trapping.
 struct CaptureSink {
     min: Level = Level::Trace,
     next_id: u64 = 0,
-    stack: List<u64> = [],
+    stack: List<SpanId> = [],
     events: List<Event> = [],
     trace: List<String> = [],
     recorded: List<String> = [],
@@ -157,48 +279,44 @@ struct CaptureSink {
 
 impl Log for CaptureSink {
     fn enabled(&self, level: Level) -> bool {
-        resume level as i32 >= self.min as i32;
+        resume level >= self.min;
     }
 
-    fn new_span(&mut self, name: String) -> u64 {
+    fn new_span(&mut self, attrs: SpanAttrs) -> SpanId {
         self.next_id += 1;
-        let id = self.next_id;
-        self.trace.push(`new:${name}#${id}`);
+        let id = self.next_id as SpanId;
+        self.trace.push(`new:${attrs.meta.name}#${id}`);
         resume id;
     }
 
-    fn enter(&mut self, id: u64) {
-        self.stack.push(id);
-        self.trace.push(`enter:${id}`);
+    fn enter(&mut self, span: SpanId) {
+        self.stack.push(span);
+        self.trace.push(`enter:${span}`);
     }
 
-    fn exit(&mut self, id: u64) {
+    fn exit(&mut self, span: SpanId) {
         self.stack.pop();
-        self.trace.push(`exit:${id}`);
+        self.trace.push(`exit:${span}`);
     }
 
-    fn close(&mut self, id: u64) {
-        self.trace.push(`close:${id}`);
+    fn close(&mut self, span: SpanId) {
+        self.trace.push(`close:${span}`);
     }
 
-    fn current_span(&self) -> u64 {
-        let top = match self.stack.last() {
-            Some(id) => id,
-            None => 0,
-        };
-        resume top;
+    fn current_span(&self) -> Option<SpanId> {
+        resume self.stack.last();
     }
 
-    fn record_fields(&mut self, id: u64, fields: Value) {
+    fn record_fields(&mut self, span: SpanId, fields: Value) {
         if let Object(map) = fields {
             for let [key, _] of map.entries() {
-                self.recorded.push(`record:${id}:${key}`);
+                self.recorded.push(`record:${span}:${key}`);
             }
         }
     }
 
-    fn follows_from(&mut self, id: u64, cause: u64) {
-        self.links.push(`${id}<-${cause}`);
+    fn follows_from(&mut self, span: SpanId, cause: SpanId) {
+        self.links.push(`${span}<-${cause}`);
     }
 
     fn event(&mut self, event: Event) {
@@ -206,46 +324,56 @@ impl Log for CaptureSink {
     }
 }
 
-// Contextual layer: prepend fixed fields, forward the rest. Generic over the
-// field payload — a `Serialize`-bounded anonymous struct — installed directly
-// as a handler via the generic `impl<T> Log for Context<T>`.
+// A JSON sink, likewise terminal: one line per event.
+struct JsonSink {
+    lines: List<String> = [],
+}
+
+impl Log for JsonSink {
+    fn enabled(&self, level: Level) -> bool {
+        resume true;
+    }
+
+    fn new_span(&self, attrs: SpanAttrs) -> SpanId {
+        resume 0 as SpanId;
+    }
+
+    fn enter(&self, span: SpanId) {
+    }
+
+    fn exit(&self, span: SpanId) {
+    }
+
+    fn close(&self, span: SpanId) {
+    }
+
+    fn current_span(&self) -> Option<SpanId> {
+        resume null;
+    }
+
+    fn record_fields(&self, span: SpanId, fields: Value) {
+    }
+
+    fn follows_from(&self, span: SpanId, cause: SpanId) {
+    }
+
+    fn event(&mut self, event: Event) {
+        match to_string(&event) {
+            Ok(s) => self.lines.push(s),
+            Err(_) => {
+            },
+        }
+    }
+}
+
+// A layer implements only what it changes. `..forward` is what makes that
+// possible: without it each of these restates all nine operations to pass
+// them through.
 struct Context<T: Serialize> {
     fields: T,
 }
 
 impl<T: Serialize> Log for Context<T> {
-    fn enabled(&self, level: Level) -> bool {
-        resume Log::enabled(level);
-    }
-
-    fn new_span(&self, name: String) -> u64 {
-        resume Log::new_span(name);
-    }
-
-    fn enter(&self, id: u64) {
-        Log::enter(id);
-    }
-
-    fn exit(&self, id: u64) {
-        Log::exit(id);
-    }
-
-    fn close(&self, id: u64) {
-        Log::close(id);
-    }
-
-    fn current_span(&self) -> u64 {
-        resume Log::current_span();
-    }
-
-    fn record_fields(&self, id: u64, fields: Value) {
-        Log::record_fields(id, fields);
-    }
-
-    fn follows_from(&self, id: u64, cause: u64) {
-        Log::follows_from(id, cause);
-    }
-
     fn event(&self, event: Event) {
         let mut merged = TreeMap::<String, Value>::new();
         if let Object(base) = box_fields(self.fields) {
@@ -265,93 +393,35 @@ impl<T: Serialize> Log for Context<T> {
             parent: event.parent,
         });
     }
+
+    ..forward
 }
 
-// JSON sink: one line per event.
-struct JsonSink {
-    lines: List<String>,
-}
-
-impl Log for JsonSink {
-    fn enabled(&self, level: Level) -> bool {
-        resume true;
-    }
-
-    fn new_span(&self, name: String) -> u64 {
-        resume 0;
-    }
-
-    fn enter(&self, id: u64) {
-    }
-
-    fn exit(&self, id: u64) {
-    }
-
-    fn close(&self, id: u64) {
-    }
-
-    fn current_span(&self) -> u64 {
-        resume 0;
-    }
-
-    fn record_fields(&self, id: u64, fields: Value) {
-    }
-
-    fn follows_from(&self, id: u64, cause: u64) {
-    }
-
-    fn event(&mut self, event: Event) {
-        match to_string(&event) {
-            Ok(s) => self.lines.push(s),
-            Err(_) => {
-            },
-        }
-    }
-}
-
-// Standalone filter layer: drop below `min`, forward the rest.
 struct Filter {
     min: Level,
 }
 
 impl Log for Filter {
     fn enabled(&self, level: Level) -> bool {
-        resume level as i32 >= self.min as i32 && Log::enabled(level);
-    }
-
-    fn new_span(&self, name: String) -> u64 {
-        resume Log::new_span(name);
-    }
-
-    fn enter(&self, id: u64) {
-        Log::enter(id);
-    }
-
-    fn exit(&self, id: u64) {
-        Log::exit(id);
-    }
-
-    fn close(&self, id: u64) {
-        Log::close(id);
-    }
-
-    fn current_span(&self) -> u64 {
-        resume Log::current_span();
-    }
-
-    fn record_fields(&self, id: u64, fields: Value) {
-        Log::record_fields(id, fields);
-    }
-
-    fn follows_from(&self, id: u64, cause: u64) {
-        Log::follows_from(id, cause);
+        resume level >= self.min && Log::enabled(level);
     }
 
     fn event(&self, event: Event) {
-        if event.meta.level as i32 >= self.min as i32 {
+        if event.meta.level >= self.min {
             Log::event(event);
         }
     }
+
+    ..forward
+}
+
+// A layer that changes nothing at all: the shape with no method for the
+// dispatch synthesis to discover it by.
+struct Passthrough {
+}
+
+impl Log for Passthrough {
+    ..forward
 }
 
 test "captures message, level, and caller location" {
@@ -370,6 +440,20 @@ test "captures message, level, and caller location" {
         assert sink.events.len() == 2;
         assert sink.events[1].meta.level matches { Warn };
     };
+}
+
+test "every level wrapper reaches the sink" {
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        trace(`t`);
+        debug(`d`);
+        info(`i`);
+        warn(`w`);
+        error(`e`);
+    };
+    assert sink.events.len() == 5;
+    assert sink.events[0].meta.level matches { Trace };
+    assert sink.events[4].meta.level matches { Error };
 }
 
 test "generic field accepts any Serialize value, preserving the data model" {
@@ -391,8 +475,8 @@ test "generic field accepts any Serialize value, preserving the data model" {
 test "span lifecycle fires and events parent to the current span" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        let sid = span(`request`);
-        in_span(sid, || {
+        let s = span(Level::Info, `request`);
+        in_span(&s, || {
             info(`inside`);
         });
         info(`outside`);
@@ -401,12 +485,12 @@ test "span lifecycle fires and events parent to the current span" {
     assert sink.trace == trace;
     assert sink.events.len() == 2;
     assert sink.events[0].message == "inside";
-    assert sink.events[0].parent == 1;  // parented to the span
+    assert sink.events[0].parent matches { Some(1) };
     assert sink.events[1].message == "outside";
-    assert sink.events[1].parent == 0;  // no current span
+    assert sink.events[1].parent matches { None };
 }
 
-test "enabled gate drops events below the sink's minimum level" {
+test "tier 3 drops events below the sink's minimum level" {
     let mut sink = CaptureSink { min: Level::Warn };
     with Log => &mut sink do {
         info(`dropped`);
@@ -416,7 +500,37 @@ test "enabled gate drops events below the sink's minimum level" {
     assert sink.events[0].message == "kept";
 }
 
-test "context layer prepends fields and forwards to outer sink" {
+test "tier 2 drops events below the process-wide level" {
+    let mut sink = CaptureSink {};
+    set_log_level(Level::Warn);
+    assert log_level() matches { Warn };
+    with Log => &mut sink do {
+        info(`dropped`);
+        warn(`kept`);
+    };
+    set_log_level(Level::Trace);
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "kept";
+}
+
+test "enabled guards fields too expensive to build" {
+    let mut sink = CaptureSink { min: Level::Warn };
+    let mut built = 0;
+    with Log => &mut sink do {
+        if enabled(Level::Debug) {
+            built += 1;
+            info(`never`);
+        }
+        if enabled(Level::Error) {
+            built += 1;
+            error(`always`);
+        }
+    };
+    assert built == 1;
+    assert sink.events.len() == 1;
+}
+
+test "context layer prepends fields and forwards the rest" {
     let mut sink = CaptureSink {};
     let ctx = Context {
         fields: { request_id: "abc" },
@@ -438,8 +552,41 @@ test "context layer prepends fields and forwards to outer sink" {
     }
 }
 
+test "a forwarding layer passes span operations through untouched" {
+    let mut sink = CaptureSink {};
+    let ctx = Context {
+        fields: { request_id: "abc" },
+    };
+    with Log => &mut sink do {
+        with Log => &ctx do {
+            let s = span(Level::Info, `request`);
+            in_span(&s, || {
+                s.record({ user: "alice" });
+                info(`inside`);
+            });
+        };
+    };
+    let trace: List<String> = ["new:request#1", "enter:1", "exit:1", "close:1"];
+    let recorded: List<String> = ["record:1:user"];
+    assert sink.trace == trace;
+    assert sink.recorded == recorded;
+    assert sink.events[0].parent matches { Some(1) };
+}
+
+test "a layer implementing nothing is still a handler" {
+    let mut sink = CaptureSink {};
+    let pass = Passthrough {};
+    with Log => &mut sink do {
+        with Log => &pass do {
+            info(`through`);
+        };
+    };
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "through";
+}
+
 test "json sink serializes whole events to one line each" {
-    let mut sink = JsonSink { lines: [] };
+    let mut sink = JsonSink {};
     with Log => &mut sink do {
         info(`hi`, { k: "v" });
     };
@@ -451,7 +598,7 @@ test "json sink serializes whole events to one line each" {
 test "effect-polymorphic in_span returns the body value" {
     let mut sink = CaptureSink {};
     let n = with Log => &mut sink do {
-        in_span(span(`compute`), || {
+        in_span(&span(Level::Info, `compute`), || {
             info(`working`);
             return 42;
         });
@@ -463,7 +610,7 @@ test "effect-polymorphic in_span returns the body value" {
 test "in_span runs exit and close even when the body returns early" {
     let mut sink = CaptureSink {};
     let n = with Log => &mut sink do {
-        in_span(span(`early`), || {
+        in_span(&span(Level::Info, `early`), || {
             if true {
                 return 7;
             }
@@ -481,39 +628,39 @@ test "in_span runs exit and close even when the body returns early" {
 test "nested spans parent to the innermost span" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        let outer = span(`outer`);
-        in_span(outer, || {
+        let outer = span(Level::Info, `outer`);
+        in_span(&outer, || {
             info(`in outer`);
-            let inner = span(`inner`);
-            in_span(inner, || {
+            let inner = span(Level::Info, `inner`);
+            in_span(&inner, || {
                 info(`in inner`);
             });
             info(`back in outer`);
         });
     };
-    assert sink.events[0].parent == 1;  // in outer
-    assert sink.events[1].parent == 2;  // in inner (innermost)
-    assert sink.events[2].parent == 1;  // back in outer
+    assert sink.events[0].parent matches { Some(1) };
+    assert sink.events[1].parent matches { Some(2) };
+    assert sink.events[2].parent matches { Some(1) };
 }
 
-test "current() reports the active span and 0 outside" {
+test "current() reports the active span and null outside" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        assert current() == 0;
-        in_span(span(`s`), || {
-            assert current() == 1;
+        assert current() matches { None };
+        in_span(&span(Level::Info, `s`), || {
+            assert current() matches { Some(_) };
         });
-        assert current() == 0;
+        assert current() matches { None };
     };
 }
 
-test "record_fields and follows_from reach the subscriber" {
+test "record and follows_from reach the subscriber" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        let a = span(`a`);
-        let b = span(`b`);
-        record(a, { user: "alice", ip: "127.0.0.1" });
-        follows(b, a);
+        let a = span(Level::Info, `a`);
+        let b = span(Level::Info, `b`);
+        a.record({ user: "alice", ip: "127.0.0.1" });
+        b.follows_from(&a);
     };
     let recorded: List<String> = ["record:1:user", "record:1:ip"];
     let links: List<String> = ["2<-1"];
