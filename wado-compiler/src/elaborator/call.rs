@@ -1981,7 +1981,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         callee: &CalleeRef,
         type_args: &mut Vec<TypeId>,
     ) {
-        let params = self.lookup_function_type_params(callee);
+        // The dense type-argument space: non-effect, non-`fn`-bound params in
+        // declaration order, the same space `type_args` is indexed by. An
+        // effect param sits in the declared list but consumes no slot, so
+        // walking the declared list would misalign every index past it.
+        let params: Vec<ast::GenericParam> = self
+            .lookup_function_type_params(callee)
+            .into_iter()
+            .filter(|p| p.is_real_type_param())
+            .collect();
         // A turbofish naming only the non-pack params (`parse::<Perms>()`,
         // where the subject appears solely in the return type) leaves the
         // trailing pack slot absent. Seed it with its declared, still-unbound

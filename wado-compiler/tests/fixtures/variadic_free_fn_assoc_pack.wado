@@ -116,6 +116,20 @@ fn set_bits<L: ReflectFlags<Members = [..M]>, ..M>(v: &L) -> i32 {
     return n;
 }
 
+/// An effect parameter sits in the declared list but consumes no type-argument
+/// slot, so seeding a missing slot must walk the dense space — walking the
+/// declared list would push a placeholder for `E` and shift every argument
+/// past it.
+fn bits_with<L: ReflectFlags<Members = [..M]>, ..M, effect E>(v: &L, mut f: fn mut() with E) -> i32
+with E {
+    f();
+    return ReflectFlags::<L>::members().len();
+}
+
+fn bits_effect_first<effect E, L: ReflectFlags<Members = [..M]>, ..M>(v: &L) -> i32 {
+    return ReflectFlags::<L>::members().len();
+}
+
 /// The subject appears only in the return type, so the caller pins it — and
 /// the turbofish names just that one param, leaving the pack slot to the
 /// projection.
@@ -146,6 +160,13 @@ test "each reflection kind projects its member channel" {
 
 test "a turbofish naming only the subject leaves the pack to the projection" {
     assert all_bits::<Perms>() == 2;
+}
+
+test "an effect parameter consumes no type-argument slot" {
+    let mut ran = false;
+    assert bits_with(&Perms::Read, || { ran = true; }) == 2;
+    assert ran;
+    assert bits_effect_first(&Perms::Read) == 2;
 }
 
 __DATA__
