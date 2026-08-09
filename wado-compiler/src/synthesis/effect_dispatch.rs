@@ -156,35 +156,27 @@ fn identify_active_effects(
 /// Effects whose call sites nothing else in the pipeline would lower.
 ///
 /// [`identify_active_effects`] keys on handler impls and `cm_binding` lowers
-/// only `#[cm]`-tagged operations, so a user-declared effect called with no
-/// `impl` anywhere in the package falls through both and reaches WIR build as
-/// an unresolved call. `#[ambient]` is what makes that reachable: it bypasses
-/// effect-check, so a facade may perform an effect the program never
-/// implements. Handing those effects the ordinary dispatch triple lowers the
-/// call to its wrapper, whose no-handler branch is the same trap a
-/// declared-but-never-installed handler already produces.
+/// only `#[cm]`-tagged operations, so an effect called with no `impl` anywhere
+/// falls through both — reachable because `#[ambient]` bypasses effect-check.
+/// The ordinary dispatch triple lowers the call to its wrapper, whose
+/// no-handler branch traps like any uninstalled handler.
 fn identify_uncovered_effects(
     project: &Package,
     effect_index: &IndexMap<EffectKey, EffectMeta>,
     active: &IndexSet<InstantiationKey>,
 ) -> IndexSet<InstantiationKey> {
-    // Resources and WASI effects reach `cm_binding` through their `cm_name`;
-    // only an operation with neither a handler nor a canonical name is
-    // unlowerable.
+    // Per-operation: an interface mixing a `#[cm]` operation with a plain one
+    // still leaves the plain one unlowered, and the infrastructure covers the
+    // whole interface either way.
     //
-    // Grouped by bare name, because that is all an effect call site carries as
-    // its module source — but every declaration under a name is kept, not the
-    // last one seen. Two modules may each declare `interface Log`, and a map
-    // keyed by the name alone would drop one of them and leave its calls to
-    // reach WIR unlowered. A call to an ambiguous name activates all the
-    // candidates: the cost is dispatch infrastructure for an effect that turns
-    // out not to be the one called, against an ICE if the guess is wrong.
+    // A call site carries only the bare name, so every declaration under a name
+    // is kept and an ambiguous call activates all of them — unused dispatch
+    // infrastructure against an ICE if the guess is wrong.
     let mut uncovered: IndexMap<String, Vec<InstantiationKey>> = IndexMap::default();
     for ((module, name), meta) in effect_index {
         let key = (module.clone(), name.clone(), Vec::new());
         if !meta.is_resource
-            && !meta.operations.is_empty()
-            && meta.operations.iter().all(|op| op.cm_name.is_none())
+            && meta.operations.iter().any(|op| op.cm_name.is_none())
             && !active.contains(&key)
         {
             uncovered.entry(name.clone()).or_default().push(key);
@@ -282,13 +274,9 @@ fn instantiation_label(base: &str, type_args: &[TypeId], type_table: &TypeTable)
     }
 }
 
-/// The type an `impl E for T` method returns for one operation.
-///
-/// An async operation reads `AsyncCall<T>` at its call site, but a handler
-/// method resumes with the resolved `T` — it has no subtask to hand back. Every
-/// other boundary in the dispatch machinery (the struct field, the closure, the
-/// wrapper) stays at the call-site type, so this unwrapping is confined to the
-/// one node that calls the user's method.
+/// The type an `impl E for T` method returns for one operation: the resolved
+/// `T` for an async operation, which reads `AsyncCall<T>` at its call site.
+/// Every other dispatch boundary stays at the call-site type.
 fn impl_method_return_type(op: &TirEffectOp, type_table: &TypeTable) -> TypeId {
     if op.is_async {
         type_table.as_async_call(op.return_type).unwrap_or_else(|| {
@@ -2273,13 +2261,10 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
     }
 }
 
-/// Repackage a handler method's resolved `T` as the `AsyncCall<T>` the
-/// operation's call site reads, by calling the interface's
-/// `__cm_wrap_async__<E>__<op>` adapter (which lowers the value into an outptr
-/// buffer and hands back an already-completed subtask).
-///
+/// Repackage a handler method's resolved `T` as the `AsyncCall<T>` its call
+/// site reads, through the interface's `__cm_wrap_async__<E>__<op>` adapter.
 /// The adapter takes no argument when `T` is unit, so the method call becomes a
-/// statement and the block's trailing expression is the wrap.
+/// statement and the wrap is the block's trailing expression.
 fn wrap_async_result(
     op: &TirEffectOp,
     method_call: TirExpr,
@@ -2345,10 +2330,8 @@ fn wrap_async_result(
 /// lower-phase closure pass converts into a field access on the
 /// generated functor struct.
 ///
-/// An async operation resumes with the resolved `T` while the closure — like
-/// every other dispatch boundary — is typed at the call-site `AsyncCall<T>`, so
-/// the body repackages the method's result through the interface's
-/// `__cm_wrap_async__` adapter:
+/// The closure is typed at the call-site type, so an async operation's body
+/// wraps the method result:
 ///
 /// ```text
 /// |<op_params>| __cm_wrap_async__<E>__<op>(__h_<E>.<E>::<op>(<op_params>))
@@ -2520,14 +2503,9 @@ fn build_trap_closure(
 }
 
 /// Build the stub for an operation a `..forward` block leaves out: call the
-/// operation's own dispatch wrapper.
-///
-/// The wrapper installs `outer` before invoking a handler closure, so by the
-/// time this stub runs the global already points past this handler and the
-/// call lands on the next one out — the same path a handler method takes when
-/// it performs its own effect. The wrapper is named directly rather than
-/// emitted as an `E::op(...)` call because call-site rewriting has already run
-/// by the time this stub is built.
+/// operation's own dispatch wrapper, which by then has installed `outer`, so
+/// the call lands on the next handler out. Named directly rather than emitted
+/// as `E::op(...)` because call-site rewriting has already run.
 fn build_forward_closure(
     op: &TirEffectOp,
     plan: &DispatchPlan,
