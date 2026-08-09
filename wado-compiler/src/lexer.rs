@@ -1074,11 +1074,20 @@ impl<'a> Lexer<'a> {
                             &mut current_literal,
                         )));
                     }
+                    // Taken before the scan: the cursor sits on the first byte
+                    // of the expression, which is where the parser's re-lex of
+                    // it has to be anchored.
+                    let origin = crate::token::Position {
+                        offset: self.pos,
+                        line: self.line,
+                        column: self.column,
+                    };
                     let (interp_expr, interp_format, hit_eof) =
                         self.collect_interpolation_source(start, start_line, start_column);
                     parts.push(TemplateTokenPart::Interpolation {
                         expr: interp_expr,
                         format: interp_format,
+                        origin,
                     });
                     if hit_eof {
                         // Outer template terminated mid-interpolation. The

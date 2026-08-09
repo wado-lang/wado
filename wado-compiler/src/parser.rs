@@ -5968,11 +5968,18 @@ impl Parser {
                 TemplateTokenPart::Literal(s) => {
                     parts.push(TemplatePart::String(s));
                 }
-                TemplateTokenPart::Interpolation { expr, format } => {
+                TemplateTokenPart::Interpolation {
+                    expr,
+                    format,
+                    origin,
+                } => {
                     // The lexer already split off the format specifier, so the
                     // expression source is parsed as-is (trimmed of surrounding
-                    // whitespace).
-                    let parsed = self.parse_interpolation_expr(expr.trim(), span)?;
+                    // whitespace). Trimming moves the origin with it, or every
+                    // span inside a `${ x }` would sit one column early.
+                    let trimmed = expr.trim_start();
+                    let origin = advance_position(origin, &expr[..expr.len() - trimmed.len()]);
+                    let parsed = self.parse_interpolation_expr(trimmed.trim_end(), span, origin)?;
                     let format_spec = match format {
                         Some(spec) if spec.is_empty() => {
                             return Err(ParseError {
@@ -5999,7 +6006,18 @@ impl Parser {
     }
 
     /// Parse an interpolation expression string.
-    fn parse_interpolation_expr(&mut self, expr_str: &str, span: Span) -> ParseResult<Expr> {
+    ///
+    /// `origin` is where `expr_str`'s first byte sits in the file. The fragment
+    /// is lexed on its own, so every span it produces is relative to it; each
+    /// one is rebased before it can reach the AST, or a node inside `${…}`
+    /// would carry an offset that indexes unrelated text and a column measured
+    /// from the wrong place.
+    fn parse_interpolation_expr(
+        &mut self,
+        expr_str: &str,
+        span: Span,
+        origin: crate::token::Position,
+    ) -> ParseResult<Expr> {
         if expr_str.is_empty() {
             return Err(ParseError {
                 message: "empty interpolation expression in template string".to_string(),
@@ -6007,15 +6025,17 @@ impl Parser {
             });
         }
 
-        let lex_result = crate::lexer::lex_with_line(expr_str, span.line);
+        let mut lex_result = crate::lexer::lex(expr_str);
+        for token in &mut lex_result.tokens {
+            token.span = rebase_span(token.span, origin);
+        }
         // Lex errors inside the interpolation surface alongside the outer
-        // parser's diagnostics. Use the lex error's own span — carefully
-        // line-shifted by `lex_with_line` — so the editor highlights the
-        // offending byte, not the whole `{…}`.
+        // parser's diagnostics, at the offending byte rather than the whole
+        // `{…}`.
         for e in &lex_result.errors {
             self.errors.push(ParseError {
                 message: format!("error parsing template interpolation: {e}"),
-                span: e.span,
+                span: rebase_span(e.span, origin),
             });
         }
 
@@ -6148,6 +6168,43 @@ impl Parser {
             span: start_span.merge(&end_span),
         })))
     }
+}
+
+/// Move `origin` past `text`, counting the lines and columns it covers.
+fn advance_position(origin: crate::token::Position, text: &str) -> crate::token::Position {
+    let lines = text.matches('\n').count();
+    crate::token::Position {
+        offset: origin.offset + text.len(),
+        line: origin.line + lines,
+        column: match text.rsplit_once('\n') {
+            Some((_, tail)) => 1 + tail.chars().count(),
+            None => origin.column + text.chars().count(),
+        },
+    }
+}
+
+/// Rebase a span produced by lexing a fragment on its own onto the file the
+/// fragment came from.
+///
+/// The fragment starts at line 1, column 1, offset 0, so only its first line
+/// needs the column shift — every later line already begins at column 1 where
+/// the file's does.
+fn rebase_span(span: Span, origin: crate::token::Position) -> Span {
+    let shift_column = |line: usize, column: usize| {
+        if line == 1 {
+            origin.column + column - 1
+        } else {
+            column
+        }
+    };
+    Span::with_end(
+        origin.offset + span.start,
+        origin.offset + span.end,
+        origin.line + span.line - 1,
+        shift_column(span.line, span.column),
+        origin.line + span.end_line - 1,
+        shift_column(span.end_line, span.end_column),
+    )
 }
 
 /// Populate `Attribute::cm_boundary` based on the attribute name.
@@ -6286,6 +6343,7 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::AstVisitor;
     use crate::lexer::lex;
 
     /// Parse helper for tests: maps the error-recovering parser back to a
@@ -7068,6 +7126,53 @@ mod tests {
                 panic!("expected for statement");
             }
         }
+    }
+
+    /// Every span inside a `${…}` must index the file, not the fragment the
+    /// parser re-lexes it from. Positions on the fragment's first line are what
+    /// break first — the later lines start at column 1 in both — so the check
+    /// covers a single-line interpolation, a leading-space one, and a
+    /// multi-line one at once.
+    #[test]
+    fn interpolation_spans_index_the_file() {
+        let source =
+            "fn f() {\n    let s = `a: ${alpha} b: ${ beta } c: ${\n        gamma\n    }`;\n}\n";
+        let module = parse(source).unwrap();
+
+        struct Idents<'a> {
+            source: &'a str,
+            found: Vec<(String, usize, usize)>,
+        }
+        impl AstVisitor for Idents<'_> {
+            fn visit_expr(&mut self, expr: &Expr) {
+                if let Expr::Ident(ident) = expr {
+                    let span = ident.span;
+                    self.found.push((
+                        self.source[span.start..span.end].to_string(),
+                        span.line,
+                        span.column,
+                    ));
+                }
+                crate::ast::walk_expr(self, expr);
+            }
+        }
+
+        let mut idents = Idents {
+            source,
+            found: Vec::new(),
+        };
+        for item in &module.items {
+            idents.visit_item(item);
+        }
+
+        assert_eq!(
+            idents.found,
+            vec![
+                ("alpha".to_string(), 2, 19),
+                ("beta".to_string(), 2, 32),
+                ("gamma".to_string(), 3, 9),
+            ]
+        );
     }
 
     #[test]
