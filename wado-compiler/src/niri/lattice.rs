@@ -38,13 +38,9 @@ impl Interpreter<'_> {
         }
     }
 
-    /// A promoted pure value as a `Lattice`.
-    ///
-    /// Goes through the one projection,
-    /// [`crate::nir_value_graph::value_kind_to_const`], rather than repeating
-    /// it: a copy here is a copy that silently drops whatever kind it was not
-    /// taught about, which is how `Unit` stayed unevaluated after the evaluator
-    /// gained a value for it.
+    /// A promoted pure value as a `Lattice`, through the one projection,
+    /// [`crate::nir_value_graph::value_kind_to_const`]. A copy here would
+    /// silently drop whatever kind it was not taught about.
     fn value_to_lattice(&self, body: &Body, v: ValueId) -> Lattice {
         let Some(ty) = body.values.type_of(v) else {
             return Lattice::Unevaluated;

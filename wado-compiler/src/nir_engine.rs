@@ -376,23 +376,11 @@ impl<'a> Engine<'a> {
     /// rebuild) and without writing anything into `value_of`.
     ///
     /// Covers a `Local` read of any local in `forwardable`, and — when
-    /// `include_fields` — a `FieldAccess` read. `forwardable` is a set of local
-    /// *indices*, with no restriction on their types: what disqualifies a local
-    /// is being address-taken or `stores`-aliased, not being an aggregate.
+    /// `include_fields` — a `FieldAccess` read. What disqualifies a local is
+    /// being address-taken or `stores`-aliased, not being an aggregate.
     ///
-    /// The re-walk exists because a structural pass (SROA) introduces stores
-    /// (`__sroa_x = 99; … __sroa_x …`) after the build-once graph was built and
-    /// `inline` coarsened it, so the new reads carry no value and forwarding
-    /// misses them. Local forwarding is immune to the call/heap bumps that
-    /// defeat the pre-SROA *field* form, so the re-walk recovers each read's
-    /// reaching value. A field read is admitted only when the walk gives it a
-    /// re-emittable `ValueId`; under the conservative session alias sets an
-    /// aliased / address-taken receiver never carries one, so the same upstream
-    /// safety `store_load_forward` relies on holds here.
-    ///
-    /// The born-as-operands path (`store_load_forward`) promotes these straight
-    /// into operand slots, so forwarding never round-trips through the
-    /// persisted `value_of` side-table (WEP item 3). Returns `(read, value)`
+    /// The re-walk exists because SROA introduces stores after the build-once
+    /// graph was built, so the new reads carry no value. Returns `(read, value)`
     /// pairs; empty when there is no built graph to grow.
     pub fn scoped_const_reads(
         &mut self,

@@ -23,14 +23,11 @@ pub enum Value {
     Bool(bool),
     /// Unicode scalar value (`char`).
     Char(char),
-    /// The null reference — what `null` denotes at a nullable reference type.
-    ///
-    /// Equality is decided only against another `Null`. A constant aggregate
-    /// names a *value*, not the reference reaching it, so `null == <aggregate>`
-    /// is left unevaluated rather than answered `false`: the evaluator must not
-    /// claim more than it knows.
+    /// The null reference. Equality is decided only against another `Null`: a
+    /// constant aggregate names a value, not the reference reaching it, so
+    /// `null == <aggregate>` stays unevaluated rather than answered `false`.
     Null,
-    /// The unit value, `()`. One inhabitant, so two are always equal.
+    /// The unit value, `()`.
     Unit,
     /// A struct or tuple whose every field is itself a compile-time value.
     ///
@@ -291,7 +288,6 @@ impl Value {
                         .zip(b_elements.iter())
                         .all(|(a, b)| a.denotes_same(b))
             }
-            // One inhabitant each, so identity needs no payload comparison.
             (Self::Null, Self::Null) | (Self::Unit, Self::Unit) => true,
             (Self::Int { .. } | Self::Bool(_) | Self::Char(_), _) => self == other,
             (Self::Null | Self::Unit, _) => false,
@@ -343,10 +339,8 @@ impl Value {
 
     /// Render the value as a NIR-compatible literal repr string.
     ///
-    /// Scalars only: an aggregate has no literal form in NIR. It *can* reach
-    /// the pool — `ValuePool::constant` interns a `PackedArray` as a `Seq` —
-    /// so a caller holding an arbitrary `Value` must filter on
-    /// [`Self::is_scalar`] first.
+    /// Scalars only. An aggregate has no literal form in NIR but can reach the
+    /// pool, so an arbitrary `Value` must pass [`Self::is_scalar`] first.
     #[must_use]
     pub fn format_repr(&self) -> String {
         match self {
@@ -364,14 +358,8 @@ impl Value {
         }
     }
 
-    /// Project an [`Operand`] to the constant it denotes.
-    ///
-    /// The constant lives in the function's `ValuePool` (the source of truth
-    /// for pure values; WEP: The Live `ValueGraph`), so only `Operand::Value`
-    /// can be one. Delegates to
-    /// [`crate::nir_value_graph::value_kind_to_const`] rather than repeating the
-    /// projection: the two were separate matches kept in step by a comment, and
-    /// the copy here silently dropped every kind it had not been taught.
+    /// Project an [`Operand`] to the constant it denotes. Constants live in
+    /// the `ValuePool`, so only `Operand::Value` can be one.
     #[must_use]
     pub fn from_operand(
         body: &Body,
@@ -620,8 +608,8 @@ fn trunc_to_int(value: f64, target: PrimitiveType) -> Option<u64> {
     }
 }
 
-/// Equality between two values that have a single inhabitant each: `null` with
-/// `null`, `()` with `()`. Every other operator is meaningless on them.
+/// Equality between two single-inhabitant values: `null` with `null`, `()`
+/// with `()`. Every other operator is meaningless on them.
 pub(crate) fn eval_singleton_binary(op: NirBinaryOp) -> Option<Value> {
     match op {
         NirBinaryOp::Eq => Some(Value::Bool(true)),

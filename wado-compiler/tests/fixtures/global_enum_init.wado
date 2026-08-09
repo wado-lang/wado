@@ -1,7 +1,6 @@
-// A global whose type is an `enum` lowers to an i32 discriminant, so its
-// initializer must be that discriminant constant. Emitting the generic
-// heap-type default instead yields `(global (mut i32) (ref.null none))`,
-// which fails core Wasm validation before the program ever runs.
+// An `enum` global lowers to an i32 discriminant, so its initializer must be
+// that constant — the generic heap-type default yields
+// `(global (mut i32) (ref.null none))`, which fails validation.
 use { println, Stdout } from "core:cli";
 
 enum Level {

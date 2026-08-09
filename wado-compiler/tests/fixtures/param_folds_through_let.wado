@@ -1,11 +1,7 @@
 // A compile-time parameter bound to a local still settles the gate: the binding
-// is a trivial copy, so copy propagation drops it and leaves the parameter read
-// in the condition, which folds. `guarded` must not survive at `-O2`.
-//
-// This does not hold for a binding whose copy is not trivial — a `String`
-// parameter is deep-copied through `array_clone_prefix`, which no pass removes,
-// so the gate is still decided at run time there. `remarks.rs` reports that
-// case rather than leaving it silent.
+// is a trivial copy, so copy propagation drops it and the read folds in the
+// condition. A `String` parameter's copy is not trivial and does not — that
+// case is reported by `remarks.rs` instead.
 use { println, Stdout } from "core:cli";
 
 #[param(name = "log.level")]

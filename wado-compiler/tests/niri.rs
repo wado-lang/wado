@@ -683,8 +683,7 @@ fn lattice_const_for_literal() {
 
 #[test]
 fn lattice_const_for_unit() {
-    // `()` denotes a value, with one inhabitant. It was outside the engine's
-    // model until `Value::Unit` existed; "I have no value for this" is what
+    // `()` denotes a value. "I have no value for this" is what
     // `lattice_unevaluated_for_unbound_local` pins instead.
     let e = unit_lit();
     assert_eq!(lattice_of(&e), Lattice::Const(Value::Unit));

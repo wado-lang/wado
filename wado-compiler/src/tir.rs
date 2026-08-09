@@ -5384,12 +5384,9 @@ pub enum SynthTrait {
     Deserialize,
 }
 
-/// An `impl` block as declared — its identity, not its methods.
-///
-/// The methods live in [`TirModule::functions`], flattened there by reify and
-/// linked back to their block by [`TirFunction::method_info`]. Keeping the
-/// block a declaration record leaves one source of truth for bodies while
-/// still describing a block whose only content is a rest clause
+/// An `impl` block as declared — its identity, not its methods, which live in
+/// [`TirModule::functions`] linked back by [`TirFunction::method_info`]. The
+/// record exists for a block whose only content is a rest clause
 /// (`impl Log for Passthrough { ..forward }`), which produces no methods at
 /// all. Consumed by the effect-dispatch synthesis; nothing past it sees an
 /// impl block.

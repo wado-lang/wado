@@ -141,34 +141,19 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 - [ ] Dead store elimination.
 - [ ] Strength reduction; reassociation; jump threading; SimplifyCFG.
 - [ ] Cross-block copy propagation.
-- [ ] Sinking pure definitions into the branch that uses them (partial dead code
-      elimination). The mirror of LICM — the same motion-safety predicates and
-      `mod_ref` summary apply, and moving pure code past effectful code is sound
-      where hoisting is not. The standing case is a gated call whose arguments
-      the caller has already built: `core:log`'s runtime level check reduces to a
-      global read and a compare, but the message template and field struct are
-      still constructed in front of it, so the disabled path pays two allocations
-      and two calls for a branch it does not take.
-- [ ] Forwarding a local bound to a global read. The value graph has no node for
-      a global read, so `let s = G` is opaque in it: the read reaches the use
-      site only when copy propagation removes the binding, which it does only
-      for a trivial copy. A `String` global is deep-copied through
-      `array_clone_prefix`, which no pass removes, so the read stays put.
-      Naming the read in the graph would make the binding transparent, but
-      re-emitting it at the read site is sound only when the global generation
-      there still equals the one the value carries — the check `FieldAccess`
-      promotion already makes by version, and the one this path would need.
-      Without it a `#[param]` string routed through a helper decides its gate at
-      run time; `remarks::collect_param_gate_remarks` reports that rather than
-      leaving it silent.
-- [ ] Devirtualizing effect dispatch. An effect operation compiles to a load of
-      the per-effect dispatch global, an `outer` save/restore around the call, a
-      `ref.cast` of the closure field, and a `call_ref` — none of it inlinable.
-      Whole-program compilation can see when an effect has a single `impl` that
-      does not self-delegate, and lower the wrapper to a direct call; declaring
-      each dispatch field at its precise closure type retires the `ref.cast`
-      independently. High value: it applies to every effect, not just the hot
-      ones.
+- [ ] Sinking pure definitions into the branch that uses them (partial DCE). The
+      mirror of LICM, reusing its motion-safety predicates; past effectful code
+      it is sound where hoisting is not. `core:log`'s disabled path pays two
+      allocations for arguments its gate discards.
+- [ ] Forwarding a local bound to a global read. The graph names no global read,
+      so `let s = G` reaches the use only when copy propagation removes the
+      binding — never for a `String`. Naming it needs a generation check at the
+      read site, the one `FieldAccess` promotion makes by version. Until then
+      `remarks::collect_param_gate_remarks` reports the miss.
+- [ ] Devirtualizing effect dispatch. An operation costs a global load, an
+      `outer` save/restore, a `ref.cast` and a `call_ref`, none inlinable. A
+      single non-self-delegating `impl` can lower to a direct call; typing each
+      dispatch field precisely retires the `ref.cast` on its own.
 - [ ] `param_spec` profitability — specialize only when the constants can decide
       a branch, so a chain that never folds stops duplicating code.
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when

@@ -92,18 +92,13 @@ fn forward_one(
     engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
-    // Every local whose reads may be forwarded: the complement of the unsafe
-    // set, with no restriction on type — what disqualifies a local is being
+    // The complement of the unsafe set: what disqualifies a local is being
     // address-taken or `stores`-aliased, not being an aggregate.
     let forwardable_locals: IndexSet<u32> = (0..engine.locals().len() as u32)
         .filter(|i| !unsafe_locals.contains(i))
         .collect();
-    // Born-as-operands (WEP item 3): take every re-emittable reaching value —
-    // `Local` and `FieldAccess` reads alike — straight from the scratch re-walk
-    // and promote it into the operand slot, so forwarding never round-trips
-    // through the persisted `value_of` side-table. The re-walk is what recovers
-    // reads SROA / field_scalarize introduced after the build-once graph was
-    // built and `inline` coarsened it.
+    // Born-as-operands (WEP item 3): promote each re-emittable reaching value
+    // straight into its operand slot, never through the persisted `value_of`.
     let forwarded: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId> = engine
         .scoped_const_reads(&forwardable_locals, /* include_fields */ true)
         .into_iter()
@@ -121,8 +116,7 @@ fn forward_one(
 pub(super) struct StoreLoadForwardRule {
     applied: Cell<bool>,
     unsafe_locals: IndexSet<u32>,
-    /// Born-as-operands reaching values from the scratch re-walk: the reads in
-    /// this map promote from it directly, never consulting `value_of`.
+    /// Reaching values from the scratch re-walk, promoted directly.
     forwarded: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
 }
 
@@ -167,9 +161,7 @@ fn forward_at_root(
         if super::extract::is_place_read(engine, expr) {
             continue;
         }
-        // Born-as-operands: every forwardable read carries its reaching value in
-        // `forwarded` (from the scratch re-walk), promoted without touching
-        // `value_of`. A read not in the map has no re-emittable value — skip it.
+        // A read not in `forwarded` has no re-emittable value.
         let Some(vid) = forwarded.get(&expr).copied() else {
             continue;
         };

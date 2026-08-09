@@ -1,7 +1,6 @@
-// `..forward` over an async operation. `Client::send` returns `AsyncCall<T>` at
-// the call site but a handler method resumes with `T`, so the forwarding stub
-// and the dispatch wrapper meet at two different types unless the closure
-// boundary is the call-site type throughout.
+// `..forward` over an async operation. `Client::send` reads `AsyncCall<T>` at
+// the call site while a handler method resumes with `T`, so the stub and the
+// wrapper meet at two types unless every boundary is the call-site one.
 use { Request, Response, ErrorCode, Fields, Trailers, StatusCode } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 

@@ -115,23 +115,16 @@ section records only the current state.
       `Unit`-tailed body skips the temp entirely. Fixture:
       `effect_handler_value_form.wado`.
 
-- [x] `..forward`. The rest clause lives on the impl block rather than on any
-      method, so it reaches the dispatch synthesis through `TirModule::impls`
-      — a block whose only content is a rest clause has no method to be
-      discovered by, and registers as a handler through that record alone.
-      An operation the block omits gets a stub that calls the operation's own
-      dispatch wrapper: the wrapper installs `outer` before invoking a handler
-      closure, so the call lands on the next handler out, and its no-handler
-      branch is what makes `..forward` on the outermost handler behave like
-      `..trap`. Fixtures: `effect_handler_forward_rest.wado`,
+- [x] `..forward`. The rest clause lives on the impl block, so it reaches the
+      dispatch synthesis through `TirModule::impls` — a block whose only content
+      is a rest clause has no method to be discovered by. An omitted operation
+      gets a stub calling that operation's own dispatch wrapper, which has
+      already installed `outer`, so the call lands on the next handler out and
+      the outermost handler's `..forward` behaves like `..trap`. Every dispatch
+      boundary is therefore typed at the call-site type, and an async
+      operation's handler closure wraps its `T` through `__cm_wrap_async__`.
+      Fixtures: `effect_handler_forward_rest.wado`,
       `effect_handler_forward_async_op.wado`.
-
-      That stub calls the wrapper, so every dispatch boundary — struct field,
-      closure, wrapper — is typed at the operation's call-site type. An async
-      operation reads `AsyncCall<T>` there while its handler method resumes
-      with the resolved `T`, so the handler closure repackages the result
-      through the interface's `__cm_wrap_async__` adapter; that unwrapping is
-      confined to the one node that calls the user's method.
 
 - [ ] `core:test::MockCM` and handler-bundling helpers (e.g.
       `MockStdout::drain()`). With generic-resource dispatch in place,

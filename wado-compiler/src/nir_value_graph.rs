@@ -19,16 +19,11 @@ use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
 /// The constant a [`ValueKind`] denotes, as niri's
-/// [`crate::const_eval::Value`]. The one projection from the graph's values to
-/// the evaluator's: `Value::from_operand` delegates here rather than repeating
-/// the match, so a kind cannot reach one and be dropped by the other.
+/// [`crate::const_eval::Value`] — the one projection between the two, which
+/// everything else delegates to.
 ///
-/// Total over the constant kinds but for the prim-consistency filter an `Int`
-/// or a `Float` carries: an `Int` needs an integer prim (`is_int_prim` —
-/// excludes `i128`/`u128`/`v128`), a `Float` needs `F32`/`F64`, and those are
-/// the widths the evaluator's arithmetic is defined at. `prim` is the operand's
-/// resolved primitive type, from its NIR type. A non-constant kind yields
-/// `None`.
+/// `prim` is the operand's resolved primitive type. A scalar yields `None`
+/// unless `prim` is a width the evaluator's arithmetic is defined at.
 pub(crate) fn value_kind_to_const(
     kind: &ValueKind,
     prim: Option<PrimitiveType>,
@@ -51,8 +46,6 @@ pub(crate) fn value_kind_to_const(
         }
         ValueKind::Bool(b) => Value::Bool(*b),
         ValueKind::Char(c) => Value::Char(*c),
-        // Already an evaluated constant; the prim filter above is a scalar
-        // concern and does not apply.
         ValueKind::Const(key, _) => key.value().clone(),
         ValueKind::Null => Value::Null,
         ValueKind::Unit => Value::Unit,
@@ -68,29 +61,18 @@ pub(crate) fn value_kind_to_const(
 
 /// Identity view of a compile-time constant, so the pool can hash-cons one.
 ///
-/// [`crate::const_eval::Value`]'s `PartialEq` is the *numeric* relation the
-/// evaluator needs — `NaN != NaN`, `+0.0 == -0.0`. Hash-consing needs the
-/// *identity* relation instead, the one [`ValueKind::Float`] already spells by
-/// keying on the bit pattern. Wrapping the value rather than giving it `Eq`
-/// keeps the evaluator's relation honest: a value that compares unequal to
-/// itself must never become a hash-cons key.
+/// [`crate::const_eval::Value`]'s `PartialEq` is the numeric relation the
+/// evaluator needs (`NaN != NaN`, `+0.0 == -0.0`); a hash-cons key needs
+/// identity. Wrapping rather than giving the value `Eq` keeps both honest.
 #[derive(Clone, Debug)]
 pub struct ConstKey(crate::const_eval::Value);
 
 impl ConstKey {
-    /// Wrap an evaluated constant in its identity relation.
-    ///
-    /// Held inline rather than behind an `Rc`: a hash-cons lookup builds the
-    /// key before it knows whether the value is already interned, so boxing
-    /// would allocate on every intern. An aggregate's payload is already
-    /// `Rc`-shared inside [`crate::const_eval::Value`], so cloning one is a
-    /// refcount bump either way.
     #[must_use]
     pub fn new(value: crate::const_eval::Value) -> Self {
         Self(value)
     }
 
-    /// The constant itself.
     #[must_use]
     pub fn value(&self) -> &crate::const_eval::Value {
         &self.0
@@ -205,8 +187,7 @@ fn const_identity_eq(a: &crate::const_eval::Value, b: &crate::const_eval::Value)
     }
 }
 
-/// The hash matching [`const_identity_eq`]. Discriminants are mixed in so two
-/// shapes carrying the same leaves do not collide by construction.
+/// The hash matching [`const_identity_eq`].
 fn const_identity_hash<H: std::hash::Hasher>(v: &crate::const_eval::Value, state: &mut H) {
     use crate::const_eval::Value;
     use std::hash::Hash;
@@ -223,7 +204,6 @@ fn const_identity_hash<H: std::hash::Hasher>(v: &crate::const_eval::Value, state
         }
         Value::Bool(b) => b.hash(state),
         Value::Char(c) => c.hash(state),
-        // The discriminant already hashed above is the whole identity.
         Value::Null | Value::Unit => {}
         Value::Aggregate { type_id, fields } => {
             type_id.hash(state);
@@ -341,21 +321,12 @@ pub enum ValueKind {
     /// A constant the scalar cases above cannot name: a `String`, a `List`, a
     /// struct, a variant.
     ///
-    /// The scalar cases are not folded into this one, and the reason is not
-    /// encoding cost. They key on a `TypeId`; [`crate::const_eval::Value`]'s
-    /// scalars key on a `PrimitiveType`, which cannot name the type of an enum
-    /// discriminant, a `flags`, or a newtype — `prim_of` yields `None` for all
-    /// three. The graph names a value *in the program*, where extraction has to
-    /// re-emit it at its NIR type; the evaluator names a value *under
-    /// arithmetic*, where wrapping and sign extension are defined at a width.
-    /// An enum case is an `i32` under arithmetic and an enum in the program,
-    /// and collapsing the two would lose whichever distinction the other
-    /// consumer needs. One projection between them, not one type: see
-    /// [`value_kind_to_const`].
+    /// The scalar cases stay separate because they key on a `TypeId` where
+    /// [`crate::const_eval::Value`] keys on a `PrimitiveType`, which cannot
+    /// name an enum, a `flags`, or a newtype.
     ///
     /// Invariant: a constant a scalar case *can* name is never a `Const`, so
-    /// one constant has one `ValueId`. [`ValuePool::constant`] is the only
-    /// place allowed to decide, and every producer goes through it.
+    /// one constant has one `ValueId`. [`ValuePool::constant`] decides.
     Const(ConstKey, TypeId),
 
     // ---- Opaque ----
@@ -416,11 +387,8 @@ pub enum ValueKind {
 }
 
 impl ValueKind {
-    /// Whether this value denotes a compile-time constant.
-    ///
-    /// A query, not an enumeration: which cases spell a constant is the pool's
-    /// business, and a caller that re-lists them goes stale the next time one
-    /// is added. Every "is this constant" test goes through here.
+    /// Whether this value denotes a compile-time constant. Ask, never re-list
+    /// the cases at a call site.
     #[must_use]
     pub fn is_constant(&self) -> bool {
         match self {
@@ -442,12 +410,9 @@ impl ValueKind {
     }
 
     /// Whether this constant may be frozen into an operand slot: it lowers to a
-    /// `const` instruction, so a rule may duplicate it at a use site.
-    ///
-    /// A [`Self::Const`] aggregate may not. Materialising one is an allocation,
-    /// and where to place it is `const_object_globalization`'s decision — so it
-    /// stays a fact the graph reasons with rather than something the extractor
-    /// re-emits. This is the distinction [`Self::is_constant`] does not draw.
+    /// `const` instruction, so a rule may duplicate it at a use site. A
+    /// [`Self::Const`] aggregate may not — materialising one is an allocation
+    /// `const_object_globalization` places.
     #[must_use]
     pub fn is_operand_constant(&self) -> bool {
         match self {
@@ -489,7 +454,6 @@ impl ValueKind {
         }
     }
 
-    /// The boolean this value denotes.
     #[must_use]
     pub fn as_bool(&self) -> Option<bool> {
         match self {
@@ -510,7 +474,6 @@ impl ValueKind {
         }
     }
 
-    /// The character this value denotes.
     #[must_use]
     pub fn as_char(&self) -> Option<char> {
         match self {
@@ -661,14 +624,9 @@ impl ValuePool {
         id
     }
 
-    /// Name an evaluated constant, whatever its shape.
-    ///
-    /// The single place that decides between an unboxed scalar kind and a
-    /// boxed [`ValueKind::Const`], which is what keeps one constant to one
-    /// `ValueId`: were a caller free to box an integer, `Int(7)` and
-    /// `Const(Int 7)` would be two ids for one value and CSE would miss the
-    /// pair. `ty` is the value's NIR type, needed because `ValueKind` is
-    /// type-erased and extraction reads the width back off the pool.
+    /// Name an evaluated constant, whatever its shape — the single place that
+    /// chooses between an unboxed scalar kind and a boxed [`ValueKind::Const`],
+    /// so `Int(7)` and `Const(Int 7)` never become two ids for one value.
     pub fn constant(&mut self, value: &crate::const_eval::Value, ty: TypeId) -> ValueId {
         use crate::const_eval::Value;
         let kind = match value {
