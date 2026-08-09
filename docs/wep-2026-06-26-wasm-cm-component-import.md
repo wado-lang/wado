@@ -94,7 +94,7 @@ the two components' host imports without hand-written forwarding.
       methods, static constructors, and `borrow<T>` parameters — is rejected
       when its type is decoded. Wado has resources; what is missing is the
       consuming direction of the mapping. A bundled ICU surface
-      ([Compile-Time Data Providers](./wep-2026-06-13-compile-time-data-providers.md))
+      ([Bundled ICU](./wep-2026-06-13-compile-time-data-providers.md))
       rests on this.
 - [ ] Async value types (`stream<T>` / `future<T>`) in an imported signature.
       This is the async import surface of
