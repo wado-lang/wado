@@ -1,0 +1,185 @@
+// `const_object_globalization` must not hoist an aggregate a callee writes
+// through a projection of it.
+//
+// `to_json` builds a fresh `JsonWriter` per call and hands `writer.buf` — a
+// `String`, so a shared array handle — to `JsonWriter::write`. `sroa_param`
+// rewrites that `&mut self` receiver into the single field it wraps, which
+// leaves a parameter that reads as by-value and still borrows the caller's
+// storage; the gate used to read the receiver's *type*, saw no `&mut`, and
+// hoisted `writer` into a module global that every call then shared. The
+// second call printed what the first had left in the buffer.
+//
+// The unreachable `builtin::black_box(false)` guard is what the EMI harness
+// injected to expose it: it is opaque to every NIR pass, so it perturbs the
+// pass order without changing what the program computes. Reproduces at -O3.
+use { println, Stdout } from "core:cli";
+struct SerializeError {
+}
+trait Serialize {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
+}
+trait SerializeStruct {
+}
+trait Serializer {
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError>;
+    fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>;
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
+    fn serialize_null(&mut self) -> Result<(), SerializeError>;
+    fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>;
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError>;
+}
+struct JsonWriter {
+    buf: String,
+}
+impl JsonWriter {
+    fn write(&mut self, s: &String) {
+        self.buf.push_str(s);
+    }
+}
+struct JsonSerializer {
+    w: &mut JsonWriter,
+}
+struct JsonSeqSerializer {
+    w: &mut JsonWriter,
+    count: i32,
+}
+struct JsonStructSerializer {
+    w: &mut JsonWriter,
+    count: i32,
+}
+impl Serializer for JsonSerializer {
+    type StructSerializer = JsonStructSerializer;
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        self.w.write(&`${v}`);
+        return Result::<(), SerializeError>::Ok(());
+    }
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
+        return Result::<(), SerializeError>::Ok(());
+    }
+    fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
+        if v {
+        }
+        return Result::<(), SerializeError>::Ok(());
+    }
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+        return Result::<(), SerializeError>::Ok(());
+    }
+    fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> with stores[self] {
+        return Result::<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer {
+            w: self.w,
+            count: 0,
+        });
+    }
+    fn begin_struct(
+        &mut self,
+        name: &String,
+        fields: i32,
+    ) -> Result<JsonStructSerializer, SerializeError> with stores[self] {
+        return Result::<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer {
+            w: self.w,
+            count: 0,
+        });
+    }
+}
+impl SerializeSeq for JsonSeqSerializer {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        if self.count > 0 {
+        }
+        return Result::<(), SerializeError>::Ok(());
+    }
+}
+impl SerializeStruct for JsonStructSerializer {
+    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+        return Result::<(), SerializeError>::Ok(());
+    }
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return Result::<(), SerializeError>::Ok(());
+    }
+}
+impl Serialize for i32 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_i32(*self);
+    }
+}
+impl Serialize for f64 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_f64(*self);
+    }
+}
+impl Serialize for bool {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_bool(*self);
+    }
+}
+impl Serialize for String {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_string(self);
+    }
+}
+impl<T: Serialize> Serialize for Option<T> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        if let Some(v) = self {
+        }
+        return s.serialize_null();
+    }
+}
+impl<T: Serialize> Serialize for List<T> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut seq = s.begin_seq(self.len());
+        if let Ok(mut seq) = seq {
+        }
+        return Result::<(), SerializeError>::Err(SerializeError { message: "begin_seq failed" });
+    }
+}
+struct Point {
+    x: f64,
+    y: f64,
+}
+impl Serialize for Point {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut st = s.begin_struct(&"Point", 2);
+        if let Ok(mut st) = st {
+        }
+        return Result::<(), SerializeError>::Err(SerializeError { message: "begin_struct failed" });
+    }
+}
+struct User {
+    name: String,
+    age: i32,
+    active: bool,
+    location: Option<Point>,
+    tags: List<String>,
+}
+impl Serialize for User {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut st = s.begin_struct(&"User", 5);
+        if let Ok(mut st) = st {
+        }
+        return Result::<(), SerializeError>::Err(SerializeError { message: "begin_struct failed" });
+    }
+}
+fn to_json<T: Serialize>(value: &T) -> String {
+    let mut writer = JsonWriter { buf: "" };
+    let mut ser = JsonSerializer { w: &mut writer };
+    if builtin::black_box(false) {  } value.serialize::<JsonSerializer>(&mut ser);
+    return writer.buf;
+}
+export fn run() with Stdout {
+    let n = 42;
+    println(to_json::<i32>(&n));
+    let s = "hello";
+    println(to_json::<String>(&s));
+    let point = Point { x: 1.5, y: 2.5 };
+    println(to_json::<Point>(&point));
+    let user2 = User {
+        name: "Bob",
+        age: 25,
+        active: false,
+        location: null,
+        tags: [],
+    };
+    println(to_json::<User>(&user2));
+}
+__DATA__
+{"stdout": "42\n\n\n\n"}

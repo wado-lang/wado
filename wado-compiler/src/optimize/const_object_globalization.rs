@@ -150,7 +150,6 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         hoistable_pure: &hoistable_pure,
         structs: &project.structs,
         param_readonly: RefCell::new(IndexMap::default()),
-        param_readonly_in_progress: RefCell::new(IndexSet::default()),
         string_inline_max_bytes: project.string_inline_max_bytes,
     };
     let mut candidates: Vec<Candidate> = Vec::new();
@@ -959,12 +958,6 @@ struct Gate<'a> {
     /// Each verdict costs two walks of the callee body, and one helper taking a
     /// constant is typically called from many sites.
     param_readonly: RefCell<IndexMap<(usize, usize), bool>>,
-    /// Verdicts currently being computed. [`Gate::callee_param_readonly`] runs
-    /// the callee's own read-only gate, which asks the same question of the
-    /// callees *it* reaches, so a recursive or mutually recursive callee would
-    /// otherwise re-enter its own in-flight query. Re-entry answers `false`:
-    /// nothing is proven yet, and read-only is the claim that needs proving.
-    param_readonly_in_progress: RefCell<IndexSet<(usize, usize)>>,
     /// The opt-level's `NirPackage::string_inline_max_bytes`, the eager
     /// `array.new_fixed` bound `translate_packed_array` applies to a `let`-shape
     /// global's value.
@@ -1055,11 +1048,36 @@ impl Gate<'_> {
     fn callee_mutates_self(&self, func_id: crate::nir::FuncId) -> Option<bool> {
         use cranelift_entity::EntityRef;
         let f = self.funcs.get(func_id.index())?.borrow();
-        let p0 = f.params.first()?;
-        Some(matches!(
-            self.type_table.borrow().get(p0.type_id),
-            ResolvedType::MutRef(_)
-        ))
+        Some(self.param_borrows_mutably(f.params.first()?))
+    }
+
+    /// Whether `param` writes the caller's argument storage.
+    ///
+    /// The type alone does not answer this. `sroa_param` rewrites a `&mut S`
+    /// parameter whose struct has a single field into that field, leaving a
+    /// parameter that reads as by-value and still borrows what the caller
+    /// passed — the write that used to travel through `&mut S` travels through
+    /// the field. [`NirParam::is_mut_ref`] is captured before that rewrite (and
+    /// before boxing) and outlives it, so it is the reliable half of the test.
+    fn param_borrows_mutably(&self, param: &crate::nir::NirParam) -> bool {
+        param.is_mut_ref
+            || matches!(
+                self.type_table.borrow().get(param.type_id),
+                ResolvedType::MutRef(_)
+            )
+    }
+
+    /// Whether parameter `pos` writes the caller's argument storage. An
+    /// unresolvable callee answers `true`: nothing here can prove it does not.
+    fn param_pos_borrows_mutably(&self, func_id: crate::nir::FuncId, pos: usize) -> bool {
+        use cranelift_entity::EntityRef;
+        let Some(f) = self.funcs.get(func_id.index()) else {
+            return true;
+        };
+        let f = f.borrow();
+        f.params
+            .get(pos)
+            .is_none_or(|param| self.param_borrows_mutably(param))
     }
 
     /// Whether the callee takes its receiver by `&self` — the only receiver
@@ -1093,31 +1111,9 @@ impl Gate<'_> {
         if let Some(&cached) = self.param_readonly.borrow().get(&key) {
             return cached;
         }
-        if !self.param_readonly_in_progress.borrow_mut().insert(key) {
-            return false;
-        }
         let verdict = self.compute_param_readonly(func_id, param_pos);
-        self.param_readonly_in_progress
-            .borrow_mut()
-            .swap_remove(&key);
         self.param_readonly.borrow_mut().insert(key, verdict);
         verdict
-    }
-
-    /// Whether a call can reach the candidate through `func_id`'s receiver
-    /// without writing it.
-    ///
-    /// `&mut self` writes the caller's storage outright, and an unknown callee
-    /// proves nothing. `&self` cannot write. A *by-value* receiver used to pass
-    /// on the strength of its type alone, which is not enough: `sroa_param`
-    /// rewrites a `&mut S` receiver whose struct has a single field into that
-    /// field by value, and a field that is itself a reference — a `String`, a
-    /// `List` — still writes the caller's storage when the callee mutates it.
-    /// So a by-value receiver clears the same body gate a by-value argument
-    /// does.
-    fn receiver_cannot_write(&self, func_id: crate::nir::FuncId) -> bool {
-        self.callee_mutates_self(func_id) == Some(false)
-            && (self.callee_borrows_self(func_id) || self.callee_param_readonly(func_id, 0))
     }
 
     fn compute_param_readonly(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
@@ -1451,14 +1447,14 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             if let Some(receiver) = receiver {
                 let recv = receiver.as_expr().map(|e| strip_refs(body, e));
                 if recv.is_some_and(|r| is_local(body, r, idx)) {
-                    if !gate.receiver_cannot_write(callee_id) {
+                    if gate.callee_mutates_self(callee_id) != Some(false) {
                         return false;
                     }
                 } else if receiver
                     .as_expr()
                     .is_some_and(|e| expr_mentions_local(body, e, idx))
                 {
-                    if !gate.receiver_cannot_write(callee_id) {
+                    if gate.callee_mutates_self(callee_id) != Some(false) {
                         return false;
                     }
                     if !expr_readonly_operand(body, receiver, idx, gate) {
@@ -1603,20 +1599,17 @@ fn call_arg_readonly(
             inner.as_expr().is_some_and(|e| is_local(body, e, idx))
                 || expr_readonly_operand(body, inner, idx, gate)
         }
-        // A *projection* of the binding whose type is itself a reference —
-        // `writer.buf`, a `String` — hands the callee the binding's own
-        // storage even though it crosses by value, so a callee that writes it
-        // writes the shared global. `sroa_param` produces exactly this shape:
-        // it rewrites a `&mut S` receiver whose struct has a single field into
-        // that field, and the mutation that used to travel through `&mut S`
-        // now travels through the field. Reading the projection is a read
-        // (`expr_readonly`); handing it over is only safe once the callee's own
-        // gate clears the parameter it lands in. A scalar projection copies its
-        // value outright and needs none of this.
+        // A *projection* of the binding — `writer.buf` — reads it, which
+        // `expr_readonly` rightly allows. Handing that read to a parameter that
+        // borrows mutably is not a read: `sroa_param` rewrites a `&mut S`
+        // parameter whose struct has a single field into that field, so the
+        // write that used to travel through `&mut S` travels through the
+        // projection and lands in the shared global. Value semantics cover
+        // every other parameter — a by-value argument is the callee's own copy,
+        // so what it does with it cannot reach the binding.
         _ => {
-            if gate.is_reference_type(body.exprs[arg].type_id)
+            if param.is_none_or(|(func_id, pos)| gate.param_pos_borrows_mutably(func_id, pos))
                 && expr_mentions_local(body, arg, idx)
-                && !param.is_some_and(|(func_id, pos)| gate.callee_param_readonly(func_id, pos))
             {
                 return false;
             }
