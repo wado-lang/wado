@@ -169,18 +169,29 @@ fn identify_uncovered_effects(
     // still leaves the plain one unlowered, and the infrastructure covers the
     // whole interface either way.
     //
-    // A call site carries only the bare name, so every declaration under a name
-    // is kept and an ambiguous call activates all of them — unused dispatch
-    // infrastructure against an ICE if the guess is wrong.
-    let mut uncovered: IndexMap<String, Vec<InstantiationKey>> = IndexMap::default();
+    // One bare name, one owner. A call site carries no declaring module, so it
+    // reaches whichever dispatch triple that name was synthesised for, and the
+    // triple is named after the name alone — activating a second declaration
+    // under it emits `__Dispatch_<E>` twice into the entry module, which
+    // `monomorphize` rejects. A name an active instantiation already owns is
+    // left to it; the call lands on that dispatch and traps there if no handler
+    // is installed, which is what an uncovered call wanted anyway.
+    let owned: IndexSet<&String> = active
+        .iter()
+        .filter(|(_, _, type_args)| type_args.is_empty())
+        .map(|(_, name, _)| name)
+        .collect();
+    let mut uncovered: IndexMap<String, InstantiationKey> = IndexMap::default();
     for ((module, name), meta) in effect_index {
-        let key = (module.clone(), name.clone(), Vec::new());
-        if !meta.is_resource
-            && meta.operations.iter().any(|op| op.cm_name.is_none())
-            && !active.contains(&key)
+        if meta.is_resource
+            || !meta.operations.iter().any(|op| op.cm_name.is_none())
+            || owned.contains(name)
         {
-            uncovered.entry(name.clone()).or_default().push(key);
+            continue;
         }
+        uncovered
+            .entry(name.clone())
+            .or_insert_with(|| (module.clone(), name.clone(), Vec::new()));
     }
     if uncovered.is_empty() {
         return IndexSet::default();
@@ -203,7 +214,7 @@ fn identify_uncovered_effects(
 /// Records which uncovered effects are actually called, so a declared but
 /// never-performed effect costs no dispatch infrastructure.
 struct UncoveredEffectCallCollector<'a> {
-    uncovered: &'a IndexMap<String, Vec<InstantiationKey>>,
+    uncovered: &'a IndexMap<String, InstantiationKey>,
     called: IndexSet<InstantiationKey>,
 }
 
@@ -211,9 +222,9 @@ impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         if let TirExprKind::Call { func, .. } = &expr.kind
             && let Some(interface) = func.module_source.interface_name()
-            && let Some(keys) = self.uncovered.get(interface.as_str())
+            && let Some(key) = self.uncovered.get(interface.as_str())
         {
-            self.called.extend(keys.iter().cloned());
+            self.called.insert(key.clone());
         }
         self.walk_expr(expr);
     }

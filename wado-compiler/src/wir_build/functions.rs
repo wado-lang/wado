@@ -857,8 +857,7 @@ fn init_placeholder(wir_type: &WirType) -> crate::wir::WirInstr {
         | WirType::Enum { .. }
         | WirType::Flags { .. } => WirInstr::I32Const(0),
         WirType::V128 => WirInstr::V128Const(0),
-        // `resolve_global` rejects a global declared at `()` or `Never`, the
-        // only two types that lower to `WirType::Unit`.
+        // `register_globals` gives a unit global no slot, so it never gets here.
         WirType::Unit => panic!("[WIR] unit-typed global has no Wasm slot to initialize"),
     }
 }
