@@ -2928,15 +2928,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             ast::Expr::Ident(ident) => {
                 // A bare turbofish value (`pair::<_, bool>`) has no call to
                 // infer from, so a `_` slot here is unresolvable — validate its
-                // type args strictly.
+                // type args strictly. A qualified path (`Maybe::<_>::Nothing`)
+                // does have one: the expected type fills the slot.
+                let qualified = !ident.segments.is_empty();
                 for ty in &ident.type_args {
-                    Self::validate_ast_type_names(
-                        ty,
-                        known_type_names,
-                        resource_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    if qualified {
+                        Self::validate_turbofish_type_arg(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    } else {
+                        Self::validate_ast_type_names(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
                 }
             }
             ast::Expr::Literal(_) | ast::Expr::Error(_) => {}

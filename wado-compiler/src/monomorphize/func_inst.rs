@@ -3539,8 +3539,8 @@ impl Monomorphizer {
         // the mapped element `Case<V, P_k>` stays the binding type only.
         let mapped_source_elems: Option<Vec<TypeId>> = if iterable_pack_mapped {
             pack_index
-                .and_then(|idx| substitution.get(&idx))
-                .and_then(|&t| type_table.as_tuple(t))
+                .and_then(|idx| self.pack_source_tuple(idx, substitution))
+                .and_then(|t| type_table.as_tuple(t))
         } else {
             None
         };
@@ -3699,7 +3699,7 @@ impl Monomorphizer {
             if let Some(pack_idx) = pack_index {
                 // The pack's own tuple, for types in the body that spell the
                 // whole pack (`[..T]`) rather than the element the loop binds.
-                let pack_tuple = substitution.get(&pack_idx).copied();
+                let pack_tuple = self.pack_source_tuple(pack_idx, substitution);
 
                 if destruct_count > 0 {
                     // Destructured zip patterns only arise from `for [a, b] of
@@ -4133,12 +4133,12 @@ impl Monomorphizer {
         // positions substitute from the source element `P_k`.
         let mapped_source_elems: Option<Vec<TypeId>> = if pack_mapped {
             pack_index
-                .and_then(|idx| substitution.get(&idx))
-                .and_then(|&t| type_table.as_tuple(t))
+                .and_then(|idx| self.pack_source_tuple(idx, substitution))
+                .and_then(|t| type_table.as_tuple(t))
         } else {
             None
         };
-        let pack_tuple = pack_index.and_then(|idx| substitution.get(&idx).copied());
+        let pack_tuple = pack_index.and_then(|idx| self.pack_source_tuple(idx, substitution));
 
         // Private to this unroll, one reader per field — so each element binding
         // moves its field out (`skip_value_copy`) rather than deep-copying it.
@@ -4407,6 +4407,22 @@ impl Monomorphizer {
             result_type,
             span,
         );
+    }
+
+    /// The whole tuple a pack stands for. An enclosing unroll pins
+    /// `substitution[index]` to the single element it walks, so a nested unroll
+    /// over the same pack reads the splice binding — which holds the tuple for
+    /// exactly that span — the same way a `[..T]` splice position does.
+    fn pack_source_tuple(
+        &self,
+        index: u32,
+        substitution: &IndexMap<u32, TypeId>,
+    ) -> Option<TypeId> {
+        self.pack_splice_bindings
+            .borrow()
+            .get(&index)
+            .copied()
+            .or_else(|| substitution.get(&index).copied())
     }
 
     /// The type of the value a single-`break` block yields.

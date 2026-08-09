@@ -14,6 +14,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
+use super::call::turbofish_holes;
 use super::infer::InferCtx;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
@@ -767,6 +768,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_id_of_decl(variant_info.defined_at)
                 } else {
                     {
+                        // `Maybe::<i32>::Nothing` pins its slots here: a
+                        // payload-less case has no payload to infer from, so
+                        // the turbofish is the only source besides the
+                        // expected type.
+                        let holes = turbofish_holes(&ident.type_args);
+                        let explicit_args: Vec<TypeId> = ident
+                            .type_args
+                            .iter()
+                            .enumerate()
+                            .map(|(i, t)| {
+                                if holes[i] {
+                                    TypeTable::UNKNOWN
+                                } else {
+                                    self.resolve_type(t)
+                                }
+                            })
+                            .collect();
                         let inferred = self.tysys.infer_variant_type_args(
                             &self.annotate_ctx,
                             prefix,
@@ -774,8 +792,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &case_data,
                             None,
                             expected_type,
-                            &[],
-                            &[],
+                            &explicit_args,
+                            &holes,
                         );
                         self.defer_uninferable_variant(inferred, prefix, &variant_info, ident.span)
                     }
@@ -1144,6 +1162,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Element type at a literal index into a tuple, which may carry a
+    /// variadic pack. A pack's arity is only known at monomorphization, so an
+    /// index at or past it resolves through the pack's mapped element — every
+    /// expansion shares that type — and no bounds check applies. `Err` carries
+    /// the diagnostic for an index that cannot resolve.
+    pub(super) fn tuple_literal_index_type(
+        type_table: &std::cell::RefCell<TypeTable>,
+        elements: &[TypeId],
+        index: usize,
+    ) -> Result<TypeId, String> {
+        let table = type_table.borrow();
+        let Some(pack_pos) = elements
+            .iter()
+            .position(|&t| matches!(table.get(t), ResolvedType::TypePack { .. }))
+        else {
+            return elements.get(index).copied().ok_or_else(|| {
+                format!(
+                    "tuple index {index} out of bounds, tuple has {} elements",
+                    elements.len()
+                )
+            });
+        };
+        if index < pack_pos {
+            return Ok(elements[index]);
+        }
+        match table.get(elements[pack_pos]) {
+            ResolvedType::TypePack {
+                mapped_elem: Some(elem),
+                ..
+            } => Ok(*elem),
+            _ => Err(format!(
+                "tuple index {index} lands on the variadic pack, whose elements have \
+                 different types; walk the tuple with `for-of` or a comprehension instead"
+            )),
+        }
+    }
+
     /// Look up field type from a struct or tuple type
     pub(super) fn lookup_field_type(
         &mut self,
@@ -1194,18 +1249,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if TypeTable::is_tuple_type(&name)
                     && let Ok(index) = field_name.parse::<usize>()
                 {
-                    if index < type_args.len() {
-                        return (index as u32, type_args[index]);
+                    match Self::tuple_literal_index_type(
+                        &self.tysys.type_table,
+                        &type_args,
+                        index,
+                    ) {
+                        Ok(elem) => return (index as u32, elem),
+                        Err(message) => {
+                            let _ = self.emit(TypeError::InvalidLiteral { message, span });
+                            return (0, TypeTable::UNKNOWN);
+                        }
                     }
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!(
-                            "tuple index {} out of bounds, tuple has {} elements",
-                            index,
-                            type_args.len()
-                        ),
-                        span,
-                    });
-                    return (0, TypeTable::UNKNOWN);
                 }
                 // Clone fields to avoid borrow issues
                 let fields_clone = self.lookup_struct_fields_in(&name, &module_source).cloned();
@@ -1445,19 +1499,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && !util::is_float_only_literal(repr)
                 && let Ok(idx) = repr.parse::<usize>()
             {
-                if idx < elements.len() {
-                    let field_type = elements[idx];
-                    return field_type;
-                } else {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!(
-                            "tuple index {} out of bounds, tuple has {} elements",
-                            idx,
-                            elements.len()
-                        ),
-                        span: index.span,
-                    });
-                    return TypeTable::UNKNOWN;
+                match Self::tuple_literal_index_type(&self.tysys.type_table, elements, idx) {
+                    Ok(elem) => return elem,
+                    Err(message) => {
+                        let _ = self.emit(TypeError::InvalidLiteral {
+                            message,
+                            span: index.span,
+                        });
+                        return TypeTable::UNKNOWN;
+                    }
                 }
             }
             // Unrolling fixes the index to a literal per element.

@@ -1,0 +1,476 @@
+//! Property-based testing derived over the reflection API.
+//!
+//! `Arbitrary` (generate a random value) and `Shrink` (make a failing value
+//! smaller) are ordinary library derivations: the four `Reflect*` traits
+//! expose a type's shape, and one blanket impl per kind does the rest. No
+//! type below declares anything — a struct, a variant, an enum and a flags
+//! type all reach their generator through the blankets.
+//!
+//!     wado run example/arbitrary.wado
+
+use { println, Stdout } from "core:cli";
+use { to_string, from_string } from "core:json";
+
+// ── A deterministic random source ─────────────────────────────────────────
+
+/// SplitMix64. `size` is the generation budget: it bounds collection lengths
+/// and terminates recursive types.
+struct Gen {
+    state: u64,
+    size: i32,
+}
+
+impl Gen {
+    fn new(seed: u64) -> Gen {
+        return Gen { state: seed, size: 6 };
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        self.state = self.state + 0x9E3779B97F4A7C15;
+        let mut z = self.state;
+        z = (z ^ z >> 30) * 0xBF58476D1CE4E5B9;
+        z = (z ^ z >> 27) * 0x94D049BB133111EB;
+        return z ^ z >> 31;
+    }
+
+    /// A value in `0..<n`.
+    fn below(&mut self, n: i32) -> i32 {
+        if n <= 1 {
+            return 0;
+        }
+        return (self.next_u64() >> 33) as i32 % n;
+    }
+
+    fn bool(&mut self) -> bool {
+        return self.next_u64() >> 63 == 1;
+    }
+
+    fn size(&self) -> i32 {
+        return self.size;
+    }
+
+    /// Runs `body` with a smaller budget, so a nested value is strictly
+    /// smaller than the one containing it.
+    fn nested<T>(&mut self, mut body: fn mut(&mut Gen) -> T) -> T {
+        let outer = self.size;
+        self.size = outer / 2;
+        let value = body(self);
+        self.size = outer;
+        return value;
+    }
+}
+
+// ── Generation ────────────────────────────────────────────────────────────
+
+trait Arbitrary {
+    fn arbitrary(g: &mut Gen) -> Self;
+}
+
+impl Arbitrary for bool {
+    fn arbitrary(g: &mut Gen) -> bool {
+        return g.bool();
+    }
+}
+
+impl Arbitrary for i32 {
+    fn arbitrary(g: &mut Gen) -> i32 {
+        return g.below(200) - 100;
+    }
+}
+
+impl Arbitrary for String {
+    fn arbitrary(g: &mut Gen) -> String {
+        // A tiny alphabet, deliberately including the separator a naive
+        // encoder would choke on.
+        let alphabet = "ab,";
+        let n = g.below(g.size() + 1);
+        let mut out = "";
+        for let mut i = 0; i < n; i += 1 {
+            out.push(alphabet.char_at_byte_unchecked(g.below(alphabet.len())));
+        }
+        return out;
+    }
+}
+
+impl<T: Arbitrary> Arbitrary for Option<T> {
+    fn arbitrary(g: &mut Gen) -> Option<T> {
+        if g.size() <= 0 || g.bool() {
+            return null;
+        }
+        return Option::Some(g.nested(|inner: &mut Gen| T::arbitrary(inner)));
+    }
+}
+
+impl<T: Arbitrary> Arbitrary for List<T> {
+    fn arbitrary(g: &mut Gen) -> List<T> {
+        let n = g.below(g.size() + 1);
+        let mut out = List::<T>::with_capacity(n);
+        for let mut i = 0; i < n; i += 1 {
+            out.push(g.nested(|inner: &mut Gen| T::arbitrary(inner)));
+        }
+        return out;
+    }
+}
+
+impl<..T: Arbitrary> Arbitrary for [..T] {
+    fn arbitrary(g: &mut Gen) -> [..T] {
+        return [..T::arbitrary(g)];
+    }
+}
+
+/// A unit case's payload. `CasePayloads` spells it `()`, so every variant
+/// with a payload-less case needs it.
+impl Arbitrary for () {
+    fn arbitrary(g: &mut Gen) -> () {
+        return ();
+    }
+}
+
+/// A struct is its field values in declaration order — exactly what
+/// `from_fields` takes, so the pack map is the whole implementation.
+impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Arbitrary> Arbitrary for S {
+    fn arbitrary(g: &mut Gen) -> S {
+        let fields = g.nested(|inner: &mut Gen| [..F::arbitrary(inner)]);
+        return ReflectStruct::<S>::from_fields(fields);
+    }
+}
+
+/// A variant picks a case, then builds its payload. `make` serves the unit
+/// cases, which `construct` cannot.
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Arbitrary> Arbitrary for V {
+    fn arbitrary(g: &mut Gen) -> V {
+        let members = ReflectVariant::<V>::members();
+        let chosen = g.below(members.len());
+        let mut built = Option::<V>::None;
+        for let [i, case] of members.enumerate() {
+            if i == chosen {
+                if case.is_unit() {
+                    built = Option::Some(case.make());
+                } else {
+                    let payload: P = g.nested(|inner: &mut Gen| P::arbitrary(inner));
+                    built = Option::Some(case.construct(payload));
+                }
+            }
+        }
+        return built.expect("the chosen case index is in range");
+    }
+}
+
+/// An enum case carries nothing, so a discriminant is the whole value.
+impl<E: ReflectEnum<Members = [..M]>, ..M> Arbitrary for E {
+    fn arbitrary(g: &mut Gen) -> E {
+        let count = ReflectEnum::<E>::members().len();
+        return ReflectEnum::<E>::from_discriminant(g.below(count))
+            .expect("the chosen discriminant is in range");
+    }
+}
+
+/// Flags flip each declared bit independently.
+impl<L: ReflectFlags<Members = [..M]>, ..M> Arbitrary for L {
+    fn arbitrary(g: &mut Gen) -> L {
+        let mut raw: u64 = 0;
+        for let bit of ReflectFlags::<L>::members() {
+            if g.bool() {
+                raw = raw | bit.bit();
+            }
+        }
+        return ReflectFlags::<L>::from_bits(raw).expect("only declared bits are set");
+    }
+}
+
+// ── Shrinking ─────────────────────────────────────────────────────────────
+
+/// Candidates strictly simpler than `self`, best first. An empty list means
+/// the value is already minimal.
+trait Shrink {
+    fn shrink(&self) -> List<Self>;
+}
+
+impl Shrink for bool {
+    fn shrink(&self) -> List<bool> {
+        if *self {
+            return [false];
+        }
+        return [];
+    }
+}
+
+impl Shrink for i32 {
+    fn shrink(&self) -> List<i32> {
+        if *self == 0 {
+            return [];
+        }
+        if *self / 2 == 0 {
+            return [0];
+        }
+        return [0, *self / 2];
+    }
+}
+
+impl Shrink for String {
+    fn shrink(&self) -> List<String> {
+        let chars = self.to_chars();
+        if chars.is_empty() {
+            return [];
+        }
+        let mut out = List::<String>::with_capacity(chars.len() + 1);
+        out.push("");
+        for let mut skip = 0; skip < chars.len(); skip += 1 {
+            let mut candidate = "";
+            for let mut i = 0; i < chars.len(); i += 1 {
+                if i != skip {
+                    candidate.push(chars[i]);
+                }
+            }
+            out.push(candidate);
+        }
+        return out;
+    }
+}
+
+impl<T: Shrink> Shrink for Option<T> {
+    fn shrink(&self) -> List<Option<T>> {
+        let Some(value) = self else { return []; };
+        let mut out: List<Option<T>> = [null];
+        for let candidate of value.shrink() {
+            out.push(Option::Some(candidate));
+        }
+        return out;
+    }
+}
+
+impl<T: Shrink> Shrink for List<T> {
+    fn shrink(&self) -> List<List<T>> {
+        let mut out = List::<List<T>>::with_capacity(self.len() * 2);
+        for let mut i = 0; i < self.len(); i += 1 {
+            let mut without = *self;
+            without.remove(i);
+            out.push(without);
+        }
+        for let mut i = 0; i < self.len(); i += 1 {
+            for let candidate of self[i].shrink() {
+                let mut replaced = *self;
+                replaced[i] = candidate;
+                out.push(replaced);
+            }
+        }
+        return out;
+    }
+}
+
+impl Shrink for () {
+    fn shrink(&self) -> List<()> {
+        return [];
+    }
+}
+
+impl<..T: Shrink> Shrink for [..T] {
+    fn shrink(&self) -> List<[..T]> {
+        let mut out = List::<[..T]>::with_capacity(4);
+        for let [i, element] of self.enumerate() {
+            for let candidate of element.shrink() {
+                let mut replaced = *self;
+                replaced[i] = candidate;
+                out.push(replaced);
+            }
+        }
+        return out;
+    }
+}
+
+/// A struct shrinks one field at a time: read the field values back through
+/// the members, replace the one slot, rebuild.
+impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Shrink> Shrink for S {
+    fn shrink(&self) -> List<S> {
+        let members = ReflectStruct::<S>::members();
+        let mut out = List::<S>::with_capacity(4);
+        for let [i, field] of members.enumerate() {
+            for let candidate of field.get(self).shrink() {
+                let mut fields = [for let f of members { f.get(self) }];
+                fields[i] = candidate;
+                out.push(ReflectStruct::<S>::from_fields(fields));
+            }
+        }
+        return out;
+    }
+}
+
+/// A variant shrinks within its live case: extract the payload, shrink it,
+/// build the case back around each candidate.
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Shrink> Shrink for V {
+    fn shrink(&self) -> List<V> {
+        let mut out = List::<V>::with_capacity(4);
+        for let case of ReflectVariant::<V>::members() {
+            if case.holds(self) && !case.is_unit() {
+                let payload: P = case.extract(self);
+                for let candidate of payload.shrink() {
+                    out.push(case.construct(candidate));
+                }
+            }
+        }
+        return out;
+    }
+}
+
+/// An enum shrinks toward the first declared case.
+impl<E: ReflectEnum<Members = [..M]>, ..M> Shrink for E {
+    fn shrink(&self) -> List<E> {
+        let live = ReflectEnum::<E>::discriminant(self);
+        let mut out = List::<E>::with_capacity(2);
+        for let case of ReflectEnum::<E>::members() {
+            if case.discriminant() < live {
+                out.push(case.make());
+            }
+        }
+        return out;
+    }
+}
+
+/// Flags shrink by clearing one set bit at a time.
+impl<L: ReflectFlags<Members = [..M]>, ..M> Shrink for L {
+    fn shrink(&self) -> List<L> {
+        let live = ReflectFlags::<L>::bits(self);
+        let mut out = List::<L>::with_capacity(2);
+        for let bit of ReflectFlags::<L>::members() {
+            if bit.is_set(self)
+                && let Some(cleared) = ReflectFlags::<L>::from_bits(live ^ bit.bit())
+            {
+                out.push(cleared);
+            }
+        }
+        return out;
+    }
+}
+
+// ── The runner ────────────────────────────────────────────────────────────
+
+/// Greedily replaces the counterexample with the first simpler value that
+/// still falsifies, until nothing simpler does.
+fn minimize<T: Shrink>(failing: T, mut prop: fn mut(&T) -> bool) -> T {
+    let mut best = failing;
+    loop {
+        let mut improved = false;
+        for let candidate of best.shrink() {
+            if !prop(&candidate) {
+                best = candidate;
+                improved = true;
+                break;
+            }
+        }
+        if !improved {
+            return best;
+        }
+    }
+}
+
+fn check<T: Arbitrary + Shrink + Inspect>(
+    name: String,
+    runs: i32,
+    seed: u64,
+    mut prop: fn mut(&T) -> bool,
+) -> bool with Stdout {
+    let mut g = Gen::new(seed);
+    for let mut run = 1; run <= runs; run += 1 {
+        let value = T::arbitrary(&mut g);
+        if !prop(&value) {
+            println(`FAIL ${name}: falsified after ${run} run(s)`);
+            println(`     counterexample: ${value:?}`);
+            println(`     minimized:      ${minimize(value, prop):?}`);
+            return false;
+        }
+    }
+    println(`ok   ${name}: ${runs} runs`);
+    return true;
+}
+
+// ── The subject under test ────────────────────────────────────────────────
+
+enum Plan {
+    Free,
+    Pro,
+    Enterprise,
+}
+
+flags Perms {
+    Read,
+    Write,
+    Admin,
+}
+
+#[wire(name_policy = "camelCase")]
+struct Account {
+    account_id: i32,
+    owner: String,
+    tags: List<String>,
+    plan: Plan,
+    perms: Perms,
+    note: Option<String>,
+}
+
+variant Event {
+    Created(Account),
+    Renamed([i32, String]),
+    Deleted,
+}
+
+/// A hand-rolled encoder. The leading marker keeps `[]` and `[""]` apart —
+/// but the separator itself is never escaped.
+fn join_tags(tags: &List<String>) -> String {
+    if tags.is_empty() {
+        return "";
+    }
+    return `,${tags.join(",")}`;
+}
+
+fn split_tags(encoded: &String) -> List<String> {
+    let Some(rest) = encoded.strip_prefix(",") else { return []; };
+    return rest.split(",").collect();
+}
+
+export fn run() with Stdout {
+    println("property-based testing over the reflection API");
+    println("");
+
+    let mut g = Gen::new(0x5EED);
+    println(`a generated Event: ${Event::arbitrary(&mut g):?}`);
+    println("");
+
+    check::<Event>("json round-trip", 200, 0x5EED, |e: &Event| {
+        let Ok(text) = to_string(e) else { return false; };
+        let Ok(back) = from_string::<Event>(text) else { return false; };
+        return back == *e;
+    });
+
+    check::<List<String>>("tag list round-trip", 200, 0x5EED, |tags: &List<String>| {
+        return split_tags(&join_tags(tags)) == *tags;
+    });
+}
+
+test "every kind reaches its generator through a blanket" {
+    let mut g = Gen::new(1);
+    let account = Account::arbitrary(&mut g);
+    let plan = Plan::arbitrary(&mut g);
+    let perms = Perms::arbitrary(&mut g);
+    let event = Event::arbitrary(&mut g);
+    assert account.tags.len() <= 6;
+    assert plan matches { Free | Pro | Enterprise };
+    assert perms as u32 <= 7;
+    assert event matches { Created(_) | Renamed(_) | Deleted };
+}
+
+test "json round-trips every generated event" {
+    let mut g = Gen::new(0x5EED);
+    for let mut run = 0; run < 50; run += 1 {
+        let event = Event::arbitrary(&mut g);
+        let text = to_string(&event).unwrap();
+        assert from_string::<Event>(text).unwrap() == event;
+    }
+}
+
+test "shrinking reduces a counterexample to the unescaped separator" {
+    let failing: List<String> = ["ab,", "b", ""];
+    let minimized = minimize(failing, |tags: &List<String>| {
+        return split_tags(&join_tags(tags)) == *tags;
+    });
+    assert minimized == [","];
+}

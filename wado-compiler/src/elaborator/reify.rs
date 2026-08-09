@@ -6024,7 +6024,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && let ast::Expr::Literal(lit) = &index.index
             && let ast::Literal::Number(repr) = &lit.value
             && let Ok(idx) = repr.parse::<usize>()
-            && idx < elems.len()
+            && let Ok(elem) = super::Elaborator::<H>::tuple_literal_index_type(
+                &self.tysys.type_table,
+                elems,
+                idx,
+            )
         {
             return TirExpr::new(
                 TirExprKind::FieldAccess {
@@ -6032,7 +6036,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     field_index: idx as u32,
                     field_name: idx.to_string(),
                 },
-                elems[idx],
+                elem,
                 index.span,
             );
         }
@@ -8730,9 +8734,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // into the element index directly.
                     if crate::tir::TypeTable::is_tuple_type(&name)
                         && let Ok(index) = field_name.parse::<usize>()
-                        && index < type_args.len()
+                        && let Ok(elem) = super::Elaborator::<H>::tuple_literal_index_type(
+                            &self.tysys.type_table,
+                            &type_args,
+                            index,
+                        )
                     {
-                        return (index as u32, field_name.to_string(), Some(type_args[index]));
+                        return (index as u32, field_name.to_string(), Some(elem));
                     }
                     (name, Some(module_source), type_args)
                 }

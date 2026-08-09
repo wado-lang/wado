@@ -3804,12 +3804,13 @@ impl Parser {
             spec_ok = self.expect_gt().is_ok();
         }
 
-        // After `Name::<…>`, only `::method(…)` continues the static-method-call
-        // path. A bare `Name::<…>` (used as a value) backtracks below so the
-        // outer postfix loop sees the `::<…>` again and either parses it as a
-        // turbofish-attached identifier or rejects a duplicate turbofish.
-        // `Name::<A>::<B>` falls into the same backtrack: the second `<` is
-        // not a method identifier.
+        // After `Name::<…>`, `::method(…)` continues the static-method-call path
+        // and `::Case` (no call) is a turbofish-qualified path selecting a
+        // payload-less case. A bare `Name::<…>` (used as a value) backtracks
+        // below so the outer postfix loop sees the `::<…>` again and either
+        // parses it as a turbofish-attached identifier or rejects a duplicate
+        // turbofish. `Name::<A>::<B>` falls into the same backtrack: the second
+        // `<` is not a method identifier.
         if spec_ok
             && self.check(&TokenKind::ColonColon)
             && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
@@ -3825,6 +3826,32 @@ impl Parser {
                 } else {
                     Vec::new()
                 };
+
+            // `Name::<Args>::Case` with no call: the qualified path the
+            // untargeted `Name::Case` produces, with the type args pinned on
+            // it. A method-level turbofish rules this out — `method::<U>` is
+            // never a case name — so that keeps expecting the call.
+            if method_type_args.is_empty() && !self.check(&TokenKind::LParen) {
+                let path_span = start_span.merge(&method_span);
+                return Ok(Expr::Ident(IdentExpr {
+                    id: self.alloc_ast_id(),
+                    name: format!("{name}::{method}"),
+                    span: path_span,
+                    segments: vec![
+                        PathSegment {
+                            id: self.alloc_ast_id(),
+                            name,
+                            span: start_span,
+                        },
+                        PathSegment {
+                            id: self.alloc_ast_id(),
+                            name: method,
+                            span: method_span,
+                        },
+                    ],
+                    type_args,
+                }));
+            }
 
             self.expect(&TokenKind::LParen)?;
             let (args, has_trailing_comma) = self.parse_arg_list()?;
