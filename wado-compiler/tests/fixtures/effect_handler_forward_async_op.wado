@@ -1,0 +1,70 @@
+// `..forward` over an async operation. `Client::send` returns `AsyncCall<T>` at
+// the call site but a handler method resumes with `T`, so the forwarding stub
+// and the dispatch wrapper meet at two different types unless the closure
+// boundary is the call-site type throughout.
+use { Request, Response, ErrorCode, Fields, Trailers, StatusCode } from "wasi:http";
+use { Client } from "wasi:http/client.wado";
+
+struct MockClient {
+    calls: i32,
+}
+
+struct PassClient {}
+
+impl Client for PassClient {
+    ..forward
+}
+
+impl Client for MockClient {
+    fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
+        self.calls += 1;
+        let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+        let [resp, _tx_future] = Response::new(Fields::new(), null, trailers_future);
+        let _ = resp.set_status_code(201 as StatusCode);
+        resume Result::<Response, ErrorCode>::Ok(resp);
+    }
+}
+
+fn fetch_upstream() -> Response with Client {
+    let headers = Fields::new();
+    let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [req, _req_future] = Request::new(headers, null, trailers_future, null);
+    let result = Client::send(req).wait();
+    return match result {
+        Ok(r) => r,
+        Err(_) => panic("mocked send returned Err"),
+    };
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let mut mock = MockClient { calls: 0 };
+    let upstream = with Client => &mut mock do {
+        let pass = PassClient {};
+        with Client => &pass do {
+            fetch_upstream();
+        }
+    };
+    assert mock.calls == 1;
+    let status = upstream.get_status_code() as i32;
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let [response, _tx_future] = Response::new(
+        Fields::new(),
+        Option::<Stream<u8>>::Some(body_rx),
+        trailers_future,
+    );
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    body_tx.write(`forwarded=${status}`.bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 200,
+        "body": "forwarded=201"
+    }
+}
