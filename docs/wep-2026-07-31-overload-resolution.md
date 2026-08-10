@@ -65,13 +65,13 @@ export fn run() {
 }
 ```
 
-Arithmetic operators cannot exhibit any collision yet: the prelude's operator
-traits take no type parameters (`trait Add { type Output; fn add(&self, rhs:
-&Self) … }`), so `impl Add<X>` is not writable and an operator trait has exactly
-one argument list. RHS-directed selection there is gated on parameterizing the
-operator traits (`trait Add<Rhs = Self>`), a stdlib redesign outside this WEP;
-`find_arithmetic_trait_impl`'s first-impl scan is safe until then because
-coherence permits only one impl.
+Arithmetic operators start out unable to exhibit a collision at all: the
+prelude's operator traits took no type parameters (`trait Add { type Output; fn
+add(&self, rhs: &Self) … }`), so `impl Add<X>` was not writable and a receiver
+had exactly one `Add` impl — which is what made `find_arithmetic_trait_impl`'s
+first-impl scan safe. Bringing `+` under the same rule as every other call
+therefore starts by parameterizing them, `trait Add<Rhs = Self>`, the shape
+Rust's `std::ops` uses.
 
 The design constraint is the [design philosophy](./design-philosophy.md): no
 function overloading. This WEP does not add it. What it defines is which
