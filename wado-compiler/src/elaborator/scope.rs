@@ -219,25 +219,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if bound.fn_signature.is_some() {
                 continue;
             }
-            for inherited in self
-                .tysys
-                .supertraits_of(&self.type_lookup(), &bound.name)
-                .to_vec()
-            {
-                // The closure spells the supertrait as its declaring module
-                // does; the sites that check a bound resolve a name in *this*
-                // frame. Hand them this frame's spelling, or `T: Derived`
-                // demands a `Base` that only the other module can name.
-                push_unique_bound(
-                    &mut elaborated,
-                    &ast::TraitBound {
-                        name: self.trait_name_in_frame(&inherited.decl),
-                        ..inherited.bound
-                    },
-                );
+            for inherited in self.supertraits_of_bound(&bound.name) {
+                push_unique_bound(&mut elaborated, &inherited.bound);
             }
         }
         elaborated
+    }
+
+    /// The supertrait closure of the bound `name` writes, found by the
+    /// declaration the name resolves to here. Keying the closure index by a
+    /// spelling instead loses every implied bound behind a `use ... as` alias,
+    /// since the index holds the declaring module's name.
+    fn supertraits_of_bound(&self, name: &str) -> Vec<super::trait_env::InheritedBound> {
+        self.tysys
+            .trait_env
+            .supertrait_closure(&self.trait_decl_key_in_frame(name))
+            .to_vec()
     }
 
     /// [`Self::elaborate_bounds`] over bare trait names, resolved to the
@@ -249,9 +246,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// trait answer for it. Deduplication is by declaration, so one trait
     /// reached under two names — an alias plus an implied bound — is one entry.
     ///
-    /// Every name handed back is this frame's, because the caller mangles the
-    /// resolved method through it and the impl side mangles through the same
-    /// frame's spelling.
+    /// Each name is left as the frame that wrote it spells it. Renaming an
+    /// implied bound to *this* frame's spelling looks tempting — the checks
+    /// downstream resolve names — but the spelling also reaches method
+    /// mangling, so it only moves the mismatch: an impl written in the trait's
+    /// own module mangles under the declared name, and merely importing an
+    /// alias then broke calls that never mentioned it. Aliases are settled by
+    /// declaration in the lookups themselves.
     pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<ElaboratedBound> {
         let mut elaborated: Vec<ElaboratedBound> = Vec::with_capacity(names.len());
         for name in names {
@@ -260,15 +261,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 decl: self.trait_decl_key_in_frame(name),
             };
             push_unique_elaborated(&mut elaborated, written);
-            for inherited in self
-                .tysys
-                .supertraits_of(&self.type_lookup(), name)
-                .to_vec()
-            {
+            for inherited in self.supertraits_of_bound(name) {
                 push_unique_elaborated(
                     &mut elaborated,
                     ElaboratedBound {
-                        name: self.trait_name_in_frame(&inherited.decl),
+                        name: inherited.bound.name,
                         decl: inherited.decl,
                     },
                 );

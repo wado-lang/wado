@@ -1,0 +1,18 @@
+// Importing an alias must not change what an unrelated bound resolves to.
+// `extra` here comes from the `Base` that `Derived` implies, and the impl is
+// written in the trait's own module under the declared name. Rewriting the
+// implied bound to this frame's spelling made the alias — imported, never
+// used — reach method mangling and miss that impl.
+use { Base as B, Derived, S } from "./sub/ufcs_supertrait_frame_dep.wado";
+
+fn implied<T: Derived>(x: &T) -> i32 {
+    return x.extra();
+}
+
+test "an imported alias leaves an implied bound alone" {
+    let s = S { v: 3 };
+    assert implied(&s) == 3;
+}
+
+__DATA__
+{"test": {}}

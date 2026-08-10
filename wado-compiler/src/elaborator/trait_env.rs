@@ -1156,6 +1156,29 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
+    /// The trait declaration `name` refers to *as written inside `module`* —
+    /// the query-time twin of the `resolve_trait` closure `build` uses, so an
+    /// impl block's trait name resolves in its own frame rather than in
+    /// whichever frame happens to be asking. `None` when the name reaches no
+    /// declaration, which leaves the caller to fall back on the spelling.
+    pub(super) fn trait_decl_key_in(&self, module: &ModuleSource, name: &str) -> Option<DeclKey> {
+        let scope = self.module_import_scopes.get(module);
+        let declared = scope
+            .and_then(|s| s.original_names.get(name))
+            .map_or(name, String::as_str);
+        if let Some(source) = scope.and_then(|s| s.sources.get(name)) {
+            let imported = (source.clone(), declared.to_string());
+            if self.decl_index.contains_key(&imported) {
+                return Some(imported);
+            }
+        }
+        let local = (module.clone(), declared.to_string());
+        if self.decl_index.contains_key(&local) {
+            return Some(local);
+        }
+        self.find_trait_decl_key(declared)
+    }
+
     /// The transitive supertraits of the trait `key` names, deduplicated by
     /// declaration and excluding the trait itself. Empty for a trait with no
     /// supertrait clause, and for a name that declares no trait.
@@ -1745,10 +1768,13 @@ fn expand_supertraits(
             continue;
         }
         // `resolve` answered in the *declaring* module's frame, the only one
-        // where `direct.name` is meaningful; record what it named.
+        // where `direct.name` is meaningful; record what it named. It answered
+        // out of `decl_index`, whose values are exactly these headers' keys.
         let super_decl = headers
             .get(&super_loc)
-            .map_or_else(|| direct.name.clone(), |h| h.name.clone());
+            .expect("resolve answers with a header's own location")
+            .name
+            .clone();
         push_unique_inherited(
             &mut closure,
             &InheritedBound {

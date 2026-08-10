@@ -508,23 +508,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let trait_name = self.get_type_name(trait_type);
-        let supertraits: Vec<DeclKey> = self
+        // Each entry keeps its declaring module's spelling; impl lookup settles
+        // the frames by declaration, so renaming it here would only trade one
+        // aliasing shape for another.
+        let supertraits: Vec<String> = self
             .tysys
             .trait_env
-            .supertrait_closure(&self.canonical_decl_key(&trait_name))
+            .supertrait_closure(&self.trait_decl_key_in_frame(&trait_name))
             .iter()
-            .map(|b| b.decl.clone())
+            .map(|b| b.bound.name.clone())
             .collect();
         if supertraits.is_empty() {
             return;
         }
         let self_type = self.resolve_type(&impl_block.ty);
-        for decl in supertraits {
-            // The closure spells each supertrait as its *declaring* module
-            // does, and `type_implements_trait` resolves a name in this frame,
-            // where that spelling may name another trait or none — an aliased
-            // supertrait (`use { Base as B }`) failed for exactly that reason.
-            let supertrait = self.trait_name_in_frame(&decl);
+        for supertrait in supertraits {
             if self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
@@ -776,19 +774,27 @@ impl TypeSystem {
         bound_name: &str,
         trait_name: &str,
     ) -> bool {
-        bound_name == trait_name
-            || self
-                .supertraits_of(scope, bound_name)
-                .iter()
-                .any(|s| s.bound.name == trait_name)
+        if bound_name == trait_name {
+            return true;
+        }
+        // By declaration: the closure spells a supertrait as its declaring
+        // module does, so a same-named trait in the asking frame is not it.
+        let wanted = self.scoped_trait_decl_key(scope, trait_name);
+        self.supertraits_of(scope, bound_name).iter().any(|s| {
+            wanted
+                .as_ref()
+                .map_or(s.bound.name == trait_name, |want| &s.decl == want)
+        })
     }
 
     /// The transitive supertraits of `trait_name` as seen from `scope`.
+    ///
+    /// Found by declaration: the closure index is keyed by the declaring
+    /// module's name, so pairing that module with the *written* spelling misses
+    /// under a `use ... as` alias and silently drops every implied bound.
     pub(super) fn supertraits_of(&self, scope: &TypeLookup, trait_name: &str) -> &[InheritedBound] {
-        match self.scoped_trait_decl_module(scope, trait_name) {
-            Some(module) => self
-                .trait_env
-                .supertrait_closure(&(module.clone(), trait_name.to_string())),
+        match self.scoped_trait_decl_key(scope, trait_name) {
+            Some(key) => self.trait_env.supertrait_closure(&key),
             None => self.trait_env.supertrait_closure_named(trait_name),
         }
     }
@@ -1334,6 +1340,51 @@ impl TypeSystem {
             || self.blanket_trait_impl_applies(ctx, scope, type_key, trait_name)
     }
 
+    /// Whether an impl block in `impl_module` writing `impl_trait_name` names
+    /// the same declaration the query means by `trait_name`.
+    ///
+    /// The two spellings come from different frames, so comparing them made a
+    /// `use ... as` alias look like a second trait and two same-named foreign
+    /// traits look like one — the latter discharging a bound the type never
+    /// implements. Each side resolves where it was written. A name that reaches
+    /// no declaration (a compiler-internal trait with no decl entry) keeps the
+    /// spelling comparison rather than matching every unresolvable name.
+    fn same_trait_decl(
+        &self,
+        scope: &TypeLookup,
+        trait_name: &str,
+        impl_module: &ModuleSource,
+        impl_trait_name: &str,
+    ) -> bool {
+        match (
+            self.scoped_trait_decl_key(scope, trait_name),
+            self.trait_env
+                .trait_decl_key_in(impl_module, impl_trait_name),
+        ) {
+            (Some(want), Some(found)) => want == found,
+            _ => impl_trait_name == trait_name,
+        }
+    }
+
+    /// [`TraitEnv::trait_decl_key_in`] for a name written in `scope`'s frame.
+    fn scoped_trait_decl_key(&self, scope: &TypeLookup, name: &str) -> Option<DeclKey> {
+        let declared = scope
+            .import_original_names
+            .get(name)
+            .map_or(name, String::as_str);
+        if let Some(source) = scope.imported_type_sources.get(name) {
+            let imported = (source.clone(), declared.to_string());
+            if self.trait_env.decl_index.contains_key(&imported) {
+                return Some(imported);
+            }
+        }
+        let local = (scope.current_module_source.clone(), declared.to_string());
+        if self.trait_env.decl_index.contains_key(&local) {
+            return Some(local);
+        }
+        self.trait_env.find_trait_decl_key(declared)
+    }
+
     /// Check if there's a trait impl for a type, with optional type args for bounds checking.
     /// For `impl<T: Eq> Eq for List<T>`, when checking `List<Foo>`, passes `[Foo]` as `type_args`.
     pub(super) fn find_trait_impl_for_type_with_args(
@@ -1354,7 +1405,7 @@ impl TypeSystem {
                 let Some(impl_trait_name) = &header.trait_name else {
                     continue;
                 };
-                if impl_trait_name == trait_name
+                if self.same_trait_decl(scope, trait_name, module_src, impl_trait_name)
                     && self.inherent_impl_type_args_match(
                         &header.ty,
                         &header.type_params,
@@ -1510,31 +1561,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         canonical
     }
 
-    /// The spelling this frame has for the trait declaration `decl`: the local
-    /// alias when it is imported under one, else its declared name. The inverse
-    /// of [`Self::trait_decl_key_in_frame`], for handing a declaration to an
-    /// API that resolves names against this frame.
-    pub(super) fn trait_name_in_frame(&self, decl: &DeclKey) -> String {
-        if decl.0 == self.current_module_source {
-            return decl.1.clone();
-        }
-        self.sem
-            .imports
-            .imported_type_sources
-            .iter()
-            .find(|(local, src)| {
-                *src == &decl.0
-                    && self
-                        .sem
-                        .imports
-                        .import_original_names
-                        .get(*local)
-                        .unwrap_or(local)
-                        == &decl.1
-            })
-            .map_or_else(|| decl.1.clone(), |(local, _)| local.clone())
-    }
-
     /// Whether the trait declaration `decl` is in scope in the current frame:
     /// declared by the current module, or imported into it under any local
     /// name. Ties between same-named foreign declarations break on this.
@@ -1674,7 +1700,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|found| (bound.name.clone(), found))
         });
         if candidates.len() > 1 {
-            let traits = candidates.iter().map(|b| b.name.clone()).collect();
+            // Two candidates can share a spelling and be different traits —
+            // that is the collision, and naming both "Base" leaves the reader
+            // no way to tell them apart, nor the suggested escape a way to
+            // reach the second. Qualify by declaring module when they clash.
+            let ambiguous_spelling = |b: &ElaboratedBound| {
+                candidates
+                    .iter()
+                    .any(|other| other.name == b.name && other.decl != b.decl)
+            };
+            let traits = candidates
+                .iter()
+                .map(|b| {
+                    if ambiguous_spelling(b) {
+                        format!("{}::{}", b.decl.0, b.name)
+                    } else {
+                        b.name.clone()
+                    }
+                })
+                .collect();
             // Keep going with the first candidate: `None` reads to the caller
             // as "no such method", which it would then report as well.
             let _ = self.emit(TypeError::AmbiguousTraitMethod {
