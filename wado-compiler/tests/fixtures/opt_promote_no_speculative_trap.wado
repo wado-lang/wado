@@ -1,10 +1,9 @@
-// A promoted pure value whose leaves are parameters may be materialized once
-// into a `let _av = ...` that every use reads. The hoist must not move a
-// *trapping* value out of the region that guards it: both uses of `a / b` sit
-// under `b != 0`, so evaluating the division at the materialization point runs
-// it for `b == 0` too and traps a program that has no division by zero in it.
+// A promoted value whose leaves are parameters may be materialized once into a
+// `let _av = ...` every use reads. Availability at the materialization point is
+// not permission to evaluate there: both uses of `a / b` sit under `b != 0`, so
+// running the division at that point traps a program that never divides by zero.
 //
-// Two uses are required — one use redirects to the pooled value inline and
+// Two uses are needed — a single use redirects to the pooled value inline and
 // never materializes.
 
 use { println, Stdout } from "core:cli";
@@ -23,9 +22,9 @@ fn guarded_rem(a: i32, b: i32) -> i32 {
     return 0;
 }
 
-// Placement alone does not cover this: the two uses sit in different arms, so
+// Placement alone does not cover this one: the uses sit in different arms, so
 // their nearest common dominator is above both guards. Only refusing to
-// materialize a trapping value keeps the division inside the arm that proved
+// materialize a trapping value keeps each division inside the arm that proved
 // `b != 0`.
 fn guarded_split(a: i32, b: i32, c: bool) -> i32 {
     if c {

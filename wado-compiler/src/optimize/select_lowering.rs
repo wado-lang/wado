@@ -139,16 +139,12 @@ fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Opti
 }
 
 /// A promoted pure value is select-eligible under the same rule as a skeleton
-/// arm ([`is_select_eligible`]): a duplicable leaf — a scalar constant or a
-/// local read — or pure non-trapping operators over such leaves. Both `select`
-/// operands are evaluated unconditionally, so a trapping op (`Div` / `Mod`, a
-/// float→int cast) is refused at any depth.
+/// arm ([`is_select_eligible`]): a duplicable leaf — a scalar constant or a local
+/// read — or pure non-trapping operators over such leaves.
 ///
-/// This must track the skeleton rule, not lag it. The same source arm reaches
-/// one or the other depending only on whether promotion happened to freeze it,
-/// so a shape accepted there and refused here silently costs the lowering —
-/// which is how `fpfmt`'s `if neg { -self } else { self }` stopped being a
-/// `select` when its parameter read became promotable.
+/// The two rules must stay in step. Which one an arm reaches depends only on
+/// whether promotion froze it, so a shape one accepts and the other refuses
+/// costs the lowering silently.
 ///
 /// A [`ValueKind::Const`] aggregate stays out: materialising it in both arms
 /// allocates twice, and `select` takes scalars anyway.
@@ -173,13 +169,10 @@ fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> 
                 && is_select_eligible_value(body, *lhs, type_table)
                 && is_select_eligible_value(body, *rhs, type_table)
         }
-        // The freeze decision refuses a value nesting a `Cast`
-        // (`ValuePool::value_fully_reemittable_locally`) because the operand's
-        // source type is unrecoverable from the type-erased tree — the very type
-        // `is_trapping_cast` would need to classify one here. Asserted rather
-        // than silently refused: if the freeze ever admits a `Cast`, this arm
-        // must gain a trap test, and a `false` would hide that behind a lost
-        // lowering.
+        // `value_fully_reemittable_locally` refuses a value nesting a `Cast`,
+        // for want of the operand's source type — the type a trap test would
+        // need here too. Asserted, not refused: were the freeze to admit one,
+        // a `false` would hide the missing trap test as a lost lowering.
         ValueKind::Cast { .. } => unreachable!(
             "select-arm eligibility reached a promoted `Cast`; the freeze decision refuses one"
         ),
@@ -196,14 +189,10 @@ fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> 
     }
 }
 
-/// True when `op` is eligible to appear inside a `builtin::select` arm, whichever
-/// form it takes: a skeleton subtree goes to [`is_select_eligible`], a promoted
-/// value to [`is_select_eligible_value`].
-///
-/// Both forms must be asked. Treating a promoted operand as ineligible loses
-/// every lowering whose operand happens to be frozen; treating it as eligible
-/// without asking admits a trapping one — `select` evaluates both arms, so an
-/// unchecked `Operand::Value` of `a / b` would be speculated.
+/// True when `op` is eligible inside a `builtin::select` arm, whichever form it
+/// takes. Both must be asked: refusing a promoted operand loses every lowering
+/// whose operand happens to be frozen, and admitting one unasked speculates a
+/// trapping `a / b`, since `select` evaluates both arms.
 fn is_select_eligible_operand(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
     match op {
         Operand::Expr(e) => is_select_eligible(body, e, type_table),

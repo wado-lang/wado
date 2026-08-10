@@ -257,9 +257,8 @@ pub fn optimize(
         }
     }
 
-    // FieldAccess promotion (WEP: NIR Optimizer Architecture): scalar fields
-    // over stable receivers freeze
-    // to operands (born-as-operands), so store-load forwarding / cse become
+    // FieldAccess promotion: scalar fields over stable receivers freeze to
+    // operands (born-as-operands), so store-load forwarding / cse become
     // operand reads. Runs after the optimization loop (so the struct shape is
     // post-SROA) but BEFORE select_lowering / multi_value_return, which rewrite
     // the body into WIR-shaped forms the value-graph build would misread. The
@@ -527,7 +526,7 @@ fn run_optimization_passes(
 ) {
     let threshold = config.inline_threshold;
     let trace_loop = crate::trace::filter().enabled("opt_loop");
-    // Per-function dirty-set gate (WEP: NIR Optimizer Architecture). Every loop pass is gate-aware:
+    // Per-function dirty-set gate. Every loop pass is gate-aware:
     // a per-function pass (`gated!`) skips functions unchanged since it last ran;
     // an interprocedural pass scans all functions but reports exactly the ones
     // it touched. Both go through `&mut gate`.
@@ -544,7 +543,7 @@ fn run_optimization_passes(
     run_pass("nir/match_to_switch_globals", project, profiler, |p| {
         match_to_switch_globals(p)
     });
-    // Operand-promotion keystone (WEP: NIR Optimizer Architecture). Pure values are
+    // Operand-promotion keystone. Pure values are
     // frozen into `Operand::Value` before the value passes, so the passes read
     // operands (`engine.operand_value`) instead of rebuilding the value graph.
     // Arith only here (before the loop); `FieldAccess` promotion runs late (after
@@ -673,7 +672,7 @@ fn run_optimization_passes(
         gated!("nir/drve", eliminate_dead_return_values);
         // Pure-value CSE is subsumed by hash-consing (identical values already
         // share a ValueId), and store-load forwarding by FieldAccess promoting at
-        // its heap version, so no separate `cse` pass runs (WEP: NIR Optimizer Architecture).
+        // its heap version, so no separate `cse` pass runs.
         // The flow-sensitive half of constant folding; the env-free half
         // (literal arithmetic + pure CTFE) runs in the `nir/peephole` passes.
         // This walker handles the folds that need per-function dataflow state —

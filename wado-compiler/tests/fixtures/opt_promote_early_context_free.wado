@@ -1,12 +1,11 @@
 // The early freeze runs before the structural passes, so it may plant only
-// context-free values. A constant means the same thing wherever it lands; a
-// value naming a local does not, because `inline` splices a callee body into a
-// caller and `sroa` renumbers locals, re-contextualizing the slot underneath
-// the value.
+// context-free values. A constant means the same thing wherever `inline` and
+// `sroa` copy the operand to; a value naming a local does not, because those
+// passes renumber locals and splice a callee body into a caller.
 //
 // The shape that broke: a callee whose parameters feed arithmetic, inlined into
-// a caller loop that re-binds those slots each iteration. Frozen early, the one
-// value spans every iteration's worth of reads.
+// a caller loop that re-binds those slots each iteration, so one frozen value
+// spans every iteration's reads.
 
 use { println, Stdout } from "core:cli";
 

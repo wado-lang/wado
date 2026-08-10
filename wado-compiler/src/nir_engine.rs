@@ -299,11 +299,9 @@ impl<'a> Engine<'a> {
     /// leaves resolves whole. Does not cache (there is no side-table to cache
     /// into).
     ///
-    /// The parameter base case is what lets a tree resolve at all. Without it
-    /// every leaf of an unpromoted tree is `None`, so `Binary` / `Unary` / `Cast`
-    /// over anything but already-frozen constants yields `None` — and since only
-    /// constants are frozen without it, nothing but an all-constant tree ever
-    /// resolves.
+    /// The parameter base case is load-bearing: without it every leaf of an
+    /// unpromoted tree is `None`, so only all-constant trees ever resolve and
+    /// no promoted value can name a local.
     fn maintain_pure_node(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
@@ -311,9 +309,8 @@ impl<'a> Engine<'a> {
         let tt = self.vg_type_table;
         let v = match kind {
             // One version-free `ValueId` per local is correct only where the
-            // local has one version. A parameter is defined at entry, so its def
-            // dominates every use, and when never reassigned it holds one value
-            // for the whole body.
+            // local has one version: a parameter is entry-defined, so its def
+            // dominates every use, and unreassigned it holds one value.
             ExprKind::Local { index, .. } => {
                 if !self.param_locals.contains(&index) {
                     return None;
@@ -824,7 +821,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Edit API: promote the folded constant subtree `id` to an `Operand::Value`
-    /// in its parent (WEP: NIR Optimizer Architecture). Interns `value` width-preserving
+    /// in its parent. Interns `value` width-preserving
     /// (carrying `id`'s recorded type) and swaps the parent's `Operand::Expr(id)`
     /// slot to the promoted value. `id`'s node is left orphaned (later DCE'd); its
     /// own `Local` mention, if any, is dropped from the use index, matching
@@ -961,7 +958,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Edit API: intern a fresh constant value into the function's pool and
-    /// return it as an `Operand::Value` (WEP: NIR Optimizer Architecture). For passes
+    /// return it as an `Operand::Value`. For passes
     /// that synthesize a constant in an operand position (a method arg, an
     /// assigned value) without a source node.
     pub fn const_operand(

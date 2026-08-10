@@ -896,7 +896,7 @@ fn rewrite_arg(
     // Case 1: StructLiteral matching the wrapper's canonical identity → unwrap to
     // its single field. Only a skeleton field is lifted in place; a promoted
     // constant field falls through to Case 3's `FieldAccess` (`(Wrapper{V}).f`,
-    // folded later) since it has no node to become (WEP: NIR Optimizer Architecture).
+    // folded later) since it has no node to become.
     if let ExprKind::StructLiteral {
         struct_type,
         fields,

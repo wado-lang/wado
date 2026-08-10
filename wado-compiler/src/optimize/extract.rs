@@ -38,9 +38,9 @@ impl crate::nir_engine::Rule for ExtractLiteralRule {
         let Some(value) = extract_const(e, vid, id) else {
             return false;
         };
-        // Promote the node to the pooled constant in its parent slot (WEP: NIR
-        // Optimizer Architecture). Idempotent: a promoted (orphaned) node has no parent
-        // slot, so the retry reports no change and the worklist terminates.
+        // Promote the node to the pooled constant in its parent slot. Idempotent:
+        // a promoted (orphaned) node has no parent slot, so the retry reports no
+        // change and the worklist terminates.
         e.replace_expr_with_value(id, value)
     }
 }
@@ -63,7 +63,7 @@ fn is_let_value(e: &Engine, id: ExprId) -> bool {
 /// True if `id` is a pure-arith node (`Binary` / `Cast` / pure `Unary`) — a
 /// freeze candidate. Under early promotion, `FieldAccess` reads also qualify
 /// (their value re-emits as a `StructGet`; reemittability + the shared `heap_ver`
-/// keep it sound), extending promotion toward every pure value (WEP: NIR Optimizer Architecture).
+/// keep it sound).
 fn is_pure_arith(e: &Engine, id: ExprId, include_fields: bool) -> bool {
     matches!(
         &e.body.exprs[id].kind,
@@ -126,9 +126,7 @@ fn block_path(e: &Engine, expr: ExprId) -> Option<Vec<(crate::nir_arena::BlockId
 /// common ancestor block precedes (dominates) each use. The uses share one
 /// `ValueId`, so no heap bump separates them — the field/value is constant
 /// across the span, and a load pinned at this point reproduces it for all.
-/// Generalises the former single-block placement to cross-block uses
-/// (WEP: NIR Optimizer Architecture,
-/// availability-aware extraction). `None` if any use lacks a path.
+/// `None` if any use lacks a path.
 fn materialise_point(
     e: &Engine,
     ids: &[ExprId],
@@ -455,16 +453,11 @@ fn classify_candidate(
         return None;
     }
     let rep = engine.value(id)?;
-    // An early freeze may plant only context-free values. That is what makes the
-    // early run sound at all: a constant means the same thing wherever it ends
-    // up, so it survives `inline` and `sroa` copying the operand around. A value
-    // naming a local does not — those passes renumber locals and splice a callee
-    // body into a caller, re-contextualizing the slot underneath the value, and
-    // the one id then spans versions the local did not have when it was frozen.
-    // (Concretely: `String::substr_bytes`'s parameters, frozen here, inlined into
-    // `trim_start`'s loop, read back as an iteration's worth of values.)
-    // The post-loop runs freeze these instead, after the structural passes have
-    // finished moving locals.
+    // An early freeze may plant only context-free values. A constant means the
+    // same thing wherever `inline` and `sroa` copy the operand to; a value naming
+    // a local does not, because those passes renumber locals and splice a callee
+    // body into a caller, so the slot moves out from under it. The post-loop
+    // freezes take these, after the structural passes have finished.
     if ctx.early && engine.body.values.names_a_local(rep) {
         return None;
     }
@@ -476,8 +469,7 @@ fn classify_candidate(
     let reemittable = match engine.body.values.kind(rep) {
         ValueKind::FieldAccess { receiver, .. } => {
             let recv = *receiver;
-            // Two gates make a `FieldAccess` materialisation sound
-            // (WEP: NIR Optimizer Architecture).
+            // Two gates make a `FieldAccess` materialisation sound.
             // (1) Field-value-type gate: only a **scalar** field — a primitive copy
             // is value-independent, so pinning + sharing it is sound; an aggregate /
             // reference field (`List.repr`, a nested struct) aliases a mutable
@@ -582,15 +574,12 @@ fn apply_field_materialise(
     changed
 }
 
-/// Whether re-emitting the value tree at `v` can trap. A materialisation runs the
-/// value once at a point that dominates the uses, which is a point the uses'
-/// own guards do not protect — so a trapping value must stay at each use, where
-/// the program already decided it was safe to evaluate.
+/// Whether re-emitting the value tree at `v` can trap. A materialisation runs it
+/// once at a point that dominates the uses — which the uses' own guards do not
+/// reach — so a trapping value has to stay where the program put it.
 ///
-/// Conservative on `Cast`: the pool is type-erased per node, so proving a cast
-/// non-trapping here would need the operand's recorded source type, which
-/// nothing guarantees is present. Refusing costs a materialisation, never
-/// correctness.
+/// Conservative on `Cast`: classifying one needs the operand's source type, and
+/// nothing guarantees the type-erased tree recorded it.
 fn value_may_trap(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool {
     match pool.kind(v).clone() {
         ValueKind::Binary { op, lhs, rhs, .. } => {
@@ -622,13 +611,12 @@ fn value_may_trap(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool 
 /// placement [`apply_field_materialise`] uses. Every other case redirects each
 /// use to the pooled representative inline.
 ///
-/// Two things bound the hoist, and the leaves being parameters answers neither.
-/// Availability says *where* the value can be computed; it does not say the
-/// program wanted it computed there. A trapping value is refused outright — the
-/// uses' guards do not extend to the materialisation point, so hoisting
-/// `a / b` out of `if b != 0` traps a program that never divides by zero. And
-/// the point is the uses' nearest common dominator rather than function entry,
-/// so a value used only inside a branch is not speculated into every call.
+/// The leaves being parameters bounds neither hazard: availability says where
+/// the value *can* be computed, not that the program wanted it computed there.
+/// So a trapping value is refused (hoisting `a / b` out of `if b != 0` traps a
+/// program that never divides by zero), and the point is the nearest common
+/// dominator rather than function entry, keeping a branch-only value out of
+/// every call.
 fn apply_value_freeze(
     engine: &mut Engine,
     rep: ValueId,

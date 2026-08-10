@@ -108,7 +108,7 @@ impl Rule for ElideBoxLocalRule {
             // then drop the now-dead binding. A skeleton initializer moves its kind
             // into the use site, which keeps its own `type_id` / `span` (the
             // field-access node's); a promoted constant redirects the use site's
-            // operand slot to the pooled value (WEP: NIR Optimizer Architecture).
+            // operand slot to the pooled value.
             match inner_op {
                 Operand::Expr(e) => {
                     let inner_kind =

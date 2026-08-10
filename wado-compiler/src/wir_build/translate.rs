@@ -2178,8 +2178,9 @@ impl FunctionTranslator<'_, '_> {
         result
     }
 
-    /// Materialise a promoted pure [`Operand::Value`] back to WIR (the extractor;
-    /// WEP: NIR Optimizer Architecture). Each kind lowers from the pool using the source
+    /// Materialise a promoted pure [`Operand::Value`] back to WIR (the
+    /// extractor; see `docs/wep-2026-06-05-nir-optimizer-architecture.md`).
+    /// Each kind lowers from the pool using the source
     /// type recorded by the builder; composite kinds (`Binary`, `Select`,
     /// `FieldAccess`, …) recurse on their operands. Kinds not yet promotable panic.
     pub(super) fn extract_value(&mut self, v: crate::nir_value_graph::ValueId) -> WirInstr {
@@ -2294,9 +2295,8 @@ impl FunctionTranslator<'_, '_> {
                 // `field_index` (the receiver `ValueId` pins the type), so derive
                 // the field name from the receiver value's recorded struct type
                 // (the builder stamped it from the receiver expr). Soundness of
-                // *where* this load runs is the materialiser's job
-                // (WEP: NIR Optimizer Architecture): the
-                // shared `heap_ver` guarantees the field is unchanged across uses.
+                // *where* this load runs is the materialiser's job: the shared
+                // `heap_ver` guarantees the field is unchanged across uses.
                 let recv_nir_ty = self
                     .body
                     .values
