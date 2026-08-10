@@ -34,8 +34,8 @@ enum RefBinding {
 type PatBindings = Vec<(String, u32, TypeId)>;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Walk a block for its fact-recording side effects (Stage 7-B:
-    /// records-only). reify rebuilds the `TirBlock` from the AST; this walk
+    /// Walk a block for its fact-recording side effects. Reify rebuilds the
+    /// `TirBlock` from the AST; this walk
     /// resolves each statement (recording types / dispatch / desugar facts and
     /// emitting diagnostics) and manages the lexical scope. `expected_type` is
     /// still propagated to the trailing statement so the coercion fact lands.
@@ -111,9 +111,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx.exit_scope();
     }
 
-    /// Resolve a statement for its facts (Stage 7-B: records-only). reify
-    /// rebuilds the `TirStmt`(s) from the AST; desugared constructs that expand
-    /// to multiple statements record their `DesugarKind` tag here.
+    /// Resolve a statement for its facts. Reify rebuilds the `TirStmt`(s)
+    /// from the AST; desugared constructs that expand to multiple statements
+    /// record their `DesugarKind` tag here.
     pub(super) fn resolve_stmt(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) {
         match stmt {
             Stmt::Let(let_stmt) => self.resolve_let(let_stmt, ctx),
@@ -336,7 +336,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // recorded above.
     }
 
-    /// Resolve a labeled block statement (Stage 7-B: records-only).
     pub(super) fn resolve_labeled_block(
         &mut self,
         labeled_block: &ast::LabeledBlockStmt,
@@ -358,7 +357,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx.active_labels.pop();
     }
 
-    /// Resolve a let statement (Stage 7-B: records-only).
     pub(super) fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
         // Handle uninitialized declaration: `let x: T;` (no initializer)
         if let_stmt.value.is_none() {
@@ -533,7 +531,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        // Stage 7-B: records-only. reify rebuilds the `Let` / `LetDestructure`
+        // Reify rebuilds the `Let` / `LetDestructure`
         // stmt from the AST + recorded facts (`let_annotated_types`,
         // `local_types`, the binding symbols). This walk binds the pattern into
         // `ctx`, records the local symbols, registers closure defaults, and
@@ -660,7 +658,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .expect("parser ensures type annotation for uninit let"),
         );
 
-        // Stage 7-B: records-only. reify rebuilds the pre-declared `Let` (with
+        // Reify rebuilds the pre-declared `Let` (with
         // its unit placeholder value) from the AST; this walk only binds the
         // local and records its symbol.
         match &let_stmt.pattern {
@@ -1102,11 +1100,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Resolve an expression statement
     pub(super) fn resolve_expr_stmt(&mut self, expr_stmt: &ExprStmt, ctx: &mut FunctionContext) {
-        // Stage 7-B: records-only; reify rebuilds the `Expr` stmt.
         self.resolve_expr(&expr_stmt.expr, ctx, None);
     }
 
-    /// Resolve a return statement (Stage 7-B: records-only).
     pub(super) fn resolve_return(&mut self, ret_stmt: &ReturnStmt, ctx: &mut FunctionContext) {
         // In async functions, `return expr` (with a value) is forbidden; use `task return expr`
         if ctx.is_async && ret_stmt.value.is_some() {
@@ -1132,7 +1128,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a `task return` statement (Stage 7-B: records-only).
     pub(super) fn resolve_task_return(
         &mut self,
         tr_stmt: &TaskReturnStmt,
@@ -1158,9 +1153,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.typecheck_return(value_type, expected, tr_stmt.span);
     }
 
-    /// Resolve an if statement (Stage 7-B: records-only). reify rebuilds the
-    /// `If` / if-let-chain TIR from the AST + the `DesugarKind::IfLetChain`
-    /// tag; this walk only resolves the condition and blocks for their facts.
+    /// Reify rebuilds the `If` / if-let-chain TIR from the AST + the
+    /// `DesugarKind::IfLetChain` tag; this walk only resolves the condition
+    /// and blocks for their facts.
     pub(super) fn resolve_if_stmt(&mut self, if_stmt: &IfStmt, ctx: &mut FunctionContext) {
         self.resolve_if_stmt_with_expected(if_stmt, ctx, None, false);
     }
@@ -1168,7 +1163,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Like `resolve_if_stmt` but propagates `expected_type` to blocks for
     /// coercion. Used when an if statement is the last statement in a block
     /// that needs type coercion (e.g., a match arm returning `List<T>` from an
-    /// if-else with tuple literals). Stage 7-B: records-only.
+    /// if-else with tuple literals).
     fn resolve_if_stmt_with_expected(
         &mut self,
         if_stmt: &IfStmt,
@@ -1224,7 +1219,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The `else_block` TIR is cloned for each failure path. This duplicates else-block code
     /// in the output, but is typically small (e.g., `None` or a single `panic` call).
     ///
-    /// Stage 7-B: records-only. The combined walk no longer builds the
+    /// The combined walk does not build the
     /// normalized `Match` / `If` chain TIR (reify rebuilds it from the
     /// `DesugarKind::IfLetChain` tag + the AST); this walk only resolves the
     /// scrutinees / conditions for their facts, binds the patterns into `ctx`,
@@ -1486,7 +1481,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.lookup_associated_constant(&assoc_const_key)
                     {
                         // Resolve for side effects (records the const body's
-                        // types for reify). Stage 7-B: `resolve_literal` is a
+                        // types for reify). `resolve_literal` is a
                         // placeholder, so classify the Literal-vs-ConstantValue
                         // pattern from the const body AST rather than the
                         // resolved value's kind. A literal body becomes a
@@ -2045,7 +2040,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `for_continue_labels` around body resolution so the inner
     /// `resolve_continue` sees an empty stack and lowers naturally.
     pub(super) fn resolve_loop(&mut self, loop_stmt: &LoopStmt, ctx: &mut FunctionContext) {
-        // Stage 7-B: records-only; reify rebuilds the `Loop` stmt.
+        // Reify rebuilds the `Loop` stmt.
         let saved = std::mem::take(&mut ctx.for_continue_labels);
         self.resolve_block(&loop_stmt.body, ctx, None);
         ctx.for_continue_labels = saved;
@@ -2151,8 +2146,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Only record the desugar tag when the iterable actually
             // supports iteration; tagging an error-path node would lead
-            // Stage 5 reify to expand a TIR shape the elaborator never
-            // produced.
+            // reify to expand a TIR shape the elaborator never produced.
             if implements_into_iter {
                 self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfIterator);
             }
@@ -2268,7 +2262,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_local_symbol(id, &binding_name, name_span, is_mut, binding_type);
         }
 
-        // Stage 7-B: records-only. reify rebuilds the `VariadicForOf` node
+        // Reify rebuilds the `VariadicForOf` node
         // (including the destructuring sub-bindings) from the AST + the
         // `DesugarKind::ForOfVariadic` tag. This walk binds the loop variable
         // and any destructured sub-bindings into `ctx` (recording their
@@ -2351,7 +2345,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let temp_name = format!("__tuple_{unique_id}");
         ctx.add_local(temp_name, tuple_type_id, false, None);
 
-        // Stage 5: capture each unrolled element's body facts separately. The
+        // Capture each unrolled element's body facts separately. The
         // body is a single source sub-tree resolved once per element here;
         // without per-element capture every `AstId`-keyed map would be
         // overwritten so only the last element's facts survive (reify would
@@ -2372,7 +2366,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 elem_type
             };
 
-            // Stage 7-B: records-only. reify rebuilds the per-element block (the
+            // Reify rebuilds the per-element block (the
             // `__tuple_N.i` field access + binding + body) from the AST + the
             // `DesugarKind::ForOfTuple` tag and per-element overlays. This walk
             // binds the loop variable(s) into `ctx` and walks the body so every
@@ -2437,7 +2431,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Capture this element's body annotations and reset the maps back to
             // their pre-loop state so the next element records from a clean
-            // slate (Stage 5; reify-only).
+            // slate.
             element_overlays.push(self.sem.types.split_off_overlay(overlay_base));
 
             ctx.exit_scope();
@@ -2548,8 +2542,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // `let mut __iter_N = …;` — `defining_ast_id: None` keeps this
-        // synthetic local out of `local_symbols`. Stage 7-B: reify rebuilds the
-        // `let`; we reserve the local slot here for walk-order parity.
+        // synthetic local out of `local_symbols`. Reify rebuilds the `let`;
+        // we reserve the local slot here for walk-order parity.
         let iter_local_index =
             ctx.add_local(iter_var.clone(), iter_type, /* is_mut */ true, None);
 
@@ -2679,7 +2673,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        // Stage 7-B: records-only. reify rebuilds the
+        // Reify rebuilds the
         // `__for_of_N: { let mut __iter = …; loop { match __iter.next() { … } } }`
         // shape from the AST + the recorded `ForOfIteratorInfo`. This walk binds
         // the loop variable (`resolve_if_pattern_inner`, preserving the
@@ -2748,7 +2742,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a break statement (Stage 7-B: records-only).
     pub(super) fn resolve_break(&mut self, break_stmt: &BreakStmt, ctx: &mut FunctionContext) {
         // Resolve the break value against the target block's expected type
         // so that literals coerce correctly (e.g. `break label: 10` when the
@@ -2789,10 +2782,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Stage 7-B: records-only; reify rebuilds the `Break` stmt.
+        // Reify rebuilds the `Break` stmt.
     }
 
-    /// Resolve a continue statement (Stage 7-B: records-only). `continue`
+    /// Resolve a continue statement. `continue`
     /// carries no facts; reify rebuilds the `Continue` (or the
     /// `break <for-body-label>` retarget) from the AST and
     /// `ctx.for_continue_labels`.
@@ -2829,7 +2822,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Naked `continue` inside this while's body targets *this* loop,
         // not an enclosing C-style `for` body label.
         let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
-        // Stage 7-B: records-only. reify rebuilds the `loop { if !cond { break }
+        // Reify rebuilds the `loop { if !cond { break }
         // B }` (or `loop { match e { pat => B, _ => break } }`) shape from the
         // `DesugarKind::While` / `WhileLetChain` tag + the AST. This walk
         // resolves the condition / scrutinees and walks the body for facts.
@@ -2915,7 +2908,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // them while the surrounding function cannot.
         ctx.enter_scope();
 
-        // Stage 7-B: records-only. reify rebuilds the C-style-for desugar
+        // Reify rebuilds the C-style-for desugar
         // (`{ init; loop { if !cond { break } __for_N_body: { B } update } }`,
         // or the `while let` form) from the `DesugarKind::CStyleFor` tag + the
         // AST. This walk resolves `init` / `cond` / scrutinee, binds the
@@ -2994,7 +2987,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         body: &Block,
         ctx: &mut FunctionContext,
     ) {
-        // Stage 7-B: records-only; reify rebuilds the labeled body block.
+        // Reify rebuilds the labeled body block.
         ctx.for_continue_labels.push(body_label.to_string());
         ctx.active_labels.push(body_label.to_string());
         self.resolve_block(body, ctx, None);
@@ -3003,7 +2996,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a for loop's optional update expression for its facts
-    /// (Stage 7-B: records-only).
+    ///.
     fn resolve_for_update(&mut self, update: Option<&Expr>, ctx: &mut FunctionContext) {
         if let Some(u) = update {
             self.resolve_expr(u, ctx, None);

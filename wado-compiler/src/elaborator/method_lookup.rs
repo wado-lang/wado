@@ -1680,7 +1680,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// `&TypeTable`-only version of [`Self::adjust_receiver_for_self_kind`]
-    /// — Stage 5 [`super::reify::Reify`] calls this directly so it can
+    /// — [`super::reify::Reify`] calls this directly so it can
     /// reproduce the receiver adjustment from the recorded
     /// `(self_kind, is_ref_impl)` pair without holding an [`Elaborator`].
     /// The instance method above stays as a thin delegate so existing
@@ -1780,8 +1780,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// `&TypeTable`-only version of the receiver-deref loop, paired
-    /// with [`Self::adjust_receiver_for_self_kind_static`] for Stage 5
-    /// reify reuse.
+    /// with [`Self::adjust_receiver_for_self_kind_static`] for reify's reuse.
     pub(super) fn deref_to_value_static(
         mut receiver: TirExpr,
         span: Span,
@@ -2078,15 +2077,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, impl_ref);
-        let is_blanket_tp = matches!(
-            &header.ty,
-            Type::Named(named) if !self.tysys.is_known_type_name(&named.name)
-        );
+        // Which target positions are slots is `is_impl_target_param`'s
+        // question, asked in the impl's *own* module — the same call
+        // `enter_impl_frame` makes when it binds them. Asking it any other way
+        // (a module-agnostic "is this a known type name?") disagrees with the
+        // frame exactly when a target argument names a type the impl's module
+        // cannot see, and the target then carries a slot this filter believes
+        // is concrete.
+        let is_target_slot = |name: &str| {
+            self.tysys
+                .is_impl_target_param(&impl_ref.0, &header.type_params, name)
+        };
+        let is_blanket_tp = matches!(&header.ty, Type::Named(n) if is_target_slot(&n.name));
         let generic_is_parametric = matches!(&header.ty, Type::Generic(g)
-            if g.args.iter().any(|a| matches!(a,
-                Type::Named(n)
-                    if !self.tysys.is_known_type_name(&n.name)
-                        || header.type_params.iter().any(|p| p.name == n.name))));
+            if g.args.iter().any(|a| matches!(a, Type::Named(n) if is_target_slot(&n.name))));
         let skip_filter = !header.type_params.is_empty()
             || is_blanket_tp
             || matches!(&header.ty, Type::Reference(_) | Type::MutReference(_))
@@ -2094,8 +2098,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if skip_filter {
             return true;
         }
-        // `skip_filter` above left only concrete targets, so the block's own
-        // `Self` is the receiver this impl demands.
+        // Every abstract target shape is now behind `skip_filter`, so the
+        // block's own `Self` is a concrete receiver this impl demands.
         let impl_recv_id = self.impl_sig(impl_ref).self_type;
         debug_assert!(
             !self
@@ -3607,7 +3611,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .make_mut_ref(index_mut_info.output_type);
 
-        // Stage 5 / Gap 3 inner-dispatch recording: keyed by the
+        // Inner-dispatch recording: keyed by the
         // `IndexExpr`'s `AstId`, capture the IndexMut::index_mut
         // dispatch decision so reify can reproduce the same
         // `*expr.index_mut(idx)` shape. The outer method's
@@ -3637,7 +3641,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        // Stage 7-B: reify (`reify_index_mut_method_call`) rebuilds the
+        // Reify (`reify_index_mut_method_call`) rebuilds the
         // inner `*expr.index_mut(idx)` from the recorded `operator_dispatch`
         // above; the combined walk only needed the dispatch fact. The
         // index was resolved above for its side effects.
@@ -3683,7 +3687,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `m["k"].push(1)` and friends leave the same annotation as the
         // ordinary path.
         //
-        // Stage 5 (Gap 3) additionally tags the call's AstId with
+        // The call's AstId is additionally tagged with
         // `DesugarKind::IndexMutMethodCall` so reify knows to follow the
         // IndexMut expansion path (synthesise `__index_mut_val`) instead
         // of the plain method-call path.
@@ -3704,7 +3708,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::DesugarKind::IndexMutMethodCall,
         );
 
-        // Stage 7-B: reify (`reify_index_mut_method_call`) rebuilds the
+        // Reify (`reify_index_mut_method_call`) rebuilds the
         // outer method call (and the `__index_mut_val` synthesis) from the
         // recorded `method_dispatch` + `IndexMutMethodCall` desugar; the
         // combined walk projects only the result type. The args were resolved

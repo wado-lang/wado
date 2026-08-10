@@ -46,7 +46,7 @@ pub(super) fn extract_compiler_item<H: CompilerHost>(
     items.into_iter().next()
 }
 
-/// Body-walk placeholder for a function / method / test. Stage 7-B: the
+/// Body-walk placeholder for a function / method / test. The
 /// combined walk records the signature facts (`fn_param_types`,
 /// `fn_return_types`, `decl_type_params`, `function_effects`,
 /// `method_names`, …) and resolves the body for its side-effect fact
@@ -2017,14 +2017,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
 
-        // Stash the resolved `Vec<EffectRef>` for reify (Stage 5): reify
+        // Stash the resolved `Vec<EffectRef>` for reify: reify
         // cannot reconstruct effect-param canonicalisation without
         // `trait_ctx.effect_params`, so the annotate phase records
         // the already-resolved list here keyed by the function's `AstId`.
         let func_key = func.id;
         scope.sem.types.function_effects.insert(func_key, effects);
 
-        // Stage 5: an async function's wasm return type is erased to
+        // An async function's wasm return type is erased to
         // `()`; record the declared (pre-erasure) return type so reify
         // can set `task_return_type` for resource-store inference.
         if func.is_async {
@@ -2243,7 +2243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let display_name =
             MethodName::format_local(&FqTypeName::binder(struct_name), None, &func.name);
 
-        // Stage 5 / mangled-name slice: publish the mangled + display
+        // Publish the mangled + display
         // names for reify to read straight off `MethodNames` instead of
         // running `format_local` itself against the impl facts.
         let method_names_key = func.id;
@@ -2413,7 +2413,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
 
-        // Stash the resolved `Vec<EffectRef>` for reify (Stage 5): reify
+        // Stash the resolved `Vec<EffectRef>` for reify: reify
         // cannot reconstruct effect-param canonicalisation without
         // `trait_ctx.effect_params`, so the annotate phase records
         // the already-resolved list here keyed by the method's `AstId`.
@@ -2448,7 +2448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .insert(mangled_name, method_resolved_param_types);
         }
 
-        // Stage 7-B: reify (`reify_method`) emits the method's `TirFunction`
+        // Reify (`reify_method`) emits the method's `TirFunction`
         // from the recorded facts (`method_impl_type_params`,
         // `method_names`, `fn_param_types`, `fn_return_types`,
         // `decl_type_params`, `function_effects`, the impl facts, …) + the

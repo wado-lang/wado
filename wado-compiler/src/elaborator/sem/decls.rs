@@ -142,8 +142,8 @@ pub(crate) struct ModuleDecls {
     /// [`super::super::Elaborator::resolve_module`].
     pub(crate) pending_anonymous_structs: Vec<crate::tir::TirStruct>,
 
-    /// Synthesis requests recorded by `impl Trait for Type;`
-    /// (Gap 12 / Stage 5). The elaborator pushes one per
+    /// Synthesis requests recorded by `impl Trait for Type;`.
+    /// The elaborator pushes one per
     /// `is_synthesize_request` impl block; `reify_module` reads
     /// this list and pushes each onto the emitted
     /// `TirModule::synthesis_requests`. Decouples annotate

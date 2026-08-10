@@ -101,8 +101,7 @@ pub struct Semantics {
     pub local_types: IndexMap<AstId, TypeId>,
     /// Resolved [`TypeId`] for every expression visited by the elaborator
     /// body walk, keyed by the expression's `(module, AstId)` pair. The
-    /// future `reify` pass (Stage 5 of the elaborator re-architecture WEP)
-    /// reads this map to set `TirExpr::type_id` without re-running
+    /// reify pass reads this map to set `TirExpr::type_id` without re-running
     /// inference; LSP hover can consult it for a type at the cursor.
     /// Empty when resolve did not run or bailed before any expression was
     /// visited.
@@ -425,8 +424,7 @@ impl Semantics {
     /// [`crate::elaborator::sem::types::MethodDispatch`] for the data
     /// shape.
     ///
-    /// `#[allow(dead_code)]` until the consumer (`reify`, Stage 5 of the
-    /// WEP) lands.
+    /// `#[allow(dead_code)]` until `reify` consumes it.
     #[allow(dead_code)]
     #[must_use]
     pub(crate) fn method_dispatch_at(

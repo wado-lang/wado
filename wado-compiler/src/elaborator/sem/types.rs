@@ -10,34 +10,20 @@
 //! ids are globally unique (`(AstIdSpace, local)`) — cross-module inlined
 //! AST (const bodies, default arguments, trait defaults) carries its own
 //! ids and cannot collide with the consumer's. This is what
-//! [`super::super::reify`] (Stage 5) reads in lieu of re-running
-//! inference.
+//! [`super::super::reify`] reads in lieu of re-running inference.
 //!
 //! Facts that derive purely from the AST (spans, position lookup) belong
 //! on [`crate::ast_index::AstIndex`], not here. Decl-level facts (function
 //! return types, generic-parameter tables) belong on
 //! [`super::decls::ModuleDecls`].
 //!
-//! [`wep-2026-05-26-elaborator-rearchitecture.md`] populated
-//! `local_types`; Stage 4 adds `expression_types` (per-`AstId` resolved
-//! type for every expression visited by the body walk),
-//! `method_dispatch` (per-`MethodCallExpr` resolved target plus the
-//! receiver-adjustment kind that annotate picked), `coercions`
-//! (per-`AstId` coercion choice that
-//! [`super::super::Elaborator::try_coerce`] applied), and `desugars`
-//! (per-`AstId` rewrite tag for the TIR-direct desugar sites: `assert`,
-//! `matches`, comparison chains, `for x of …`, `while`, and compound
-//! assignment).
-//!
-//! Stage 5 extends the map set with the remaining decisions reify needs:
-//! `generic_instantiations` (call/struct/variant generic type args plus
-//! the resulting instance `TypeId`), `closure_captures` (the capture
-//! list plus the mut-capture `__ref_*` materialisation order),
-//! `assert_captures` (the power-assert capture-slot table), and
-//! `for_of_iterator` (the resolved `into_iter`/`next` dispatch targets
-//! for the iterator path of `for x of expr`). `MethodDispatch` also
-//! grows an `is_ref_impl` flag that reify needs alongside `self_kind`
-//! to drive `adjust_receiver_for_self_kind`. See
+//! The map set is every decision reify cannot re-derive from the AST:
+//! resolved types (`local_types`, `expression_types`), dispatch targets
+//! (`method_dispatch`, `operator_dispatch`, `for_of_iterator`), the chosen
+//! `coercions`, the `desugars` tag for each TIR-direct rewrite (`assert`,
+//! `matches`, comparison chains, `for x of …`, `while`, compound
+//! assignment), `generic_instantiations`, and the capture tables
+//! (`closure_captures`, `assert_captures`). See
 //! `wep-2026-05-26-elaborator-rearchitecture.md` §`Reify — mechanical`.
 
 use crate::ast::{self, AstId};
@@ -121,7 +107,7 @@ pub(crate) struct MethodDispatch {
 /// Which sub-coercion [`super::super::Elaborator::try_coerce`] applied at
 /// a given expression site.
 ///
-/// The variant is what `reify` (Stage 5) needs to pick the same lowering
+/// The variant is what `reify` needs to pick the same lowering
 /// path without re-checking expected-type compatibility; the target type
 /// comes alongside on [`CoercionChoice`].
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -177,7 +163,7 @@ pub(crate) struct TypeAnnotations {
     /// expression's [`AstId`]. Populated unconditionally at the end of the
     /// resolver wrapper so every sub-expression — including operands of
     /// binary ops, call arguments, and block trailing values — leaves an
-    /// entry. The future `reify` pass (Stage 5) reads this map to set
+    /// entry. Reify reads this map to set
     /// `TirExpr::type_id` without re-running type inference; LSP hover
     /// may also consult it directly.
     pub(crate) expression_types: IndexMap<AstId, TypeId>,
@@ -198,14 +184,14 @@ pub(crate) struct TypeAnnotations {
     /// keyed by the enclosing AST node's [`AstId`]. See [`DesugarKind`].
     pub(crate) desugars: IndexMap<AstId, DesugarKind>,
     /// Generic instantiations decided by inference at call / construction
-    /// sites (Gap 1 of Stage 5). Keyed by the call expression's, struct
+    /// sites. Keyed by the call expression's, struct
     /// literal's, or variant-ctor's [`AstId`]. Recorded by
     /// `record_generic_instantiation*` (call.rs / expr.rs / stmt.rs); read
     /// by reify via `ann_generic_instantiations`. See
     /// [`GenericInstantiation`].
     pub(crate) generic_instantiations: IndexMap<AstId, GenericInstantiation>,
-    /// Capture analysis result for each closure expression (Gap 4 of
-    /// Stage 5). Keyed by the [`crate::ast::ClosureExpr`]'s [`AstId`].
+    /// Capture analysis result for each closure expression. Keyed by the
+    /// [`crate::ast::ClosureExpr`]'s [`AstId`].
     /// See [`ClosureCaptureInfo`].
     pub(crate) closure_captures: IndexMap<AstId, ClosureCaptureInfo>,
     /// Resolved (type-arg-substituted) parameter types for a free /
@@ -215,25 +201,25 @@ pub(crate) struct TypeAnnotations {
     /// parameter sees the function signature, inferring unannotated closure
     /// params and producing the functor specialization the call site needs.
     pub(crate) call_param_types: IndexMap<AstId, Vec<TypeId>>,
-    /// Power-assert capture-slot map for each assert statement (Gap 5
-    /// of Stage 5). Keyed by the [`crate::ast::AssertStmt`]'s [`AstId`].
+    /// Power-assert capture-slot map for each assert statement. Keyed by
+    /// the [`crate::ast::AssertStmt`]'s [`AstId`].
     /// See [`AssertCaptureInfo`].
     pub(crate) assert_captures: IndexMap<AstId, AssertCaptureInfo>,
     /// For-of iterator dispatch decisions for the `IntoIterator` path
-    /// (Gap 6 of Stage 5). Keyed by the [`crate::ast::ForOfStmt`]'s
+    /// Keyed by the [`crate::ast::ForOfStmt`]'s
     /// [`AstId`]. Tuple and variadic paths are tagged via [`DesugarKind`]
     /// alone and leave no entry here. See [`ForOfIteratorInfo`].
     pub(crate) for_of_iterator: IndexMap<AstId, ForOfIteratorInfo>,
     /// Operator-dispatch decisions for binary / index expressions that
-    /// the elaborator lowered to a trait method call (Gap 11 of
-    /// Stage 5). Keyed by the [`crate::ast::BinaryExpr`]'s or
+    /// the elaborator lowered to a trait method call. Keyed by the
+    /// [`crate::ast::BinaryExpr`]'s or
     /// [`crate::ast::IndexExpr`]'s [`AstId`]. Absence of an entry
     /// means the elaborator emitted a native
     /// [`crate::tir::TirExprKind::Binary`] /
     /// [`crate::tir::TirExprKind::Index`] for this expression. See
     /// [`OperatorDispatch`].
     pub(crate) operator_dispatch: IndexMap<AstId, OperatorDispatch>,
-    /// Handler-binding resolution facts (Gap 13 of Stage 5).
+    /// Handler-binding resolution facts.
     /// Keyed by the [`crate::ast::EffectHandlerBinding`]'s
     /// [`AstId`]. Carries the list of effects this binding
     /// installs (one per element for explicit form; many for
@@ -243,7 +229,7 @@ pub(crate) struct TypeAnnotations {
     /// expanded `TirHandlerBinding`s without re-running
     /// `collect_effect_impls_for_type`.
     pub(crate) handler_bindings: IndexMap<AstId, HandlerBindingFacts>,
-    /// Impl-block resolution facts (Gap 12 of Stage 5). Keyed by
+    /// Impl-block resolution facts. Keyed by
     /// the [`crate::ast::ImplBlock`]'s [`AstId`]. Carries the
     /// resolved `Self` type, the trait reference's canonical and
     /// mangled forms, the impl's projected
@@ -256,7 +242,7 @@ pub(crate) struct TypeAnnotations {
     /// in `reify_impl`.
     pub(crate) impl_facts: IndexMap<AstId, ImplFacts>,
     /// Resolved `with` clause for each function / method declaration
-    /// (Gap of Stage 5). Keyed by the [`crate::ast::Function`]'s or
+    /// Keyed by the [`crate::ast::Function`]'s or
     /// [`crate::ast::Method`]'s [`AstId`]. The body walk calls
     /// [`super::super::Elaborator::resolve_effects`] while effect
     /// parameters are still in scope and stashes the result here so
@@ -295,7 +281,7 @@ pub(crate) struct TypeAnnotations {
     /// reproduce from the AST alone. Recording the resolved trait
     /// info here lets reify rebuild the same desugar deterministically
     /// — the `__b` local lands at the same `FunctionContext` index
-    /// reify reserves for it (Gap 7 walk-order invariant).
+    /// reify reserves for it (the walk-order invariant).
     pub(crate) sequence_coercions: IndexMap<AstId, SequenceCoercionFacts>,
     /// `KeyValueLiteralBuilder` coercion data for an anonymous
     /// struct literal coerced into a map-style type. Keyed by the
@@ -325,7 +311,7 @@ pub(crate) struct TypeAnnotations {
     /// elaborator dispatches each shape to a different trait.
     pub(crate) index_assign_dispatch: IndexMap<AstId, OperatorDispatch>,
     /// Per-element annotation overlays for compile-time-unrolled tuple
-    /// `for-of` loops (Stage 5). Keyed by the [`crate::ast::ForOfStmt`]'s
+    /// `for-of` loops. Keyed by the [`crate::ast::ForOfStmt`]'s
     /// [`AstId`]; the outer `Vec` holds one entry per *instantiation* of
     /// that for-of in deterministic walk order (a nested inner for-of is
     /// instantiated once per outer element, hence multiple entries), and
@@ -404,7 +390,7 @@ pub(crate) struct TypeAnnotations {
     /// Assignment-target place classification for each identifier that
     /// resolves to a place (local / `&mut`-deref-capture / global), keyed by
     /// the [`crate::ast::IdentExpr`]'s [`AstId`]. Recorded by
-    /// [`super::super::Elaborator::resolve_ident`] (Stage 7-B) so
+    /// [`super::super::Elaborator::resolve_ident`] so
     /// [`super::super::Elaborator::assign_to_target`] can validate l-values
     /// and global mutability from the AST + this fact instead of reading the
     /// now-placeholder resolved `target.kind`. Idents that resolve to
@@ -804,8 +790,8 @@ pub(crate) struct AssertCaptureInfo {
 }
 
 /// Handler-binding resolution facts recorded once per
-/// [`crate::ast::EffectHandlerBinding`] at annotate time (Gap 13
-/// of Stage 5). Reify reads this entry to enumerate the
+/// [`crate::ast::EffectHandlerBinding`] at annotate time. Reify
+/// reads this entry to enumerate the
 /// `TirHandlerBinding`s without re-running
 /// `collect_effect_impls_for_type` or the explicit-form
 /// `trait_env` validation.
@@ -843,7 +829,7 @@ pub(crate) struct HandlerEffectEntry {
 }
 
 /// Impl-block resolution facts recorded once per `impl` block at
-/// annotate time (Gap 12 of Stage 5). Reify reads this entry
+/// annotate time. Reify reads this entry
 /// keyed by the [`crate::ast::ImplBlock`]'s [`AstId`] and uses
 /// every field verbatim — no re-resolution of the impl target,
 /// the trait reference, the type params, or the associated
@@ -875,8 +861,8 @@ pub(crate) struct ImplFacts {
     pub(crate) is_handler_method: bool,
     /// True iff the impl target is `&T` / `&mut T` (ref-type
     /// impl). Method receivers `&self` get an extra `&` layer at
-    /// receiver-adjustment time; mirrors Gap 2's per-call
-    /// `is_ref_impl` but is decided at impl-block scope.
+    /// receiver-adjustment time; mirrors [`MethodDispatch::is_ref_impl`]
+    /// but is decided at impl-block scope.
     pub(crate) is_ref_impl: bool,
     /// Mangled struct name the elaborator feeds into
     /// [`crate::name::MethodName::format_local`] when naming the impl's
@@ -907,11 +893,10 @@ pub(crate) struct ImplFacts {
     pub(crate) concrete_owner: Option<crate::name::FqTypeName>,
 }
 
-/// Operator-dispatch decision recorded when the elaborator lowers a
-/// binary or index expression to a trait method call (Gap 11 of
-/// Stage 5). Reify checks this map before falling back to the native
-/// [`crate::tir::TirExprKind::Binary`] / [`crate::tir::TirExprKind::Index`]
-/// path.
+/// Operator-dispatch decision recorded when the elaborator lowers a binary
+/// or index expression to a trait method call. Reify checks this map before
+/// falling back to the native [`crate::tir::TirExprKind::Binary`] /
+/// [`crate::tir::TirExprKind::Index`] path.
 #[derive(Clone)]
 pub(crate) struct OperatorDispatch {
     /// The trait method to dispatch to. Carries the impl block's
@@ -945,7 +930,7 @@ pub(crate) struct OperatorDispatch {
     pub(crate) needs_deref: bool,
 }
 
-/// `for x of expr` iterator dispatch result (Gap 6 of Stage 5).
+/// `for x of expr` iterator dispatch result.
 /// Recorded only on the iterator path (`DesugarKind::ForOfIterator`);
 /// tuple and variadic paths don't dispatch, so they don't record here.
 ///
@@ -982,8 +967,7 @@ pub(crate) struct ForOfIteratorInfo {
 /// Which TIR-direct desugar path the body walk took at a source-level
 /// rewrite site. The variants enumerate every surface form whose
 /// lowering bypasses synthetic AST construction (see the LSP-friendly
-/// compiler architecture note in
-/// `wado-compiler/CLAUDE.md`); the future `reify` pass (Stage 5) reads
+/// compiler architecture note in `wado-compiler/CLAUDE.md`); reify reads
 /// this tag to pick the same expansion without re-deciding the shape.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DesugarKind {

@@ -465,8 +465,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // FunctionRef we then build mangles a non-existent method
         // against the receiver's struct module — we MUST NOT record that
         // as a successful dispatch in `sem.types.method_dispatch`, or
-        // Stage 5 reify would try to lower a call to a function that
-        // does not exist.
+        // reify would try to lower a call to a function that does not exist.
         let method_found = method_info.is_some();
         let MethodInfo {
             impl_offset: sig_impl_offset,
@@ -1721,7 +1720,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return TypeTable::ERROR;
                     }
 
-                    // Stage 7-B: reify rebuilds the `VariantConstruct` from
+                    // Reify rebuilds the `VariantConstruct` from
                     // the AST + variant info; the combined walk projects only
                     // the result type.
                     return target_type_id;
@@ -1838,7 +1837,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
 
-                    // Stage 7-B: reify rebuilds the `VariantConstruct` from
+                    // Reify rebuilds the `VariantConstruct` from
                     // the AST + variant info; the combined walk projects only
                     // the result type. The payload was already resolved (and
                     // typechecked) above for its fact-recording side effects.
@@ -1882,7 +1881,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .get_newtype_base(target_type_id);
             let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
             if base_of_target == Some(arg_type) || base_of_arg == Some(target_type_id) {
-                // Stage 7-B: reify rebuilds the newtype `Cast`; the combined
+                // Reify rebuilds the newtype `Cast`; the combined
                 // walk projects only the result type.
                 return target_type_id;
             }
@@ -2256,7 +2255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        // Stage 7-B: reify rebuilds the static-method `Call` TIR from the
+        // Reify rebuilds the static-method `Call` TIR from the
         // recorded `static_method_dispatch` + resolved args; the combined
         // walk projects only the result type. `args` was resolved above for
         // its fact-recording side effects.
@@ -3640,7 +3639,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }),
         };
 
-        // Stage 7-B: record the static-method dispatch decision (formerly
+        // Record the static-method dispatch decision (formerly
         // recovered by the caller from the built `Call` TIR) so reify can
         // reproduce the same `Call` shape without re-running impl lookup,
         // mangled-name construction, or monomorph-info shaping. The per-arg

@@ -100,12 +100,6 @@ use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
 };
 
-// Migration markers below trace the WEP 2026-05-26 elaborator
-// re-architecture. Each `MIGRATION:` line names the field's future home —
-// `TypeSystem` (pipeline-wide type knowledge) or a sub-struct of
-// `ModuleSemantics` (per-module facts), or a transient annotate-time scope
-// or cross-cutting input that stays on the per-module driver.
-
 pub struct Elaborator<'a, H: CompilerHost> {
     /// Pipeline-wide type knowledge: type arena, decl-interned type
     /// tables, registries, included-files map, and the read-only caches
@@ -122,11 +116,9 @@ pub struct Elaborator<'a, H: CompilerHost> {
     symbols: &'a SymbolTable,
     /// Logger for emitting diagnostics
     logger: &'a Logger<'a, H>,
-    /// Current module source being resolved (for struct type `module_source`)
-    // MIGRATION: identifies the active `ModuleSemantics` — the driver swaps
-    //   modules via the `IndexMap<ModuleSource, ModuleSemantics>` key, so this
-    //   field eventually disappears (Stage 5 carries it as an explicit
-    //   argument to the per-module walker).
+    /// Current module source being resolved (for struct type `module_source`).
+    /// Identifies the active `ModuleSemantics`, which the driver swaps by
+    /// `IndexMap<ModuleSource, ModuleSemantics>` key.
     current_module_source: ModuleSource,
     /// Entry module source (for cross-module import dedup)
     entry_module_source: ModuleSource,
@@ -591,9 +583,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Result type of an AST block, read from `expression_types` rather
     /// than a built `TirBlock`. AST-level replacement for
-    /// `Self::block_result_type(&TirBlock)` (Stage 7-B): lets the combined
-    /// walk type `{ … }`, `if`/`match` arms, loop and handler bodies
-    /// without inspecting the body TIR it produces.
+    /// `Self::block_result_type(&TirBlock)`: lets the combined walk type
+    /// `{ … }`, `if`/`match` arms, loop and handler bodies without
+    /// inspecting the body TIR it produces.
     pub(super) fn ast_block_result_type(&self, block: &crate::ast::Block) -> TypeId {
         control_flow::block_result_type(self.ctrl_flow_ctx(), block)
     }
@@ -635,9 +627,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Record the resolved [`TypeId`] for the expression at `ast_id` —
-    /// the per-`AstId` annotation the future `reify` pass (Stage 5 of WEP
-    /// 2026-05-26) reads to set `TirExpr::type_id` without re-running
-    /// inference.
+    /// the per-`AstId` annotation reify reads to set `TirExpr::type_id`
+    /// without re-running inference.
     ///
     /// Skipped when the resolution failed (yielding [`TypeTable::ERROR`])
     /// or when the recorded type still mentions
@@ -651,7 +642,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if type_id == TypeTable::ERROR {
             return;
         }
-        // UNKNOWN-containing types ARE recorded (Stage 7-B): a bare `null` is
+        // UNKNOWN-containing types ARE recorded: a bare `null` is
         // `Option<UNKNOWN>`, and the AST-level block-result-type analysis the
         // combined walk uses (in place of reading the body TIR) needs to see
         // an unresolved-null branch to type it the same way the TIR walker
@@ -676,7 +667,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `is_ref_impl` is the flag `lookup_method_info` produces alongside
     /// the dispatch target; reify uses it together with `self_kind` to
     /// drive `adjust_receiver_for_self_kind` without re-running impl
-    /// lookup (Gap 2 of Stage 5).
+    /// lookup.
     pub(super) fn record_method_dispatch(
         &mut self,
         ast_id: Option<crate::ast::AstId>,
@@ -709,7 +700,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Record a generic-instantiation decision for the call / struct
-    /// literal / variant-ctor at `ast_id` (Gap 1 of Stage 5). `type_args`
+    /// literal / variant-ctor at `ast_id`. `type_args`
     /// is the inferred (or explicitly written) concrete type for each
     /// generic parameter in declaration order; `instance_type` is the
     /// `TypeId` of the resulting `GenericInstance` / monomorphic target.
@@ -763,7 +754,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Record the capture-analysis result for the closure expression at
-    /// `ast_id` (Gap 4 of Stage 5). See [`sem::types::ClosureCaptureInfo`].
+    /// `ast_id`. See [`sem::types::ClosureCaptureInfo`].
     pub(super) fn record_closure_captures(
         &mut self,
         ast_id: crate::ast::AstId,
@@ -774,8 +765,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Record the power-assert capture-slot table for the assert
-    /// statement at `ast_id` (Gap 5 of Stage 5). See
-    /// [`sem::types::AssertCaptureInfo`].
+    /// statement at `ast_id`. See [`sem::types::AssertCaptureInfo`].
     pub(super) fn record_assert_captures(
         &mut self,
         ast_id: crate::ast::AstId,
@@ -786,7 +776,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Record the iterator-path dispatch decision for the for-of
-    /// statement at `ast_id` (Gap 6 of Stage 5). Tuple / variadic paths
+    /// statement at `ast_id`. Tuple / variadic paths
     /// are tagged via [`sem::types::DesugarKind`] alone and leave no
     /// entry here. See [`sem::types::ForOfIteratorInfo`].
     pub(super) fn record_for_of_iterator(
@@ -800,8 +790,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Record the operator-dispatch decision for a binary / index
     /// expression that the elaborator lowered to a trait method call
-    /// (Gap 11 of Stage 5). Absence of a recorded entry signals to
-    /// reify that the native
+    /// Absence of a recorded entry signals to reify that the native
     /// [`tir::TirExprKind::Binary`] / [`tir::TirExprKind::Index`] path
     /// was taken instead. See [`sem::types::OperatorDispatch`].
     pub(super) fn record_operator_dispatch(
@@ -829,8 +818,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.index_assign_dispatch.insert(key, info);
     }
 
-    /// Record the handler-binding resolution facts (Gap 13 of
-    /// Stage 5) keyed by the
+    /// Record the handler-binding resolution facts keyed by the
     /// [`crate::ast::EffectHandlerBinding`]'s [`AstId`]. Reify
     /// reads this entry to enumerate the `TirHandlerBinding`s
     /// without re-running `collect_effect_impls_for_type` or the
@@ -869,8 +857,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         crate::name::FqTypeName::of_head(&module, &name)
     }
 
-    /// Record the impl-block resolution facts (Gap 12 of Stage 5)
-    /// keyed by the [`crate::ast::ImplBlock`]'s [`AstId`]. Reify
+    /// Record the impl-block resolution facts keyed by the
+    /// [`crate::ast::ImplBlock`]'s [`AstId`]. Reify
     /// reads the entry verbatim — no re-resolution of the impl
     /// target, the trait reference, the type params, or the
     /// associated types happens inside `reify_impl`.
@@ -884,8 +872,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.impl_facts.insert(key, info);
     }
 
-    /// Record an `impl Trait for Type;` synthesis request (Gap 12 /
-    /// Stage 5). `reify_module` reads
+    /// Record an `impl Trait for Type;` synthesis request. `reify_module` reads
     /// [`sem::decls::ModuleDecls::pending_synthesis_requests`] and
     /// pushes each onto the emitted [`tir::TirModule::synthesis_requests`].
     pub(super) fn record_pending_synthesis_request(&mut self, req: tir::SynthesisRequest) {
@@ -1045,7 +1032,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Record the assignment-target place classification for the identifier
-    /// at `ast_id` (Stage 7-B). Called from [`Self::resolve_ident`] at each
+    /// at `ast_id`. Called from [`Self::resolve_ident`] at each
     /// site that resolves to a place (local / `&mut`-deref-capture / global)
     /// so [`Self::assign_to_target`] can validate l-values and global
     /// mutability from the AST + this fact instead of the now-placeholder
@@ -1818,7 +1805,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // Stage 5 / Gap 12: record the impl-block
+        // Record the impl-block
         // resolution facts so `reify_impl` can read them
         // verbatim. All inputs are already computed by
         // the setup above; the recording is one call
@@ -1953,13 +1940,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // module's globally-unique `AstId`s, so the facts the
             // walk records cannot collide with impl-module nodes.
             //
-            // Stage 5 completion: the body walk's only output
-            // is a per-impl `ModuleSemantics` snapshot stored on
+            // The body walk's only output is a per-impl
+            // `ModuleSemantics` snapshot stored on
             // `ModuleSemantics::default_method_semantics`. Reify
             // (the sole TIR source) reads those snapshots and
-            // produces the impl's default-method
-            // `TirFunction`s. The combined walk no longer builds
-            // default-method TIR.
+            // produces the impl's default-method `TirFunction`s.
             //
             // Per-impl snapshots are required because the same
             // trait body synthesised for many impls would

@@ -62,11 +62,9 @@ use super::tysys::TypeSystem;
 /// `swap_remove` + `insert`, so no shared-mutability plumbing is needed
 /// (WEP 2026-05-26).
 ///
-/// Migration markers on each field below trace the WEP 2026-05-26
-/// elaborator re-architecture. `AnnotateState` itself disappears after
-/// Stage 7 — its contents redistribute into [`super::tysys::TypeSystem`]
-/// (pipeline-wide), per-module [`super::sem::ModuleSemantics`] instances,
-/// and cross-cutting driver state.
+/// `AnnotateState` is slated to dissolve: its contents redistribute into
+/// [`super::tysys::TypeSystem`] (pipeline-wide), per-module
+/// [`super::sem::ModuleSemantics`] instances, and driver locals.
 pub(crate) struct AnnotateState {
     /// Pipeline-wide type knowledge: the type arena, decl-interned type
     /// tables, registries, included-files map, and read-only caches
@@ -100,12 +98,10 @@ pub(crate) struct AnnotateState {
     pub(crate) module_semantics: IndexMap<ModuleSource, super::sem::ModuleSemantics>,
     /// Kiln invocation redirects consulted by `resolve_import` call sites
     /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].
-    // MIGRATION: cross-cutting input (loader-provided redirect map).
     pub(crate) invocations: Rc<crate::kiln::InvocationIndex>,
     /// `ModuleSource` interner shared across phases. `Rc<RefCell<>>` so
     /// `&self` elaborator methods can `borrow_mut()` it when constructing
     /// new module sources during name resolution.
-    // MIGRATION: cross-cutting input (shared interner).
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
     /// Source-level liveness computed between `annotate_bodies` and `reify`
     /// in [`Self::build_tir_from_state`]. Empty until that runs; consumed by
