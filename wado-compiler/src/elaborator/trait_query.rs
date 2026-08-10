@@ -508,8 +508,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let trait_name = self.get_type_name(trait_type);
-        // Each entry keeps its declaring module's spelling; impl lookup settles
-        // the frames by declaration.
         let supertraits: Vec<String> = self
             .tysys
             .trait_env
@@ -776,8 +774,6 @@ impl TypeSystem {
         if bound_name == trait_name {
             return true;
         }
-        // By declaration: the closure spells a supertrait as its declaring
-        // module does, so a same-named trait in the asking frame is not it.
         let wanted = self.scoped_trait_decl_key(scope, trait_name);
         self.supertraits_of(scope, bound_name).iter().any(|s| {
             wanted
@@ -787,10 +783,6 @@ impl TypeSystem {
     }
 
     /// The transitive supertraits of `trait_name` as seen from `scope`.
-    ///
-    /// Resolved to a declaration first: pairing the declaring module with the
-    /// *written* spelling misses under a `use ... as` alias and silently drops
-    /// every implied bound.
     pub(super) fn supertraits_of(&self, scope: &TypeLookup, trait_name: &str) -> &[InheritedBound] {
         match self.scoped_trait_decl_key(scope, trait_name) {
             Some(key) => self.trait_env.supertrait_closure(&key),
@@ -1339,14 +1331,9 @@ impl TypeSystem {
             || self.blanket_trait_impl_applies(ctx, scope, type_key, trait_name)
     }
 
-    /// Whether an impl block in `impl_module` writing `impl_trait_name` names
-    /// the declaration the query means by `trait_name`. Each side resolves
-    /// where it was written: comparing the spellings makes a `use ... as` alias
-    /// look like a second trait, and two same-named foreign traits look like
-    /// one, discharging a bound the type never implements.
-    ///
-    /// A name reaching no declaration (a compiler-internal trait) falls back to
-    /// the spelling rather than matching everything.
+    /// Whether `impl_trait_name`, written in `impl_module`, and `trait_name`,
+    /// written in `scope`, name one declaration. Falls back to comparing the
+    /// spellings for a name that reaches no declaration.
     fn same_trait_decl(
         &self,
         scope: &TypeLookup,
@@ -1667,10 +1654,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// substituted by the `TypeParam`'s type. More than one bound declaring the
     /// name is ambiguous — reported, then resolved to the first.
     ///
-    /// `required_trait`: the trait a qualified call named (`Eq::eq(&a, &b)`),
-    /// which alone may answer. It is matched against the *elaborated* bounds,
-    /// the set a body may name: a supertrait of a written bound qualifies, and
-    /// a subtrait shadowing one stays distinguishable.
+    /// `required_trait`: the trait a qualified call named, which alone may
+    /// answer. Matched against the *elaborated* bounds, so a supertrait of a
+    /// written bound qualifies.
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
         bounds: &[String],
@@ -1681,9 +1667,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<(String, MethodInfo)> {
         let bounds = self.elaborate_bound_names(bounds);
         // Stopping at the first hit would hide the ambiguity, so every bound is
-        // scanned — by predicate, leaving only the winner to clone. Comparison
-        // is by declaration: a same-named trait from another module is not the
-        // one the call named.
+        // scanned — by predicate, leaving only the winner to clone.
         let candidates: Vec<&ElaboratedBound> = bounds
             .iter()
             .filter(|b| {
@@ -1698,9 +1682,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (bound.name.clone(), found)
         });
         if candidates.len() > 1 {
-            // Two candidates can share a spelling and be different traits, so
-            // reporting both as "Base" names no escape from the collision.
-            // Qualify by declaring module when they clash.
+            // Two candidates can share a spelling; reporting both as "Base"
+            // names no escape from the collision.
             let ambiguous_spelling = |b: &ElaboratedBound| {
                 candidates
                     .iter()

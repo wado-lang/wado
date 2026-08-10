@@ -417,11 +417,8 @@ pub(super) type TraitDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 /// and [`SupertraitClosureIndex`] use.
 type TraitDeclLoc = (ModuleSource, AstId);
 
-/// A supertrait in a closure, paired with the declaration it resolved to.
-///
-/// The bound keeps the *declaring* module's spelling. Consumers read the
-/// closure from their own frame, where that spelling may name a different
-/// trait or none, so the identity has to travel with it.
+/// A supertrait paired with the declaration it resolved to. The bound keeps the
+/// declaring module's spelling, which need not name the same trait elsewhere.
 #[derive(Clone, Debug)]
 pub(super) struct InheritedBound {
     pub(super) bound: ast::TraitBound,
@@ -1154,10 +1151,8 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
-    /// The trait declaration `name` refers to *as written inside `module`* —
-    /// the query-time twin of the `resolve_trait` closure `build` uses, so an
-    /// impl block's trait name resolves in its own frame, not the asking one.
-    /// `None` when the name reaches no declaration.
+    /// The trait declaration `name` refers to as written inside `module` — the
+    /// query-time twin of the `resolve_trait` closure `build` uses.
     pub(super) fn trait_decl_key_in(&self, module: &ModuleSource, name: &str) -> Option<DeclKey> {
         let scope = self.module_import_scopes.get(module);
         let declared = scope
@@ -1687,9 +1682,8 @@ pub(super) fn push_unique_bound(bounds: &mut Vec<ast::TraitBound>, bound: &ast::
     }
 }
 
-/// [`push_unique_bound`] keyed by declaration: a diamond reaching one
-/// supertrait through two subtraits leaves one entry even when the two
-/// modules spell it differently.
+/// [`push_unique_bound`] keyed by declaration, so two spellings of one
+/// supertrait collapse.
 fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBound) {
     let Some(existing) = bounds.iter_mut().find(|b| b.decl == bound.decl) else {
         bounds.push(bound.clone());
@@ -1764,8 +1758,7 @@ fn expand_supertraits(
             report_supertrait_cycle(pos, stack, headers, reported, cycles);
             continue;
         }
-        // `resolve` answered in the *declaring* module's frame, the only one
-        // where `direct.name` is meaningful; record what it named.
+        // `direct.name` is meaningful only here; record what `resolve` named.
         let super_decl = headers
             .get(&super_loc)
             .expect("resolve answers with a header's own location")

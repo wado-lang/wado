@@ -1,14 +1,12 @@
-// Inside a generic body the bounds a qualified call may name are the
-// *elaborated* ones: `T: Derived` carries `Base`, so `Base::tag(x)` resolves
-// even though only `Derived` was written. WEP 2026-07-31.
+// A qualified call may name the elaborated bounds: `T: Derived` carries `Base`,
+// so `Base::tag(x)` resolves. WEP 2026-07-31.
 trait Base {
     fn base(&self) -> i32;
     fn tag(&self) -> i32;
 }
 
 trait Derived: Base {
-    // Shadows `Base::tag` — a collision the qualified call is the escape for
-    // (WEP 2026-07-27), so both spellings must select their own declaration.
+    // Shadows `Base::tag`; both spellings must select their own declaration.
     fn tag(&self) -> i32;
 }
 

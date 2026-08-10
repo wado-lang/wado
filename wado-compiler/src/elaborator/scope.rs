@@ -16,16 +16,12 @@ use crate::tir::TypeId;
 use super::Elaborator;
 use super::trait_env::{DeclKey, InheritedBound, push_unique_bound};
 
-/// A bound paired with the declaration it names. A written bound resolves in
-/// the frame that wrote it, an implied one in its subtrait's declaring module,
-/// so the spelling alone does not identify the trait.
+/// A bound name paired with the declaration it resolves to.
 pub(super) struct ElaboratedBound {
     pub(super) name: String,
     pub(super) decl: DeclKey,
 }
 
-/// Append unless the declaration is already present; the first spelling wins,
-/// so a written bound is not renamed by an implied one reaching it later.
 fn push_unique_elaborated(bounds: &mut Vec<ElaboratedBound>, bound: ElaboratedBound) {
     if !bounds.iter().any(|b| b.decl == bound.decl) {
         bounds.push(bound);
@@ -225,9 +221,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         elaborated
     }
 
-    /// The supertrait closure of the bound `name` writes. Resolving the name to
-    /// a declaration is what makes a `use ... as` alias work: the closure is
-    /// keyed by the declared name, never the local spelling.
     fn supertraits_of_bound(&self, name: &str) -> Vec<InheritedBound> {
         self.tysys
             .trait_env
@@ -235,14 +228,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .to_vec()
     }
 
-    /// [`Self::elaborate_bounds`] over bare trait names, paired with the
-    /// declarations they name. Deduplication is by declaration, so one trait
-    /// reached under two names — an alias plus an implied bound — is one entry.
+    /// [`Self::elaborate_bounds`] over bare trait names.
     ///
-    /// Each name keeps the spelling of the frame that wrote it, because it
-    /// reaches method mangling: rewriting an implied bound to this frame's
-    /// spelling hides the impl written in the trait's own module. The lookups
-    /// settle aliases by declaration instead.
+    /// Each name keeps its writing frame's spelling — it reaches method
+    /// mangling, where rewriting it hides the impl in the trait's own module.
     pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<ElaboratedBound> {
         let mut elaborated: Vec<ElaboratedBound> = Vec::with_capacity(names.len());
         for name in names {
