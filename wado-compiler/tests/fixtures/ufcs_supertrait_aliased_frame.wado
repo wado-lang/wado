@@ -1,19 +1,11 @@
-// One trait reached under two names: `B` (this module's alias) and the `Base`
-// the imported `Derived` implies. They are one declaration, so:
+// One trait reached under two names: `B`, this module's alias, and the `Base`
+// the imported `Derived` implies. They are one declaration, so `impl Derived
+// for Local` finds its supertrait obligation discharged by `impl B for Local`,
+// and naming the trait in a bound list is not ambiguous.
 //
-//   - `impl Derived for Local` finds its supertrait obligation discharged by
-//     `impl B for Local`, though the closure spells that supertrait `Base` and
-//     only `B` names it here;
-//   - naming it in a bound list is not ambiguous — deduplicating the elaborated
-//     bounds by spelling reported "ambiguous method 'extra': declared by 'Base'
-//     and 'B'" on the very spelling meant to disambiguate.
-//
-// Calling `extra` through the bound is covered only in the `B + Derived`
-// order. The elaborated list keeps the first spelling to reach a declaration,
-// and that spelling reaches method mangling, which is still name-based: written
-// `Derived` first and the implied `Base` wins the slot, mangling a name the
-// local `impl B` does not answer to. The order dependence is the symptom, not
-// the design — see issue #1785.
+// The bound order matters here, and should not: the elaborated list keeps the
+// first spelling to reach a declaration, and that spelling reaches method
+// mangling, which is still name-based. See issue #1785.
 use { Base as B, Derived } from "./sub/ufcs_supertrait_frame_dep.wado";
 
 struct Local {

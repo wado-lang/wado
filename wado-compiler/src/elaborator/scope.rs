@@ -14,12 +14,11 @@ use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
 use super::Elaborator;
-use super::trait_env::{DeclKey, push_unique_bound};
+use super::trait_env::{DeclKey, InheritedBound, push_unique_bound};
 
-/// A bound in elaborated form: the spelling to read it by, and the declaration
-/// it names. Identity travels with the name because the two come from
-/// different frames — a written bound resolves where it was written, an
-/// implied one where its subtrait was declared.
+/// A bound paired with the declaration it names. A written bound resolves in
+/// the frame that wrote it, an implied one in its subtrait's declaring module,
+/// so the spelling alone does not identify the trait.
 pub(super) struct ElaboratedBound {
     pub(super) name: String,
     pub(super) decl: DeclKey,
@@ -226,33 +225,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         elaborated
     }
 
-    /// The supertrait closure of the bound `name` writes, found by the
-    /// declaration the name resolves to here. Keying the closure index by a
-    /// spelling instead loses every implied bound behind a `use ... as` alias,
-    /// since the index holds the declaring module's name.
-    fn supertraits_of_bound(&self, name: &str) -> Vec<super::trait_env::InheritedBound> {
+    /// The supertrait closure of the bound `name` writes. Resolving the name to
+    /// a declaration is what makes a `use ... as` alias work: the closure is
+    /// keyed by the declared name, never the local spelling.
+    fn supertraits_of_bound(&self, name: &str) -> Vec<InheritedBound> {
         self.tysys
             .trait_env
             .supertrait_closure(&self.trait_decl_key_in_frame(name))
             .to_vec()
     }
 
-    /// [`Self::elaborate_bounds`] over bare trait names, resolved to the
-    /// declarations they name.
-    ///
-    /// A written name resolves in this frame; a supertrait's identity comes
-    /// from the closure, which resolved it where it was written. Reading a
-    /// supertrait's spelling back in this frame is what let a same-named local
-    /// trait answer for it. Deduplication is by declaration, so one trait
+    /// [`Self::elaborate_bounds`] over bare trait names, paired with the
+    /// declarations they name. Deduplication is by declaration, so one trait
     /// reached under two names — an alias plus an implied bound — is one entry.
     ///
-    /// Each name is left as the frame that wrote it spells it. Renaming an
-    /// implied bound to *this* frame's spelling looks tempting — the checks
-    /// downstream resolve names — but the spelling also reaches method
-    /// mangling, so it only moves the mismatch: an impl written in the trait's
-    /// own module mangles under the declared name, and merely importing an
-    /// alias then broke calls that never mentioned it. Aliases are settled by
-    /// declaration in the lookups themselves.
+    /// Each name keeps the spelling of the frame that wrote it, because it
+    /// reaches method mangling: rewriting an implied bound to this frame's
+    /// spelling hides the impl written in the trait's own module. The lookups
+    /// settle aliases by declaration instead.
     pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<ElaboratedBound> {
         let mut elaborated: Vec<ElaboratedBound> = Vec::with_capacity(names.len());
         for name in names {

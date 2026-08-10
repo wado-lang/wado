@@ -419,11 +419,9 @@ type TraitDeclLoc = (ModuleSource, AstId);
 
 /// A supertrait in a closure, paired with the declaration it resolved to.
 ///
-/// The bound keeps the *declaring* module's spelling; the key is the
-/// identity. Consumers read a closure from their own frame, where that
-/// spelling may name a different trait — or nothing at all, when the
-/// supertrait was written under a `use ... as` alias. Carrying the key
-/// spares them a re-resolution that has no correct answer to give.
+/// The bound keeps the *declaring* module's spelling. Consumers read the
+/// closure from their own frame, where that spelling may name a different
+/// trait or none, so the identity has to travel with it.
 #[derive(Clone, Debug)]
 pub(super) struct InheritedBound {
     pub(super) bound: ast::TraitBound,
@@ -1158,9 +1156,8 @@ impl TraitEnv {
 
     /// The trait declaration `name` refers to *as written inside `module`* —
     /// the query-time twin of the `resolve_trait` closure `build` uses, so an
-    /// impl block's trait name resolves in its own frame rather than in
-    /// whichever frame happens to be asking. `None` when the name reaches no
-    /// declaration, which leaves the caller to fall back on the spelling.
+    /// impl block's trait name resolves in its own frame, not the asking one.
+    /// `None` when the name reaches no declaration.
     pub(super) fn trait_decl_key_in(&self, module: &ModuleSource, name: &str) -> Option<DeclKey> {
         let scope = self.module_import_scopes.get(module);
         let declared = scope
@@ -1768,8 +1765,7 @@ fn expand_supertraits(
             continue;
         }
         // `resolve` answered in the *declaring* module's frame, the only one
-        // where `direct.name` is meaningful; record what it named. It answered
-        // out of `decl_index`, whose values are exactly these headers' keys.
+        // where `direct.name` is meaningful; record what it named.
         let super_decl = headers
             .get(&super_loc)
             .expect("resolve answers with a header's own location")
