@@ -2393,10 +2393,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `ty` is still an unbound generic parameter / pack (as opposed to
     /// a concrete type inferred from the call site).
+    /// Whether `ty` is a type argument nothing has determined yet — either a
+    /// slot the solver left as its own parameter, or an inference variable it
+    /// never solved. Both mean "no answer", so a default may still fill it.
     pub(super) fn is_unbound_type_param(&self, ty: TypeId) -> bool {
         matches!(
             self.tysys.type_table.borrow().get(ty),
-            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+            ResolvedType::TypeParam { .. }
+                | ResolvedType::TypePack { .. }
+                | ResolvedType::InferVar(_)
         )
     }
 

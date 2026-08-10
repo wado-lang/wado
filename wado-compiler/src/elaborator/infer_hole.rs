@@ -137,6 +137,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_params_all_in(expected, &scope)
     }
 
+    /// Record `answer` as the solution of `var` — the direct form of
+    /// [`Self::solve_infer_holes_against`], for a use site whose own solver
+    /// already determined the type argument. Keeps the first answer, matching
+    /// the unifier's `or_insert` policy, and refuses an answer that is itself
+    /// still a variable.
+    pub(super) fn solve_infer_var(&mut self, var: TypeId, answer: TypeId) {
+        if self.tysys.type_table.borrow().contains_infer_var(answer) {
+            return;
+        }
+        if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
+            *slot = Some(answer);
+        }
+    }
+
     /// Solve holes in `holey` by unifying against `expected`. A binding is taken
     /// only when hole-free — a hole must resolve to a concrete type, not another.
     pub(super) fn solve_infer_holes_against(&mut self, holey: TypeId, expected: TypeId) {
