@@ -844,32 +844,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             else {
                 continue;
             };
-            let user_owns_name = modules.iter().any(|(ms, m)| {
-                super::trait_env::is_user_local(ms)
-                    && m.items
-                        .iter()
-                        .any(|it| matches!(it, Item::Trait(t) if t.name == sealed_name))
-            });
-            if user_owns_name {
+            // The sealed trait is the *stdlib* declaration of that name. A
+            // user trait sharing the name is a different declaration and
+            // resolves to a different key, so it needs no exemption here.
+            let Some(sealed_key) = trait_env.stdlib_trait_decl_key(&sealed_name) else {
                 continue;
-            }
-            for (module_source, module) in modules {
-                if !super::trait_env::is_user_local(module_source) {
+            };
+            for header in trait_env.impl_headers.values() {
+                if !super::trait_env::is_user_local(&header.module) {
                     continue;
                 }
-                for item in &module.items {
-                    if let Item::Impl(impl_block) = item
-                        && let Some(trait_type) = &impl_block.trait_type
-                        && super::trait_env::get_type_name_static(trait_type) == sealed_name
-                    {
-                        let _ = logger.error_in(
-                            module_source,
-                            TypeError::SealedTraitImpl {
-                                trait_name: sealed_name.clone(),
-                                span: impl_block.span,
-                            },
-                        );
-                    }
+                if header.trait_key.as_ref() == Some(&sealed_key) {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::SealedTraitImpl {
+                            trait_name: sealed_name.clone(),
+                            span: header.span,
+                        },
+                    );
                 }
             }
         }
@@ -879,70 +871,36 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // and only fails Wasm validation — so compare the two here, where every
         // declaration and impl is in hand.
         //
-        // Resolving the impl's trait name through imports needs machinery this
-        // pre-pass lacks. Take the declaration the impl's own module provides,
-        // else the only one bearing the name; a name several modules declare is
-        // left alone rather than matched against the wrong trait.
-        let mut trait_decls: IndexMap<(&ModuleSource, &str), &ast::TraitDecl> = IndexMap::default();
-        let mut decls_named: IndexMap<&str, usize> = IndexMap::default();
-        for (module_source, module) in modules {
-            for item in &module.items {
-                if let Item::Trait(t) = item {
-                    trait_decls.insert((module_source, t.name.as_str()), t);
-                    *decls_named.entry(t.name.as_str()).or_insert(0) += 1;
-                }
-            }
-        }
-        for (module_source, module) in modules {
-            if !super::trait_env::is_user_local(module_source) {
+        // The impl's trait is the one its header resolved to, so a module
+        // implementing its own `Encode` is never checked against another
+        // module's declaration of that name.
+        for header in trait_env.impl_headers.values() {
+            if !super::trait_env::is_user_local(&header.module) {
                 continue;
             }
-            for item in &module.items {
-                let Item::Impl(impl_block) = item else {
+            let Some(decl) = header
+                .trait_key
+                .as_ref()
+                .and_then(|key| trait_env.trait_decl_header(key))
+            else {
+                continue;
+            };
+            for method in &header.methods {
+                let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
                     continue;
                 };
-                let Some(trait_type) = &impl_block.trait_type else {
-                    continue;
-                };
-                let trait_name = super::trait_env::get_type_name_static(trait_type);
-                let decl = trait_decls
-                    .get(&(module_source, trait_name.as_str()))
-                    .or_else(|| {
-                        (decls_named.get(trait_name.as_str()) == Some(&1))
-                            .then(|| {
-                                trait_decls
-                                    .iter()
-                                    .find(|((_, n), _)| *n == trait_name.as_str())
-                                    .map(|(_, d)| d)
-                            })
-                            .flatten()
-                    });
-                let Some(decl) = decl else {
-                    continue;
-                };
-                for method in &impl_block.methods {
-                    let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
-                        continue;
-                    };
-                    let arity = |f: &ast::Function| {
-                        f.params
-                            .iter()
-                            .filter(|p| p.self_kind == ast::SelfKind::None)
-                            .count()
-                    };
-                    let (expected, found) = (arity(declared), arity(method));
-                    if expected != found {
-                        let _ = logger.error_in(
-                            module_source,
-                            TypeError::TraitMethodArityMismatch {
-                                trait_name: trait_name.clone(),
-                                method_name: method.name.clone(),
-                                expected,
-                                found,
-                                span: method.name_span,
-                            },
-                        );
-                    }
+                let (expected, found) = (declared.param_count, method.param_count);
+                if expected != found {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::TraitMethodArityMismatch {
+                            trait_name: decl.name.clone(),
+                            method_name: method.name.clone(),
+                            expected,
+                            found,
+                            span: method.name_span,
+                        },
+                    );
                 }
             }
         }

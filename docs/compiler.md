@@ -218,6 +218,15 @@ and `{decl}` repeat whenever a type is implemented in the module declaring it �
 the common case. A receiver with no declaring module (a builtin, a tuple) has no
 `{decl}` segment. See WEP 2026-07-29 for why neither segment is removable alone.
 
+The same rule binds names still in their written form. A type name in source is
+relative to the module that wrote it — its **vantage** — so an identity is
+derived once, at `TraitEnv::build`, where the vantage exists: each `impl`
+block's digest (`ImplHeader`) carries its module, its target's `ImplTargetKey`
+and its trait's. Whole-program checks (coherence, orphan rules, sealed traits,
+trait-method arity) read that digest instead of re-walking `loaded_modules`,
+because a second walk has no vantage and can only compare spellings. See WEP
+2026-08-10.
+
 ## Component Model Registries
 
 Three registries collect declarative information from the standard library and feed both the elaborator and codegen:

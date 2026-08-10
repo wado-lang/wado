@@ -264,6 +264,15 @@ impl ImplTargetKey {
             ImplTargetKey::Ref(_) => None,
         }
     }
+
+    /// How to spell this target in a diagnostic — the declaration name, or the
+    /// reference prefix for a `&T` / `&mut T` target.
+    pub(crate) fn display_name(&self) -> &str {
+        match self {
+            ImplTargetKey::Decl((_, name)) | ImplTargetKey::TypeParam(_, name) => name,
+            ImplTargetKey::Ref(kind) => kind.prefix(),
+        }
+    }
 }
 
 pub(super) type TraitImplIndex = IndexMap<ImplTargetKey, Vec<(ModuleSource, AstId)>>;
@@ -287,10 +296,25 @@ fn index_by_receiver(index: &TraitImplIndex) -> ReceiverImplIndex {
 /// [`TraitEnv::impl_headers`].
 #[derive(Clone, Debug)]
 pub(super) struct ImplHeader {
+    /// The module that wrote this header — the vantage every name in
+    /// [`Self::ty`] and [`Self::trait_type`] is spelled from. Without it a
+    /// consumer holding the header alone can only compare spellings, which is
+    /// what makes two modules' same-named types look like one.
+    pub(super) module: ModuleSource,
+    /// Identity of the impl target, resolved once from [`Self::module`]'s
+    /// vantage. The key every impl index in this file is keyed by, so a
+    /// whole-program check compares identities rather than written heads.
+    pub(super) target: ImplTargetKey,
+    /// Identity of the implemented trait, resolved the same way; `None` for
+    /// inherent `impl Type { … }` blocks.
+    pub(super) trait_key: Option<ImplTargetKey>,
     /// Trait name for `impl Trait for Type` blocks (via `get_type_name_static`
     /// on the trait reference); `None` for inherent `impl Type { … }` blocks.
     /// The memoised head name of [`Self::trait_type`], so the index filters
     /// that only ask "is this a trait impl?" need no allocation.
+    ///
+    /// A spelling, not an identity — compare [`Self::trait_key`] instead when
+    /// the question is *which* trait this is.
     pub(super) trait_name: Option<String>,
     /// The full trait reference (`Index<K>` in `impl Index<K> for Map`), for
     /// consumers that need its generic arguments rather than its head name.
@@ -309,6 +333,8 @@ pub(super) struct ImplHeader {
     /// `impl Trait for Type;` — a body-less derivation request rather than a
     /// real impl (WEP 2026-06-25 trait derivation).
     pub(super) is_synthesize_request: bool,
+    /// Where the block is written, for diagnostics raised against it.
+    pub(super) span: Span,
 }
 
 /// Digested signature of a single method inside an [`ImplHeader`]. Holds the
@@ -325,6 +351,15 @@ pub(super) struct ImplMethodHeader {
     /// declarations it distinguishes default methods from bare signatures,
     /// which method-lookup's fallback ordering depends on.
     pub(super) has_body: bool,
+    /// Where the method is written, so a whole-program check reporting on it
+    /// needs no second walk of the module AST to find the span.
+    pub(super) span: Span,
+    /// The span of the method's name alone, for a diagnostic that points at
+    /// the signature rather than the whole body.
+    pub(super) name_span: Span,
+    /// Parameter count excluding `self`, so an arity check reads the digest
+    /// instead of the method AST.
+    pub(super) param_count: usize,
 }
 
 /// The receiver shape of a blanket impl.
@@ -921,6 +956,13 @@ impl TraitEnv {
                                     ast_id: m.id,
                                     type_params: m.type_params.clone(),
                                     has_body: m.body.is_some(),
+                                    span: m.span,
+                                    name_span: m.name_span,
+                                    param_count: m
+                                        .params
+                                        .iter()
+                                        .filter(|p| p.self_kind == ast::SelfKind::None)
+                                        .count(),
                                 })
                                 .collect(),
                             assoc_types: trait_decl.associated_types.clone(),
@@ -936,12 +978,35 @@ impl TraitEnv {
                 let type_key = impl_target_key(
                     &impl_block.ty,
                     module_source,
+                    &impl_block.type_params,
                     module_import_scopes.get(module_source),
                     symbols,
+                    decl_index
+                        .keys()
+                        .chain(effect_decl_index.keys())
+                        .chain(resource_decl_index.keys())
+                        .chain(type_decl_index.keys()),
                 );
+                let trait_key = impl_block.trait_type.as_ref().map(|trait_type| {
+                    impl_target_key(
+                        trait_type,
+                        module_source,
+                        &impl_block.type_params,
+                        module_import_scopes.get(module_source),
+                        symbols,
+                        decl_index
+                        .keys()
+                        .chain(effect_decl_index.keys())
+                        .chain(resource_decl_index.keys())
+                        .chain(type_decl_index.keys()),
+                    )
+                });
                 impl_headers.insert(
                     (module_source.clone(), impl_block.id),
                     ImplHeader {
+                        module: module_source.clone(),
+                        target: type_key.clone(),
+                        trait_key,
                         trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
                         trait_type: impl_block.trait_type.clone(),
                         ty: impl_block.ty.clone(),
@@ -954,10 +1019,18 @@ impl TraitEnv {
                                 ast_id: m.id,
                                 type_params: m.type_params.clone(),
                                 has_body: m.body.is_some(),
+                                span: m.span,
+                                name_span: m.name_span,
+                                param_count: m
+                                    .params
+                                    .iter()
+                                    .filter(|p| p.self_kind == ast::SelfKind::None)
+                                    .count(),
                             })
                             .collect(),
                         associated_types: impl_block.associated_types.clone(),
                         is_synthesize_request: impl_block.is_synthesize_request,
+                        span: impl_block.span,
                     },
                 );
                 // Joins `all_impl_index` before the trait/inherent split, so its
@@ -1063,7 +1136,33 @@ impl TraitEnv {
             }
         }
 
-        let mut violations = check_all_orphan_rules(modules, &decl_index, &type_decl_index);
+        // The one answer to "which declaration does this written name mean?",
+        // from the writing module's vantage. Every whole-program check below
+        // takes it rather than reading a head off the AST, so no check can
+        // fall back to comparing spellings.
+        let resolve_written = |module: &ModuleSource,
+                               ty: &ast::Type,
+                               type_params: &[ast::GenericParam]| {
+            impl_target_key(
+                ty,
+                module,
+                type_params,
+                module_import_scopes.get(module),
+                symbols,
+                decl_index
+                        .keys()
+                        .chain(effect_decl_index.keys())
+                        .chain(resource_decl_index.keys())
+                        .chain(type_decl_index.keys()),
+            )
+        };
+
+        let mut violations = check_all_orphan_rules(
+            &impl_headers,
+            &decl_index,
+            &type_decl_index,
+            &resolve_written,
+        );
 
         // `canonical_key` goes through `symbols`, which does not carry a
         // `use ... as` alias; the module's import scope does.
@@ -1079,8 +1178,8 @@ impl TraitEnv {
             }
             decl_index.get(&canonical_key(module, declared)).cloned()
         };
-        violations.extend(check_variadic_impl_overlap(modules, &resolve_trait));
-        violations.extend(check_inherent_impl_collisions(modules));
+        violations.extend(check_variadic_impl_overlap(&impl_headers));
+        violations.extend(check_inherent_impl_collisions(&impl_headers));
 
         let (supertrait_closures, cycles) =
             build_supertrait_closures(&trait_decl_headers, &resolve_trait);
@@ -1465,6 +1564,27 @@ impl TraitEnv {
             .cloned()
     }
 
+    /// The stdlib's declaration of `name`, as the key an `impl` header
+    /// resolves to. A compiler item (`Member`, `ReflectStruct`, …) is a
+    /// stdlib trait, so this is its identity — and a user trait sharing the
+    /// name is a different declaration, not an exemption to special-case.
+    pub(super) fn stdlib_trait_decl_key(&self, name: &str) -> Option<ImplTargetKey> {
+        self.decl_index
+            .keys()
+            .find(|(ms, n)| n == name && !is_user_local(ms))
+            .map(|key| ImplTargetKey::Decl(key.clone()))
+    }
+
+    /// The digested declaration an `impl` header's [`ImplHeader::trait_key`]
+    /// names, or `None` when the key names no trait declaration.
+    pub(super) fn trait_decl_header(&self, key: &ImplTargetKey) -> Option<&TraitDeclHeader> {
+        let ImplTargetKey::Decl(decl_key) = key else {
+            return None;
+        };
+        let loc = self.decl_index.get(decl_key)?;
+        self.trait_decl_headers.get(loc)
+    }
+
     /// Find any canonical receiver [`DeclKey`] currently registered in
     /// the static-method index whose bare name matches `name`. Used as a
     /// final fallback in [`crate::elaborator::Elaborator::canonical_decl_key`]
@@ -1514,18 +1634,18 @@ pub(super) fn is_user_local(ms: &ModuleSource) -> bool {
     )
 }
 
-/// Returns `true` if the named type is a local (user-defined) type.
-/// Primitive types (i32, bool, char, etc.) are not in the set and return `false`.
-fn is_local_type_name(name: &str, local_type_names: &IndexSet<String>) -> bool {
-    local_type_names.contains(name)
-}
-
-/// Returns `true` if the named trait is a local (user-defined) trait.
-/// Any module that declares a trait by this name suffices; per-module
-/// disambiguation is not required because the orphan rule operates at the
-/// project (user-local) granularity.
-fn is_local_trait_name(name: &str, local_trait_names: &IndexSet<String>) -> bool {
-    local_trait_names.contains(name)
+/// The declarations a user package owns, as identities rather than bare
+/// names. The orphan rule asks "does this package own the thing this name
+/// refers to?" — a question a spelling cannot answer, because a user
+/// declaration shadowing a stdlib name would otherwise vouch for the stdlib
+/// type it shadows.
+struct LocalDecls {
+    types: IndexSet<DeclKey>,
+    traits: IndexSet<DeclKey>,
+    /// Whether a user module declares the tuple type (`pub type [..T];`). The
+    /// tuple is one global shape rather than a per-module declaration, so
+    /// ownership of it is a yes/no fact about the package.
+    tuple: bool,
 }
 
 /// Describes the orphan-rule "classification" of a position in the impl sequence.
@@ -1547,43 +1667,26 @@ enum PositionKind {
 /// References (`&T`, `&mut T`) are *fundamental* and are looked through.
 fn classify_position(
     ty: &Type,
-    type_params: &[String],
-    local_type_names: &IndexSet<String>,
+    header: &ImplHeader,
+    local: &LocalDecls,
+    resolve: ResolveWritten<'_>,
 ) -> PositionKind {
     match ty {
         // Fundamental: look through references
         Type::Reference(inner) | Type::MutReference(inner) => {
-            classify_position(inner, type_params, local_type_names)
+            classify_position(inner, header, local, resolve)
         }
-        Type::Named(named) => {
-            if type_params.contains(&named.name) {
-                PositionKind::UncoveredTypeParam
-            } else if is_local_type_name(&named.name, local_type_names) {
-                PositionKind::LocalType
-            } else {
-                PositionKind::ForeignType
-            }
-        }
-        Type::Generic(generic) => {
-            if type_params.contains(&generic.name) {
-                // Generic<T> where generic itself is a type param: uncovered
-                PositionKind::UncoveredTypeParam
-            } else if is_local_type_name(&generic.name, local_type_names) {
-                // LocalType<...>: the head is local → this position is local
-                PositionKind::LocalType
-            } else {
-                PositionKind::ForeignType
+        Type::Named(_) | Type::Generic(_) => {
+            match resolve(&header.module, ty, &header.type_params) {
+                ImplTargetKey::TypeParam(..) => PositionKind::UncoveredTypeParam,
+                ImplTargetKey::Decl(key) if local.types.contains(&key) => PositionKind::LocalType,
+                ImplTargetKey::Decl(_) | ImplTargetKey::Ref(_) => PositionKind::ForeignType,
             }
         }
         // Tuples are local if the current crate owns them (via `pub type [..T];`)
-        Type::Tuple(_) => {
-            if local_type_names.contains(TypeTable::TUPLE_TYPE_NAME) {
-                PositionKind::LocalType
-            } else {
-                PositionKind::ForeignType
-            }
-        }
-        Type::Function(_)
+        Type::Tuple(_) if local.tuple => PositionKind::LocalType,
+        Type::Tuple(_)
+        | Type::Function(_)
         | Type::NamespacedGeneric(_)
         | Type::TypePackSpread(..)
         | Type::Infer(_)
@@ -1595,15 +1698,13 @@ fn classify_position(
 ///
 /// Sequence: `[self_type, trait_arg1, trait_arg2, ...]`.
 /// Valid if there exists a position with `LocalType` and no `UncoveredTypeParam` before it.
-fn check_orphan_rfc2451(impl_block: &ast::ImplBlock, local_type_names: &IndexSet<String>) -> bool {
-    let type_params: Vec<String> = impl_block
-        .type_params
-        .iter()
-        .map(|p| p.name.clone())
-        .collect();
-
+fn check_orphan_rfc2451(
+    header: &ImplHeader,
+    local: &LocalDecls,
+    resolve: ResolveWritten<'_>,
+) -> bool {
     // Build the sequence: self type first, then trait type arguments
-    let trait_args: &[Type] = match impl_block.trait_type.as_ref() {
+    let trait_args: &[Type] = match header.trait_type.as_ref() {
         Some(Type::Generic(g)) => &g.args,
         _ => &[],
     };
@@ -1611,7 +1712,7 @@ fn check_orphan_rfc2451(impl_block: &ast::ImplBlock, local_type_names: &IndexSet
     let mut seen_uncovered_before_local = false;
 
     // Position 0: self type
-    match classify_position(&impl_block.ty, &type_params, local_type_names) {
+    match classify_position(&header.ty, header, local, resolve) {
         PositionKind::LocalType => return true,
         PositionKind::UncoveredTypeParam => seen_uncovered_before_local = true,
         PositionKind::ForeignType => {}
@@ -1619,7 +1720,7 @@ fn check_orphan_rfc2451(impl_block: &ast::ImplBlock, local_type_names: &IndexSet
 
     // Positions 1+: trait type arguments
     for trait_arg in trait_args {
-        match classify_position(trait_arg, &type_params, local_type_names) {
+        match classify_position(trait_arg, header, local, resolve) {
             PositionKind::LocalType => {
                 if !seen_uncovered_before_local {
                     return true;
@@ -1640,6 +1741,13 @@ fn check_orphan_rfc2451(impl_block: &ast::ImplBlock, local_type_names: &IndexSet
 /// Resolves a supertrait name referenced in a trait's own module to that
 /// supertrait's declaration. `None` for a name that declares no trait.
 type ResolveTrait<'a> = &'a dyn Fn(&ModuleSource, &str) -> Option<TraitDeclLoc>;
+
+/// Resolves a type written in one module — the vantage — to the declaration it
+/// names, shadowed by the surrounding item's own type parameters. The single
+/// answer to "which type is this name?", handed to whole-program checks so
+/// none of them re-derives one from a bare head.
+type ResolveWritten<'a> =
+    &'a dyn Fn(&ModuleSource, &ast::Type, &[ast::GenericParam]) -> ImplTargetKey;
 
 /// Append `bound` unless a bound of that name is already present. Bound lists
 /// are name-keyed everywhere downstream, so a name is the identity here too.
@@ -1916,53 +2024,44 @@ impl VariadicImpl<'_> {
 /// The same walk refuses a target the compiler does not implement, which would
 /// otherwise miscompile or trip the WIR validator.
 fn check_variadic_impl_overlap(
-    modules: &IndexMap<ModuleSource, Module>,
-    resolve_trait: ResolveTrait<'_>,
+    impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut violations = Vec::new();
-    let mut groups: IndexMap<TraitDeclLoc, Vec<VariadicImpl<'_>>> = IndexMap::default();
+    let mut groups: IndexMap<&ImplTargetKey, Vec<VariadicImpl<'_>>> = IndexMap::default();
 
-    for (module_source, module) in modules {
-        for item in &module.items {
-            let Item::Impl(impl_block) = item else {
-                continue;
-            };
-            let Some(trait_type) = &impl_block.trait_type else {
-                continue;
-            };
-            let Some(target) = variadic_target(&impl_block.ty) else {
-                continue;
-            };
-            if let VariadicTarget::Unsupported = target {
-                if is_user_local(module_source) {
-                    violations.push((
-                        module_source.clone(),
-                        TypeError::UnsupportedVariadicImplTarget {
-                            span: impl_block.span,
-                        },
-                    ));
-                }
-                continue;
+    for header in impl_headers.values() {
+        let Some(trait_key) = &header.trait_key else {
+            continue;
+        };
+        let Some(target) = variadic_target(&header.ty) else {
+            continue;
+        };
+        if let VariadicTarget::Unsupported = target {
+            if is_user_local(&header.module) {
+                violations.push((
+                    header.module.clone(),
+                    TypeError::UnsupportedVariadicImplTarget { span: header.span },
+                ));
             }
-            let trait_name = get_type_name_static(trait_type);
-            let Some(trait_loc) = resolve_trait(module_source, &trait_name) else {
-                continue;
-            };
-            groups.entry(trait_loc).or_default().push(VariadicImpl {
-                module_source,
-                span: impl_block.span,
-                trait_name,
-                trait_args: match trait_type {
-                    ast::Type::Generic(generic) => &generic.args,
-                    _ => &[],
-                },
-                params: impl_block
-                    .type_params
-                    .iter()
-                    .map(|p| p.name.as_str())
-                    .collect(),
-            });
+            continue;
         }
+        let ImplTargetKey::Decl(_) = trait_key else {
+            continue;
+        };
+        groups.entry(trait_key).or_default().push(VariadicImpl {
+            module_source: &header.module,
+            span: header.span,
+            trait_name: trait_key.display_name().to_string(),
+            trait_args: match header.trait_type.as_ref() {
+                Some(ast::Type::Generic(generic)) => &generic.args,
+                _ => &[],
+            },
+            params: header
+                .type_params
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect(),
+        });
     }
 
     for impls in groups.values_mut() {
@@ -2031,48 +2130,49 @@ fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
 /// inherent impl carries no such contract, so a generic caller type-checked
 /// against the general method would link to a differently-typed function.
 /// Rejected, as in Rust.
+///
+/// Keyed by the target's resolved [`ImplTargetKey`], never by the head as
+/// written: `Box_` in one module and `Box_` in another are two types, and a
+/// spelling cannot tell them apart. Reading the resolved key off
+/// [`ImplHeader`] is what makes that structural — the identity is decided once,
+/// where the vantage exists, rather than re-derived here from a bare name.
 fn check_inherent_impl_collisions(
-    modules: &IndexMap<ModuleSource, Module>,
+    impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
 ) -> Vec<(ModuleSource, TypeError)> {
-    let mut generic_methods_by_head: IndexMap<String, IndexSet<&str>> = IndexMap::default();
+    let mut generic_methods_by_target: IndexMap<&ImplTargetKey, IndexSet<&str>> =
+        IndexMap::default();
     let mut instantiations = Vec::new();
 
-    for (module_source, module) in modules {
-        for item in &module.items {
-            let Item::Impl(impl_block) = item else {
-                continue;
-            };
-            if impl_block.trait_type.is_some() {
-                continue;
-            }
-            let params: IndexSet<&str> = impl_block
-                .type_params
-                .iter()
-                .map(|p| p.name.as_str())
-                .collect();
-            let head = get_type_name_static(&impl_block.ty);
-            if target_mentions_impl_param(&impl_block.ty, &params) {
-                generic_methods_by_head
-                    .entry(head)
-                    .or_default()
-                    .extend(impl_block.methods.iter().map(|m| m.name.as_str()));
-            } else if is_user_local(module_source) {
-                instantiations.push((module_source, impl_block, head));
-            }
+    for header in impl_headers.values() {
+        if header.trait_key.is_some() {
+            continue;
+        }
+        let params: IndexSet<&str> = header
+            .type_params
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
+        if target_mentions_impl_param(&header.ty, &params) {
+            generic_methods_by_target
+                .entry(&header.target)
+                .or_default()
+                .extend(header.methods.iter().map(|m| m.name.as_str()));
+        } else if is_user_local(&header.module) {
+            instantiations.push(header);
         }
     }
 
     let mut violations = Vec::new();
-    for (module_source, impl_block, head) in instantiations {
-        let Some(generic_methods) = generic_methods_by_head.get(&head) else {
+    for header in instantiations {
+        let Some(generic_methods) = generic_methods_by_target.get(&header.target) else {
             continue;
         };
-        for method in &impl_block.methods {
+        for method in &header.methods {
             if generic_methods.contains(method.name.as_str()) {
                 violations.push((
-                    module_source.clone(),
+                    header.module.clone(),
                     TypeError::DuplicateInherentMethod {
-                        self_type_name: head.clone(),
+                        self_type_name: header.target.display_name().to_string(),
                         method_name: method.name.clone(),
                         span: method.span,
                     },
@@ -2088,88 +2188,74 @@ fn check_inherent_impl_collisions(
 /// Only impl blocks in local (user) modules are checked. Each violation is
 /// paired with the offending impl's [`ModuleSource`] for file attribution.
 fn check_all_orphan_rules(
-    modules: &IndexMap<ModuleSource, Module>,
+    impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
     decl_index: &TraitDeclIndex,
     type_decl_index: &IndexMap<DeclKey, ModuleSource>,
+    resolve: ResolveWritten<'_>,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut violations = Vec::new();
 
-    // Project all (`DeclKey`, `ModuleSource`) entries down to bare names of
-    // user-local declarations. The orphan rule applies at the project /
-    // user-local granularity, so the sets need only track *whether* a name
-    // is defined by some user module — per-module disambiguation isn't
-    // needed for orphan classification (and would require canonicalising
-    // an impl block's referenced type, which lacks the module context the
-    // build phase has access to).
-    let local_type_names: IndexSet<String> = type_decl_index
-        .iter()
-        .filter(|(_, ms)| is_user_local(ms))
-        .map(|((_, name), _)| name.clone())
-        .collect();
-    let local_trait_names: IndexSet<String> = decl_index
-        .iter()
-        .filter(|(_, (ms, _))| is_user_local(ms))
-        .map(|((_, name), _)| name.clone())
-        .collect();
+    let local_key = |(_, ms): (&DeclKey, &ModuleSource)| is_user_local(ms);
+    let local = LocalDecls {
+        types: type_decl_index
+            .iter()
+            .filter(|e| local_key((e.0, e.1)))
+            .map(|(key, _)| key.clone())
+            .collect(),
+        traits: decl_index
+            .iter()
+            .filter(|(_, (ms, _))| is_user_local(ms))
+            .map(|(key, _)| key.clone())
+            .collect(),
+        tuple: type_decl_index
+            .iter()
+            .any(|((_, name), ms)| name == TypeTable::TUPLE_TYPE_NAME && is_user_local(ms)),
+    };
 
-    for (module_source, module) in modules {
-        if !is_user_local(module_source) {
+    for header in impl_headers.values() {
+        if !is_user_local(&header.module) {
             continue;
         }
 
-        for item in &module.items {
-            let Item::Impl(impl_block) = item else {
-                continue;
-            };
-            let Some(trait_type) = &impl_block.trait_type else {
-                // Inherent impl. The orphan rule (foreign-trait/foreign-type)
-                // does not apply, but coherence does: a user package may only
-                // define inherent methods on types it owns. Extending a foreign
-                // type (a primitive, `Array<T>`, `String`, or any other stdlib
-                // type) inherently would let two packages add colliding methods
-                // to the same type, so it is forbidden — use a trait instead.
-                // `classify_position` looks through references and treats a
-                // `LocalType` head as owned; only a genuinely foreign head is a
-                // violation. (Stdlib modules are skipped above, so their own
-                // `impl Array<T>` / `impl i32` are unaffected.)
-                let type_params: Vec<String> = impl_block
-                    .type_params
-                    .iter()
-                    .map(|p| p.name.clone())
-                    .collect();
-                if let PositionKind::ForeignType =
-                    classify_position(&impl_block.ty, &type_params, &local_type_names)
-                {
-                    violations.push((
-                        module_source.clone(),
-                        TypeError::InherentImplOnForeignType {
-                            self_type_name: get_type_name_static(&impl_block.ty),
-                            span: impl_block.span,
-                        },
-                    ));
-                }
-                continue;
-            };
-
-            let trait_name = get_type_name_static(trait_type);
-
-            // If the trait is local, always allowed
-            if is_local_trait_name(&trait_name, &local_trait_names) {
-                continue;
-            }
-
-            // Foreign trait: apply RFC 2451 sequence check
-            if !check_orphan_rfc2451(impl_block, &local_type_names) {
-                let self_type_name = get_type_name_static(&impl_block.ty);
+        let Some(trait_key) = &header.trait_key else {
+            // Inherent impl. The orphan rule (foreign-trait/foreign-type)
+            // does not apply, but coherence does: a user package may only
+            // define inherent methods on types it owns. Extending a foreign
+            // type (a primitive, `Array<T>`, `String`, or any other stdlib
+            // type) inherently would let two packages add colliding methods
+            // to the same type, so it is forbidden — use a trait instead.
+            // `classify_position` looks through references and treats a
+            // `LocalType` head as owned; only a genuinely foreign head is a
+            // violation. (Stdlib modules are skipped above, so their own
+            // `impl Array<T>` / `impl i32` are unaffected.)
+            if let PositionKind::ForeignType = classify_position(&header.ty, header, &local, resolve)
+            {
                 violations.push((
-                    module_source.clone(),
-                    TypeError::OrphanViolation {
-                        trait_name,
-                        self_type_name,
-                        span: impl_block.span,
+                    header.module.clone(),
+                    TypeError::InherentImplOnForeignType {
+                        self_type_name: header.target.display_name().to_string(),
+                        span: header.span,
                     },
                 ));
             }
+            continue;
+        };
+
+        // If the trait is local, always allowed
+        if matches!(trait_key, ImplTargetKey::Decl(key) if local.traits.contains(key)) {
+            continue;
+        }
+
+        // Foreign trait: apply RFC 2451 sequence check
+        if !check_orphan_rfc2451(header, &local, resolve) {
+            violations.push((
+                header.module.clone(),
+                TypeError::OrphanViolation {
+                    trait_name: trait_key.display_name().to_string(),
+                    self_type_name: header.target.display_name().to_string(),
+                    span: header.span,
+                },
+            ));
         }
     }
 
@@ -2229,16 +2315,24 @@ pub(super) fn declaring_side_decl_key<'a>(
     (module_source.clone(), name.to_string())
 }
 
-pub(super) fn impl_target_key(
+pub(super) fn impl_target_key<'a>(
     ty: &ast::Type,
     module_source: &ModuleSource,
+    type_params: &[ast::GenericParam],
     scope: Option<&ModuleImportScope>,
     symbols: &SymbolTable,
+    decl_keys: impl Iterator<Item = &'a DeclKey>,
 ) -> ImplTargetKey {
     if let Some(kind) = name::RefKind::from_ast(ty) {
         ImplTargetKey::Ref(kind)
     } else {
         let written = get_type_name_static(ty);
+        // The impl's own binder shadows any declaration of the same name, so
+        // `impl<T> Trait for T` written where a `struct T` exists stays a
+        // blanket rather than joining that struct's bucket.
+        if type_params.iter().any(|p| p.name == written) {
+            return ImplTargetKey::TypeParam(module_source.clone(), written);
+        }
         let empty_sources: IndexMap<String, ModuleSource> = IndexMap::default();
         let empty_names: IndexMap<String, String> = IndexMap::default();
         let key = super::trait_query::decl_identity_core(
@@ -2251,7 +2345,16 @@ pub(super) fn impl_target_key(
         );
         match key {
             Some(key) => ImplTargetKey::Decl(key),
-            None => ImplTargetKey::TypeParam(module_source.clone(), written),
+            // Reached through no import and no symbol: a prelude-implicit name
+            // (`Display`, `ReflectStruct`, `Ord`) that the writing module never
+            // `use`d still names a declaration, so fall back to the program's
+            // declarations by bare name — the same fallback
+            // `declaring_side_decl_key` offers. Only a name reaching none of
+            // them is a blanket parameter.
+            None => match decl_keys.into_iter().find(|(_, n)| *n == written) {
+                Some(key) => ImplTargetKey::Decl(key.clone()),
+                None => ImplTargetKey::TypeParam(module_source.clone(), written),
+            },
         }
     }
 }
@@ -2291,7 +2394,7 @@ pub(super) fn get_type_name_static(ty: &ast::Type) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{GenericParam, GenericType, ImplBlock, NamedType};
+    use crate::ast::{GenericParam, GenericType, NamedType};
     use crate::module_source::ModuleSourceInterner;
     use crate::token::Span;
 
@@ -2345,27 +2448,77 @@ mod tests {
         }
     }
 
-    fn make_type_decl_index(local_names: &[&str]) -> IndexSet<String> {
-        let mut s = IndexSet::default();
-        for &name in local_names {
-            s.insert(name.to_string());
+    /// The vantage every orphan-rule test writes its impl from. One per
+    /// thread: [`crate::intern::InternedStr`] compares by pointer, so a fresh
+    /// interner per call would mint modules that never compare equal.
+    fn vantage() -> ModuleSource {
+        thread_local! {
+            static VANTAGE: ModuleSource = ModuleSourceInterner::new().local("./test.wado");
         }
-        s
+        VANTAGE.with(Clone::clone)
     }
 
-    fn impl_block(type_params: Vec<GenericParam>, trait_type: Type, self_type: Type) -> ImplBlock {
-        ImplBlock {
-            id: crate::ast::AstId::fresh(),
-            type_params,
+    /// Test double for the build-time resolver: a binder stays a binder, a
+    /// reference keys by kind, and every other name is declared by the module
+    /// that wrote it. `make_local_decls` builds the owned set from the same
+    /// module, so a name is local exactly when the test says it is.
+    fn resolve_for_test(
+        module: &ModuleSource,
+        ty: &Type,
+        type_params: &[GenericParam],
+    ) -> ImplTargetKey {
+        if let Some(kind) = name::RefKind::from_ast(ty) {
+            return ImplTargetKey::Ref(kind);
+        }
+        let head = get_type_name_static(ty);
+        if type_params.iter().any(|p| p.name == head) {
+            return ImplTargetKey::TypeParam(module.clone(), head);
+        }
+        ImplTargetKey::Decl((module.clone(), head))
+    }
+
+    fn make_local_decls(local_names: &[&str]) -> LocalDecls {
+        LocalDecls {
+            types: local_names
+                .iter()
+                .map(|name| (vantage(), (*name).to_string()))
+                .collect(),
+            traits: IndexSet::default(),
+            tuple: false,
+        }
+    }
+
+    /// A digested header as `TraitEnv::build` would produce it, with the
+    /// identities the test double resolves.
+    fn impl_header(
+        type_params: Vec<GenericParam>,
+        trait_type: Type,
+        self_type: Type,
+    ) -> ImplHeader {
+        let module = vantage();
+        ImplHeader {
+            target: resolve_for_test(&module, &self_type, &type_params),
+            trait_key: Some(resolve_for_test(&module, &trait_type, &type_params)),
+            module,
+            trait_name: Some(get_type_name_static(&trait_type)),
             trait_type: Some(trait_type),
             ty: self_type,
-            associated_types: vec![],
-            constants: vec![],
+            type_params,
             methods: vec![],
+            associated_types: vec![],
             is_synthesize_request: false,
-            rest: None,
             span: dummy_span(),
         }
+    }
+
+    /// A position classified on its own, outside any impl: the orphan rule
+    /// reads the self type and each trait argument through the same call, so
+    /// the tests below exercise it through a header with no type parameters
+    /// unless one is named.
+    fn classify(ty: &Type, type_params: &[&str], local: &LocalDecls) -> PositionKind {
+        let params: Vec<GenericParam> = type_params.iter().map(|n| type_param(n)).collect();
+        let header = impl_header(params, named("ForeignTrait"), ty.clone());
+        classify_position(ty, &header, local, &resolve_for_test)
     }
 
     // --- is_user_local ---
@@ -2404,36 +2557,36 @@ mod tests {
 
     #[test]
     fn test_classify_local_named_type() {
-        let tdx = make_type_decl_index(&["MyError"]);
+        let tdx = make_local_decls(&["MyError"]);
         assert!(matches!(
-            classify_position(&named("MyError"), &[], &tdx),
+            classify(&named("MyError"), &[], &tdx),
             PositionKind::LocalType
         ));
     }
 
     #[test]
     fn test_classify_foreign_named_type() {
-        let tdx = make_type_decl_index(&[]);
+        let tdx = make_local_decls(&[]);
         assert!(matches!(
-            classify_position(&named("String"), &[], &tdx),
+            classify(&named("String"), &[], &tdx),
             PositionKind::ForeignType
         ));
     }
 
     #[test]
     fn test_classify_primitive_is_foreign() {
-        let tdx = make_type_decl_index(&[]);
+        let tdx = make_local_decls(&[]);
         assert!(matches!(
-            classify_position(&named("i32"), &[], &tdx),
+            classify(&named("i32"), &[], &tdx),
             PositionKind::ForeignType
         ));
     }
 
     #[test]
     fn test_classify_uncovered_type_param() {
-        let tdx = make_type_decl_index(&[]);
+        let tdx = make_local_decls(&[]);
         assert!(matches!(
-            classify_position(&named("T"), &["T".to_string()], &tdx),
+            classify(&named("T"), &["T"], &tdx),
             PositionKind::UncoveredTypeParam
         ));
     }
@@ -2441,10 +2594,10 @@ mod tests {
     #[test]
     fn test_classify_local_generic_head_is_local() {
         // LocalType<T> — head is local regardless of args
-        let tdx = make_type_decl_index(&["LocalType"]);
+        let tdx = make_local_decls(&["LocalType"]);
         let ty = generic("LocalType", vec![named("T")]);
         assert!(matches!(
-            classify_position(&ty, &["T".to_string()], &tdx),
+            classify(&ty, &["T"], &tdx),
             PositionKind::LocalType
         ));
     }
@@ -2452,10 +2605,10 @@ mod tests {
     #[test]
     fn test_classify_foreign_generic_is_foreign() {
         // List<T> — head List is foreign
-        let tdx = make_type_decl_index(&[]);
+        let tdx = make_local_decls(&[]);
         let ty = generic("List", vec![named("T")]);
         assert!(matches!(
-            classify_position(&ty, &["T".to_string()], &tdx),
+            classify(&ty, &["T"], &tdx),
             PositionKind::ForeignType
         ));
     }
@@ -2463,9 +2616,9 @@ mod tests {
     #[test]
     fn test_classify_reference_to_local_is_local() {
         // &LocalType — fundamental: look through &
-        let tdx = make_type_decl_index(&["MyStruct"]);
+        let tdx = make_local_decls(&["MyStruct"]);
         assert!(matches!(
-            classify_position(&ref_type(named("MyStruct")), &[], &tdx),
+            classify(&ref_type(named("MyStruct")), &[], &tdx),
             PositionKind::LocalType
         ));
     }
@@ -2473,18 +2626,18 @@ mod tests {
     #[test]
     fn test_classify_mut_reference_to_local_is_local() {
         // &mut LocalType — fundamental: look through &mut
-        let tdx = make_type_decl_index(&["MyStruct"]);
+        let tdx = make_local_decls(&["MyStruct"]);
         assert!(matches!(
-            classify_position(&mut_ref_type(named("MyStruct")), &[], &tdx),
+            classify(&mut_ref_type(named("MyStruct")), &[], &tdx),
             PositionKind::LocalType
         ));
     }
 
     #[test]
     fn test_classify_reference_to_foreign_is_foreign() {
-        let tdx = make_type_decl_index(&[]);
+        let tdx = make_local_decls(&[]);
         assert!(matches!(
-            classify_position(&ref_type(named("String")), &[], &tdx),
+            classify(&ref_type(named("String")), &[], &tdx),
             PositionKind::ForeignType
         ));
     }
@@ -2492,10 +2645,10 @@ mod tests {
     #[test]
     fn test_classify_tuple_is_foreign() {
         // Tuple types have no single named head → foreign
-        let tdx = make_type_decl_index(&["MyStruct"]);
+        let tdx = make_local_decls(&["MyStruct"]);
         let ty = Type::Tuple(vec![named("MyStruct"), named("i32")]);
         assert!(matches!(
-            classify_position(&ty, &[], &tdx),
+            classify(&ty, &[], &tdx),
             PositionKind::ForeignType
         ));
     }
@@ -2505,94 +2658,94 @@ mod tests {
     #[test]
     fn test_rfc2451_local_self_type_allowed() {
         // impl ForeignTrait for LocalType → T0 is local → allowed
-        let tdx = make_type_decl_index(&["MyStruct"]);
-        let ib = impl_block(vec![], named("ForeignTrait"), named("MyStruct"));
-        assert!(check_orphan_rfc2451(&ib, &tdx));
+        let tdx = make_local_decls(&["MyStruct"]);
+        let ib = impl_header(vec![], named("ForeignTrait"), named("MyStruct"));
+        assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
     }
 
     #[test]
     fn test_rfc2451_both_foreign_forbidden() {
         // impl Eq for String → both foreign
-        let tdx = make_type_decl_index(&[]);
-        let ib = impl_block(vec![], named("Eq"), named("String"));
-        assert!(!check_orphan_rfc2451(&ib, &tdx));
+        let tdx = make_local_decls(&[]);
+        let ib = impl_header(vec![], named("Eq"), named("String"));
+        assert!(!check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
     }
 
     #[test]
     fn test_rfc2451_local_in_trait_arg_allowed() {
         // impl From<MyError> for String → T0=String(foreign), T1=MyError(local) → allowed
-        let tdx = make_type_decl_index(&["MyError"]);
-        let ib = impl_block(
+        let tdx = make_local_decls(&["MyError"]);
+        let ib = impl_header(
             vec![],
             generic("From", vec![named("MyError")]),
             named("String"),
         );
-        assert!(check_orphan_rfc2451(&ib, &tdx));
+        assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
     }
 
     #[test]
     fn test_rfc2451_uncovered_type_param_forbidden() {
         // impl<T> Eq for T → T0=T(uncovered) → forbidden
-        let tdx = make_type_decl_index(&[]);
-        let ib = impl_block(vec![type_param("T")], named("Eq"), named("T"));
-        assert!(!check_orphan_rfc2451(&ib, &tdx));
+        let tdx = make_local_decls(&[]);
+        let ib = impl_header(vec![type_param("T")], named("Eq"), named("T"));
+        assert!(!check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
     }
 
     #[test]
     fn test_rfc2451_uncovered_param_before_local_in_trait_arg_forbidden() {
         // impl<T> From<T> for String → T0=String(foreign), T1=T(uncovered) → forbidden
-        let tdx = make_type_decl_index(&[]);
-        let ib = impl_block(
+        let tdx = make_local_decls(&[]);
+        let ib = impl_header(
             vec![type_param("T")],
             generic("From", vec![named("T")]),
             named("String"),
         );
-        assert!(!check_orphan_rfc2451(&ib, &tdx));
+        assert!(!check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
     }
 
     #[test]
     fn test_rfc2451_local_type_as_generic_head_in_trait_arg() {
         // impl<T> From<LocalType<T>> for ForeignType → T0=ForeignType, T1=LocalType<T>(local head) → allowed
-        let tdx = make_type_decl_index(&["LocalType"]);
+        let tdx = make_local_decls(&["LocalType"]);
         let trait_ty = generic("From", vec![generic("LocalType", vec![named("T")])]);
-        let ib = impl_block(vec![type_param("T")], trait_ty, named("ForeignType"));
-        assert!(check_orphan_rfc2451(&ib, &tdx));
+        let ib = impl_header(vec![type_param("T")], trait_ty, named("ForeignType"));
+        assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
     }
 
     #[test]
     fn test_rfc2451_foreign_generic_head_in_trait_arg_forbidden() {
         // impl<T> From<List<T>> for ForeignType → T0=ForeignType, T1=List<T>(foreign head) → forbidden
-        let tdx = make_type_decl_index(&[]);
+        let tdx = make_local_decls(&[]);
         let trait_ty = generic("From", vec![generic("List", vec![named("T")])]);
-        let ib = impl_block(vec![type_param("T")], trait_ty, named("ForeignType"));
-        assert!(!check_orphan_rfc2451(&ib, &tdx));
+        let ib = impl_header(vec![type_param("T")], trait_ty, named("ForeignType"));
+        assert!(!check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
     }
 
     #[test]
     fn test_rfc2451_ref_to_local_as_self_type() {
         // impl ForeignTrait for &LocalType → fundamental, look through & → allowed
-        let tdx = make_type_decl_index(&["MyStruct"]);
-        let ib = impl_block(vec![], named("ForeignTrait"), ref_type(named("MyStruct")));
-        assert!(check_orphan_rfc2451(&ib, &tdx));
+        let tdx = make_local_decls(&["MyStruct"]);
+        let ib = impl_header(vec![], named("ForeignTrait"), ref_type(named("MyStruct")));
+        assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
     }
 
     #[test]
     fn test_rfc2451_ref_to_foreign_as_self_type_forbidden() {
         // impl ForeignTrait for &String → &String is foreign → forbidden
-        let tdx = make_type_decl_index(&[]);
-        let ib = impl_block(vec![], named("ForeignTrait"), ref_type(named("String")));
-        assert!(!check_orphan_rfc2451(&ib, &tdx));
+        let tdx = make_local_decls(&[]);
+        let ib = impl_header(vec![], named("ForeignTrait"), ref_type(named("String")));
+        assert!(!check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
     }
 
     #[test]
     fn test_rfc2451_local_self_before_uncovered_param_in_trait_arg() {
         // impl<T> From<T> for LocalType → T0=LocalType(local!) → allowed before reaching T1=T
-        let tdx = make_type_decl_index(&["LocalType"]);
-        let ib = impl_block(
+        let tdx = make_local_decls(&["LocalType"]);
+        let ib = impl_header(
             vec![type_param("T")],
             generic("From", vec![named("T")]),
             named("LocalType"),
         );
-        assert!(check_orphan_rfc2451(&ib, &tdx));
+        assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
     }
 }
