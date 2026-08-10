@@ -31,8 +31,7 @@ use super::util::placeholder;
 
 /// Lightweight reference to an impl block. Stores `(module_source,
 /// item_id)` and resolves to the block's digested [`ImplHeader`] via
-/// [`impl_header`]; the impl AST itself is no longer reachable from
-/// dispatch.
+/// [`impl_header`]. Dispatch cannot reach the impl AST at all.
 struct ImplBlockRef(ModuleSource, AstId);
 
 /// A trait spelling's head: `Add<Feet>` is an `Add` impl. Trait arguments are

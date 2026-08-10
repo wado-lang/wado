@@ -728,7 +728,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Address-taken tracking for an implicit `&mut self` borrow on a
         // primitive local receiver is owned by reify (`reify.rs` method-call
         // arm marks `address_taken_locals` on the TIR it emits); the combined
-        // walk no longer computes it now that `resolve_ident` returns a
+        // walk does not compute it, since `resolve_ident` returns a
         // placeholder.
 
         if self_kind == ast::SelfKind::MutRef && !is_ref_impl {
@@ -3639,11 +3639,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }),
         };
 
-        // Record the static-method dispatch decision (formerly
-        // recovered by the caller from the built `Call` TIR) so reify can
-        // reproduce the same `Call` shape without re-running impl lookup,
-        // mangled-name construction, or monomorph-info shaping. The per-arg
-        // `is_mut` flags match what the old `CallArg`s carried.
+        // Record the static-method dispatch decision so reify can reproduce
+        // the same `Call` shape without re-running impl lookup, mangled-name
+        // construction, or monomorph-info shaping.
         let param_is_mut: Vec<bool> = args
             .iter()
             .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))

@@ -4481,13 +4481,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Reify an `if cond { … } else { … }` expression. The `cond`
-    /// shape is restricted to `Condition::Expr` here; `Condition::LetChain`
-    /// dispatches through the `IfLetChain` desugar (`sem.types.desugars`
-    /// records the tag at annotate time — `Elaborator::resolve_if_expr`
-    /// at expr.rs:1860). The chain expansion needs `let`-binding +
-    /// branch-merging logic that mirrors `resolve_let_chain_stmts` and
-    /// is deferred to a follow-up.
+    /// Reify an `if cond { … } else { … }` expression. `Condition::LetChain`
+    /// dispatches through the `IfLetChain` desugar, whose tag annotate
+    /// records on `sem.types.desugars` (`Elaborator::resolve_if_expr` at
+    /// expr.rs:1860).
     fn reify_if_expr(
         &mut self,
         if_expr: &ast::IfExpr,
@@ -5631,8 +5628,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// `Result<T, E>`'s `?`-op desugar — mirrors
     /// `Elaborator::resolve_question_mark_result` (expr.rs:4087+).
-    /// Only the same-error-type case lands here; the `From::from` synthesis
-    /// path on mismatched error types is not implemented.
     fn reify_question_mark_result(
         &mut self,
         inner: TirExpr,
@@ -5778,16 +5773,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `(a < m_0) && (m_0 < m_1) && … && (m_{n-1} < tail)` wrapped
     /// in a block that holds the `__mK` bindings.
     ///
-    /// Native primitive comparisons emit `TirExprKind::Binary`
-    /// directly; non-primitive operands route through trait
-    /// dispatch in the elaborator. The trait-dispatch path inside
-    /// the chain is not implemented: the synthesised inner comparisons
-    /// have no source AST id, so the `operator_dispatch` record (keyed
-    /// by `AstId`) doesn't catch them. The primitive-only path covers the
-    /// common shape (`x < y && y < z`); non-primitive chains fall to the
-    /// recovery shape (native Binary on whatever types the operands
-    /// land at, plus the elaborator's `RequiresTrait` diagnostic
-    /// will have already fired on the annotate side).
+    /// Primitive comparisons emit `TirExprKind::Binary` directly;
+    /// non-primitive operands dispatch through the `operator_dispatch`
+    /// record annotate left on the chain's own `AstId` (the synthesised
+    /// inner comparisons have no source id of their own).
     fn reify_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -7031,14 +7020,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a `with E => h, … do { body }` effect handler block.
     /// Mirrors `Elaborator::resolve_with_handler` (handlers.rs:37+).
     ///
-    /// Each handler binding is one of:
-    /// - Explicit `Effect => handler_expr` — reify the effect type
-    ///   to its `(module, name)` canonical key and emit a
-    ///   `TirHandlerBinding` with `EffectRef::Concrete`.
-    /// - Bundled `handler_expr` (no `=>`) — staged for a follow-up
-    ///   that records the handler type's implemented effect set
-    ///   per binding so reify can enumerate them without
-    ///   re-running `trait_env.implements_effect` lookups.
+    /// Both binding forms — explicit `Effect => handler_expr` and bundled
+    /// `handler_expr` — read their effect list off
+    /// `sem.types.handler_bindings`, so reify enumerates them without
+    /// re-running `trait_env.implements_effect`.
     fn reify_with_handler(
         &mut self,
         with_expr: &ast::WithHandlerExpr,
@@ -7726,10 +7711,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ))
     }
 
-    /// Reify a `CallExpr`. Mirrors `Elaborator::resolve_call`
-    /// (call.rs:200+): a bare-ident callee resolving to a free function
-    /// becomes `TirExprKind::Call`, a qualified-ident variant constructor
-    /// (`Some(x)`, `Result::Ok(v)`) becomes `TirExprKind::VariantConstruct`.
+    /// Reify a `CallExpr`, mirroring `Elaborator::resolve_call`
+    /// (call.rs:200+). The arms below are ordered by precedence and each
+    /// documents the recorded fact it reads; nothing here re-resolves a
+    /// callee.
     fn reify_call(
         &mut self,
         call: &ast::CallExpr,
