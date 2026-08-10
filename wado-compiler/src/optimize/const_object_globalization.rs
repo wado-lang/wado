@@ -276,8 +276,6 @@ fn collect_candidates(
 ) {
     let single_decl_locals = locals_declared_once(body);
     let siblings = sibling_const_locals(body, gate, &single_decl_locals);
-    // Reads in the pool count twice over: they decide "unread" below, and
-    // `rewrite_reads` must reach every one of them.
     let mut read_locals = IndexSet::default();
     collect_reads(body, &mut read_locals);
     promoted_local_reads(body, &mut read_locals);
@@ -626,9 +624,6 @@ fn let_stmt_qualifies(
     if !read_locals.contains(&local_index) {
         return None;
     }
-    // The mutation replaces the `let` with a `GlobalVarSet`, so every read must
-    // become a `GlobalVarGet`. A promoted read buried inside a compound value
-    // has no slot to rewrite — the local would outlive its definition.
     if buried.contains(&local_index) {
         return None;
     }
@@ -1686,6 +1681,23 @@ fn reads_local(body: &Body, idx: u32) -> bool {
     reads.contains(&idx)
 }
 
+/// How many of `node`'s operand slots hold `value`. Counted before any is
+/// replaced: a read minted for a slot that is not there would linger in the
+/// append-only arena as an orphan.
+fn operand_slots_holding(
+    body: &Body,
+    node: NodeRef,
+    value: crate::nir_value_graph::ValueId,
+) -> usize {
+    let mut slots = 0;
+    body.for_each_operand(node, |op| {
+        if op.as_value() == Some(value) {
+            slots += 1;
+        }
+    });
+    slots
+}
+
 /// Rewrite the reads that live in the value pool: an operand that is exactly
 /// `Opaque(Local local_index)` becomes a fresh `GlobalVarGet` expression.
 /// Candidacy already refused a local buried inside a compound value
@@ -1706,15 +1718,7 @@ fn rewrite_promoted_reads(
     }
     for node in reachable_nodes(body) {
         for &value in &promoted {
-            // Probe first: minting a read for a slot that is not there would
-            // leave an orphan node in the append-only arena.
-            let mut slots = 0;
-            body.for_each_operand(node, |op| {
-                if op.as_value() == Some(value) {
-                    slots += 1;
-                }
-            });
-            for _ in 0..slots {
+            for _ in 0..operand_slots_holding(body, node, value) {
                 let span = body.span_of(node);
                 let read = body.exprs.push(ExprNode {
                     kind: ExprKind::GlobalVarGet {

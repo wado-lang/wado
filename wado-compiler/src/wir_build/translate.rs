@@ -2439,13 +2439,11 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
-                // The three shapes `optimize::multi_value_return` admits are
-                // lowered before reaching here. Anywhere else the caller expects
-                // one value and the callee leaves N — which core Wasm validation
-                // would reject far from the cause.
                 debug_assert!(
                     self.multi_value_results_taken || !self.callee_returns_multi_value(func),
-                    "[WIR] multi-value call to {} lowered as an ordinary call",
+                    "[WIR] multi-value call to {} lowered as an ordinary call: the shapes \
+                     `optimize::multi_value_return` admits — a `let` bind, a discarded \
+                     statement, a pass-through return — are lowered before this",
                     func.name
                 );
 

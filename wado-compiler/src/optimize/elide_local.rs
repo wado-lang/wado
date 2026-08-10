@@ -65,6 +65,7 @@ impl Rule for ElideRule<'_> {
         let promoted_reads = PromotedReads::default();
         let mut new_stmts = Vec::with_capacity(stmts.len());
         let mut changed = false;
+        let mut elided: Vec<u32> = Vec::new();
         let len = stmts.len();
         for (i, stmt) in stmts.into_iter().enumerate() {
             let is_tail = i + 1 == len;
@@ -77,8 +78,12 @@ impl Rule for ElideRule<'_> {
                 &promoted_reads,
             ) {
                 Action::Keep => new_stmts.push(stmt),
-                Action::Drop => changed = true,
+                Action::Drop => {
+                    elided.extend(bound_local(engine, stmt));
+                    changed = true;
+                }
                 Action::Demote(value) => {
+                    elided.extend(bound_local(engine, stmt));
                     let span = engine.body.stmts[stmt].span;
                     new_stmts.push(engine.alloc_stmt(StmtKind::Expr(value.into()), span));
                     changed = true;
@@ -88,8 +93,37 @@ impl Rule for ElideRule<'_> {
         if changed {
             engine.set_block_stmts(id, new_stmts);
         }
+        debug_assert!(
+            elided.iter().all(|&l| !is_read(engine.body, l)),
+            "[NIR] elide_local: a local was elided while a read of it survived"
+        );
         changed
     }
+}
+
+/// The local a statement binds or assigns, which elision leaves without a
+/// definition.
+fn bound_local(engine: &Engine, stmt: StmtId) -> Option<u32> {
+    match &engine.body.stmts[stmt].kind {
+        StmtKind::Let { local_index, .. } => Some(*local_index),
+        StmtKind::Expr(Operand::Expr(e)) => match &engine.body.exprs[*e].kind {
+            ExprKind::Assign { target, .. } => match &engine.body.exprs[*target].kind {
+                ExprKind::Local { index, .. } => Some(*index),
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Whether any reachable read of `local` survives, in the skeleton or the value
+/// pool.
+fn is_read(body: &Body, local: u32) -> bool {
+    let mut reads = IndexSet::default();
+    arena_query::collect_reads(body, &mut reads);
+    arena_query::promoted_local_reads(body, &mut reads);
+    reads.contains(&local)
 }
 
 /// Classify a statement for write-only-local elimination. Mirrors the former

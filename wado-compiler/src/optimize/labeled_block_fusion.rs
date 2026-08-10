@@ -94,13 +94,9 @@ impl Rule for LabeledBlockFusionRule {
             // (a later statement, another branch) would then read a deleted
             // local. Fuse only when every mention of the temp lives inside the
             // consumer statement.
-            // The use index sees the skeleton only, so both tallies add the
-            // pool's reads or the equality compares unlike things.
             let consumer_uses =
                 count_local_uses_in_stmt(engine.body, stmts[i + 1], info.temp_local);
-            let body_uses = engine.local_reads(info.temp_local).len()
-                + promoted_reads.count(engine.body, info.temp_local);
-            if body_uses != consumer_uses {
+            if body_uses(engine, &promoted_reads, info.temp_local) != consumer_uses {
                 continue;
             }
             if yields && i + 2 == stmts.len() {
@@ -1039,6 +1035,13 @@ impl NirRefVisitor for SlotReadCollector {
         self.direct_uses += promoted_read_count_at(body, node, self.local_idx);
         self.walk_node(body, node);
     }
+}
+
+/// Every use of `local` in the body, skeleton and value pool alike — the total
+/// [`count_local_uses_in_stmt`] counts within one statement, so the two compare.
+/// The engine's use index sees the skeleton only, hence the second term.
+fn body_uses(engine: &Engine, promoted: &PromotedReadCounts, local: u32) -> usize {
+    engine.local_reads(local).len() + promoted.count(engine.body, local)
 }
 
 /// Whether any reachable read of `local` survives, in the skeleton or the value

@@ -887,9 +887,7 @@ fn propagate_at_root(
                 | CopySource::Ref { index, .. }
                 | CopySource::MutRef { index, .. } => target_set.contains(index),
                 CopySource::RefProjection { root_local, .. } => target_set.contains(root_local),
-                // A promoted value has no source *binding*, but its
-                // `Opaque(Local)` leaves read locals: planting it at the
-                // target's reads strands them if this round deletes one.
+                // No source *binding*, but the value's leaves read locals.
                 CopySource::Promoted(v) => {
                     let mut leaves = IndexSet::default();
                     engine.body.values.collect_opaque_locals(*v, &mut leaves);

@@ -126,7 +126,8 @@ pub(super) fn buried_promoted_reads(body: &Body) -> IndexSet<u32> {
             if let Some(v) = op.as_value()
                 && bare_promoted_local(body, op).is_none()
             {
-                body.values.collect_opaque_locals_seen(v, &mut seen, &mut out);
+                body.values
+                    .collect_opaque_locals_seen(v, &mut seen, &mut out);
             }
         });
     }

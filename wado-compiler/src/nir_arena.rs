@@ -1288,7 +1288,12 @@ impl Body {
     /// `new`, returning whether a slot changed. One slot per call, so a caller
     /// planting an expression mints a fresh node for each rather than hanging
     /// one id under two parents; loop until it returns `false`.
-    pub fn replace_value_operand_once(&mut self, node: NodeRef, from: ValueId, new: Operand) -> bool {
+    pub fn replace_value_operand_once(
+        &mut self,
+        node: NodeRef,
+        from: ValueId,
+        new: Operand,
+    ) -> bool {
         let mut done = false;
         self.for_each_operand_mut(node, |o| {
             if !done && *o == Operand::Value(from) {

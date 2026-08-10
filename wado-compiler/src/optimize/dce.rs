@@ -2364,8 +2364,28 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
                     &effects,
                 );
             }
+            debug_assert!(
+                !reads_any_global(body, &unobserved),
+                "[NIR] unhoist_unobserved_globals: a global lost its store while a \
+                 read of it survived"
+            );
         }
     }
+}
+
+/// Whether a reachable expression still reads one of `globals`. The pass drops
+/// each one's guard and store, so a surviving read would see the uninitialized
+/// slot.
+fn reads_any_global(body: &Body, globals: &IndexSet<(String, String)>) -> bool {
+    crate::nir_visitor::reachable_exprs(body)
+        .into_iter()
+        .any(|e| match &body.exprs[e].kind {
+            ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => globals.contains(&(module_source.to_path().join("::"), name.clone())),
+            _ => false,
+        })
 }
 
 /// Every block reachable from the body root. The drop below must see the same
@@ -2657,8 +2677,6 @@ mod tests {
     #[test]
     fn mentioned_locals_ignores_a_promoted_value_no_reachable_slot_carries() {
         let (mut body, live) = body_reading_promoted_local(3);
-        // The pool is append-only: a promoted read whose statement is no longer
-        // reachable still names its local there, and must not count.
         let stale = body.values.canonical_local(4, TypeId(0));
         body.stmts.push(StmtNode {
             kind: StmtKind::Expr(Operand::Value(stale)),
