@@ -143,9 +143,9 @@ type "functype//iterator_generic_map_test.wado/iterator_generic_map_test.wado/Ge
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(53)
 
-type "functype//iterator_generic_map_test.wado/iterator_generic_map_test.wado/__Closure_2::__call" = fn(ref "iterator_generic_map_test.wado//__Closure_2", i32) -> i32;  // TypeId(54)
+type "functype//iterator_generic_map_test.wado/iterator_generic_map_test.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(54)
 
-type "functype//iterator_generic_map_test.wado/iterator_generic_map_test.wado/__Closure_3::__call" = fn(ref "iterator_generic_map_test.wado//__Closure_3", i32) -> char;  // TypeId(55)
+type "functype//iterator_generic_map_test.wado/iterator_generic_map_test.wado/__Closure_3::__call" = fn(i32) -> char;  // TypeId(55)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(56)
 
@@ -748,24 +748,20 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::nex
     return 0, item;
 }
 
-fn "iterator_generic_map_test.wado/iterator_generic_map_test.wado/__Closure_2::__call"(self, x) {
+fn "iterator_generic_map_test.wado/iterator_generic_map_test.wado/__Closure_2::__call"(x) {
     return x * 2;
 }
 
-fn "iterator_generic_map_test.wado/iterator_generic_map_test.wado/__Closure_3::__call"(self, x) {
+fn "iterator_generic_map_test.wado/iterator_generic_map_test.wado/__Closure_3::__call"(x) {
     return x;
 }
 
 fn "closure/iterator_generic_map_test.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "iterator_generic_map_test.wado//__Closure_2";
-    __typed_env = ref.cast "iterator_generic_map_test.wado//__Closure_2"(__env);
-    return "iterator_generic_map_test.wado/iterator_generic_map_test.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "iterator_generic_map_test.wado/iterator_generic_map_test.wado/__Closure_2::__call"(__p0);
 }
 
 fn "closure/iterator_generic_map_test.wado/__closure_wrapper_1"(__env, __p0) {
-    let __typed_env: ref "iterator_generic_map_test.wado//__Closure_3";
-    __typed_env = ref.cast "iterator_generic_map_test.wado//__Closure_3"(__env);
-    return "iterator_generic_map_test.wado/iterator_generic_map_test.wado/__Closure_3::__call"(__typed_env, __p0);
+    return "iterator_generic_map_test.wado/iterator_generic_map_test.wado/__Closure_3::__call"(__p0);
 }
 
 export fn "iterator_generic_map_test.wado/__cm_export____test_0_generic_map_iterator_doubles_values" as "__test_0_generic_map_iterator_doubles_values"

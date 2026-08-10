@@ -94,9 +94,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_a
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::is_char_boundary" = fn(ref "core:prelude/string.wado//String", i32) -> bool;  // TypeId(37)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(38)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes" = fn(ref "core:prelude/string.wado//String", i32, i32) -> [ref Array<u8>, i32];  // TypeId(38)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes_unchecked" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(39)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes_unchecked" = fn(ref "core:prelude/string.wado//String", i32, i32) -> [ref Array<u8>, i32];  // TypeId(39)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(40)
 
@@ -157,7 +157,7 @@ fn "string_substr_bytes_panic_oob.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:string_substr_bytes_panic_oob.wado::__modules_initialized = 1;
     };
-    drop("core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, 0, 100));
+    multivalue_bind [_, _] = "core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, 0, 100);
     "wasi/task-return"(0);
 }
 
@@ -504,9 +504,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes_unche
     let len: i32;
     let part: ref Array<u8>;
     if end <= start {
-        return struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+        return builtin::array_new<u8>(0), 0;
     }
-    return repr = self.repr, part = builtin::array_new<u8>(local.tee len(end - start)), builtin::array_copy<u8>(part, 0, repr, start, len), struct.new "core:prelude/string.wado//String" { repr: part, used: len };
+    repr = self.repr;
+    part = builtin::array_new<u8>(local.tee len(end - start));
+    builtin::array_copy<u8>(part, 0, repr, start, len);
+    return part, len;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {

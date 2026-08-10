@@ -194,9 +194,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<()>");  // TypeId(79)
 
-type "functype//wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_2::__call" = fn(ref "wasi_clocks_full.wado//__Closure_2", i32);  // TypeId(80)
+type "functype//wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_2::__call" = fn(i32);  // TypeId(80)
 
-type "functype//wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_3::__call" = fn(ref "wasi_clocks_full.wado//__Closure_3", i32);  // TypeId(81)
+type "functype//wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_3::__call" = fn(i32);  // TypeId(81)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(82)
 
@@ -1038,24 +1038,20 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait"(self) {
     return nop;
 }
 
-fn "wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_2::__call"(self, __outptr) {
+fn "wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_2::__call"(__outptr) {
     "wasi_clocks_full.wado/__cm_lift__MonotonicClock_wait_for"(__outptr);
 }
 
-fn "wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_3::__call"(self, __outptr) {
+fn "wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_3::__call"(__outptr) {
     "wasi_clocks_full.wado/__cm_lift__MonotonicClock_wait_until"(__outptr);
 }
 
 fn "closure/wasi_clocks_full.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "wasi_clocks_full.wado//__Closure_2";
-    __typed_env = ref.cast "wasi_clocks_full.wado//__Closure_2"(__env);
-    "wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_2::__call"(__typed_env, __p0);
+    "wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_2::__call"(__p0);
 }
 
 fn "closure/wasi_clocks_full.wado/__closure_wrapper_1"(__env, __p0) {
-    let __typed_env: ref "wasi_clocks_full.wado//__Closure_3";
-    __typed_env = ref.cast "wasi_clocks_full.wado//__Closure_3"(__env);
-    "wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_3::__call"(__typed_env, __p0);
+    "wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_3::__call"(__p0);
 }
 
 export fn "wasi_clocks_full.wado/__cm_export____test_0_monotonic__now_is_non_decreasing" as "__test_0_monotonic__now_is_non_decreasing"

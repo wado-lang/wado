@@ -24,11 +24,9 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
 
-type "functype//cross_module_same_name_struct_iter.wado/__test_0_construct_same_name_struct_from_other_module_while_a_sibling_iterates" = fn();  // TypeId(7)
+type "functype//cross_module_same_name_struct_iter.wado/__cm_export____test_0_construct_same_name_struct_from_other_module_while_a_sibling_iterates" = fn();  // TypeId(7)
 
-type "functype//cross_module_same_name_struct_iter.wado/__cm_export____test_0_construct_same_name_struct_from_other_module_while_a_sibling_iterates" = fn();  // TypeId(8)
-
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(9)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(8)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -36,20 +34,16 @@ import memory (1) from "mem/memory";
 
 global mut global:cross_module_same_name_struct_iter.wado::__modules_initialized: bool = 0;
 
-fn "cross_module_same_name_struct_iter.wado/__test_0_construct_same_name_struct_from_other_module_while_a_sibling_iterates"() {
-    let __sroa_o_items: ref "core:prelude//List<./sub/cross_module_same_name_struct_iter_b.wado/Pair>";
-    __sroa_o_items = struct.new "core:prelude//List<./sub/cross_module_same_name_struct_iter_b.wado/Pair>" { repr: array.new_fixed<ref "./sub/cross_module_same_name_struct_iter_b.wado//Pair">(struct.new "./sub/cross_module_same_name_struct_iter_b.wado//Pair" { indices: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(0, 1), used: 2 } }), used: 1 };
-    drop(builtin::array_get<ref "./sub/cross_module_same_name_struct_iter_b.wado//Pair">(__sroa_o_items.repr, 0).indices);
-}
-
 fn "cross_module_same_name_struct_iter.wado/__cm_export____test_0_construct_same_name_struct_from_other_module_while_a_sibling_iterates"() {
+    let __sroa_o_items: ref "core:prelude//List<./sub/cross_module_same_name_struct_iter_b.wado/Pair>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:cross_module_same_name_struct_iter.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:cross_module_same_name_struct_iter.wado::__modules_initialized = 1;
     };
-    "cross_module_same_name_struct_iter.wado/__test_0_construct_same_name_struct_from_other_module_while_a_sibling_iterates"();
+    __sroa_o_items = struct.new "core:prelude//List<./sub/cross_module_same_name_struct_iter_b.wado/Pair>" { repr: array.new_fixed<ref "./sub/cross_module_same_name_struct_iter_b.wado//Pair">(struct.new "./sub/cross_module_same_name_struct_iter_b.wado//Pair" { indices: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(0, 1), used: 2 } }), used: 1 };
+    drop(builtin::array_get<ref "./sub/cross_module_same_name_struct_iter_b.wado//Pair">(__sroa_o_items.repr, 0).indices);
     "wasi/task-return"(0);
 }
 

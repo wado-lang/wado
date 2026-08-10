@@ -339,7 +339,7 @@ type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(78)
 
-type "functype//http_client_send_simple.wado/http_client_send_simple.wado/__Closure_2::__call" = fn(ref "http_client_send_simple.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(79)
+type "functype//http_client_send_simple.wado/http_client_send_simple.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(79)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(80)
 
@@ -1936,14 +1936,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     return result;
 }
 
-fn "http_client_send_simple.wado/http_client_send_simple.wado/__Closure_2::__call"(self, __outptr) {
+fn "http_client_send_simple.wado/http_client_send_simple.wado/__Closure_2::__call"(__outptr) {
     return "http_client_send_simple.wado/__cm_lift__Client_send"(__outptr);
 }
 
 fn "closure/http_client_send_simple.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "http_client_send_simple.wado//__Closure_2";
-    __typed_env = ref.cast "http_client_send_simple.wado//__Closure_2"(__env);
-    return "http_client_send_simple.wado/http_client_send_simple.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "http_client_send_simple.wado/http_client_send_simple.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "http_client_send_simple.wado/__cm_export__handle" as "handle"

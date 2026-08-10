@@ -130,9 +130,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_i
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,char>") -> [i32, char];  // TypeId(51)
 
-type "functype//iterator_trait_map.wado/iterator_trait_map.wado/__Closure_0::__call" = fn(ref "iterator_trait_map.wado//__Closure_0", char) -> char;  // TypeId(52)
+type "functype//iterator_trait_map.wado/iterator_trait_map.wado/__Closure_0::__call" = fn(char) -> char;  // TypeId(52)
 
-type "functype//iterator_trait_map.wado/iterator_trait_map.wado/__Closure_1::__call" = fn(ref "iterator_trait_map.wado//__Closure_1", char) -> char;  // TypeId(53)
+type "functype//iterator_trait_map.wado/iterator_trait_map.wado/__Closure_1::__call" = fn(char) -> char;  // TypeId(53)
 
 type "functype//core:prelude/primitive.wado/u64::fmt_base$spec0" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(54)
 
@@ -929,11 +929,11 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/strin
     return 1, 0;
 }
 
-fn "iterator_trait_map.wado/iterator_trait_map.wado/__Closure_0::__call"(self, c) {
+fn "iterator_trait_map.wado/iterator_trait_map.wado/__Closure_0::__call"(c) {
     return c | (((c - 65) <u 26) * 32);
 }
 
-fn "iterator_trait_map.wado/iterator_trait_map.wado/__Closure_1::__call"(self, c) {
+fn "iterator_trait_map.wado/iterator_trait_map.wado/__Closure_1::__call"(c) {
     return c ^ (((c - 97) <u 26) * 32);
 }
 
@@ -975,15 +975,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "closure/iterator_trait_map.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "iterator_trait_map.wado//__Closure_0";
-    __typed_env = ref.cast "iterator_trait_map.wado//__Closure_0"(__env);
-    return "iterator_trait_map.wado/iterator_trait_map.wado/__Closure_0::__call"(__typed_env, __p0);
+    return "iterator_trait_map.wado/iterator_trait_map.wado/__Closure_0::__call"(__p0);
 }
 
 fn "closure/iterator_trait_map.wado/__closure_wrapper_1"(__env, __p0) {
-    let __typed_env: ref "iterator_trait_map.wado//__Closure_1";
-    __typed_env = ref.cast "iterator_trait_map.wado//__Closure_1"(__env);
-    return "iterator_trait_map.wado/iterator_trait_map.wado/__Closure_1::__call"(__typed_env, __p0);
+    return "iterator_trait_map.wado/iterator_trait_map.wado/__Closure_1::__call"(__p0);
 }
 
 export fn "iterator_trait_map.wado/__cm_export__run" as "run"

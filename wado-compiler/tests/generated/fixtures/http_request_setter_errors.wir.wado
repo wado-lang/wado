@@ -434,7 +434,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(113)
 
-type "functype//http_request_setter_errors.wado/http_request_setter_errors.wado/__Closure_2::__call" = fn(ref "http_request_setter_errors.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(114)
+type "functype//http_request_setter_errors.wado/http_request_setter_errors.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(114)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(115)
 
@@ -2577,14 +2577,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     return result;
 }
 
-fn "http_request_setter_errors.wado/http_request_setter_errors.wado/__Closure_2::__call"(self, __outptr) {
+fn "http_request_setter_errors.wado/http_request_setter_errors.wado/__Closure_2::__call"(__outptr) {
     return "http_request_setter_errors.wado/__cm_lift__Client_send"(__outptr);
 }
 
 fn "closure/http_request_setter_errors.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "http_request_setter_errors.wado//__Closure_2";
-    __typed_env = ref.cast "http_request_setter_errors.wado//__Closure_2"(__env);
-    return "http_request_setter_errors.wado/http_request_setter_errors.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "http_request_setter_errors.wado/http_request_setter_errors.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "http_request_setter_errors.wado/__cm_export__handle" as "handle"
