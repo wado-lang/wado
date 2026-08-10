@@ -10,6 +10,20 @@ This WEP is the design. The pass inventory lives in
 rule predicates, pass ordering — is owned by the code
 (`nir_arena.rs`, `nir_value_graph.rs`, `nir_engine.rs`, `optimize/`).
 
+## Terms
+
+- Skeleton — the tier that carries execution order: statements, control flow,
+  calls, assignments, allocation. Document order is effect order. Pure values
+  have no place in an order, so they are not stored here; what is left is the
+  bare frame of the computation.
+- Hash-consing — interning a value by its structure, so two structurally
+  identical values are handed the same `ValueId` at construction. Equality
+  becomes `==` on a `u32`, and a common subexpression is common before any pass
+  looks at it.
+- Promoted — a skeleton operand slot that holds a `ValueId` instead of pointing
+  at a sub-expression node. The value moved out of the skeleton and into the
+  pool; nothing in the arena spells it any more.
+
 ## Context
 
 The optimizer was ~31 independent passes, each a full mutating walk over an
@@ -74,11 +88,14 @@ side-table derived from the skeleton.
   the builder threads a per-local current value, constructs `Select` at merge
   points and `LoopPhi` at loops, and bumps heap versions where the skeleton may
   write. A read's `ValueId` is fixed to the value dominant at that point.
-- Rewrites are eager and destructive-by-union: proving `a ≡ b` unions their
-  e-classes and every user resolves the representative. Congruence is restored by
-  a deferred rebuild over the touched classes, never a skeleton re-walk. This is
-  Cranelift's aegraph model — build once, rewrite eagerly, extract once — not
-  equality saturation.
+- Identity is structural, and a `ValueId` is stable once allocated: interning is
+  pure hash-consing, with no e-class merges and so no representative lookup. A
+  rewrite that proves `a ≡ b` points the operand slot at `b`; it never merges
+  two ids. Rules apply eagerly and once per match, never searched to a fixed
+  point.
+
+Build once, rewrite eagerly, extract once — the shape Cranelift's aegraph
+mid-end takes, minus its union-find.
 
 Constant aggregates are named by a single `Const` kind; materialising one is an
 allocation, which is `const_object_globalization`'s decision, so an aggregate
@@ -157,20 +174,23 @@ interprocedural over-approximation.
 
 ## Soundness invariants
 
-- Union soundness. Two `ValueId`s are unioned only when they denote the same
-  value in every execution reaching that point — the obligation CSE, copy
-  propagation, and forwarding each discharged separately, now expressed once.
+- Substitution soundness. An operand is repointed from `a` to `b` only when the
+  two denote the same value in every execution reaching that point — the
+  obligation CSE, copy propagation, and forwarding each discharged separately,
+  now expressed once. Sharing an id is stronger than that and needs no
+  justification at all: hash-consing only ever gives one id to structurally
+  identical values.
 - Flow-freeze validity. A control-flow rewrite that changes which value is
-  dominant must union the affected classes; a read must never be left pointing at
+  dominant must repoint the affected operands; a read must never be left holding
   a value that no longer reaches it.
 - Heap-version monotonicity. A `FieldAccess` value's `heap_ver` is the version
   before the read; a later write bumps to a fresh version, so any read after it
   gets a fresh `ValueId`.
 - Pointwise maintenance. A structural edit keeps the graph coherent at the point
-  of the edit — pruning a branch unions the dead `Select` arm into the survivor;
-  splicing an inlined body or an SROA split grows the graph at the splice point.
-  Monotone growth, never a re-derivation of existing flow. This is the
-  load-bearing claim of the design.
+  of the edit — pruning a branch repoints the surviving operands past the dead
+  `Select` arm; splicing an inlined body or an SROA split interns value nodes for
+  the new skeleton subtree. Monotone growth, never a re-derivation of existing
+  flow. This is the load-bearing claim of the design.
 - Extraction equivalence. The extracted form computes, for every effectful
   position, the same values in the same effect order as graph + skeleton.
 - The edit API is the only mutation path during a run. A pass that pokes the
@@ -310,9 +330,9 @@ edits maintain, never re-derived from a side-table at query time.
   GVN fall out of hash-consing, pure copy propagation out of shared ids,
   store-load forwarding out of `(receiver, field, heap_ver)` identity. Their
   walks and bespoke analysis caches went with them.
-- The optimizer gained a hash-cons pool, a union-find, a builder, and an
-  extractor; it lost the `value_of` side-table, the cache machinery, the engine's
-  per-pass value rebuild, and every per-pass structural key.
+- The optimizer gained a hash-cons pool, a builder, and an extractor; it lost
+  the `value_of` side-table, the cache machinery, the engine's per-pass value
+  rebuild, and every per-pass structural key.
 - The arena costs one mutation discipline: the edit API is mandatory, and dead
   nodes accumulate until compaction lands.
 - Measured wins along the way: the arena-direct engine cut a heavy module's
@@ -325,5 +345,5 @@ edits maintain, never re-derived from a side-table at query time.
 - [Normalized IR (NIR) Layer](./wep-2026-05-11-nir.md) — the type boundary at `lower` that NIR is.
 - [Wasm IR (WIR) Layer](./wep-2026-02-14-wir-layer.md) — the separately-typed backend IR NIR extracts into.
 - [Optimizer Remarks for Missed Optimizations](./wep-2026-06-03-optimizer-remarks.md) — how a missed rewrite is reported.
-- Cranelift's aegraph mid-end and `egg` (https://egraphs-good.github.io/) — the build-once, eager-rewrite, single-extraction model this adapts.
+- Cranelift's aegraph mid-end and `egg` (https://egraphs-good.github.io/) — the build-once, eager-rewrite, single-extraction model this adapts (without their union-find over e-classes).
 - `.claude/skills/profiling-wado-compiler` — the workflow behind the cost numbers.
