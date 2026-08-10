@@ -2941,7 +2941,7 @@ fn is_inline_safe_expr(expr: &Expr) -> bool {
     )
 }
 
-fn binary_op_str(op: BinaryOp) -> &'static str {
+pub(crate) fn binary_op_str(op: BinaryOp) -> &'static str {
     match op {
         BinaryOp::Add => "+",
         BinaryOp::Sub => "-",

@@ -1,0 +1,36 @@
+// The path that reaches the end of a labeled block yields its trailing
+// statement's value, so that tail is one of the block's branches: it types the
+// block when no `break` does, and agrees with the breaks when they do.
+
+test "the tail types a labeled block with no break" {
+    let v = blk: {
+        let base = 40;
+        base + 2
+    };
+    assert v == 42;
+}
+
+test "the tail is the value when no break is taken" {
+    let c = false;
+    let v = blk: {
+        if c {
+            break blk: 1
+        }
+        2
+    };
+    assert v == 2;
+}
+
+test "a break wins over the tail on the path that takes it" {
+    let c = true;
+    let v = blk: {
+        if c {
+            break blk: 1
+        }
+        2
+    };
+    assert v == 1;
+}
+
+__DATA__
+{"test": {}}

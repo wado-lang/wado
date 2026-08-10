@@ -714,6 +714,26 @@ outer: {
 }
 ```
 
+#### As an Expression
+
+A labeled block used as a value yields through `break LABEL: expr`, and through
+its trailing statement on the path that reaches the end. Both are branches of
+the block and must agree on one type:
+
+```wado
+let found = search: {
+    for let item of items {
+        if item.key == key {
+            break search: item.value;
+        }
+    }
+    -1  // the value when no break is taken
+};
+```
+
+A block whose trailing statement is not a value has none to yield on that path,
+so reaching the end traps; write `break LABEL: expr` on every path instead.
+
 #### Design Rationale
 
 The label is mandatory because `{ field: value }` without context could be either a block with a labeled statement or a struct literal. Requiring the label removes this ambiguity.
@@ -2927,6 +2947,10 @@ f.take(B { v: 1 })          // OK: a named struct literal selects Take<B>
 f.take(a)                    // OK: the local's declared type selects Take<A>
 ```
 
+Any argument whose type the call site fixes selects: a local, a field read, a
+call's return type, an operator's result, a cast, an associated constant, an
+enum case, a range.
+
 Selection is unique-or-error, with no ranking. An argument whose type the
 call site does not pin — above all a bare literal, which could coerce to
 several widths — admits every candidate it could coerce to and never selects
@@ -2943,10 +2967,14 @@ Take::<i64>::take(&f, 42)    // OK: the trait turbofish pins the list
 
 This is deliberate: letting the literal's default type decide would make
 adding an `impl Take<i32>` silently retarget every existing call that meant
-`Take<i64>`. Operators resolve their impl by operand type on the same
-principle, which is why `List<T>` implements `IndexValue<i32>`,
-`IndexValue<RangeExclusive<i32>>`, and `IndexValue<RangeInclusive<i32>>` at
-once.
+`Take<i64>`. A closure or a compound literal is typed by the parameter it is
+passed to, so it carries nothing to select on either, and the error names the
+argument that came up empty.
+
+Operators resolve their impl by operand type on the same principle, which is
+why `List<T>` implements `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`,
+and `IndexValue<RangeInclusive<i32>>` at once — and why the same impls answer
+the method spelling, `l.index_value(i)`.
 
 Two _different_ traits declaring one method name for one receiver is a
 separate case and is always reported: name the trait
@@ -3246,6 +3274,35 @@ i32::from_str_lenient(&" 1 ")     // Err — never trims whitespace
 ```
 
 `FromStr`'s fundamental operation is `from_str_range(s, start, end)` (parse a byte range with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
+
+### Arithmetic Operator Traits
+
+The prelude's binary operator traits (`Add`, `Sub`, `Mul`, `Div`, `Rem`,
+`BitAnd`, `BitOr`, `BitXor`) carry a right-hand type parameter defaulting to
+`Self`:
+
+```wado
+trait Add<Rhs = Self> {
+    type Output;
+    fn add(&self, rhs: &Rhs) -> Self::Output;
+}
+```
+
+Omitting the argument is the ordinary case: `impl Add for Meters` adds two
+`Meters`. Writing it lets one type be added to another, and the right operand
+selects between the impls:
+
+```wado
+impl Add for Meters { … }          // Meters + Meters
+impl Add<Feet> for Meters { … }    // Meters + Feet
+
+let total = m + f;                 // selects Add<Feet>
+```
+
+Selection follows the same unique-or-error rule as a method call's argument
+lists (see [One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)).
+`Neg` and `BitNot` are unary and take no argument; `Shl` / `Shr` declare
+`rhs: u32`.
 
 ### Indexing Traits
 

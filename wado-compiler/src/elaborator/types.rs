@@ -307,6 +307,33 @@ pub enum TypeError {
         method: String,
         /// The competing trait spellings, in candidate order.
         traits: Vec<String>,
+        /// What each argument contributed to selection, in argument order.
+        /// Empty when the call never reached argument-directed selection.
+        arguments: Vec<String>,
+        span: Span,
+    },
+
+    /// Every argument list of one trait rejected the arguments. The other end
+    /// of [`TypeError::AmbiguousTraitArguments`]: selection had what it needed
+    /// and no impl accepts it.
+    NoMatchingOverload {
+        method: String,
+        /// The candidate spellings, in candidate order.
+        traits: Vec<String>,
+        /// What each argument contributed, in argument order.
+        arguments: Vec<String>,
+        span: Span,
+    },
+
+    /// An operator whose receiver implements its trait at several right-hand
+    /// types, none of which the right operand selects. Same rule as a method
+    /// call's argument lists, reported where the operator is written.
+    AmbiguousOperatorRhs {
+        op: String,
+        type_name: String,
+        /// The competing trait spellings (`Add<i32>`, `Add<Meters>`), in
+        /// candidate order.
+        candidates: Vec<String>,
         span: Span,
     },
 
@@ -921,20 +948,61 @@ impl TypeError {
             TypeError::AmbiguousTraitArguments {
                 method,
                 traits,
+                arguments,
+                span,
+            } => (
+                Code::TypeMismatch,
+                append_reason_chain(
+                    format!(
+                        "ambiguous call to '{method}': the arguments do not select between {}; annotate an argument (e.g. '42 as i64') or pin the trait, e.g. '{}::{method}(&value, …)'",
+                        traits
+                            .iter()
+                            .map(|t| format!("'{t}'"))
+                            .collect::<Vec<_>>()
+                            .join(" and "),
+                        traits
+                            .first()
+                            .map(|t| t.replacen('<', "::<", 1))
+                            .expect("ambiguity reported with no candidate traits")
+                    ),
+                    arguments,
+                ),
+                *span,
+            ),
+            TypeError::NoMatchingOverload {
+                method,
+                traits,
+                arguments,
+                span,
+            } => (
+                Code::TypeMismatch,
+                append_reason_chain(
+                    format!(
+                        "no overload of '{method}' accepts these arguments: the candidates are {}",
+                        traits
+                            .iter()
+                            .map(|t| format!("'{t}'"))
+                            .collect::<Vec<_>>()
+                            .join(" and ")
+                    ),
+                    arguments,
+                ),
+                *span,
+            ),
+            TypeError::AmbiguousOperatorRhs {
+                op,
+                type_name,
+                candidates,
                 span,
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "ambiguous call to '{method}': the arguments do not select between {}; annotate an argument (e.g. '42 as i64') or pin the trait, e.g. '{}::{method}(&value, …)'",
-                    traits
+                    "ambiguous operator `{op}` on '{type_name}': the right operand does not select between {}; annotate it (e.g. '42 as i64') to pin one",
+                    candidates
                         .iter()
-                        .map(|t| format!("'{t}'"))
+                        .map(|c| format!("'{c}'"))
                         .collect::<Vec<_>>()
-                        .join(" and "),
-                    traits
-                        .first()
-                        .map(|t| t.replacen('<', "::<", 1))
-                        .expect("ambiguity reported with no candidate traits")
+                        .join(" and ")
                 ),
                 *span,
             ),
@@ -2357,8 +2425,8 @@ pub(super) struct IndexValueTraitInfo {
     pub(super) index_type: Option<TypeId>,
 }
 
-/// Info about a comparison trait implementation (`Eq` or `Ord`)
 /// Info about an operator trait implementation
+#[derive(Clone)]
 pub(super) struct ArithmeticTraitInfo {
     /// The Output associated type
     pub(super) output_type: TypeId,

@@ -32,6 +32,7 @@ mod scope;
 pub(crate) mod sem;
 pub(crate) mod sig;
 mod stmt;
+mod synth;
 mod template;
 pub(crate) mod trait_env;
 mod trait_query;

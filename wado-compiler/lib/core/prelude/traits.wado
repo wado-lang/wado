@@ -608,47 +608,47 @@ internal trait IndexValue<IndexType> {
 }
 /// Trait for the `+` operator.
 /// Types implementing this trait can use the `+` operator for addition.
-internal trait Add {
+internal trait Add<Rhs = Self> {
     type Output;
 
     /// Adds two values and returns the result.
-    fn add(&self, rhs: &Self) -> Self::Output;
+    fn add(&self, rhs: &Rhs) -> Self::Output;
 }
 
 /// Trait for the `-` operator (binary subtraction).
 /// Types implementing this trait can use the `-` operator for subtraction.
-internal trait Sub {
+internal trait Sub<Rhs = Self> {
     type Output;
 
     /// Subtracts rhs from self and returns the result.
-    fn sub(&self, rhs: &Self) -> Self::Output;
+    fn sub(&self, rhs: &Rhs) -> Self::Output;
 }
 
 /// Trait for the `*` operator.
 /// Types implementing this trait can use the `*` operator for multiplication.
-internal trait Mul {
+internal trait Mul<Rhs = Self> {
     type Output;
 
     /// Multiplies two values and returns the result.
-    fn mul(&self, rhs: &Self) -> Self::Output;
+    fn mul(&self, rhs: &Rhs) -> Self::Output;
 }
 
 /// Trait for the `/` operator.
 /// Types implementing this trait can use the `/` operator for division.
-internal trait Div {
+internal trait Div<Rhs = Self> {
     type Output;
 
     /// Divides self by rhs and returns the result.
-    fn div(&self, rhs: &Self) -> Self::Output;
+    fn div(&self, rhs: &Rhs) -> Self::Output;
 }
 
 /// Trait for the `%` operator.
 /// Types implementing this trait can use the `%` operator for remainder.
-internal trait Rem {
+internal trait Rem<Rhs = Self> {
     type Output;
 
     /// Returns the remainder of dividing self by rhs.
-    fn rem(&self, rhs: &Self) -> Self::Output;
+    fn rem(&self, rhs: &Rhs) -> Self::Output;
 }
 
 /// Trait for the unary `-` operator (negation).
@@ -660,27 +660,27 @@ internal trait Neg {
     fn neg(&self) -> Self::Output;
 }
 /// Trait for the `&` operator (bitwise AND).
-internal trait BitAnd {
+internal trait BitAnd<Rhs = Self> {
     type Output;
 
     /// Returns the bitwise AND of self and rhs.
-    fn bitand(&self, rhs: &Self) -> Self::Output;
+    fn bitand(&self, rhs: &Rhs) -> Self::Output;
 }
 
 /// Trait for the `|` operator (bitwise OR).
-internal trait BitOr {
+internal trait BitOr<Rhs = Self> {
     type Output;
 
     /// Returns the bitwise OR of self and rhs.
-    fn bitor(&self, rhs: &Self) -> Self::Output;
+    fn bitor(&self, rhs: &Rhs) -> Self::Output;
 }
 
 /// Trait for the `^` operator (bitwise XOR).
-internal trait BitXor {
+internal trait BitXor<Rhs = Self> {
     type Output;
 
     /// Returns the bitwise XOR of self and rhs.
-    fn bitxor(&self, rhs: &Self) -> Self::Output;
+    fn bitxor(&self, rhs: &Rhs) -> Self::Output;
 }
 
 /// Trait for the `~` operator (bitwise NOT).

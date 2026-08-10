@@ -177,31 +177,37 @@ Not all operators should be overloadable. Here's what Wado allows:
 #### Arithmetic Operators (Essential for SIMD)
 
 ```wado
-trait Add {
+trait Add<Rhs = Self> {
     type Output;
-    fn add(self, rhs: Self) -> Self::Output;
+    fn add(&self, rhs: &Rhs) -> Self::Output;
 }
 
-trait Sub {
+trait Sub<Rhs = Self> {
     type Output;
-    fn sub(self, rhs: Self) -> Self::Output;
+    fn sub(&self, rhs: &Rhs) -> Self::Output;
 }
 
-trait Mul {
+trait Mul<Rhs = Self> {
     type Output;
-    fn mul(self, rhs: Self) -> Self::Output;
+    fn mul(&self, rhs: &Rhs) -> Self::Output;
 }
 
-trait Div {
+trait Div<Rhs = Self> {
     type Output;
-    fn div(self, rhs: Self) -> Self::Output;
+    fn div(&self, rhs: &Rhs) -> Self::Output;
 }
 
-trait Rem {
+trait Rem<Rhs = Self> {
     type Output;
-    fn rem(self, rhs: Self) -> Self::Output;
+    fn rem(&self, rhs: &Rhs) -> Self::Output;
 }
 ```
+
+The right-hand type is a parameter defaulting to `Self`, so one type may be
+added to several: `impl Add<Feet> for Meters` beside `impl Add for Meters`, and
+the right operand selects between them by
+[Overload Resolution](./wep-2026-07-31-overload-resolution.md)'s rule. Omitting
+the argument is the ordinary case and reads exactly as before.
 
 **Usage**:
 
@@ -254,19 +260,19 @@ let negated = -v;  // Desugars to: v.neg()
 #### Bitwise Operators
 
 ```wado
-trait BitAnd {
+trait BitAnd<Rhs = Self> {
     type Output;
-    fn bitand(self, rhs: Self) -> Self::Output;
+    fn bitand(&self, rhs: &Rhs) -> Self::Output;
 }
 
-trait BitOr {
+trait BitOr<Rhs = Self> {
     type Output;
-    fn bitor(self, rhs: Self) -> Self::Output;
+    fn bitor(&self, rhs: &Rhs) -> Self::Output;
 }
 
-trait BitXor {
+trait BitXor<Rhs = Self> {
     type Output;
-    fn bitxor(self, rhs: Self) -> Self::Output;
+    fn bitxor(&self, rhs: &Rhs) -> Self::Output;
 }
 
 trait BitNot {

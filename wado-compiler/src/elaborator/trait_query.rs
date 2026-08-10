@@ -2213,8 +2213,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // declared. The auto-derive set and the fixed return types come from
         // `TypeSystem::auto_derive_by_trait` (the single source).
         let auto_derive = self.tysys.auto_derive_by_trait(trait_name);
-        let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) =
-            self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_name, method_name)
+        let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) = self
+            .find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_name, method_name, None)
         {
             let return_type = auto_derive.unwrap_or(info.output_type);
             let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();

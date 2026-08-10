@@ -1,0 +1,17 @@
+// A labeled block yields through `break label:`, and through its trailing
+// statement on the path that reaches the end. A tail carrying a value is one
+// more branch and must agree with the breaks; unchecked, the disagreement
+// reached codegen and produced an invalid core Wasm module.
+export fn run() {
+    let c = true;
+    let v = blk: {
+        if c {
+            break blk: 1
+        }
+        "unused"
+    };
+    assert v == 1;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'i32', found 'String'"}

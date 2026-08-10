@@ -1,0 +1,31 @@
+// A literal never selects: it admits every numeric width, so a receiver
+// carrying `Add<i32>` beside `Add<i64>` leaves `m + 1` with two answers.
+// Picking one silently would let adding an impl retarget an existing call
+// (WEP 2026-07-31), so the operator reports the same unique-or-error the
+// argument lists of a method call do.
+struct Meters {
+    v: i64,
+}
+
+impl Add<i64> for Meters {
+    type Output = Meters;
+    fn add(&self, rhs: &i64) -> Meters {
+        return Meters { v: self.v + *rhs };
+    }
+}
+
+impl Add<i32> for Meters {
+    type Output = Meters;
+    fn add(&self, rhs: &i32) -> Meters {
+        return Meters { v: self.v + (*rhs as i64) * 100 };
+    }
+}
+
+export fn run() {
+    let m = Meters { v: 1 };
+    let r = m + 1;
+    assert r.v == 2;
+}
+
+__DATA__
+{"compile_error": "ambiguous operator `+` on 'Meters': the right operand does not select between 'Add<i64>' and 'Add<i32>'"}

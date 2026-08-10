@@ -17,11 +17,35 @@ impl From<List<String>> for Wrapper {
     }
 }
 
+struct Pair<T> {
+    a: T,
+}
+
+impl From<Pair<i32>> for Wrapper {
+    fn from(v: Pair<i32>) -> Wrapper {
+        return Wrapper { tag: "pair-ints" };
+    }
+}
+
+impl From<Pair<String>> for Wrapper {
+    fn from(v: Pair<String>) -> Wrapper {
+        return Wrapper { tag: "pair-strs" };
+    }
+}
+
 test "the full argument type selects between same-head impls" {
     let ints: List<i32> = [1, 2];
     let strs: List<String> = ["a"];
     assert Wrapper::from(ints).tag == "ints";
     assert Wrapper::from(strs).tag == "strs";
+}
+
+// `Pair { a: 5 }` synthesizes to the head alone — its type arguments come from
+// elaboration — so the preselect has no single type to match and must leave the
+// choice to the path that elaborates the argument first, not call it ambiguous.
+test "a head-only argument leaves the choice to elaboration" {
+    assert Wrapper::from(Pair { a: 5 }).tag == "pair-ints";
+    assert Wrapper::from(Pair { a: "x" }).tag == "pair-strs";
 }
 
 __DATA__

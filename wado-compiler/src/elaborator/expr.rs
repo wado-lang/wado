@@ -67,6 +67,19 @@ pub(super) enum UnionSource {
     Base { base_idx: usize, field_index: u32 },
 }
 
+/// The selected indexing impl's key type must be the one the index expression
+/// was elaborated against: both sides ask the same question, so a disagreement
+/// means one of them changed. This used to be *repaired* by resolving the index
+/// a second time, elaborating one AST node twice.
+fn debug_assert_key_matches(impl_key: Option<TypeId>, elaborated: TypeId) {
+    if let Some(key) = impl_key {
+        debug_assert_eq!(
+            key, elaborated,
+            "indexing impl selected for a key type the index was not elaborated against"
+        );
+    }
+}
+
 /// Peel references off `type_id` and, if it names a struct, return its
 /// `(name, defining module, type arguments)`. Shared by the resolve and reify
 /// spread-field projections so both classify a base identically.
@@ -276,32 +289,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx.active_labels.pop();
                 let target = ctx.labeled_block_targets.pop().unwrap();
 
-                // Unify the types of every `break label: expr`. The use-site
-                // expected type wins when present; otherwise pick a
-                // representative break type, skipping `never` (the bottom
-                // type) and types still containing UNKNOWN (e.g. a bare
-                // `null` whose `Option<...>` inner is not yet known) so a
-                // diverging or unresolved break does not mask the real type.
-                // Mirrors `resolve_match_expr` result-type selection.
+                // Unify every `break label: expr` with the fall-through path,
+                // whose value is the trailing statement's — what
+                // `translate_stmts_as_value` leaves on the stack there, or
+                // `unreachable` when the tail is not a value.
+                //
+                // The use-site expected type wins when present; otherwise pick a
+                // representative branch type, skipping `never` and types still
+                // containing UNKNOWN (a bare `null` whose `Option<...>` inner is
+                // not yet known) so a diverging or unresolved branch does not
+                // mask the real type. Mirrors `resolve_match_expr`.
+                let tail_type = self.ast_block_result_type(&lb.block);
+                let mut branch_types = target.break_types.clone();
+                branch_types.push(tail_type);
                 let result_type = if let Some(ty) = expected_type {
                     ty
-                } else if !target.break_types.is_empty() {
+                } else {
                     let tt = self.tysys.type_table.borrow();
-                    target
-                        .break_types
+                    branch_types
                         .iter()
                         .copied()
                         .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
                         .or_else(|| {
-                            target
-                                .break_types
+                            branch_types
                                 .iter()
                                 .copied()
                                 .find(|&t| t != TypeTable::NEVER)
                         })
-                        .unwrap_or(target.break_types[0])
-                } else {
-                    TypeTable::UNIT
+                        // Every branch diverges: the block's value is `never`.
+                        .unwrap_or(branch_types[0])
                 };
 
                 // Report any `break label: null` whose `Option<...>` inner
@@ -314,10 +330,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
                 }
 
-                // Report any break whose value type disagrees with the
-                // unified result type.
+                // Report any branch whose type disagrees with the unified
+                // result — the tail included, when it carries a value.
                 for &break_type in &target.break_types {
                     self.check_branch_type(break_type, result_type, lb.span);
+                }
+                if tail_type != TypeTable::UNIT && tail_type != TypeTable::NEVER {
+                    self.check_branch_type(tail_type, result_type, lb.span);
                 }
 
                 // Stage 7-B: reify rebuilds the `LabeledBlock` from the AST,
@@ -1567,18 +1586,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
-            let expected_key = Self::is_coercible_compound_literal(&index.index)
-                .then(|| {
-                    self.index_lookup_or_newtype_base(
-                        &struct_name,
-                        base_type_id,
-                        &lookup_name,
-                        lookup_type_id,
-                        |s, n, t| s.find_index_value_trait_impl(n, t, None),
-                    )
-                    .and_then(|(i, _)| i.index_type)
-                })
-                .flatten();
+            // A subscript selects its impl by key type, so the key is
+            // synthesized before the impl is chosen — the ordering an overloaded
+            // method call has, answered the same way. Only a key synthesis
+            // cannot type (a compound literal, whose type the impl supplies)
+            // still falls back to pre-selecting an impl for its expected type.
+            let key_class = self.synthesize_arg_class(&index.index, ctx);
+            let expected_key = self.index_key_type(&key_class).or_else(|| {
+                self.index_lookup_or_newtype_base(
+                    &struct_name,
+                    base_type_id,
+                    &lookup_name,
+                    lookup_type_id,
+                    |s, n, t| s.find_index_value_trait_impl(n, t, None),
+                )
+                .and_then(|(i, _)| i.index_type)
+            });
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
 
             // Reject &T/&mut T used as index expression (would ICE in codegen)
@@ -1602,11 +1625,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .flatten();
             if let Some((trait_info, matched_type_id)) = index_trait_info {
-                if let Some(key_type) = trait_info.index_type
-                    && key_type != index_type
-                {
-                    let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
-                }
+                debug_assert_key_matches(trait_info.index_type, index_type);
 
                 let receiver = self.fq_index_receiver(matched_type_id);
                 let mangled_method_name =
@@ -1658,11 +1677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
             );
             if let Some((trait_info, matched_type_id)) = index_value_info {
-                if let Some(key_type) = trait_info.index_type
-                    && key_type != index_type
-                {
-                    let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
-                }
+                debug_assert_key_matches(trait_info.index_type, index_type);
 
                 let receiver = self.fq_index_receiver(matched_type_id);
                 let mangled_method_name = MethodName::format_local(

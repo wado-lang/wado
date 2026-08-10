@@ -1,0 +1,58 @@
+// The prelude's binary operator traits carry a right-hand type parameter
+// (`trait Add<Rhs = Self>`), so one receiver may add two different operands and
+// the right one selects the impl — the operator's shape of argument-directed
+// selection (WEP 2026-07-31). Omitting the argument means `Rhs = Self`, which
+// is what every existing impl writes.
+
+struct Meters {
+    v: i32,
+}
+
+struct Feet {
+    v: i32,
+}
+
+impl Add for Meters {
+    type Output = Meters;
+    fn add(&self, rhs: &Meters) -> Meters {
+        return Meters { v: self.v + rhs.v };
+    }
+}
+
+impl Add<Feet> for Meters {
+    type Output = Meters;
+    fn add(&self, rhs: &Feet) -> Meters {
+        return Meters { v: self.v + rhs.v * 3 };
+    }
+}
+
+impl Mul<i32> for Meters {
+    type Output = Meters;
+    fn mul(&self, rhs: &i32) -> Meters {
+        return Meters { v: self.v * *rhs };
+    }
+}
+
+test "the right operand's type selects the Add impl" {
+    let m = Meters { v: 10 };
+    let same = m + Meters { v: 5 };
+    assert same.v == 15;
+    let mixed = m + Feet { v: 2 };
+    assert mixed.v == 16;
+}
+
+test "a local right operand selects too" {
+    let m = Meters { v: 1 };
+    let f = Feet { v: 3 };
+    let mixed = m + f;
+    assert mixed.v == 10;
+}
+
+test "an operand type the impls do not share still selects" {
+    let m = Meters { v: 4 };
+    let doubled = m * 2;
+    assert doubled.v == 8;
+}
+
+__DATA__
+{"test": {}}

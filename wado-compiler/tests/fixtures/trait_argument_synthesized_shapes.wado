@@ -1,0 +1,139 @@
+// Argument synthesis is a judgement over the whole expression language, so
+// every form whose type is fixed at the call site selects an argument list:
+// a field read, a method call, an operator, an associated constant, a global,
+// an enum case, a cast to a generic type (WEP 2026-07-31).
+
+struct A {
+    v: i32,
+}
+
+struct B {
+    v: i32,
+}
+
+struct Holder {
+    a: A,
+    b: B,
+}
+
+impl Holder {
+    fn make_b(&self) -> B {
+        return B { v: 7 };
+    }
+}
+
+enum Color {
+    Red,
+    Green,
+}
+
+enum Shade {
+    Light,
+    Dark,
+}
+
+global WIDE: i64 = 2;
+
+trait Take<S> {
+    fn take(&self, s: S) -> i32;
+}
+
+impl Take<A> for bool {
+    fn take(&self, s: A) -> i32 {
+        return s.v;
+    }
+}
+
+impl Take<B> for bool {
+    fn take(&self, s: B) -> i32 {
+        return s.v * 2;
+    }
+}
+
+trait Width<S> {
+    fn width(&self, s: S) -> i32;
+}
+
+impl Width<i32> for bool {
+    fn width(&self, s: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl Width<i64> for bool {
+    fn width(&self, s: i64) -> i32 {
+        return 2;
+    }
+}
+
+trait Kind<S> {
+    fn kind(&self, s: S) -> i32;
+}
+
+impl Kind<Color> for bool {
+    fn kind(&self, s: Color) -> i32 {
+        return 10;
+    }
+}
+
+impl Kind<Shade> for bool {
+    fn kind(&self, s: Shade) -> i32 {
+        return 20;
+    }
+}
+
+trait Pick<S> {
+    fn pick(&self, s: S) -> i32;
+}
+
+impl Pick<List<i32>> for bool {
+    fn pick(&self, s: List<i32>) -> i32 {
+        return 30;
+    }
+}
+
+impl Pick<List<i64>> for bool {
+    fn pick(&self, s: List<i64>) -> i32 {
+        return 40;
+    }
+}
+
+test "a field read selects the argument list" {
+    let f = true;
+    let h = Holder { a: A { v: 3 }, b: B { v: 4 } };
+    assert f.take(h.a) == 3;
+    assert f.take(h.b) == 8;
+}
+
+test "a method call's return type selects the argument list" {
+    let f = true;
+    let h = Holder { a: A { v: 3 }, b: B { v: 4 } };
+    assert f.take(h.make_b()) == 14;
+}
+
+test "an associated constant and a global select numeric widths" {
+    let f = true;
+    assert f.width(i32::MAX) == 1;
+    assert f.width(WIDE) == 2;
+}
+
+test "a unary operator keeps its operand's type" {
+    let f = true;
+    let n: i64 = 5;
+    assert f.width(-n) == 2;
+}
+
+test "an enum case selects the argument list" {
+    let f = true;
+    assert f.kind(Color::Red) == 10;
+    assert f.kind(Shade::Dark) == 20;
+}
+
+test "a cast to a generic type selects the argument list" {
+    let f = true;
+    assert f.pick([1, 2] as List<i32>) == 30;
+    assert f.pick([1, 2] as List<i64>) == 40;
+}
+
+__DATA__
+{"test": {}}

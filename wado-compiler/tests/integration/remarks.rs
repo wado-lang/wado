@@ -307,7 +307,7 @@ export fn run() with Stdout {
 /// A `CompilerHost` serving a fixed set of in-memory modules, so a multi-file
 /// program can be compiled without touching the filesystem.
 struct MultiFileHost {
-    files: std::collections::HashMap<String, String>,
+    files: wado_compiler::hashmap::IndexMap<String, String>,
     diagnostics: std::sync::Mutex<Vec<wado_compiler::Diagnostic>>,
 }
 

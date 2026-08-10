@@ -112,8 +112,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Primitive type: coerce literal to the same type
                 Some(left)
             } else {
-                // Struct type: look up operator trait and use rhs parameter type
-                self.find_operator_rhs_type(left, &op)
+                // Struct type: the literal has no type yet, so its class is
+                // what selects among several `Add<Rhs>` impls.
+                let rhs_class = self.synthesize_arg_class(right_ast, ctx);
+                self.find_operator_rhs_type(left, &op, Some(&rhs_class), right_ast.span())
             };
             let right = self.resolve_expr(right_ast, ctx, coerce_type);
             (
@@ -156,8 +158,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | BinaryOp::Gt
                     | BinaryOp::GtEq
             );
-            let left_lit = is_comparison && Self::is_coercible_compound_literal(left_ast);
-            let right_lit = is_comparison && Self::is_coercible_compound_literal(right_ast);
+            let left_lit = is_comparison && Self::takes_shape_from_expected_type(left_ast);
+            let right_lit = is_comparison && Self::takes_shape_from_expected_type(right_ast);
             if left_lit && !right_lit {
                 let right = self.resolve_expr(right_ast, ctx, expected_type);
                 let left_expected = if right == TypeTable::ERROR {
@@ -186,9 +188,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    pub(super) fn is_coercible_compound_literal(expr: &ast::Expr) -> bool {
+    /// Whether an operand's own elaboration would consult the expected type, so
+    /// a comparison resolves the *other* side first and hands this one its type.
+    /// A syntactic subset of the forms argument synthesis classifies as
+    /// [`super::synth::ArgClass::Opaque`], and syntactic on purpose: reify
+    /// decides the same order with no synthesis to ask, and a type-dependent
+    /// order would desync the two walks inside a tuple `for-of`, where one
+    /// sub-tree is visited once per element.
+    ///
+    /// Subset, not equality, is the safe side: a form left out resolves on its
+    /// own, as every operand did before.
+    pub(super) fn takes_shape_from_expected_type(expr: &ast::Expr) -> bool {
         match expr {
             ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => true,
+            // A namespaced call (`Color::from_str(s)`) reads as a static path
+            // too; a plain call's return type is its own.
             ast::Expr::Call(call) => {
                 matches!(&call.callee, ast::Expr::Ident(id) if id.segments.len() >= 2)
             }
@@ -599,19 +613,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let (lookup_name, lookup_type_id) =
                     self.tysys.newtype_base_lookup(&struct_name, left.type_id);
 
-                // Find the arithmetic trait implementation
-                let (trait_info_opt, (impl_name, impl_type_id)) = self
-                    .find_arithmetic_trait_impl(&struct_name, left.type_id, trait_name, method_name)
-                    .map(|info| (Some(info), (struct_name.clone(), left.type_id)))
-                    .unwrap_or_else(|| {
-                        let info = self.find_arithmetic_trait_impl(
-                            &lookup_name,
-                            lookup_type_id,
-                            trait_name,
-                            method_name,
-                        );
-                        (info, (lookup_name.clone(), lookup_type_id))
-                    });
+                // The right operand is resolved by now, so its type selects
+                // among the receiver's `Add<Rhs>` impls (WEP 2026-07-31).
+                let rhs_class = super::synth::ArgClass::Exact(right.type_id);
+                let mut admitted = self.find_arithmetic_trait_impls(
+                    &struct_name,
+                    left.type_id,
+                    trait_name,
+                    method_name,
+                    Some(&rhs_class),
+                );
+                let mut impl_name = struct_name.clone();
+                let mut impl_type_id = left.type_id;
+                if admitted.is_empty() {
+                    // The impl is read on the newtype's base, so the right
+                    // operand is read there too: `impl Add for Vec2`
+                    // dispatched through `Position` declares `&Vec2`, and the
+                    // operand is a `Position` over the same base.
+                    let rhs_base = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .get_newtype_base(right.type_id)
+                        .unwrap_or(right.type_id);
+                    let rhs_class = super::synth::ArgClass::Exact(rhs_base);
+                    admitted = self.find_arithmetic_trait_impls(
+                        &lookup_name,
+                        lookup_type_id,
+                        trait_name,
+                        method_name,
+                        Some(&rhs_class),
+                    );
+                    impl_name.clone_from(&lookup_name);
+                    impl_type_id = lookup_type_id;
+                }
+                // Unique-or-error: several admitted impls are reported here,
+                // where the span is, and dispatch falls through to the
+                // operand-type error below.
+                self.report_ambiguous_operator_rhs(&admitted, left.type_id, op, span);
+                let trait_info_opt = match admitted.as_slice() {
+                    [_only] => admitted.into_iter().next(),
+                    [] | [_, _, ..] => None,
+                };
                 if let Some(trait_info) = trait_info_opt {
                     let resolved = ResolvedTraitMethod {
                         trait_name: trait_info.trait_name,
@@ -716,9 +759,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let (lookup_name, lookup_type_id) =
                     self.tysys.newtype_base_lookup(&struct_name, left.type_id);
 
-                // Find the shift trait implementation
+                // Find the shift trait implementation. `Shl` / `Shr` declare
+                // `rhs: u32` and take no trait argument, so there is nothing
+                // to select between.
                 let (trait_info_opt, (impl_name, impl_type_id)) = self
-                    .find_arithmetic_trait_impl(&struct_name, left.type_id, trait_name, method_name)
+                    .find_arithmetic_trait_impl(
+                        &struct_name,
+                        left.type_id,
+                        trait_name,
+                        method_name,
+                        None,
+                    )
                     .map(|info| (Some(info), (struct_name.clone(), left.type_id)))
                     .unwrap_or_else(|| {
                         let info = self.find_arithmetic_trait_impl(
@@ -726,6 +777,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             lookup_type_id,
                             trait_name,
                             method_name,
+                            None,
                         );
                         (info, (lookup_name.clone(), lookup_type_id))
                     });
@@ -1705,12 +1757,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.type_table.borrow().get(param_ty),
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             );
-            // For `&Self` parameters the "value-level" expected type is
-            // the receiver's type (preserving newtype identity when an
-            // impl on the base is dispatched through a newtype receiver).
-            // For concrete parameter types (e.g. `rhs: u32` on
-            // `Shl::shl`) the expected type is the parameter type itself.
-            let expected = if wrap { receiver.type_id } else { param_ty };
+            // For a `&Self` parameter the "value-level" expected type is the
+            // receiver's type, preserving newtype identity when an impl on the
+            // base is dispatched through a newtype receiver. A parameterized
+            // operator trait (`impl Add<Feet> for Meters`) declares a
+            // *different* referent, and that one is what the operand must
+            // match. For a concrete parameter (e.g. `rhs: u32` on `Shl::shl`)
+            // the expected type is the parameter type itself.
+            let expected = if wrap {
+                let referent = match self.tysys.type_table.borrow().get(param_ty) {
+                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                    _ => param_ty,
+                };
+                // Only a trait spelled with an argument (`Add<Feet>`) declares
+                // a referent of its own; a bare `Add` — like `Eq` and `Ord` —
+                // declares `&Self`, and a variadic `impl Ord for [..T]`
+                // resolves that to a shape the operand does not equal.
+                let declares_rhs = resolved.trait_name.contains('<')
+                    && referent != receiver.type_id
+                    && referent != self.tysys.get_base_type(receiver.type_id);
+                if declares_rhs {
+                    referent
+                } else {
+                    receiver.type_id
+                }
+            } else {
+                param_ty
+            };
             self.typecheck(arg.type_id, expected, span);
             wrap_flags.push(wrap);
         }
