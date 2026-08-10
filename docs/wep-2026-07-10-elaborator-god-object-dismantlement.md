@@ -132,7 +132,7 @@ What this deletes, structurally:
   pass records the authoritative use→def edges once, and queries no longer
   resolve anything, so there is nothing to suppress. The gate itself survives
   for a use the query coupling hid — argument classification
-  (`synthesize_arg_class`) walks an argument *speculatively* to choose among
+  (`synthesize_arg_class`) walks an argument _speculatively_ to choose among
   overloads, and a probe that records is a probe with a side effect.
 - `with_module_perspective` on the query paths. It survives only for the
   walker's callee-scope work: a parameter default re-resolved at the call site
@@ -319,7 +319,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
   as the `&Module` argument its entry points already take. The walker's
   cross-module needs are covered by `Signatures` (fallback-module idents, data
   sections, the declaring node each signature carries) and the `Rc`'d trait
-  default bodies. What survives is one *declaring-side* read: the driver fills
+  default bodies. What survives is one _declaring-side_ read: the driver fills
   each module's imported globals from `Signatures::globals` once every decl
   pass has run, rather than the decl pass re-resolving the declaring module's
   AST under a borrowed perspective.
@@ -402,7 +402,7 @@ not say):
 - `Self` — the block's own resolved target, which is also what a concrete
   candidate is matched against;
 - the target's fq name and which trait declaration the block implements —
-  name-level, but *frame*-level too, so the decl pass is the only phase that
+  name-level, but _frame_-level too, so the decl pass is the only phase that
   can answer them without borrowing another module's imports.
 
 Nothing about the answer is call-site-shaped except the slot map, so the query
@@ -414,8 +414,8 @@ neither swaps a perspective nor suppresses a recording.
 - [ ] S8 Walker slim-down. Done: `loaded_modules` and `current_module_items`
       are off the struct. Remaining: the `ElabEnv` bundle, `AnnotateState`'s
       dissolution, and the construction-site collapse.
-Ordering: S7 converts one query at a time rather than as a single cut. S8 is
-last and depends on neither.
+      Ordering: S7 converts one query at a time rather than as a single cut. S8 is
+      last and depends on neither.
 
 Progress metric:
 

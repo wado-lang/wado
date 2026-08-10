@@ -824,7 +824,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
                 trait_name: trait_name.as_deref(),
-                declaring_module: Some(callee_module.clone()),
+                declaring_module: Some(callee_module),
                 span,
             });
             if type_args.is_empty() {
@@ -2781,9 +2781,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn trait_impl_keys_current_first(&self, struct_name: &str) -> Vec<(ModuleSource, AstId)> {
         let env = &self.tysys.trait_env;
         let declared = env.entries_by_receiver_vec(&self.impl_target(struct_name).receiver());
-        let binder = env
-            .entries_by_receiver_vec(&Receiver::Type(FqTypeName::binder(struct_name)));
-        let is_current = |(module, _): &&(ModuleSource, AstId)| *module == self.current_module_source;
+        let binder = env.entries_by_receiver_vec(&Receiver::Type(FqTypeName::binder(struct_name)));
+        let is_current =
+            |(module, _): &&(ModuleSource, AstId)| *module == self.current_module_source;
         let mut keys: Vec<(ModuleSource, AstId)> = declared
             .iter()
             .chain(binder.iter())

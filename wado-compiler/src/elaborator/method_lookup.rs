@@ -2386,11 +2386,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .impl_sig(impl_ref.1)
             .expect("the decl pass records every impl block's declaration facts")
             .instantiate_slots(&scope.tysys.type_table, &impl_slots);
-        scope
-            .annotate_ctx
-            .trait_ctx
-            .assoc_type_bindings
-            .extend(impl_sig.associated_types.iter().map(|(n, &t)| (n.clone(), t)));
+        scope.annotate_ctx.trait_ctx.assoc_type_bindings.extend(
+            impl_sig
+                .associated_types
+                .iter()
+                .map(|(n, &t)| (n.clone(), t)),
+        );
 
         let blanket_type_param = if is_blanket_type_param {
             Some(impl_struct_name.clone())
