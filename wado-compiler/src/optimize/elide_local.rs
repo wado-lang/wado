@@ -159,6 +159,18 @@ fn classify(
         // introduces a local, writes to it via Assign, then a downstream pass
         // folds away the only read site. The matching `let x;` declaration
         // falls out once every write to `x` is gone.
+        StmtKind::Expr(operand @ Operand::Value(_)) => {
+            if !is_tail
+                && arena_query::is_pure_nontrapping_operand_typed(
+                    engine.body,
+                    *operand,
+                    engine.value_graph_type_table(),
+                )
+            {
+                return Action::Drop;
+            }
+            Action::Keep
+        }
         StmtKind::Expr(Operand::Expr(e)) => {
             let assign = match &engine.body.exprs[*e].kind {
                 ExprKind::Assign { target, value } => Some((*target, *value)),
@@ -317,6 +329,34 @@ mod tests {
         assert!(
             body.blocks[body.root].stmts.is_empty(),
             "the pool still names local 0, but no reachable operand reads it"
+        );
+    }
+
+    /// A statement whose operand is a promoted value carries no binding, so the
+    /// only thing keeping it alive is the statement itself.
+    #[test]
+    fn drops_a_promoted_value_standing_alone_as_a_statement() {
+        let mut body = Body::empty();
+        let dead = body.values.int_typed(1, TypeTable::I32);
+        let tail = body.values.int_typed(2, TypeTable::I32);
+        let stmts = [dead, tail]
+            .map(|v| {
+                body.stmts.push(StmtNode {
+                    kind: StmtKind::Expr(Operand::Value(v)),
+                    span: Span::default(),
+                })
+            })
+            .to_vec();
+        body.root = body.blocks.push(BlockNode {
+            stmts,
+            span: Span::default(),
+        });
+        let mut locals = Vec::new();
+        run_elide(&mut body, &mut locals);
+        assert_eq!(
+            body.blocks[body.root].stmts.len(),
+            1,
+            "only the tail statement, which is the block's value, should remain"
         );
     }
 

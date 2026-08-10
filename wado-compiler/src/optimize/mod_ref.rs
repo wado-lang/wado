@@ -196,6 +196,24 @@ fn field_receiver_nonnull(body: &Body, scope: &AccumScope<'_>, base: Operand) ->
     }
 }
 
+/// The one trapping cast: `wir_build::translate_cast` lowers a float-to-integer
+/// conversion to the non-saturating `I*TruncF*`, which traps on NaN and on an
+/// out-of-range magnitude. Every other conversion it emits is total — integer to
+/// integer of any width or signedness, integer to float, float to float — and a
+/// cast between non-numeric types is a representation no-op, never a `ref.cast`.
+/// Provable only with a type table.
+fn cast_truncates_a_float(
+    body: &Body,
+    scope: &AccumScope<'_>,
+    inner: Operand,
+    target: crate::tir::TypeId,
+) -> bool {
+    let Some(types) = scope.types else {
+        return true;
+    };
+    types.is_float(body.operand_type(inner)) && types.is_integer(target)
+}
+
 impl ModRef {
     /// Compute the summary of the expression `id` and its sub-tree.
     pub fn of_expr(body: &Body, id: ExprId) -> Self {
@@ -389,11 +407,9 @@ impl ModRef {
                 let expr = *expr;
                 self.accumulate_operand(body, expr, scope);
             }
-            ExprKind::Cast { expr, .. } => {
-                // v1: conservatively trap-capable (numeric narrowing /
-                // ref.cast). Refine when a consumer needs the precision.
-                self.may_trap = true;
-                let expr = *expr;
+            ExprKind::Cast { expr, target_type } => {
+                let (expr, target_type) = (*expr, *target_type);
+                self.may_trap |= cast_truncates_a_float(body, scope, expr, target_type);
                 self.accumulate_operand(body, expr, scope);
             }
 
@@ -1702,39 +1718,49 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------
-    // Cast may_trap depends on target kind — see B5/D6 finding
-    // -----------------------------------------------------------------
-    //
-    // Today every Cast is conservatively `may_trap = true`. After the
-    // refinement, integer-to-integer casts (widen / narrow / signed-vs-
-    // unsigned reinterpret) and integer-to-float / float-to-float casts
-    // are non-trapping, leaving only float-to-int non-saturating
-    // truncations and `ref.cast` as trap-capable.
-    //
-    // The test exercises an `i32 -> i64` widening which is provably
-    // non-trapping in Wasm; ModRef must reflect that.
-
-    fn cast(body: &mut Body, expr: ExprId, target_type: TypeId) -> ExprId {
+    fn cast(body: &mut Body, from: TypeId, to: TypeId) -> ExprId {
+        let inner = body.exprs.push(ExprNode {
+            kind: ExprKind::Local {
+                index: 0,
+                name: "x".to_string(),
+            },
+            type_id: from,
+            span: sp(),
+        });
         body.exprs.push(ExprNode {
             kind: ExprKind::Cast {
-                expr: expr.into(),
-                target_type,
+                expr: inner.into(),
+                target_type: to,
             },
-            type_id: target_type,
+            type_id: to,
             span: sp(),
         })
     }
 
+    fn cast_traps(from: TypeId, to: TypeId) -> bool {
+        let types = crate::tir::TypeTable::new();
+        let mut body = Body::empty();
+        let c = cast(&mut body, from, to);
+        ModRef::of_expr_typed(&body, c, Some(&types)).may_trap
+    }
+
     #[test]
-    fn cast_i32_to_i64_does_not_trap() {
-        // expr.type_id and target are integer types (we model both as ty()
-        // for unit-test purposes; the production refinement consults the
-        // TypeTable). This test pins the "non-trapping widening" branch.
-        let _ = cast; // ensure the helper is used so the test compiles.
-        // We can't fully assert this without a TypeTable here; defer the
-        // active assertion to the e2e fixture and keep this as a stub
-        // that documents the expectation.
+    fn only_a_float_to_integer_cast_traps() {
+        use crate::tir::TypeTable;
+        assert!(cast_traps(TypeTable::F64, TypeTable::I32));
+        assert!(cast_traps(TypeTable::F32, TypeTable::I64));
+        assert!(!cast_traps(TypeTable::I32, TypeTable::I64));
+        assert!(!cast_traps(TypeTable::I64, TypeTable::I32));
+        assert!(!cast_traps(TypeTable::I32, TypeTable::F64));
+        assert!(!cast_traps(TypeTable::F32, TypeTable::F64));
+    }
+
+    #[test]
+    fn a_cast_stays_trap_capable_without_a_type_table() {
+        use crate::tir::TypeTable;
+        let mut body = Body::empty();
+        let c = cast(&mut body, TypeTable::I64, TypeTable::I32);
+        assert!(ModRef::of_expr(&body, c).may_trap);
     }
 
     // -----------------------------------------------------------------
