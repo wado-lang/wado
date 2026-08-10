@@ -1,7 +1,7 @@
 //! [`ModuleBindings`] — `use → def` edges and locally defined symbols.
 //!
-//! Populated by the body walk (Stage 3 of
-//! [`wep-2026-05-26-elaborator-rearchitecture.md`]) — every call site that
+//! Populated by the body walk
+//! ([`wep-2026-05-26-elaborator-rearchitecture.md`]) — every call site that
 //! resolves an identifier to its defining symbol writes here, and every
 //! site that introduces a user-visible local binding registers it here.
 //!

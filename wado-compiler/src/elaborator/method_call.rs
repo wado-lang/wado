@@ -45,7 +45,7 @@ fn static_call_symbol_name(static_call: &ast::StaticMethodCallExpr) -> String {
 ///
 /// `call_id == None` likewise suppresses recording the dispatch decision
 /// in [`super::sem::TypeAnnotations::method_dispatch`]: the future
-/// `reify` pass (Stage 5 of WEP 2026-05-26) only walks source-level
+/// `reify` pass (WEP 2026-05-26) only walks source-level
 /// `MethodCallExpr` nodes, so a synthesised call has no AST id under which
 /// to file an entry.
 pub(super) struct MethodCallInput<'a> {
@@ -1152,7 +1152,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info: Some(method_info),
         };
 
-        // Stage 4 of WEP 2026-05-26: record the dispatch decision so the
+        // WEP 2026-05-26: record the dispatch decision so the
         // future `reify` pass can emit the same method-call TIR without
         // re-running trait lookup / method-name mangling. Skipped when:
         //  - `call_id == None` (synthetic call: for-of's `.into_iter()`
@@ -2235,7 +2235,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info: Some(method_info),
         };
 
-        // Stage 5 (WEP 2026-05-26): record the resolved static-method
+        // WEP 2026-05-26: record the resolved static-method
         // call so reify reproduces the same `FunctionRef` (mangled name,
         // monomorph info, and `cm_name` for CM binding synthesis) without
         // re-resolving the target type — reify's from-scratch resolution

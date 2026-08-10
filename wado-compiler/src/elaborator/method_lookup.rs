@@ -100,10 +100,8 @@ pub(super) struct MethodInferenceInput<'a> {
     /// the method lookup for same-named methods on different traits (e.g.
     /// `payload` on Serialize vs Deserialize).
     pub trait_name: Option<&'a str>,
-    /// Module declaring the method — the scope a defaulted type parameter's
-    /// default type resolves in, since `<T = Priv>` may name a type the call
-    /// site cannot. Mirrors the free-function path's
-    /// `fill_defaulted_fn_type_args`.
+    /// Module declaring the method. See
+    /// [`Elaborator::fill_defaulted_method_type_args`].
     pub declaring_module: Option<ModuleSource>,
     /// Call-site span, used to anchor a "cannot infer type parameter"
     /// diagnostic when inference leaves a method type parameter dangling.
@@ -2096,9 +2094,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if skip_filter {
             return true;
         }
-        // The target is fully concrete here (`skip_filter` above), so the
-        // block's own `Self` is the receiver this impl demands.
+        // `skip_filter` above left only concrete targets, so the block's own
+        // `Self` is the receiver this impl demands.
         let impl_recv_id = self.impl_sig(impl_ref).self_type;
+        debug_assert!(
+            !self
+                .tysys
+                .type_table
+                .borrow()
+                .contains_type_param(impl_recv_id),
+            "a slot-carrying impl target reached the concrete-receiver filter"
+        );
         let tt = self.tysys.type_table.borrow();
         let target = tt.peel_refs(impl_recv_id);
         let mut current = tt.peel_refs(receiver);
@@ -2364,11 +2370,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Bind the impl's slots to the receiver's type arguments. The slot map
-        // the scope now holds is the alignment — built per impl shape (generic,
-        // ref, blanket, variadic), which a flat positional list cannot express.
-        // Method-level slots stay abstract: inference solves them at the call
-        // site.
+        // The receiver's type arguments, aligned to the impl's slots per its
+        // shape (generic, ref, blanket, variadic) — which a flat positional
+        // list cannot express. Method-level slots stay abstract: inference
+        // solves them at the call site.
         let impl_slots: IndexMap<u32, TypeId> = scope
             .annotate_ctx
             .trait_ctx
@@ -2376,11 +2381,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .values()
             .copied()
             .collect();
-        // The block's own declaration facts, instantiated through that
-        // alignment. Resolved once by the decl pass in the block's frame, so a
-        // binding naming a type private to the declaring module (`type Iter =
-        // TreeSetIter<T>`) means what the block wrote, not what the caller's
-        // perspective can see (issue #1416).
+        // A binding naming a type private to the declaring module (`type Iter
+        // = TreeSetIter<T>`) means what the block wrote, not what the caller's
+        // perspective can see (issue #1416) — which is why the decl pass, not
+        // this query, resolved it.
         let signatures = Rc::clone(&scope.tysys.signatures);
         let impl_sig = signatures
             .impl_sig(impl_ref.1)
@@ -2473,10 +2477,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // `Self` needs no special handling. The canonical frame bound it
-            // to the impl target, so instantiating with the receiver's
-            // arguments yields the concrete receiver — what re-resolving the
-            // signature under `with_self_type_if_known` used to produce.
+            // `Self` needs no special handling: the canonical frame bound it
+            // to the impl target, so filling the slots with the receiver's
+            // arguments yields the concrete receiver.
             let instantiated = method_sig
                 .decl
                 .instantiate_slots(&scope.tysys.type_table, &impl_slots);
@@ -3674,7 +3677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )),
         };
 
-        // Stage 4 of WEP 2026-05-26: the IndexMut rewrite is the only
+        // WEP 2026-05-26: the IndexMut rewrite is the only
         // path that builds the user-visible method-call TIR without going
         // through `resolve_method_call_with`. Record dispatch here so
         // `m["k"].push(1)` and friends leave the same annotation as the

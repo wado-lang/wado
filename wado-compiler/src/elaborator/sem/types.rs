@@ -18,7 +18,7 @@
 //! return types, generic-parameter tables) belong on
 //! [`super::decls::ModuleDecls`].
 //!
-//! Stage 3 of [`wep-2026-05-26-elaborator-rearchitecture.md`] populated
+//! [`wep-2026-05-26-elaborator-rearchitecture.md`] populated
 //! `local_types`; Stage 4 adds `expression_types` (per-`AstId` resolved
 //! type for every expression visited by the body walk),
 //! `method_dispatch` (per-`MethodCallExpr` resolved target plus the
@@ -38,8 +38,7 @@
 //! for the iterator path of `for x of expr`). `MethodDispatch` also
 //! grows an `is_ref_impl` flag that reify needs alongside `self_kind`
 //! to drive `adjust_receiver_for_self_kind`. See
-//! `wep-2026-05-26-elaborator-rearchitecture.md` §`Design notes (Stage 5)`
-//! for the full gap inventory.
+//! `wep-2026-05-26-elaborator-rearchitecture.md` §`Reify — mechanical`.
 
 use crate::ast::{self, AstId};
 use crate::hashmap::IndexMap;
@@ -70,8 +69,7 @@ use crate::tir::{FunctionRef, TypeId};
 /// was found on a reference-type impl (`impl Trait for &T`), because such
 /// impls take an *extra* layer of `&` on the receiver. The flag is the
 /// output of `lookup_method_info` and the input reify feeds to
-/// `adjust_receiver_for_self_kind` (Gap 2 in
-/// `wep-2026-05-26-elaborator-rearchitecture.md` §`Design notes (Stage 5)`).
+/// `adjust_receiver_for_self_kind`.
 #[derive(Clone)]
 pub(crate) struct MethodDispatch {
     pub(crate) function_ref: FunctionRef,
@@ -725,7 +723,7 @@ pub(crate) struct GenericInstantiation {
     ///
     /// Recording it here lets reify drop its own `mangle_generic_name`
     /// reconstruction at struct-literal / call sites — the parity-bug
-    /// class WEP 2026-05-26 §"Stage 7 gap" calls out (`type_name(t)`
+    /// class WEP 2026-05-26 §"Reify — mechanical" calls out (`type_name(t)`
     /// drift between annotate and reify) goes away by construction.
     pub(crate) mangled_name: Option<String>,
     /// True for an anonymous composition (`{ ..a, ..b }`): reify projects the
@@ -750,9 +748,8 @@ pub(crate) struct MutCapture {
     pub(crate) ref_type: TypeId,
     /// Outer function's local index for the original binding. Reify
     /// recomputes the same index from its own walk (see the
-    /// `FunctionContext::locals` walk-order invariant in
-    /// `wep-2026-05-26-elaborator-rearchitecture.md` §`Design notes
-    /// (Stage 5)`); this field is the cross-check.
+    /// `FunctionContext::locals` walk-order invariant); this field is the
+    /// cross-check.
     pub(crate) outer_index: u32,
 }
 
@@ -891,7 +888,7 @@ pub(crate) struct ImplFacts {
     /// special cases and the `&T`-blanket "bare `&`" carve-out that
     /// `get_type_name` already encodes — `module.rs:581`). Keeping the
     /// canonical name on the impl facts prevents the parity-bug class
-    /// called out in WEP 2026-05-26 §"Stage 7 gap".
+    /// called out in WEP 2026-05-26 §"Reify — mechanical".
     pub(crate) struct_name: crate::name::FqTypeName,
     /// The impl target's typed receiver, decided from the AST type at record
     /// time (`Receiver::Ref` for `&T` / `&mut T`, `Receiver::Type` otherwise).

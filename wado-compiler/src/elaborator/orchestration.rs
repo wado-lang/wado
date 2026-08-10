@@ -60,7 +60,7 @@ use super::tysys::TypeSystem;
 /// [`super::sem::ModuleSemantics`]. Each entry is owned by exactly one
 /// place at a time — the driver hands the entry to the body walk via
 /// `swap_remove` + `insert`, so no shared-mutability plumbing is needed
-/// (WEP 2026-05-26, Stage 3).
+/// (WEP 2026-05-26).
 ///
 /// Migration markers on each field below trace the WEP 2026-05-26
 /// elaborator re-architecture. `AnnotateState` itself disappears after
@@ -96,7 +96,7 @@ pub(crate) struct AnnotateState {
     /// (`references` / `local_symbols` / `local_types`) — each module's
     /// data now lives in its own owned [`super::sem::ModuleSemantics`], so
     /// the body walk's `&mut` access stays disjoint across modules and the
-    /// shared-mutability plumbing disappears (WEP 2026-05-26, Stage 3).
+    /// shared-mutability plumbing disappears (WEP 2026-05-26).
     pub(crate) module_semantics: IndexMap<ModuleSource, super::sem::ModuleSemantics>,
     /// Kiln invocation redirects consulted by `resolve_import` call sites
     /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].

@@ -768,9 +768,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             associated_types.insert(binding.name.clone(), type_id);
         }
 
-        // The block's own name-level facts, answered here because the frame is
-        // the block's: what its imports make of the target it wrote, and which
-        // trait declaration the name it implements picks out.
+        // The block's name-level facts. Answered here because this is the only
+        // phase standing in the block's own frame.
         let target_fq = scope.qualified_receiver_name(&scope.get_type_name(&impl_block.ty));
         let trait_decl = impl_block.trait_type.as_ref().map(|trait_type| {
             let head = scope.get_type_name(trait_type);
@@ -989,7 +988,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// The decl pass runs this for every impl block so a dispatch query
     /// instantiates a recorded signature instead of re-resolving the method
-    /// AST under the *caller's* perspective (WEP 2026-07-10).
+    /// AST under the *caller's* perspective (WEP 2026-05-26).
     pub(super) fn record_impl_decls(&mut self, impl_block: &ast::ImplBlock) {
         let mut block = self.enter_inherited_type_param_scope();
         block.annotate_ctx.trait_ctx.type_params.clear();

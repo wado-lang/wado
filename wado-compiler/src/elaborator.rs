@@ -152,9 +152,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// ([`Self::synthesize_arg_class`]), which walks an argument
     /// *speculatively* to pick among overloads and must leave no trace — the
     /// real walk of the same node records the authoritative edge once the
-    /// callee is chosen. Type-checking queries no longer need the gate: since
-    /// WEP 2026-07-10 they read declaration facts the decl pass resolved in
-    /// the declaring frame instead of re-resolving a foreign signature's AST.
+    /// callee is chosen.
     pub(super) suppress_reference_recording: bool,
     /// Per-module deferred-inference state, solved and swept in
     /// [`Self::finalize_infer_holes`] at the end of the module walk. See
@@ -341,11 +339,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Locals are cleared because they describe in-progress resolution, not the
     /// target module's definitions; everything is restored on return.
     ///
-    /// Callee-scope work only. A *query* never enters another module's
-    /// perspective — every declaration fact it needs was resolved in the
-    /// declaring frame by the decl pass (WEP 2026-07-10). What remains is the
-    /// walker resolving a parameter default at the call site, which the
-    /// callee's own scope has to answer for (WEP 2026-04-11).
+    /// Callee-scope work only: the walker resolving a parameter default at the
+    /// call site, which the callee's own scope has to answer for (WEP
+    /// 2026-04-11). A *query* never enters another module's perspective —
+    /// every declaration fact it needs is one the decl pass already resolved
+    /// in the declaring frame (WEP 2026-05-26).
     ///
     /// Already being in `module`'s perspective skips the swap entirely — which
     /// also leaves the in-progress locals in place, as a same-module resolution

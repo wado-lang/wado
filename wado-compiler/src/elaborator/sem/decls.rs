@@ -1,6 +1,6 @@
 //! [`ModuleDecls`] — module-internal declarations confirmed by elaboration.
 //!
-//! Stage 3 of [`wep-2026-05-26-elaborator-rearchitecture.md`] populates the
+//! [`wep-2026-05-26-elaborator-rearchitecture.md`] populates the
 //! fields below by relocating per-module state off
 //! [`super::super::Elaborator`].
 //!

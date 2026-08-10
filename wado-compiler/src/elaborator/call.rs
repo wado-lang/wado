@@ -656,7 +656,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let holes = turbofish_holes(&call.type_args);
                     merge_turbofish_type_args(&mut method_type_args, &holes, &method_args);
                 }
-                // Stage 5 (Gap 1 of WEP 2026-05-26): record the combined
+                // WEP 2026-05-26: record the combined
                 // `(impl_args, method_args)` for the static-method call
                 // site. Reify needs both halves to reconstruct the
                 // mangled `__<Type>__<method>` name with the same type
@@ -789,7 +789,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                // Stage 5/7-B (WEP 2026-05-26): `resolve_static_method_call_from_qualified`
+                // WEP 2026-05-26: `resolve_static_method_call_from_qualified`
                 // records the resolved `FunctionRef` under `call.id` itself
                 // (`static_method_dispatch`) so reify can reproduce the same
                 // `Call` shape without re-running impl lookup, mangled-name
@@ -882,7 +882,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     };
 
-                    // Stage 5 (Gap 1 of WEP 2026-05-26): record generic
+                    // WEP 2026-05-26: record generic
                     // type args for variant constructors. Non-generic
                     // variants emit a `Variant` (no type_args) and the
                     // recording is skipped via the empty-`type_args`
@@ -1384,7 +1384,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = self.substitute_type_params(return_type, &type_args);
         }
 
-        // Stage 5 (Gap 1 of WEP 2026-05-26): record the inferred /
+        // WEP 2026-05-26: record the inferred /
         // explicit `type_args` so reify can emit
         // `TirExprKind::Call { type_args, … }` without re-running
         // inference. Free-function calls have no `GenericInstance`-style
@@ -1452,7 +1452,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             monomorph_info: None,
             method_info: None, // Free function call,
         };
-        // Stage 5 (WEP 2026-05-26): record the resolved callee for the
+        // WEP 2026-05-26: record the resolved callee for the
         // free / builtin / namespaced call paths so reify reproduces
         // the same FunctionRef shape (module_source, mangled name,
         // method_info) without re-running the dispatch logic. The

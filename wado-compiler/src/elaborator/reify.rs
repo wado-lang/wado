@@ -1,6 +1,6 @@
 //! Reify — AST + [`super::sem::ModuleSemantics`] → [`crate::tir::TirModule`].
 //!
-//! Introduced by Stage 5 of [`wep-2026-05-26-elaborator-rearchitecture.md`].
+//! Introduced by [`wep-2026-05-26-elaborator-rearchitecture.md`].
 //! The reify pass is the mechanical half of the annotate/reify split:
 //! every TIR-shaping decision is already recorded on `ModuleSemantics`
 //! during `annotate_bodies`; this walker reads those annotations and emits
@@ -54,8 +54,8 @@
 //! body. Local indices, capture indices, and synthetic-local counters
 //! (`next_assert_id`, `next_loop_id`, the `__ref_*` ordering) must match
 //! what `annotate_bodies` produced. The contract is documented at
-//! [`wep-2026-05-26-elaborator-rearchitecture.md`] §`Design notes (Stage
-//! 5)` →`Gap 7: per-function local-frame walk-order invariant`. The unit
+//! [`wep-2026-05-26-elaborator-rearchitecture.md`] §`Reify — mechanical`.
+//! The unit
 //! test contract: for every function `f`, the `Vec<TirLocal>` annotate
 //! emitted equals the `Vec<TirLocal>` reify emits.
 
@@ -1622,7 +1622,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `facts.self_type` would need the `&` / `&mut` / tuple
         // special-cases and the `&T`-blanket "bare `&`" carve-out that
         // `get_type_name` (module.rs:581) already encodes — exactly the
-        // parity-bug class WEP 2026-05-26 §"Stage 7 gap" calls out.
+        // parity-bug class WEP 2026-05-26 §"Reify — mechanical" calls out.
         let _base_struct_name = facts.struct_name.clone();
         // Mangled / display names — read straight off the per-method facts
         // `resolve_method` already publishes; reify no longer runs
@@ -8735,9 +8735,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// generic-substituted with the receiver's `type_args` and is the
     /// authoritative source for the access's `TirExpr::type_id` — unlike
     /// `expression_types[field.id]`, which collides across template
-    /// sub-parsers (WEP 2026-05-26 gotcha #1). `None` for the type means
-    /// the receiver was not a known struct; the caller falls back to the
-    /// recorded type.
+    /// sub-parsers. `None` for the type means the receiver was not a known
+    /// struct; the caller falls back to the recorded type.
     fn lookup_struct_field_index(
         &self,
         receiver_type: TypeId,
@@ -9049,7 +9048,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // this branch only fires for a snapshot-rehydrated callee module,
             // which carries no `current_module_globals`. So resolve the declared
             // type from the AST — the one documented reify type re-resolution
-            // (WEP 2026-05-26 §"Stage 7"). Everywhere else reify reads a fact.
+            // (WEP 2026-05-26 §"Reify — mechanical"). Everywhere else reify
+            // reads a fact.
             let ty = self.resolve_type(&global_decl.ty);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {

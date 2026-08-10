@@ -11,7 +11,7 @@ use crate::tir::{TypeId, TypeTable};
 use super::sem::decls::FunctionSig;
 
 /// Program-wide declaration facts, resolved once by the decl pass and
-/// read-only afterwards (WEP 2026-07-10).
+/// read-only afterwards (WEP 2026-05-26).
 ///
 /// # Membership rule
 ///
@@ -119,7 +119,7 @@ impl Signatures {
 
 /// A declaration's parameter and return types, resolved once in its
 /// declaring frame and abstract over the positional slots in
-/// [`Self::type_params`] (WEP 2026-07-10).
+/// [`Self::type_params`] (WEP 2026-05-26).
 ///
 /// Slot `i` is a `ResolvedType::TypeParam` (or `TypePack`) whose index is
 /// `i`, so a use site's type arguments fill the slots positionally.
@@ -571,9 +571,6 @@ mod tests {
         assert_eq!(inst.associated_types.get("Item"), None);
     }
 
-    /// A blanket / `&`-target / variadic block binds its slots from the
-    /// receiver in a way `slots` cannot derive from the target arguments, so
-    /// its caller passes the alignment in.
     #[test]
     fn instantiate_slots_takes_the_alignment_the_caller_holds() {
         let table = RefCell::new(TypeTable::new());

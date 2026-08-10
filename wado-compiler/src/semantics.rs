@@ -436,7 +436,7 @@ impl Semantics {
         self.method_dispatch.get(&id)
     }
 
-    /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
+    /// WEP 2026-05-26: stable public view onto the recorded
     /// method-dispatch decision at `key`.
     ///
     /// Returns `(resolved_function_name, defining_module, self_kind_str)`
@@ -495,7 +495,7 @@ impl Semantics {
         self.method_dispatch.keys().copied()
     }
 
-    /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
+    /// WEP 2026-05-26: stable public view onto the recorded
     /// coercion choice at `key`.
     ///
     /// Returns `(coercion_kind_str, target_type_id)` for an expression
@@ -528,7 +528,7 @@ impl Semantics {
         self.coercions.keys().copied()
     }
 
-    /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
+    /// WEP 2026-05-26: stable public view onto the recorded
     /// desugar tag at `key`.
     ///
     /// Returns the variant name (`lower_snake_case`) for a TIR-direct

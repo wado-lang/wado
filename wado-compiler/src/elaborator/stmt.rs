@@ -2065,7 +2065,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check if the iterable is `.enumerate()` on something.
         //
-        // Stage 4 / WEP 2026-05-26 note: the `.enumerate()`
+        // WEP 2026-05-26 note: the `.enumerate()`
         // `MethodCallExpr` is unwrapped here at the AST level — the
         // elaborator never resolves it as a method call, so
         // `expression_types` and `method_dispatch` carry no entry for
@@ -2508,7 +2508,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `call_id == None` so `record_method_dispatch` skips it; the
         // outcome's `dispatch` carries the `(self_kind, is_ref_impl,
         // FunctionRef)` reify needs to reproduce the same call shape
-        // (Gap 6 of WEP 2026-05-26).
+        // (WEP 2026-05-26).
         let into_iter_outcome = self.resolve_method_call_with(
             MethodCallInput {
                 receiver: into_iter_receiver,
@@ -2654,7 +2654,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Stage 5 (Gap 6 of WEP 2026-05-26): record the iterator-path
+        // WEP 2026-05-26: record the iterator-path
         // dispatch decision so reify can re-emit the synthetic
         // `into_iter()` / `next()` calls without re-dispatching. Only
         // record when both dispatches succeeded (the trait-check error
