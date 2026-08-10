@@ -1,0 +1,38 @@
+// The elaborated bounds are the whole set a qualified call may name: `Other`
+// shares the method name but is no bound of `T`, so it must not answer.
+// The guard against widening the supertrait fix into "any trait answers".
+trait Base {
+    fn tag(&self) -> i32;
+}
+
+trait Other {
+    fn tag(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl Base for S {
+    fn tag(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Other for S {
+    fn tag(&self) -> i32 {
+        return self.v * 2;
+    }
+}
+
+fn tagged<T: Base>(x: &T) -> i32 {
+    return Other::tag(x);
+}
+
+test "a trait outside the bounds does not answer" {
+    let s = S { v: 3 };
+    assert tagged(&s) == 6;
+}
+
+__DATA__
+{"test": {}, "compile_error": "no method 'tag' found on type 'T'"}

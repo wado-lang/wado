@@ -1,0 +1,66 @@
+// Inside a generic body the bounds a qualified call may name are the
+// *elaborated* ones: `T: Derived` carries `Base`, so `Base::tag(x)` resolves
+// even though only `Derived` was written. Filtering the written bound names
+// before supertrait expansion emptied the candidate list, making the qualified
+// spelling strictly weaker than the plain `x.tag()`. WEP 2026-07-31.
+trait Base {
+    fn base(&self) -> i32;
+    fn tag(&self) -> i32;
+}
+
+trait Derived: Base {
+    // Shadows `Base::tag` — a collision the qualified call is the escape for
+    // (WEP 2026-07-27), so both spellings must select their own declaration.
+    fn tag(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl Base for S {
+    fn base(&self) -> i32 {
+        return self.v;
+    }
+
+    fn tag(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Derived for S {
+    fn tag(&self) -> i32 {
+        return self.v * 100;
+    }
+}
+
+fn supertrait_method<T: Derived>(x: &T) -> i32 {
+    return Base::base(x);
+}
+
+fn both_tags<T: Derived>(x: &T) -> i32 {
+    return Base::tag(x) + Derived::tag(x);
+}
+
+fn same<T: Ord>(a: T, b: T) -> bool {
+    return Eq::eq(&a, &b);
+}
+
+test "a qualified call names a supertrait of a written bound" {
+    let s = S { v: 3 };
+    assert supertrait_method(&s) == 3;
+}
+
+test "a qualified call selects between a subtrait and the supertrait it shadows" {
+    let s = S { v: 3 };
+    assert both_tags(&s) == 303;
+}
+
+test "a prelude supertrait is reachable too: Eq::eq under T: Ord" {
+    assert same(1, 1);
+    assert !same(1, 2);
+    assert same("a", "a");
+}
+
+__DATA__
+{"test": {}}

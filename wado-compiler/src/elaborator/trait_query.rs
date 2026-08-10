@@ -1613,19 +1613,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// elaborated form: `T: Ord` searches `Ord` and its supertraits. `Self` is
     /// substituted by the `TypeParam`'s type. More than one bound declaring the
     /// name is ambiguous — reported, then resolved to the first.
+    ///
+    /// `required_trait`: the trait a qualified call named (`Eq::eq(&a, &b)`),
+    /// which alone may answer. It is matched against the *elaborated* bounds —
+    /// the set a body may name is the closure, so a supertrait of a written
+    /// bound qualifies and a subtrait shadowing one stays distinguishable.
+    /// Elaborating after the filter instead would drop the supertrait before it
+    /// was ever a candidate, and re-add the shadowed one after.
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
         bounds: &[String],
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
+        required_trait: Option<&super::types::RequiredTrait>,
     ) -> Option<(String, MethodInfo)> {
         let bounds = self.elaborate_bound_names(bounds);
         // Stopping at the first hit would hide the ambiguity, so every bound is
-        // scanned — by predicate, leaving only the winner to clone.
+        // scanned — by predicate, leaving only the winner to clone. Bounds are
+        // compared as declarations, so a same-named trait from another module
+        // does not answer for the one the call named.
         let candidates: Vec<String> = bounds
             .iter()
-            .filter(|t| self.trait_declares_method(t, method_name))
+            .filter(|t| {
+                required_trait.is_none_or(|w| self.trait_decl_key_in_frame(t) == w.decl)
+                    && self.trait_declares_method(t, method_name)
+            })
             .cloned()
             .collect();
         let resolved = candidates.first().and_then(|trait_name| {
