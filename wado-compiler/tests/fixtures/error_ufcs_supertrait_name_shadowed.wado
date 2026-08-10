@@ -1,0 +1,24 @@
+// `T: Derived` implies the *imported* module's `Base`. This module declares an
+// unrelated trait of the same name, so the implied bound and the qualified
+// call name two different declarations — the call must not resolve.
+//
+// The bounds a qualified call may name are compared as declarations. Comparing
+// the supertrait's spelling instead resolved it in this frame, where `Base` is
+// the local trait, and let a trait that is no bound of `T` answer.
+use { Derived, S } from "./sub/ufcs_supertrait_frame_dep.wado";
+
+trait Base {
+    fn extra(&self) -> i32;
+}
+
+fn shadowed<T: Derived>(x: &T) -> i32 {
+    return Base::extra(x);
+}
+
+test "a local trait sharing a supertrait's name does not answer" {
+    let s = S { v: 3 };
+    assert shadowed(&s) == 3;
+}
+
+__DATA__
+{"test": {}, "compile_error": "no method 'extra' found on type 'T'"}

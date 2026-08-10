@@ -14,6 +14,24 @@ use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
 use super::Elaborator;
+use super::trait_env::{DeclKey, push_unique_bound};
+
+/// A bound in elaborated form: the spelling to read it by, and the declaration
+/// it names. Identity travels with the name because the two come from
+/// different frames — a written bound resolves where it was written, an
+/// implied one where its subtrait was declared.
+pub(super) struct ElaboratedBound {
+    pub(super) name: String,
+    pub(super) decl: DeclKey,
+}
+
+/// Append unless the declaration is already present; the first spelling wins,
+/// so a written bound is not renamed by an implied one reaching it later.
+fn push_unique_elaborated(bounds: &mut Vec<ElaboratedBound>, bound: ElaboratedBound) {
+    if !bounds.iter().any(|b| b.decl == bound.decl) {
+        bounds.push(bound);
+    }
+}
 
 /// Mutable trait resolution context scoped to the current resolution site.
 ///
@@ -197,7 +215,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn elaborate_bounds(&self, bounds: &[ast::TraitBound]) -> Vec<ast::TraitBound> {
         let mut elaborated = Vec::with_capacity(bounds.len());
         for bound in bounds {
-            super::trait_env::push_unique_bound(&mut elaborated, bound);
+            push_unique_bound(&mut elaborated, bound);
             if bound.fn_signature.is_some() {
                 continue;
             }
@@ -206,27 +224,54 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .supertraits_of(&self.type_lookup(), &bound.name)
                 .to_vec()
             {
-                super::trait_env::push_unique_bound(&mut elaborated, &inherited);
+                // The closure spells the supertrait as its declaring module
+                // does; the sites that check a bound resolve a name in *this*
+                // frame. Hand them this frame's spelling, or `T: Derived`
+                // demands a `Base` that only the other module can name.
+                push_unique_bound(
+                    &mut elaborated,
+                    &ast::TraitBound {
+                        name: self.trait_name_in_frame(&inherited.decl),
+                        ..inherited.bound
+                    },
+                );
             }
         }
         elaborated
     }
 
-    /// [`Self::elaborate_bounds`] over bare trait names.
-    pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<String> {
-        let mut elaborated: Vec<String> = Vec::with_capacity(names.len());
+    /// [`Self::elaborate_bounds`] over bare trait names, resolved to the
+    /// declarations they name.
+    ///
+    /// A written name resolves in this frame; a supertrait's identity comes
+    /// from the closure, which resolved it where it was written. Reading a
+    /// supertrait's spelling back in this frame is what let a same-named local
+    /// trait answer for it. Deduplication is by declaration, so one trait
+    /// reached under two names — an alias plus an implied bound — is one entry.
+    ///
+    /// Every name handed back is this frame's, because the caller mangles the
+    /// resolved method through it and the impl side mangles through the same
+    /// frame's spelling.
+    pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<ElaboratedBound> {
+        let mut elaborated: Vec<ElaboratedBound> = Vec::with_capacity(names.len());
         for name in names {
-            if !elaborated.contains(name) {
-                elaborated.push(name.clone());
-            }
+            let written = ElaboratedBound {
+                name: name.clone(),
+                decl: self.trait_decl_key_in_frame(name),
+            };
+            push_unique_elaborated(&mut elaborated, written);
             for inherited in self
                 .tysys
                 .supertraits_of(&self.type_lookup(), name)
                 .to_vec()
             {
-                if !elaborated.contains(&inherited.name) {
-                    elaborated.push(inherited.name);
-                }
+                push_unique_elaborated(
+                    &mut elaborated,
+                    ElaboratedBound {
+                        name: self.trait_name_in_frame(&inherited.decl),
+                        decl: inherited.decl,
+                    },
+                );
             }
         }
         elaborated

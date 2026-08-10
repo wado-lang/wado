@@ -1,0 +1,44 @@
+// One trait reached under two names: `B` (this module's alias) and the `Base`
+// the imported `Derived` implies. They are one declaration, so naming it is
+// not ambiguous — deduplicating the elaborated bounds by spelling reported
+// "ambiguous method 'extra': declared by 'Base' and 'B'" on the very
+// spelling meant to disambiguate.
+//
+// `impl Derived for Local` is the same question from the impl side: its
+// supertrait obligation is spelled `Base` by the declaring module, and only
+// `B` names that declaration here.
+use { Base as B, Derived } from "./sub/ufcs_supertrait_frame_dep.wado";
+
+struct Local {
+    v: i32,
+}
+
+impl B for Local {
+    fn extra(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Derived for Local {
+    fn tag(&self) -> i32 {
+        return self.v * 2;
+    }
+}
+
+fn aliased<T: Derived + B>(x: &T) -> i32 {
+    return B::extra(x);
+}
+
+fn implied<T: Derived>(x: &T) -> i32 {
+    return B::extra(x);
+}
+
+test "an aliased bound and the implied supertrait are one declaration" {
+    let l = Local { v: 3 };
+    assert aliased(&l) == 3;
+    assert implied(&l) == 3;
+    assert l.tag() == 6;
+}
+
+__DATA__
+{"test": {}}
