@@ -72,8 +72,8 @@ pub use codegen_flags::CodegenFlags;
 pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, Diagnostic, DiagnosticSpan, GeneratorDiagnostic,
     GeneratorDiagnosticLevel, GeneratorError, GeneratorInputFile, GeneratorOutputFile,
-    GeneratorReadRecord, GeneratorRequest, GeneratorResponse, GeneratorRunnerError,
-    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, Severity, SourceError,
+    GeneratorRequest, GeneratorResponse, GeneratorRunnerError, GeneratorSourceSpan,
+    KILN_GENERATOR_WIT, LogLevel, Severity, SourceError,
 };
 pub use logger::{Bail, Logger};
 pub use remarks::{Remark, collect_param_gate_remarks, collect_value_copy_remarks};

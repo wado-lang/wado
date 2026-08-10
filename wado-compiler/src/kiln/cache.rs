@@ -1,7 +1,7 @@
 //! Cache-key composition for Kiln generator invocations.
 //!
 //! The cache key is a SHA-256 over a canonical byte string described in
-//! WEP 2026-04-12 §"Cache-key composition". This module is the single
+//! WEP 2026-04-12 §"Caching". This module is the single
 //! authority for that layout: callers (the pipeline driver, the lockfile
 //! writer) go through [`compose_cache_key`] so a cache hit is bit-identical
 //! regardless of who computed it.
@@ -39,15 +39,9 @@ fn hex(bytes: &[u8; 32]) -> String {
     out
 }
 
-/// Magic + version prefix. Bump when the canonical layout changes in a
-/// way that must invalidate every existing lockfile entry. `v2` marked
-/// the M6.4 switch from the binary options encoder to canonical JSON;
-/// `v3` dropped NFC normalization on string values so cache keys reflect
-/// the literal UTF-8 bytes the user supplied; `v4` switched the options
-/// encoding to CBOR; `v5` replaces CBOR with a
-/// tagged length-prefixed hash-only encoding when options became a typed
-/// WIT argument.
-const MAGIC: &[u8] = b"kiln-cache-key-v5\0";
+/// Magic + version prefix. Bump whenever the canonical layout below
+/// changes, so every recorded key is invalidated.
+const MAGIC: &[u8] = b"kiln-cache-key-v6\0";
 
 /// The core:kiln world version the generator was built against. Part of the
 /// cache key so a future world-version bump invalidates every cached entry.
@@ -69,9 +63,6 @@ pub struct CacheKeyInputs<'a> {
     pub primary: &'a FileHash,
     /// Declared supplementary inputs, in declaration order.
     pub inputs: &'a [FileHash],
-    /// Files the previous run of this invocation read via `host::read-file`,
-    /// sorted lexicographically by path and deduplicated.
-    pub prior_reads: &'a [FileHash],
     /// Canonical encoding of the options (from the invocation).
     pub options_canonical: &'a [u8],
 }
@@ -97,11 +88,6 @@ pub fn compose_cache_key(inputs: &CacheKeyInputs<'_>) -> [u8; 32] {
     for f in inputs.inputs {
         write_file_hash(&mut h, f);
     }
-    write_u32(&mut h, inputs.prior_reads.len() as u32);
-    for f in inputs.prior_reads {
-        write_file_hash(&mut h, f);
-    }
-
     write_prefixed(&mut h, inputs.options_canonical);
     h.finalize().into()
 }
@@ -326,7 +312,6 @@ mod tests {
             generator_source_hash: zero,
             primary,
             inputs: &[],
-            prior_reads: &[],
             options_canonical: options,
         }
     }
@@ -369,31 +354,6 @@ mod tests {
         let b = compose_cache_key(&base_inputs(&primary, &one, b""));
         assert_ne!(a, b);
     }
-
-    #[test]
-    fn compose_distinguishes_input_from_prior_read() {
-        let zero = [0u8; 32];
-        let primary = fh("schema.proto", 0xaa);
-        let extra = fh("included.proto", 0xbb);
-        let a = compose_cache_key(&CacheKeyInputs {
-            generator_identity: "ns:proto@1.0.0",
-            generator_source_hash: &zero,
-            primary: &primary,
-            inputs: std::slice::from_ref(&extra),
-            prior_reads: &[],
-            options_canonical: b"",
-        });
-        let b = compose_cache_key(&CacheKeyInputs {
-            generator_identity: "ns:proto@1.0.0",
-            generator_source_hash: &zero,
-            primary: &primary,
-            inputs: &[],
-            prior_reads: &[extra],
-            options_canonical: b"",
-        });
-        assert_ne!(a, b);
-    }
-
     #[test]
     fn generator_identity_for_spec_is_verbatim() {
         let m = GeneratorModule::Spec("ns:proto@1.0.0".into());

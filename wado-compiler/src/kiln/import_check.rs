@@ -15,7 +15,7 @@
 //! diagnostic points at the user's `use` statement with the same span
 //! machinery as any other import error.
 //!
-//! See WEP 2026-04-12 §"M6.5 stage 2".
+//! See WEP 2026-04-12 §"Authoring a generator".
 use crate::ast::{
     AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern,
     SelfKind, Stmt, StructLiteralExpr, StructLiteralField, Type, UseDecl, UseItem,
@@ -61,7 +61,8 @@ pub fn check_loaded<H: CompilerHost>(
 }
 
 /// Rewrite a kiln generator's `fn generate(req: Request<T>) -> Result<...>`
-/// into the typed-options wire shape (Kiln WEP "Protocol revision 3"):
+/// into the typed-options wire shape (Kiln WEP §"Options are a typed argument
+/// in each generator's own world"):
 /// the single `req` parameter is replaced by `primary: InputFile`, `inputs:
 /// List<InputFile>`, and `options: T`, and the body starts with `let req =
 /// Request { primary, inputs, options };`. The user's subsequent body keeps

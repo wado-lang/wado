@@ -1617,7 +1617,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// Emit a `Code::KilnMissingWith` diagnostic for a bare `use ... from
     /// "./schema.<ext>"` whose source is a non-`.wado` schema and that has
     /// no inline `with { generator: { ... } }` clause registered for this
-    /// importing file. WEP 2026-04-12 §"Use site syntax" makes such
+    /// importing file. WEP 2026-04-12 §"Use-site syntax" makes such
     /// imports a hard error so the user gets a pointed message instead of
     /// a downstream parse failure on the schema content.
     fn emit_kiln_missing_with(

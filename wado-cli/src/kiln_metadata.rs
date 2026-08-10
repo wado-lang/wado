@@ -1,8 +1,8 @@
 //! Per-invocation Kiln cache state, stored next to the generated outputs
 //! at `<manifest_root>/<output_dir>/<primary_basename>.kiln.json`.
 //!
-//! See [WEP: Kiln](../../docs/wep-2026-04-12-kiln.md), section
-//! "Caching and the `<primary>.kiln.json` cache file", for the design.
+//! See [WEP: Kiln](../../docs/wep-2026-04-12-kiln.md), section "Caching",
+//! for the design.
 //!
 //! The location is derived deterministically from `Invocation::output_dir`
 //! and the basename of `Invocation::from` (the primary input file). For
@@ -154,7 +154,6 @@ mod tests {
                 path: "schemas/y.proto".to_string(),
                 hash: "sha256:bb".to_string(),
             }],
-            reads: vec![],
             options_hash: "sha256:cc".to_string(),
             outputs: vec![OutputEntry {
                 path: "build/kiln/kiln-deadbeef/x.wado".to_string(),

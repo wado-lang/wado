@@ -3,7 +3,7 @@
 //! The LSP runs without a Wasm runtime that can execute generator
 //! components: native `wado-cli` provides one through wasmtime, but the
 //! `wasm32-wasip2` LSP host (VS Code Wasm, browser playground) cannot.
-//! Per WEP 2026-04-12 §"Transitional consume-only mode", the LSP
+//! Per WEP 2026-04-12 §"Consume-only mode", the LSP
 //! redirects `use { ... } from "<schema>"` clauses to the on-disk
 //! generator output recorded in `<output_dir>/<primary>.kiln.json`.
 //!

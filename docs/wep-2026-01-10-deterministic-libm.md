@@ -2,340 +2,121 @@
 
 ## Context
 
-### Problem Statement
+IEEE 754 pins only the basic arithmetic operators (`+`, `-`, `*`, `/`, `sqrt`).
+The transcendental functions — `sin`, `log`, `exp`, `pow` — are left to the
+implementation, so the same source produces different bits depending on the C
+library, the CPU architecture, and the operating system it ran on.
 
-Floating-point math functions (`sin`, `cos`, `log`, `exp`, etc.) are implementation-dependent in traditional programming environments. As documented in [this analysis](https://zenn.dev/mod_poppo/articles/floating-point-portability), the same code can produce different results across:
+WebAssembly closes part of that gap: the arithmetic operators it defines are
+IEEE 754 conformant, rounding is fixed to round-to-nearest-ties-to-even, and
+there is no extended intermediate precision to vary. But Wasm defines no
+transcendental instructions and WASI defines no math interface, so a program
+that takes `sin` from its host inherits the host's libm — and loses determinism
+at exactly the point where Wasm stops guaranteeing it.
 
-- Different C standard library implementations (glibc, musl, MSVC CRT)
-- Different CPU architectures (x86, ARM, RISC-V)
-- Different operating systems (Linux, macOS, Windows)
-
-This non-determinism stems from:
-
-1. **Implementation freedom**: IEEE 754 only specifies basic arithmetic (`+`, `-`, `*`, `/`, `sqrt`), not transcendental functions
-2. **Approximation algorithms**: Different libraries use different polynomial approximations
-3. **Platform-specific optimizations**: CPU-specific instructions with varying precision
-4. **Compiler optimizations**: Constant folding vs runtime evaluation can yield different results
-
-### WebAssembly's Partial Solution
-
-WebAssembly provides **deterministic basic arithmetic**:
-
-- ✅ IEEE 754-2019 compliant for `+`, `-`, `*`, `/`, `sqrt`, `min`, `max`, `abs`, etc.
-- ✅ Fixed rounding mode (round-to-nearest, ties-to-even)
-- ✅ No intermediate precision variation (unlike x87 80-bit extended precision)
-
-However, **complex math functions remain host-dependent**:
-
-- ❌ If delegated to WASI host functions, results vary by platform
-- ❌ No standard WIT interface for math functions in WASI P3
-
-### Design Philosophy Alignment
-
-Wado's core principles demand determinism:
-
-1. **"Wasm only"**: Zero abstraction over WebAssembly
-2. **Portability**: Same code, same results, everywhere
-3. **Explicit imports**: All dependencies are clear and controlled
-
-**Goal**: Math functions should be as deterministic as basic arithmetic.
+Wado needs this beyond portability of results. Compile-time execution must agree
+with run-time execution; with a host-provided transcendental, that agreement
+would depend on the machine that ran the build.
 
 ## Decision
 
-**Bundle a fixed, deterministic math library compiled to WebAssembly** rather than delegating to host implementations.
+Bundle one fixed implementation of the transcendental functions with the
+toolchain and link it into the program. Math is never a host import.
 
-### Choice: Rust `libm` Crate
+### Choice of implementation
 
-**Selected Library**: [Rust `libm`](https://github.com/rust-lang/libm)
-**License**: MIT OR Apache-2.0 (dual license)
-**Version**: 0.2.x (track upstream stable releases)
+Rust's `libm` crate (MIT OR Apache-2.0), derived from musl's libm.
 
-**Rationale**:
+| Criterion   | Rust `libm`                   | musl libm      | fdlibm         |
+| ----------- | ----------------------------- | -------------- | -------------- |
+| License     | MIT / Apache-2.0              | MIT            | permissive     |
+| Language    | Rust                          | C              | C              |
+| Wasm build  | native target, no C toolchain | needs wasi-sdk | needs wasi-sdk |
+| `no_std`    | yes                           | no             | no             |
+| Maintenance | active, musl-derived          | active         | quiescent      |
 
-| Criterion             | Rust `libm`                                         | musl libm               | fdlibm                     |
-| --------------------- | --------------------------------------------------- | ----------------------- | -------------------------- |
-| **License**           | ✅ MIT/Apache-2.0                                   | ✅ MIT                  | ⚠️ Permissive (verify)     |
-| **Language**          | ✅ Pure Rust                                        | ❌ C (requires clang)   | ❌ C                       |
-| **Wasm compilation**  | ✅ Native (cargo → wasm32-unknown-unknown)          | ⚠️ Requires wasi-sdk    | ⚠️ Requires wasi-sdk       |
-| **no_std support**    | ✅ Yes (no libc/WASI dependencies)                  | ❌ No                   | ❌ No                      |
-| **Upstream**          | ✅ Based on musl, actively maintained               | ✅ High quality         | ⚠️ Less active maintenance |
-| **Rust integration**  | ✅ Native Cargo dependency                          | ⚠️ FFI required         | ⚠️ FFI required            |
-| **Production usage**  | ✅ Used in Rust `no_std` ecosystem (embedded, Wasm) | ✅ Alpine Linux default | ✅ Java StrictMath, V8     |
-| **Compiler affinity** | ✅ Wado compiler is Rust-based                      | ⚠️ Neutral              | ⚠️ Neutral                 |
+`no_std` is what makes it a leaf: the bundled artifact pulls in no libc and no
+WASI, so bundling it adds no import to the program.
 
-### Integration Architecture
+### Division of labour: instructions before library
 
-```
-wado-compiler/
-├── embedded/
-│   ├── libm.wasm          # Pre-built Rust libm component
-│   └── libm.wit           # WIT interface definition
-├── lib/core/
-│   └── math.wado          # Wado wrapper API
-└── scripts/
-    └── build-libm.sh      # Build script for libm.wasm
-```
+Anything Wasm already pins — `sqrt`, `abs`, `ceil`, `floor`, `trunc`, `nearest`,
+`min`, `max`, `copysign` — stays a Wasm instruction and never reaches the
+bundled library. The library supplies only what has no instruction: the
+trigonometric, hyperbolic, exponential, logarithmic, power, and remainder
+families, for both `f32` and `f64`. Splitting on "does Wasm pin it" keeps the
+bundled surface minimal at no cost to determinism.
 
-**Build Process**:
+### Form: a core module, not a component
 
-```bash
-# scripts/build-libm.sh
+The library's whole surface is scalars in, scalars out. It holds no state a
+caller can observe, owns no handles, and passes no aggregates. So it is bundled
+as a core Wasm module linked inside the produced component, not as a component
+of its own: a canonical-ABI boundary would buy nothing that scalars need, and
+the core-module form lets the bundled code share the program's linear memory
+rather than standing up its own.
 
-# 1. Create Rust wrapper crate
-cargo new --lib wado-libm
-cd wado-libm
+Only the functions a program actually reaches survive into the output — the
+bundled module is pruned to the used export set when it is linked, so a program
+that calls `sin` does not carry `pow`.
 
-# 2. Add dependency
-cat >> Cargo.toml <<EOF
-[dependencies]
-libm = "0.2"
+### Surface: methods, not a math module
 
-[lib]
-crate-type = ["cdylib"]
-EOF
+The bundled asset is not a user-visible module. The prelude attaches its
+functions to the primitive float types, so user code writes `x.sin()` and never
+names the asset. There is no `core:math` re-exporter — with a single consumer it
+would be pure indirection. The prelude reaches the asset through the ordinary
+core-Wasm asset import mechanism
+([WebAssembly Module Import](./wep-2026-01-10-wasm-import.md)); nothing about the
+bundled library is special-cased in the import path.
 
-# 3. Implement WIT-compatible exports
-# src/lib.rs - export C-compatible functions
+### Versioning
 
-# 4. Compile to Core Wasm
-cargo build --target wasm32-unknown-unknown --release
-
-# 5. Convert to Component Model
-wasm-tools component new \
-    target/wasm32-unknown-unknown/release/wado_libm.wasm \
-    --wit ../embedded/libm.wit \
-    -o ../embedded/libm.wasm
-```
-
-**WIT Definition** (`embedded/libm.wit`):
-
-```wit
-package wado:libm@1.0.0;
-
-interface math {
-    // Trigonometric functions
-    sin: func(x: f64) -> f64;
-    cos: func(x: f64) -> f64;
-    tan: func(x: f64) -> f64;
-    asin: func(x: f64) -> f64;
-    acos: func(x: f64) -> f64;
-    atan: func(x: f64) -> f64;
-    atan2: func(y: f64, x: f64) -> f64;
-
-    // Hyperbolic functions
-    sinh: func(x: f64) -> f64;
-    cosh: func(x: f64) -> f64;
-    tanh: func(x: f64) -> f64;
-
-    // Exponential and logarithmic
-    exp: func(x: f64) -> f64;
-    exp2: func(x: f64) -> f64;
-    log: func(x: f64) -> f64;
-    log2: func(x: f64) -> f64;
-    log10: func(x: f64) -> f64;
-
-    // Power functions
-    pow: func(x: f64, y: f64) -> f64;
-    sqrt: func(x: f64) -> f64;  // Note: Also available as Wasm instruction
-    cbrt: func(x: f64) -> f64;
-
-    // Rounding and remainder
-    ceil: func(x: f64) -> f64;
-    floor: func(x: f64) -> f64;
-    trunc: func(x: f64) -> f64;
-    round: func(x: f64) -> f64;
-
-    // Other
-    fabs: func(x: f64) -> f64;
-    fmod: func(x: f64, y: f64) -> f64;
-
-    // f32 variants (selected subset)
-    sinf: func(x: f32) -> f32;
-    cosf: func(x: f32) -> f32;
-    sqrtf: func(x: f32) -> f32;
-    // ... (add as needed)
-}
-
-world libm {
-    export math;
-}
-```
-
-**Wado API** (`lib/core/math.wado`):
-
-```wado
-// Imports the bundled libm.wasm using the new Wasm import feature
-use {
-    sin as libm_sin,
-    cos as libm_cos,
-    tan as libm_tan,
-    sqrt as libm_sqrt,
-    log as libm_log,
-    exp as libm_exp,
-    pow as libm_pow,
-    // ... other functions
-} from "builtin:libm" with { type: "wasm" };
-
-// Public API with Wado naming conventions
-pub fn sin(x: f64) -> f64 {
-    return libm_sin(x);
-}
-
-pub fn cos(x: f64) -> f64 {
-    return libm_cos(x);
-}
-
-pub fn tan(x: f64) -> f64 {
-    return libm_tan(x);
-}
-
-pub fn sqrt(x: f64) -> f64 {
-    return libm_sqrt(x);
-}
-
-pub fn log(x: f64) -> f64 {
-    return libm_log(x);
-}
-
-pub fn exp(x: f64) -> f64 {
-    return libm_exp(x);
-}
-
-pub fn pow(x: f64, y: f64) -> f64 {
-    return libm_pow(x, y);
-}
-
-// ... other functions
-```
-
-**User Code**:
-
-```wado
-use {sin, cos, pow} from "core:math";
-
-fn calculate_orbit(angle: f64, radius: f64) -> [f64, f64] {
-    let x = radius * cos(angle);
-    let y = radius * sin(angle);
-    return [x, y];
-}
-
-// ✅ Deterministic: Same results on all platforms
-// ✅ No WASI dependency: Pure Wasm computation
-```
-
-### Special Handling: `builtin:libm` Namespace
-
-The `builtin:libm` import source is a **compiler-internal namespace** that resolves to the embedded `libm.wasm`:
-
-```rust
-// wado-compiler/src/elaborator.rs
-match import_source {
-    "builtin:libm" => {
-        // Load embedded libm.wasm from binary
-        let wasm_bytes = include_bytes!("../embedded/libm.wasm");
-        resolve_wasm_module(wasm_bytes, import_items)
-    }
-    path if path.ends_with(".wasm") => {
-        // User-provided .wasm file
-        resolve_external_wasm(path, import_items)
-    }
-    // ... other cases
-}
-```
+The bundled implementation is pinned per toolchain release. Its numeric results
+are observable behaviour, so upgrading it is a deliberate release decision, not
+an automatic dependency bump — two programs built by one compiler version agree
+bit for bit.
 
 ## Consequences
 
-### Positive
+- Math is as deterministic as arithmetic: identical results across operating
+  systems, architectures, and Wasm engines, and identical between compile-time
+  and run-time evaluation.
+- Math needs no host capability, so it works in every world — including ones
+  with nothing to import it from.
+- A program carries the code for the math it uses. Pruning bounds this to the
+  reachable set, but a program spanning many families pays for them.
+- The bundled implementation can be slower than a host's routines built on
+  architecture-specific instructions. Determinism is the deliberate trade.
+- Platform-specific extended precision is unavailable by construction. That is
+  the point, not a limitation to mitigate.
 
-✅ **Full determinism**: Math functions produce identical results across all platforms
-✅ **No host dependency**: Pure Wasm, no WASI calls for math
-✅ **Portability**: Wado programs are truly portable
-✅ **License compatibility**: MIT/Apache-2.0 matches typical open source projects
-✅ **Quality**: Rust libm is based on musl, widely tested
-✅ **Build simplicity**: Rust → Wasm is straightforward
-✅ **Maintenance**: Track upstream Rust libm releases
+## Alternatives considered
 
-### Negative
+### Host math functions
 
-⚠️ **Bundle size**: Increases output `.wasm` size (estimate: ~50-100 KB for full libm)
-⚠️ **Performance**: May be slower than native CPU instructions in some cases
-⚠️ **Maintenance burden**: Must rebuild libm.wasm when updating Rust libm
-⚠️ **Limited to IEEE 754**: Cannot leverage platform-specific extended precision
+Rejected: this is the status quo the WEP exists to avoid, and WASI defines no
+math interface to import from in the first place.
 
-### Mitigation Strategies
+### Software floating point
 
-**Bundle size**:
+Rejected: determinism down to the arithmetic operators, at a cost in speed and
+complexity that buys nothing, since Wasm already pins those operators.
 
-- Tree-shaking: Only include math functions actually used in the program
-- Separate f32/f64 variants to avoid duplicating both
-- Provide `--math-backend=host` compiler flag for users who prefer host functions
+### Lookup tables with interpolation
 
-**Performance**:
+Rejected: precision bounded by table size is the wrong trade for a
+general-purpose library.
 
-- For most applications, determinism > raw speed
-- Profile and optimize hot paths if needed
-- Consider SIMD variants (future: `f32x4`, `f64x2` operations)
+### A standard deterministic math interface
 
-**Maintenance**:
-
-- Automate `libm.wasm` rebuild in CI/CD pipeline
-- Pin Rust libm version in releases, update deliberately
-
-## Implementation Plan
-
-### Phase 1: Build Infrastructure
-
-- [ ] Create `wado-libm` Rust wrapper crate
-- [ ] Write `scripts/build-libm.sh` build script
-- [ ] Generate `embedded/libm.wasm` and `embedded/libm.wit`
-- [ ] Embed `libm.wasm` in compiler binary
-
-### Phase 2: Compiler Integration (depends on WEP-2026-01-10-wasm-import)
-
-- [ ] Implement `builtin:libm` namespace resolution
-- [ ] Link bundled `libm.wasm` into final component
-
-### Phase 3: Standard Library API
-
-- [ ] Write `lib/core/math.wado` wrapper
-- [ ] Document all math functions in API docs
-- [ ] Add usage examples
-
-### Phase 4: Testing
-
-- [ ] Cross-platform determinism tests (Linux, macOS, Windows, wasmtime, browser)
-- [ ] Precision tests against known constants
-- [ ] Performance benchmarks
-
-### Phase 5: Optimization
-
-- [ ] Implement tree-shaking for unused math functions
-- [ ] Add `--math-backend=host|bundled` compiler option
-- [ ] Measure and document bundle size impact
-
-## Alternatives Considered
-
-### Alternative 1: WASI Host Functions
-
-**Rejected**: Non-deterministic, defeats portability goals
-
-### Alternative 2: Software Floating-Point (softfloat)
-
-**Rejected**: Extreme precision but too slow, massive complexity
-
-### Alternative 3: Lookup Tables + Interpolation
-
-**Rejected**: Limited precision, large table size, not suitable for general-purpose library
-
-### Alternative 4: Component Model Math Interface Standard (future)
-
-**Deferred**: If WASI defines a standard `wasi:math` interface with determinism guarantees, we can switch to it. For now, bundled libm is the pragmatic choice.
+Deferred. If Wasm or WASI ever defines a math interface carrying a determinism
+guarantee, it supersedes the bundled library. Until then, bundling is the only
+way to obtain the guarantee.
 
 ## References
 
-- [Rust libm repository](https://github.com/rust-lang/libm)
-- [musl libc](https://musl.libc.org/)
-- [Floating-point portability issues (Japanese)](https://zenn.dev/mod_poppo/articles/floating-point-portability)
-- [IEEE 754-2019 Standard](https://ieeexplore.ieee.org/document/8766229)
-- [WebAssembly Floating-Point Semantics](https://webassembly.github.io/spec/core/exec/numerics.html#floating-point-operations)
-- Related WEP: [WEP-2026-01-10-wasm-import](./wep-2026-01-10-wasm-import.md)
+- [Rust libm](https://github.com/rust-lang/libm)
+- [Floating-point portability (Japanese)](https://zenn.dev/mod_poppo/articles/floating-point-portability)
+- [WebAssembly floating-point semantics](https://webassembly.github.io/spec/core/exec/numerics.html#floating-point-operations)
+- [WEP: WebAssembly Module Import Support](./wep-2026-01-10-wasm-import.md)

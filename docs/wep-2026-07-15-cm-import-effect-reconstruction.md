@@ -108,13 +108,14 @@ function values) and why static provider composition is the one that ships.
 
 ## Scope
 
-- [x] Synchronous value-type surface (primitives, strings, records, containers).
-- [x] Consuming: component-level union — every export requires the union of the
-      component's imports. Sound and exact for well-factored pure packages
-      (marl's union is empty). Over-approximation bites only when one component
-      mixes pure and impure exports.
-- [x] Producing: a guest effect unhandled at a library boundary lowers to a CM
-      import; a provider satisfies it.
+The rule covers the synchronous value-type surface. Consuming attributes to each
+export the union of the component's imports — sound, and exact for a
+well-factored pure package, over-approximating only where one component mixes
+pure and impure exports. Producing is the mirror: a guest effect left unhandled
+at a library boundary lowers to a CM import for a provider to satisfy.
+
+Not covered yet:
+
 - [ ] Per-export reachability (attribute each import to the exports that reach
       it) — a refinement over the union, conservative on indirect calls.
 - [ ] A single provider file spanning several of a dependency's imported
@@ -161,8 +162,8 @@ correct; `with Marl` was cheap because it was dishonest.
 Each supersession is scoped — host-satisfied (WASI) interfaces and host-provided
 resources are unchanged.
 
-- [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md) §"Pure
-  interfaces": "an interface with functions is conservatively treated as
+- [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md) §"Purity and
+  effects": "an interface with functions is conservatively treated as
   effectful by the call site" — superseded for imported components; a fused
   component's interface is effectful only insofar as its own host-leaf imports
   are.

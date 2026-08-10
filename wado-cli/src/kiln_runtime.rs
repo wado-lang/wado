@@ -1,7 +1,7 @@
 //! Native wasmtime runtime for Kiln generators.
 //!
-//! Instantiates a compiled generator component, linking only the two host
-//! imports (`read-file` and `emit-diagnostic`). Everything else — WASI, clocks,
+//! Instantiates a compiled generator component, linking only the single
+//! host import (`emit-diagnostic`). Everything else — WASI, clocks,
 //! random, http — is unlinked; a generator that imports any of those fails at
 //! link time, which is the determinism guarantee.
 //!
@@ -11,7 +11,7 @@
 //! materialized into a typed value shaped by the component's own introspected
 //! parameter type.
 //!
-//! See WEP 2026-04-12 (Kiln) §"Host-delegated execution".
+//! See WEP 2026-04-12 (Kiln) §"The generator contract".
 
 use std::sync::{Arc, Mutex};
 
@@ -23,8 +23,8 @@ use wasmtime::{Engine, Store};
 use wado_compiler::kiln::{CanonicalOptions, CanonicalValue};
 use wado_compiler::{
     CompilerHost, GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError,
-    GeneratorInputFile, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
-    GeneratorResponse, GeneratorRunnerError, GeneratorSourceSpan,
+    GeneratorInputFile, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
+    GeneratorRunnerError, GeneratorSourceSpan,
 };
 
 wasmtime::component::bindgen!({
@@ -49,29 +49,11 @@ pub struct KilnRunPolicy {
     pub fuel: u64,
 }
 
-struct KilnHostState<H: CompilerHost> {
-    host: Arc<H>,
-    reads: Arc<Mutex<Vec<GeneratorReadRecord>>>,
+struct KilnHostState {
     diagnostics: Arc<Mutex<Vec<GeneratorDiagnostic>>>,
 }
 
-impl<H: CompilerHost + 'static> kiln_host::Host for KilnHostState<H> {
-    async fn read_file(&mut self, path: String) -> Result<String, kiln_host::HostError> {
-        match self.host.load_source(&path).await {
-            Ok(bytes) => {
-                let hash = wado_compiler::kiln::content_hash(&bytes);
-                self.reads.lock().unwrap().push(GeneratorReadRecord {
-                    path: path.clone(),
-                    content_hash: hash,
-                });
-                String::from_utf8(bytes)
-                    .map_err(|e| kiln_host::HostError::Io(format!("{path}: not UTF-8: {e}")))
-            }
-            Err(wado_compiler::SourceError::NotFound { .. }) => Err(kiln_host::HostError::NotFound),
-            Err(e) => Err(kiln_host::HostError::Io(e.to_string())),
-        }
-    }
-
+impl kiln_host::Host for KilnHostState {
     async fn emit_diagnostic(&mut self, diagnostic: kiln_host::Diagnostic) {
         self.diagnostics
             .lock()
@@ -336,13 +318,13 @@ pub fn compile_component(
 }
 
 /// Instantiate a pre-built [`Component`] against the
-/// `core:kiln/generator` world, invoke `generate`, and return the
-/// response plus the files the generator read via `host::read-file`.
+/// `core:kiln/generator` world, invoke `generate`, and return its typed
+/// outcome alongside every diagnostic the generator emitted.
+///
 /// Always pass a [`Component`] obtained from the host's cache rather
 /// than building one inline — see [`compile_component`].
-pub async fn run_generator<H: CompilerHost + 'static>(
+pub async fn run_generator(
     engine: &Engine,
-    host: Arc<H>,
     component: &Component,
     request: GeneratorRequest,
     policy: KilnRunPolicy,
@@ -350,23 +332,14 @@ pub async fn run_generator<H: CompilerHost + 'static>(
     Result<GeneratorResponse, GeneratorRunnerError>,
     Vec<GeneratorDiagnostic>,
 ) {
-    let reads = Arc::new(Mutex::new(Vec::<GeneratorReadRecord>::new()));
     let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
 
-    // Run the generator in an inner future that yields the typed outcome, then
-    // drain the diagnostics and return them alongside it — on both the success
-    // and the failure path. `emit_diagnostic` guarantees they are printed even
-    // when the generator returns successfully; relaying on the error path too
-    // keeps a failing generator from swallowing the diagnostics that explain
-    // the failure. The only host reachable here is the collect-only inner
-    // host, so the relay (print + collect) is the caller's job (see
-    // `FilesystemCompilerHost::run_generator`).
-    let reads_inner = reads.clone();
+    // Diagnostics are drained on both the success and the failure path, so a
+    // failing generator cannot swallow the ones explaining why. Printing them
+    // is the caller's job — see `FilesystemCompilerHost::run_generator`.
     let diagnostics_inner = diagnostics.clone();
     let outcome: Result<GeneratorResponse, GeneratorRunnerError> = async move {
         let state = KilnHostState {
-            host: host.clone(),
-            reads: reads_inner.clone(),
             diagnostics: diagnostics_inner,
         };
 
@@ -375,7 +348,7 @@ pub async fn run_generator<H: CompilerHost + 'static>(
         // host`. The compiler handles the panic-path stderr elision
         // at codegen time so the generator component never imports WASI
         // in the first place.
-        let mut linker: Linker<KilnHostState<H>> = Linker::new(engine);
+        let mut linker: Linker<KilnHostState> = Linker::new(engine);
         kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
             .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e}")))?;
 
@@ -423,7 +396,6 @@ pub async fn run_generator<H: CompilerHost + 'static>(
         match result {
             Val::Result(Ok(payload)) => Ok(GeneratorResponse {
                 files: lift_response(payload.as_deref())?,
-                reads: std::mem::take(&mut *reads_inner.lock().unwrap()),
             }),
             Val::Result(Err(payload)) => Err(GeneratorRunnerError::Generator(lift_error_val(
                 payload.as_deref(),
@@ -536,7 +508,6 @@ mod tests {
 
     #[test]
     fn typed_options_generator_round_trips() {
-        use std::sync::Arc;
         use wado_compiler::{CompilerOptions, LogLevel, compile_with_options};
 
         const SRC: &str = r#"
@@ -586,7 +557,6 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 
         let (outcome, _diags) = runtime().block_on(run_generator(
             &engine,
-            Arc::new(NoopHost),
             &component,
             request,
             KilnRunPolicy::default(),
@@ -610,7 +580,6 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     /// `ok.wado` when it sees all three option values materialized correctly.
     #[test]
     fn typed_options_round_trip_covers_kebab_and_float_widths() {
-        use std::sync::Arc;
         use wado_compiler::{CompilerOptions, LogLevel, compile_with_options};
 
         const SRC: &str = r#"
@@ -679,7 +648,6 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 
         let (outcome, _diags) = runtime().block_on(run_generator(
             &engine,
-            Arc::new(NoopHost),
             &component,
             request,
             KilnRunPolicy::default(),

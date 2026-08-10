@@ -10,7 +10,7 @@
 //!    resolution flakiness.
 //! 3. Missing source path surfaces `ProviderError::Internal`.
 //!
-//! See WEP 2026-04-12 §"M6.7" (the `wado-cli/tests/kiln_compile.rs` bullet).
+//! See WEP 2026-04-12 §"Caching".
 
 use std::path::PathBuf;
 

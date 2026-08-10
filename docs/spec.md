@@ -3902,7 +3902,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 }
 ```
 
-The compiler extracts the `Options` shape from the generator's IR and type-checks every call site against it. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or ambient filesystem); transitive schema files are picked up via a host-provided `read-file` import that the compiler logs as part of the cache key. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. Subsequent compiles skip the generator when its content-addressed cache key matches `wado.lock`.
+The compiler extracts the `Options` shape from the generator's IR and type-checks every call site against it. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or filesystem): every schema they see arrives by value, listed at the use site. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. Subsequent compiles skip the generator when its content-addressed cache key matches `wado.lock`.
 
 In hosts that cannot execute generators (today's wasm32-bundled LSP / browser playground), Kiln falls back to consume-only mode: the compiler reads cached generated `.wado` files from disk and emits a stale-cache warning if hashes do not match. Projects that want a full LSP experience in such hosts commit `build/kiln/` and `wado.lock` to their repository.
 
@@ -5148,11 +5148,11 @@ export fn bump_realloc(...) -> i32 { ... }
 
 Declares that a builtin function is imported as a Component Model canonical built-in. Used in `core:builtin` to map intrinsic declarations to CM imports. Functions without this attribute compile directly to Wasm instructions.
 
-| Namespace   | Description                                      |
-| ----------- | ------------------------------------------------ |
-| `"wasi"`    | CM canonical builtins (streams, futures, tasks)  |
-| `"mem"`     | Memory operations from the "mem" core module     |
-| `"bundled"` | Functions from bundled Wasm modules (e.g., libm) |
+| Namespace       | Description                                                    |
+| --------------- | -------------------------------------------------------------- |
+| `"wasi"`        | CM canonical builtins (streams, futures, tasks)                |
+| `"mem"`         | Memory operations from the "mem" core module                   |
+| `"wasm:<path>"` | Exports of an imported core-wasm asset (e.g. the bundled libm) |
 
 ```wado
 #[canonical("wasi", "stream-new")]

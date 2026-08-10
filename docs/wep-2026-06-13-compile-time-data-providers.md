@@ -1,322 +1,307 @@
-# WEP: Compile-Time Data Providers (bundled ICU as the first consumer)
+# WEP: Compile-Time Data Providers
 
 ## Context
 
-Some standard-library capabilities are dominated not by code but by large,
-statically-bakeable data: Unicode/CLDR tables (ICU), time-zone databases,
-i18n message catalogs, font glyph sets. Baking all of it into every program is
-untenable — in the measured ICU spike under `wado-bundled-icu/`, the all-features
-bundle is ~3.7 MB, dominated by segmentation (~2.35 MB) and collation (~1.1 MB)
-data.
+Some libraries are dominated not by code but by data: Unicode and CLDR tables,
+time-zone databases, message catalogs, font glyph sets, emoji and script tables,
+unit-conversion tables, geodata. They share a shape — the library ships
+everything, and each program uses a sliver. A program that uppercases Turkish
+text needs one language's casing rules, not every language's; a program
+formatting one time zone needs one zone, not the whole database.
 
-A companion findings document, [research: splitting large libraries](./research-library-splitting.md), establishes the levers and the
-hard constraints (separate component memories; only bytes cross the boundary;
-dedup follows genuine runtime data dependencies, not taxonomy). The
-`wado-bundled-icu/bdp-spike/` proof-of-concept then demonstrated the concrete
-mechanism end-to-end: a feature component built without baked data, loading a
-sliced postcard blob at runtime through ICU4X's `BlobDataProvider`, with the
-blob supplied either by the host or by a separate data component composed in.
+No library can fix this for itself. Which fraction a program uses is a
+whole-program fact, known only after the compiler has resolved what the program
+reaches. The library author can guess and offer feature flags, which pushes the
+problem onto every consumer and gets it wrong for most of them; or ship
+everything and be too large to use. Both are the status quo across languages.
 
-What remains is the toolchain integration: how a Wado program declares what it
-needs, and how the compiler produces a minimal, per-program data slice. This WEP
-proposes a general mechanism for that and adopts ICU as its first consumer.
+This WEP adds the missing capability to the toolchain: a package can declare
+that some of its components are backed by a **data provider**, a component the
+compiler runs at build time to produce exactly the data that program needs. The
+mechanism is a language feature open to any package, not a fixture serving one
+first-party library. [`core:icu`](./wep-2026-08-09-core-icu.md) is its first
+consumer and its proof, not its purpose.
 
 ### Why not Kiln
 
-[Kiln](./wep-2026-04-12-kiln.md) already provides the right plumbing —
-sandboxed, deterministic, content-addressed compile-time generators invoked from
-`use ... with` sites via `CompilerHost::run_generator`. But Kiln is deliberately
-narrowed to "IDL → Wado source": its generators are Wado packages, its input is
-a user schema file, and its output is `.wado` source. Data provisioning needs
-three things Kiln intentionally does not do:
+[Kiln](./wep-2026-04-12-kiln.md) already provides most of the plumbing:
+sandboxed, deterministic, content-addressed compile-time components invoked by
+the compiler and cached by content. But Kiln is deliberately narrowed to
+"IDL → Wado source", and data provisioning differs on all three axes that
+narrowing fixes:
 
-- Emit a binary data asset (and wire it to a prebuilt component), not source.
-- Be driven by which exported symbols are actually used, not by a schema file.
-- Run a provider that may be authored in any language (ICU's slicer is ICU4X /
-  Rust), since the host only ever executes an opaque wasm component.
+- The output is a binary asset wired into a prebuilt component, not `.wado`
+  source that the frontend then parses.
+- The trigger is which exported symbols a program actually reaches, not a schema
+  file named at a `use` site.
+- The invocation is once per (module, program) after reachability is known, not
+  once per declaration site.
 
-So this is a sibling mechanism that reuses Kiln's infrastructure (sandbox,
-cache, host-delegated execution) under a different contract, rather than a
-widening of Kiln's charter.
+So this is a sibling mechanism that reuses Kiln's infrastructure — the sandbox,
+the content-addressed cache, host-delegated execution — under its own contract,
+rather than a widening of Kiln's charter.
 
 ## Decision
 
-### The mechanism: compile-time data providers
+### Provider-backed components
 
-A data provider is a wasm component implementing a `data-provider` world. The
-compiler invokes it during compilation, sandboxed and cached exactly like a
-Kiln generator, but with a contract specialized for data slicing. The source
-language of the provider is unconstrained; the contract is defined over the
-wasm component, not over Wado source.
+A package may ship three things instead of one:
 
-Surface and data are separated:
+- Implementation components: prebuilt wasm components holding the code with no
+  data baked in. They receive their data when the consuming program is built.
+- A provider component: a wasm component exporting the `data-provider` world,
+  which turns a set of used symbols into the data those components need.
+- Data assets: opaque files in the package that only the provider reads.
 
-- The type surface of a provider-backed module (e.g. `core:collation`) is a
-  prebuilt, bundled WIT interface. Type-checking resolves names against it with
-  no provider involvement, so it works offline and is fast.
-- The provider produces only data. It is invoked once the elaborator has
-  resolved reachability (see below), and returns the bytes to embed.
+The package's Wado surface is ordinary Wado source importing those
+implementation components. Nothing about being provider-backed appears in the
+API, so a consumer writes an ordinary `use` and never learns the mechanism
+exists.
 
-Provider contract (sketch; final WIT regenerated via
-[Wado→WIT mapping](./wep-2026-01-29-wit-wado-mapping.md)):
+The provider's source language is unconstrained: the contract is defined over
+the component, so a library whose slicer only exists in Rust, C, or Go ships
+that slicer compiled to wasm.
+
+### The provider contract
 
 ```wit
 package core:provider;
 
 interface types {
   record request {
-    module: string,         // "core:collation"
-    symbols: list<string>,  // union of imported names across all use-sites
-    options: string,        // canonical-JSON union of mergeable `with { ... }`,
-                            // same encoding Kiln uses; provider decodes it
+    module: string,         // the provider-backed module being served
+    symbols: list<string>,  // the symbols this program actually reaches
+  }
+  record blob {
+    component: string,      // which implementation component this data is for
+    data: list<u8>,
   }
   record response {
-    data: list<u8>,         // the sliced per-program asset to embed
+    blobs: list<blob>,
   }
 }
 
 world data-provider {
-  import core:kiln/kiln-host;  // emit-diagnostic + read-asset (see below)
+  import provider-host;
   use types.{request, response};
   export provide: func(req: request) -> response;
 }
 ```
 
-The provider reuses Kiln's host interface unchanged except for one added
-function. Kiln's `read-file` is UTF-8 text resolved relative to the user's
-declaration site; a data provider instead needs raw bytes from the toolchain's
-bundled asset namespace, so `core:kiln/kiln-host` gains a sibling read:
+One invocation per (provider-backed module, program), after reachability is
+known. A component that receives no blob is one no live symbol reached, and it
+is not linked at all — neither its code nor its data enters the output.
+
+How a use site's `with { ... }` options reach the provider is deliberately
+absent; see "Options".
+
+### The sandbox
+
+The provider runs on the consumer's machine at build time, so what it cannot do
+is as much of the contract as what it can. Its world imports one host interface:
 
 ```wit
-// added to core:kiln/kiln-host
-/// Read a bundled compiler asset (e.g. one entry of the ICU data archive) as
-/// raw bytes. Distinct from `read-file` (UTF-8 user files at the declaration
-/// site): `read-asset` resolves a name in the toolchain's bundled namespace.
-/// Calls are recorded and contribute to the cache key.
-read-asset: func(name: string) -> result<list<u8>, host-error>;
+interface provider-host {
+  /// Read a file from the provider's own package as raw bytes. Reads are
+  /// scoped to that package, recorded, and contribute to the cache key.
+  read-asset: func(name: string) -> result<list<u8>, host-error>;
+
+  /// Report a diagnostic, surfaced as an ordinary compile diagnostic.
+  emit-diagnostic: func(diagnostic: diagnostic);
+}
 ```
 
-Diagnostics go through the host's existing `emit-diagnostic`, so the response
-carries only `data`. The request has no `datasets` field: the provider pulls the
-archive entries it needs via `read-asset`, and those recorded reads contribute to
-the cache key alongside `(module, sorted symbols, canonical options, provider
-source hash)` — mirroring how Kiln records `read-file`.
+Two properties matter, and both are structural rather than policy:
 
-The op→marker mapping lives entirely in the provider — it is ICU-version-specific
-(e.g. that `collator.compare` also pulls `NormalizerNfd*`). The compiler passes
-only Wado symbol names and stays ICU-agnostic. Correctness is guarded by a
-recording test: a `BufferProvider` wrapper logs every marker each op's
-constructor requests, so the map is derived from real behaviour rather than from
-the crate-level `provider::MARKERS` lists (which omit transitive dependencies).
-A prototype (`wado-bundled-icu/bdp-spike/marker-recording/`) confirms this — the
-collator's constructor auto-records `NormalizerNfdDataV1` / `NormalizerNfdTablesV1`
-alongside the collation markers. The recorded set is request-specific (root
-collation pulls no `CollationTailoringV1`), so the map is the union over inputs
-chosen to exercise every path; the test asserts the provider's map covers that
-union and flags drift on ICU upgrades.
+A provider reads its own package and nothing else. It cannot see the consuming
+program's source, its dependencies, or any path on the machine. It learns which
+of its own symbols were used — names from its own API — and nothing further about
+the program that used them. Nothing resolves a path in the consumer's tree — a
+data provider has no business there — so the two host interfaces stay disjoint
+and `core:kiln/kiln-host`, which grants only diagnostics, is left untouched.
 
-### Compiler aggregation phase
+A provider is a pure function. No clocks, no randomness, no network, no sockets,
+no environment. Violating that would require exporting a different world, which
+the compiler refuses to load. Determinism is what makes the output cacheable and
+reproducible builds possible; it is not a flag anyone can turn off.
 
-Unlike Kiln (one content-addressed invocation per `use ... with` site), a data
-provider is invoked once per (feature, program):
+Because third-party code runs here, the sandbox also carries a resource ceiling —
+fuel and a wall-clock deadline — so a malformed or hostile provider fails the
+build instead of hanging it. This is a requirement of the mechanism, not a
+deferred nicety: a compile-time component that can run forever is a supply-chain
+denial of service.
 
-1. Resolve `core:collation` etc. as provider-backed; type-check against the
-   bundled surface.
-2. Collect every `use` site of that module across the program and take the union
-   of imported symbol names and of `with { ... }` options. Each option must be
-   _mergeable_: list options (e.g. `locales`) union; scalar options must agree
-   (a conflict is a diagnostic).
-3. If the feature is reachable, invoke the provider with
-   `{ module, symbols, options }`; otherwise drop the feature entirely (its
-   prebuilt component and data are never linked).
-4. Embed the returned `data` and wire it to the prebuilt data-free component
-   (the `bdp-spike` composition). Cache key: `(module, sorted symbols, canonical
-   options, provider source hash, recorded read-asset names)`.
+### Reachability drives everything
 
-Reachability comes from the existing elaborator pass (detailed under _Elaborator
-hook_ below). It is less exhaustive than a full DCE but sufficient here:
-over-keeping an op only over-bundles its data, never affecting correctness. And
-because Wado uses explicit named imports, the imported names are themselves the
-usage signal — no separate whole-program call-graph pass is needed.
-
-Locale declarations are transitive and additive across the dependency graph: a
-library that does `use ... with { locales: ["ja"] }` forces `ja` data into any
-program that links it. This is correct (the library genuinely needs it) but must
-be documented, since an application inherits locales it did not declare itself. A
-future extension may add an application-level _kill switch_ to forcibly cap or
-override the inherited locale/feature set; out of scope for v1.
-
-### Elaborator hook
-
-The reachable-op set is read from the elaborator's `liveness` pass
+The set of reached symbols comes from the elaborator's `liveness` pass
 ([elaborator rearchitecture](./wep-2026-05-26-elaborator-rearchitecture.md)),
-which already computes `Liveness.live_items` — the closure of source items
-reachable from the export boundary — and already feeds both `reify` (input
-shrinking) and the unused-import diagnostics
-([unused diagnostics](./wep-2026-05-16-unused-diagnostics.md)). Data provisioning
-is a third consumer of the same result, sibling to those two:
+which already computes the closure of items reachable from the export boundary
+and already feeds both `reify` and the
+[unused-import diagnostics](./wep-2026-05-16-unused-diagnostics.md). Data
+provisioning is a third consumer of the same result.
 
-- For each provider-backed module, take the imported symbols present in
-  `live_items`, by their original Wado names (`upper`, `Collator`, ...), grouped
-  by module — these become the request's `symbols`.
-- A module with no live imported symbol is unreachable, so its prebuilt
-  component and data are never linked. The drop falls out of the same
-  reachability `reify` uses; no extra analysis is added.
-- The `with` options come from the `use` declarations (the `imports` resolution
-  context), unioned per module.
+For free functions this needs nothing new: Wado's explicit named imports make the
+imported name itself the usage signal, so no whole-program call-graph pass is
+added.
 
-Because `live_items` already backs the unused-import diagnostics, the LSP knows
-"imported but unused" for ICU ops with no extra work. Surfacing the _data cost_
-of a live import (e.g. that `words` pulls multi-MB) is an optional inlay hint
-built on the provider's size metadata, deferred past v1.
+Methods are the part the pass does not answer today. It classifies free functions
+and globals, and seeds every method as a live root so that no method is reported
+dead — a soundness choice that defers method-level detection to a follow-up slice
+its own design names. Until that lands, a live type implies every one of its
+methods, so a provider-backed library must carry its coarse split in its types
+rather than in its methods.
 
-### The `use ... with` surface
+Over-keeping is always safe: it over-bundles data and never changes behaviour.
 
-```wado
-// text: data is not locale-partitioned; imported names select markers.
-use { upper, fold } from "core:text";        // casemap markers (~24 KB)
-use { normalize } from "core:text";           // normalizer markers (~157 KB)
-use { category, script } from "core:text";    // properties markers
+### Options
 
-// collation: locales declared via `with`.
-use { Collator } from "core:collation" with { locales: ["ja", "en-US"] };
+A provider-backed module's `with { ... }` options are typed against a declaration
+on its surface, so the compiler validates a use site before any provider runs,
+and merges across sites by type: `list<T>` options union, scalar options must
+agree or a conflict is a diagnostic. That much is settled and independent of
+carriage.
 
-// segmentation: the multi-MB data is opt-in by importing words/lines.
-use { graphemes } from "core:segmentation";                                  // small
-use { words, lines } from "core:segmentation" with { dictionaries: ["cjk"] }; // multi-MB
-```
+How the declaration is written, and how the validated value reaches the provider,
+is not. Kiln solves the same problem for generator options but not in a form this
+mechanism can adopt verbatim: a Kiln generator carries its options as a typed
+argument in a world it synthesizes for itself, whereas providers all conform to
+one `data-provider` world. Decide it when the mechanism is implemented.
 
-Locale option semantics:
+### Packaging and versioning
 
-- Omitted ⇒ root/`und` only (collation root UCA; no tailorings). Minimal by
-  default.
-- The declared set is the union across all use-sites; the provider expands it
-  with likely-subtags and the fallback chain.
-- A runtime langid outside the declared set falls back per ICU (to the nearest
-  available, ultimately root). A _literal_ langid outside the set is a
-  compile-time diagnostic.
-- Only locale-bearing modules consume it (today, collation; later datetime /
-  number formatting). It is inert elsewhere.
+The provider, the implementation components, the data assets, and the Wado
+surface are one package. That is not a convenience — it is what keeps them
+coherent. Slicing data for version N and instantiating it in a component built
+for version N−1 is exactly the failure this mechanism could otherwise introduce,
+and a single package version makes it unrepresentable.
 
-### Options: schema and merging
+Distribution is the ordinary package path, so a provider-backed library is
+published, fetched, and locked like any other. A first-party library may instead
+ship with the toolchain; that changes where the package comes from and nothing
+about how it works.
 
-A provider-backed module declares its `with { ... }` options as a typed Options
-record on its bundled surface, reusing Kiln's Options-descriptor mechanism
-([Kiln](./wep-2026-04-12-kiln.md)). The compiler type-checks the `with` block
-against it and encodes the value as the same canonical JSON the cache key hashes;
-a Rust provider decodes that JSON directly (serde), a Wado provider gets the
-typed `Options` sugar.
+### Caching
 
-Aggregation across use-sites (per the phase above) merges by type:
+An invocation's cache key covers the package identity and version, the sorted
+symbol set, the canonical options, the provider component's hash, and the assets
+it read. Repeat builds skip the provider entirely.
 
-- `list<T>` options merge by set-union (deduplicated, order-normalized) — e.g.
-  `locales`, `dictionaries`.
-- scalar options (bool / enum / number / string) must agree across use-sites; a
-  conflict is a diagnostic.
+Recorded reads make the key converge rather than be exact: the reads observed on
+the previous successful run participate in the next key. This is sound because a
+provider is deterministic — its read set is a function of the other key inputs —
+and it is the technique build systems use for header dependencies. Kiln avoids
+needing it by having every input named at the use site, which a provider cannot
+do: only the provider knows which of its own assets a symbol set requires.
 
-This type-driven rule covers every ICU option (all are lists), so v1 adds no
-per-field merge annotations; introducing them (e.g. `max` / `or` for scalars) is
-a later extension only if a future provider needs it. Note that the runtime
-fallback mode (`strict`) is a property of the constructed object, not of data
-slicing, so it is an ordinary API argument, not a `with` option.
+### Hosts that cannot run a provider
 
-### ICU as the first consumer
+Running a provider requires a wasm runtime with Component Model support, which
+the native toolchain has and a browser-embedded one may not. The degradation is
+clean, and better than Kiln's: a provider-backed module's _type surface_ is
+prebuilt and needs no provider, so name resolution, type checking, hover, and
+go-to-definition all work untouched. Only producing a binary is unavailable, and
+a host that cannot run providers is typically a host that does not generate code
+anyway.
 
-ICU is special-cased only in that it is a first-party bundled consumer of the
-general mechanism; it does not add compiler logic of its own.
+### Reporting what data costs
 
-- Components: a coarse split into `core:text` (casemap + normalizer +
-  properties), `core:collation`, and `core:segmentation`. The split isolates the
-  two heavy data sets (collation, segmentation) so unused features link nothing;
-  within `core:text` the provider still slices data per imported op.
-- Each component is a prebuilt, data-free Rust→wasm component (the `bdp-spike`
-  model).
-- The ICU provider is the ICU4X data slicer (`icu_provider_export` /
-  `icu_provider_blob`) compiled to a wasm component. It slices the bundled image
-  by `(symbols → markers)` and `(options.locales → locale set)`. Running from a
-  bundled image needs no network, so it is fully deterministic and sandboxable.
-- Collation's dependency on the normalizer's NFD markers (~37 KB, the one real
-  cross-feature data dependency measured) is satisfied by including those markers
-  in collation's own slice; no shared data component is needed at this size.
+The mechanism exists to control size, so the toolchain reports what was
+included: per live symbol, the bytes its data contributed. Without it a user has
+no way to discover that one import is responsible for most of their binary, which
+is precisely the situation the mechanism is meant to end. This is the same
+posture as [optimizer remarks](./wep-2026-06-03-optimizer-remarks.md) — the
+compiler explains a decision the user cannot otherwise see.
 
-### Distribution: everything bundled
+## Alternatives considered
 
-The full ICU distribution unit — prebuilt data-free components, the ICU data
-image, the ICU provider component, and the `core:*` WIT surfaces — is bundled
-with the toolchain (the `wado-bundled-libm` / `wado-bundled-icu` lineage), not a
-userland package and not lazily fetched. `use { upper } from "core:text"` works
-with no dependency to add. Programs that do not reference an ICU feature link
-none of its code or data.
+### Leave it to the library
 
-The data image is a single compressed, indexed archive embedded in the
-toolchain, keeping the `wado` compiler a self-contained binary while letting the
-host extract only the entries a build needs via `read-asset`.
+Feature flags, or one crate per data set, is what most ecosystems do. It works
+only when the consumer knows which fraction they need and is willing to maintain
+that knowledge as their code changes. It is wrong by default, it is wrong again
+after every refactor, and it cannot express "the data for exactly the symbols
+this program reaches" at all, since no library can see that.
 
-Archive layout:
+### Ship everything, once
 
-- Entries are per-marker (e.g. `collation/CollationTailoringV1`,
-  `segmentation/SegmenterDictionaryAutoV1`). Per-marker granularity is what lets
-  a grapheme-only build never touch segmentation's multi-MB dictionary/LSTM
-  entries, while keeping the index small — per-(marker, locale) would explode it
-  for collation. A locale-bearing marker's entry holds all locales; the provider
-  slices locales within it.
-- The index is a minimal central directory: entry name → (offset, length). A
-  custom table suffices since the toolchain reads it itself; an actual ZIP is a
-  drop-in alternative if external inspection is wanted. Random access (not a
-  streamed `tar`) is required for selective extraction.
-- Compression is per-entry zlib (`flate2` / `miniz_oxide`), applied and reversed
-  host-side: `read-asset` returns already-decompressed bytes, so the provider
-  links no decompressor. zlib is chosen over zstd deliberately: it is already a
-  `wado-compiler` dependency and pure Rust, whereas zstd would add a new C
-  dependency to the otherwise runtime-free compiler. Measured on the ICU blobs,
-  zstd's advantage does not justify that cost: zstd-19 beats zlib-9 by only ~9%
-  on the dominant (near-incompressible) segmentation data and ~8% on the small
-  feature blobs — its biggest win, ~24%, is on mid-size locale data. Compression
-  is one-time (at toolchain-build), so its speed is irrelevant; decompression
-  (per user build) is ~2–3× faster with zstd but already negligible with zlib
-  (the largest 4 MB entry decompresses in ~24 ms, and a build pulls only the few
-  entries it uses). zlib runs at its default level: on this data higher levels
-  buy no measurable ratio (level 9 matched or slightly trailed level 6), so the
-  extra compression time is pointless.
+Bake the full data into the component and accept the size. It is the simplest
+thing that works and is the right answer for small data sets — which is why this
+mechanism is opt-in per package rather than a rule. It stops working as soon as
+the data is large and the usage is narrow, which is the entire class this WEP
+addresses.
 
-Within-entry slicing: given the entries its `symbols → markers` need, plus the
-locale set, the provider produces the data-free component's blob by re-exporting
-the selected markers × locales through ICU's `BlobExporter` — the same machinery
-as the offline datagen, with the bundled entries as the source instead of CLDR.
+### Prebuilt variants
+
+Publish one component per plausible configuration — per locale set, per feature
+subset — and let the consumer pick. The combinatorics defeat it: the useful
+configurations are the power set of the capabilities crossed with the locale set,
+so either the matrix is unpublishable or the offered variants are the same
+guesses feature flags make.
+
+### A native slicer in the toolchain
+
+For a first-party library the slicer could be ordinary Rust linked into the
+toolchain: no component, no sandbox, no protocol, and a much smaller design.
+Rejected because it forecloses the point. A slicer inside the compiler serves
+only libraries shipped with the compiler, so every third-party library dominated
+by data would be back to feature flags, and each new one would arrive as a
+compiler patch. What is being built is a capability of the language, and a
+capability only its authors can use is not one.
 
 ## Consequences
 
-- Per-program data is minimal: only the markers for imported ops and the
-  declared locales are embedded; unused features are absent entirely.
-- Determinism improves over ad-hoc datagen: slicing reads a bundled image, never
-  the network (the proxy/TLS non-determinism hit during the spike disappears).
-- The compiler executes a wasm provider at compile time (already the Kiln
-  execution model) and caches by content; repeat builds skip it.
-- Toolchain size grows by the bundled ICU image. Accepted in exchange for the
-  zero-dependency `core:` experience.
-- Runtime-loaded data loses zero-copy-from-static and adds a fixed per-feature
-  deserialization overhead; for a single feature this is roughly size-neutral
-  versus baking. The win is across features and via per-program slicing.
-- Data/code version coherence: the image, the prebuilt components, and the
-  provider must share one pinned ICU/CLDR version, tied to the `core:*` package
-  versions.
+- A library whose value is data becomes publishable without forcing its size on
+  every consumer. This is a class of library that currently either does not get
+  written or gets written as a pile of feature flags.
+- The compiler runs third-party code at build time. The sandbox and the resource
+  ceiling are what make that acceptable, so neither is optional, and both are
+  load-bearing parts of the contract rather than hardening added later.
+- A provider-backed package is more work to build than an ordinary one — a
+  slicer, data assets, and data-free components instead of one library — so the
+  mechanism earns its keep only where the data genuinely dominates. That is the
+  intended filter.
+- Builds gain a compile-time execution step. It is content-addressed, so it is
+  paid once per distinct configuration rather than per build.
+- Type checking stays independent of it: surfaces are prebuilt, so editors and
+  wasm-hosted toolchains work with no provider at all.
+- Data and code cannot drift apart, because they are versioned as one package.
 
-## Implementation status
+## Open questions
 
-The design above is settled and validated end-to-end by the spikes under
-`wado-bundled-icu/bdp-spike/`: data-free components running on runtime-loaded and
-composed-in blobs, the collator→normalizer marker dedup (37 KB), the
-casemap/properties/segmenter non-dedup (~0), the shared-infra floor (~10 KB), the
-marker-recording mechanism, and the zlib-vs-zstd comparison. What remains is
-implementation, roughly in order:
+- [ ] The declaration surface: how a package states which components are
+      provider-backed, which provider serves them, and where its data assets
+      live. The manifest is the obvious home, alongside Kiln's `generator` field.
+- [ ] The options protocol, per "Options".
+- [ ] Method-level reachability in the `liveness` pass, without which a live type
+      implies every method.
+- [ ] Whether a provider may depend on another provider's output. Kiln allows
+      generator DAGs; the analogous case here has no motivating example yet, and
+      forbidding it keeps invocation a single flat step.
+- [ ] The fuel and deadline defaults, and whether a consumer can raise them for a
+      provider they trust.
 
-- [ ] Promote the spike's data-free `text` / `collation` / `segmentation`
-      components into first-party prebuilt artifacts with their `core:*` WIT
-      surfaces.
-- [ ] Build the ICU provider component (`icu_provider_export`-based) with its
-      op→marker map and the marker-recording drift test.
-- [ ] Build the bundled archive (per-marker zlib entries + index) and the
-      `read-asset` capability on `core:kiln/kiln-host`.
-- [ ] Wire the compiler provisioning phase: aggregate live provider-backed
-      imports + options off the `liveness` pass, invoke the provider, embed and
-      compose the result, and cache by content.
+## Implementation
+
+- [ ] The `data-provider` world and `provider-host`, with the shared diagnostic
+      types hoisted out of `core:kiln/kiln-host` so both hosts use one shape.
+- [ ] The declaration surface and its manifest schema.
+- [ ] The provisioning phase: aggregate live symbols and options off `liveness`,
+      invoke the provider, embed each blob into its component, compose, and cache
+      by content.
+- [ ] The resource ceiling: fuel plus a wall-clock deadline, with the failure
+      reported against the use site.
+- [ ] Per-symbol data-cost reporting.
+- [ ] [`core:icu`](./wep-2026-08-09-core-icu.md) as the first consumer, which is
+      what proves the contract against a real slicer rather than a toy one.
+
+## References
+
+- [Kiln](./wep-2026-04-12-kiln.md) — the compile-time execution and caching
+  infrastructure this reuses.
+- [`core:icu`](./wep-2026-08-09-core-icu.md) — the first consumer.
+- [research: splitting large libraries](./research-library-splitting.md) — the
+  levers and hard constraints, measured.
+- [Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) — how
+  implementation components are consumed and composed.
+- [Package Manifest](./wep-2026-02-14-package-manifest.md) — where the
+  declaration surface will live.

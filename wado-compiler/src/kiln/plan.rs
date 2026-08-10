@@ -2,8 +2,7 @@
 //! invocations.
 //!
 //! An edge `A -> B` means A depends on B: B must run first so A sees B's
-//! output directory populated. See WEP 2026-04-12 §"Build pipeline
-//! integration" (the five-step plan).
+//! output directory populated. See WEP 2026-04-12 §"Build integration".
 
 use super::invocation::{DeclSite, Invocation, InvocationPath};
 
