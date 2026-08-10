@@ -45,6 +45,7 @@ use super::types::{
     StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
+use super::written::WrittenHead;
 
 /// Analysis state produced by [`Elaborator::annotate_modules`] and consumed by
 /// [`Elaborator::build_tir_from_state`].
@@ -3399,11 +3400,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     continue;
                 }
                 // Determine the struct name (base name without type args)
-                let struct_name = Self::get_type_name_static(&impl_block.ty);
+                let struct_name = WrittenHead::of(&impl_block.ty, module_source)
+                    .spelling_pending_migration()
+                    .to_string();
                 let trait_name = impl_block
                     .trait_type
                     .as_ref()
-                    .map(Self::get_type_name_static)
+                    .map(|t| {
+                        WrittenHead::of(t, module_source)
+                            .spelling_pending_migration()
+                            .to_string()
+                    })
                     .unwrap_or_default();
 
                 // Build a mapping from type param name to index from the explicit `impl<...>` header.

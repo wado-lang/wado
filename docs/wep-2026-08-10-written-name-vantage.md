@@ -54,9 +54,8 @@ The vantage exists there, and the answer is computed there.
 Five other whole-program checks then walked the same ASTs again — the
 inherent-impl collision check, the orphan rules, the variadic-overlap check,
 the sealed-trait scan, the trait-method arity check — and none of them was
-handed that answer. A second
-harvest has no vantage to resolve with, so it re-derived an identity from a
-bare head. Two of them said so in comments ("would require build-time import
+handed that answer. A second harvest has no vantage to resolve with, so it
+re-derived an identity from a bare head. Two of them said so in comments ("would require build-time import
 resolution that the current `TraitEnv::build` doesn't have plumbed through";
 "resolving the impl's trait name through imports needs machinery this pre-pass
 lacks"). The machinery was one pass away, unshared.
@@ -134,13 +133,15 @@ allowed a third.
 /// diagnostics.
 pub(crate) struct WrittenHead<'a> {
     spelling: &'a str,
+    ref_kind: Option<RefKind>,   // a reference declares nothing; its kind is its identity
     vantage: &'a ModuleSource,
 }
 ```
 
 Missing `Hash` is what stops it keying a registry; missing `PartialEq` is what
-stops `written_head(a) != written_head(b)` from compiling. Both defects in
-#1769 were one of those two expressions.
+stops `head_of(a) != head_of(b)` from compiling. Every defect this WEP fixes was
+one of those two expressions: the collision check hashed the head, the orphan
+and sealed checks compared it.
 
 `WrittenHead::resolve_with` hands a resolver the spelling and the vantage in one
 call, so the two cannot be paired wrongly. Questions that are *not* identity
@@ -225,3 +226,9 @@ identity by comparing spellings.
   5. [ ] `orchestration.rs`'s associated-type scan is the last whole-program
          walk of `loaded_modules` that reads heads. It belongs on the digest,
          like the five checks that moved.
+-
+  6. [ ] `item.rs`'s unknown-trait check and `reify.rs`'s default-method
+         synthesis are sound already — each hands its spelling to a frame
+         resolver whose vantage *is* the head's module — but they say so only in
+         prose. They read through `resolve_with` once the resolver stops needing
+         `&mut self` while the head borrows it.

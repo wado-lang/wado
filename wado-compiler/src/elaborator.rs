@@ -38,6 +38,7 @@ pub(crate) mod trait_env;
 mod trait_query;
 mod type_resolution;
 mod typecheck;
+mod written;
 pub(crate) mod types;
 mod tysys;
 mod util;

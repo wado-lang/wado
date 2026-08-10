@@ -523,26 +523,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    pub(super) fn get_type_name_static(ty: &Type) -> String {
-        match ty {
-            Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
-            Type::Named(named) => named.name.clone(),
-            Type::Generic(generic) => generic.name.clone(),
-            Type::Reference(_) | Type::MutReference(_) => RefKind::from_ast(ty)
-                .expect("ref classify")
-                .prefix()
-                .to_string(),
-            Type::Tuple(elems) => {
-                if elems.is_empty() {
-                    TypeTable::UNIT_TYPE_NAME.to_string()
-                } else {
-                    TypeTable::TUPLE_TYPE_NAME.to_string()
-                }
-            }
-            _ => "Unknown".to_string(),
-        }
-    }
-
     pub(super) fn get_type_name(&self, ty: &Type) -> String {
         match ty {
             Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
