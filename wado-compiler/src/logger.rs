@@ -193,6 +193,12 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     ///
     /// Use for errors that make it impossible to continue the current phase.
     pub fn fatal(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
+        // A quiet scope drops the report, not the bail: the query that opened
+        // it must still unwind, and the real walk reaches the same node and
+        // reports there.
+        if self.quiet_depth.get() > 0 {
+            return Err(Bail);
+        }
         self.error_count.set(self.error_count.get() + 1);
         self.host.emit_diagnostic(err.into());
         Err(Bail)

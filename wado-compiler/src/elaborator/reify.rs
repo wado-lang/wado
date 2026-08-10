@@ -4634,8 +4634,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | ast::BinaryOp::LtEq
                 | ast::BinaryOp::Gt
                 | ast::BinaryOp::GtEq
-        ) && super::Elaborator::<H>::is_coercible_compound_literal(&binary.left)
-            && !super::Elaborator::<H>::is_coercible_compound_literal(&binary.right)
+        ) && super::Elaborator::<H>::takes_shape_from_expected_type(&binary.left)
+            && !super::Elaborator::<H>::takes_shape_from_expected_type(&binary.right)
         {
             let right = self.reify_expr(&binary.right, ctx, None);
             let left = self.reify_expr(&binary.left, ctx, None);
@@ -5823,8 +5823,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if chain.comparisons.len() == 1 {
             let cmp = &chain.comparisons[0];
             let (left, right) =
-                if super::Elaborator::<H>::is_coercible_compound_literal(&chain.first)
-                    && !super::Elaborator::<H>::is_coercible_compound_literal(&cmp.right)
+                if super::Elaborator::<H>::takes_shape_from_expected_type(&chain.first)
+                    && !super::Elaborator::<H>::takes_shape_from_expected_type(&cmp.right)
                 {
                     let right = self.reify_expr(&cmp.right, ctx, None);
                     let left = self.reify_expr(&chain.first, ctx, Some(right.type_id));

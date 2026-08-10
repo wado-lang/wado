@@ -159,8 +159,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | BinaryOp::Gt
                     | BinaryOp::GtEq
             );
-            let left_lit = is_comparison && Self::is_coercible_compound_literal(left_ast);
-            let right_lit = is_comparison && Self::is_coercible_compound_literal(right_ast);
+            let left_lit = is_comparison && Self::takes_shape_from_expected_type(left_ast);
+            let right_lit = is_comparison && Self::takes_shape_from_expected_type(right_ast);
             if left_lit && !right_lit {
                 let right = self.resolve_expr(right_ast, ctx, expected_type);
                 let left_expected = if right == TypeTable::ERROR {
@@ -189,9 +189,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    pub(super) fn is_coercible_compound_literal(expr: &ast::Expr) -> bool {
+    /// Whether an operand's own elaboration would consult the expected type,
+    /// so a comparison resolves the *other* side first and hands this one its
+    /// type. A syntactic subset of the forms argument synthesis classifies as
+    /// [`super::synth::ArgClass::Opaque`] — deliberately syntactic, because
+    /// reify decides the same order and has no synthesis to ask, and because
+    /// the order must not depend on types: inside a tuple `for-of` the two
+    /// walks visit one sub-tree once per element, and a type-dependent order
+    /// would desync them.
+    ///
+    /// Subset, not equality, is the safe side: a form left out simply
+    /// resolves on its own, which is what every operand did before.
+    pub(super) fn takes_shape_from_expected_type(expr: &ast::Expr) -> bool {
         match expr {
             ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => true,
+            // A namespaced call (`Color::from_str(s)`) reads as a static path
+            // too; a plain call's return type is its own.
             ast::Expr::Call(call) => {
                 matches!(&call.callee, ast::Expr::Ident(id) if id.segments.len() >= 2)
             }
@@ -606,47 +619,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // operand is resolved by now, so its type selects among the
                 // receiver's `Add<Rhs>` impls (WEP 2026-07-31).
                 let rhs_class = super::synth::ArgClass::Exact(right.type_id);
-                let (trait_info_opt, (impl_name, impl_type_id)) = self
-                    .find_arithmetic_trait_impl(
-                        &struct_name,
-                        left.type_id,
+                let mut admitted = self.find_arithmetic_trait_impls(
+                    &struct_name,
+                    left.type_id,
+                    trait_name,
+                    method_name,
+                    Some(&rhs_class),
+                );
+                let mut impl_name = struct_name.clone();
+                let mut impl_type_id = left.type_id;
+                if admitted.is_empty() {
+                    // The impl is read on the newtype's base, so the right
+                    // operand is read there too: `impl Add for Vec2`
+                    // dispatched through `Position` declares `&Vec2`, and the
+                    // operand is a `Position` over the same base.
+                    let rhs_base = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .get_newtype_base(right.type_id)
+                        .unwrap_or(right.type_id);
+                    let rhs_class = super::synth::ArgClass::Exact(rhs_base);
+                    admitted = self.find_arithmetic_trait_impls(
+                        &lookup_name,
+                        lookup_type_id,
                         trait_name,
                         method_name,
                         Some(&rhs_class),
-                    )
-                    .map(|info| (Some(info), (struct_name.clone(), left.type_id)))
-                    .unwrap_or_else(|| {
-                        // The impl is read on the newtype's base, so the right
-                        // operand is read there too: `impl Add for Vec2`
-                        // dispatched through `Position` declares `&Vec2`, and
-                        // the operand is a `Position` over the same base.
-                        let rhs_base = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .get_newtype_base(right.type_id)
-                            .unwrap_or(right.type_id);
-                        let rhs_class = super::synth::ArgClass::Exact(rhs_base);
-                        let info = self.find_arithmetic_trait_impl(
-                            &lookup_name,
-                            lookup_type_id,
-                            trait_name,
-                            method_name,
-                            Some(&rhs_class),
-                        );
-                        (info, (lookup_name.clone(), lookup_type_id))
-                    });
-                if trait_info_opt.is_none() {
-                    self.report_ambiguous_operator_rhs(
-                        &struct_name,
-                        left.type_id,
-                        trait_name,
-                        method_name,
-                        &rhs_class,
-                        op,
-                        span,
                     );
+                    impl_name.clone_from(&lookup_name);
+                    impl_type_id = lookup_type_id;
                 }
+                // Unique-or-error: several admitted impls are reported here,
+                // where the span is, and dispatch falls through to the
+                // operand-type error below.
+                self.report_ambiguous_operator_rhs(&admitted, left.type_id, op, span);
+                let trait_info_opt = match admitted.as_slice() {
+                    [_only] => admitted.into_iter().next(),
+                    [] | [_, _, ..] => None,
+                };
                 if let Some(trait_info) = trait_info_opt {
                     let resolved = ResolvedTraitMethod {
                         trait_name: trait_info.trait_name,

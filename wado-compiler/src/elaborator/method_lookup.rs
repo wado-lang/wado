@@ -299,6 +299,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// [`Self::probe_trait_impls`] as a fold: every candidate's projection,
+    /// in candidate order, instead of the first. Selection that is
+    /// unique-or-error needs to see them all before it may pick one.
+    fn collect_trait_impls<R>(
+        &mut self,
+        target: &ImplTargetKey,
+        concrete_type_args: &[TypeId],
+        trait_matches: impl Fn(&str) -> bool,
+        mut project: impl FnMut(
+            &mut Self,
+            &ImplBlockRef,
+            &InstantiatedImplSig,
+            &IndexSet<String>,
+        ) -> Option<R>,
+    ) -> Vec<R> {
+        let mut found = Vec::new();
+        self.probe_trait_impls::<()>(target, concrete_type_args, trait_matches, |s, r, sig, d| {
+            if let Some(projected) = project(s, r, sig, d) {
+                found.push(projected);
+            }
+            None
+        });
+        found
+    }
+
     /// Find the rhs parameter type for an operator trait on a struct type.
     /// Used to determine what type a literal rhs should be coerced to. `rhs`
     /// is the right operand's class, which selects among several `Add<Rhs>`
@@ -331,26 +356,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report an operator whose receiver implements its trait at several
     /// right-hand types that the right operand does not tell apart — the
     /// operator's shape of the same unique-or-error rule a method call's
-    /// argument lists follow. Silent when the receiver simply has no impl:
-    /// that is the caller's "operator not applicable" error.
-    #[allow(clippy::too_many_arguments)]
+    /// argument lists follow. `admitted` is what the selection scan already
+    /// collected, so the report costs no second lookup. Silent below two
+    /// candidates: no impl at all is the caller's "operator not applicable"
+    /// error.
     pub(super) fn report_ambiguous_operator_rhs(
-        &mut self,
-        struct_name: &str,
+        &self,
+        admitted: &[ArithmeticTraitInfo],
         base_type_id: TypeId,
-        trait_name: &str,
-        method_name: &str,
-        rhs: &ArgClass,
         op: BinaryOp,
         span: Span,
     ) {
-        let admitted = self.find_arithmetic_trait_impls(
-            struct_name,
-            base_type_id,
-            trait_name,
-            method_name,
-            Some(rhs),
-        );
         if admitted.len() < 2 {
             return;
         }
@@ -358,8 +374,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let candidates = admitted
             .iter()
             .map(|info| match info.rhs_type {
-                Some(t) => format!("{trait_name}<{}>", tt.type_name(tt.peel_refs(t))),
-                None => trait_name.to_string(),
+                Some(t) => format!("{}<{}>", info.trait_name, tt.type_name(tt.peel_refs(t))),
+                None => info.trait_name.clone(),
             })
             .collect();
         let type_name = tt.type_name(base_type_id);
@@ -382,8 +398,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TypeId> {
         let struct_name = self.tysys.struct_name_for_type(rhs_type_id)?;
         let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
-        // Verify the trait impl exists; the self type is the struct type itself
-        self.find_arithmetic_trait_impl(&struct_name, rhs_type_id, &trait_name, method_name, None)?;
+        // Verify the trait impl exists. `1 + m` reads the impl on the right
+        // operand's type and gives the literal that same type, so the impl
+        // must be the one whose right-hand type is it — an `Add<Feet>` on
+        // `Meters` does not answer for `1 + m`.
+        let rhs = ArgClass::Exact(rhs_type_id);
+        self.find_arithmetic_trait_impl(
+            &struct_name,
+            rhs_type_id,
+            &trait_name,
+            method_name,
+            Some(&rhs),
+        )?;
         Some(rhs_type_id)
     }
 }
@@ -3251,8 +3277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Vec::new()
             };
 
-        let mut admitted: Vec<ArithmeticTraitInfo> = Vec::new();
-        self.probe_trait_impls::<()>(
+        self.collect_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
             // The operator traits carry a right-hand type argument now, so a
@@ -3311,7 +3336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .copied()
                     .unwrap_or(base_type_id);
 
-                admitted.push(ArithmeticTraitInfo {
+                Some(ArithmeticTraitInfo {
                     output_type,
                     self_kind,
                     // The *full* spelling (`Add<Feet>`), not the operator's
@@ -3320,13 +3345,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // path records `IndexValue<i32>`.
                     trait_name: s.get_type_name_full(header.trait_type.as_ref().unwrap()),
                     rhs_type,
-                });
-                // Never short-circuit: selection is unique-or-error, so every
-                // admitted impl has to be seen before one is chosen.
-                None
+                })
             },
-        );
-        admitted
+        )
     }
 
     /// Look up the type parameters of a static method from its impl header.
