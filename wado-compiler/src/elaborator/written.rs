@@ -1,10 +1,15 @@
 //! Type names still in the form the source wrote them.
 //!
 //! A type name in Wado is module-relative: `Box_` means whatever the module
-//! that wrote it says it means. The module a name is read from is its
-//! **vantage**, and a head with no vantage answers no identity question — which
-//! is why [`WrittenHead`] is the only way from an [`ast::Type`] to its head,
-//! and why it carries the vantage it was built with. See WEP 2026-08-10.
+//! that wrote it says it means, so a head with no module answers no identity
+//! question. [`WrittenHead`] is the only way from an [`ast::Type`] to its head,
+//! and it carries that module.
+//!
+//! Transitional. WEP 2026-08-10 puts the answer on the reference site instead —
+//! `Resolutions: AstId -> DeclRef`, one pass, and identity rather than a name as
+//! what every query takes — and its stage D deletes this module. Until then this
+//! keeps a new vantage-free derivation from being written. [`binder_of`] is the
+//! part that survives, as the binder arm of that resolution.
 
 use std::fmt;
 
@@ -90,10 +95,10 @@ impl<'a> WrittenHead<'a> {
 
     /// The bare spelling, compared against another bare spelling.
     ///
-    /// Unsound as an identity — two modules' `Widget` compare equal — and kept
-    /// only for the dispatch paths listed under "Remaining work" in WEP
-    /// 2026-08-10, which still key a receiver by name rather than by the
-    /// identity the call site already holds. Do not add call sites.
+    /// Unsound as an identity — two modules' `Widget` compare equal. It marks
+    /// the dispatch paths that still key a receiver by name; WEP 2026-08-10's
+    /// stage C converts them to `DeclRef` and this method goes with them. Do
+    /// not add call sites.
     pub(crate) fn spelling_pending_migration(&self) -> &'a str {
         self.spelling
     }
