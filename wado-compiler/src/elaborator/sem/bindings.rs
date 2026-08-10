@@ -32,7 +32,7 @@ use crate::symbol::Symbol;
 ///
 /// Keys are bare [`AstId`]s — globally unique, so an edge recorded while a
 /// walk visits foreign AST (e.g. under
-/// [`super::super::Elaborator::with_module_perspective`]) still names its node
+/// [`super::super::Elaborator::with_module_perspective_for`]) still names its node
 /// exactly, whichever module's `ModuleBindings` it lands in; the sole consumer
 /// ([`crate::semantics::semantics_with_logger`]) flattens them into single
 /// `Semantics` maps. Def-side values are bare `AstId`s too; navigation

@@ -286,8 +286,11 @@ impl TraitSig {
 ///
 /// Not part of [`MethodSig`]: these are the *block's* facts, shared by every
 /// method it declares, and a use site reads them without naming a method.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub(crate) struct ImplSig {
+    /// The impl target as the block's own frame resolved it — `Self` inside
+    /// the block. Carries the block's slots where the target is generic.
+    pub(crate) self_type: TypeId,
     /// The impl target's type arguments (`K`, `V` in `impl … for Map<K, V>`).
     /// A slot appears as its own `TypeParam` / `TypePack`, so aligning a
     /// receiver's arguments against this list says which slot each fills.
@@ -298,6 +301,13 @@ pub(crate) struct ImplSig {
     pub(crate) trait_type_args: Vec<TypeId>,
     /// The block's `type X = …;` bindings, resolved against the same slots.
     pub(crate) associated_types: IndexMap<String, TypeId>,
+    /// The target's fq name, qualified by the module that declares it — what
+    /// the block's own imports make of the name it wrote. A blanket target
+    /// (`impl<T> Trait for T`) is its own binder.
+    pub(crate) target_fq: crate::name::FqTypeName,
+    /// Which trait declaration the block implements, resolved in the block's
+    /// frame. `None` for an inherent impl.
+    pub(crate) trait_decl: Option<super::trait_env::DeclKey>,
 }
 
 impl ImplSig {
@@ -308,19 +318,31 @@ impl ImplSig {
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
     ) -> InstantiatedImplSig {
-        let slots = self.slots(type_table, receiver_args);
+        self.instantiate_slots(type_table, &self.slots(type_table, receiver_args))
+    }
+
+    /// [`Self::instantiate`] from a slot map the caller already holds.
+    ///
+    /// [`Self::slots`] is the alignment a plain generic target implies; a
+    /// blanket, `&`-target or variadic-tuple block binds its slots from the
+    /// receiver differently, and that caller passes its own map here.
+    pub(crate) fn instantiate_slots(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        slots: &IndexMap<u32, TypeId>,
+    ) -> InstantiatedImplSig {
         let mut table = type_table.borrow_mut();
         InstantiatedImplSig {
             trait_type_args: self
                 .trait_type_args
                 .iter()
-                .map(|&arg| table.substitute_type_params(arg, &slots))
+                .map(|&arg| table.substitute_type_params(arg, slots))
                 .collect(),
             associated_types: self
                 .associated_types
                 .iter()
                 .map(|(name, &binding)| {
-                    (name.clone(), table.substitute_type_params(binding, &slots))
+                    (name.clone(), table.substitute_type_params(binding, slots))
                 })
                 .collect(),
         }
@@ -518,9 +540,12 @@ mod tests {
     fn partially_concrete_impl(table: &RefCell<TypeTable>) -> ImplSig {
         let v = table.borrow_mut().make_type_param("V".to_string(), 1);
         ImplSig {
+            self_type: TypeTable::UNKNOWN,
             target_type_args: vec![TypeTable::U8, v],
             trait_type_args: vec![TypeTable::I32],
             associated_types: [("Output".to_string(), v)].into_iter().collect(),
+            target_fq: crate::name::FqTypeName::builtin("Map"),
+            trait_decl: None,
         }
     }
 
@@ -544,6 +569,20 @@ mod tests {
 
         assert_eq!(inst.associated_types.get("Output"), Some(&TypeTable::BOOL));
         assert_eq!(inst.associated_types.get("Item"), None);
+    }
+
+    /// A blanket / `&`-target / variadic block binds its slots from the
+    /// receiver in a way `slots` cannot derive from the target arguments, so
+    /// its caller passes the alignment in.
+    #[test]
+    fn instantiate_slots_takes_the_alignment_the_caller_holds() {
+        let table = RefCell::new(TypeTable::new());
+        let sig = partially_concrete_impl(&table);
+
+        let inst = sig.instantiate_slots(&table, &[(1, TypeTable::BOOL)].into_iter().collect());
+
+        assert_eq!(inst.associated_types.get("Output"), Some(&TypeTable::BOOL));
+        assert_eq!(inst.trait_type_args, vec![TypeTable::I32]);
     }
 
     #[test]

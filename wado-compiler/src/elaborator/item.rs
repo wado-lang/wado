@@ -768,12 +768,29 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             associated_types.insert(binding.name.clone(), type_id);
         }
 
+        // The block's own name-level facts, answered here because the frame is
+        // the block's: what its imports make of the target it wrote, and which
+        // trait declaration the name it implements picks out.
+        let target_fq = scope.qualified_receiver_name(&scope.get_type_name(&impl_block.ty));
+        let trait_decl = impl_block.trait_type.as_ref().map(|trait_type| {
+            let head = scope.get_type_name(trait_type);
+            scope.trait_decl_key_in_frame(&head)
+        });
+        let self_type = scope
+            .annotate_ctx
+            .trait_ctx
+            .self_type
+            .expect("entering an impl frame binds Self to the target");
+
         scope.sem.decls.impl_sigs.insert(
             impl_block.id,
             super::sig::ImplSig {
+                self_type,
                 target_type_args,
                 trait_type_args,
                 associated_types,
+                target_fq,
+                trait_decl,
             },
         );
     }
@@ -1202,7 +1219,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Record per-field resolved types for reify to read instead of
         // re-resolving them off the static decl pass + UNKNOWN-fallback.
         // The static pass cannot follow `pub use` re-export chains; the
-        // resolution we just did, with `loaded_modules` in scope, can.
+        // resolution we just did, with import scopes in place, can.
         self.sem
             .types
             .struct_field_types

@@ -86,7 +86,7 @@ enforced by types, not review:
 ```
 TypeSystem (+ Signatures)  — pipeline-wide queries; no AST, no sem writes, no logging
 ModuleSemantics            — per-module facts (unchanged)
-Annotator (today: Elaborator) — the per-module walker: AST in, facts out
+Elaborator                 — the per-module walker: AST in, facts out
 Reify                      — facts in, TIR out (unchanged)
 ```
 
@@ -128,11 +128,18 @@ What this deletes, structurally:
 - Every `loaded_modules` read outside reify, `get_impl_block` and its 14
   callers, and the whole-module scans in `call.rs` / `method_call.rs` /
   `expr.rs`.
-- `suppress_reference_recording` and `with_reference_recording_suppressed`:
-  the owning module's decl pass records the authoritative use→def edges once;
-  queries no longer resolve anything, so there is nothing to suppress.
+- `suppress_reference_recording` on the query paths: the owning module's decl
+  pass records the authoritative use→def edges once, and queries no longer
+  resolve anything, so there is nothing to suppress. The gate itself survives
+  for a use the query coupling hid — argument classification
+  (`synthesize_arg_class`) walks an argument *speculatively* to choose among
+  overloads, and a probe that records is a probe with a side effect.
 - `with_module_perspective` on the query paths. It survives only for the
-  walker's callee-scope work (default-argument resolution at call sites).
+  walker's callee-scope work: a parameter default re-resolved at the call site
+  (WEP 2026-04-11), reached through `default_scope_module`. Both call paths
+  point it at the callee now — the method path pointed it nowhere, so a
+  method default naming a type private to its own module resolved to nothing
+  where the free-function form resolved fine.
 - The partial digests that grew ad hoc because this one didn't exist:
   `ModuleDecls::function_return_types`, `imported_functions`,
   `generic_function_*`, `generic_method_*`,
@@ -291,24 +298,31 @@ Three rules define the boundary: `TypeSystem` never sees AST, never mutates
 already the pattern for the migrated `trait_query` half; it becomes the rule
 for all of it.
 
-### Annotator — the walker Elaborator honestly is
+### Elaborator — the walker it honestly is
 
-End-state shape (6 fields, from 19):
+End-state shape (7 fields, from 19):
 
 ```rust
-pub struct Annotator<'a, H: CompilerHost> {
+pub struct Elaborator<'a, H: CompilerHost> {
     env: ElabEnv<'a, H>,   // symbols, logger, interner, invocations, entry module
     tysys: TypeSystem,     // shared handle (+ Signatures)
     sem: ModuleSemantics,  // owned; driver swaps per module
-    module: ModuleCx<'a>,  // current module source + items, set at entry
+    module: ModuleSource,  // current module, set at entry
     scope: Scope,          // guard-managed transient state
     infer_holes: InferHoleTable,
+    suppress_reference_recording: bool,  // the argument-classification probe
 }
 ```
 
-- `loaded_modules` leaves the struct. The walker's last AST needs are covered
-  by `Signatures` (fallback-module idents, data sections, the declaring node
-  each signature carries) and the `Rc`'d trait default bodies.
+- `loaded_modules` and `current_module_items` leave the struct: no walker arm
+  reads an AST it does not own, and the whole module's AST reaches the walker
+  as the `&Module` argument its entry points already take. The walker's
+  cross-module needs are covered by `Signatures` (fallback-module idents, data
+  sections, the declaring node each signature carries) and the `Rc`'d trait
+  default bodies. What survives is one *declaring-side* read: the driver fills
+  each module's imported globals from `Signatures::globals` once every decl
+  pass has run, rather than the decl pass re-resolving the declaring module's
+  AST under a borrowed perspective.
 - Side channels become data flow: `resolve_method_call_with` returns its
   dispatch outcome; the operator's source `AstId` becomes a parameter;
   `capture_tuple_overlays` is deleted.
@@ -319,9 +333,6 @@ pub struct Annotator<'a, H: CompilerHost> {
 - `resolve_type` stays on the walker by design. Inside the walk it is honest:
   interning, authoritative edge recording, and diagnostics are the walker's
   job. What was wrong was queries calling it; that path is gone.
-- The struct is renamed `Annotator` at the end, matching the phase names
-  (`annotate` / `reify`). `elaborator/` stays as the directory and umbrella
-  term, per the parent WEP.
 
 ### Driver
 
@@ -335,7 +346,7 @@ reify            — ×N, unchanged
 `AnnotateState` dissolves (its own doc predicts this): `tysys` and
 `module_semantics` land on `Semantics`, the rest are driver locals. The
 per-module construction site collapses from 19 fields (two of them
-placeholders) to `Annotator::new(&env, tysys.clone(), sem)`.
+placeholders) to `Elaborator::new(&env, tysys.clone(), sem)`.
 
 ### Rejected alternative
 
@@ -376,37 +387,54 @@ reify. It instantiates the recorded `MethodSig` instead, in three parts:
 The query stops writing walk state entirely: no scope to enter, no `self_type`
 to set, no `assoc_type_bindings` to seed and restore.
 
-- [ ] S7 Query migration: `lookup_method_info` cluster and remaining
-      callee-signature queries → `impl TypeSystem (ctx, scope)`; delete
-      `suppress_reference_recording` / `with_reference_recording_suppressed`;
-      `with_module_perspective` shrinks to the walker's default-argument use.
-- [ ] S8 Walker slim-down: `ElabEnv` / `ModuleCx` bundles; `AnnotateState`
-      dissolves; the construction site collapses.
-- [ ] S9 Rename `Elaborator` → `Annotator`; update `docs/compiler.md` and
-      `wado-compiler/AGENTS.md`.
+### What the dispatch path reads instead of an impl block's AST
 
-Ordering: S7 converts one query at a time rather than as a single cut. S8–S9
-are last and depend on neither.
+`lookup_method_info` was the last cluster resolving a foreign declaration at a
+use site. Each question it asked of the AST is now the declaring block's own
+[`ImplSig`] entry, instantiated through the slot map the candidate's shape
+implies (`instantiate_slots`, since a blanket, `&`-target or variadic-tuple
+block binds its slots from the receiver in a way the target arguments alone do
+not say):
+
+- its `type X = …` bindings and its trait reference's arguments — resolved
+  once in the block's frame, so a binding naming a type private to the
+  declaring module means what the block wrote;
+- `Self` — the block's own resolved target, which is also what a concrete
+  candidate is matched against;
+- the target's fq name and which trait declaration the block implements —
+  name-level, but *frame*-level too, so the decl pass is the only phase that
+  can answer them without borrowing another module's imports.
+
+Nothing about the answer is call-site-shaped except the slot map, so the query
+neither swaps a perspective nor suppresses a recording.
+
+- [x] S7 Query migration: the `lookup_method_info` cluster and the remaining
+      callee-signature queries read the digest; query-side
+      `suppress_reference_recording` and `with_module_perspective` are gone.
+- [ ] S8 Walker slim-down. Done: `loaded_modules` and `current_module_items`
+      are off the struct. Remaining: the `ElabEnv` bundle, `AnnotateState`'s
+      dissolution, and the construction-site collapse.
+Ordering: S7 converts one query at a time rather than as a single cut. S8 is
+last and depends on neither.
 
 Progress metric:
 
 | Metric                                           | Now | Target |
 | ------------------------------------------------ | --- | ------ |
-| `loaded_modules` reads outside reify / decl pass | 3   | 0      |
+| `loaded_modules` reads outside reify / decl pass | 0   | 0      |
 | Whole-module AST scans                           | 0   | 0      |
 | Name-keyed AST predicates                        | 0   | 0      |
 | AST-level type-param substitution helpers        | 0   | 0      |
-| `with_module_perspective` call sites             | 9   | 1      |
-| `suppress_reference_recording` call sites        | 3   | 0      |
+| `with_module_perspective` call sites             | 2   | 2      |
+| `suppress_reference_recording` call sites        | 1   | 1      |
 | Manual scope save/restore clusters               | 0   | 0      |
-| `Elaborator` fields                              | 13  | 6      |
+| `Elaborator` fields                              | 11  | 7      |
 
-Every surviving `loaded_modules` read is an indexed fetch of one declaration,
-not a scan: all three are in `method_call.rs`, reached through `impl_index` /
-`all_impl_index`. S7 owns them along with
-the two scope-swapping counts; one perspective swap is the walker's own —
-typing an imported global in its declaring module, which is the callee-scope
-use the target of 1 reserves.
+The two scope-swapping targets are floors, not zeroes, and each is a walker
+frame rather than a query: both perspective swaps are the callee-scope retry a
+parameter default needs when the caller cannot name the callee's type
+(WEP 2026-04-11), and the surviving suppression is the argument-classification
+probe.
 
 ## Consequences
 

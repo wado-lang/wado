@@ -391,12 +391,12 @@ pub(crate) struct TypeAnnotations {
     pub(crate) let_annotated_types: IndexMap<AstId, TypeId>,
     /// Resolved field types per struct decl `AstId`, in declaration order, as
     /// `resolve_struct` resolved them with the struct's type-param scope and
-    /// the `loaded_modules`-aware resolver in place.
+    /// the full annotate-time resolver in place.
     ///
     /// Recorded so reify can read field types straight from this map instead
     /// of relying on `tysys.all_struct_fields` + an UNKNOWN-fallback
     /// re-resolve. The fallback existed because the static decl-field pass
-    /// (which seeds `all_struct_fields`) runs without `loaded_modules` and
+    /// (which seeds `all_struct_fields`) runs before import scopes exist and
     /// cannot follow `pub use` re-export chains — so a field typed by a
     /// re-exported decl (e.g. `Mark = u64` re-exported from `wasi:clocks`)
     /// landed as `UNKNOWN` there and forced reify to re-resolve. The combined

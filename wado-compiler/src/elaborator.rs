@@ -120,8 +120,6 @@ pub struct Elaborator<'a, H: CompilerHost> {
     pub(crate) sem: sem::ModuleSemantics,
     /// Symbol table from analyzer
     symbols: &'a SymbolTable,
-    /// Loaded modules from analyzer
-    loaded_modules: &'a IndexMap<ModuleSource, Module>,
     /// Logger for emitting diagnostics
     logger: &'a Logger<'a, H>,
     /// Current module source being resolved (for struct type `module_source`)
@@ -132,8 +130,6 @@ pub struct Elaborator<'a, H: CompilerHost> {
     current_module_source: ModuleSource,
     /// Entry module source (for cross-module import dedup)
     entry_module_source: ModuleSource,
-    /// Current module items (for local function parameter lookup)
-    current_module_items: &'a [Item],
     /// Transient annotate-time scope: trait-resolution context (incl.
     /// effect params), `type_implements_trait` recursion guard, and the
     /// default-expression module fallback. Mutated only through the RAII
@@ -150,20 +146,15 @@ pub struct Elaborator<'a, H: CompilerHost> {
     pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
     /// When `true`, the single use→def edge sink [`Self::insert_reference`]
     /// (which every `record_*` helper funnels through) drops edges instead of
-    /// recording them. Set while a *type-checking query* resolves a
-    /// declaration's signature whose AST nodes belong to another declaration —
-    /// most notably [`Self::lookup_method_info`], which resolves a method's
-    /// parameter / return types from a (possibly foreign) `impl` / `resource`
-    /// declaration to compute its `MethodInfo`.
+    /// recording them.
     ///
-    /// Those signature nodes are owned by the declaring module and already get
-    /// their use→def edges recorded when that module is annotated
-    /// (`resolve_resource_decl`, the impl-method walk). Globally-unique
-    /// `AstId`s mean re-recording can no longer clobber an unrelated node's
-    /// edge, but a query re-resolution may still record a *different* def
-    /// than the owning module's walk did (it resolves under the consumer's
-    /// import scope), so queries stay suppressed to keep the owning walk's
-    /// edge authoritative.
+    /// One caller: argument classification
+    /// ([`Self::synthesize_arg_class`]), which walks an argument
+    /// *speculatively* to pick among overloads and must leave no trace — the
+    /// real walk of the same node records the authoritative edge once the
+    /// callee is chosen. Type-checking queries no longer need the gate: since
+    /// WEP 2026-07-10 they read declaration facts the decl pass resolved in
+    /// the declaring frame instead of re-resolving a foreign signature's AST.
     pub(super) suppress_reference_recording: bool,
     /// Per-module deferred-inference state, solved and swept in
     /// [`Self::finalize_infer_holes`] at the end of the module walk. See
@@ -344,18 +335,31 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.lookup_variant_case(name).is_some()
     }
 
-    /// Run `body` with the elaborator's "current module" perspective swapped to
-    /// `module_source` and the supplied import `scope` (type sources *and*
-    /// namespace imports, so `ns::Type` types resolve canonically — issue
-    /// #1415). Locals are cleared because they describe in-progress resolution,
-    /// not the target module's definitions; everything is restored on return.
-    pub(super) fn with_module_perspective<R>(
+    /// Run `body` in `module`'s perspective: the walker's "current module" and
+    /// its import scope (type sources *and* namespace imports, so `ns::Type`
+    /// types resolve canonically — issue #1415) swapped for the duration.
+    /// Locals are cleared because they describe in-progress resolution, not the
+    /// target module's definitions; everything is restored on return.
+    ///
+    /// Callee-scope work only. A *query* never enters another module's
+    /// perspective — every declaration fact it needs was resolved in the
+    /// declaring frame by the decl pass (WEP 2026-07-10). What remains is the
+    /// walker resolving a parameter default at the call site, which the
+    /// callee's own scope has to answer for (WEP 2026-04-11).
+    ///
+    /// Already being in `module`'s perspective skips the swap entirely — which
+    /// also leaves the in-progress locals in place, as a same-module resolution
+    /// legitimately resolves against them.
+    pub(super) fn with_module_perspective_for<R>(
         &mut self,
-        module_source: ModuleSource,
-        scope: trait_env::ModuleImportScope,
+        module: &ModuleSource,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        let saved_src = std::mem::replace(&mut self.current_module_source, module_source);
+        if self.current_module_source == *module {
+            return body(self);
+        }
+        let scope = self.tysys.trait_env.import_scope(module);
+        let saved_src = std::mem::replace(&mut self.current_module_source, module.clone());
         let saved_imp =
             std::mem::replace(&mut self.sem.imports.imported_type_sources, scope.sources);
         let saved_orig = std::mem::replace(
@@ -388,29 +392,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         result
     }
 
-    /// Run `body` in `module`'s perspective, but skip the swap entirely when
-    /// `module` is already the current perspective — the common case on the
-    /// method / associated-type lookup path, where the receiver's impl usually
-    /// lives in the current module. Skipping avoids the `import_scope` clone
-    /// and, unlike [`Self::with_module_perspective`], leaves the in-progress
-    /// locals in place — which a same-module lookup legitimately resolves
-    /// against.
-    pub(super) fn with_module_perspective_for<R>(
-        &mut self,
-        module: &ModuleSource,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        if self.current_module_source == *module {
-            return body(self);
-        }
-        let scope = self.tysys.trait_env.import_scope(module);
-        self.with_module_perspective(module.clone(), scope, body)
-    }
-
     /// Run `body` with use→def reference recording suppressed, restoring the
-    /// previous setting on return. Used by type-checking queries that resolve
-    /// foreign declaration signatures (see
-    /// [`Self::suppress_reference_recording`]).
+    /// previous setting on return. See
+    /// [`Self::suppress_reference_recording`].
     pub(super) fn with_reference_recording_suppressed<R>(
         &mut self,
         body: impl FnOnce(&mut Self) -> R,
@@ -1521,7 +1505,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// ([`Self::annotate_module_bodies`]).
     pub fn annotate_module_decls(&mut self, module: &'a Module, module_source: ModuleSource) {
         self.current_module_source = module_source.clone();
-        self.current_module_items = &module.items;
         self.sem.imports.effect_sources = Self::build_effect_sources(
             &mut self.interner.borrow_mut(),
             module,
@@ -1547,9 +1530,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.collect_function_signatures(module);
         }
 
-        // Collect global variable names and types (before resolving functions that may reference them)
+        // This module's own globals. The ones it *imports* are filled in
+        // afterwards, by the driver: an imported global's type means what the
+        // declaring module wrote (`global RK_PROG: NodeKind` names a newtype
+        // the importer never brought into scope), and that is a declaration
+        // fact — available once every module's decl pass has run, never by
+        // re-resolving the declaring module's AST here.
         self.sem.decls.current_module_globals.clear();
-        self.sem.decls.imported_globals.clear();
         for item in &module.items {
             if let Item::Global(global_decl) = item {
                 let ty = self.resolve_type(&global_decl.ty);
@@ -1557,96 +1544,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .decls
                     .current_module_globals
                     .insert(global_decl.name.clone(), (ty, global_decl.mutable));
-            }
-        }
-
-        // Also collect imported globals from use declarations
-        for item in &module.items {
-            if let Item::Use(use_decl) = item {
-                let source_module_source = name::resolve_import_with_invocations(
-                    &mut self.interner.borrow_mut(),
-                    &module_source,
-                    &use_decl.source,
-                    Some(&self.entry_module_source),
-                    &self.invocations,
-                );
-
-                // Collect `(local_name, source_global_name)` pairs to import:
-                // a `Simple` import names one global; a `Namespace` import
-                // brings every public global into scope under its `ns$global`
-                // alias.
-                if let Some(source_module) = self.loaded_modules.get(&source_module_source) {
-                    let mut to_import: Vec<(String, String)> = Vec::new();
-                    for use_item in &use_decl.items {
-                        match use_item {
-                            ast::UseItem::Simple { name, alias, .. } => {
-                                if let Some(symbol) =
-                                    self.symbols.lookup_in_module(&source_module_source, name)
-                                    && matches!(symbol.kind, crate::symbol::SymbolKind::Global(_))
-                                {
-                                    to_import.push((
-                                        alias.as_ref().unwrap_or(name).clone(),
-                                        name.clone(),
-                                    ));
-                                }
-                            }
-                            ast::UseItem::Namespace { name: ns } => {
-                                // Reachable means `pub`, or `internal` when the
-                                // source module shares the importer's package.
-                                // Mirrors analyze-phase registration
-                                // (`import_reachable`).
-                                let same_package =
-                                    source_module_source.same_package(&module_source);
-                                for src_item in &source_module.items {
-                                    if let Item::Global(global_decl) = src_item
-                                        && global_decl.visibility.reachable_from(same_package)
-                                    {
-                                        to_import.push((
-                                            crate::name::namespace_member_alias(
-                                                ns,
-                                                &global_decl.name,
-                                            ),
-                                            global_decl.name.clone(),
-                                        ));
-                                    }
-                                }
-                            }
-                            ast::UseItem::InterfaceFunctions { .. } | ast::UseItem::Wildcard => {}
-                        }
-                    }
-                    // Pair each import with the declaration it names, so the
-                    // borrow on `source_module` ends before resolution starts.
-                    let declared: Vec<(String, String, ast::Type, bool)> = to_import
-                        .into_iter()
-                        .filter_map(|(local_name, source_name)| {
-                            source_module
-                                .items
-                                .iter()
-                                .find_map(|src_item| match src_item {
-                                    Item::Global(g) if g.name == source_name => Some((
-                                        local_name.clone(),
-                                        source_name.clone(),
-                                        g.ty.clone(),
-                                        g.mutable,
-                                    )),
-                                    _ => None,
-                                })
-                        })
-                        .collect();
-                    for (local_name, source_name, ty_ast, mutable) in declared {
-                        // A declared type means what the *declaring* module
-                        // wrote: `global RK_PROG: NodeKind` names a newtype the
-                        // importer never brought into scope, and resolving it
-                        // here would type the global `unknown`.
-                        let ty = self.with_module_perspective_for(&source_module_source, |s| {
-                            s.resolve_type(&ty_ast)
-                        });
-                        self.sem.decls.imported_globals.insert(
-                            local_name,
-                            (source_module_source.clone(), source_name, ty, mutable),
-                        );
-                    }
-                }
             }
         }
 
@@ -1783,7 +1680,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `ModuleSemantics` first.
     pub fn annotate_module_bodies(&mut self, module: &'a Module, module_source: ModuleSource) {
         self.current_module_source = module_source;
-        self.current_module_items = &module.items;
         let _resolve_funcs_span = self.logger.span("elaborate/resolve_funcs");
 
         let mut test_count = 0usize;

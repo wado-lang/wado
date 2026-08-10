@@ -55,6 +55,16 @@ fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader 
         .expect("every indexed impl block has an ImplHeader")
 }
 
+impl<H: CompilerHost> Elaborator<'_, H> {
+    /// The declaration facts the decl pass recorded for an indexed impl block.
+    fn impl_sig(&self, r: &ImplBlockRef) -> &super::sig::ImplSig {
+        self.tysys
+            .signatures
+            .impl_sig(r.1)
+            .expect("the decl pass records every impl block's declaration facts")
+    }
+}
+
 /// Inputs for [`Elaborator::infer_method_type_args`].
 ///
 /// Groups everything the caller has already resolved about the method
@@ -90,6 +100,11 @@ pub(super) struct MethodInferenceInput<'a> {
     /// the method lookup for same-named methods on different traits (e.g.
     /// `payload` on Serialize vs Deserialize).
     pub trait_name: Option<&'a str>,
+    /// Module declaring the method — the scope a defaulted type parameter's
+    /// default type resolves in, since `<T = Priv>` may name a type the call
+    /// site cannot. Mirrors the free-function path's
+    /// `fill_defaulted_fn_type_args`.
+    pub declaring_module: Option<ModuleSource>,
     /// Call-site span, used to anchor a "cannot infer type parameter"
     /// diagnostic when inference leaves a method type parameter dangling.
     pub span: Span,
@@ -557,15 +572,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<MethodInfo> {
         // First, get the base (non-reference) type for method lookup
         let base_type_id = self.tysys.get_base_type(receiver_type);
-        // Resolving the method's signature here walks a (possibly foreign)
-        // declaration's parameter / return type AST. Those nodes are owned by
-        // the declaring module and already have their use→def edges recorded
-        // when that module is annotated; re-recording them under the consumer
-        // would mis-key the use and can clobber a real edge via an AstId
-        // collision. Suppress recording for the whole query.
-        self.with_reference_recording_suppressed(|s| {
-            s.lookup_method_info_uncached(base_type_id, method_name)
-        })
+        self.lookup_method_info_uncached(base_type_id, method_name)
     }
 
     fn lookup_method_info_uncached(
@@ -964,13 +971,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Bind a still-unbound method type param to its declared default, resolving
-    /// the default with `Self` set to the concrete receiver.
+    /// Bind a still-unbound method type param to its declared default,
+    /// resolving the default with `Self` set to the concrete receiver and
+    /// `default_scope_module` pointed at the declaring module — a default may
+    /// name a type private to that module (`<T = Priv>`), which the call site
+    /// cannot resolve. The free-function path does the same
+    /// ([`Self::fill_defaulted_fn_type_args`]).
     fn fill_defaulted_method_type_args(
         &mut self,
         method_type_params: &[ast::GenericParam],
         receiver_type: TypeId,
         trait_name: Option<&str>,
+        declaring_module: Option<ModuleSource>,
         impl_offset: u32,
         inferred: &mut [TypeId],
     ) {
@@ -992,13 +1004,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_name);
         }
         let defaults: Vec<Option<TypeId>> = self.with_self_type(receiver_type, |s| {
-            let mut scope = s.enter_inherited_type_param_scope();
-            scope.annotate_ctx.trait_ctx.type_params.clear();
-            scope.register_generic_params(method_type_params, impl_offset);
-            method_type_params
-                .iter()
-                .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
-                .collect()
+            s.with_default_scope_module(declaring_module, |s| {
+                let mut scope = s.enter_inherited_type_param_scope();
+                scope.annotate_ctx.trait_ctx.type_params.clear();
+                scope.register_generic_params(method_type_params, impl_offset);
+                method_type_params
+                    .iter()
+                    .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
+                    .collect()
+            })
         });
         for i in 0..inferred.len() {
             if self.is_unbound_type_param(inferred[i])
@@ -1049,6 +1063,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             decl_return_type,
             expected_return_type,
             trait_name,
+            declaring_module,
             span,
         } = input;
 
@@ -1153,6 +1168,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method_type_params,
             receiver_type,
             trait_name,
+            declaring_module,
             impl_offset,
             &mut inferred,
         );
@@ -1790,52 +1806,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Find a trait method for a given type and method name.
-    /// Returns (`trait_name`, `MethodInfo`, `ModuleSource`) if found, None otherwise.
-    /// This is used when an inherent method is not found.
-    ///
-    /// `receiver_type_args` should contain the concrete type arguments for generic receivers
-    /// (e.g., `[i32]` for `Box_<i32>`). This is used to substitute type parameters when
-    /// resolving associated types like `type Item = T`.
-    pub(super) fn find_trait_method_for_type(
-        &mut self,
-        type_key: &ImplTargetKey,
-        method_name: &str,
-        struct_module: &ModuleSource,
-        receiver_type_args: Option<&[TypeId]>,
-        receiver_type_id: Option<TypeId>,
-        span: Span,
-        // `required_trait`: set by a trait-qualified call
-        // (`Alpha::describe(&x)`), where only impls of that trait's
-        // declaration may answer; its `args`, when present (turbofish), pin
-        // one argument list.
-        required_trait: Option<&super::types::RequiredTrait>,
-        // `probe`: the call's arguments, classified on demand to select
-        // among one trait's argument lists. `None` from callers with no
-        // argument list at hand.
-        probe: Option<&mut ArgProbe<'_>>,
-    ) -> Option<super::types::TraitMethodMatch> {
-        // Resolving a trait method's signature here walks (possibly foreign)
-        // impl-block parameter / return type AST nodes. Those nodes are owned
-        // by the declaring module and already have their use→def edges
-        // recorded when that module is annotated; re-recording them under the
-        // consumer's perspective mis-keys the use and can clobber a real edge
-        // via an AstId collision in `bindings.references` (cf.
-        // `lookup_method_info` which suppresses for the same reason).
-        self.with_reference_recording_suppressed(|s| {
-            s.find_trait_method_for_type_inner(
-                type_key,
-                method_name,
-                struct_module,
-                receiver_type_args,
-                receiver_type_id,
-                span,
-                required_trait,
-                probe,
-            )
-        })
-    }
-
     /// The typed receiver chain: `type_key` plus the newtype/flags base heads
     /// reachable from it. A reference head has no newtype base, so it is
     /// returned as a singleton; a named head walks its newtype chain via
@@ -1995,18 +1965,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.concrete_impl_matches_receiver(impl_ref, receiver_type_id) {
             return None;
         }
-        // Qualify from the impl's own module: the call site's imports may name
-        // the same declaration differently, or not at all.
-        let impl_struct_fq = if is_blanket_type_param {
-            crate::name::FqTypeName::binder(&impl_struct_name)
-        } else {
-            let impl_module = impl_ref.0.clone();
-            let impl_scope = trait_env.import_scope(&impl_module);
-            let written = &impl_struct_name;
-            self.with_module_perspective(impl_module, impl_scope, |s| {
-                s.qualified_receiver_name(written)
-            })
-        };
+        // Qualified in the impl's own frame by the decl pass: the call site's
+        // imports may name the same declaration differently, or not at all.
+        let impl_struct_fq = self.impl_sig(impl_ref).target_fq.clone();
         Some((impl_struct_name, impl_struct_fq, is_blanket_type_param))
     }
 
@@ -2135,11 +2096,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if skip_filter {
             return true;
         }
-        let impl_ty = header.ty.clone();
-        let impl_module = impl_ref.0.clone();
-        let impl_scope = trait_env.import_scope(&impl_module);
-        let impl_recv_id =
-            self.with_module_perspective(impl_module, impl_scope, |s| s.resolve_type(&impl_ty));
+        // The target is fully concrete here (`skip_filter` above), so the
+        // block's own `Self` is the receiver this impl demands.
+        let impl_recv_id = self.impl_sig(impl_ref).self_type;
         let tt = self.tysys.type_table.borrow();
         let target = tt.peel_refs(impl_recv_id);
         let mut current = tt.peel_refs(receiver);
@@ -2156,18 +2115,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The body of [`Self::find_trait_method_for_type`]; the wrapper runs it
-    /// with use→def reference recording suppressed, since foreign impl
-    /// signatures are walked here.
-    fn find_trait_method_for_type_inner(
+    /// Find a trait method for a given type and method name, for when an
+    /// inherent method is not found.
+    ///
+    /// `receiver_type_args` should contain the concrete type arguments for
+    /// generic receivers (e.g., `[i32]` for `Box_<i32>`), which fill the
+    /// declaring impl block's slots.
+    pub(super) fn find_trait_method_for_type(
         &mut self,
         type_key: &ImplTargetKey,
         method_name: &str,
-        _struct_module: &ModuleSource,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
         span: Span,
+        // `required_trait`: set by a trait-qualified call
+        // (`Alpha::describe(&x)`), where only impls of that trait's
+        // declaration may answer; its `args`, when present (turbofish), pin
+        // one argument list.
         required_trait: Option<&super::types::RequiredTrait>,
+        // `probe`: the call's arguments, classified on demand to select
+        // among one trait's argument lists. `None` from callers with no
+        // argument list at hand.
         probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<super::types::TraitMethodMatch> {
         use super::types::TraitMethodMatch;
@@ -2325,12 +2293,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         };
-        // Extract associated type bindings (lightweight: just name+type, not methods)
-        let assoc_bindings: Vec<(String, ast::Type)> = header
-            .associated_types
-            .iter()
-            .map(|b| (b.name.clone(), b.ty.clone()))
-            .collect();
         let impl_module_source = impl_home.clone();
         // A concrete generic instantiation trait impl (`impl Tag for
         // List<u8>`) yields a per-instantiation concrete method, called
@@ -2402,19 +2364,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Set up associated type bindings for resolving Self::* types. Resolve
-        // in the impl's module so a binding naming a type private to that
-        // module (`type Iter = TreeSetIter<T>`) is not re-resolved by name in
-        // the caller's perspective, where it is invisible (issue #1416).
-        for (name, ty) in &assoc_bindings {
-            let type_id =
-                scope.with_module_perspective_for(&impl_module_source, |s| s.resolve_type(ty));
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .assoc_type_bindings
-                .insert(name.clone(), type_id);
-        }
+        // Bind the impl's slots to the receiver's type arguments. The slot map
+        // the scope now holds is the alignment — built per impl shape (generic,
+        // ref, blanket, variadic), which a flat positional list cannot express.
+        // Method-level slots stay abstract: inference solves them at the call
+        // site.
+        let impl_slots: IndexMap<u32, TypeId> = scope
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .values()
+            .copied()
+            .collect();
+        // The block's own declaration facts, instantiated through that
+        // alignment. Resolved once by the decl pass in the block's frame, so a
+        // binding naming a type private to the declaring module (`type Iter =
+        // TreeSetIter<T>`) means what the block wrote, not what the caller's
+        // perspective can see (issue #1416).
+        let signatures = Rc::clone(&scope.tysys.signatures);
+        let impl_sig = signatures
+            .impl_sig(impl_ref.1)
+            .expect("the decl pass records every impl block's declaration facts")
+            .instantiate_slots(&scope.tysys.type_table, &impl_slots);
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .assoc_type_bindings
+            .extend(impl_sig.associated_types.iter().map(|(n, &t)| (n.clone(), t)));
 
         let blanket_type_param = if is_blanket_type_param {
             Some(impl_struct_name.clone())
@@ -2457,63 +2433,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // module), the arguments with the impl's bound type params substituted
         // (so `impl<T> Take<T> for Wrapper<T>` on `Wrapper<i32>` reads as
         // `Take<i32>`). Spellings never carry identity (WEP 2026-07-31).
-        let trait_head_name = scope.get_type_name(&trait_type_for_name);
-        let trait_decl = scope.with_module_perspective_for(&impl_module_source, |s| {
-            s.trait_decl_key_in_frame(&trait_head_name)
-        });
-        let trait_args = {
-            // Only target-position params are bound above; a param free in the
-            // trait arguments (`impl<T> From<T> for Wrapper`) must still
-            // resolve — as itself, not as an unknown-type diagnostic. Bound
-            // temporarily: `impl_slots` below reads the scope's param map and
-            // must see exactly the target bindings.
-            let mut free_params: Vec<String> = Vec::new();
-            for (i, tp) in header.type_params.iter().enumerate() {
-                if !scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .contains_key(&tp.name)
-                {
-                    let id = scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_param(tp.name.clone(), i as u32);
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .insert(tp.name.clone(), (i as u32, id));
-                    free_params.push(tp.name.clone());
-                }
-            }
-            let args: Vec<TypeId> = scope.with_module_perspective_for(&impl_module_source, |s| {
-                match &trait_type_for_name {
-                    Type::Generic(generic) => {
-                        generic.args.iter().map(|arg| s.resolve_type(arg)).collect()
-                    }
-                    _ => Vec::new(),
-                }
-            });
-            for name in free_params {
-                scope.annotate_ctx.trait_ctx.type_params.shift_remove(&name);
-            }
-            args
-        };
+        let trait_decl = signatures
+            .impl_sig(impl_ref.1)
+            .expect("the decl pass records every impl block's declaration facts")
+            .trait_decl
+            .clone()
+            .expect("a candidate reached here through the trait impl index");
+        let trait_args = impl_sig.trait_type_args;
 
         let mut method_found = false;
         if let Some((method_sig, method_type_params)) = method_data {
             let self_kind = method_sig.self_kind;
             let trait_name = scope.get_type_name_full(&trait_type_for_name);
-
-            let impl_slots: IndexMap<u32, TypeId> = scope
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .values()
-                .copied()
-                .collect();
 
             let impl_offset = crate::tir::method_param_offset_of(impl_slots.keys().copied());
             for (i, type_param) in method_type_params.iter().enumerate() {
@@ -2541,14 +2472,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // Bind the impl's slots to the receiver's type arguments. The
-            // slot map the scope already holds is the alignment — it is built
-            // per impl shape (generic, ref, blanket, variadic), which a flat
-            // positional list cannot express. Method-level slots stay
-            // abstract: inference solves them at the call site.
-            //
-            // `Self` needs no special handling now. The canonical frame bound
-            // it to the impl target, so instantiating with the receiver's
+            // `Self` needs no special handling. The canonical frame bound it
+            // to the impl target, so instantiating with the receiver's
             // arguments yields the concrete receiver — what re-resolving the
             // signature under `with_self_type_if_known` used to produce.
             let instantiated = method_sig
@@ -3629,7 +3554,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(trait_match) = self.find_trait_method_for_type(
                 &self.impl_target(&output_struct_name),
                 &method_call.method,
-                &output_module_source,
                 output_type_args.as_deref(),
                 Some(output_type),
                 method_call.span,

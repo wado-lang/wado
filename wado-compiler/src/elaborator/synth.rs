@@ -693,8 +693,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
             _ => None,
         };
-        let module = self.canonical_decl_key(&name).0;
-
         let ref_kind = crate::name::RefKind::from_resolved(
             &self.tysys.type_table.borrow().get(receiver).clone(),
         );
@@ -702,7 +700,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(found) = self.find_trait_method_for_type(
                 &super::trait_env::ImplTargetKey::Ref(ref_kind),
                 method,
-                &module,
                 type_args.as_deref(),
                 Some(base),
                 span,
@@ -720,7 +717,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_trait_method_for_type(
             &target,
             method,
-            &module,
             type_args.as_deref(),
             Some(base),
             span,
