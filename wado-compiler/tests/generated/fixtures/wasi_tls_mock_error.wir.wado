@@ -115,7 +115,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(45)
 
-type "functype//wasi_tls_mock_error.wado/wasi_tls_mock_error.wado/__Closure_2::__call" = fn(ref "wasi_tls_mock_error.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(46)
+type "functype//wasi_tls_mock_error.wado/wasi_tls_mock_error.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(46)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(47)
 
@@ -485,14 +485,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     return result;
 }
 
-fn "wasi_tls_mock_error.wado/wasi_tls_mock_error.wado/__Closure_2::__call"(self, __outptr) {
+fn "wasi_tls_mock_error.wado/wasi_tls_mock_error.wado/__Closure_2::__call"(__outptr) {
     return "wasi_tls_mock_error.wado/__cm_lift__Connector_connect"(__outptr);
 }
 
 fn "closure/wasi_tls_mock_error.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "wasi_tls_mock_error.wado//__Closure_2";
-    __typed_env = ref.cast "wasi_tls_mock_error.wado//__Closure_2"(__env);
-    return "wasi_tls_mock_error.wado/wasi_tls_mock_error.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "wasi_tls_mock_error.wado/wasi_tls_mock_error.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "wasi_tls_mock_error.wado/__cm_export__run" as "run"

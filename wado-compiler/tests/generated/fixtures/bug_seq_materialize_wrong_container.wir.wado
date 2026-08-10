@@ -38,7 +38,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//bug_seq_materialize_wrong_container.wado/make" = fn() -> [ref Array<u8>, i32];  // TypeId(12)
+type "functype//bug_seq_materialize_wrong_container.wado/make" = fn();  // TypeId(12)
 
 type "functype//bug_seq_materialize_wrong_container.wado/run" = fn();  // TypeId(13)
 
@@ -105,9 +105,7 @@ global mut global:bug_seq_materialize_wrong_container.wado::__modules_initialize
 global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "bug_seq_materialize_wrong_container.wado/make"() {
-    let a: ref Array<u8>;
-    a = builtin::array_new<u8>(5);
-    return a, 2;
+    return;
 }
 
 fn "bug_seq_materialize_wrong_container.wado/run"() with Stdout {
@@ -122,9 +120,7 @@ fn "bug_seq_materialize_wrong_container.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:bug_seq_materialize_wrong_container.wado::__modules_initialized = 1;
     };
-    let c_mv_data: ref Array<u8>;
-    let c_mv_tag: i32;
-    multivalue_bind [c_mv_data, c_mv_tag] = "bug_seq_materialize_wrong_container.wado/make"();
+    "bug_seq_materialize_wrong_container.wado/make"();
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_6 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(5, f_6); start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1); builtin::array_set_u8(__local_1.repr, start, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_21 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(2, f_21); __local_1);
 }
 

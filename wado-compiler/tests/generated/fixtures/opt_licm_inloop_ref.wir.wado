@@ -112,16 +112,13 @@ fn "opt_licm_inloop_ref.wado/probe"(c) {
 }
 
 fn "opt_licm_inloop_ref.wado/accumulate"(n, t) {
-    let config: ref "opt_licm_inloop_ref.wado//Config";
     let sum: i32;
     let i: i32;
-    config = struct.new "opt_licm_inloop_ref.wado//Config" { threshold: t, scale: 2 };
     sum = 0;
     i = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= n;
-            drop("opt_licm_inloop_ref.wado/probe"(config));
             sum = sum + (t * i);
             i = i + 1;
             continue l1;

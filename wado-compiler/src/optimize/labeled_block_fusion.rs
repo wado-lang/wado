@@ -41,7 +41,8 @@ use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::{
-    block_contains_loop, has_break_to, is_local, is_local_operand, single_payload_binding,
+    block_contains_loop, collect_reads, has_break_to, is_local, is_local_operand,
+    promoted_local_reads, promoted_read_count_at, promoted_read_counts, single_payload_binding,
 };
 
 /// The slot `sroa_variant_return` reserves for the tag in every scalarized
@@ -71,6 +72,7 @@ impl Rule for LabeledBlockFusionRule {
     }
 
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        let promoted_reads = PromotedReadCounts::default();
         let stmts = engine.body.blocks[block].stmts.clone();
         if stmts.len() < 2 {
             return false;
@@ -94,13 +96,18 @@ impl Rule for LabeledBlockFusionRule {
             // consumer statement.
             let consumer_uses =
                 count_local_uses_in_stmt(engine.body, stmts[i + 1], info.temp_local);
-            if engine.local_reads(info.temp_local).len() != consumer_uses {
+            if body_uses(engine, &promoted_reads, info.temp_local) != consumer_uses {
                 continue;
             }
             if yields && i + 2 == stmts.len() {
                 continue;
             }
+            let temp = info.temp_local;
             perform_fusion(engine, block, &stmts, i, info);
+            debug_assert!(
+                !is_read(engine.body, temp),
+                "[NIR] labeled_block_fusion: temp local {temp} is still read after fusion"
+            );
             return true;
         }
         false
@@ -974,8 +981,11 @@ fn slot_reads_in_operand(body: &Body, op: Operand, local_idx: u32) -> Option<Vec
         direct_uses: 0,
         slot_uses: 0,
     };
-    if let Operand::Expr(e) = op {
-        v.visit_node(body, NodeRef::Expr(e));
+    match op {
+        Operand::Expr(e) => v.visit_node(body, NodeRef::Expr(e)),
+        // The operand itself is the read: no `FieldAccess` slot to hand it.
+        Operand::Value(value) if body.values.value_reads_local(value, local_idx) => return None,
+        Operand::Value(_) => {}
     }
     if v.direct_uses != v.slot_uses {
         return None;
@@ -994,6 +1004,10 @@ fn slot_reads_in_operand(body: &Body, op: Operand, local_idx: u32) -> Option<Vec
     Some(slots)
 }
 
+/// Tallies the temp's reads two ways: `direct_uses` counts every one, skeleton
+/// and pool alike, and `slot_uses` counts those that are a `FieldAccess`
+/// receiver. Equal tallies mean every read is a slot read, which is the only
+/// shape the fused block can serve.
 struct SlotReadCollector {
     local_idx: u32,
     slots: IndexMap<u32, TypeId>,
@@ -1018,10 +1032,45 @@ impl NirRefVisitor for SlotReadCollector {
                 self.slots.insert(*field_index, body.exprs[e].type_id);
             }
         }
+        self.direct_uses += promoted_read_count_at(body, node, self.local_idx);
         self.walk_node(body, node);
     }
 }
 
+/// Every use of `local` in the body, skeleton and value pool alike — the total
+/// [`count_local_uses_in_stmt`] counts within one statement, so the two compare.
+/// The engine's use index sees the skeleton only, hence the second term.
+fn body_uses(engine: &Engine, promoted: &PromotedReadCounts, local: u32) -> usize {
+    engine.local_reads(local).len() + promoted.count(engine.body, local)
+}
+
+/// Whether any reachable read of `local` survives, in the skeleton or the value
+/// pool. The fusion deletes the temp's binding, so one that does would read a
+/// local nothing defines.
+fn is_read(body: &Body, local: u32) -> bool {
+    let mut reads = IndexSet::default();
+    collect_reads(body, &mut reads);
+    promoted_local_reads(body, &mut reads);
+    reads.contains(&local)
+}
+
+/// Per-body count of the reads that live in the value pool, keyed by local and
+/// filled on first ask. The gate below needs it for one temp at a time, but the
+/// walk that answers costs a whole body, so it answers for all of them at once.
+#[derive(Default)]
+struct PromotedReadCounts(std::cell::OnceCell<IndexMap<u32, usize>>);
+
+impl PromotedReadCounts {
+    fn count(&self, body: &Body, local: u32) -> usize {
+        self.0
+            .get_or_init(|| promoted_read_counts(body))
+            .get(&local)
+            .copied()
+            .unwrap_or(0)
+    }
+}
+
+/// Counts every read of `local_idx`, skeleton and value pool alike.
 struct LocalUseCounter {
     local_idx: u32,
     count: usize,
@@ -1034,6 +1083,7 @@ impl NirRefVisitor for LocalUseCounter {
         {
             self.count += 1;
         }
+        self.count += promoted_read_count_at(body, node, self.local_idx);
         self.walk_node(body, node);
     }
 }
@@ -1062,8 +1112,13 @@ fn count_local_uses_in_operand(body: &Body, op: Operand, local_idx: u32) -> usiz
         local_idx,
         count: 0,
     };
-    if let Operand::Expr(e) = op {
-        v.visit_node(body, NodeRef::Expr(e));
+    match op {
+        Operand::Expr(e) => v.visit_node(body, NodeRef::Expr(e)),
+        Operand::Value(value) => {
+            if body.values.value_reads_local(value, local_idx) {
+                v.count += 1;
+            }
+        }
     }
     v.count
 }

@@ -9,62 +9,57 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-struct param_spec_forwarded_chain.wado//Style {  // TypeId(2)
-    mut quoted: bool,
-    mut upper: bool,
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//param_spec_forwarded_chain.wado/run" = fn();  // TypeId(10)
 
-type "functype//param_spec_forwarded_chain.wado/run" = fn();  // TypeId(11)
+type "functype//param_spec_forwarded_chain.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//param_spec_forwarded_chain.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//param_spec_forwarded_chain.wado/__cm_export__run" = fn();  // TypeId(12)
 
-type "functype//param_spec_forwarded_chain.wado/__cm_export__run" = fn();  // TypeId(13)
+type "functype//param_spec_forwarded_chain.wado/outer$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(13)
 
-type "functype//param_spec_forwarded_chain.wado/outer$spec0" = fn(ref "param_spec_forwarded_chain.wado//Style", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(14)
+type "functype//param_spec_forwarded_chain.wado/inner$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(14)
 
-type "functype//param_spec_forwarded_chain.wado/inner$spec0" = fn(ref "param_spec_forwarded_chain.wado//Style", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(15)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(15)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(16)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(16)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(17)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(17)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(18)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(18)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(19)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(20)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(20)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(21)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(21)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(22)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(24)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(25)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(27)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -82,7 +77,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:param_spec_forwarded_chain.wado::__modules_initialized: bool = 0;
 global global:param_spec_forwarded_chain.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 100), used: 2 };
 global global:param_spec_forwarded_chain.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 };
-global global:param_spec_forwarded_chain.wado::__const_obj_2: ref null "param_spec_forwarded_chain.wado//Style" = struct.new "param_spec_forwarded_chain.wado//Style" { quoted: 0, upper: 0 };
 
 fn "param_spec_forwarded_chain.wado/run"() with Stdout {
     let out: ref "core:prelude/string.wado//String";
@@ -93,8 +87,8 @@ fn "param_spec_forwarded_chain.wado/run"() with Stdout {
         global:param_spec_forwarded_chain.wado::__modules_initialized = 1;
     };
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-    "param_spec_forwarded_chain.wado/outer$spec0"(global:param_spec_forwarded_chain.wado::__const_obj_2, out, global:param_spec_forwarded_chain.wado::__const_obj_1);
-    "param_spec_forwarded_chain.wado/outer$spec0"(global:param_spec_forwarded_chain.wado::__const_obj_2, out, global:param_spec_forwarded_chain.wado::__const_obj_0);
+    "param_spec_forwarded_chain.wado/outer$spec0"(out, global:param_spec_forwarded_chain.wado::__const_obj_1);
+    "param_spec_forwarded_chain.wado/outer$spec0"(out, global:param_spec_forwarded_chain.wado::__const_obj_0);
     "core:cli/println"(out);
 }
 
@@ -113,20 +107,20 @@ fn "param_spec_forwarded_chain.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "param_spec_forwarded_chain.wado/outer$spec0"(st, out, word) {
-    let start_5: i32;
-    let start_14: i32;
-    start_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(out, 1);
-    builtin::array_set_u8(out.repr, start_5, 91);
-    "param_spec_forwarded_chain.wado/inner$spec0"(st, out, word);
-    start_14 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(out, 1);
-    builtin::array_set_u8(out.repr, start_14, 93);
+fn "param_spec_forwarded_chain.wado/outer$spec0"(out, word) {
+    let start_4: i32;
+    let start_13: i32;
+    start_4 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(out, 1);
+    builtin::array_set_u8(out.repr, start_4, 91);
+    "param_spec_forwarded_chain.wado/inner$spec0"(out, word);
+    start_13 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(out, 1);
+    builtin::array_set_u8(out.repr, start_13, 93);
 }
 
-fn "param_spec_forwarded_chain.wado/inner$spec0"(st, out, word) {
+fn "param_spec_forwarded_chain.wado/inner$spec0"(out, word) {
     let i: i32;
     let b: u8;
-    let start_21: i32;
+    let start_20: i32;
     let _licm_used_38: i32;
     let _licm_repr_39: ref Array<u8>;
     i = 0;
@@ -136,10 +130,10 @@ fn "param_spec_forwarded_chain.wado/inner$spec0"(st, out, word) {
         l1: loop {
             break_if b0 i >= _licm_used_38;
             b = builtin::array_get<u8>(_licm_repr_39, i);
-            start_21 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(out, 1);
+            start_20 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(out, 1);
             _licm_used_38 = word.used;
             _licm_repr_39 = word.repr;
-            builtin::array_set_u8(out.repr, start_21, b);
+            builtin::array_set_u8(out.repr, start_20, b);
             i = i + 1;
             continue l1;
         };

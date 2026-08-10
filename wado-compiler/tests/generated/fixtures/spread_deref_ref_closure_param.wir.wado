@@ -145,7 +145,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<spread_deref_
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<spread_deref_ref_closure_param.wado/S>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<spread_deref_ref_closure_param.wado/S>") -> ref null "spread_deref_ref_closure_param.wado//S";  // TypeId(54)
 
-type "functype//spread_deref_ref_closure_param.wado/spread_deref_ref_closure_param.wado/__Closure_2::__call" = fn(ref "spread_deref_ref_closure_param.wado//__Closure_2", ref "spread_deref_ref_closure_param.wado//S") -> ref "spread_deref_ref_closure_param.wado//S";  // TypeId(55)
+type "functype//spread_deref_ref_closure_param.wado/spread_deref_ref_closure_param.wado/__Closure_2::__call" = fn(ref "spread_deref_ref_closure_param.wado//S") -> ref "spread_deref_ref_closure_param.wado//S";  // TypeId(55)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(56)
 
@@ -792,14 +792,12 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<spread_deref_re
     return ref_val;
 }
 
-fn "spread_deref_ref_closure_param.wado/spread_deref_ref_closure_param.wado/__Closure_2::__call"(self, s) {
+fn "spread_deref_ref_closure_param.wado/spread_deref_ref_closure_param.wado/__Closure_2::__call"(s) {
     return struct.new "spread_deref_ref_closure_param.wado//S" { a: s.a, b: s.b + 10, c: s.c };
 }
 
 fn "closure/spread_deref_ref_closure_param.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "spread_deref_ref_closure_param.wado//__Closure_2";
-    __typed_env = ref.cast "spread_deref_ref_closure_param.wado//__Closure_2"(__env);
-    return "spread_deref_ref_closure_param.wado/spread_deref_ref_closure_param.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "spread_deref_ref_closure_param.wado/spread_deref_ref_closure_param.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "spread_deref_ref_closure_param.wado/__cm_export____test_0_spread_over_a_dereferenced__s_closure_parameter" as "__test_0_spread_over_a_dereferenced__s_closure_parameter"

@@ -381,7 +381,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = 
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(91)
 
-type "functype//http_client_send_with_body.wado/http_client_send_with_body.wado/__Closure_2::__call" = fn(ref "http_client_send_with_body.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(92)
+type "functype//http_client_send_with_body.wado/http_client_send_with_body.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(92)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(93)
 
@@ -2130,14 +2130,12 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^FromIterator::from_it
     return result;
 }
 
-fn "http_client_send_with_body.wado/http_client_send_with_body.wado/__Closure_2::__call"(self, __outptr) {
+fn "http_client_send_with_body.wado/http_client_send_with_body.wado/__Closure_2::__call"(__outptr) {
     return "http_client_send_with_body.wado/__cm_lift__Client_send"(__outptr);
 }
 
 fn "closure/http_client_send_with_body.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "http_client_send_with_body.wado//__Closure_2";
-    __typed_env = ref.cast "http_client_send_with_body.wado//__Closure_2"(__env);
-    return "http_client_send_with_body.wado/http_client_send_with_body.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "http_client_send_with_body.wado/http_client_send_with_body.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "http_client_send_with_body.wado/__cm_export__handle" as "handle"

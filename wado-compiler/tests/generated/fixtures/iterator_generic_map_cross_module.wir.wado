@@ -123,7 +123,7 @@ type "functype//./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_l
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(46)
 
-type "functype//iterator_generic_map_cross_module.wado/iterator_generic_map_cross_module.wado/__Closure_2::__call" = fn(ref "iterator_generic_map_cross_module.wado//__Closure_2", i32) -> i32;  // TypeId(47)
+type "functype//iterator_generic_map_cross_module.wado/iterator_generic_map_cross_module.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(47)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
 
@@ -631,14 +631,12 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::nex
     return 0, item;
 }
 
-fn "iterator_generic_map_cross_module.wado/iterator_generic_map_cross_module.wado/__Closure_2::__call"(self, x) {
+fn "iterator_generic_map_cross_module.wado/iterator_generic_map_cross_module.wado/__Closure_2::__call"(x) {
     return x * 10;
 }
 
 fn "closure/iterator_generic_map_cross_module.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "iterator_generic_map_cross_module.wado//__Closure_2";
-    __typed_env = ref.cast "iterator_generic_map_cross_module.wado//__Closure_2"(__env);
-    return "iterator_generic_map_cross_module.wado/iterator_generic_map_cross_module.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "iterator_generic_map_cross_module.wado/iterator_generic_map_cross_module.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "iterator_generic_map_cross_module.wado/__cm_export__run" as "run"

@@ -1209,7 +1209,6 @@ fn "http_fields_immutable_errors.wado/__cm_binding__Fields_set"(self, name, valu
     let __value_base: i32;
     let __value_i: i32;
     let __value_addr: i32;
-    let __list_len: i32;
     let __list_base: i32;
     let __list_i: i32;
     let __list_addr: i32;
@@ -1226,6 +1225,7 @@ fn "http_fields_immutable_errors.wado/__cm_binding__Fields_set"(self, name, valu
     let len_44: i32;
     let arr: ref Array<u8>;
     let _licm_repr_47: ref "Array<core:prelude/list.wado/List<u8>>";
+    let __sroa___value_elem_used: i32;
     __name_packed = "core:rt/cm_lower_string"(name);
     __value_len = value.used;
     __value_base = "mem/realloc"(0, 0, 4, __value_len * 8);
@@ -1243,12 +1243,12 @@ fn "http_fields_immutable_errors.wado/__cm_binding__Fields_set"(self, name, valu
             let __array_clone_dst_4: ref Array<u8>;
             __array_clone_dst_4 = builtin::array_new<u8>(__array_clone_len_4);
             builtin::array_copy<u8>(__array_clone_dst_4, 0, __array_clone_src_4, 0, __array_clone_len_4);
-            __list_len = v.used;
-            __list_base = "mem/realloc"(0, 0, 1, __list_len * 1);
+            __sroa___value_elem_used = v.used;
+            __list_base = "mem/realloc"(0, 0, 1, __sroa___value_elem_used * 1);
             __list_i = 0;
             b109: block {
                 l110: loop {
-                    break_if b109 __list_i >= __list_len;
+                    break_if b109 __list_i >= __sroa___value_elem_used;
                     __list_addr = __list_base + (__list_i * 1);
                     __list_elem = builtin::array_get<u8>(__array_clone_dst_4, __list_i);
                     builtin::store_u8(__list_addr, __list_elem);
@@ -1257,7 +1257,7 @@ fn "http_fields_immutable_errors.wado/__cm_binding__Fields_set"(self, name, valu
                 };
             };
             builtin::store_i32(__value_addr, __list_base);
-            builtin::store_i32(__value_addr + 4, __list_len);
+            builtin::store_i32(__value_addr + 4, __sroa___value_elem_used);
             __value_i = __value_i + 1;
             continue l108;
         };

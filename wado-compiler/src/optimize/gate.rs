@@ -216,6 +216,12 @@ impl FunctionGate {
     /// gate when `f` reports a change. Returns whether any function changed.
     /// `len` is the current function count (read once; these passes do not add
     /// functions mid-pass).
+    /// Whether any function in `0..len` is still dirty for `pass`. Lets a
+    /// caller skip whole-program work it would only need inside the loop.
+    pub fn any_pending(&mut self, pass: GatedPass, len: usize) -> bool {
+        (0..len).any(|i| self.needs(pass, FuncId::new(i)))
+    }
+
     pub fn run_gated(
         &mut self,
         pass: GatedPass,

@@ -495,23 +495,21 @@ fn "stream_http_echo.wado/handle"(request) {
     let __pattern_temp_4: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let __match_191: ref null "core:prelude//List<u8>";
     let packed_192: i64;
-    let rx_193: i32;
-    let tx_194: i32;
     let packed_199: i64;
     let rx_200: i32;
     let tx_201: i32;
     let packed_202: i64;
     let rx_203: i32;
     let tx_204: i32;
+    let __sroa___pattern_temp_0_0: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stream_http_echo.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:stream_http_echo.wado::__modules_initialized = 1;
     };
-    rx_193 = builtin::i32_wrap_i64(local.tee packed_192("wasi/future-new:transmission-http"()));
-    drop(local.tee tx_194(builtin::i32_wrap_i64(packed_192 >> 32_i64)));
-    __pattern_temp_1 = "stream_http_echo.wado/__cm_binding__Request_consume_body"(request, rx_193);
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed_192("wasi/future-new:transmission-http"()));
+    __pattern_temp_1 = "stream_http_echo.wado/__cm_binding__Request_consume_body"(request, __sroa___pattern_temp_0_0);
     body_stream = __pattern_temp_1.0;
     chunks = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: builtin::array_new<ref "core:prelude//List<u8>">(0), used: 0 };
     b0: block {

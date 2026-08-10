@@ -682,70 +682,147 @@ impl ValuePool {
         v
     }
 
-    /// Every local index named by an `OpaqueSource::Local` (a promoted value
-    /// extracted as `local.get idx`). A pass that decides a local is unused must
-    /// treat these as reads — the read lives in the value pool, not the skeleton.
-    pub fn opaque_local_sources(&self) -> impl Iterator<Item = u32> + '_ {
-        self.opaque_sources.values().filter_map(|s| match s {
-            OpaqueSource::Local(idx) => Some(*idx),
-            OpaqueSource::Expr(_) => None,
-        })
-    }
-
     /// Collect into `out` every local index named by an `Opaque(Local)`
     /// reachable from value `v` — the locals a promoted value reads when
     /// extracted (a leaf `Opaque(Local)` is `local.get idx`). Recurses the pure
     /// value tree; a `FieldAccess` reads its receiver's locals.
     pub fn collect_opaque_locals(&self, v: ValueId, out: &mut IndexSet<u32>) {
-        // Worklist with a visited set, not recursion: an induction `LoopPhi` is
-        // self-referential (`body_iter` = `binary(phi, step)`), so a recursive walk
-        // would not terminate. The visited set bounds the traversal at each value's
-        // canonical id.
+        self.collect_opaque_locals_seen(v, &mut IndexSet::default(), out);
+    }
+
+    /// How many pure-value children `v` has — zero for a leaf. Lets a walk
+    /// answer a leaf without allocating a worklist.
+    fn child_count(&self, v: ValueId) -> usize {
+        match self.kind(v) {
+            ValueKind::Binary { .. } | ValueKind::LoopPhi { .. } => 2,
+            ValueKind::Unary { .. } | ValueKind::Cast { .. } | ValueKind::FieldAccess { .. } => 1,
+            ValueKind::Select { .. } => 3,
+            ValueKind::Opaque(_)
+            | ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::Const(..) => 0,
+        }
+    }
+
+    /// Push the pure-value children of `v` — the edges both leaf walks follow.
+    /// An `Opaque` is a leaf: it stands for what the graph cannot reconstruct.
+    fn push_value_children(&self, v: ValueId, stack: &mut Vec<ValueId>) {
+        match self.kind(v) {
+            ValueKind::Binary { lhs, rhs, .. } => {
+                stack.push(*lhs);
+                stack.push(*rhs);
+            }
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                stack.push(*operand);
+            }
+            ValueKind::Select { cond, then, else_ } => {
+                stack.push(*cond);
+                stack.push(*then);
+                stack.push(*else_);
+            }
+            ValueKind::LoopPhi { entry, body_iter } => {
+                stack.push(*entry);
+                stack.push(*body_iter);
+            }
+            ValueKind::FieldAccess { receiver, .. } => stack.push(*receiver),
+            ValueKind::Opaque(_)
+            | ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::Const(..) => {}
+        }
+    }
+
+    /// Whether an `Opaque(Local idx)` is reachable from `v` — i.e. the promoted
+    /// value reads local `idx` when extracted. The early-exit form of
+    /// [`ValuePool::collect_opaque_locals`], for the "does this mention the
+    /// local?" guards that decide whether a rewrite may move or drop code.
+    pub fn value_reads_local(&self, v: ValueId, idx: u32) -> bool {
+        if self.child_count(v) == 0 {
+            return matches!(self.kind(v), ValueKind::Opaque(oid)
+                if self.opaque_source(*oid) == Some(OpaqueSource::Local(idx)));
+        }
         let mut stack = vec![v];
         let mut seen: IndexSet<ValueId> = IndexSet::default();
         while let Some(v) = stack.pop() {
             if !seen.insert(v) {
                 continue;
             }
-            match self.kind(v).clone() {
-                ValueKind::Opaque(oid) => {
-                    if let Some(OpaqueSource::Local(idx)) = self.opaque_source(oid) {
-                        out.insert(idx);
-                    }
+            if let ValueKind::Opaque(oid) = self.kind(v) {
+                if self.opaque_source(*oid) == Some(OpaqueSource::Local(idx)) {
+                    return true;
                 }
-                ValueKind::Binary { lhs, rhs, .. } => {
-                    stack.push(lhs);
-                    stack.push(rhs);
-                }
-                ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
-                    stack.push(operand);
-                }
-                ValueKind::Select { cond, then, else_ } => {
-                    stack.push(cond);
-                    stack.push(then);
-                    stack.push(else_);
-                }
-                ValueKind::LoopPhi { entry, body_iter } => {
-                    stack.push(entry);
-                    stack.push(body_iter);
-                }
-                ValueKind::FieldAccess { receiver, .. } => stack.push(receiver),
-                _ => {}
+                continue;
             }
+            self.push_value_children(v, &mut stack);
+        }
+        false
+    }
+
+    /// [`ValuePool::collect_opaque_locals`] carrying its visited set across
+    /// calls. A census over many operands shares one `seen`, so a value the
+    /// graph hash-conses into several operands is walked once: skipping it the
+    /// second time loses nothing, since its locals are already in `out`.
+    pub fn collect_opaque_locals_seen(
+        &self,
+        v: ValueId,
+        seen: &mut IndexSet<ValueId>,
+        out: &mut IndexSet<u32>,
+    ) {
+        // Worklist with a visited set, not recursion: an induction `LoopPhi` is
+        // self-referential (`body_iter` = `binary(phi, step)`), so a recursive walk
+        // would not terminate. The visited set bounds the traversal at each value's
+        // canonical id.
+        let mut stack = vec![v];
+        while let Some(v) = stack.pop() {
+            if !seen.insert(v) {
+                continue;
+            }
+            if let ValueKind::Opaque(oid) = self.kind(v) {
+                if let Some(OpaqueSource::Local(idx)) = self.opaque_source(*oid) {
+                    out.insert(idx);
+                }
+                continue;
+            }
+            self.push_value_children(v, &mut stack);
         }
     }
 
     /// Remap every `OpaqueSource::Local` index through `remap` (old → new).
     /// A pass that renumbers a body's locals must call this so a promoted
     /// `Opaque` value (extracted as `local.get idx`) still names the right slot.
-    /// A `None` entry marks a dropped local; a `Local` source pointing at one is
-    /// a bug (a live promoted value reads a dead local), so it panics.
+    ///
+    /// A `None` entry marks a dropped local. The pool is append-only, so a
+    /// source naming one is the residue of a promoted read that folded away —
+    /// the caller drops a local only when no reachable operand reads it
+    /// ([`crate::optimize::arena_query::promoted_local_reads`]). Such a source
+    /// is cleared rather than remapped: the value is unreachable, and clearing
+    /// it turns any use into the "no recorded extraction source" panic at WIR
+    /// build instead of a silent read of the wrong slot. The canonical-local
+    /// cache is keyed by index, so it renumbers alongside.
     pub fn remap_opaque_locals(&mut self, remap: &[Option<u32>]) {
-        for src in self.opaque_sources.values_mut() {
-            if let OpaqueSource::Local(idx) = src {
-                *idx = remap[*idx as usize].expect("promoted Opaque reads a local DAE dropped");
-            }
-        }
+        self.canonical_locals = self
+            .canonical_locals
+            .iter()
+            .filter_map(|(&idx, &v)| remap[idx as usize].map(|new| (new, v)))
+            .collect();
+        self.opaque_sources.retain(|_, src| match src {
+            OpaqueSource::Local(idx) => match remap[*idx as usize] {
+                Some(new) => {
+                    *idx = new;
+                    true
+                }
+                None => false,
+            },
+            OpaqueSource::Expr(_) => true,
+        });
     }
 
     /// Whether `id`'s value can be re-emitted by the extractor purely from the
@@ -1083,6 +1160,26 @@ mod tests {
         let pool = ValuePool::new();
         assert_eq!(pool.len(), 0);
         assert!(pool.is_empty());
+    }
+
+    /// DAE renumbers the locals it keeps and drops the rest. A source naming a
+    /// dropped local belongs to a value no reachable operand carries — the pool
+    /// is append-only — so it is cleared, not remapped onto a live slot.
+    #[test]
+    fn remap_opaque_locals_clears_a_source_naming_a_dropped_local() {
+        let mut pool = ValuePool::new();
+        let kept = pool.canonical_local(1, TypeTable::I32);
+        let dropped = pool.canonical_local(2, TypeTable::I32);
+        let opaque_of = |pool: &ValuePool, v| match pool.kind(v) {
+            ValueKind::Opaque(oid) => *oid,
+            other => panic!("canonical_local is an Opaque, got {other:?}"),
+        };
+        let (kept_oid, dropped_oid) = (opaque_of(&pool, kept), opaque_of(&pool, dropped));
+
+        pool.remap_opaque_locals(&[None, Some(0), None]);
+
+        assert_eq!(pool.opaque_source(kept_oid), Some(OpaqueSource::Local(0)));
+        assert_eq!(pool.opaque_source(dropped_oid), None);
     }
 
     #[test]

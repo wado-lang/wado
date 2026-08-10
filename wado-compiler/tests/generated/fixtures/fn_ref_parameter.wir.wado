@@ -111,9 +111,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::wri
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(45)
 
-type "functype//fn_ref_parameter.wado/fn_ref_parameter.wado/__Closure_3::__call" = fn(ref "fn_ref_parameter.wado//__Closure_3", i32) -> i32;  // TypeId(46)
+type "functype//fn_ref_parameter.wado/fn_ref_parameter.wado/__Closure_3::__call" = fn(i32) -> i32;  // TypeId(46)
 
-type "functype//fn_ref_parameter.wado/fn_ref_parameter.wado/__Closure_6::__call" = fn(ref "fn_ref_parameter.wado//__Closure_6", i32) -> i32;  // TypeId(47)
+type "functype//fn_ref_parameter.wado/fn_ref_parameter.wado/__Closure_6::__call" = fn(i32) -> i32;  // TypeId(47)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
 
@@ -574,24 +574,20 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "fn_ref_parameter.wado/fn_ref_parameter.wado/__Closure_3::__call"(self, n) {
+fn "fn_ref_parameter.wado/fn_ref_parameter.wado/__Closure_3::__call"(n) {
     return n * 2;
 }
 
-fn "fn_ref_parameter.wado/fn_ref_parameter.wado/__Closure_6::__call"(self, n) {
+fn "fn_ref_parameter.wado/fn_ref_parameter.wado/__Closure_6::__call"(n) {
     return n * 2;
 }
 
 fn "closure/fn_ref_parameter.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "fn_ref_parameter.wado//__Closure_3";
-    __typed_env = ref.cast "fn_ref_parameter.wado//__Closure_3"(__env);
-    return "fn_ref_parameter.wado/fn_ref_parameter.wado/__Closure_3::__call"(__typed_env, __p0);
+    return "fn_ref_parameter.wado/fn_ref_parameter.wado/__Closure_3::__call"(__p0);
 }
 
 fn "closure/fn_ref_parameter.wado/__closure_wrapper_1"(__env, __p0) {
-    let __typed_env: ref "fn_ref_parameter.wado//__Closure_6";
-    __typed_env = ref.cast "fn_ref_parameter.wado//__Closure_6"(__env);
-    return "fn_ref_parameter.wado/fn_ref_parameter.wado/__Closure_6::__call"(__typed_env, __p0);
+    return "fn_ref_parameter.wado/fn_ref_parameter.wado/__Closure_6::__call"(__p0);
 }
 
 export fn "fn_ref_parameter.wado/__cm_export____test_0_bare_name_to_fn_parameter" as "__test_0_bare_name_to_fn_parameter"

@@ -250,7 +250,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(85)
 
-type "functype//effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/BaseStream^StreamWritable<u8>::write" = fn(ref "effect_handler_resource_stream_self_delegation.wado//BaseStream", i32, ref "core:prelude//List<u8>");  // TypeId(86)
+type "functype//effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/BaseStream^StreamWritable<u8>::write" = fn(ref "effect_handler_resource_stream_self_delegation.wado//BaseStream", ref "core:prelude//List<u8>");  // TypeId(86)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(87)
 
@@ -266,13 +266,13 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = 
 
 type "functype//effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_2::__call" = fn() -> ref "tuple//[Stream<u8>, StreamWritable<u8>]";  // TypeId(93)
 
-type "functype//effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_3::__call" = fn(ref "effect_handler_resource_stream_self_delegation.wado//__Closure_3", i32, i32) -> ref "core:prelude//List<u8>";  // TypeId(94)
+type "functype//effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_3::__call" = fn(ref "effect_handler_resource_stream_self_delegation.wado//__Closure_3") -> ref "core:prelude//List<u8>";  // TypeId(94)
 
 type "functype//effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_4::__call" = fn();  // TypeId(95)
 
 type "functype//effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_5::__call" = fn();  // TypeId(96)
 
-type "functype//effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_6::__call" = fn(ref "effect_handler_resource_stream_self_delegation.wado//__Closure_6", i32, ref "core:prelude//List<u8>");  // TypeId(97)
+type "functype//effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_6::__call" = fn(ref "effect_handler_resource_stream_self_delegation.wado//__Closure_6", ref "core:prelude//List<u8>");  // TypeId(97)
 
 type "functype//effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_7::__call" = fn();  // TypeId(98)
 
@@ -912,18 +912,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_uncheck
     builtin::array_set_u8(self.repr, start, byte);
 }
 
-fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/BaseStream^StreamWritable<u8>::write"(self, this, data) {
+fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/BaseStream^StreamWritable<u8>::write"(self, data) {
     let __iter_3: ref "core:prelude/slice.wado//ArrayIter<u8>";
-    let _licm_buf_10: ref "core:prelude//List<u8>";
+    let _licm_buf_9: ref "core:prelude//List<u8>";
     __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: data.repr, index: 0, end: data.used };
-    _licm_buf_10 = self.buf;
+    _licm_buf_9 = self.buf;
     b38: block {
         l39: loop {
             let __match_5_mv_0: i32;
             let __match_5_mv_1: u8;
             multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(__iter_3);
             if __match_5_mv_0 == 0 {
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(_licm_buf_10, __match_5_mv_1);
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(_licm_buf_9, __match_5_mv_1);
             } else {
                 break b38;
             }
@@ -1068,10 +1068,10 @@ fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_
     return struct.new "tuple//[Stream<u8>, StreamWritable<u8>]" { 0: 0, 1: 0 };
 }
 
-fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_3::__call"(self_0, self_1, max) {
-    let self_3: ref "effect_handler_resource_stream_self_delegation.wado//BaseStream";
+fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_3::__call"(self) {
+    let self_1: ref "effect_handler_resource_stream_self_delegation.wado//BaseStream";
     let snapshot: ref "core:prelude//List<u8>";
-    return self_3 = self_0.__capture_0, snapshot = self_3.buf, self_3.buf = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 }, snapshot;
+    return self_1 = self.__capture_0, snapshot = self_1.buf, self_1.buf = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 }, snapshot;
 }
 
 fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_4::__call"() {
@@ -1081,8 +1081,8 @@ fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_
 fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_5::__call"() {
 }
 
-fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_6::__call"(self_0, self_1, data) {
-    "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/BaseStream^StreamWritable<u8>::write"(self_0.__capture_0, self_1, data);
+fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_6::__call"(self, data) {
+    "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/BaseStream^StreamWritable<u8>::write"(self.__capture_0, data);
 }
 
 fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_7::__call"() {
@@ -1141,7 +1141,7 @@ fn "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrappe
 fn "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_1"(__env, __p0, __p1) {
     let __typed_env: ref "effect_handler_resource_stream_self_delegation.wado//__Closure_3";
     __typed_env = ref.cast "effect_handler_resource_stream_self_delegation.wado//__Closure_3"(__env);
-    return "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_3::__call"(__typed_env, __p0, __p1);
+    return "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_3::__call"(__typed_env);
 }
 
 fn "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_2"(__env, __p0) {
@@ -1155,7 +1155,7 @@ fn "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrappe
 fn "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_4"(__env, __p0, __p1) {
     let __typed_env: ref "effect_handler_resource_stream_self_delegation.wado//__Closure_6";
     __typed_env = ref.cast "effect_handler_resource_stream_self_delegation.wado//__Closure_6"(__env);
-    "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_6::__call"(__typed_env, __p0, __p1);
+    "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/__Closure_6::__call"(__typed_env, __p1);
 }
 
 fn "closure/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_5"(__env, __p0, __p1) {

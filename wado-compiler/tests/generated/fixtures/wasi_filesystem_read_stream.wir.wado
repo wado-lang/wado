@@ -237,7 +237,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:p
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::grow" = fn(ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>");  // TypeId(74)
 
-type "functype//wasi_filesystem_read_stream.wado/wasi_filesystem_read_stream.wado/__Closure_2::__call" = fn(ref "wasi_filesystem_read_stream.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(75)
+type "functype//wasi_filesystem_read_stream.wado/wasi_filesystem_read_stream.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(75)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(76)
 
@@ -1146,14 +1146,12 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
     self.repr = new_repr;
 }
 
-fn "wasi_filesystem_read_stream.wado/wasi_filesystem_read_stream.wado/__Closure_2::__call"(self, __outptr) {
+fn "wasi_filesystem_read_stream.wado/wasi_filesystem_read_stream.wado/__Closure_2::__call"(__outptr) {
     return "wasi_filesystem_read_stream.wado/__cm_lift__Descriptor_open_at"(__outptr);
 }
 
 fn "closure/wasi_filesystem_read_stream.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "wasi_filesystem_read_stream.wado//__Closure_2";
-    __typed_env = ref.cast "wasi_filesystem_read_stream.wado//__Closure_2"(__env);
-    return "wasi_filesystem_read_stream.wado/wasi_filesystem_read_stream.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "wasi_filesystem_read_stream.wado/wasi_filesystem_read_stream.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "wasi_filesystem_read_stream.wado/__cm_export__run" as "run"

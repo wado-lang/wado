@@ -6,6 +6,9 @@
 // `Factory^Maker::make` returns a heap `Pair`, but its only call site drops the
 // result. Before the relaxation the `trait_name.is_some()` pin blocked it and
 // the method kept returning `Pair`; now DRVE voids the return.
+//
+// Voiding it kills the body — the `Pair` it built was the return value — so both
+// parameters are unread and DAE takes them too: the method ends up `fn()`.
 
 use { println, Stdout } from "core:cli";
 
@@ -38,6 +41,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "done\n",
-    "wir_expect:O2": ["Maker::make\" = fn(ref \"opt_drve_trait_method.wado//Factory\", i32);"],
+    "wir_expect:O2": ["Maker::make\" = fn();"],
     "wir_not_expect:O2": ["Maker::make\" = fn(ref \"opt_drve_trait_method.wado//Factory\", i32) -> ref"]
 }

@@ -573,7 +573,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^FromItera
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(161)
 
-type "functype//http_client_request_full.wado/http_client_request_full.wado/__Closure_2::__call" = fn(ref "http_client_request_full.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(162)
+type "functype//http_client_request_full.wado/http_client_request_full.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(162)
 
 type "functype//core:prelude/primitive.wado/u64::fmt_base$spec0" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(163)
 
@@ -877,8 +877,6 @@ fn "http_client_request_full.wado/handle"(request) with Client {
     let __vc_payload_0: i32;
     let __vc_payload_1: ref "wasi:http/types.wado//ErrorCode";
     let packed_261: i64;
-    let rx_262: i32;
-    let tx_263: i32;
     let collected: ref "core:prelude//List<u8>";
     let self_267: ref "core:prelude/slice.wado//ArrayIter<u8>";
     let packed_270: i64;
@@ -888,6 +886,7 @@ fn "http_client_request_full.wado/handle"(request) with Client {
     let rx_274: i32;
     let tx_275: i32;
     let self_277: ref "core:prelude/string.wado//StrUtf8ByteIter";
+    let __sroa___pattern_temp_2_0: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:http_client_request_full.wado::__modules_initialized);
         cold_path;
@@ -1024,9 +1023,8 @@ fn "http_client_request_full.wado/handle"(request) with Client {
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("send failed"), used: 11 });
         unreachable;
     });
-    rx_262 = builtin::i32_wrap_i64(local.tee packed_261("wasi/future-new:transmission-http"()));
-    drop(local.tee tx_263(builtin::i32_wrap_i64(packed_261 >> 32_i64)));
-    __pattern_temp_3 = "http_client_request_full.wado/__cm_binding__Response_consume_body"(upstream, rx_262);
+    __sroa___pattern_temp_2_0 = builtin::i32_wrap_i64(local.tee packed_261("wasi/future-new:transmission-http"()));
+    __pattern_temp_3 = "http_client_request_full.wado/__cm_binding__Response_consume_body"(upstream, __sroa___pattern_temp_2_0);
     body_stream = __pattern_temp_3.0;
     body = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     b18: block {
@@ -3685,7 +3683,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next
     return 0, item;
 }
 
-fn "http_client_request_full.wado/http_client_request_full.wado/__Closure_2::__call"(self, __outptr) {
+fn "http_client_request_full.wado/http_client_request_full.wado/__Closure_2::__call"(__outptr) {
     return "http_client_request_full.wado/__cm_lift__Client_send"(__outptr);
 }
 
@@ -3727,9 +3725,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "closure/http_client_request_full.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "http_client_request_full.wado//__Closure_2";
-    __typed_env = ref.cast "http_client_request_full.wado//__Closure_2"(__env);
-    return "http_client_request_full.wado/http_client_request_full.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "http_client_request_full.wado/http_client_request_full.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "http_client_request_full.wado/__cm_export__handle" as "handle"

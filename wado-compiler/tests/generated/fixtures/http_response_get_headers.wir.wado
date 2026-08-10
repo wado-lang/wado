@@ -568,8 +568,7 @@ fn "http_response_get_headers.wado/handle"(request) {
     };
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     tx = builtin::i32_wrap_i64(packed >> 32_i64);
-    headers = "http_response_get_headers.wado/__cm_binding__Fields_new"();
-    drop("http_response_get_headers.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-check"), used: 7 }, global:http_response_get_headers.wado::__const_obj_6));
+    drop("http_response_get_headers.wado/__cm_binding__Fields_append"(local.tee headers("http_response_get_headers.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-check"), used: 7 }, global:http_response_get_headers.wado::__const_obj_6));
     __pattern_temp_1 = "http_response_get_headers.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx);
     __v0 = "http_response_get_headers.wado/__cm_binding__Fields_has"(local.tee resp_headers("http_response_get_headers.wado/__cm_binding__Response_get_headers"(local.tee response(__pattern_temp_1.0))), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-check"), used: 7 });
     if @unlikely(__v0 == 0) {

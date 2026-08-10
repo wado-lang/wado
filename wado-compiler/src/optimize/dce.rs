@@ -1718,8 +1718,16 @@ impl DceAnalysis {
                     self.enum_exact
                         .insert((name.clone(), module_source.clone()));
                 }
-                ResolvedType::GenericInstance { name, .. } => {
+                ResolvedType::GenericInstance {
+                    name, type_args, ..
+                } => {
                     self.generic_instance_names.insert(name.clone());
+                    // The spelling a live `Struct` with type args records, so
+                    // `keeps_struct` recognises the monomorph either way: a dead
+                    // local still declares its type, and `wir_build` declares a
+                    // Wasm local for it.
+                    self.struct_monomorph_names
+                        .insert(type_table.struct_rendered_name(name, type_args));
                 }
                 _ => {}
             }
@@ -2108,9 +2116,10 @@ fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
     collect.0
 }
 
-/// Locals some reachable expression mentions. A binding absent here is never
-/// read: an assignment target, a borrow and a capture all mention their local,
-/// so the census over-approximates and only ever keeps a statement alive.
+/// Locals some reachable node mentions, skeleton and value pool alike. A
+/// binding absent here is never read: an assignment target, a borrow and a
+/// capture all mention their local, so the census over-approximates and only
+/// ever keeps a statement alive.
 fn mentioned_locals(body: &Body) -> IndexSet<u32> {
     let mut out = IndexSet::default();
     for e in crate::nir_visitor::reachable_exprs(body) {
@@ -2118,6 +2127,7 @@ fn mentioned_locals(body: &Body) -> IndexSet<u32> {
             out.insert(*index);
         }
     }
+    super::arena_query::promoted_local_reads(body, &mut out);
     out
 }
 
@@ -2150,7 +2160,7 @@ fn global_reads_in(body: &Body, expr: ExprId) -> Vec<(ExprId, (String, String))>
 /// literal aggregate. Failing that the tree is walked: it refuses every call on
 /// sight, while the initializer globalization hoists for a reflect member walk
 /// *is* a call, so each one is answered by its whole-function summary instead.
-fn deletable_value(
+pub(super) fn deletable_value(
     body: &Body,
     value: Operand,
     types: &TypeTable,
@@ -2362,8 +2372,28 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
                     &effects,
                 );
             }
+            debug_assert!(
+                !reads_any_global(body, &unobserved),
+                "[NIR] unhoist_unobserved_globals: a global lost its store while a \
+                 read of it survived"
+            );
         }
     }
+}
+
+/// Whether a reachable expression still reads one of `globals`. The pass drops
+/// each one's guard and store, so a surviving read would see the uninitialized
+/// slot.
+fn reads_any_global(body: &Body, globals: &IndexSet<(String, String)>) -> bool {
+    crate::nir_visitor::reachable_exprs(body)
+        .into_iter()
+        .any(|e| match &body.exprs[e].kind {
+            ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => globals.contains(&(module_source.to_path().join("::"), name.clone())),
+            _ => false,
+        })
 }
 
 /// Every block reachable from the body root. The drop below must see the same
@@ -2585,6 +2615,8 @@ fn remove_dead_global_sets_expr(
 mod tests {
     use super::*;
     use crate::module_source::ModuleSourceInterner;
+    use crate::nir_arena::BlockNode;
+    use crate::token::Span;
 
     fn free_fn(interner: &mut ModuleSourceInterner, name: &str) -> FunctionId {
         FunctionId::Free(FreeFunctionName::from_strs(interner, &["test"], name))
@@ -2623,5 +2655,45 @@ mod tests {
         assert!(reachable.contains(&free_fn(&mut interner, "foo")));
         assert!(reachable.contains(&free_fn(&mut interner, "bar")));
         assert!(!reachable.contains(&free_fn(&mut interner, "unused")));
+    }
+
+    /// A statement whose value is a promoted read of `local_index`, plus the
+    /// block holding it.
+    fn body_reading_promoted_local(local_index: u32) -> (Body, StmtId) {
+        let mut body = Body::empty();
+        let value = body.values.canonical_local(local_index, TypeId(0));
+        let stmt = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Value(value)),
+            span: Span::default(),
+        });
+        body.root = body.blocks.push(BlockNode {
+            stmts: vec![stmt],
+            span: Span::default(),
+        });
+        (body, stmt)
+    }
+
+    #[test]
+    fn mentioned_locals_sees_a_local_read_through_a_promoted_value() {
+        let (body, _) = body_reading_promoted_local(3);
+        assert!(
+            mentioned_locals(&body).contains(&3),
+            "a read living in the value pool is still a read"
+        );
+    }
+
+    #[test]
+    fn mentioned_locals_ignores_a_promoted_value_no_reachable_slot_carries() {
+        let (mut body, live) = body_reading_promoted_local(3);
+        let stale = body.values.canonical_local(4, TypeId(0));
+        body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Value(stale)),
+            span: Span::default(),
+        });
+        body.blocks[body.root].stmts = vec![live];
+
+        let mentioned = mentioned_locals(&body);
+        assert!(mentioned.contains(&3));
+        assert!(!mentioned.contains(&4));
     }
 }

@@ -131,7 +131,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" =
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(50)
 
-type "functype//iterator_assoc_type_chain.wado/iterator_assoc_type_chain.wado/__Closure_2::__call" = fn(ref "iterator_assoc_type_chain.wado//__Closure_2", i32) -> bool;  // TypeId(51)
+type "functype//iterator_assoc_type_chain.wado/iterator_assoc_type_chain.wado/__Closure_2::__call" = fn(i32) -> bool;  // TypeId(51)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
 
@@ -682,14 +682,12 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^Iterator::nex
     return 0, item;
 }
 
-fn "iterator_assoc_type_chain.wado/iterator_assoc_type_chain.wado/__Closure_2::__call"(self, x) {
+fn "iterator_assoc_type_chain.wado/iterator_assoc_type_chain.wado/__Closure_2::__call"(x) {
     return (x % 2) == 0;
 }
 
 fn "closure/iterator_assoc_type_chain.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "iterator_assoc_type_chain.wado//__Closure_2";
-    __typed_env = ref.cast "iterator_assoc_type_chain.wado//__Closure_2"(__env);
-    return "iterator_assoc_type_chain.wado/iterator_assoc_type_chain.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "iterator_assoc_type_chain.wado/iterator_assoc_type_chain.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "iterator_assoc_type_chain.wado/__cm_export__run" as "run"

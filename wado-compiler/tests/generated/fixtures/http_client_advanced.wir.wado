@@ -529,7 +529,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^FromItera
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(149)
 
-type "functype//http_client_advanced.wado/http_client_advanced.wado/__Closure_2::__call" = fn(ref "http_client_advanced.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(150)
+type "functype//http_client_advanced.wado/http_client_advanced.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(150)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(151)
 
@@ -655,13 +655,11 @@ fn "http_client_advanced.wado/read_body"(resp) {
     let text: ref "core:prelude/string.wado//String";
     let __pattern_temp_1: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";
     let packed: i64;
-    let rx: i32;
-    let tx: i32;
     let collected: ref "core:prelude//List<u8>";
     let self_18: ref "core:prelude/slice.wado//ArrayIter<u8>";
-    rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new:transmission-http"()));
-    drop(local.tee tx(builtin::i32_wrap_i64(packed >> 32_i64)));
-    __pattern_temp_1 = "http_client_advanced.wado/__cm_binding__Response_consume_body"(resp, rx);
+    let __sroa___pattern_temp_0_0: i32;
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/future-new:transmission-http"()));
+    __pattern_temp_1 = "http_client_advanced.wado/__cm_binding__Response_consume_body"(resp, __sroa___pattern_temp_0_0);
     body_stream = __pattern_temp_1.0;
     result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     b2: block {
@@ -3120,14 +3118,12 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next
     return 0, item;
 }
 
-fn "http_client_advanced.wado/http_client_advanced.wado/__Closure_2::__call"(self, __outptr) {
+fn "http_client_advanced.wado/http_client_advanced.wado/__Closure_2::__call"(__outptr) {
     return "http_client_advanced.wado/__cm_lift__Client_send"(__outptr);
 }
 
 fn "closure/http_client_advanced.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "http_client_advanced.wado//__Closure_2";
-    __typed_env = ref.cast "http_client_advanced.wado//__Closure_2"(__env);
-    return "http_client_advanced.wado/http_client_advanced.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "http_client_advanced.wado/http_client_advanced.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "http_client_advanced.wado/__cm_export__handle" as "handle"

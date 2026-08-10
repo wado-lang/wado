@@ -94,6 +94,16 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
     let descriptors = build_callee_descriptors(project);
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
+    // Only a body with a loop is versioned, so a program with none pays nothing.
+    let effects = if project
+        .functions
+        .iter()
+        .any(|f| f.borrow().body.as_ref().is_some_and(body_contains_loop))
+    {
+        super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry)
+    } else {
+        Vec::new()
+    };
     let type_table = project.type_table.borrow();
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
@@ -140,7 +150,7 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
 
         // Sweep the deleted checks' residue: the `if false { panic }` shells
         // and any now-write-only condition temps.
-        let elide_rule = ElideRule::new(&stores_aliased);
+        let elide_rule = ElideRule::new(&stores_aliased, &effects);
         let prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
         let rules: [&dyn Rule; 2] = [&prune_rule, &elide_rule];
         engine.run(&rules);

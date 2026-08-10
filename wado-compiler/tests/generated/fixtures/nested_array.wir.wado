@@ -412,7 +412,6 @@ fn "nested_array.wado/nested_array_mutate_test"() with Stdout {
 
 fn "nested_array.wado/nested_array_option_access_test"() with Stdout {
     let a: ref "core:prelude/types.wado//Option<i32>";
-    let b: ref "core:prelude/types.wado//Option<i32>";
     let c: ref "core:prelude/types.wado//Option<i32>";
     let arr: ref "core:prelude//List<core:prelude/types.wado/Option<i32>>";
     let __iter_6: ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>";
@@ -438,9 +437,8 @@ fn "nested_array.wado/nested_array_option_access_test"() with Stdout {
     let start_156: i32;
     let start_170: i32;
     a = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 };
-    b = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     c = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 99 };
-    arr = struct.new "core:prelude//List<core:prelude/types.wado/Option<i32>>" { repr: array.new_fixed<ref "core:prelude/types.wado//Option<i32>">(a, b, c), used: 3 };
+    arr = struct.new "core:prelude//List<core:prelude/types.wado/Option<i32>>" { repr: array.new_fixed<ref "core:prelude/types.wado//Option<i32>">(a, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, c), used: 3 };
     drop(builtin::array_get<ref "core:prelude/types.wado//Option<i32>">(arr.repr, 0));
     "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }; start_38 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_10, 1); builtin::array_set_u8(__local_10.repr, start_38, 102); start_47 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_10, 1); builtin::array_set_u8(__local_10.repr, start_47, 105); start_56 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_10, 1); builtin::array_set_u8(__local_10.repr, start_56, 114); start_65 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_10, 1); builtin::array_set_u8(__local_10.repr, start_65, 115); start_74 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_10, 1); builtin::array_set_u8(__local_10.repr, start_74, 116); start_83 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_10, 1); builtin::array_set_u8(__local_10.repr, start_83, 58); start_92 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_10, 1); builtin::array_set_u8(__local_10.repr, start_92, 32); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(42, __local_11); __local_10);
     __match_15 = builtin::array_get<ref "core:prelude/types.wado//Option<i32>">(arr.repr, 1);

@@ -47,7 +47,8 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 ## General Rules
 
 - Write all documentation and comments in English, and keep them concise — cut filler and low-information words.
-  - Comments: don't write them. Make them unnecessary through clear structure, naming, and function decomposition that make intent obvious.
+  - Comments: keep them to a minimum, and write none where none is needed. Make intent obvious through clear structure, naming, and function decomposition.
+  - Invariants: state them as assertions, not comments. An assert is checked; a comment goes stale.
   - Docs: keep them concise. Don't document implementation details.
 - Avoid ad-hoc workarounds. Write proper code based on a sound design.
 - Perform red/green TDD.

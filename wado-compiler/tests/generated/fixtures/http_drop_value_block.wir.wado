@@ -582,8 +582,7 @@ fn "http_drop_value_block.wado/handle"(request) {
     let __match_scrut_0: ref "wasi:http/types.wado//Method";
     __match_scrut_0 = "http_drop_value_block.wado/__cm_binding__Request_get_method"(request);
     probe_count = (if __match_scrut_0.discriminant == 0 -> i32 {
-        probe = "http_drop_value_block.wado/__cm_binding__Fields_new"();
-        drop("http_drop_value_block.wado/__cm_binding__Fields_append"(probe, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-probe"), used: 7 }, global:http_drop_value_block.wado::__const_obj_6));
+        drop("http_drop_value_block.wado/__cm_binding__Fields_append"(local.tee probe("http_drop_value_block.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-probe"), used: 7 }, global:http_drop_value_block.wado::__const_obj_6));
         __block_v_14 = select i32("http_drop_value_block.wado/__cm_binding__Fields_has"(probe, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-probe"), used: 7 }), 7, 0);
         "wasi/resource-drop:fields"(probe);
         __block_v_14;

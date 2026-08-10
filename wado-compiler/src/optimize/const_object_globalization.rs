@@ -59,7 +59,10 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-use super::arena_query::{collect_reads, expr_mentions_local, is_local, strip_refs};
+use super::arena_query::{
+    bare_promoted_reads, buried_promoted_reads, collect_reads, expr_mentions_local, is_local,
+    promoted_local_reads, reachable_nodes, strip_refs,
+};
 
 /// A hoisting candidate, identified by its owning function. Resolved in an
 /// immutable analysis phase, applied in a later mutation phase to avoid
@@ -209,6 +212,11 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
                      (local {local_index}) went missing between collection and mutation"
                 );
                 inline_sibling_lets(body, local_index, &sibling_lets, &module_source, &name);
+                debug_assert!(
+                    !reads_local(body, local_index),
+                    "[NIR] const_object_globalization: local {local_index} is still read \
+                     after its `let` became a `GlobalVarSet`"
+                );
             }
             CandidateKind::InlineRef { ref_expr } => {
                 hoist_inline_ref(
@@ -268,11 +276,10 @@ fn collect_candidates(
 ) {
     let single_decl_locals = locals_declared_once(body);
     let siblings = sibling_const_locals(body, gate, &single_decl_locals);
-    // Skeleton mentions only: the pool-wide `opaque_local_sources` cannot
-    // stand in for the missing pool reads, since the append-only pool also
-    // names locals whose promoted reads have long folded away.
     let mut read_locals = IndexSet::default();
     collect_reads(body, &mut read_locals);
+    promoted_local_reads(body, &mut read_locals);
+    let buried = buried_promoted_reads(body);
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
@@ -282,7 +289,8 @@ fn collect_candidates(
                 ..
             } = &body.stmts[s].kind
             && single_decl_locals.contains(local_index)
-            && let Some(sibling_lets) = let_stmt_qualifies(body, s, gate, &siblings, &read_locals)
+            && let Some(sibling_lets) =
+                let_stmt_qualifies(body, s, gate, &siblings, &read_locals, &buried)
         {
             // A sibling `let` moves into the initializer at mutation time,
             // so it decides the guard as much as the candidate's own value.
@@ -593,6 +601,7 @@ fn let_stmt_qualifies(
     gate: &Gate<'_>,
     siblings: &SiblingConsts,
     read_locals: &IndexSet<u32>,
+    buried: &IndexSet<u32>,
 ) -> Option<Vec<StmtId>> {
     let StmtKind::Let {
         local_index,
@@ -613,6 +622,9 @@ fn let_stmt_qualifies(
     // An unread binding is dead code on its way out, not a hoist target:
     // hoisting it manufactures a live global no WIR cleanup deletes.
     if !read_locals.contains(&local_index) {
+        return None;
+    }
+    if buried.contains(&local_index) {
         return None;
     }
     // A sibling-const read (the flattened builder-temp pair `let mut __b =
@@ -787,6 +799,10 @@ fn seeded_locals_read(body: &Body, value: Operand, siblings: &SiblingConsts) -> 
 }
 
 /// Tally reads of each local in `wanted` under `node`, in a single walk.
+/// How many times each wanted local is read under `node`, skeleton and value
+/// pool alike. The confinement check compares a whole-body count against an
+/// in-initializer one, so a read either walk misses would let a sibling escape
+/// unseen.
 fn count_reads_of(body: &Body, node: NodeRef, wanted: &IndexSet<u32>) -> IndexMap<u32, usize> {
     let mut counts: IndexMap<u32, usize> = IndexMap::default();
     let mut stack = vec![node];
@@ -797,6 +813,16 @@ fn count_reads_of(body: &Body, node: NodeRef, wanted: &IndexSet<u32>) -> IndexMa
         {
             *counts.entry(*index).or_default() += 1;
         }
+        body.for_each_operand(node, |op| {
+            let Some(v) = op.as_value() else {
+                return;
+            };
+            let mut leaves = IndexSet::default();
+            body.values.collect_opaque_locals(v, &mut leaves);
+            for idx in leaves.intersection(wanted) {
+                *counts.entry(*idx).or_default() += 1;
+            }
+        });
         body.for_each_child(node, |c| stack.push(c));
     }
     counts
@@ -1641,6 +1667,70 @@ fn rewrite_reads(
             name: name.to_string(),
         };
         body.exprs[id].type_id = ty;
+    }
+    rewrite_promoted_reads(body, local_index, module_source, name, ty);
+}
+
+/// Whether any reachable read of `idx` survives, in the skeleton or the value
+/// pool. The globalization drops the local's `let`, so one that does would
+/// extract a `local.get` of a local nothing defines.
+fn reads_local(body: &Body, idx: u32) -> bool {
+    let mut reads = IndexSet::default();
+    collect_reads(body, &mut reads);
+    promoted_local_reads(body, &mut reads);
+    reads.contains(&idx)
+}
+
+/// How many of `node`'s operand slots hold `value`. Counted before any is
+/// replaced: a read minted for a slot that is not there would linger in the
+/// append-only arena as an orphan.
+fn operand_slots_holding(
+    body: &Body,
+    node: NodeRef,
+    value: crate::nir_value_graph::ValueId,
+) -> usize {
+    let mut slots = 0;
+    body.for_each_operand(node, |op| {
+        if op.as_value() == Some(value) {
+            slots += 1;
+        }
+    });
+    slots
+}
+
+/// Rewrite the reads that live in the value pool: an operand that is exactly
+/// `Opaque(Local local_index)` becomes a fresh `GlobalVarGet` expression.
+/// Candidacy already refused a local buried inside a compound value
+/// ([`buried_promoted_reads`]), so these are all of them.
+///
+/// One expression id per slot: the same node in two operand slots would break
+/// the single-parent invariant.
+fn rewrite_promoted_reads(
+    body: &mut Body,
+    local_index: u32,
+    module_source: &ModuleSource,
+    name: &str,
+    ty: TypeId,
+) {
+    let promoted = bare_promoted_reads(body, local_index);
+    if promoted.is_empty() {
+        return;
+    }
+    for node in reachable_nodes(body) {
+        for &value in &promoted {
+            for _ in 0..operand_slots_holding(body, node, value) {
+                let span = body.span_of(node);
+                let read = body.exprs.push(ExprNode {
+                    kind: ExprKind::GlobalVarGet {
+                        module_source: module_source.clone(),
+                        name: name.to_string(),
+                    },
+                    type_id: ty,
+                    span,
+                });
+                body.replace_value_operand_once(node, value, Operand::Expr(read));
+            }
+        }
     }
 }
 

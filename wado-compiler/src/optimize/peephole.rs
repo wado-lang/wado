@@ -101,12 +101,18 @@ pub(super) fn run_peephole(
     } else {
         GatedPass::PeepholePost
     };
+    // Once for the run, and only when the gate has a body to visit.
+    let effects = if gate.any_pending(gated_pass, len) {
+        super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry)
+    } else {
+        Vec::new()
+    };
     gate.run_gated(gated_pass, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is
         // rebuilt for each body.
         let stores_aliased = func.stores_aliased_locals.clone();
-        let elide_rule = ElideRule::new(&stores_aliased);
+        let elide_rule = ElideRule::new(&stores_aliased, &effects);
         // Reference elimination runs post-inline only (it cleans up the ref
         // bindings inlining exposes). Its maps are built from the pristine
         // post-inline body.

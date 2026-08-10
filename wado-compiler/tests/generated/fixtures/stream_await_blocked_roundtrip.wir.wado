@@ -485,8 +485,6 @@ fn "stream_await_blocked_roundtrip.wado/handle"(request) {
     let __pattern_temp_1: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";
     let __pattern_temp_4: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let packed_197: i64;
-    let rx_198: i32;
-    let tx_199: i32;
     let packed_208: i64;
     let rx_209: i32;
     let tx_210: i32;
@@ -498,15 +496,15 @@ fn "stream_await_blocked_roundtrip.wado/handle"(request) {
     let __vc_payload_0: ref "core:prelude/string.wado//String";
     let __sroa___struct_val_field_name: ref null "core:prelude/string.wado//String";
     let __sroa___struct_val_field_size: ref "core:prelude/types.wado//Option<u32>";
+    let __sroa___pattern_temp_0_0: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stream_await_blocked_roundtrip.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:stream_await_blocked_roundtrip.wado::__modules_initialized = 1;
     };
-    rx_198 = builtin::i32_wrap_i64(local.tee packed_197("wasi/future-new:transmission-http"()));
-    drop(local.tee tx_199(builtin::i32_wrap_i64(packed_197 >> 32_i64)));
-    __pattern_temp_1 = "stream_await_blocked_roundtrip.wado/__cm_binding__Request_consume_body"(request, rx_198);
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed_197("wasi/future-new:transmission-http"()));
+    __pattern_temp_1 = "stream_await_blocked_roundtrip.wado/__cm_binding__Request_consume_body"(request, __sroa___pattern_temp_0_0);
     body_stream = __pattern_temp_1.0;
     body = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     b0: block {

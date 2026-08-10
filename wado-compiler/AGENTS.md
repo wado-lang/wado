@@ -19,6 +19,12 @@ as `Operand::Value` in the pool (`body.values`), so a pass reads the value off
 the operand instead of looking it up — there is no `ExprId`→value side-table.
 BCE recognisers are structural.
 
+A pass that decides a local is unused, or that rewrites every read of one, must
+count the reads that live in the pool as `Operand::Value`, not just the skeleton
+ones (`arena_query`'s `promoted_*` queries). Scope them to the reachable
+operands: the pool is append-only, so seeding from it pins locals whose reads
+folded away long ago.
+
 Never reintroduce, regardless of perf:
 
 - a rebuild of the value graph mid-pipeline. Build-once is structural: nothing

@@ -410,7 +410,7 @@ type "functype//wasi:http/types.wado/wasi:http/types.wado/StatusCode^Inspect::in
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(107)
 
-type "functype//http_client_send_proxy.wado/http_client_send_proxy.wado/__Closure_2::__call" = fn(ref "http_client_send_proxy.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(108)
+type "functype//http_client_send_proxy.wado/http_client_send_proxy.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(108)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(109)
 
@@ -2368,14 +2368,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     return result;
 }
 
-fn "http_client_send_proxy.wado/http_client_send_proxy.wado/__Closure_2::__call"(self, __outptr) {
+fn "http_client_send_proxy.wado/http_client_send_proxy.wado/__Closure_2::__call"(__outptr) {
     return "http_client_send_proxy.wado/__cm_lift__Client_send"(__outptr);
 }
 
 fn "closure/http_client_send_proxy.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "http_client_send_proxy.wado//__Closure_2";
-    __typed_env = ref.cast "http_client_send_proxy.wado//__Closure_2"(__env);
-    return "http_client_send_proxy.wado/http_client_send_proxy.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "http_client_send_proxy.wado/http_client_send_proxy.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "http_client_send_proxy.wado/__cm_export__handle" as "handle"

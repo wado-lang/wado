@@ -132,9 +132,9 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::push" =
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(54)
 
-type "functype//generic_advanced.wado/generic_advanced.wado/__Closure_2::__call" = fn(ref "generic_advanced.wado//__Closure_2", ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/types.wado//Box<i32>") -> bool;  // TypeId(55)
+type "functype//generic_advanced.wado/generic_advanced.wado/__Closure_2::__call" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/types.wado//Box<i32>") -> bool;  // TypeId(55)
 
-type "functype//generic_advanced.wado/generic_advanced.wado/__Closure_3::__call" = fn(ref "generic_advanced.wado//__Closure_3", ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/types.wado//Box<i32>") -> bool;  // TypeId(56)
+type "functype//generic_advanced.wado/generic_advanced.wado/__Closure_3::__call" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/types.wado//Box<i32>") -> bool;  // TypeId(56)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(57)
 
@@ -917,24 +917,20 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "generic_advanced.wado/generic_advanced.wado/__Closure_2::__call"(self, a, b) {
+fn "generic_advanced.wado/generic_advanced.wado/__Closure_2::__call"(a, b) {
     return a.value < b.value;
 }
 
-fn "generic_advanced.wado/generic_advanced.wado/__Closure_3::__call"(self, a, b) {
+fn "generic_advanced.wado/generic_advanced.wado/__Closure_3::__call"(a, b) {
     return a.value > b.value;
 }
 
 fn "closure/generic_advanced.wado/__closure_wrapper_0"(__env, __p0, __p1) {
-    let __typed_env: ref "generic_advanced.wado//__Closure_2";
-    __typed_env = ref.cast "generic_advanced.wado//__Closure_2"(__env);
-    return "generic_advanced.wado/generic_advanced.wado/__Closure_2::__call"(__typed_env, __p0, __p1);
+    return "generic_advanced.wado/generic_advanced.wado/__Closure_2::__call"(__p0, __p1);
 }
 
 fn "closure/generic_advanced.wado/__closure_wrapper_1"(__env, __p0, __p1) {
-    let __typed_env: ref "generic_advanced.wado//__Closure_3";
-    __typed_env = ref.cast "generic_advanced.wado//__Closure_3"(__env);
-    return "generic_advanced.wado/generic_advanced.wado/__Closure_3::__call"(__typed_env, __p0, __p1);
+    return "generic_advanced.wado/generic_advanced.wado/__Closure_3::__call"(__p0, __p1);
 }
 
 export fn "generic_advanced.wado/__cm_export____test_0_box_with_trait_method" as "__test_0_box_with_trait_method"

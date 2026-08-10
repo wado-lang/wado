@@ -216,6 +216,7 @@ fn refute_candidates(
             candidates,
             passes_through,
             &mut invalid,
+            false,
         );
     }
     for global in &project.globals {
@@ -227,6 +228,7 @@ fn refute_candidates(
             candidates,
             None,
             &mut invalid,
+            true,
         );
     }
     invalid
@@ -584,6 +586,9 @@ fn block_tail_returns_match(body: &Body, block: BlockId, expected: &ExpectedShap
 // Call-site validation
 // -----------------------------------------------------------------------
 
+/// `yields_value` marks a body whose last statement *is* the body's value — a
+/// global initializer. A function body is not one: it yields through `Return`,
+/// so every statement of its root block discards.
 fn validate_uses_in_block(
     body: &Body,
     block: BlockId,
@@ -591,6 +596,7 @@ fn validate_uses_in_block(
     candidates: &IndexMap<usize, CandidateInfo>,
     passes_through: Option<TypeId>,
     invalid: &mut IndexSet<usize>,
+    yields_value: bool,
 ) {
     let mut tracked: IndexMap<u32, usize> = IndexMap::default();
     let settled = super::sroa_variant_return::settled_locals(body);
@@ -600,8 +606,10 @@ fn validate_uses_in_block(
         passes_through,
         settled: &settled,
     };
-    for &stmt in &body.blocks[block].stmts {
-        validate_stmt(body, stmt, &cx, invalid, &mut tracked);
+    let stmts = body.blocks[block].stmts.clone();
+    for (i, &stmt) in stmts.iter().enumerate() {
+        let discarded = !yields_value || i + 1 != stmts.len();
+        validate_stmt(body, stmt, &cx, invalid, &mut tracked, discarded);
     }
 }
 
@@ -619,12 +627,18 @@ struct UseCx<'a> {
     settled: &'a IndexSet<u32>,
 }
 
+/// `discarded` says the statement's value goes nowhere — it is not the last
+/// statement of its block, so no enclosing block or branch can take it as its
+/// value. Only there may a call's result be dropped, which is what lets
+/// `wir_build` bind it to `MultiValueLocalBind` wildcards; anywhere else the
+/// value is live and the callee must keep the heap-tuple ABI.
 fn validate_stmt(
     body: &Body,
     stmt: StmtId,
     cx: &UseCx<'_>,
     invalid: &mut IndexSet<usize>,
     tracked: &mut IndexMap<u32, usize>,
+    discarded: bool,
 ) {
     match &body.stmts[stmt].kind {
         StmtKind::Let {
@@ -645,8 +659,8 @@ fn validate_stmt(
                 && let Some((func_id, _, call)) = block_tail_call(body, value, &mut prefix)
                 && let Some(&candidate_idx) = cx.candidate_ids.get(&func_id)
             {
-                for s in prefix {
-                    validate_stmt(body, s, cx, invalid, tracked);
+                for &s in &prefix {
+                    validate_stmt(body, s, cx, invalid, tracked, true);
                 }
                 tracked.insert(local_index, candidate_idx);
                 walk_call_args_for_uses(body, call, cx, invalid, tracked);
@@ -655,7 +669,21 @@ fn validate_stmt(
             walk_expr_for_uses_operand(body, value, cx, invalid, tracked);
         }
         StmtKind::Expr(e) => {
-            walk_expr_for_uses_operand(body, *e, cx, invalid, tracked);
+            let e = *e;
+            // A dropped result is a call site like any other — `wir_build`
+            // binds the N results to wildcards — so only the args are uses.
+            let mut prefix: Vec<StmtId> = Vec::new();
+            if discarded
+                && let Some((func_id, _, call)) = block_tail_call(body, e, &mut prefix)
+                && cx.candidate_ids.contains_key(&func_id)
+            {
+                for &s in &prefix {
+                    validate_stmt(body, s, cx, invalid, tracked, true);
+                }
+                walk_call_args_for_uses(body, call, cx, invalid, tracked);
+                return;
+            }
+            walk_expr_for_uses_operand(body, e, cx, invalid, tracked);
         }
         StmtKind::Return { value: Some(e) } => {
             let e = *e;
@@ -682,21 +710,42 @@ fn validate_stmt(
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
             walk_expr_for_uses_operand(body, condition, cx, invalid, tracked);
             let mut inner = tracked.clone();
-            for &s in &body.blocks[then_block].stmts.clone() {
-                validate_stmt(body, s, cx, invalid, &mut inner);
+            for (i, &s) in body.blocks[then_block].stmts.clone().iter().enumerate() {
+                validate_stmt(
+                    body,
+                    s,
+                    cx,
+                    invalid,
+                    &mut inner,
+                    i + 1 != body.blocks[then_block].stmts.len() || discarded,
+                );
             }
             if let Some(eb) = else_block {
                 let mut inner = tracked.clone();
-                for &s in &body.blocks[eb].stmts.clone() {
-                    validate_stmt(body, s, cx, invalid, &mut inner);
+                for (i, &s) in body.blocks[eb].stmts.clone().iter().enumerate() {
+                    validate_stmt(
+                        body,
+                        s,
+                        cx,
+                        invalid,
+                        &mut inner,
+                        i + 1 != body.blocks[eb].stmts.len() || discarded,
+                    );
                 }
             }
         }
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
             let b = *b;
             let mut inner = tracked.clone();
-            for &s in &body.blocks[b].stmts.clone() {
-                validate_stmt(body, s, cx, invalid, &mut inner);
+            for (i, &s) in body.blocks[b].stmts.clone().iter().enumerate() {
+                validate_stmt(
+                    body,
+                    s,
+                    cx,
+                    invalid,
+                    &mut inner,
+                    i + 1 != body.blocks[b].stmts.len() || discarded,
+                );
             }
         }
         StmtKind::LetDestructure { value, .. } => {
@@ -792,14 +841,14 @@ fn validate_tail_block(
         return;
     };
     for &s in lead {
-        validate_stmt(body, s, cx, invalid, tracked);
+        validate_stmt(body, s, cx, invalid, tracked, true);
     }
     match &body.stmts[last].kind {
         StmtKind::Expr(v) | StmtKind::Return { value: Some(v) } => {
             let v = *v;
             validate_tail_return(body, v, ours, cx, invalid, tracked);
         }
-        _ => validate_stmt(body, last, cx, invalid, tracked),
+        _ => validate_stmt(body, last, cx, invalid, tracked, false),
     }
 }
 
@@ -871,8 +920,15 @@ fn walk_expr_for_uses(
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
             let b = *b;
             let mut inner = tracked.clone();
-            for &s in &body.blocks[b].stmts.clone() {
-                validate_stmt(body, s, cx, invalid, &mut inner);
+            for (i, &s) in body.blocks[b].stmts.clone().iter().enumerate() {
+                validate_stmt(
+                    body,
+                    s,
+                    cx,
+                    invalid,
+                    &mut inner,
+                    i + 1 != body.blocks[b].stmts.len(),
+                );
             }
         }
         ExprKind::If {
@@ -883,13 +939,27 @@ fn walk_expr_for_uses(
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
             walk_expr_for_uses_operand(body, condition, cx, invalid, tracked);
             let mut inner = tracked.clone();
-            for &s in &body.blocks[then_branch].stmts.clone() {
-                validate_stmt(body, s, cx, invalid, &mut inner);
+            for (i, &s) in body.blocks[then_branch].stmts.clone().iter().enumerate() {
+                validate_stmt(
+                    body,
+                    s,
+                    cx,
+                    invalid,
+                    &mut inner,
+                    i + 1 != body.blocks[then_branch].stmts.len(),
+                );
             }
             if let Some(eb) = else_branch {
                 let mut inner = tracked.clone();
-                for &s in &body.blocks[eb].stmts.clone() {
-                    validate_stmt(body, s, cx, invalid, &mut inner);
+                for (i, &s) in body.blocks[eb].stmts.clone().iter().enumerate() {
+                    validate_stmt(
+                        body,
+                        s,
+                        cx,
+                        invalid,
+                        &mut inner,
+                        i + 1 != body.blocks[eb].stmts.len(),
+                    );
                 }
             }
         }
@@ -917,13 +987,27 @@ fn walk_expr_for_uses(
             walk_expr_for_uses_operand(body, scrutinee, cx, invalid, tracked);
             for arm in arms {
                 let mut inner = tracked.clone();
-                for &s in &body.blocks[arm].stmts.clone() {
-                    validate_stmt(body, s, cx, invalid, &mut inner);
+                for (i, &s) in body.blocks[arm].stmts.clone().iter().enumerate() {
+                    validate_stmt(
+                        body,
+                        s,
+                        cx,
+                        invalid,
+                        &mut inner,
+                        i + 1 != body.blocks[arm].stmts.len(),
+                    );
                 }
             }
             let mut inner = tracked.clone();
-            for &s in &body.blocks[default].stmts.clone() {
-                validate_stmt(body, s, cx, invalid, &mut inner);
+            for (i, &s) in body.blocks[default].stmts.clone().iter().enumerate() {
+                validate_stmt(
+                    body,
+                    s,
+                    cx,
+                    invalid,
+                    &mut inner,
+                    i + 1 != body.blocks[default].stmts.len(),
+                );
             }
         }
         _ => {
