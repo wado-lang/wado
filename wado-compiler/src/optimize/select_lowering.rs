@@ -173,15 +173,13 @@ fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> 
                 && is_select_eligible_value(body, *lhs, type_table)
                 && is_select_eligible_value(body, *rhs, type_table)
         }
-        ValueKind::Cast { operand, target } => {
-            let src = body
-                .values
-                .type_of(*operand)
-                .expect("promoted value has no recorded type");
-            !is_trapping_cast(src, *target, type_table)
-                && is_select_eligible_value(body, *operand, type_table)
-        }
-        ValueKind::Int(..)
+        // A promoted value never nests a `Cast`: the freeze decision rejects one
+        // (`ValuePool::value_fully_reemittable_locally`) because the operand's
+        // source type is unrecoverable from the type-erased tree — which is also
+        // the type `is_trapping_cast` would need here. Refused rather than
+        // written as an unreachable arm that would have to assert it.
+        ValueKind::Cast { .. }
+        | ValueKind::Int(..)
         | ValueKind::Float(..)
         | ValueKind::Bool(_)
         | ValueKind::Char(_)
@@ -194,13 +192,19 @@ fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> 
     }
 }
 
-/// True when `id` is eligible to appear as a `builtin::select` arm: a
-/// duplicable leaf (`Local`, literal) or a single layer of pure leaf
-/// operators over leaf-pure operands, none of which traps. See the original
-/// pass doc for the full rationale.
+/// True when `op` is eligible to appear inside a `builtin::select` arm, whichever
+/// form it takes: a skeleton subtree goes to [`is_select_eligible`], a promoted
+/// value to [`is_select_eligible_value`].
+///
+/// Both forms must be asked. Treating a promoted operand as ineligible loses
+/// every lowering whose operand happens to be frozen; treating it as eligible
+/// without asking admits a trapping one — `select` evaluates both arms, so an
+/// unchecked `Operand::Value` of `a / b` would be speculated.
 fn is_select_eligible_operand(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
-    op.as_expr()
-        .is_some_and(|e| is_select_eligible(body, e, type_table))
+    match op {
+        Operand::Expr(e) => is_select_eligible(body, e, type_table),
+        Operand::Value(v) => is_select_eligible_value(body, v, type_table),
+    }
 }
 
 fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
@@ -216,12 +220,8 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
             // both arms unconditionally. The trap taxonomy is shared with
             // `arena_query` so it cannot drift from the other trap consumers.
             !super::arena_query::binary_op_may_trap(*op)
-                && left
-                    .as_expr()
-                    .is_none_or(|e| is_select_eligible(body, e, type_table))
-                && right
-                    .as_expr()
-                    .is_none_or(|e| is_select_eligible(body, e, type_table))
+                && is_select_eligible_operand(body, *left, type_table)
+                && is_select_eligible_operand(body, *right, type_table)
         }
         ExprKind::Cast {
             expr: inner,

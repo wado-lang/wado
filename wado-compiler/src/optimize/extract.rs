@@ -582,12 +582,53 @@ fn apply_field_materialise(
     changed
 }
 
+/// Whether re-emitting the value tree at `v` can trap. A materialisation runs the
+/// value once at a point that dominates the uses, which is a point the uses'
+/// own guards do not protect — so a trapping value must stay at each use, where
+/// the program already decided it was safe to evaluate.
+///
+/// Conservative on `Cast`: the pool is type-erased per node, so proving a cast
+/// non-trapping here would need the operand's recorded source type, which
+/// nothing guarantees is present. Refusing costs a materialisation, never
+/// correctness.
+fn value_may_trap(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool {
+    match pool.kind(v).clone() {
+        ValueKind::Binary { op, lhs, rhs, .. } => {
+            super::arena_query::binary_op_may_trap(op)
+                || value_may_trap(pool, lhs)
+                || value_may_trap(pool, rhs)
+        }
+        ValueKind::Unary { operand, .. } => value_may_trap(pool, operand),
+        ValueKind::Cast { .. } => true,
+        ValueKind::Select { cond, then, else_ } => {
+            value_may_trap(pool, cond) || value_may_trap(pool, then) || value_may_trap(pool, else_)
+        }
+        ValueKind::FieldAccess { .. } | ValueKind::LoopPhi { .. } => true,
+        ValueKind::Int(..)
+        | ValueKind::Float(..)
+        | ValueKind::Bool(_)
+        | ValueKind::Char(_)
+        | ValueKind::Null
+        | ValueKind::Unit
+        | ValueKind::Const(..)
+        | ValueKind::Opaque(_) => false,
+    }
+}
+
 /// Apply strategy for a non-`FieldAccess` (pure-arith / constant) representative.
 /// A value used by several slots whose leaves are all non-`mut` parameters is
-/// **materialised once** — a single entry `let _av = <value>` all uses read via
-/// `local.get _av`, available and unchanged at function entry where the `let` is
-/// inserted, so it dominates every use soundly. Every other case redirects each
+/// **materialised once** — a single `let _av = <value>` all uses read via
+/// `local.get _av` — placed at the nearest point dominating every use, the same
+/// placement [`apply_field_materialise`] uses. Every other case redirects each
 /// use to the pooled representative inline.
+///
+/// Two things bound the hoist, and the leaves being parameters answers neither.
+/// Availability says *where* the value can be computed; it does not say the
+/// program wanted it computed there. A trapping value is refused outright — the
+/// uses' guards do not extend to the materialisation point, so hoisting
+/// `a / b` out of `if b != 0` traps a program that never divides by zero. And
+/// the point is the uses' nearest common dominator rather than function entry,
+/// so a value used only inside a branch is not speculated into every call.
 fn apply_value_freeze(
     engine: &mut Engine,
     rep: ValueId,
@@ -597,8 +638,10 @@ fn apply_value_freeze(
 ) -> bool {
     let mut leaves = crate::hashmap::IndexSet::default();
     engine.body.values.collect_opaque_locals(rep, &mut leaves);
-    let materialize =
-        ids.len() > 1 && !leaves.is_empty() && leaves.iter().all(|l| param_set.contains(l));
+    let materialize = ids.len() > 1
+        && !leaves.is_empty()
+        && leaves.iter().all(|l| param_set.contains(l))
+        && !value_may_trap(&engine.body.values, rep);
     let mut changed = false;
     if materialize {
         let name = format!("_av_{}", engine.locals().len());
@@ -620,10 +663,14 @@ fn apply_value_freeze(
             },
             crate::token::Span::default(),
         );
-        let root = engine.body.root;
-        let mut stmts = engine.body.blocks[root].stmts.clone();
-        stmts.insert(0, let_stmt);
-        engine.set_block_stmts(root, stmts);
+        let (anchor, block) = match materialise_point(engine, ids) {
+            Some(point) => point,
+            None => return false,
+        };
+        let mut stmts = engine.body.blocks[block].stmts.clone();
+        let pos = stmts.iter().position(|&x| x == anchor).unwrap_or(0);
+        stmts.insert(pos, let_stmt);
+        engine.set_block_stmts(block, stmts);
         for &id in ids {
             changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Value(read));
         }
