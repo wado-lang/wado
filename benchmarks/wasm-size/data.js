@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786321252533,
+  "lastUpdate": 1786360725688,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46917,6 +46917,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f77fbb96442faba7ac47e8d2cd4862684578d8f0"
         },
         "date": 1786321251831,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271633,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e62b4b3b7424bf7abf917d464a253304ef1ce108",
+          "message": "Merge pull request #1781 from wado-lang/claude/overload-selection-ambiguity-805ao2\n\nfeat(compiler): select overloads by synthesized argument types",
+          "timestamp": "2026-08-10T20:06:58+09:00",
+          "tree_id": "4aa7024cfc8b16fba5320321f5401d171184aab5",
+          "url": "https://github.com/wado-lang/wado/commit/e62b4b3b7424bf7abf917d464a253304ef1ce108"
+        },
+        "date": 1786360724807,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
