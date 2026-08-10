@@ -291,10 +291,6 @@ pub async fn execute_with_mode<H: CompilerHost>(
                         normalized.as_str(),
                     );
                 }
-                // Atomic publish (temp + rename): the same generated output can
-                // be written by several files' compiles at once during a parallel
-                // `wado test` sweep, and a plain `fs::write` lets a concurrent
-                // reader observe a torn, half-written module.
                 write_atomic(&full_path, &bytes).map_err(|source| ExecuteError::Io {
                     path: full_path.clone(),
                     source,
@@ -1967,9 +1963,6 @@ mod tests {
             assert!(hand_written_path.exists());
         }
 
-        /// A concurrent `write_atomic` stages the output's full bytes — header
-        /// included — in a sibling temp before renaming it into place. Deleting
-        /// one fails that publish with `ENOENT` against the final path.
         #[test]
         fn reconcile_outputs_spares_a_concurrent_writers_staging_temp() {
             let tmp = tempfile::tempdir().unwrap();

@@ -145,15 +145,13 @@ pub fn staging_file_name(file_name: &str) -> String {
     )
 }
 
-/// Whether `file_name` names a [`write_atomic`] staging file.
 pub fn is_staging_file(file_name: &str) -> bool {
     file_name.contains(STAGING_INFIX)
 }
 
-/// Write `bytes` to `path` atomically: create the parent dir, write a sibling
-/// temp file, then rename into place. A crash or a concurrent writer can only
-/// leave a stray temp file, never a half-written `component.wasm` that the
-/// `is_file()` cache check would then trust forever.
+/// Write `bytes` to `path` atomically. A crash or a concurrent writer can only
+/// leave a stray staging file, never a half-written one the `is_file()` cache
+/// check would then trust forever.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
@@ -177,10 +175,6 @@ mod tests {
 
     #[test]
     fn write_atomic_is_concurrency_safe_for_the_same_path() {
-        // A parallel compile fetches the same registry component from several
-        // files at once, so `write_atomic` runs concurrently on one path. Every
-        // writer must succeed and leave the full bytes — no writer may rename
-        // another's temp file out from under it.
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("ghcr.io/ns/pkg/0.1.0/component.wasm");
         let bytes: Vec<u8> = (0..4096).map(|i| (i % 251) as u8).collect();
