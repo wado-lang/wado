@@ -267,16 +267,30 @@ phase (was ~21 %); the cost is now the passes themselves.
 
 Precision.
 
-- [ ] Retire or repair `loop_entry_values`. It is the only thing the built
-      `ValueGraphBuild` still produces for a pass (LICM's hoist legality), and
-      measurement says LICM never gets a usable answer: across ten benchmarks and
-      a fixture sample the value-hoist path asked 10,900 times and collected zero
-      loop-entry locals every time, because almost nothing is a promoted operand
-      _while the loop runs_ — `promote_fields` and the final arithmetic freeze
-      are both post-loop. `inline` meanwhile discards a non-empty map 1,469
-      times, which costs nothing precisely because the consumer is inert. Either
-      promote earlier so LICM sees operands, or drop the mechanism and the build
-      it justifies.
+- [ ] Promote values that read locals. Today none exist: across four benchmarks
+      not one of ~110,000 reachable promoted operands contains an `Opaque` at
+      any point in the pipeline, at `-O1` / `-O2` / `-O3`. Only constants are
+      ever frozen.
+
+      The cause is a missing base case, not a gate. `Engine::maintain_pure_node`
+      resolves `Binary` / `Unary` / `Cast` and bottoms out at every other kind,
+      so a `Local` leaf yields `None`, so a tree over locals yields `None`, so it
+      never reaches the freeze decision — and since the freeze is the only thing
+      that would promote the leaf, nothing bootstraps. Only all-constant trees
+      resolve, and those fold to a constant anyway.
+
+      Everything downstream is inert as a result: the `promoted_*` read census
+      that six passes consult always returns empty, LICM's value hoist collected
+      zero loop-entry locals in 10,900 queries, `loop_entry_values` has no
+      working consumer (so `inline` discarding a non-empty map 1,469 times costs
+      nothing), and `promote_fields` promotes no field.
+
+      The obvious repair does not work — see "Measured dead ends". A local's
+      value is only meaningful with the version the flow walk assigns it, and
+      that version does not exist at query time. So this is not a base case to
+      add to the resolver; it is the born-at-`lower` item above, where the
+      builder still holds `current_value` and can mint a versioned value as it
+      walks.
 - [ ] Copy propagation on `ValueId`. Source-stability is not subsumed by value
       equality — a write-once `x` whose source `y` is later reassigned can read
       equal ids yet be unsafe to fold. Revisit with `Select` / `Opaque`
@@ -320,8 +334,17 @@ Each was built, verified, and reverted. Do not retry as-is.
   case. Deleted.
 - **Pooling the graph builder's output maps.** The build is compute-bound (walk +
   hash-cons + flow joins), not allocation-bound; measured no improvement.
-- **Promoting induction-variable `Local` reads to source-bearing opaques.** Traps
-  `closure_for_loop_mutation`.
+- **Resolving a `Local` read to a version-free opaque at query time.** Tried
+  twice. Both fail on the same point: one `ValueId` per local index spans every
+  version of that local. Promoting induction-variable reads traps
+  `closure_for_loop_mutation`. Restricting it to never-reassigned _parameters_
+  looks airtight — a parameter is entry-defined and single-version — and still
+  miscompiles, because `inline` does not preserve parameterhood: a callee
+  parameter becomes an ordinary caller local whose binding re-executes, so the
+  one canonical opaque minted for it now spans an iteration's worth of values.
+  It reproduces as `wado run package-gale/src/main.wado gen …` trapping with
+  "allocation size too large" in `String::substr_bytes`, called from
+  `trim_start`'s loop.
 - **A query-time entry-`FieldAccess` materialiser.** Miscompiled ~165 fixtures:
   reference and aggregate fields change copy / alias semantics.
 - **Keeping caller values across a loop-free-but-impure inline.** Over-merges two
