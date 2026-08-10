@@ -32,12 +32,12 @@ fn grow_memory(new_offset: i32) {
 
 pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
-        if ((oldptr + oldsize) == core::allocator::heap_offset) {
+        if (%18 == core::allocator::heap_offset) {
             core::allocator::heap_offset = oldptr;
         }
         return 0;
     }
-    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
+    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), %20);
     let new_offset: i32 = (aligned + newsize);
     if (new_offset > (core::builtin::memory_size() * 65536)) {
         core::builtin::cold_path();
@@ -54,7 +54,7 @@ pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32)
         }
         return 0;
     }
-    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
+    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), %22);
     let new_offset: i32 = (aligned + newsize);
     if (new_offset > (core::builtin::memory_size() * 65536)) {
         core::builtin::cold_path();
@@ -65,11 +65,11 @@ pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32)
 }
 
 fn fl_push(block: i32, size: i32) {
-    let k: i32 = ((size - 32) >> 4);
+    let k: i32 = (%25 >> 4);
     let k: i32 = core::builtin::select::<i32>((k < 32), k, 32);
     let head: i32 = core::builtin::i32_load((8 + (k * 4)));
-    core::builtin::i32_store((block + 8), head);
-    core::builtin::i32_store((block + 12), 0);
+    core::builtin::i32_store(%15, head);
+    core::builtin::i32_store(%16, 0);
     if (head != 0) {
         core::builtin::i32_store((head + 12), block);
     }
@@ -77,8 +77,8 @@ fn fl_push(block: i32, size: i32) {
 }
 
 fn fl_unlink(block: i32) {
-    let next: i32 = core::builtin::i32_load((block + 8));
-    let prev: i32 = core::builtin::i32_load((block + 12));
+    let next: i32 = core::builtin::i32_load(%17);
+    let prev: i32 = core::builtin::i32_load(%18);
     if (prev == 0) {
         let tag: i32 = core::builtin::i32_load(block);
         let size: i32 = core::builtin::i32_and(tag, -8);
@@ -97,7 +97,7 @@ fn fl_carve(block: i32, block_size: i32, size: i32) {
     if (remainder >= 32) {
         let tag: i32 = (size + 1);
         core::builtin::i32_store(block, tag);
-        core::builtin::i32_store(((block + size) - 8), tag);
+        core::builtin::i32_store(%17, tag);
         let rest: i32 = (block + size);
         let tag: i32 = (remainder + 0);
         core::builtin::i32_store(rest, tag);
@@ -106,7 +106,7 @@ fn fl_carve(block: i32, block_size: i32, size: i32) {
     } else {
         let tag: i32 = (block_size + 1);
         core::builtin::i32_store(block, tag);
-        core::builtin::i32_store(((block + block_size) - 8), tag);
+        core::builtin::i32_store(%19, tag);
     }
 }
 
@@ -148,7 +148,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         core::allocator::fl_push(block, size);
         return 0;
     }
-    let size: i32 = (core::builtin::i32_and((newsize + 15), -16) + 16);
+    let size: i32 = (core::builtin::i32_and(%82, -16) + 16);
     let k: i32 = ((size - 32) >> 4);
     let mut j: i32 = core::builtin::select::<i32>((k < 32), k, 32);
     loop {
