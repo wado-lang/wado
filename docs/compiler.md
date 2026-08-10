@@ -219,13 +219,14 @@ the common case. A receiver with no declaring module (a builtin, a tuple) has no
 `{decl}` segment. See WEP 2026-07-29 for why neither segment is removable alone.
 
 The same rule binds names still in their written form. A type name in source is
-relative to the module that wrote it — its **vantage** — so an identity is
-derived once, at `TraitEnv::build`, where the vantage exists: each `impl`
-block's digest (`ImplHeader`) carries its module, its target's `ImplTargetKey`
-and its trait's. Whole-program checks (coherence, orphan rules, sealed traits,
-trait-method arity) read that digest instead of re-walking `loaded_modules`,
-because a second walk has no vantage and can only compare spellings. See WEP
-2026-08-10.
+relative to the module that wrote it, so a **reference site** — not a consumer —
+is what an identity is derived at, once. Today that holds for `impl` headers:
+each block's digest (`ImplHeader`) carries its module, its target's
+`ImplTargetKey` and its trait's, and the whole-program checks (coherence, orphan
+rules, sealed traits, trait-method arity) read the digest instead of re-walking
+`loaded_modules`, because a second walk knows no module and can only compare
+spellings. Extending that to every reference site, so identity rather than a
+name is what the queries take, is WEP 2026-08-10.
 
 ## Component Model Registries
 
