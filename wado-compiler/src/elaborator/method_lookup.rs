@@ -35,6 +35,12 @@ use super::util::placeholder;
 /// dispatch.
 struct ImplBlockRef(ModuleSource, AstId);
 
+/// A trait spelling's head: `Add<Feet>` is an `Add` impl. Trait arguments are
+/// selected on separately, so a lookup by operator name compares heads.
+fn trait_head(spelling: &str) -> &str {
+    spelling.split('<').next().unwrap_or(spelling)
+}
+
 /// The digested header of the impl block `r` points at. Borrowed from the
 /// caller's `TraitEnv` handle rather than from `&self`, so the header stays
 /// readable across the `&mut self` calls a lookup makes.
@@ -294,16 +300,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Find the rhs parameter type for an operator trait on a struct type.
-    /// Used to determine what type a literal rhs should be coerced to.
+    /// Used to determine what type a literal rhs should be coerced to. `rhs`
+    /// is the right operand's class, which selects among several `Add<Rhs>`
+    /// impls before either operand has been given a type.
     pub(super) fn find_operator_rhs_type(
         &mut self,
         self_type_id: TypeId,
         op: &BinaryOp,
+        rhs: Option<&ArgClass>,
     ) -> Option<TypeId> {
         let struct_name = self.tysys.struct_name_for_type(self_type_id)?;
         let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
-        let trait_info =
-            self.find_arithmetic_trait_impl(&struct_name, self_type_id, &trait_name, method_name)?;
+        let trait_info = self.find_arithmetic_trait_impl(
+            &struct_name,
+            self_type_id,
+            &trait_name,
+            method_name,
+            rhs,
+        )?;
         // Unwrap the &T reference wrapper if present (e.g., rhs: &Self → return Self)
         trait_info.rhs_type.map(|t| {
             let resolved = self.tysys.type_table.borrow().get(t).clone();
@@ -312,6 +326,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => t,
             }
         })
+    }
+
+    /// Report an operator whose receiver implements its trait at several
+    /// right-hand types that the right operand does not tell apart — the
+    /// operator's shape of the same unique-or-error rule a method call's
+    /// argument lists follow. Silent when the receiver simply has no impl:
+    /// that is the caller's "operator not applicable" error.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn report_ambiguous_operator_rhs(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        trait_name: &str,
+        method_name: &str,
+        rhs: &ArgClass,
+        op: BinaryOp,
+        span: Span,
+    ) {
+        let admitted = self.find_arithmetic_trait_impls(
+            struct_name,
+            base_type_id,
+            trait_name,
+            method_name,
+            Some(rhs),
+        );
+        if admitted.len() < 2 {
+            return;
+        }
+        let tt = self.tysys.type_table.borrow();
+        let candidates = admitted
+            .iter()
+            .map(|info| match info.rhs_type {
+                Some(t) => format!("{trait_name}<{}>", tt.type_name(tt.peel_refs(t))),
+                None => trait_name.to_string(),
+            })
+            .collect();
+        let type_name = tt.type_name(base_type_id);
+        drop(tt);
+        let _ = self.emit(TypeError::AmbiguousOperatorRhs {
+            op: crate::unparse::binary_op_str(op).to_string(),
+            type_name,
+            candidates,
+            span,
+        });
     }
 
     /// Find the self type for an operator trait, given the rhs type.
@@ -325,7 +383,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let struct_name = self.tysys.struct_name_for_type(rhs_type_id)?;
         let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
         // Verify the trait impl exists; the self type is the struct type itself
-        self.find_arithmetic_trait_impl(&struct_name, rhs_type_id, &trait_name, method_name)?;
+        self.find_arithmetic_trait_impl(&struct_name, rhs_type_id, &trait_name, method_name, None)?;
         Some(rhs_type_id)
     }
 }
@@ -3157,7 +3215,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_type_id: TypeId,
         trait_name: &str,
         method_name: &str,
+        rhs: Option<&ArgClass>,
     ) -> Option<ArithmeticTraitInfo> {
+        match self
+            .find_arithmetic_trait_impls(struct_name, base_type_id, trait_name, method_name, rhs)
+            .as_slice()
+        {
+            [only] => Some(only.clone()),
+            // Unique-or-error, as everywhere else: several admitted impls are
+            // the caller's to report, with the span it holds.
+            [] | [_, _, ..] => None,
+        }
+    }
+
+    /// Every impl of `trait_name` on the receiver whose right-hand parameter
+    /// admits `rhs` — the operator counterpart of argument-directed selection
+    /// (WEP 2026-07-31). `rhs` is a *class*, not a type: at the point the
+    /// coercion lookup runs, the right operand may still be a literal that has
+    /// not been given a type yet, and a literal admits without selecting.
+    pub(super) fn find_arithmetic_trait_impls(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        trait_name: &str,
+        method_name: &str,
+        rhs: Option<&ArgClass>,
+    ) -> Vec<ArithmeticTraitInfo> {
         // Get concrete type arguments from the base type (for generic instances)
         let concrete_type_args: Vec<TypeId> =
             if let ResolvedType::GenericInstance { type_args, .. } =
@@ -3168,10 +3251,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Vec::new()
             };
 
-        self.probe_trait_impls(
+        let mut admitted: Vec<ArithmeticTraitInfo> = Vec::new();
+        self.probe_trait_impls::<()>(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
-            |found_trait_name| found_trait_name == trait_name,
+            // The operator traits carry a right-hand type argument now, so a
+            // candidate renders as `Add<Feet>`; the head is what names the
+            // operator.
+            |found_trait_name| trait_head(found_trait_name) == trait_name,
             |s, impl_ref, impl_sig, _declared| {
                 // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>).
                 // Shared with `lookup_method_info_uncached` and
@@ -3204,20 +3291,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(rhs_index)
                     .copied();
 
+                // The declared parameter is `&Rhs`; the operand is the
+                // referent, so admissibility compares against that.
+                if let Some(class) = rhs {
+                    let declared = rhs_type.map(|t| match s.tysys.type_table.borrow().get(t) {
+                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                        _ => t,
+                    });
+                    if let Some(declared) = declared
+                        && !s.class_admits(declared, class)
+                    {
+                        return None;
+                    }
+                }
+
                 let output_type = impl_sig
                     .associated_types
                     .get("Output")
                     .copied()
                     .unwrap_or(base_type_id);
 
-                Some(ArithmeticTraitInfo {
+                admitted.push(ArithmeticTraitInfo {
                     output_type,
                     self_kind,
-                    trait_name: trait_name.to_string(),
+                    // The *full* spelling (`Add<Feet>`), not the operator's
+                    // base name: it is what the mangled method name
+                    // discriminates instantiations on, exactly as the indexing
+                    // path records `IndexValue<i32>`.
+                    trait_name: s.get_type_name_full(header.trait_type.as_ref().unwrap()),
                     rhs_type,
-                })
+                });
+                // Never short-circuit: selection is unique-or-error, so every
+                // admitted impl has to be seen before one is chosen.
+                None
             },
-        )
+        );
+        admitted
     }
 
     /// Look up the type parameters of a static method from its impl header.

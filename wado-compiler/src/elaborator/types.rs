@@ -315,6 +315,18 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An operator whose receiver implements its trait at several right-hand
+    /// types, none of which the right operand selects. Same rule as a method
+    /// call's argument lists, reported where the operator is written.
+    AmbiguousOperatorRhs {
+        op: String,
+        type_name: String,
+        /// The competing trait spellings (`Add<i32>`, `Add<Meters>`), in
+        /// candidate order.
+        candidates: Vec<String>,
+        span: Span,
+    },
+
     /// `Trait::method()` with no arguments: the trait-qualified call form
     /// takes the receiver as its first argument, so there is nothing to
     /// dispatch on.
@@ -944,6 +956,23 @@ impl TypeError {
                             .expect("ambiguity reported with no candidate traits")
                     ),
                     arguments,
+                ),
+                *span,
+            ),
+            TypeError::AmbiguousOperatorRhs {
+                op,
+                type_name,
+                candidates,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous operator `{op}` on '{type_name}': the right operand does not select between {}; annotate it (e.g. '42 as i64') to pin one",
+                    candidates
+                        .iter()
+                        .map(|c| format!("'{c}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and ")
                 ),
                 *span,
             ),
@@ -2368,6 +2397,7 @@ pub(super) struct IndexValueTraitInfo {
 
 /// Info about a comparison trait implementation (`Eq` or `Ord`)
 /// Info about an operator trait implementation
+#[derive(Clone)]
 pub(super) struct ArithmeticTraitInfo {
     /// The Output associated type
     pub(super) output_type: TypeId,

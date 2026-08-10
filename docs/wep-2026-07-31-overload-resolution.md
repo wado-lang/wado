@@ -472,7 +472,7 @@ the position that rejected it instead of a bare "method not found".
 
 | Feature           | Interaction                                                                                                                                                                                                                                                               |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Operators         | Indexing selects by the operand's type, which is the same rule read through a different entry point; the two must agree for every index expression. Arithmetic cannot collide yet — the prelude's operator traits take no type parameters. `Eq` / `Ord` take none either. |
+| Operators         | Indexing selects by the operand's type, which is the same rule read through a different entry point; the two must agree for every index expression. Arithmetic and bitwise operators select over `Add<Rhs>` and friends by the right operand's class. `Eq` / `Ord` take no trait arguments — unaffected. |
 | `From` / `?`      | See Conversions. `?` stays target-type-directed.                                                                                                                                                                                                                          |
 | Default arguments | Owned by the trait declaration, identical across an overload set — no interaction with selection.                                                                                                                                                                         |
 | Effects           | Never considered by selection; the chosen method's `with` clause is checked afterwards.                                                                                                                                                                                   |
@@ -565,24 +565,17 @@ Where the pieces live:
   elaborated arguments.
 - The side-effect discipline: `Logger::quiet` (`logger.rs`) and, in debug
   builds, `ModuleSemantics::fact_count` asserted unchanged across a synthesis.
-
-Remaining work:
-
-- [ ] Extend the soundness check beyond the calls where selection ran: a
-      `WADO_VERIFY_ARG_SYNTHESIS=1` mode classifying every method-call argument
-      and comparing it with the type the argument received, for a CI job over
-      the fixture corpus — a wider drift detector for a judgement that
-      necessarily restates typing rules the elaborator also implements.
-- [ ] Retire the index path's `expected_index_type` pre-resolve in favour of
-      synthesis, removing the second `resolve_expr` of an index expression that
-      runs whenever the selected key type differs from the first resolve's
-      result. Synthesis currently reads a subscript the way that path does — a
-      literal key takes its default type — which is the coupling the move would
-      remove.
-- [ ] Let an argument that synthesizes a type drive `conversion_preselect`
-      too, instead of passing through to the name hint.
-- [ ] Operator-trait parameterization (`trait Add<Rhs = Self>`), which is what
-      would make RHS-directed operator selection expressible at all.
+- The soundness invariant: `verify_arg_synthesis`, run in debug builds over
+  *every* method-call argument — the ones selection asked about and the ones it
+  did not — so the whole fixture corpus is the drift detector.
+- Operators: `find_arithmetic_trait_impls` collects the receiver's impls of the
+  operator's trait whose right-hand parameter admits the operand's class, and
+  `find_arithmetic_trait_impl` is the unique-or-error view of it. The right
+  operand's class is its resolved type at dispatch and its literal class at the
+  earlier coercion lookup (`find_operator_rhs_type`), which is what lets `m * 2`
+  select `Mul<i32>` before the literal has a type. A `&Self` parameter still
+  expects the receiver's own type, so a newtype dispatched to its base's impl
+  type-checks as the newtype.
 
 The bounds counterpart of an overload set (`T: Take<A> + Take<B>`) cannot arise
 yet — positional trait arguments do not parse in bound position.
@@ -597,7 +590,9 @@ read, an operator (`i + 1`), a range, an `if` with agreeing branches, a cast to
 a generic type, a const, an enum case; negative fixtures pin what stays
 ambiguous and why (a closure, a compound literal, a generic call with an open
 return type); and a pair fixture asserts `l[e]` and `l.index_value(e)` select
-the same impl for every `e` above.
+the same impl for every `e` above. `operator_rhs_selection.wado` pins the
+operator counterpart: `Add` at two right-hand types, and a literal selecting
+`Mul<i32>`.
 
 ## Consequences
 
@@ -627,7 +622,12 @@ Trade-offs:
   from lowering in `resolve_expr`, which is its own WEP.
 - Classifying an argument re-runs the lookups its sub-expressions need, so a
   method call in argument position is looked up twice. Only multi-argument-list
-  candidate sets pay; single-candidate calls are untouched.
+  candidate sets pay; single-candidate calls are untouched. Debug builds pay it
+  on every method-call argument, which is the price of the drift detector.
+- Parameterizing the operator traits changes their declared shape, so a
+  `T: Add` bound now means `Add<Self>` and an impl written against the old
+  spelling still reads the same. What it buys is that `+` stops being the one
+  operator whose impl a program cannot choose.
 - Literal-only distinctions error where other languages would pick a default.
   This is deliberate — predictability over convenience — and the diagnostic
   carries the one-token fix.

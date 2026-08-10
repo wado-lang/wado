@@ -707,7 +707,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.typecheck(arg.type_id, expected_type, arg_span);
         }
 
-        self.verify_arg_synthesis(&synthesized, &args, span);
+        self.verify_arg_synthesis(&synthesized, args_ast, ctx, &args, span);
 
         // Substitute return type for inherited newtype methods
         // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
@@ -2995,15 +2995,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.keys_declare_static_method(&keys, method_name)
     }
 
-    /// The literal preselect over a receiver's conversion impls
-    /// (WEP 2026-07-31 phase 4) — this DOES decide calls: `Selected` /
-    /// `Ambiguous` short-circuit resolution.
+    /// The argument preselect over a receiver's conversion impls
+    /// (WEP 2026-07-31) — this DOES decide calls: `Selected` / `Ambiguous`
+    /// short-circuit resolution.
     ///
     /// Selection must run before the argument is elaborated: the expected
     /// type that shapes a literal comes from the selected impl, and picking
-    /// it afterwards is the circular ordering the WEP diagnoses. Only the
-    /// literal classes participate — an argument with a type of its own
-    /// already selects deterministically through the name hint.
+    /// it afterwards is the circular ordering the WEP diagnoses. Every class
+    /// that carries information participates — a synthesized type selects by
+    /// `TypeId` here rather than through the name hint's spelling comparison,
+    /// which is what that mechanism's aliasing ceiling asks for. An `Opaque`
+    /// argument carries nothing and passes through.
     ///
     /// Admissibility is [`Elaborator::class_admits`] over each impl's
     /// *resolved* source type — the same table argument-directed selection
@@ -3017,10 +3019,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         class: &super::synth::ArgClass,
     ) -> ConversionPreselect {
         use super::synth::ArgClass;
-        if !matches!(
-            class,
-            ArgClass::IntLit | ArgClass::FloatLit | ArgClass::StrLit
-        ) {
+        if matches!(class, ArgClass::Opaque(_)) {
             return ConversionPreselect::Pass;
         }
         let (candidates, _has_blanket) = self.conversion_impl_survey(struct_name, method_name);

@@ -904,6 +904,10 @@ trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
 // Option<T>, TreeMap<K, V>; not Result)
 trait Default { fn default() -> Self; }
 
+// For + - * / % & | ^ operators. `Rhs` defaults to Self; naming it lets one
+// type take several right-hand types, and the right operand selects the impl.
+trait Add<Rhs = Self> { type Output; fn add(&self, rhs: &Rhs) -> Self::Output; }
+
 // For [] operators
 trait IndexRef<I> { type Output: Ref; fn index_ref(&self, index: I) -> &Self::Output; }
 trait IndexMutRef<I> { type Output: RefMut; fn index_mut_ref(&mut self, index: I) -> &mut Self::Output; }

@@ -224,41 +224,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The soundness invariant, checked where selection ran: an argument whose
-    /// class named a type — exactly, or by its head — must have elaborated to
-    /// a type in that class's denotation. A mismatch means synthesis
+    /// The soundness invariant: every argument must have elaborated to a type
+    /// in its class's denotation. A violation means synthesis
     /// under-approximated, which is the direction that selects the wrong impl,
     /// so it is a compiler bug and not a diagnostic.
     ///
-    /// Debug builds only: the elaborated types are the check's whole input, so
-    /// it costs a comparison per classified argument and the fixture corpus is
-    /// what exercises it.
+    /// Checked on *every* method-call argument in debug builds, not only the
+    /// ones selection asked about: a judgement that restates typing rules the
+    /// elaborator also implements drifts silently unless the whole corpus
+    /// exercises it. Arguments selection never classified are classified here
+    /// for the comparison — the same side-effect-free walk, after the fact.
     pub(super) fn verify_arg_synthesis(
-        &self,
-        synthesized: &[Option<ArgClass>],
+        &mut self,
+        selected_with: &[Option<ArgClass>],
+        args_ast: &[ast::Expr],
+        ctx: &FunctionContext,
         args: &[crate::tir::TirExpr],
         span: crate::token::Span,
     ) {
         // The invariant is about well-typed programs: once an error is
         // reported the arguments carry recovery types, which say nothing about
         // synthesis.
-        if cfg!(debug_assertions) && !self.logger.has_errors() {
-            for (index, class) in synthesized.iter().enumerate() {
-                let Some(class @ (ArgClass::Exact(_) | ArgClass::Head(_))) = class else {
-                    continue;
-                };
-                let Some(arg) = args.get(index) else { continue };
-                if arg.type_id == TypeTable::ERROR || arg.type_id == TypeTable::UNKNOWN {
-                    continue;
-                }
-                assert!(
-                    self.class_admits(arg.type_id, class),
-                    "argument synthesis under-approximated at {span:?}: argument {} elaborated to \
-                     `{}`, which the synthesized class {class:?} excludes",
-                    index + 1,
-                    self.tysys.type_table.borrow().type_name(arg.type_id),
-                );
+        if !cfg!(debug_assertions) || self.logger.has_errors() {
+            return;
+        }
+        for (index, arg_ast) in args_ast.iter().enumerate() {
+            let Some(arg) = args.get(index) else { continue };
+            if arg.type_id == TypeTable::ERROR || arg.type_id == TypeTable::UNKNOWN {
+                continue;
             }
+            let class = match selected_with.get(index).and_then(Clone::clone) {
+                Some(class) => class,
+                None => self.synthesize_arg_class(arg_ast, ctx),
+            };
+            assert!(
+                self.class_admits(arg.type_id, &class),
+                "argument synthesis under-approximated at {span:?}: argument {} elaborated to \
+                 `{}`, which the synthesized class {class:?} excludes",
+                index + 1,
+                self.tysys.type_table.borrow().type_name(arg.type_id),
+            );
         }
     }
 
@@ -379,19 +384,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let name = canonical.as_deref().unwrap_or(&id.name);
         if !name.contains("::") {
             if let Some(local) = ctx.lookup(name) {
-                return ArgClass::Exact(local.type_id);
+                return self.class_of_type(local.type_id);
             }
             if let Some((_, inner)) = ctx.deref_overrides.get(name) {
-                return ArgClass::Exact(*inner);
+                return self.class_of_type(*inner);
             }
             if let Some(outer) = ctx.outer_locals.get(name) {
-                return ArgClass::Exact(outer.type_id);
+                return self.class_of_type(outer.type_id);
             }
             if let Some(&(ty, _)) = self.sem.decls.current_module_globals.get(name) {
-                return ArgClass::Exact(ty);
+                return self.class_of_type(ty);
             }
             if let Some((_, _, ty, _)) = self.sem.decls.imported_globals.get(name) {
-                return ArgClass::Exact(*ty);
+                return self.class_of_type(*ty);
             }
             // A bare function name is a function *reference*, whose type the
             // expected type instantiates; anything else did not resolve.
@@ -404,7 +409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         if let Some((_, ty, _)) = self.lookup_associated_constant(name) {
-            return ArgClass::Exact(ty);
+            return self.class_of_type(ty);
         }
         let name = name.to_string();
         self.synth_qualified_case(&name)
@@ -437,7 +442,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(info) = self.lookup_flags_case(prefix) {
             let type_id = info.type_id;
             if info.members.iter().any(|m| m.name == suffix) {
-                return ArgClass::Exact(type_id);
+                return self.class_of_type(type_id);
             }
         }
         ArgClass::Opaque(OpaqueReason::Unresolved)
@@ -445,7 +450,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     fn synth_decl_type(&self, declared_at: ast::AstId) -> ArgClass {
         match self.tysys.type_table.borrow().type_of_symbol(&declared_at) {
-            Some(type_id) => ArgClass::Exact(type_id),
+            Some(type_id) => self.class_of_type(type_id),
             None => ArgClass::Opaque(OpaqueReason::Unresolved),
         }
     }
@@ -509,8 +514,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(name) = self.tysys.struct_name_for_type(t) else {
                     return open;
                 };
-                match self.find_arithmetic_trait_impl(&name, t, trait_name, method_name) {
-                    Some(info) => ArgClass::Exact(info.output_type),
+                match self.find_arithmetic_trait_impl(&name, t, trait_name, method_name, None) {
+                    Some(info) => self.class_of_type(info.output_type),
                     None => open,
                 }
             }
@@ -724,7 +729,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (`resolve_index`), so a literal key takes its default type there — and
     /// synthesis must read the key the same way or it would answer for an impl
     /// the real walk never picks.
-    fn index_key_type(&mut self, key: &ArgClass) -> Option<TypeId> {
+    pub(super) fn index_key_type(&mut self, key: &ArgClass) -> Option<TypeId> {
         match key {
             ArgClass::Exact(t) => Some(*t),
             ArgClass::IntLit => Some(TypeTable::I32),
@@ -860,15 +865,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A resolved type's class: exact when closed, its head when only the head
-    /// is known, open when neither.
+    /// is known, open when neither. The single funnel every rule returns
+    /// through, so "`Exact` means closed" holds in one place.
+    ///
+    /// A type carrying an unsolved inference hole is *not* closed even though
+    /// it names a constructor: `let Some(b) = opt` binds `b` at `?` until the
+    /// argument position pins it, and reading the hole as the answer is
+    /// exactly the under-approximation the invariant forbids.
     fn class_of_type(&self, type_id: TypeId) -> ArgClass {
         if type_id == TypeTable::UNKNOWN || type_id == TypeTable::ERROR {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         }
-        let tt = self.tysys.type_table.borrow();
-        if !tt.contains_type_param(type_id) {
+        let open = self.tysys.type_table.borrow().contains_type_param(type_id)
+            || self.type_has_infer_hole(type_id);
+        if !open {
             return ArgClass::Exact(type_id);
         }
+        let tt = self.tysys.type_table.borrow();
         match tt.get(type_id) {
             ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. } => {
                 ArgClass::Head(tt.fq_base_type_name(type_id))
@@ -885,20 +898,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A named struct literal's type: exact for a non-generic struct the table
-    /// has interned, its head for a generic one. A name that is not a known
-    /// type resolves to nothing, so it claims no head either.
+    /// has interned, its head for a generic one — `Pair { … }` elaborates to
+    /// `Pair<i32, i64>`, and the declaration's own `TypeId` is not that type.
+    /// A name that is not a known type resolves to nothing, so it claims no
+    /// head either.
     fn synth_named_type(&self, name: &str) -> ArgClass {
         if let Some(primitive) = TypeTable::primitive_by_name(name) {
             return ArgClass::Exact(primitive);
         }
         let (module, decl) = self.canonical_decl_key(name);
-        if let Some(type_id) = self
+        let generic = self
+            .lookup_struct_fields_in(&decl, &module)
+            .is_some_and(|info| !info.type_param_type_ids.is_empty());
+        if generic {
+            return ArgClass::Head(FqTypeName::of_head(&module, &decl));
+        }
+        let found = self
             .tysys
             .type_table
             .borrow()
-            .find_struct_type(&decl, &module)
-        {
-            return ArgClass::Exact(type_id);
+            .find_struct_type(&decl, &module);
+        if let Some(type_id) = found {
+            return self.class_of_type(type_id);
         }
         if self.tysys.is_known_type_name(&decl) {
             return ArgClass::Head(FqTypeName::of_head(&module, &decl));

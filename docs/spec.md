@@ -3255,6 +3255,35 @@ i32::from_str_lenient(&" 1 ")     // Err — never trims whitespace
 
 `FromStr`'s fundamental operation is `from_str_range(s, start, end)` (parse a byte range with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
 
+### Arithmetic Operator Traits
+
+The prelude's binary operator traits (`Add`, `Sub`, `Mul`, `Div`, `Rem`,
+`BitAnd`, `BitOr`, `BitXor`) carry a right-hand type parameter defaulting to
+`Self`:
+
+```wado
+trait Add<Rhs = Self> {
+    type Output;
+    fn add(&self, rhs: &Rhs) -> Self::Output;
+}
+```
+
+Omitting the argument is the ordinary case: `impl Add for Meters` adds two
+`Meters`. Writing it lets one type be added to another, and the right operand
+selects between the impls:
+
+```wado
+impl Add for Meters { … }          // Meters + Meters
+impl Add<Feet> for Meters { … }    // Meters + Feet
+
+let total = m + f;                 // selects Add<Feet>
+```
+
+Selection follows the same unique-or-error rule as a method call's argument
+lists (see [One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)).
+`Neg` and `BitNot` are unary and take no argument; `Shl` / `Shr` declare
+`rhs: u32`.
+
 ### Indexing Traits
 
 The prelude defines traits for index-based access:

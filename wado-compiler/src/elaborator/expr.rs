@@ -67,6 +67,21 @@ pub(super) enum UnionSource {
     Base { base_idx: usize, field_index: u32 },
 }
 
+/// The selected indexing impl's key type must be the one the index expression
+/// was elaborated against — the pre-selection that supplies the expected type
+/// and the post-selection that reads the impl ask the same question, so a
+/// disagreement means one of them changed. It used to be *repaired* by
+/// resolving the index a second time, which elaborated one AST node twice;
+/// asserting keeps the single elaboration honest.
+fn debug_assert_key_matches(impl_key: Option<TypeId>, elaborated: TypeId) {
+    if let Some(key) = impl_key {
+        debug_assert_eq!(
+            key, elaborated,
+            "indexing impl selected for a key type the index was not elaborated against"
+        );
+    }
+}
+
 /// Peel references off `type_id` and, if it names a struct, return its
 /// `(name, defining module, type arguments)`. Shared by the resolve and reify
 /// spread-field projections so both classify a base identically.
@@ -1567,18 +1582,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
-            let expected_key = Self::is_coercible_compound_literal(&index.index)
-                .then(|| {
-                    self.index_lookup_or_newtype_base(
-                        &struct_name,
-                        base_type_id,
-                        &lookup_name,
-                        lookup_type_id,
-                        |s, n, t| s.find_index_value_trait_impl(n, t, None),
-                    )
-                    .and_then(|(i, _)| i.index_type)
-                })
-                .flatten();
+            // A subscript selects its impl by key type, so the key must be
+            // typed before the impl is chosen — the same ordering an
+            // overloaded method call has, answered the same way: by
+            // synthesizing the key. Only a key synthesis cannot type (a
+            // compound literal, whose type the impl supplies) still falls back
+            // to pre-selecting an impl for its expected type.
+            let key_class = self.synthesize_arg_class(&index.index, ctx);
+            let expected_key = self.index_key_type(&key_class).or_else(|| {
+                self.index_lookup_or_newtype_base(
+                    &struct_name,
+                    base_type_id,
+                    &lookup_name,
+                    lookup_type_id,
+                    |s, n, t| s.find_index_value_trait_impl(n, t, None),
+                )
+                .and_then(|(i, _)| i.index_type)
+            });
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
 
             // Reject &T/&mut T used as index expression (would ICE in codegen)
@@ -1602,11 +1622,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .flatten();
             if let Some((trait_info, matched_type_id)) = index_trait_info {
-                if let Some(key_type) = trait_info.index_type
-                    && key_type != index_type
-                {
-                    let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
-                }
+                debug_assert_key_matches(trait_info.index_type, index_type);
 
                 let receiver = self.fq_index_receiver(matched_type_id);
                 let mangled_method_name =
@@ -1658,11 +1674,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
             );
             if let Some((trait_info, matched_type_id)) = index_value_info {
-                if let Some(key_type) = trait_info.index_type
-                    && key_type != index_type
-                {
-                    let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
-                }
+                debug_assert_key_matches(trait_info.index_type, index_type);
 
                 let receiver = self.fq_index_receiver(matched_type_id);
                 let mangled_method_name = MethodName::format_local(
