@@ -1722,11 +1722,10 @@ impl DceAnalysis {
                     name, type_args, ..
                 } => {
                     self.generic_instance_names.insert(name.clone());
-                    // The same spelling a live `Struct` with type args records,
-                    // so `keeps_struct` recognises the monomorph either way. A
-                    // dead local still declares its type, and `wir_build`
-                    // declares a Wasm local for it — reaching the instance
-                    // through no other node is not the same as being unused.
+                    // The spelling a live `Struct` with type args records, so
+                    // `keeps_struct` recognises the monomorph either way: a dead
+                    // local still declares its type, and `wir_build` declares a
+                    // Wasm local for it.
                     self.struct_monomorph_names
                         .insert(type_table.struct_rendered_name(name, type_args));
                 }
