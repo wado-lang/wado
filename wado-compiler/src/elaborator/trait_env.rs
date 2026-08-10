@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use super::written::WrittenHead;
 use crate::ast::{self, AstId, Item, Module, Type};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -13,7 +14,6 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name;
 use crate::tir::TypeTable;
 use crate::token::Span;
-use super::written::WrittenHead;
 
 /// A module's type-name import scope, derived once from its `use`
 /// declarations. The single source of truth for how a module resolves a type
@@ -993,10 +993,10 @@ impl TraitEnv {
                         module_import_scopes.get(module_source),
                         symbols,
                         decl_index
-                        .keys()
-                        .chain(effect_decl_index.keys())
-                        .chain(resource_decl_index.keys())
-                        .chain(type_decl_index.keys()),
+                            .keys()
+                            .chain(effect_decl_index.keys())
+                            .chain(resource_decl_index.keys())
+                            .chain(type_decl_index.keys()),
                     )
                 });
                 impl_headers.insert(
@@ -1144,21 +1144,20 @@ impl TraitEnv {
         // from the writing module's vantage. Every whole-program check below
         // takes it rather than reading a head off the AST, so no check can
         // fall back to comparing spellings.
-        let resolve_written = |module: &ModuleSource,
-                               ty: &ast::Type,
-                               type_params: &[ast::GenericParam]| {
-            impl_target_key(
-                WrittenHead::of(ty, module),
-                type_params,
-                module_import_scopes.get(module),
-                symbols,
-                decl_index
+        let resolve_written =
+            |module: &ModuleSource, ty: &ast::Type, type_params: &[ast::GenericParam]| {
+                impl_target_key(
+                    WrittenHead::of(ty, module),
+                    type_params,
+                    module_import_scopes.get(module),
+                    symbols,
+                    decl_index
                         .keys()
                         .chain(effect_decl_index.keys())
                         .chain(resource_decl_index.keys())
                         .chain(type_decl_index.keys()),
-            )
-        };
+                )
+            };
 
         let mut violations = check_all_orphan_rules(
             &impl_headers,
@@ -2059,11 +2058,7 @@ fn check_variadic_impl_overlap(
                 Some(ast::Type::Generic(generic)) => &generic.args,
                 _ => &[],
             },
-            params: header
-                .type_params
-                .iter()
-                .map(|p| p.name.as_str())
-                .collect(),
+            params: header.type_params.iter().map(|p| p.name.as_str()).collect(),
         });
     }
 
@@ -2150,11 +2145,7 @@ fn check_inherent_impl_collisions(
         if header.trait_key.is_some() {
             continue;
         }
-        let params: IndexSet<&str> = header
-            .type_params
-            .iter()
-            .map(|p| p.name.as_str())
-            .collect();
+        let params: IndexSet<&str> = header.type_params.iter().map(|p| p.name.as_str()).collect();
         if target_mentions_impl_param(&header.ty, &params) {
             generic_methods_by_target
                 .entry(&header.target)
@@ -2231,7 +2222,8 @@ fn check_all_orphan_rules(
             // `LocalType` head as owned; only a genuinely foreign head is a
             // violation. (Stdlib modules are skipped above, so their own
             // `impl Array<T>` / `impl i32` are unaffected.)
-            if let PositionKind::ForeignType = classify_position(&header.ty, header, &local, resolve)
+            if let PositionKind::ForeignType =
+                classify_position(&header.ty, header, &local, resolve)
             {
                 violations.push((
                     header.module.clone(),

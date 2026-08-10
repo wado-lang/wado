@@ -41,9 +41,9 @@ impl<'a> WrittenHead<'a> {
             ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME,
             ast::Type::Named(named) => named.name.as_str(),
             ast::Type::Generic(generic) => generic.name.as_str(),
-            ast::Type::Reference(_) | ast::Type::MutReference(_) => ref_kind
-                .expect("Reference/MutReference classify")
-                .prefix(),
+            ast::Type::Reference(_) | ast::Type::MutReference(_) => {
+                ref_kind.expect("Reference/MutReference classify").prefix()
+            }
             ast::Type::Tuple(elems) if elems.is_empty() => TypeTable::UNIT_TYPE_NAME,
             ast::Type::Tuple(_) => TypeTable::TUPLE_TYPE_NAME,
             ast::Type::NamespacedGeneric(_)
@@ -70,7 +70,10 @@ impl<'a> WrittenHead<'a> {
     /// Hand a resolver the spelling and the vantage at once, so the two cannot
     /// be paired wrongly. Every identity derived from written syntax goes
     /// through here.
-    pub(crate) fn resolve_with<T>(&self, resolve: impl FnOnce(&'a ModuleSource, &'a str) -> T) -> T {
+    pub(crate) fn resolve_with<T>(
+        &self,
+        resolve: impl FnOnce(&'a ModuleSource, &'a str) -> T,
+    ) -> T {
         resolve(self.vantage, self.spelling)
     }
 

@@ -88,13 +88,13 @@ a check reporting on one needs no second look at the AST.
 
 Every whole-program check now reads the digest:
 
-| check                       | keyed by                                        |
-| --------------------------- | ----------------------------------------------- |
-| inherent-impl collisions    | `ImplTargetKey` of the target                   |
-| orphan rules (RFC 2451)     | `DeclKey` sets of user-owned types and traits   |
-| variadic-impl overlap       | `ImplTargetKey` of the trait                    |
-| sealed-trait impls          | the stdlib declaration's `ImplTargetKey`        |
-| trait-method arity          | the declaration the impl's own header resolved  |
+| check                    | keyed by                                       |
+| ------------------------ | ---------------------------------------------- |
+| inherent-impl collisions | `ImplTargetKey` of the target                  |
+| orphan rules (RFC 2451)  | `DeclKey` sets of user-owned types and traits  |
+| variadic-impl overlap    | `ImplTargetKey` of the trait                   |
+| sealed-trait impls       | the stdlib declaration's `ImplTargetKey`       |
+| trait-method arity       | the declaration the impl's own header resolved |
 
 The rule this establishes: **a whole-program check does not walk
 `loaded_modules`.** Walking is how a pass ends up holding syntax without a
@@ -144,7 +144,7 @@ one of those two expressions: the collision check hashed the head, the orphan
 and sealed checks compared it.
 
 `WrittenHead::resolve_with` hands a resolver the spelling and the vantage in one
-call, so the two cannot be paired wrongly. Questions that are *not* identity
+call, so the two cannot be paired wrongly. Questions that are _not_ identity
 questions keep syntax-only helpers, because they are answered inside one item
 where the vantage is shared by construction:
 
@@ -177,7 +177,7 @@ Three further corrections fall out rather than being sought:
   `DeclKey` set.
 - The sealed-trait scan compared a written head against a compiler item's name
   and exempted the whole check whenever any user module declared a trait of
-  that name. The sealed trait is the *stdlib* declaration of that name, so a
+  that name. The sealed trait is the _stdlib_ declaration of that name, so a
   user trait sharing it is simply a different key — the exemption is gone with
   the ambiguity that motivated it.
 - The trait-method arity check matched an impl against "the declaration in the
@@ -191,7 +191,7 @@ Costs and risks:
   the e2e suite is their gate, not a proof obligation discharged by review.
 - `ImplHeader` grows. It is the intended direction — the digest exists so
   consumers stop re-reading the AST — but each added field must be one the
-  build phase can fill correctly for *every* impl block, stdlib included.
+  build phase can fill correctly for _every_ impl block, stdlib included.
 - Rule 3 makes every surviving hole say so at its call site, but does not close
   it. Each `spelling_pending_migration` caller is still a place the class can
   produce a wrong answer — just not a place it can be written by accident.
@@ -229,6 +229,6 @@ identity by comparing spellings.
 -
   6. [ ] `item.rs`'s unknown-trait check and `reify.rs`'s default-method
          synthesis are sound already — each hands its spelling to a frame
-         resolver whose vantage *is* the head's module — but they say so only in
+         resolver whose vantage _is_ the head's module — but they say so only in
          prose. They read through `resolve_with` once the resolver stops needing
          `&mut self` while the head borrows it.

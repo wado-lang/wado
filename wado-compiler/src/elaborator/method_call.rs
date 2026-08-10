@@ -3294,7 +3294,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && method.default_body.is_some()
                     && method.sig.self_kind == ast::SelfKind::None
                 {
-                    return Some((resolve_trait_name(trait_type, impl_module), method.sig.ast_id));
+                    return Some((
+                        resolve_trait_name(trait_type, impl_module),
+                        method.sig.ast_id,
+                    ));
                 }
                 None
             };

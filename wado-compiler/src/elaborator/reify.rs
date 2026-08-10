@@ -1446,7 +1446,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             super::written::WrittenHead::of(trait_ast, &self.current_module_source)
                 .spelling_pending_migration();
         let Some(trait_sig) = super::trait_query::trait_sig_by_name_with(
-            &trait_decl_name,
+            trait_decl_name,
             &self.current_module_source,
             &self.sem.imports,
             self.symbols,
