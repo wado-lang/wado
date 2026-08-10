@@ -267,10 +267,16 @@ phase (was ~21 %); the cost is now the passes themselves.
 
 Precision.
 
-- [ ] Per-`(receiver-root, field)` heap granularity via `mod_ref.rs`, replacing
-      the per-field MVP. Standing residual: `int128_cast_to_primitives` is +36
-      bytes, one reinterpret assert whose seed and consumer never coexist in a
-      single per-build graph.
+- [ ] Retire or repair `loop_entry_values`. It is the only thing the built
+      `ValueGraphBuild` still produces for a pass (LICM's hoist legality), and
+      measurement says LICM never gets a usable answer: across ten benchmarks and
+      a fixture sample the value-hoist path asked 10,900 times and collected zero
+      loop-entry locals every time, because almost nothing is a promoted operand
+      _while the loop runs_ — `promote_fields` and the final arithmetic freeze
+      are both post-loop. `inline` meanwhile discards a non-empty map 1,469
+      times, which costs nothing precisely because the consumer is inert. Either
+      promote earlier so LICM sees operands, or drop the mechanism and the build
+      it justifies.
 - [ ] Copy propagation on `ValueId`. Source-stability is not subsumed by value
       equality — a write-once `x` whose source `y` is later reassigned can read
       equal ids yet be unsafe to fold. Revisit with `Select` / `Opaque`

@@ -258,7 +258,7 @@ impl<'a> Engine<'a> {
             pure_builtin_callees: None,
         };
         // The value graph lives on `Body` and is built once, then maintained
-        // through every edit (`maintain_value_after_edit` / `redirect_expr`, plus
+        // through every edit (`replace_expr_with_value` / `redirect_expr`, plus
         // structural-pass coarsening). A new session reuses it as-is — there is
         // no session-start drop and no rebuild path (build-once is invariant).
         engine.build_parents();
@@ -275,20 +275,19 @@ impl<'a> Engine<'a> {
     /// # Maintenance contract
     ///
     /// The graph is built once and maintained in place — there is no rebuild.
-    /// Edits via the engine API (`replace_expr_kind` / `redirect_expr`) keep it
-    /// current through `maintain_value_after_edit`; a structural pass that edits
-    /// the arena directly (`inline`) coarsens the touched region, then regrows
-    /// each splice point's *constants* ([`crate::nir_value_graph::builder::build_scoped`]).
-    /// A query reflects the maintained state.
+    /// Edits via the engine API (`replace_expr_kind` / `redirect_expr`) keep the
+    /// operands current, and a query re-derives through them
+    /// ([`Engine::maintain_pure_node`]); a structural pass that edits the arena
+    /// directly (`inline`) coarsens the touched region, and a caller that needs
+    /// the reaching values back regrows them into a scratch pool
+    /// ([`Engine::scoped_const_reads`]).
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
-        // `value_of` retirement: the skeleton-expr → value side-table read is
-        // removed. An expr's value now comes only from promoted operands
-        // (born-as-operands) and pure re-derivation over them; an unpromoted leaf
-        // (`Local` / `FieldAccess`) resolves to `None`. Sound — `None` is the
-        // finest partition, so consumers (cse / store_load_forward / freeze) skip
-        // the expr rather than over-merge. The remaining red is the honest measure
-        // of how much the optimizer still depends on the side-table.
+        // There is no skeleton-expr → value side-table. An expr's value comes
+        // only from promoted operands (born-as-operands) and pure re-derivation
+        // over them; an unpromoted leaf (`Local` / `FieldAccess`) resolves to
+        // `None`. Sound — `None` is the finest partition, so a consumer skips the
+        // expr rather than over-merging it with another.
         self.maintain_pure_node(expr)
     }
 
