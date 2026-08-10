@@ -672,8 +672,6 @@ fn render_generic_params(params: &[GenericParam]) -> String {
             out.push_str(": ");
             render_trait_bounds(&param.bounds, &mut out);
         }
-        // The default is what makes the argument optional, so `Add<Rhs = Self>`
-        // rendered as `Add<Rhs>` reads as a mandatory one.
         if let Some(default) = &param.default {
             out.push_str(" = ");
             out.push_str(&render_type(default));

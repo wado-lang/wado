@@ -66,11 +66,11 @@ export fn run() {
 ```
 
 Arithmetic operators start out unable to exhibit a collision at all: the
-prelude's operator traits took no type parameters (`trait Add { type Output; fn
-add(&self, rhs: &Self) … }`), so `impl Add<X>` was not writable and a receiver
-had exactly one `Add` impl — which is what made `find_arithmetic_trait_impl`'s
+prelude's operator traits take no type parameters (`trait Add { type Output; fn
+add(&self, rhs: &Self) … }`), so `impl Add<X>` is not writable and a receiver has
+exactly one `Add` impl — which is what makes `find_arithmetic_trait_impl`'s
 first-impl scan safe. Bringing `+` under the same rule as every other call
-therefore starts by parameterizing them, `trait Add<Rhs = Self>`, the shape
+therefore starts by parameterizing them: `trait Add<Rhs = Self>`, the shape
 Rust's `std::ops` uses.
 
 The design constraint is the [design philosophy](./design-philosophy.md): no

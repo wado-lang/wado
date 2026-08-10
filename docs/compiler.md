@@ -77,7 +77,7 @@ The result, `Semantics`, carries the TIR modules plus an `AstIndex` and a use→
 
 The elaborator covers trait selection, generic inference, method dispatch, coercion, and effect typing. All trait calls are resolved statically — by the end of the pipeline every call targets a concrete monomorphized function. There is no runtime vtable.
 
-One trait implemented for one receiver at several argument lists is chosen by the arguments, which are classified before they are elaborated (`elaborator/synth.rs`, [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)). That classification is a query, not a walk: it runs under `Logger::quiet`, and debug builds assert it recorded no fact.
+One trait implemented for one receiver at several argument lists is chosen by the arguments, which are classified before they are elaborated (`elaborator/synth.rs`, [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)). That classification is a read-only query: it runs under `Logger::quiet`, and debug builds assert it recorded no fact.
 
 ## Synthesis
 
