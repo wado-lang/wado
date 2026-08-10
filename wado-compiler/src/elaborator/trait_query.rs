@@ -961,6 +961,7 @@ impl TypeSystem {
             | ResolvedType::Error
             | ResolvedType::TypeParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::InferVar(_)
             | ResolvedType::AssocTypeProjection { .. } => false,
         }
     }

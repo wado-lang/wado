@@ -59,7 +59,7 @@ pub(super) fn unify(
         // `or_insert` prevents later fields with self-referential types
         // (like `List<&Node<K>>`) from overwriting earlier correct
         // mappings (like `K -> String`) with incorrect ones (`K -> K`).
-        (ResolvedType::TypeParam { .. }, _) => {
+        (ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_), _) => {
             bindings.entry(expected).or_insert(actual);
         }
         // Tuple types with a type pack: e.g., `[A, ..T, B]` matched

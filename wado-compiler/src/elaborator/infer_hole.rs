@@ -7,23 +7,19 @@
 //! solved holes into recorded facts; an unsolved hole raises "cannot infer" and
 //! is pinned to `error`.
 //!
-//! Holes are `TypeParam`s with `index >= HOLE_INDEX_BASE`, reusing the
-//! unification/substitution machinery without colliding with real parameters.
-//! Deferral fires only for hole-free receivers/args, so no recorded mangled
-//! name embeds a hole and a plain `TypeId` sweep suffices.
+//! A hole is a [`ResolvedType::InferVar`] — a *flexible* variable, distinct
+//! from the *rigid* `TypeParam` it stands in for. Deferral fires only for
+//! hole-free receivers/args, so no recorded mangled name embeds a hole and a
+//! plain `TypeId` sweep suffices.
 
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{InferVarId, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
 use super::infer::unify;
 use super::types::TypeError;
-
-/// Reserved start of the inference-hole `TypeParam` index space, far above the
-/// dense-from-0 real type parameters so the two never overlap.
-pub(super) const HOLE_INDEX_BASE: u32 = 0x8000_0000;
 
 /// Per-module registry of inference holes and their (eventual) solutions.
 #[derive(Default)]
@@ -55,14 +51,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: String,
         bound_names: Vec<String>,
     ) -> TypeId {
-        // Holes are only appended, so the next dense index is the current count.
-        let index = HOLE_INDEX_BASE + self.infer_holes.solutions.len() as u32;
-        let name = format!("?{index}");
-        let hole = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_type_param(name, index);
+        // Variables are only appended, so the next id is the current count.
+        let var = InferVarId(self.infer_holes.solutions.len() as u32);
+        let hole = self.tysys.type_table.borrow_mut().make_infer_var(var);
         self.infer_holes.solutions.insert(hole, None);
         self.infer_holes.diags.insert(hole, (span, message));
         if !bound_names.is_empty() {
@@ -120,10 +111,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.infer_holes.is_empty() {
             return false;
         }
-        self.tysys
-            .type_table
-            .borrow()
-            .contains_infer_hole(ty, HOLE_INDEX_BASE)
+        self.tysys.type_table.borrow().contains_infer_var(ty)
     }
 
     /// Whether a deferred inference hole may be solved against `expected`.
@@ -163,7 +151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let tt = self.tysys.type_table.borrow();
         for (hole, concrete) in bindings {
             if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole)
-                && !tt.contains_infer_hole(concrete, HOLE_INDEX_BASE)
+                && !tt.contains_infer_var(concrete)
             {
                 *slot = Some(concrete);
             }
@@ -183,25 +171,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .substitute_type_params(ty, &subst)
+            .substitute_infer_vars(ty, &subst)
     }
 
-    /// Build the `hole-index → replacement` map. With `pin_unsolved`, unsolved
-    /// holes map to `error` (used at finalize so nothing leaks); otherwise only
-    /// solved holes are included.
-    fn solved_hole_subst(&self, pin_unsolved: bool) -> IndexMap<u32, TypeId> {
+    /// Build the `variable → replacement` map. With `pin_unsolved`, unsolved
+    /// variables map to `error` (used at finalize so nothing leaks); otherwise
+    /// only solved ones are included.
+    fn solved_hole_subst(&self, pin_unsolved: bool) -> IndexMap<InferVarId, TypeId> {
         let tt = self.tysys.type_table.borrow();
         self.infer_holes
             .solutions
             .iter()
             .filter_map(|(hole, sol)| {
-                let index = match tt.get(*hole) {
-                    ResolvedType::TypeParam { index, .. } => *index,
-                    _ => return None,
+                let ResolvedType::InferVar(var) = tt.get(*hole) else {
+                    panic!("infer-hole table holds a non-variable type");
                 };
                 match sol {
-                    Some(concrete) => Some((index, *concrete)),
-                    None if pin_unsolved => Some((index, TypeTable::ERROR)),
+                    Some(concrete) => Some((*var, *concrete)),
+                    None if pin_unsolved => Some((*var, TypeTable::ERROR)),
                     None => None,
                 }
             })
@@ -274,7 +261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Trait default-method bodies record into a separate synthetic semantics
     /// stashed in `default_method_semantics`, not the main `types`; sweep those
     /// too, or a hole minted in a default-method body leaks past reify.
-    fn sweep_recorded_facts(&mut self, subst: &IndexMap<u32, TypeId>) {
+    fn sweep_recorded_facts(&mut self, subst: &IndexMap<InferVarId, TypeId>) {
         if subst.is_empty() {
             return;
         }
@@ -289,12 +276,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn sweep_type_annotations(
         tt: &mut TypeTable,
         types: &mut super::sem::TypeAnnotations,
-        subst: &IndexMap<u32, TypeId>,
+        subst: &IndexMap<InferVarId, TypeId>,
     ) {
-        let sub = |tt: &mut TypeTable, t: TypeId| tt.substitute_type_params(t, subst);
+        let sub = |tt: &mut TypeTable, t: TypeId| tt.substitute_infer_vars(t, subst);
         let sub_vec = |tt: &mut TypeTable, v: &mut Vec<TypeId>| {
             for t in v.iter_mut() {
-                *t = tt.substitute_type_params(*t, subst);
+                *t = tt.substitute_infer_vars(*t, subst);
             }
         };
 

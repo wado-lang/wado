@@ -271,6 +271,20 @@ impl std::fmt::Display for TypeId {
     }
 }
 
+/// Identity of an inference variable — see [`ResolvedType::InferVar`].
+///
+/// Minted per module by the elaborator, so two uses of the same polymorphic
+/// signature get distinct variables. Unlike a [`ResolvedType::TypeParam`]
+/// index, this is not positional: it names one unknown, not a slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct InferVarId(pub u32);
+
+impl std::fmt::Display for InferVarId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "?{}", self.0)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PrimitiveType {
     I8,
@@ -412,13 +426,29 @@ pub enum ResolvedType {
         stores: Vec<u32>,
     },
     Reactive(TypeId),
-    /// Type parameter (e.g., `T` in `struct Box<T>`)
-    /// Used before monomorphization; should be substituted with concrete types
+    /// Type parameter (e.g., `T` in `struct Box<T>`) — a *rigid* variable.
+    ///
+    /// It stands for whatever a caller instantiates the binding item with, so
+    /// inside that item it is opaque: nothing but itself is assignable to it.
+    /// It appears only within the item that binds it; a *use* of a polymorphic
+    /// signature instantiates these into [`ResolvedType::InferVar`]s.
     TypeParam {
         name: String,
         /// Index of the type parameter in the generic definition (0 for first param)
         index: u32,
     },
+    /// Inference variable — a *flexible* variable standing for a type the
+    /// solver has yet to determine.
+    ///
+    /// Minted when a use site instantiates a polymorphic signature, and solved
+    /// by unification against the actual argument / expected types. Distinct
+    /// from [`ResolvedType::TypeParam`] precisely because the two answer
+    /// opposite questions at a type check: a rigid parameter rejects anything
+    /// but itself, a variable accepts and records.
+    ///
+    /// Never survives elaboration — `finalize_infer_holes` substitutes every
+    /// variable (solved → concrete, unsolved → `error`) before lowering.
+    InferVar(InferVarId),
     /// Type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
     /// Used inside tuples before monomorphization; expanded to concrete types during substitution.
     ///
@@ -2089,6 +2119,11 @@ impl TypeTable {
         self.intern(ResolvedType::TypeParam { name, index })
     }
 
+    /// Create an inference variable (see [`ResolvedType::InferVar`]).
+    pub fn make_infer_var(&mut self, id: InferVarId) -> TypeId {
+        self.intern(ResolvedType::InferVar(id))
+    }
+
     /// Create a type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
     pub fn make_type_pack(&mut self, name: String, index: u32) -> TypeId {
         self.intern(ResolvedType::TypePack {
@@ -2512,15 +2547,47 @@ impl TypeTable {
         substitution: &IndexMap<u32, TypeId>,
         projections: &SlotProjections,
     ) -> TypeId {
-        if substitution.is_empty() && projections.is_empty() {
+        self.subst_rec(type_id, substitution, &IndexMap::default(), projections)
+    }
+
+    /// Substitute solved inference variables into `type_id`.
+    ///
+    /// The flexible counterpart of [`Self::substitute_type_params`]: that one
+    /// fills a declaration's slots positionally, this one answers variables the
+    /// solver has determined. They share one traversal, differing only in which
+    /// leaf they replace.
+    pub fn substitute_infer_vars(
+        &mut self,
+        type_id: TypeId,
+        solutions: &IndexMap<InferVarId, TypeId>,
+    ) -> TypeId {
+        self.subst_rec(
+            type_id,
+            &IndexMap::default(),
+            solutions,
+            &SlotProjections::default(),
+        )
+    }
+
+    /// The shared traversal behind [`Self::substitute_type_params_with`] and
+    /// [`Self::substitute_infer_vars`].
+    fn subst_rec(
+        &mut self,
+        type_id: TypeId,
+        substitution: &IndexMap<u32, TypeId>,
+        vars: &IndexMap<InferVarId, TypeId>,
+        projections: &SlotProjections,
+    ) -> TypeId {
+        if substitution.is_empty() && vars.is_empty() && projections.is_empty() {
             return type_id;
         }
         match self.get(type_id).clone() {
             ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
                 substitution.get(&index).copied().unwrap_or(type_id)
             }
+            ResolvedType::InferVar(var) => vars.get(&var).copied().unwrap_or(type_id),
             ResolvedType::BuiltinArray(elem) => {
-                let new_elem = self.substitute_type_params_with(elem, substitution, projections);
+                let new_elem = self.subst_rec(elem, substitution, vars, projections);
                 if new_elem == elem {
                     type_id
                 } else {
@@ -2528,7 +2595,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::Ref(inner) => {
-                let new_inner = self.substitute_type_params_with(inner, substitution, projections);
+                let new_inner = self.subst_rec(inner, substitution, vars, projections);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -2536,7 +2603,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::MutRef(inner) => {
-                let new_inner = self.substitute_type_params_with(inner, substitution, projections);
+                let new_inner = self.subst_rec(inner, substitution, vars, projections);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -2552,10 +2619,9 @@ impl TypeTable {
             } => {
                 let new_params: Vec<TypeId> = params
                     .iter()
-                    .map(|&p| self.substitute_type_params_with(p, substitution, projections))
+                    .map(|&p| self.subst_rec(p, substitution, vars, projections))
                     .collect();
-                let new_return_type =
-                    self.substitute_type_params_with(return_type, substitution, projections);
+                let new_return_type = self.subst_rec(return_type, substitution, vars, projections);
                 if new_params == params && new_return_type == return_type {
                     type_id
                 } else {
@@ -2575,7 +2641,7 @@ impl TypeTable {
             } => {
                 let new_args: Vec<TypeId> = type_args
                     .iter()
-                    .map(|&a| self.substitute_type_params_with(a, substitution, projections))
+                    .map(|&a| self.subst_rec(a, substitution, vars, projections))
                     .collect();
                 if new_args == type_args {
                     type_id
@@ -2617,9 +2683,10 @@ impl TypeTable {
                                             for pe in pack_elems {
                                                 let mut elem_substitution = substitution.clone();
                                                 elem_substitution.insert(index, pe);
-                                                new_elems.push(self.substitute_type_params_with(
+                                                new_elems.push(self.subst_rec(
                                                     elem,
                                                     &elem_substitution,
+                                                    vars,
                                                     projections,
                                                 ));
                                             }
@@ -2637,11 +2704,7 @@ impl TypeTable {
                                 }
                             }
                             _ => {
-                                new_elems.push(self.substitute_type_params_with(
-                                    e,
-                                    substitution,
-                                    projections,
-                                ));
+                                new_elems.push(self.subst_rec(e, substitution, vars, projections));
                             }
                         }
                     }
@@ -2653,7 +2716,7 @@ impl TypeTable {
                 } else {
                     let new_args: Vec<TypeId> = type_args
                         .iter()
-                        .map(|&a| self.substitute_type_params_with(a, substitution, projections))
+                        .map(|&a| self.subst_rec(a, substitution, vars, projections))
                         .collect();
                     if new_args == type_args {
                         type_id
@@ -2688,8 +2751,7 @@ impl TypeTable {
                 }
                 // Substitute the parameter first; only attempt projection
                 // resolution once the underlying type is fully concrete.
-                let substituted_base =
-                    self.substitute_type_params_with(param_id, substitution, projections);
+                let substituted_base = self.subst_rec(param_id, substitution, vars, projections);
                 if !self.contains_type_param(substituted_base) {
                     // Associated types are inherited through references (mirrors
                     // method-call auto-deref), so peel `&`/`&mut` before
@@ -2712,8 +2774,7 @@ impl TypeTable {
                 let mut new_bindings: Vec<(String, TypeId)> =
                     Vec::with_capacity(assoc_type_bindings.len());
                 for (name, bound) in &assoc_type_bindings {
-                    let substituted =
-                        self.substitute_type_params_with(*bound, substitution, projections);
+                    let substituted = self.subst_rec(*bound, substitution, vars, projections);
                     new_bindings.push((name.clone(), substituted));
                 }
                 if substituted_base == param_id && new_bindings == assoc_type_bindings {
@@ -2733,7 +2794,7 @@ impl TypeTable {
             // type today, so the wrapper never reaches monomorphize — but the
             // contract is "rewrite every embedded parameter", and it embeds one.
             ResolvedType::Reactive(inner) => {
-                let new_inner = self.substitute_type_params_with(inner, substitution, projections);
+                let new_inner = self.subst_rec(inner, substitution, vars, projections);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -2902,6 +2963,7 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::TypeParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::InferVar(_)
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => true,
@@ -3001,6 +3063,7 @@ impl TypeTable {
     pub fn type_params_all_in(&self, id: TypeId, allowed: &[TypeId]) -> bool {
         match self.get(id) {
             ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => allowed.contains(&id),
+            ResolvedType::InferVar(_) => false,
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
@@ -3033,26 +3096,24 @@ impl TypeTable {
 
     /// Whether `id` (recursively) contains an inference-hole `TypeParam` — one
     /// whose `index >= base` (see `elaborator::infer_hole`).
-    pub fn contains_infer_hole(&self, id: TypeId, base: u32) -> bool {
+    pub fn contains_infer_var(&self, id: TypeId) -> bool {
         match self.get(id) {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                *index >= base
-            }
+            ResolvedType::InferVar(_) => true,
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_infer_hole(*inner, base),
+            | ResolvedType::Reactive(inner) => self.contains_infer_var(*inner),
             ResolvedType::Function {
                 params,
                 return_type,
                 ..
             } => {
-                params.iter().any(|p| self.contains_infer_hole(*p, base))
-                    || self.contains_infer_hole(*return_type, base)
+                params.iter().any(|p| self.contains_infer_var(*p))
+                    || self.contains_infer_var(*return_type)
             }
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.contains_infer_hole(*t, base))
+                type_args.iter().any(|t| self.contains_infer_var(*t))
             }
             _ => false,
         }
@@ -3103,6 +3164,7 @@ impl TypeTable {
             }
             ResolvedType::Reactive(inner) => format!("Reactive<{}>", self.type_name(*inner)),
             ResolvedType::TypeParam { name, .. } => name.clone(),
+            ResolvedType::InferVar(var) => var.to_string(),
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
@@ -3796,6 +3858,7 @@ impl TypeTable {
             } => TypeNameInfo::Named(format!("{module_source}/{name}")),
             // A type parameter is a template's own binder, not a declaration.
             ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
+            ResolvedType::InferVar(var) => TypeNameInfo::Named(var.to_string()),
             ResolvedType::GenericInstance {
                 name,
                 type_args,
