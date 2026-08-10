@@ -115,6 +115,19 @@ argument is the surrounding item's own type parameters: a binder shadows any
 declaration of the same name, so `impl<T> Trait for T` written where a
 `struct T` exists stays a blanket rather than joining that struct's bucket.
 
+Its by-bare-name fallback — for a prelude `internal trait` such as
+`ReflectStruct`, which no module `use`s and no symbol exports — is scoped to the
+declarations the _position_ admits. A spelling cannot say whether `Codec` means
+a `trait Codec` or a `struct Codec`; an unscoped scan hands an `impl Codec { … }`
+target the trait's key, which is the wrong bucket and a bogus coherence error.
+
+`ImplTargetKey::TypeParam` answers both "a binder" and "reaches no declaration",
+so a consumer that needs them apart must ask the binder question itself, with
+`binder_of`, before resolving. The orphan rule is that consumer: a name
+resolving to nothing is a **foreign** type, and reading it as an uncovered
+parameter drops the coherence error `impl Undeclared { … }` deserves while
+inventing an orphan violation for `impl From<Local> for Undeclared`.
+
 Its call-site counterpart is `trait_query::canonical_decl_key_with`, over
 `decl_identity_core`. The two are different **vantages**, not two
 implementations — an `impl` header is read before any import scope of the
@@ -226,6 +239,16 @@ identity by comparing spellings.
   5. [ ] `orchestration.rs`'s associated-type scan is the last whole-program
          walk of `loaded_modules` that reads heads. It belongs on the digest,
          like the five checks that moved.
+-
+  7. [ ] `trait_query::find_trait_impl_for_type_with_args` compares
+         `header.trait_name` — the impl's spelling in its own module — against
+         the query's spelling in the caller's, so an aliased bound is
+         unsatisfiable and a same-named foreign trait is silently satisfied
+         (issue #1785). The impl-side identity is `header.trait_key` and the
+         caller-side one is `trait_decl_key_in_frame`; what remains is making
+         identity the currency of `type_implements_trait`, whose whole path —
+         including the `(TypeId, String)` recursion guard — threads
+         `trait_name: &str`.
 -
   6. [ ] `item.rs`'s unknown-trait check and `reify.rs`'s default-method
          synthesis are sound already — each hands its spelling to a frame

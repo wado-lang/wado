@@ -875,6 +875,20 @@ impl TraitEnv {
             }
         }
 
+        // The declarations that may inhabit each `impl` header position, for
+        // the by-bare-name fallback in `impl_target_key`. A spelling cannot say
+        // whether `Codec` means a `trait Codec` or a `struct Codec`; the
+        // position can, so each scope lists only what is admissible there. An
+        // unscoped scan hands an `impl Codec { … }` target the trait's key —
+        // the wrong bucket in `all_impl_index`, and a bogus coherence error.
+        let type_position_decls = || type_decl_index.keys().chain(resource_decl_index.keys());
+        let trait_position_decls = || {
+            decl_index
+                .keys()
+                .chain(effect_decl_index.keys())
+                .chain(resource_decl_index.keys())
+        };
+
         // Canonicalise a bare type / trait name referenced in
         // `module_source` (an impl block's home module). Looks first
         // through `symbols` (per-module imports + that module's own
@@ -980,11 +994,7 @@ impl TraitEnv {
                     &impl_block.type_params,
                     module_import_scopes.get(module_source),
                     symbols,
-                    decl_index
-                        .keys()
-                        .chain(effect_decl_index.keys())
-                        .chain(resource_decl_index.keys())
-                        .chain(type_decl_index.keys()),
+                    type_position_decls(),
                 );
                 let trait_key = impl_block.trait_type.as_ref().map(|trait_type| {
                     impl_target_key(
@@ -992,11 +1002,7 @@ impl TraitEnv {
                         &impl_block.type_params,
                         module_import_scopes.get(module_source),
                         symbols,
-                        decl_index
-                            .keys()
-                            .chain(effect_decl_index.keys())
-                            .chain(resource_decl_index.keys())
-                            .chain(type_decl_index.keys()),
+                        trait_position_decls(),
                     )
                 });
                 impl_headers.insert(
@@ -1151,11 +1157,7 @@ impl TraitEnv {
                     type_params,
                     module_import_scopes.get(module),
                     symbols,
-                    decl_index
-                        .keys()
-                        .chain(effect_decl_index.keys())
-                        .chain(resource_decl_index.keys())
-                        .chain(type_decl_index.keys()),
+                    type_position_decls(),
                 )
             };
 
@@ -1678,11 +1680,27 @@ fn classify_position(
         Type::Reference(inner) | Type::MutReference(inner) => {
             classify_position(inner, header, local, resolve)
         }
+        // "Is this position an uncovered parameter?" is a question about the
+        // impl's own binders, answered without resolving anything — and it must
+        // be asked separately. `ImplTargetKey::TypeParam` covers both a binder
+        // and a name that reaches no declaration at all, and reading the second
+        // as uncovered loses the coherence error an `impl Undeclared { … }`
+        // deserves while inventing an orphan violation for
+        // `impl From<Local> for Undeclared`.
+        Type::Named(_) | Type::Generic(_)
+            if super::written::binder_of(ty, &header.type_params).is_some() =>
+        {
+            PositionKind::UncoveredTypeParam
+        }
+        // Everything else is an identity question: the package owns this
+        // position only when the name resolves to a declaration it owns. A name
+        // resolving to nothing is foreign, not uncovered.
         Type::Named(_) | Type::Generic(_) => {
             match resolve(&header.module, ty, &header.type_params) {
-                ImplTargetKey::TypeParam(..) => PositionKind::UncoveredTypeParam,
                 ImplTargetKey::Decl(key) if local.types.contains(&key) => PositionKind::LocalType,
-                ImplTargetKey::Decl(_) | ImplTargetKey::Ref(_) => PositionKind::ForeignType,
+                ImplTargetKey::Decl(_) | ImplTargetKey::Ref(_) | ImplTargetKey::TypeParam(..) => {
+                    PositionKind::ForeignType
+                }
             }
         }
         // Tuples are local if the current crate owns them (via `pub type [..T];`)
@@ -2301,6 +2319,15 @@ pub(super) fn declaring_side_decl_key<'a>(
     (module_source.clone(), name.to_string())
 }
 
+/// `decl_keys` are the declarations to fall back to by bare name, for a name
+/// the import scope and symbol table both miss — a prelude `internal trait`
+/// such as `ReflectStruct`, which no module `use`s and no symbol exports.
+///
+/// It must list only the declarations that can inhabit this position: a
+/// spelling alone cannot say whether `Codec` means one module's `trait Codec`
+/// or another's `struct Codec`, and only the position knows which is even
+/// admissible. [`TraitEnv::build`] scopes it per position
+/// (`type_position_decls` / `trait_position_decls`).
 pub(super) fn impl_target_key<'a>(
     head: WrittenHead<'_>,
     type_params: &[ast::GenericParam],
@@ -2422,10 +2449,17 @@ mod tests {
         VANTAGE.with(Clone::clone)
     }
 
+    /// Names the test program declares nowhere. The real resolver answers
+    /// `TypeParam` for these — the same variant a binder gets — so the double
+    /// must too, or the tests cannot see the conflation `classify_position`
+    /// must not fall for.
+    const UNDECLARED: &[&str] = &["Undeclared"];
+
     /// Test double for the build-time resolver: a binder stays a binder, a
-    /// reference keys by kind, and every other name is declared by the module
-    /// that wrote it. `make_local_decls` builds the owned set from the same
-    /// module, so a name is local exactly when the test says it is.
+    /// reference keys by kind, an [`UNDECLARED`] name reaches no declaration,
+    /// and every other name is declared by the module that wrote it.
+    /// `make_local_decls` builds the owned set from the same module, so a name
+    /// is local exactly when the test says it is.
     fn resolve_for_test(
         module: &ModuleSource,
         ty: &Type,
@@ -2436,7 +2470,7 @@ mod tests {
             return ImplTargetKey::Ref(kind);
         }
         let spelling = head.spelling_pending_migration().to_string();
-        if head.binder_in(type_params).is_some() {
+        if head.binder_in(type_params).is_some() || UNDECLARED.contains(&spelling.as_str()) {
             return ImplTargetKey::TypeParam(module.clone(), spelling);
         }
         ImplTargetKey::Decl((module.clone(), spelling))
@@ -2556,6 +2590,30 @@ mod tests {
         let tdx = make_local_decls(&[]);
         assert!(matches!(
             classify(&named("T"), &["T"], &tdx),
+            PositionKind::UncoveredTypeParam
+        ));
+    }
+
+    #[test]
+    fn test_classify_undeclared_name_is_foreign_not_uncovered() {
+        // A name that reaches no declaration is foreign — the package does not
+        // own it, so an inherent `impl` on it is a coherence violation. Reading
+        // it as an uncovered parameter (both are `ImplTargetKey::TypeParam`)
+        // silently drops that error.
+        let tdx = make_local_decls(&["LocalType"]);
+        assert!(matches!(
+            classify(&named("Undeclared"), &[], &tdx),
+            PositionKind::ForeignType
+        ));
+    }
+
+    #[test]
+    fn test_classify_binder_shadowing_an_undeclared_name_is_uncovered() {
+        // The binder question is about the impl's own parameters, so a name
+        // both declared nowhere and bound here is still uncovered.
+        let tdx = make_local_decls(&[]);
+        assert!(matches!(
+            classify(&named("Undeclared"), &["Undeclared"], &tdx),
             PositionKind::UncoveredTypeParam
         ));
     }
@@ -2714,6 +2772,21 @@ mod tests {
             vec![type_param("T")],
             generic("From", vec![named("T")]),
             named("LocalType"),
+        );
+        assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
+    }
+
+    #[test]
+    fn test_rfc2451_undeclared_self_type_does_not_cover_a_local_trait_arg() {
+        // impl From<LocalType> for Undeclared → T0 is foreign (not uncovered),
+        // so T1=LocalType still covers the impl. Classifying T0 as uncovered
+        // invents an orphan violation for a program whose only real error is
+        // the unknown name.
+        let tdx = make_local_decls(&["LocalType"]);
+        let ib = impl_header(
+            vec![],
+            generic("From", vec![named("LocalType")]),
+            named("Undeclared"),
         );
         assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
     }
