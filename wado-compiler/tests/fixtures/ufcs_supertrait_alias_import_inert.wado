@@ -1,15 +1,21 @@
 // Importing an alias must not change what an unrelated bound resolves to:
 // `extra` comes from the implied `Base`, whose impl is in the trait's own
-// module under the declared name.
+// module under the declared name. `B` may still qualify the call — it names
+// that declaration.
 use { Base as B, Derived, S } from "./sub/ufcs_supertrait_frame_dep.wado";
 
 fn implied<T: Derived>(x: &T) -> i32 {
     return x.extra();
 }
 
+fn qualified<T: Derived>(x: &T) -> i32 {
+    return B::extra(x);
+}
+
 test "an imported alias leaves an implied bound alone" {
     let s = S { v: 3 };
     assert implied(&s) == 3;
+    assert qualified(&s) == 3;
 }
 
 __DATA__
