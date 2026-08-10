@@ -92,48 +92,48 @@ aliased by reference (scalars, resources).
 
 Returns a copy of the element at the given index.
 
-### `pub trait Add`
+### `pub trait Add<Rhs>`
 
 Trait for the `+` operator.
 Types implementing this trait can use the `+` operator for addition.
 
-#### `fn add(&self, rhs: &Self) -> Self::Output`
+#### `fn add(&self, rhs: &Rhs) -> Self::Output`
 
 Adds two values and returns the result.
 
-### `pub trait Sub`
+### `pub trait Sub<Rhs>`
 
 Trait for the `-` operator (binary subtraction).
 Types implementing this trait can use the `-` operator for subtraction.
 
-#### `fn sub(&self, rhs: &Self) -> Self::Output`
+#### `fn sub(&self, rhs: &Rhs) -> Self::Output`
 
 Subtracts rhs from self and returns the result.
 
-### `pub trait Mul`
+### `pub trait Mul<Rhs>`
 
 Trait for the `*` operator.
 Types implementing this trait can use the `*` operator for multiplication.
 
-#### `fn mul(&self, rhs: &Self) -> Self::Output`
+#### `fn mul(&self, rhs: &Rhs) -> Self::Output`
 
 Multiplies two values and returns the result.
 
-### `pub trait Div`
+### `pub trait Div<Rhs>`
 
 Trait for the `/` operator.
 Types implementing this trait can use the `/` operator for division.
 
-#### `fn div(&self, rhs: &Self) -> Self::Output`
+#### `fn div(&self, rhs: &Rhs) -> Self::Output`
 
 Divides self by rhs and returns the result.
 
-### `pub trait Rem`
+### `pub trait Rem<Rhs>`
 
 Trait for the `%` operator.
 Types implementing this trait can use the `%` operator for remainder.
 
-#### `fn rem(&self, rhs: &Self) -> Self::Output`
+#### `fn rem(&self, rhs: &Rhs) -> Self::Output`
 
 Returns the remainder of dividing self by rhs.
 
@@ -146,27 +146,27 @@ Types implementing this trait can use the `-` prefix operator.
 
 Returns the negation of self.
 
-### `pub trait BitAnd`
+### `pub trait BitAnd<Rhs>`
 
 Trait for the `&` operator (bitwise AND).
 
-#### `fn bitand(&self, rhs: &Self) -> Self::Output`
+#### `fn bitand(&self, rhs: &Rhs) -> Self::Output`
 
 Returns the bitwise AND of self and rhs.
 
-### `pub trait BitOr`
+### `pub trait BitOr<Rhs>`
 
 Trait for the `|` operator (bitwise OR).
 
-#### `fn bitor(&self, rhs: &Self) -> Self::Output`
+#### `fn bitor(&self, rhs: &Rhs) -> Self::Output`
 
 Returns the bitwise OR of self and rhs.
 
-### `pub trait BitXor`
+### `pub trait BitXor<Rhs>`
 
 Trait for the `^` operator (bitwise XOR).
 
-#### `fn bitxor(&self, rhs: &Self) -> Self::Output`
+#### `fn bitxor(&self, rhs: &Rhs) -> Self::Output`
 
 Returns the bitwise XOR of self and rhs.
 
@@ -432,48 +432,48 @@ aliased by reference (scalars, resources).
 
 Returns a copy of the element at the given index.
 
-### `pub trait Add`
+### `pub trait Add<Rhs>`
 
 Trait for the `+` operator.
 Types implementing this trait can use the `+` operator for addition.
 
-#### `fn add(&self, rhs: &Self) -> Self::Output`
+#### `fn add(&self, rhs: &Rhs) -> Self::Output`
 
 Adds two values and returns the result.
 
-### `pub trait Sub`
+### `pub trait Sub<Rhs>`
 
 Trait for the `-` operator (binary subtraction).
 Types implementing this trait can use the `-` operator for subtraction.
 
-#### `fn sub(&self, rhs: &Self) -> Self::Output`
+#### `fn sub(&self, rhs: &Rhs) -> Self::Output`
 
 Subtracts rhs from self and returns the result.
 
-### `pub trait Mul`
+### `pub trait Mul<Rhs>`
 
 Trait for the `*` operator.
 Types implementing this trait can use the `*` operator for multiplication.
 
-#### `fn mul(&self, rhs: &Self) -> Self::Output`
+#### `fn mul(&self, rhs: &Rhs) -> Self::Output`
 
 Multiplies two values and returns the result.
 
-### `pub trait Div`
+### `pub trait Div<Rhs>`
 
 Trait for the `/` operator.
 Types implementing this trait can use the `/` operator for division.
 
-#### `fn div(&self, rhs: &Self) -> Self::Output`
+#### `fn div(&self, rhs: &Rhs) -> Self::Output`
 
 Divides self by rhs and returns the result.
 
-### `pub trait Rem`
+### `pub trait Rem<Rhs>`
 
 Trait for the `%` operator.
 Types implementing this trait can use the `%` operator for remainder.
 
-#### `fn rem(&self, rhs: &Self) -> Self::Output`
+#### `fn rem(&self, rhs: &Rhs) -> Self::Output`
 
 Returns the remainder of dividing self by rhs.
 
@@ -486,27 +486,27 @@ Types implementing this trait can use the `-` prefix operator.
 
 Returns the negation of self.
 
-### `pub trait BitAnd`
+### `pub trait BitAnd<Rhs>`
 
 Trait for the `&` operator (bitwise AND).
 
-#### `fn bitand(&self, rhs: &Self) -> Self::Output`
+#### `fn bitand(&self, rhs: &Rhs) -> Self::Output`
 
 Returns the bitwise AND of self and rhs.
 
-### `pub trait BitOr`
+### `pub trait BitOr<Rhs>`
 
 Trait for the `|` operator (bitwise OR).
 
-#### `fn bitor(&self, rhs: &Self) -> Self::Output`
+#### `fn bitor(&self, rhs: &Rhs) -> Self::Output`
 
 Returns the bitwise OR of self and rhs.
 
-### `pub trait BitXor`
+### `pub trait BitXor<Rhs>`
 
 Trait for the `^` operator (bitwise XOR).
 
-#### `fn bitxor(&self, rhs: &Self) -> Self::Output`
+#### `fn bitxor(&self, rhs: &Rhs) -> Self::Output`
 
 Returns the bitwise XOR of self and rhs.
 
