@@ -11,7 +11,7 @@
 //! rewrite [`crate::nir_engine::Engine`] that consumes this arena, not on
 //! `Body` itself (so they don't burden every body). `lower::translate` builds
 //! the arena directly — there is no tree representation to convert from. See
-//! `docs/wep-2026-06-05-nir-skeleton-arena.md`.
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 
 use cranelift_entity::{PrimaryMap, entity_impl};
 
@@ -22,7 +22,7 @@ use crate::tir::TypeId;
 use crate::token::Span;
 
 /// An operand position in the skeleton — an expression's value, after operand
-/// promotion (WEP: The Live `ValueGraph`). It is either a pure value living in the
+/// promotion (WEP: NIR Optimizer Architecture). It is either a pure value living in the
 /// function's [`ValuePool`] (literals, `Binary`, pure `Unary`, `Cast`, and the
 /// `Local` / `FieldAccess` reads the graph resolves to a value), or an effectful
 /// / control subtree kept in the skeleton (`Call`, allocation literals,
@@ -81,7 +81,7 @@ pub struct PatId(u32);
 entity_impl!(PatId, "pat");
 
 /// A uniform handle to any arena node, used by the rewrite engine's worklist
-/// and parent map. See `docs/wep-2026-06-05-nir-rewrite-engine-design.md`.
+/// and parent map. See `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum NodeRef {
     Expr(ExprId),
@@ -487,14 +487,14 @@ pub struct Body {
     pub address_taken_locals: IndexSet<u32>,
     pub stores_aliased_locals: IndexSet<u32>,
     /// The function's pure-value graph — the source of truth for every
-    /// [`Operand::Value`] in the skeleton (WEP: The Live `ValueGraph`). Built once
+    /// [`Operand::Value`] in the skeleton (WEP: NIR Optimizer Architecture). Built once
     /// by `lower::translate` and maintained in place by the optimizer's edits;
     /// never re-derived from the skeleton. Empty on a body built before operand
     /// promotion populates it.
     pub values: ValuePool,
     /// The per-function value graph (`value_of` + `loop_entry_values`), persisted
     /// here so it survives across optimizer passes instead of living as a
-    /// per-`Engine`-session cache (WEP: The Live `ValueGraph`, build-once). `None`
+    /// per-`Engine`-session cache (WEP: NIR Optimizer Architecture, build-once). `None`
     /// until the first value query builds it.
     pub value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
 }

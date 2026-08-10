@@ -9,7 +9,7 @@
 //! pruning (`const_branch_prune::BranchPruneRule`) — over one shared worklist
 //! per function: a single engine session (parent map, use index, post-order
 //! seed) on which all the rules interleave.
-//! See `docs/wep-2026-06-05-nir-rewrite-engine-design.md`.
+//! See `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 //!
 //! Constant folding is only partly here. Its flow-sensitive folds — env-bound
 //! locals, forwarded struct fields, immutable-global reads, and constant-branch

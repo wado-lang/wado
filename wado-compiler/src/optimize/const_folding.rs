@@ -212,7 +212,7 @@ impl Rule for ConstFoldRule<'_> {
             return false;
         };
         // Promote the folded scalar to an `Operand::Value` in its parent (WEP:
-        // The Live ValueGraph). A node with no operand parent slot (e.g. a body
+        // NIR Optimizer Architecture). A node with no operand parent slot (e.g. a body
         // root) cannot be promoted; report no change so the worklist settles.
         engine.replace_expr_with_value(id, value)
     }

@@ -5,14 +5,13 @@
 //! Wasm `select` instruction. Both branches must be pure (no side effects, no
 //! traps) since `select` evaluates both operands eagerly.
 //!
-//! This is the first peephole pass ported to the worklist rewrite engine
-//! (Phase 4 stage C; see `docs/wep-2026-06-05-nir-rewrite-engine-design.md`):
-//! it runs as a [`Rule`] over each function's arena `Body` directly, with no
-//! `Body ↔ tree` bridge. The `select` Call reuses the existing condition / arm
-//! expression ids, so the rewrite is a single `replace_expr_kind` with no node
-//! allocation. The rule is confluent — a `select` arm must be leaf-pure, so an
-//! arm can never itself be an `If` / `Call`, and the worklist's bottom-up order
-//! produces the same result the old top-down visitor did.
+//! Runs as a [`Rule`] on the worklist rewrite engine (see
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) over each function's
+//! arena `Body`. The `select` Call reuses the existing
+//! condition / arm expression ids, so the rewrite is a single
+//! `replace_expr_kind` with no node allocation. The rule is confluent — a
+//! `select` arm must be leaf-pure, so an arm can never itself be an
+//! `If` / `Call`.
 
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;

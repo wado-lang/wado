@@ -46,7 +46,7 @@ tree — two attempts each lost the string-builder folds. The rule, its
 mechanism, and its measurement live on `aggregate_safe_locals`; the two
 `still_vouches` tests in `tests/integration/niri.rs` pin it.
 
-Details: `docs/wep-2026-06-15-live-value-graph.md`.
+Details: `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 
 ## Development Cycle
 

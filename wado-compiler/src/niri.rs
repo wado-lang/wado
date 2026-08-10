@@ -162,7 +162,7 @@ pub trait EditSink {
     /// existing node's content into `e`.
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind);
     /// Promote `e` to the folded pure scalar `value`, reporting whether the edit
-    /// was applied (WEP: The Live `ValueGraph`). An aggregate is declined — the
+    /// was applied (WEP: NIR Optimizer Architecture). An aggregate is declined — the
     /// pool models scalars only — as is every value on the scratch backend,
     /// whose reads recompute through the lattice and need no write-back.
     fn replace_with_value(&mut self, e: ExprId, value: Value) -> bool;

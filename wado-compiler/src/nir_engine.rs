@@ -5,7 +5,7 @@
 //! might be reducible, rather than the ~31 whole-tree passes the current
 //! optimizer runs in a global fixed point.
 //!
-//! See `docs/wep-2026-06-05-nir-rewrite-engine-design.md`.
+//! See `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 //!
 //! The module provides the full engine: the *session* (the parent map, the
 //! local use index, and the worklist, built once per function from a `Body`),
@@ -805,7 +805,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Edit API: promote the folded constant subtree `id` to an `Operand::Value`
-    /// in its parent (WEP: The Live `ValueGraph`). Interns `value` width-preserving
+    /// in its parent (WEP: NIR Optimizer Architecture). Interns `value` width-preserving
     /// (carrying `id`'s recorded type) and swaps the parent's `Operand::Expr(id)`
     /// slot to the promoted value. `id`'s node is left orphaned (later DCE'd); its
     /// own `Local` mention, if any, is dropped from the use index, matching
@@ -942,7 +942,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Edit API: intern a fresh constant value into the function's pool and
-    /// return it as an `Operand::Value` (WEP: The Live `ValueGraph`). For passes
+    /// return it as an `Operand::Value` (WEP: NIR Optimizer Architecture). For passes
     /// that synthesize a constant in an operand position (a method arg, an
     /// assigned value) without a source node.
     pub fn const_operand(

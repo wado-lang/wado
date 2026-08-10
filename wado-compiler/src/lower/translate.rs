@@ -1177,8 +1177,8 @@ impl FunctionTranslator<'_, '_> {
     /// the function's `ValuePool` and returns `Operand::Value` here instead.
     fn convert_operand(&self, expr: &TirExpr) -> Operand {
         // Pure scalar literals are born directly as `Operand::Value` in the
-        // function's value pool — they never exist as an `ExprKind` (WEP: The
-        // Live ValueGraph; pure scalars live only in the graph). `alloc_unshared`
+        // function's value pool — they never exist as an `ExprKind` (WEP: NIR
+        // Optimizer Architecture; pure scalars live only in the graph). `alloc_unshared`
         // keeps each constant's source width (a type-erased `7` of `i32` vs
         // `i64` must not collide).
         use crate::nir_value_graph::ValueKind;
@@ -1445,7 +1445,7 @@ impl FunctionTranslator<'_, '_> {
             // Pure scalar literals are interned into the `ValuePool` and born as
             // `Operand::Value` by `convert_operand`; every literal-bearing
             // position routes through `convert_operand`, so `convert_expr` is
-            // never entered on one (WEP: The Live ValueGraph).
+            // never entered on one (WEP: NIR Optimizer Architecture).
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
             | TirExprKind::BoolLiteral(_)

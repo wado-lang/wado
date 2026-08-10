@@ -2,7 +2,7 @@
 //! `SkelTree`.
 //!
 //! In the live-ValueGraph design (see
-//! `docs/wep-2026-06-15-live-value-graph.md`) an expression's value is a
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) an expression's value is a
 //! hash-consed [`ValueId`]; the extractor walks the skeleton and lowers each
 //! pure operand to that value's concrete form.
 //!
@@ -38,8 +38,8 @@ impl crate::nir_engine::Rule for ExtractLiteralRule {
         let Some(value) = extract_const(e, vid, id) else {
             return false;
         };
-        // Promote the node to the pooled constant in its parent slot (WEP: The
-        // Live ValueGraph). Idempotent: a promoted (orphaned) node has no parent
+        // Promote the node to the pooled constant in its parent slot (WEP: NIR
+        // Optimizer Architecture). Idempotent: a promoted (orphaned) node has no parent
         // slot, so the retry reports no change and the worklist terminates.
         e.replace_expr_with_value(id, value)
     }
@@ -63,7 +63,7 @@ fn is_let_value(e: &Engine, id: ExprId) -> bool {
 /// True if `id` is a pure-arith node (`Binary` / `Cast` / pure `Unary`) — a
 /// freeze candidate. Under early promotion, `FieldAccess` reads also qualify
 /// (their value re-emits as a `StructGet`; reemittability + the shared `heap_ver`
-/// keep it sound), extending promotion toward every pure value (WEP P2).
+/// keep it sound), extending promotion toward every pure value (WEP: NIR Optimizer Architecture).
 fn is_pure_arith(e: &Engine, id: ExprId, include_fields: bool) -> bool {
     matches!(
         &e.body.exprs[id].kind,
@@ -126,7 +126,8 @@ fn block_path(e: &Engine, expr: ExprId) -> Option<Vec<(crate::nir_arena::BlockId
 /// common ancestor block precedes (dominates) each use. The uses share one
 /// `ValueId`, so no heap bump separates them — the field/value is constant
 /// across the span, and a load pinned at this point reproduces it for all.
-/// Generalises the former single-block placement to cross-block uses (WEP P2,
+/// Generalises the former single-block placement to cross-block uses
+/// (WEP: NIR Optimizer Architecture,
 /// availability-aware extraction). `None` if any use lacks a path.
 fn materialise_point(
     e: &Engine,
@@ -187,7 +188,7 @@ fn stmt_block_path(
 /// the deepest block common to both paths (not nested in a sibling branch
 /// `before_stmt` does not enter) and `def_stmt` must sit strictly earlier there.
 /// Used to admit a non-param `FieldAccess` receiver only when its single-assignment
-/// def is live at the materialisation point (WEP P2 receiver-availability gate).
+/// def is live at the materialisation point (the receiver-availability gate).
 fn def_dominates(
     e: &Engine,
     def_stmt: crate::nir_arena::StmtId,
@@ -368,7 +369,7 @@ pub(super) fn freeze_pure_arith(
 
         // Phase 2: apply. No further graph queries. Group by representative so a
         // value used by several slots can be **materialised once** (availability
-        // extraction, WEP P2) — a single pre-header `let _av = <value>` whose uses
+        // extraction) — a single pre-header `let _av = <value>` whose uses
         // read `local.get _av` — instead of re-emitting the computation at each
         // use. `record_value_tree_types` stamps the tree's width and skips a
         // width-conflicting value; the two apply strategies then diverge on whether
@@ -462,7 +463,8 @@ fn classify_candidate(
     let reemittable = match engine.body.values.kind(rep) {
         ValueKind::FieldAccess { receiver, .. } => {
             let recv = *receiver;
-            // Two gates make a `FieldAccess` materialisation sound (WEP P2).
+            // Two gates make a `FieldAccess` materialisation sound
+            // (WEP: NIR Optimizer Architecture).
             // (1) Field-value-type gate: only a **scalar** field — a primitive copy
             // is value-independent, so pinning + sharing it is sound; an aggregate /
             // reference field (`List.repr`, a nested struct) aliases a mutable
@@ -514,7 +516,7 @@ fn classify_candidate(
 /// Apply strategy for a `FieldAccess` representative: pin the load in a `let _av
 /// = <value>` at a statement dominating its uses and rewrite each use to a
 /// **skeleton** `Local _av` read, so receiver-position passes see an ordinary
-/// local (materialiser-first, WEP P2). A `FieldAccess` is never inline-reemittable
+/// local (materialiser-first). A `FieldAccess` is never inline-reemittable
 /// (re-emitting a load at an arbitrary slot is unsound once a pass moves the
 /// operand), so this is its only promotion path. Single-use places at the use's
 /// own statement; multi-use shares one load at the nearest common dominator of

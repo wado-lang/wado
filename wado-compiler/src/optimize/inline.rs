@@ -1098,7 +1098,7 @@ fn try_inline_call_expr(
     let call_span = caller.exprs[call_id].span;
 
     // Args are already in the caller arena (operands of the discarded call); bind
-    // each to its param `Let` directly (WEP: The Live ValueGraph).
+    // each to its param `Let` directly (WEP: NIR Optimizer Architecture).
     //
     // The `Let` stands in for the parameter, so it takes the parameter's
     // declared type (`TypeId`s are package-wide after link). The argument's

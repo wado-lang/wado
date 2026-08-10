@@ -12,7 +12,7 @@
 //! and control-flow *structure*, never on labels or variable names.
 //!
 //! Runs on the worklist rewrite engine (see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: the
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a [`Rule`]: the
 //! expression simplifications are an `apply_expr` peephole and the
 //! statement-list flattening / dead-code elimination is an `apply_block`
 //! rewrite. The break-target queries are read-only walks over the arena

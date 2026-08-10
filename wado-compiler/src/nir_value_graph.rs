@@ -10,7 +10,7 @@
 //! Consumed by [`crate::nir_engine::Engine::value`] (which lazily builds the
 //! per-function graph via [`builder::build`]) and through that by the CSE
 //! and store-load-forward rules. See
-//! `docs/wep-2026-06-05-worklist-rewrite-engine.md`.
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 
 pub mod builder;
 
