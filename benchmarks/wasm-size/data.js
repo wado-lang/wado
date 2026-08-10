@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786284603063,
+  "lastUpdate": 1786321252533,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46873,6 +46873,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b6135bc98c5ceab1ab8a224ec80fe6df78aa7921"
         },
         "date": 1786284602493,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6043,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16237,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271633,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f77fbb96442faba7ac47e8d2cd4862684578d8f0",
+          "message": "Merge pull request #1780 from wado-lang/claude/wado-bundled-icu-lang-features-rts827\n\nfeat(kiln)!: retire the `read-file` host import, and design bundled ICU as a facade",
+          "timestamp": "2026-08-10T09:08:15+09:00",
+          "tree_id": "e06d1221b9c1b09ab8c92447402e82d0cf47b8c7",
+          "url": "https://github.com/wado-lang/wado/commit/f77fbb96442faba7ac47e8d2cd4862684578d8f0"
+        },
+        "date": 1786321251831,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
