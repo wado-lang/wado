@@ -2395,13 +2395,11 @@ fn "./sub/httpbin_handler.wado/read_body_from_request"(request) {
     let s: ref "core:prelude/string.wado//String";
     let __pattern_temp_1: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";
     let packed: i64;
-    let rx: i32;
-    let tx: i32;
     let collected: ref "core:prelude//List<u8>";
     let self_18: ref "core:prelude/slice.wado//ArrayIter<u8>";
-    rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new:transmission-http"()));
-    drop(local.tee tx(builtin::i32_wrap_i64(packed >> 32_i64)));
-    __pattern_temp_1 = "httpbin_headers.wado/__cm_binding__Request_consume_body"(request, rx);
+    let __sroa___pattern_temp_0_0: i32;
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/future-new:transmission-http"()));
+    __pattern_temp_1 = "httpbin_headers.wado/__cm_binding__Request_consume_body"(request, __sroa___pattern_temp_0_0);
     body_stream = __pattern_temp_1.0;
     body = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(256), used: 0 };
     b216: block {

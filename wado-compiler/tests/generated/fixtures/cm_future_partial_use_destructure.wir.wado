@@ -437,19 +437,17 @@ fn "cm_future_partial_use_destructure.wado/handle"(request) {
     let __free_ptr_175: i32;
     let __pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let packed_180: i64;
-    let tx_182: i32;
     let packed_183: i64;
     let rx_184: i32;
     let tx_185: i32;
+    let __sroa___pattern_temp_0_1: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:cm_future_partial_use_destructure.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:cm_future_partial_use_destructure.wado::__modules_initialized = 1;
     };
-    drop(builtin::i32_wrap_i64(local.tee packed_180("wasi/future-new:s32"())));
-    tx_182 = builtin::i32_wrap_i64(packed_180 >> 32_i64);
-    "cm_future_partial_use_destructure.wado/__cm_future_write_i32"(tx_182, 42);
+    "cm_future_partial_use_destructure.wado/__cm_future_write_i32"(local.tee __sroa___pattern_temp_0_1(builtin::i32_wrap_i64(local.tee packed_180("wasi/future-new:s32"()) >> 32_i64)), 42);
     rx_184 = builtin::i32_wrap_i64(local.tee packed_183("wasi/future-new"()));
     tx_185 = builtin::i32_wrap_i64(packed_183 >> 32_i64);
     __pattern_temp_2 = "cm_future_partial_use_destructure.wado/__cm_binding__Response_new"(local.tee headers("cm_future_partial_use_destructure.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx_184);

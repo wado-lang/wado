@@ -671,8 +671,6 @@ fn "http_client_send_body_read.wado/handle"(request) with Client {
     let __vc_payload_0: i32;
     let __vc_payload_1: ref "wasi:http/types.wado//ErrorCode";
     let packed_207: i64;
-    let rx_208: i32;
-    let tx_209: i32;
     let collected: ref "core:prelude//List<u8>";
     let self_213: ref "core:prelude/slice.wado//ArrayIter<u8>";
     let packed_216: i64;
@@ -682,6 +680,7 @@ fn "http_client_send_body_read.wado/handle"(request) with Client {
     let rx_220: i32;
     let tx_221: i32;
     let self_223: ref "core:prelude/string.wado//StrUtf8ByteIter";
+    let __sroa___pattern_temp_2_0: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:http_client_send_body_read.wado::__modules_initialized);
         cold_path;
@@ -710,9 +709,8 @@ fn "http_client_send_body_read.wado/handle"(request) with Client {
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("upstream request failed"), used: 23 });
         unreachable;
     });
-    rx_208 = builtin::i32_wrap_i64(local.tee packed_207("wasi/future-new:transmission-http"()));
-    drop(local.tee tx_209(builtin::i32_wrap_i64(packed_207 >> 32_i64)));
-    __pattern_temp_3 = "http_client_send_body_read.wado/__cm_binding__Response_consume_body"(upstream, rx_208);
+    __sroa___pattern_temp_2_0 = builtin::i32_wrap_i64(local.tee packed_207("wasi/future-new:transmission-http"()));
+    __pattern_temp_3 = "http_client_send_body_read.wado/__cm_binding__Response_consume_body"(upstream, __sroa___pattern_temp_2_0);
     body_stream = __pattern_temp_3.0;
     body = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("proxied: "), used: 9 };
     b2: block {

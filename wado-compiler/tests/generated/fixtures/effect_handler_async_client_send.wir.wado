@@ -530,15 +530,13 @@ fn "effect_handler_async_client_send.wado/fetch_upstream"() with Client {
     let r: i32;
     let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let packed: i64;
-    let rx: i32;
-    let tx: i32;
     let v: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __vc_payload_0: i32;
     let __vc_payload_1: ref "wasi:http/types.wado//ErrorCode";
+    let __sroa___pattern_temp_0_0: i32;
     headers = "effect_handler_async_client_send.wado/__cm_binding__Fields_new"();
-    rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
-    drop(local.tee tx(builtin::i32_wrap_i64(packed >> 32_i64)));
-    __pattern_temp_1 = "effect_handler_async_client_send.wado/__cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 });
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
+    __pattern_temp_1 = "effect_handler_async_client_send.wado/__cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __sroa___pattern_temp_0_0, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 });
     drop("effect_handler_async_client_send.wado/__cm_binding__Request_set_path_with_query"(local.tee req(__pattern_temp_1.0), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/upstream"), used: 9 }));
     v = "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"("effect_handler_async_client_send.wado/__effect_dispatch__Client__send"(req));
     result = (if ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(v) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>" {
@@ -2681,8 +2679,7 @@ fn "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/
     let __local_10: ref "core:prelude/string.wado//String";
     let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let packed: i64;
-    let rx: i32;
-    let tx: i32;
+    let __sroa___pattern_temp_0_0: i32;
     self.calls = self.calls + 1;
     let __match_scrut_0: ref null "core:prelude/string.wado//String";
     __match_scrut_0 = "effect_handler_async_client_send.wado/__cm_binding__Request_get_path_with_query"(request);
@@ -2701,9 +2698,8 @@ condition: request.get_path_with_query() matches { Some(\"/upstream\") }
         }; global:effect_handler_async_client_send.wado::__const_obj_1); __local_7);
         unreachable;
     }
-    rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
-    drop(local.tee tx(builtin::i32_wrap_i64(packed >> 32_i64)));
-    __pattern_temp_1 = "effect_handler_async_client_send.wado/__cm_binding__Response_new"("effect_handler_async_client_send.wado/__cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx);
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
+    __pattern_temp_1 = "effect_handler_async_client_send.wado/__cm_binding__Response_new"("effect_handler_async_client_send.wado/__cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __sroa___pattern_temp_0_0);
     drop("effect_handler_async_client_send.wado/__cm_binding__Response_set_status_code"(local.tee resp(__pattern_temp_1.0), 201));
     __drop_spill_9 = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: resp };
     "wasi/resource-drop:request"(request);
