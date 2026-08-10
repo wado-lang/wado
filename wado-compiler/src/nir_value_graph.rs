@@ -682,6 +682,16 @@ impl ValuePool {
         v
     }
 
+    /// Whether the value tree at `v` reads any local (an `Opaque(Local)` leaf).
+    /// A value that names none is context-free: it denotes the same thing at
+    /// every program point, so a pass may plant it before the structural passes
+    /// move locals around.
+    pub fn names_a_local(&self, v: ValueId) -> bool {
+        let mut out = IndexSet::default();
+        self.collect_opaque_locals(v, &mut out);
+        !out.is_empty()
+    }
+
     /// Collect into `out` every local index named by an `Opaque(Local)`
     /// reachable from value `v` — the locals a promoted value reads when
     /// extracted (a leaf `Opaque(Local)` is `local.get idx`). Recurses the pure

@@ -455,6 +455,19 @@ fn classify_candidate(
         return None;
     }
     let rep = engine.value(id)?;
+    // An early freeze may plant only context-free values. That is what makes the
+    // early run sound at all: a constant means the same thing wherever it ends
+    // up, so it survives `inline` and `sroa` copying the operand around. A value
+    // naming a local does not — those passes renumber locals and splice a callee
+    // body into a caller, re-contextualizing the slot underneath the value, and
+    // the one id then spans versions the local did not have when it was frozen.
+    // (Concretely: `String::substr_bytes`'s parameters, frozen here, inlined into
+    // `trim_start`'s loop, read back as an iteration's worth of values.)
+    // The post-loop runs freeze these instead, after the structural passes have
+    // finished moving locals.
+    if ctx.early && engine.body.values.names_a_local(rep) {
+        return None;
+    }
     // A standalone `FieldAccess` is reemittable when its receiver is (it
     // materialises via the source-point path). For every other value,
     // `FieldAccess` is non-reemittable (it cannot be inlined), so

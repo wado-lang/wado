@@ -293,16 +293,36 @@ impl<'a> Engine<'a> {
 
     /// Re-derive `expr`'s value from its operands (the sole value source now
     /// that `value_of` is retired). Operand-determined kinds only (`Binary`,
-    /// non-address `Unary`, `Cast`); every other kind — and any node with an
-    /// unresolved operand — yields `None`. Recurses through
-    /// [`Engine::operand_value`] so a pure subtree over promoted leaves resolves
-    /// whole. Does not cache (there is no side-table to cache into).
+    /// non-address `Unary`, `Cast`) plus a read of a stable parameter; every
+    /// other kind — and any node with an unresolved operand — yields `None`.
+    /// Recurses through [`Engine::operand_value`] so a pure subtree over promoted
+    /// leaves resolves whole. Does not cache (there is no side-table to cache
+    /// into).
+    ///
+    /// The parameter base case is what lets a tree resolve at all. Without it
+    /// every leaf of an unpromoted tree is `None`, so `Binary` / `Unary` / `Cast`
+    /// over anything but already-frozen constants yields `None` — and since only
+    /// constants are frozen without it, nothing but an all-constant tree ever
+    /// resolves.
     fn maintain_pure_node(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
         let result_ty = self.body.exprs[expr].type_id;
         let tt = self.vg_type_table;
         let v = match kind {
+            // One version-free `ValueId` per local is correct only where the
+            // local has one version. A parameter is defined at entry, so its def
+            // dominates every use, and when never reassigned it holds one value
+            // for the whole body.
+            ExprKind::Local { index, .. } => {
+                if !self.param_locals.contains(&index) {
+                    return None;
+                }
+                if self.locals().get(index as usize).is_none_or(|l| l.is_mut) {
+                    return None;
+                }
+                self.body.values.canonical_local(index, result_ty)
+            }
             ExprKind::Binary { left, op, right } => {
                 let lhs = self.operand_value(left)?;
                 let rhs = self.operand_value(right)?;
