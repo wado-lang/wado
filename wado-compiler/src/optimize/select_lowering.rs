@@ -132,18 +132,27 @@ fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Opti
         }
         StmtKind::Expr(Operand::Value(v)) => {
             let v = *v;
-            is_select_eligible_value(body, v).then_some(Operand::Value(v))
+            is_select_eligible_value(body, v, type_table).then_some(Operand::Value(v))
         }
         _ => None,
     }
 }
 
-/// A promoted pure value is select-eligible when it is a scalar constant leaf or
-/// a local read: both are duplicable and cannot trap, so evaluating it in both
-/// `select` operand positions is observation-free. A [`ValueKind::Const`]
-/// aggregate is not — materialising it in both arms allocates twice, and
-/// `select` takes scalars anyway.
-fn is_select_eligible_value(body: &Body, v: ValueId) -> bool {
+/// A promoted pure value is select-eligible under the same rule as a skeleton
+/// arm ([`is_select_eligible`]): a duplicable leaf — a scalar constant or a
+/// local read — or pure non-trapping operators over such leaves. Both `select`
+/// operands are evaluated unconditionally, so a trapping op (`Div` / `Mod`, a
+/// float→int cast) is refused at any depth.
+///
+/// This must track the skeleton rule, not lag it. The same source arm reaches
+/// one or the other depending only on whether promotion happened to freeze it,
+/// so a shape accepted there and refused here silently costs the lowering —
+/// which is how `fpfmt`'s `if neg { -self } else { self }` stopped being a
+/// `select` when its parameter read became promotable.
+///
+/// A [`ValueKind::Const`] aggregate stays out: materialising it in both arms
+/// allocates twice, and `select` takes scalars anyway.
+fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> bool {
     let kind = body.values.kind(v);
     if kind.is_operand_constant() {
         return true;
@@ -155,6 +164,23 @@ fn is_select_eligible_value(body: &Body, v: ValueId) -> bool {
                 Some(OpaqueSource::Local(_))
             )
         }
+        ValueKind::Unary { op, operand, .. } => {
+            matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
+                && is_select_eligible_value(body, *operand, type_table)
+        }
+        ValueKind::Binary { op, lhs, rhs, .. } => {
+            !super::arena_query::binary_op_may_trap(*op)
+                && is_select_eligible_value(body, *lhs, type_table)
+                && is_select_eligible_value(body, *rhs, type_table)
+        }
+        ValueKind::Cast { operand, target } => {
+            let src = body
+                .values
+                .type_of(*operand)
+                .expect("promoted value has no recorded type");
+            !is_trapping_cast(src, *target, type_table)
+                && is_select_eligible_value(body, *operand, type_table)
+        }
         ValueKind::Int(..)
         | ValueKind::Float(..)
         | ValueKind::Bool(_)
@@ -162,9 +188,6 @@ fn is_select_eligible_value(body: &Body, v: ValueId) -> bool {
         | ValueKind::Null
         | ValueKind::Unit
         | ValueKind::Const(..)
-        | ValueKind::Binary { .. }
-        | ValueKind::Unary { .. }
-        | ValueKind::Cast { .. }
         | ValueKind::Select { .. }
         | ValueKind::LoopPhi { .. }
         | ValueKind::FieldAccess { .. } => false,
