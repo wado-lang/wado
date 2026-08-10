@@ -271,10 +271,10 @@ fn collect_candidates(
 ) {
     let single_decl_locals = locals_declared_once(body);
     let siblings = sibling_const_locals(body, gate, &single_decl_locals);
-    // Promoted reads count: they decide "unread" (a dead binding is not a hoist
-    // target) and, more sharply, they are reads `rewrite_reads` must reach —
-    // the mutation drops the `let`, so a read it misses would extract a
-    // `local.get` of a local nothing defines.
+    // Promoted reads count twice over: they decide "unread" (a dead binding is
+    // not a hoist target), and they are reads `rewrite_reads` must reach — the
+    // mutation drops the `let`, so a read it misses would extract a `local.get`
+    // of a local nothing defines.
     let mut read_locals = IndexSet::default();
     collect_reads(body, &mut read_locals);
     promoted_local_reads(body, &mut read_locals);
@@ -1680,9 +1680,8 @@ fn rewrite_reads(
 /// Candidacy already refused a local buried inside a compound value
 /// ([`buried_promoted_reads`]), so these are all of them.
 ///
-/// Each slot gets its own expression id — one node in two operand slots would
-/// break the single-parent invariant — so the ids are minted up front and
-/// handed out as the mutable walk finds the slots.
+/// One expression id per slot: the same node in two operand slots would break
+/// the single-parent invariant.
 fn rewrite_promoted_reads(
     body: &mut Body,
     local_index: u32,

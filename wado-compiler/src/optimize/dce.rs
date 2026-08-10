@@ -2108,13 +2108,10 @@ fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
     collect.0
 }
 
-/// Locals some reachable node mentions. A binding absent here is never read:
-/// an assignment target, a borrow and a capture all mention their local, so the
-/// census over-approximates and only ever keeps a statement alive.
-///
-/// A promoted operand ([`Operand::Value`]) reads its locals in the pool rather
-/// than the skeleton, so the census unions in
-/// [`super::arena_query::promoted_local_reads`].
+/// Locals some reachable node mentions, skeleton and value pool alike. A
+/// binding absent here is never read: an assignment target, a borrow and a
+/// capture all mention their local, so the census over-approximates and only
+/// ever keeps a statement alive.
 fn mentioned_locals(body: &Body) -> IndexSet<u32> {
     let mut out = IndexSet::default();
     for e in crate::nir_visitor::reachable_exprs(body) {

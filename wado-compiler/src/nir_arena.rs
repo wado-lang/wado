@@ -92,8 +92,8 @@ pub enum NodeRef {
 
 /// A child slot of an arena node: an operand position — which may hold a
 /// promoted value carrying no skeleton id — or a structural / non-operand id
-/// child. The single description of a node's shape, walked by
-/// [`Body::for_each_child`] and [`Body::for_each_operand`] alike.
+/// child. [`Body::for_each_child`] and [`Body::for_each_operand`] are both
+/// filters over this, so neither can miss a slot the other sees.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Slot {
     Operand(Operand),
@@ -1165,11 +1165,11 @@ impl Body {
     /// (`Assign::target`) and structural children (blocks, patterns) are not
     /// operands and are not visited.
     ///
-    /// A `&mut` walk cannot be expressed as a filter over the shared
-    /// [`Slot`] one, so this match is the one place the operand positions are
-    /// written twice. A debug assertion compares its slot count against the
-    /// shared walk at every call, so a variant taught to one and not the other
-    /// fails the first test that touches that node kind.
+    /// A `&mut` walk cannot be a filter over the shared [`Slot`] one, so this
+    /// match restates the operand positions. A debug assertion compares its
+    /// slot count against [`Body::for_each_operand`] on every call, so a variant
+    /// taught to one and not the other fails the first test that reaches that
+    /// node kind.
     pub fn for_each_operand_mut(&mut self, node: NodeRef, mut f: impl FnMut(&mut Operand)) {
         #[cfg(debug_assertions)]
         let expected = {
@@ -1286,9 +1286,8 @@ impl Body {
 
     /// Replace one operand slot of `node` holding `Operand::Value(from)` with
     /// `new`, returning whether a slot changed. One slot per call, so a caller
-    /// planting an expression mints a fresh node for each and never pairs a
-    /// list of ids positionally against a second walk; loop until it returns
-    /// `false`.
+    /// planting an expression mints a fresh node for each rather than hanging
+    /// one id under two parents; loop until it returns `false`.
     pub fn replace_value_operand_once(&mut self, node: NodeRef, from: ValueId, new: Operand) -> bool {
         let mut done = false;
         self.for_each_operand_mut(node, |o| {
@@ -1347,8 +1346,9 @@ impl Body {
     /// want of a skeleton node. Non-operand id slots (`Assign::target`) and
     /// structural children (blocks, patterns) are not operands and are skipped.
     ///
-    /// Both walks share one description of the node structure ([`Slot`]), so a
-    /// variant added to the arena cannot be missed by one and not the other.
+    /// This and [`Body::for_each_child`] filter one description of the node
+    /// structure ([`Slot`]), so a variant added to the arena cannot be seen by
+    /// one and missed by the other.
     pub fn for_each_operand(&self, node: NodeRef, mut f: impl FnMut(Operand)) {
         self.for_each_slot(node, &mut |slot| {
             if let Slot::Operand(o) = slot {
@@ -1358,8 +1358,9 @@ impl Body {
     }
 
     /// The node's shape, in source order: every operand slot and every
-    /// structural / non-operand id child. The sole place a node's children are
-    /// spelled out; the two public walks above filter this.
+    /// structural / non-operand id child. The two shared walks above filter
+    /// this; [`Body::for_each_operand_mut`] is the one restatement, and is
+    /// checked against it.
     fn for_each_slot(&self, node: NodeRef, f: &mut impl FnMut(Slot)) {
         match node {
             NodeRef::Block(b) => {

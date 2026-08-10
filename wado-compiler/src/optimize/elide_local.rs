@@ -62,15 +62,6 @@ impl<'a> ElideRule<'a> {
 impl Rule for ElideRule<'_> {
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
-        // Locals read only through a promoted `Operand::Value` are live but
-        // invisible to the use index, so keep them.
-        //
-        // Per block application, not cached on the rule: a rule that queries a
-        // value builds the graph for that body on the spot, which mints
-        // `Opaque(Local)` operands mid-run, so a function-level cache would
-        // answer from before the read existed and elide a live binding. The
-        // walk stays off the hot path anyway — `is_kept` asks only after the
-        // escape set and the use index both come up empty.
         let promoted_reads = PromotedReads::default();
         let mut new_stmts = Vec::with_capacity(stmts.len());
         let mut changed = false;
@@ -202,11 +193,16 @@ fn is_kept(
 }
 
 /// The locals a reachable promoted operand reads
-/// ([`arena_query::promoted_local_reads`]), computed on first query.
+/// ([`arena_query::promoted_local_reads`]) — live, but invisible to the use
+/// index, so [`is_kept`] must see them.
 ///
-/// [`is_kept`] reaches it only after the escape set and the use index both come
-/// up empty — that is, only for a statement about to be elided — so a block
-/// with nothing to elide never pays for the walk.
+/// Built on first query, which [`is_kept`] reaches only once the escape set and
+/// the use index have both come up empty: a block with nothing to elide never
+/// pays for the walk.
+///
+/// One per block application rather than per function: a rule that queries a
+/// value builds the graph for that body on the spot, minting `Opaque(Local)`
+/// operands mid-run, so a cached answer could predate the read it must see.
 #[derive(Default)]
 struct PromotedReads(OnceCell<IndexSet<u32>>);
 

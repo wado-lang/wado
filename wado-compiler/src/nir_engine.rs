@@ -752,9 +752,8 @@ impl<'a> Engine<'a> {
     /// twin of [`Engine::redirect_expr`], which keys on the `ExprId` a skeleton
     /// operand carries — a promoted value has none.
     ///
-    /// One slot per call, so a caller planting an expression mints a fresh node
-    /// for each and never hangs one id under two parents; loop until it returns
-    /// `false` to cover a node that holds `from` twice.
+    /// One slot per call (see [`Body::replace_value_operand_once`]); loop until
+    /// it returns `false` to cover a node that holds `from` twice.
     pub fn redirect_value_operand(
         &mut self,
         node: NodeRef,

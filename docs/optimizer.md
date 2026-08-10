@@ -28,6 +28,8 @@ The fixed-point loop exits early on convergence. The backend-required rewrites (
 
 Pure values are the optimizer's source of truth, not re-derived per pass. Each operand position is either a skeleton subtree or a promoted pure value interned in a per-function pool, hash-consed so congruent values share one node. The graph is built once per function and maintained in place across passes via e-class union, never rebuilt — so pure-value CSE falls out of the pool, constant folding reads pooled values, and bounds-check elimination recognises them structurally. See [WEP: The Live ValueGraph](./wep-2026-06-15-live-value-graph.md).
 
+A promoted read lives in the pool rather than the skeleton, so a pass that decides a local is unused, or that rewrites every read of one, must count the pool's reads too — `arena_query`'s `promoted_*` queries supply them. They are scoped to the operands the skeleton still carries: the pool is append-only, so it also holds the values of reads that folded away, and treating those as live pins locals forever.
+
 ### Worklist rewrite engine
 
 Genuinely-local NIR rewrites run as rules on a worklist engine over one function's arena: a node is revisited only when an edit may have made it reducible, rather than via repeated whole-tree sweeps. The engine owns the session state and a mutating edit API that keeps it coherent. Flow-sensitive passes that need per-block dataflow keep their own walkers. See [WEP: NIR Rewrite Engine](./wep-2026-06-05-nir-rewrite-engine-design.md).
@@ -131,7 +133,7 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 ## Shared facilities
 
 - `mod_ref.rs` — a conservative mod/ref summary backing the move-safety predicates (`may_clobber`, `can_move_past`).
-- `arena_query.rs` — shared arena queries (purity and trap classification, mutation and place-root checks, break-target search).
+- `arena_query.rs` — shared arena queries (purity and trap classification, mutation and place-root checks, break-target search, the promoted-read census).
 - `nir_visitor.rs` — the shared pre/post-order visitor traits.
 
 ## Differential testing (EMI)

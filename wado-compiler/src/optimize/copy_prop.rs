@@ -45,11 +45,10 @@ struct CopyBinding {
     /// in the function (e.g. a loop counter copied inside the loop body).
     /// Always `true` for a promoted-value source.
     source_scope_stable: bool,
-    /// Whether every promoted read of the target can be substituted: each fills
-    /// its operand slot whole (`Opaque(Local target)`), and the source is one an
-    /// operand slot can hold — a pooled value, or a bare local the substitution
-    /// mints a read node for. Decided per binding in [`analyze_function_body`],
-    /// where the body is still in hand.
+    /// Whether [`substitute_promoted_reads`] can rewrite every promoted read of
+    /// the target: each fills its slot whole (`Opaque(Local target)`), and the
+    /// source is one an operand slot can hold — a pooled value, or a bare local
+    /// it mints a read node for.
     promoted_reads_substitutable: bool,
 }
 
@@ -220,8 +219,8 @@ fn analyze_copy_binding(
 struct AnalysisResult {
     bindings: Vec<CopyBinding>,
     usage: IndexMap<u32, LocalUsage>,
-    /// The locals a reachable promoted operand reads, built once with the usage
-    /// counts above — the substitution below needs the same set.
+    /// The locals a reachable promoted operand reads, built once alongside the
+    /// usage counts — the substitution needs the same set.
     promoted_reads: IndexSet<u32>,
 }
 
@@ -313,9 +312,8 @@ fn scan_node(
         }
         return;
     }
-    // A promoted operand reads its locals from the value pool, so the skeleton
-    // walk never reaches them. The scope-stability interval below is only
-    // meaningful if it sees those reads too.
+    // The scope-stability interval below is only meaningful if it also sees the
+    // reads that live in the value pool.
     let mut promoted: IndexSet<u32> = IndexSet::default();
     body.for_each_operand(node, |op| {
         if let Some(v) = op.as_value() {
@@ -380,9 +378,8 @@ fn analyze_function_body(body: &Body, ctx: &AnalysisCtx<'_>) -> AnalysisResult {
     for idx in result.promoted_reads.clone() {
         result.usage.entry(idx).or_default().read_count += 2;
     }
-    // One census for the round: which locals a promoted operand reads without
-    // filling its slot, so no rewrite can reach them. Per-binding queries would
-    // re-walk the body (and every operand's value DAG) inside the fixpoint.
+    // One census for the round: a per-binding query would re-walk the body, and
+    // every operand's value DAG with it, inside the fixpoint.
     let buried = super::arena_query::buried_promoted_reads(body);
     for binding in &mut result.bindings {
         binding.promoted_reads_substitutable = matches!(
@@ -584,11 +581,8 @@ fn can_propagate_copy(
     type_table: &TypeTable,
     promoted_reads: &IndexSet<u32>,
 ) -> bool {
-    // Every read must be substitutable, since the binding's `let` is removed
-    // (`dead_locals`) and a read left behind would dangle on a deleted local.
-    // A promoted read is substitutable when it fills its operand slot whole
-    // (`Opaque(Local target)`) and the source is one an operand can hold; a read
-    // buried inside a compound value has no slot of its own.
+    // The binding's `let` is removed (`dead_locals`), so a read left behind
+    // would dangle on a deleted local: every one of them must be substitutable.
     if promoted_reads.contains(&binding.target_local) && !binding.promoted_reads_substitutable {
         return false;
     }
@@ -686,8 +680,8 @@ fn can_propagate_copy(
 
 /// Substitute the reads that live in the value pool: an operand that is exactly
 /// `Opaque(Local target)` becomes the target's source. Runs before the skeleton
-/// pass drops the bindings, and only for targets
-/// [`promoted_reads_substitutable`] approved.
+/// pass drops the bindings, over the targets
+/// [`CopyBinding::promoted_reads_substitutable`] approved.
 fn substitute_promoted_reads(engine: &mut Engine, substitutions: &IndexMap<u32, CopySource>) {
     let mut plan: Vec<(NodeRef, crate::nir_value_graph::ValueId, CopySource)> = Vec::new();
     for node in super::arena_query::reachable_nodes(engine.body) {
