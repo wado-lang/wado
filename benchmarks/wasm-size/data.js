@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786363179967,
+  "lastUpdate": 1786364947056,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47005,6 +47005,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/85d9e6045731c4e2a638e8f2ac29f57e1a600202"
         },
         "date": 1786363179088,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267689,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "29a045c2cafe6e7e844d738f65b154530e435dde",
+          "message": "Merge pull request #1783 from wado-lang/claude/kiln-reconcile-temp-race\n\nfix(kiln): output reconciliation spares a staging temp",
+          "timestamp": "2026-08-10T21:16:44+09:00",
+          "tree_id": "8472fa1259841fc5d88a13c7f84f9458ce525cf2",
+          "url": "https://github.com/wado-lang/wado/commit/29a045c2cafe6e7e844d738f65b154530e435dde"
+        },
+        "date": 1786364946491,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
