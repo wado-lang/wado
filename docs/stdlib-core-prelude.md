@@ -92,7 +92,7 @@ aliased by reference (scalars, resources).
 
 Returns a copy of the element at the given index.
 
-### `pub trait Add<Rhs>`
+### `pub trait Add<Rhs = Self>`
 
 Trait for the `+` operator.
 Types implementing this trait can use the `+` operator for addition.
@@ -101,7 +101,7 @@ Types implementing this trait can use the `+` operator for addition.
 
 Adds two values and returns the result.
 
-### `pub trait Sub<Rhs>`
+### `pub trait Sub<Rhs = Self>`
 
 Trait for the `-` operator (binary subtraction).
 Types implementing this trait can use the `-` operator for subtraction.
@@ -110,7 +110,7 @@ Types implementing this trait can use the `-` operator for subtraction.
 
 Subtracts rhs from self and returns the result.
 
-### `pub trait Mul<Rhs>`
+### `pub trait Mul<Rhs = Self>`
 
 Trait for the `*` operator.
 Types implementing this trait can use the `*` operator for multiplication.
@@ -119,7 +119,7 @@ Types implementing this trait can use the `*` operator for multiplication.
 
 Multiplies two values and returns the result.
 
-### `pub trait Div<Rhs>`
+### `pub trait Div<Rhs = Self>`
 
 Trait for the `/` operator.
 Types implementing this trait can use the `/` operator for division.
@@ -128,7 +128,7 @@ Types implementing this trait can use the `/` operator for division.
 
 Divides self by rhs and returns the result.
 
-### `pub trait Rem<Rhs>`
+### `pub trait Rem<Rhs = Self>`
 
 Trait for the `%` operator.
 Types implementing this trait can use the `%` operator for remainder.
@@ -146,7 +146,7 @@ Types implementing this trait can use the `-` prefix operator.
 
 Returns the negation of self.
 
-### `pub trait BitAnd<Rhs>`
+### `pub trait BitAnd<Rhs = Self>`
 
 Trait for the `&` operator (bitwise AND).
 
@@ -154,7 +154,7 @@ Trait for the `&` operator (bitwise AND).
 
 Returns the bitwise AND of self and rhs.
 
-### `pub trait BitOr<Rhs>`
+### `pub trait BitOr<Rhs = Self>`
 
 Trait for the `|` operator (bitwise OR).
 
@@ -162,7 +162,7 @@ Trait for the `|` operator (bitwise OR).
 
 Returns the bitwise OR of self and rhs.
 
-### `pub trait BitXor<Rhs>`
+### `pub trait BitXor<Rhs = Self>`
 
 Trait for the `^` operator (bitwise XOR).
 
@@ -432,7 +432,7 @@ aliased by reference (scalars, resources).
 
 Returns a copy of the element at the given index.
 
-### `pub trait Add<Rhs>`
+### `pub trait Add<Rhs = Self>`
 
 Trait for the `+` operator.
 Types implementing this trait can use the `+` operator for addition.
@@ -441,7 +441,7 @@ Types implementing this trait can use the `+` operator for addition.
 
 Adds two values and returns the result.
 
-### `pub trait Sub<Rhs>`
+### `pub trait Sub<Rhs = Self>`
 
 Trait for the `-` operator (binary subtraction).
 Types implementing this trait can use the `-` operator for subtraction.
@@ -450,7 +450,7 @@ Types implementing this trait can use the `-` operator for subtraction.
 
 Subtracts rhs from self and returns the result.
 
-### `pub trait Mul<Rhs>`
+### `pub trait Mul<Rhs = Self>`
 
 Trait for the `*` operator.
 Types implementing this trait can use the `*` operator for multiplication.
@@ -459,7 +459,7 @@ Types implementing this trait can use the `*` operator for multiplication.
 
 Multiplies two values and returns the result.
 
-### `pub trait Div<Rhs>`
+### `pub trait Div<Rhs = Self>`
 
 Trait for the `/` operator.
 Types implementing this trait can use the `/` operator for division.
@@ -468,7 +468,7 @@ Types implementing this trait can use the `/` operator for division.
 
 Divides self by rhs and returns the result.
 
-### `pub trait Rem<Rhs>`
+### `pub trait Rem<Rhs = Self>`
 
 Trait for the `%` operator.
 Types implementing this trait can use the `%` operator for remainder.
@@ -486,7 +486,7 @@ Types implementing this trait can use the `-` prefix operator.
 
 Returns the negation of self.
 
-### `pub trait BitAnd<Rhs>`
+### `pub trait BitAnd<Rhs = Self>`
 
 Trait for the `&` operator (bitwise AND).
 
@@ -494,7 +494,7 @@ Trait for the `&` operator (bitwise AND).
 
 Returns the bitwise AND of self and rhs.
 
-### `pub trait BitOr<Rhs>`
+### `pub trait BitOr<Rhs = Self>`
 
 Trait for the `|` operator (bitwise OR).
 
@@ -502,7 +502,7 @@ Trait for the `|` operator (bitwise OR).
 
 Returns the bitwise OR of self and rhs.
 
-### `pub trait BitXor<Rhs>`
+### `pub trait BitXor<Rhs = Self>`
 
 Trait for the `^` operator (bitwise XOR).
 

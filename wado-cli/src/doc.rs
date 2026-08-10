@@ -413,6 +413,17 @@ mod format_contract_tests {
     }
 
     #[test]
+    fn a_type_parameter_renders_its_default() {
+        let out = markdown_of(
+            "//! Demo.\n\npub trait Combine<Rhs = Self> {\n    fn combine(&self, rhs: &Rhs) -> i32;\n}\n",
+        );
+        assert!(
+            out.contains("trait Combine<Rhs = Self>"),
+            "the default is what makes the argument optional:\n{out}"
+        );
+    }
+
+    #[test]
     fn single_synopsis_renders_a_section() {
         let out = markdown_of(
             "//! Demo.\n\n#[synopsis]\ntest {\n    let x = 1;\n    assert x == 1;\n}\n",
