@@ -21,7 +21,6 @@ use super::Elaborator;
 use super::scope::TypeParamScope;
 use super::sig::{DeclSig, MethodSig};
 use super::types::{FunctionContext, TypeError};
-use super::written::WrittenHead;
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
 /// `#[compiler_item("...")]` attributes, emitting a diagnostic for
@@ -797,9 +796,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// while that helper answers with the prelude's, and until the two agree
     /// there is no reliable answer to build on.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
-        let name = WrittenHead::of(trait_type, &self.current_module_source)
-            .spelling_pending_migration()
-            .to_string();
+        let name = super::trait_env::get_type_name_static(trait_type);
         if self.trait_decl_header_in_frame(&name).is_some()
             || self
                 .tysys

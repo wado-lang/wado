@@ -39,7 +39,6 @@ enum FuncRefInference {
 }
 
 use super::util::placeholder;
-use super::written::WrittenHead;
 
 /// Per spread base in an anonymous literal: whether it is a key-value map, and
 /// (for a plain struct base) its defining module plus field list
@@ -4762,8 +4761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     header.trait_name.as_deref() == Some(from_trait_name.as_str())
                         && matches!(&header.trait_type, Some(ast::Type::Generic(g))
                         if g.args.first().is_some_and(|arg| {
-                            WrittenHead::of(arg, &header.module).spelling_pending_migration()
-                                == from_name
+                            super::trait_env::get_type_name_static(arg) == from_name
                         }))
                 })
         };

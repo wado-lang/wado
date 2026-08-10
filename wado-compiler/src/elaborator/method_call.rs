@@ -16,7 +16,6 @@ use super::callee::StaticMethodRef;
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ScalarReflectSpec;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
-use super::written::WrittenHead;
 
 /// A static call named the way [symbol notation] writes it — the receiver's
 /// type arguments included (`List<i32>::with_capacity`). Rendering only the
@@ -2830,7 +2829,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type: &ast::Type,
         arg_type_id: &crate::tir::TypeId,
     ) -> bool {
-        let target = WrittenHead::of(target_type, &self.current_module_source);
+        let target_name = super::trait_env::get_type_name_static(target_type);
         let arg_type_name = self.tysys.type_table.borrow().type_name(*arg_type_id);
         let from_trait_name = self
             .tysys
@@ -2846,8 +2845,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return false;
             };
             if header.trait_name.as_deref() != Some(from_trait_name.as_str())
-                || WrittenHead::of(&header.ty, &header.module).spelling_pending_migration()
-                    != target.spelling_pending_migration()
+                || super::trait_env::get_type_name_static(&header.ty) != target_name
             {
                 return false;
             }
@@ -3070,9 +3068,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(trait_type) = impl_block.trait_type.as_ref() else {
                     return;
                 };
-                let base = WrittenHead::of(trait_type, module).spelling_pending_migration();
-                if WrittenHead::of(&impl_block.ty, module).spelling_pending_migration()
-                    != struct_name
+                let base = super::trait_env::get_type_name_static(trait_type);
+                if super::trait_env::get_type_name_static(&impl_block.ty) != struct_name
                     || (base != from_trait_name && base != "TryFrom")
                     || !impl_block.methods.iter().any(|m| m.name == method_name)
                 {
@@ -3092,8 +3089,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     // Full spelling with the head un-aliased, so the
                     // alternatives read `List<i32>`, not a bare `List`.
-                    let head = WrittenHead::of(arg, module)
-                        .resolve_with(|module, name| s.import_original_name(name, module));
+                    let head = super::trait_env::get_type_name_static(arg);
+                    let head = s.import_original_name(&head, module);
                     let mut rendered = String::new();
                     crate::unparse::unparse_type_into(arg, &mut rendered);
                     let resolved = match rendered.split_once('<') {
@@ -3190,12 +3187,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .to_string();
         let is_from_or_try_from =
             |base: &str| -> bool { base == from_trait_name || base == "TryFrom" };
-        let resolve_trait_name = |trait_type: &ast::Type, impl_module: &ModuleSource| -> String {
-            let base = WrittenHead::of(trait_type, impl_module).spelling_pending_migration();
-            if is_from_or_try_from(base) {
+        let resolve_trait_name = |trait_type: &ast::Type| -> String {
+            let base = super::trait_env::get_type_name_static(trait_type);
+            if is_from_or_try_from(&base) {
                 self.get_type_name_full(trait_type)
             } else {
-                base.to_string()
+                base
             }
         };
 
@@ -3206,8 +3203,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(expected) = arg_type_name else {
                 return true;
             };
-            let base = WrittenHead::of(trait_type, impl_module).spelling_pending_migration();
-            if is_from_or_try_from(base)
+            let base = super::trait_env::get_type_name_static(trait_type);
+            if is_from_or_try_from(&base)
                 && let ast::Type::Generic(g) = trait_type
                 && let Some(arg) = g.args.first()
             {
@@ -3228,8 +3225,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // a call whose argument's real name is `Instant`, regardless of
                 // the alias the caller used. The verbatim name would miss the
                 // impl and fall back to a (non-existent) inherent `Type::from`.
-                let head = WrittenHead::of(arg, impl_module)
-                    .resolve_with(|module, name| self.import_original_name(name, module));
+                let head = super::trait_env::get_type_name_static(arg);
+                let head = self.import_original_name(&head, impl_module);
                 let expected_head = expected.split('<').next().unwrap_or(expected);
                 if head != expected_head {
                     return false;
@@ -3254,7 +3251,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let strip = |t: &str| t.replace(' ', "");
                 return strip(&full) == strip(expected);
             }
-            !is_from_or_try_from(base)
+            !is_from_or_try_from(&base)
         };
 
         // Returns the trait the impl names and the node declaring the method
@@ -3264,8 +3261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let check_impl =
             |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<(String, AstId)> {
                 let trait_type = impl_block.trait_type.as_ref()?;
-                if WrittenHead::of(&impl_block.ty, impl_module).spelling_pending_migration()
-                    != struct_name
+                if super::trait_env::get_type_name_static(&impl_block.ty) != struct_name
                     || !matches_arg_type(trait_type, impl_module, &impl_block.type_params)
                 {
                     return None;
@@ -3276,7 +3272,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .any(|p| p.self_kind != ast::SelfKind::None);
                     if method.name == method_name && !has_self {
-                        return Some((resolve_trait_name(trait_type, impl_module), method.id));
+                        return Some((resolve_trait_name(trait_type), method.id));
                     }
                 }
                 // Fall back to the trait declaration's default methods: when
@@ -3286,18 +3282,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // the trait's default. This mirrors how generic dispatch
                 // (`T::method()`) already finds default methods in
                 // `find_method_type_param_names`.
-                let trait_name_base =
-                    WrittenHead::of(trait_type, impl_module).spelling_pending_migration();
+                let trait_name_base = super::trait_env::get_type_name_static(trait_type);
                 if let Some(method) = self
-                    .trait_sig_by_name(trait_name_base)
+                    .trait_sig_by_name(&trait_name_base)
                     .and_then(|sig| sig.method(method_name))
                     && method.default_body.is_some()
                     && method.sig.self_kind == ast::SelfKind::None
                 {
-                    return Some((
-                        resolve_trait_name(trait_type, impl_module),
-                        method.sig.ast_id,
-                    ));
+                    return Some((resolve_trait_name(trait_type), method.sig.ast_id));
                 }
                 None
             };

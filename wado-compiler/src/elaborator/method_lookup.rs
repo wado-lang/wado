@@ -28,7 +28,6 @@ use super::types::{
 use super::tysys::TypeSystem;
 
 use super::util::placeholder;
-use super::written::WrittenHead;
 
 /// Lightweight reference to an impl block. Stores `(module_source,
 /// item_id)` and resolves to the block's digested [`ImplHeader`] via
@@ -1973,8 +1972,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, impl_ref);
         let impl_struct_name = self.get_type_name(&header.ty);
-        let impl_key =
-            super::trait_env::receiver_decl_key(WrittenHead::of(&header.ty, &header.module));
+        let impl_key = super::trait_env::receiver_decl_key(&header.ty);
         // Accept if the type matches by name, or if it's a blanket impl type parameter.
         let is_blanket_type_param =
             matches!(&header.ty, Type::Named(named) if !self.tysys.is_known_type_name(&named.name));
@@ -2082,8 +2080,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_type_params: &[ast::GenericParam],
         receiver_type_id: Option<TypeId>,
     ) -> bool {
-        let Some(param) =
-            super::written::binder_of(impl_ty, impl_type_params).filter(|tp| !tp.bounds.is_empty())
+        let impl_ty_name = super::trait_env::get_type_name_static(impl_ty);
+        let Some(param) = impl_type_params
+            .iter()
+            .find(|tp| tp.name == impl_ty_name && !tp.bounds.is_empty())
         else {
             return true;
         };
@@ -3419,9 +3419,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> Vec<ast::GenericParam> {
         for header in self.tysys.trait_env.impl_headers.values() {
-            if WrittenHead::of(&header.ty, &header.module).spelling_pending_migration()
-                == struct_name
-            {
+            if super::trait_env::get_type_name_static(&header.ty) == struct_name {
                 for method in &header.methods {
                     if method.name == method_name && !method.type_params.is_empty() {
                         return method.type_params.clone();

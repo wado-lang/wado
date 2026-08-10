@@ -2105,9 +2105,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if header.associated_types.is_empty() {
                     continue;
                 }
-                let Some(blanket_param) =
-                    super::written::binder_of(&header.ty, &header.type_params)
-                        .filter(|tp| !tp.bounds.is_empty())
+                let impl_type_name = super::trait_env::get_type_name_static(&header.ty);
+                let Some(blanket_param) = header
+                    .type_params
+                    .iter()
+                    .find(|tp| tp.name == impl_type_name && !tp.bounds.is_empty())
                 else {
                     continue;
                 };

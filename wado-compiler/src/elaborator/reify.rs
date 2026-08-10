@@ -1442,11 +1442,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // concrete functions. Recorded AST-side by the elaborator.
         let concrete_owner: Option<FqTypeName> = facts.concrete_owner.clone();
 
-        let trait_decl_name =
-            super::written::WrittenHead::of(trait_ast, &self.current_module_source)
-                .spelling_pending_migration();
+        let trait_decl_name = super::trait_env::get_type_name_static(trait_ast);
         let Some(trait_sig) = super::trait_query::trait_sig_by_name_with(
-            trait_decl_name,
+            &trait_decl_name,
             &self.current_module_source,
             &self.sem.imports,
             self.symbols,

@@ -6,7 +6,6 @@
 
 use std::sync::Arc;
 
-use super::written::WrittenHead;
 use crate::ast::{self, AstId, Item, Module, Type};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -309,9 +308,10 @@ pub(super) struct ImplHeader {
     /// Identity of the implemented trait, resolved the same way; `None` for
     /// inherent `impl Type { … }` blocks.
     pub(super) trait_key: Option<ImplTargetKey>,
-    /// The head [`Self::trait_type`] writes; `None` for inherent
-    /// `impl Type { … }` blocks. Memoised so the index filters that only ask
-    /// "is this a trait impl?" need no allocation.
+    /// Trait name for `impl Trait for Type` blocks (via `get_type_name_static`
+    /// on the trait reference); `None` for inherent `impl Type { … }` blocks.
+    /// The memoised head name of [`Self::trait_type`], so the index filters
+    /// that only ask "is this a trait impl?" need no allocation.
     ///
     /// A spelling, not an identity — compare [`Self::trait_key`] instead when
     /// the question is *which* trait this is.
@@ -541,9 +541,10 @@ pub struct TraitEnv {
     /// Type name → **every** impl block (inherent and trait) on that type, in
     /// global build order (matching `impl_headers`'s insertion order), so
     /// candidate scans iterate directly with no per-call sort. Keyed like
-    /// `impl_index`, by the target's resolved [`ImplTargetKey`], so same-named
-    /// types in different modules get their own bucket. The inherent subset is
-    /// the `trait_name.is_none()` filter ([`Self::inherent_impl_keys`]).
+    /// `impl_index` (bare name via `get_type_name_static`); same-named types in
+    /// different modules share a bucket, disambiguated by the per-entry
+    /// `ModuleSource`. The inherent subset is the `trait_name.is_none()` filter
+    /// ([`Self::inherent_impl_keys`]).
     pub(super) all_impl_index: TraitImplIndex,
     /// `impl_index` and `all_impl_index` re-keyed by the target's bare head,
     /// for callers that hold a name without the import context to canonicalise
@@ -987,10 +988,10 @@ impl TraitEnv {
                 let Item::Impl(impl_block) = item else {
                     continue;
                 };
-                let target_head = WrittenHead::of(&impl_block.ty, module_source);
-                let type_name = target_head.spelling_pending_migration().to_string();
+                let type_name = get_type_name_static(&impl_block.ty);
                 let type_key = impl_target_key(
-                    target_head,
+                    &impl_block.ty,
+                    module_source,
                     &impl_block.type_params,
                     module_import_scopes.get(module_source),
                     symbols,
@@ -998,7 +999,8 @@ impl TraitEnv {
                 );
                 let trait_key = impl_block.trait_type.as_ref().map(|trait_type| {
                     impl_target_key(
-                        WrittenHead::of(trait_type, module_source),
+                        trait_type,
+                        module_source,
                         &impl_block.type_params,
                         module_import_scopes.get(module_source),
                         symbols,
@@ -1011,11 +1013,7 @@ impl TraitEnv {
                         module: module_source.clone(),
                         target: type_key.clone(),
                         trait_key,
-                        trait_name: impl_block.trait_type.as_ref().map(|t| {
-                            WrittenHead::of(t, module_source)
-                                .spelling_pending_migration()
-                                .to_string()
-                        }),
+                        trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
                         trait_type: impl_block.trait_type.clone(),
                         ty: impl_block.ty.clone(),
                         type_params: impl_block.type_params.clone(),
@@ -1048,9 +1046,7 @@ impl TraitEnv {
                     .or_default()
                     .push((module_source.clone(), impl_block.id));
                 if let Some(trait_type) = &impl_block.trait_type {
-                    let trait_name = WrittenHead::of(trait_type, module_source)
-                        .spelling_pending_migration()
-                        .to_string();
+                    let trait_name = get_type_name_static(trait_type);
                     if let Some((receiver, param)) =
                         classify_blanket_receiver(&impl_block.ty, &impl_block.type_params)
                     {
@@ -1153,7 +1149,8 @@ impl TraitEnv {
         let resolve_written =
             |module: &ModuleSource, ty: &ast::Type, type_params: &[ast::GenericParam]| {
                 impl_target_key(
-                    WrittenHead::of(ty, module),
+                    ty,
+                    module,
                     type_params,
                     module_import_scopes.get(module),
                     symbols,
@@ -2275,6 +2272,15 @@ fn check_all_orphan_rules(
     violations
 }
 
+/// Extract a type name from an AST type without needing an Elaborator instance.
+/// The typed [`name::Receiver`] key an `impl` target indexes under.
+/// A `&T` / `&mut T` target keys as `Receiver::Ref` (from the typed AST, never
+/// a `"&"` string); everything else keys as `Receiver::Type` over the canonical
+/// [`get_type_name_static`] head, so the key domain matches the old string keys
+/// exactly apart from the ref shape being typed.
+/// Canonical [`ImplTargetKey`] for an impl target written in `module_source`.
+/// The declaring module and original name come from that module's import
+/// scope, so `impl T for Alias` keys the same as `impl T for Original`.
 /// Which declaration a type name means, read from the module that *wrote*
 /// the name — the vantage an `impl` header has and a use site does not.
 ///
@@ -2329,29 +2335,28 @@ pub(super) fn declaring_side_decl_key<'a>(
 /// admissible. [`TraitEnv::build`] scopes it per position
 /// (`type_position_decls` / `trait_position_decls`).
 pub(super) fn impl_target_key<'a>(
-    head: WrittenHead<'_>,
+    ty: &ast::Type,
+    module_source: &ModuleSource,
     type_params: &[ast::GenericParam],
     scope: Option<&ModuleImportScope>,
     symbols: &SymbolTable,
     decl_keys: impl Iterator<Item = &'a DeclKey>,
 ) -> ImplTargetKey {
-    if let Some(kind) = head.ref_kind() {
-        return ImplTargetKey::Ref(kind);
-    }
-    // The impl's own binder shadows any declaration of the same name, so
-    // `impl<T> Trait for T` written where a `struct T` exists stays a blanket
-    // rather than joining that struct's bucket.
-    let is_binder = head.binder_in(type_params).is_some();
-    head.resolve_with(|vantage, written| {
-        let blanket = || ImplTargetKey::TypeParam(vantage.clone(), written.to_string());
-        if is_binder {
-            return blanket();
+    if let Some(kind) = name::RefKind::from_ast(ty) {
+        ImplTargetKey::Ref(kind)
+    } else {
+        let written = get_type_name_static(ty);
+        // The impl's own binder shadows any declaration of the same name, so
+        // `impl<T> Trait for T` written where a `struct T` exists stays a
+        // blanket rather than joining that struct's bucket.
+        if type_params.iter().any(|p| p.name == written) {
+            return ImplTargetKey::TypeParam(module_source.clone(), written);
         }
         let empty_sources: IndexMap<String, ModuleSource> = IndexMap::default();
         let empty_names: IndexMap<String, String> = IndexMap::default();
         let key = super::trait_query::decl_identity_core(
-            written,
-            vantage,
+            &written,
+            module_source,
             scope.map_or(&empty_sources, |s| &s.sources),
             &empty_sources,
             scope.map_or(&empty_names, |s| &s.original_names),
@@ -2365,12 +2370,12 @@ pub(super) fn impl_target_key<'a>(
             // declarations by bare name — the same fallback
             // `declaring_side_decl_key` offers. Only a name reaching none of
             // them is a blanket parameter.
-            None => match decl_keys.into_iter().find(|(_, n)| n == written) {
+            None => match decl_keys.into_iter().find(|(_, n)| *n == written) {
                 Some(key) => ImplTargetKey::Decl(key.clone()),
-                None => blanket(),
+                None => ImplTargetKey::TypeParam(module_source.clone(), written),
             },
         }
-    })
+    }
 }
 
 /// The declaration name an `impl` header writes its target as.
@@ -2378,8 +2383,31 @@ pub(super) fn impl_target_key<'a>(
 /// An AST header carries no module, so this cannot produce a qualified
 /// receiver — compare it against [`name::Receiver::decl_key`], which is the
 /// same namespace, never against `head_key`.
-pub(super) fn receiver_decl_key(head: WrittenHead<'_>) -> String {
-    head.spelling_pending_migration().to_string()
+pub(super) fn receiver_decl_key(ty: &ast::Type) -> String {
+    match name::RefKind::from_ast(ty) {
+        Some(kind) => kind.prefix().to_string(),
+        None => get_type_name_static(ty),
+    }
+}
+
+pub(super) fn get_type_name_static(ty: &ast::Type) -> String {
+    match ty {
+        ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
+        ast::Type::Named(named) => named.name.clone(),
+        ast::Type::Generic(generic) => generic.name.clone(),
+        ast::Type::Reference(_) | ast::Type::MutReference(_) => name::RefKind::from_ast(ty)
+            .expect("Reference/MutReference classify")
+            .prefix()
+            .to_string(),
+        ast::Type::Tuple(elems) => {
+            if elems.is_empty() {
+                TypeTable::UNIT_TYPE_NAME.to_string()
+            } else {
+                TypeTable::TUPLE_TYPE_NAME.to_string()
+            }
+        }
+        _ => "Unknown".to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -2465,15 +2493,14 @@ mod tests {
         ty: &Type,
         type_params: &[GenericParam],
     ) -> ImplTargetKey {
-        let head = WrittenHead::of(ty, module);
-        if let Some(kind) = head.ref_kind() {
+        if let Some(kind) = name::RefKind::from_ast(ty) {
             return ImplTargetKey::Ref(kind);
         }
-        let spelling = head.spelling_pending_migration().to_string();
-        if head.binder_in(type_params).is_some() || UNDECLARED.contains(&spelling.as_str()) {
-            return ImplTargetKey::TypeParam(module.clone(), spelling);
+        let head = get_type_name_static(ty);
+        if type_params.iter().any(|p| p.name == head) || UNDECLARED.contains(&head.as_str()) {
+            return ImplTargetKey::TypeParam(module.clone(), head);
         }
-        ImplTargetKey::Decl((module.clone(), spelling))
+        ImplTargetKey::Decl((module.clone(), head))
     }
 
     fn make_local_decls(local_names: &[&str]) -> LocalDecls {
@@ -2498,12 +2525,8 @@ mod tests {
         ImplHeader {
             target: resolve_for_test(&module, &self_type, &type_params),
             trait_key: Some(resolve_for_test(&module, &trait_type, &type_params)),
-            trait_name: Some(
-                WrittenHead::of(&trait_type, &module)
-                    .spelling_pending_migration()
-                    .to_string(),
-            ),
             module,
+            trait_name: Some(get_type_name_static(&trait_type)),
             trait_type: Some(trait_type),
             ty: self_type,
             type_params,
