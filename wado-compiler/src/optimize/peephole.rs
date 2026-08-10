@@ -91,9 +91,6 @@ pub(super) fn run_peephole(
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
 
-    // Whole-function effect summaries, computed once for the run: `ElideRule`
-    // asks them whether a dead binding's call may go with the binding.
-    let effects = super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     // The pre- and post-inline runs apply different rule sets, so they keep
@@ -104,6 +101,13 @@ pub(super) fn run_peephole(
     } else {
         GatedPass::PeepholePost
     };
+    // Whole-function effect summaries, computed once for the run and only when
+    // the gate has a body to visit: `ElideRule` asks them whether a dead
+    // binding's call may go with the binding.
+    let effects = gate
+        .any_pending(gated_pass, len)
+        .then(|| super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry))
+        .unwrap_or_default();
     gate.run_gated(gated_pass, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is

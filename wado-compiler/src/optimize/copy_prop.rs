@@ -220,6 +220,9 @@ fn analyze_copy_binding(
 struct AnalysisResult {
     bindings: Vec<CopyBinding>,
     usage: IndexMap<u32, LocalUsage>,
+    /// The locals a reachable promoted operand reads, built once with the usage
+    /// counts above — the substitution below needs the same set.
+    promoted_reads: IndexSet<u32>,
 }
 
 /// Per-round analysis inputs: the callee oracle, the function-wide
@@ -366,15 +369,15 @@ fn analyze_function_body(body: &Body, ctx: &AnalysisCtx<'_>) -> AnalysisResult {
     let mut result = AnalysisResult {
         bindings: Vec::new(),
         usage: IndexMap::default(),
+        promoted_reads: IndexSet::default(),
     };
     analyze_block(body, body.root, &mut result, ctx);
     // A local read only through a promoted `Operand::Value` (`Opaque(Local)`) is
     // invisible to the skeleton walk above; count it so copy-prop does not treat
     // the local as dead / single-use and eliminate it out from under the promoted
     // read. Empty (behavior-neutral) until operand promotion runs.
-    let mut promoted = IndexSet::default();
-    super::arena_query::promoted_local_reads(body, &mut promoted);
-    for &idx in &promoted {
+    super::arena_query::promoted_local_reads(body, &mut result.promoted_reads);
+    for idx in result.promoted_reads.clone() {
         result.usage.entry(idx).or_default().read_count += 2;
     }
     // One census for the round: which locals a promoted operand reads without
@@ -878,8 +881,7 @@ fn propagate_at_root(
         if analysis.bindings.is_empty() {
             break;
         }
-        let mut promoted_reads = IndexSet::default();
-        super::arena_query::promoted_local_reads(engine.body, &mut promoted_reads);
+        let promoted_reads = analysis.promoted_reads;
         let eliminable: Vec<CopyBinding> = analysis
             .bindings
             .into_iter()

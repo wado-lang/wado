@@ -36,14 +36,11 @@ pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
 /// ([`collect_reads`], the engine's use index) cannot see them, and a pass that
 /// decides a local is unused must union this in.
 ///
-/// Reachability is the whole point: the pool is append-only, so its
-/// `opaque_local_sources` also names the locals of promoted reads that folded
-/// away long ago. Seeding from the pool keeps those locals alive forever, which
-/// costs real copies and blocks real elisions; walking the operands instead
-/// counts exactly the reads that survive.
-///
-/// A body with no block structure is a bare expression — a global initializer —
-/// and everything it holds is reachable by construction.
+/// Reachability is the whole point: the pool is append-only, so it also holds
+/// the `Opaque(Local)` values of promoted reads that folded away long ago.
+/// Seeding from the pool would keep those locals alive forever, which costs
+/// real copies and blocks real elisions; walking the operands counts exactly
+/// the reads that survive.
 pub(super) fn promoted_local_reads(body: &Body, out: &mut IndexSet<u32>) {
     let mut seen = IndexSet::default();
     for node in reachable_nodes(body) {
@@ -74,15 +71,26 @@ pub(super) fn promoted_read_count_at(body: &Body, node: NodeRef, idx: u32) -> us
     count
 }
 
-/// How many reachable operands read `idx` through a promoted value, over the
-/// whole body — the [`promoted_read_count_at`] total. A gate that compares a
-/// whole-function tally against a scoped one must add this to *both* sides, or
-/// the equality stops meaning "every mention is in scope".
-pub(super) fn promoted_read_count(body: &Body, idx: u32) -> usize {
-    reachable_nodes(body)
-        .into_iter()
-        .map(|node| promoted_read_count_at(body, node, idx))
-        .sum()
+/// How many reachable operands read each local through a promoted value, over
+/// the whole body — the [`promoted_read_count_at`] totals, for every local at
+/// once. A gate that compares a whole-function tally against a scoped one must
+/// add these to *both* sides, or the equality stops meaning "every mention is
+/// in scope".
+pub(super) fn promoted_read_counts(body: &Body) -> crate::hashmap::IndexMap<u32, usize> {
+    let mut counts = crate::hashmap::IndexMap::default();
+    for node in reachable_nodes(body) {
+        body.for_each_operand(node, |op| {
+            let Some(v) = op.as_value() else {
+                return;
+            };
+            let mut leaves = IndexSet::default();
+            body.values.collect_opaque_locals(v, &mut leaves);
+            for idx in leaves {
+                *counts.entry(idx).or_default() += 1;
+            }
+        });
+    }
+    counts
 }
 
 /// Every reachable operand that is exactly the promoted read `Opaque(Local
@@ -130,11 +138,20 @@ pub(super) fn buried_promoted_reads(body: &Body) -> IndexSet<u32> {
     out
 }
 
-/// Every node reachable from the body root. A body with no block structure is a
-/// bare expression — a global initializer — and holds only expressions.
+/// Every node reachable from the body root.
+///
+/// A body with no blocks has no root to walk from — a scratch arena a pass is
+/// still filling. Every node it holds counts, since a liveness census must
+/// never miss a read; over-counting only keeps something alive.
 pub(super) fn reachable_nodes(body: &Body) -> Vec<NodeRef> {
     if body.blocks.is_empty() {
-        return body.exprs.iter().map(|(e, _)| NodeRef::Expr(e)).collect();
+        return body
+            .exprs
+            .iter()
+            .map(|(e, _)| NodeRef::Expr(e))
+            .chain(body.stmts.iter().map(|(s, _)| NodeRef::Stmt(s)))
+            .chain(body.pats.iter().map(|(p, _)| NodeRef::Pat(p)))
+            .collect();
     }
     let mut out = Vec::new();
     let mut stack = vec![NodeRef::Block(body.root)];

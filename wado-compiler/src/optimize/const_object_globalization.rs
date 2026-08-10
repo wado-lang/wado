@@ -61,7 +61,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{
     bare_promoted_reads, buried_promoted_reads, collect_reads, expr_mentions_local, is_local,
-    promoted_local_reads, promoted_read_count_at, reachable_nodes, strip_refs,
+    promoted_local_reads, reachable_nodes, strip_refs,
 };
 
 /// A hoisting candidate, identified by its owning function. Resolved in an
@@ -815,13 +815,18 @@ fn count_reads_of(body: &Body, node: NodeRef, wanted: &IndexSet<u32>) -> IndexMa
         }
         // The confinement tally below compares a whole-body count against an
         // in-initializer one; a promoted read the skeleton walk cannot see
-        // would make a sibling read outside the initializer invisible.
-        for &idx in wanted {
-            let n = promoted_read_count_at(body, node, idx);
-            if n > 0 {
-                *counts.entry(idx).or_default() += n;
+        // would make a sibling read outside the initializer invisible. One walk
+        // per operand answers for every wanted local at once.
+        body.for_each_operand(node, |op| {
+            let Some(v) = op.as_value() else {
+                return;
+            };
+            let mut leaves = IndexSet::default();
+            body.values.collect_opaque_locals(v, &mut leaves);
+            for idx in leaves.intersection(wanted) {
+                *counts.entry(*idx).or_default() += 1;
             }
-        }
+        });
         body.for_each_child(node, |c| stack.push(c));
     }
     counts
@@ -1673,7 +1678,7 @@ fn rewrite_reads(
 /// Rewrite the reads that live in the value pool: an operand that is exactly
 /// `Opaque(Local local_index)` becomes a fresh `GlobalVarGet` expression.
 /// Candidacy already refused a local buried inside a compound value
-/// ([`has_buried_promoted_read`]), so these are all of them.
+/// ([`buried_promoted_reads`]), so these are all of them.
 ///
 /// Each slot gets its own expression id — one node in two operand slots would
 /// break the single-parent invariant — so the ids are minted up front and

@@ -41,8 +41,8 @@ use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::{
-    block_contains_loop, has_break_to, is_local, is_local_operand, promoted_read_count,
-    promoted_read_count_at, single_payload_binding,
+    block_contains_loop, has_break_to, is_local, is_local_operand, promoted_read_count_at,
+    promoted_read_counts, single_payload_binding,
 };
 
 /// The slot `sroa_variant_return` reserves for the tag in every scalarized
@@ -72,6 +72,10 @@ impl Rule for LabeledBlockFusionRule {
     }
 
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        // The whole-body promoted-read tally, shared by every candidate in this
+        // block: the walk is per body, not per temp, and the block is left as
+        // soon as one fusion fires.
+        let promoted_reads = PromotedReadCounts::default();
         let stmts = engine.body.blocks[block].stmts.clone();
         if stmts.len() < 2 {
             return false;
@@ -99,7 +103,7 @@ impl Rule for LabeledBlockFusionRule {
             let consumer_uses =
                 count_local_uses_in_stmt(engine.body, stmts[i + 1], info.temp_local);
             let body_uses = engine.local_reads(info.temp_local).len()
-                + promoted_read_count(engine.body, info.temp_local);
+                + promoted_reads.count(engine.body, info.temp_local);
             if body_uses != consumer_uses {
                 continue;
             }
@@ -1032,6 +1036,22 @@ impl NirRefVisitor for SlotReadCollector {
         // position it unbalances the tally, which rejects the fusion.
         self.direct_uses += promoted_read_count_at(body, node, self.local_idx);
         self.walk_node(body, node);
+    }
+}
+
+/// Per-body count of the reads that live in the value pool, keyed by local and
+/// filled on first ask. The gate below needs it for one temp at a time, but the
+/// walk that answers costs a whole body, so it answers for all of them at once.
+#[derive(Default)]
+struct PromotedReadCounts(std::cell::OnceCell<IndexMap<u32, usize>>);
+
+impl PromotedReadCounts {
+    fn count(&self, body: &Body, local: u32) -> usize {
+        self.0
+            .get_or_init(|| promoted_read_counts(body))
+            .get(&local)
+            .copied()
+            .unwrap_or(0)
     }
 }
 

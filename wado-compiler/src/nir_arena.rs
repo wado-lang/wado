@@ -1161,11 +1161,39 @@ impl Body {
     }
 
     /// Invoke `f` on every operand slot of `node`, in source order — the
-    /// mutable twin of [`Body::for_each_operand`], and the only place the
-    /// writable operand positions are spelled out. Non-operand `ExprId` slots
+    /// mutable twin of [`Body::for_each_operand`]. Non-operand `ExprId` slots
     /// (`Assign::target`) and structural children (blocks, patterns) are not
     /// operands and are not visited.
+    ///
+    /// A `&mut` walk cannot be expressed as a filter over the shared
+    /// [`Slot`] one, so this match is the one place the operand positions are
+    /// written twice. A debug assertion compares its slot count against the
+    /// shared walk at every call, so a variant taught to one and not the other
+    /// fails the first test that touches that node kind.
     pub fn for_each_operand_mut(&mut self, node: NodeRef, mut f: impl FnMut(&mut Operand)) {
+        #[cfg(debug_assertions)]
+        let expected = {
+            let mut n = 0usize;
+            self.for_each_operand(node, |_| n += 1);
+            n
+        };
+        #[cfg(debug_assertions)]
+        let mut seen = 0usize;
+        #[cfg(debug_assertions)]
+        let mut f = |o: &mut Operand| {
+            seen += 1;
+            f(o);
+        };
+        self.for_each_operand_mut_inner(node, &mut f);
+        #[cfg(debug_assertions)]
+        assert_eq!(
+            seen, expected,
+            "operand slots of {node:?} disagree between `for_each_operand` and \
+             `for_each_operand_mut`"
+        );
+    }
+
+    fn for_each_operand_mut_inner(&mut self, node: NodeRef, f: &mut impl FnMut(&mut Operand)) {
         match node {
             NodeRef::Block(_) => {}
             NodeRef::Pat(p) => {

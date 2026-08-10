@@ -690,6 +690,24 @@ impl ValuePool {
         self.collect_opaque_locals_seen(v, &mut IndexSet::default(), out);
     }
 
+    /// How many pure-value children `v` has — zero for a leaf. Lets a walk
+    /// answer a leaf without allocating a worklist.
+    fn child_count(&self, v: ValueId) -> usize {
+        match self.kind(v) {
+            ValueKind::Binary { .. } | ValueKind::LoopPhi { .. } => 2,
+            ValueKind::Unary { .. } | ValueKind::Cast { .. } | ValueKind::FieldAccess { .. } => 1,
+            ValueKind::Select { .. } => 3,
+            ValueKind::Opaque(_)
+            | ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::Const(..) => 0,
+        }
+    }
+
     /// Push the pure-value children of `v` — the edges both leaf walks follow.
     /// An `Opaque` is a leaf: it stands for what the graph cannot reconstruct.
     fn push_value_children(&self, v: ValueId, stack: &mut Vec<ValueId>) {
@@ -727,6 +745,12 @@ impl ValuePool {
     /// [`ValuePool::collect_opaque_locals`], for the "does this mention the
     /// local?" guards that decide whether a rewrite may move or drop code.
     pub fn value_reads_local(&self, v: ValueId, idx: u32) -> bool {
+        // A leaf answers without a worklist, which is most operands: every
+        // constant, and the bare `local.get` a promoted read is.
+        if self.child_count(v) == 0 {
+            return matches!(self.kind(v), ValueKind::Opaque(oid)
+                if self.opaque_source(*oid) == Some(OpaqueSource::Local(idx)));
+        }
         let mut stack = vec![v];
         let mut seen: IndexSet<ValueId> = IndexSet::default();
         while let Some(v) = stack.pop() {

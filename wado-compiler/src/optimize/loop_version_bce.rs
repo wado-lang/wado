@@ -95,7 +95,14 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     // Whole-function effect summaries for the sweep's `ElideRule` (see there).
-    let effects = super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
+    // Only a body with a loop can be versioned, so a program with none pays
+    // nothing for them.
+    let effects = project
+        .functions
+        .iter()
+        .any(|f| f.borrow().body.as_ref().is_some_and(body_contains_loop))
+        .then(|| super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry))
+        .unwrap_or_default();
     let type_table = project.type_table.borrow();
     let mut buffers = EngineBuffers::default();
     let mut changed = false;

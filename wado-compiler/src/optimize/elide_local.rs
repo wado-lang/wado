@@ -63,9 +63,14 @@ impl Rule for ElideRule<'_> {
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
         // Locals read only through a promoted `Operand::Value` are live but
-        // invisible to the use index, so keep them. Recomputed per block
-        // application, since a rewrite elsewhere in the run can promote a fresh
-        // read into the skeleton.
+        // invisible to the use index, so keep them.
+        //
+        // Per block application, not cached on the rule: a rule that queries a
+        // value builds the graph for that body on the spot, which mints
+        // `Opaque(Local)` operands mid-run, so a function-level cache would
+        // answer from before the read existed and elide a live binding. The
+        // walk stays off the hot path anyway — `is_kept` asks only after the
+        // escape set and the use index both come up empty.
         let promoted_reads = PromotedReads::default();
         let mut new_stmts = Vec::with_capacity(stmts.len());
         let mut changed = false;
