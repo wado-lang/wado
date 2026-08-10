@@ -785,6 +785,13 @@ impl ValuePool {
     /// it turns any use into the "no recorded extraction source" panic at WIR
     /// build instead of a silent read of the wrong slot.
     pub fn remap_opaque_locals(&mut self, remap: &[Option<u32>]) {
+        // The canonical-local cache is keyed by index, so it renumbers with the
+        // sources; an entry for a dropped local goes, like its source.
+        self.canonical_locals = self
+            .canonical_locals
+            .iter()
+            .filter_map(|(&idx, &v)| remap[idx as usize].map(|new| (new, v)))
+            .collect();
         self.opaque_sources.retain(|_, src| match src {
             OpaqueSource::Local(idx) => match remap[*idx as usize] {
                 Some(new) => {

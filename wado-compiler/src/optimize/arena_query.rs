@@ -130,12 +130,6 @@ pub(super) fn buried_promoted_reads(body: &Body) -> IndexSet<u32> {
     out
 }
 
-/// Whether any reachable operand buries `idx` inside a compound promoted value
-/// — a read [`bare_promoted_reads`] cannot hand a rewrite a slot for.
-pub(super) fn has_buried_promoted_read(body: &Body, idx: u32) -> bool {
-    buried_promoted_reads(body).contains(&idx)
-}
-
 /// Every node reachable from the body root. A body with no block structure is a
 /// bare expression — a global initializer — and holds only expressions.
 pub(super) fn reachable_nodes(body: &Body) -> Vec<NodeRef> {

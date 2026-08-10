@@ -216,6 +216,7 @@ fn refute_candidates(
             candidates,
             passes_through,
             &mut invalid,
+            false,
         );
     }
     for global in &project.globals {
@@ -227,6 +228,7 @@ fn refute_candidates(
             candidates,
             None,
             &mut invalid,
+            true,
         );
     }
     invalid
@@ -584,6 +586,9 @@ fn block_tail_returns_match(body: &Body, block: BlockId, expected: &ExpectedShap
 // Call-site validation
 // -----------------------------------------------------------------------
 
+/// `yields_value` marks a body whose last statement *is* the body's value — a
+/// global initializer. A function body is not one: it yields through `Return`,
+/// so every statement of its root block discards.
 fn validate_uses_in_block(
     body: &Body,
     block: BlockId,
@@ -591,6 +596,7 @@ fn validate_uses_in_block(
     candidates: &IndexMap<usize, CandidateInfo>,
     passes_through: Option<TypeId>,
     invalid: &mut IndexSet<usize>,
+    yields_value: bool,
 ) {
     let mut tracked: IndexMap<u32, usize> = IndexMap::default();
     let settled = super::sroa_variant_return::settled_locals(body);
@@ -600,8 +606,10 @@ fn validate_uses_in_block(
         passes_through,
         settled: &settled,
     };
-    for &stmt in &body.blocks[block].stmts.clone() {
-        validate_stmt(body, stmt, &cx, invalid, &mut tracked, true);
+    let stmts = body.blocks[block].stmts.clone();
+    for (i, &stmt) in stmts.iter().enumerate() {
+        let discarded = !yields_value || i + 1 != stmts.len();
+        validate_stmt(body, stmt, &cx, invalid, &mut tracked, discarded);
     }
 }
 
@@ -651,8 +659,9 @@ fn validate_stmt(
                 && let Some((func_id, _, call)) = block_tail_call(body, value, &mut prefix)
                 && let Some(&candidate_idx) = cx.candidate_ids.get(&func_id)
             {
-                for (i, s) in prefix.iter().enumerate() {
-                    validate_stmt(body, *s, cx, invalid, tracked, i + 1 != prefix.len());
+                // Lead statements only (see `block_tail_call`): all discarded.
+                for &s in &prefix {
+                    validate_stmt(body, s, cx, invalid, tracked, true);
                 }
                 tracked.insert(local_index, candidate_idx);
                 walk_call_args_for_uses(body, call, cx, invalid, tracked);
@@ -671,8 +680,10 @@ fn validate_stmt(
                 && let Some((func_id, _, call)) = block_tail_call(body, e, &mut prefix)
                 && cx.candidate_ids.contains_key(&func_id)
             {
-                for (i, s) in prefix.iter().enumerate() {
-                    validate_stmt(body, *s, cx, invalid, tracked, i + 1 != prefix.len());
+                // `block_tail_call` hands back the statements *ahead* of the
+                // call, so each one's value goes nowhere.
+                for &s in &prefix {
+                    validate_stmt(body, s, cx, invalid, tracked, true);
                 }
                 walk_call_args_for_uses(body, call, cx, invalid, tracked);
                 return;
