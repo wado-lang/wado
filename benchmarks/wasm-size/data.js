@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786360725688,
+  "lastUpdate": 1786363179967,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -46981,6 +46981,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 271633,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "85d9e6045731c4e2a638e8f2ac29f57e1a600202",
+          "message": "Merge pull request #1782 from wado-lang/claude/dce-issue-1772-as2bjo\n\nfix(nir): count the local reads that live in the value pool",
+          "timestamp": "2026-08-10T20:44:07+09:00",
+          "tree_id": "8892bbf0f85fb9b332a3293a2f8e4b1b56185b92",
+          "url": "https://github.com/wado-lang/wado/commit/85d9e6045731c4e2a638e8f2ac29f57e1a600202"
+        },
+        "date": 1786363179088,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267689,
             "unit": "bytes"
           }
         ]
