@@ -1691,9 +1691,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && self.trait_declares_method(&b.decl, method_name)
             })
             .collect();
-        let resolved = candidates.first().and_then(|bound| {
-            self.trait_method_of(&bound.decl, method_name)
-                .map(|found| (bound.name.clone(), found))
+        let resolved = candidates.first().map(|bound| {
+            let found = self
+                .trait_method_of(&bound.decl, method_name)
+                .expect("a candidate was filtered on its declaration declaring the method");
+            (bound.name.clone(), found)
         });
         if candidates.len() > 1 {
             // Two candidates can share a spelling and be different traits, so
