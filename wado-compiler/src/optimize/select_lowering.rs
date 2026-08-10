@@ -173,13 +173,17 @@ fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> 
                 && is_select_eligible_value(body, *lhs, type_table)
                 && is_select_eligible_value(body, *rhs, type_table)
         }
-        // A promoted value never nests a `Cast`: the freeze decision rejects one
+        // The freeze decision refuses a value nesting a `Cast`
         // (`ValuePool::value_fully_reemittable_locally`) because the operand's
-        // source type is unrecoverable from the type-erased tree — which is also
-        // the type `is_trapping_cast` would need here. Refused rather than
-        // written as an unreachable arm that would have to assert it.
-        ValueKind::Cast { .. }
-        | ValueKind::Int(..)
+        // source type is unrecoverable from the type-erased tree — the very type
+        // `is_trapping_cast` would need to classify one here. Asserted rather
+        // than silently refused: if the freeze ever admits a `Cast`, this arm
+        // must gain a trap test, and a `false` would hide that behind a lost
+        // lowering.
+        ValueKind::Cast { .. } => unreachable!(
+            "select-arm eligibility reached a promoted `Cast`; the freeze decision refuses one"
+        ),
+        ValueKind::Int(..)
         | ValueKind::Float(..)
         | ValueKind::Bool(_)
         | ValueKind::Char(_)
