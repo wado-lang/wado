@@ -1,0 +1,20 @@
+// A concrete value cannot satisfy a `let` annotation naming the enclosing
+// body's own type parameter: inside `f`, `T` is opaque, whatever the caller
+// instantiates it to.
+//
+// The `let` check deferred every comparison involving a type parameter, so
+// this compiled and monomorphization then emitted an `i32` where the local was
+// declared `T` — the WIR validator rejected the module instead of the
+// elaborator reporting a diagnostic.
+
+fn f<T>(v: T) -> bool {
+    let x: T = 5;
+    return x == v;
+}
+
+export fn run() {
+    assert f("a") == false;
+}
+
+__DATA__
+{ "compile_error": "type mismatch" }
