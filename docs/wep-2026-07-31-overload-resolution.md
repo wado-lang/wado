@@ -470,16 +470,16 @@ the position that rejected it instead of a bare "method not found".
 
 ### Interactions
 
-| Feature           | Interaction                                                                                                                                                                                                                                                               |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Feature           | Interaction                                                                                                                                                                                                                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Operators         | Indexing selects by the operand's type, which is the same rule read through a different entry point; the two must agree for every index expression. Arithmetic and bitwise operators select over `Add<Rhs>` and friends by the right operand's class. `Eq` / `Ord` take no trait arguments — unaffected. |
-| `From` / `?`      | See Conversions. `?` stays target-type-directed.                                                                                                                                                                                                                          |
-| Default arguments | Owned by the trait declaration, identical across an overload set — no interaction with selection.                                                                                                                                                                         |
-| Effects           | Never considered by selection; the chosen method's `with` clause is checked afterwards.                                                                                                                                                                                   |
-| Coherence         | Untouched. Selection picks an argument list among impls coherence already accepts; overlapping impls of one instantiation remain errors.                                                                                                                                  |
-| Newtypes          | Inherited impls are candidates on the newtype receiver; the same grouping and selection apply.                                                                                                                                                                            |
-| Monomorphization  | Unaffected. The chosen trait's spelling lands in the mangled name, which `InstantiationKey` already discriminates on.                                                                                                                                                     |
-| LSP / tooling     | Hover and go-to-definition read the recorded dispatch fact; synthesis leaves no persistent state.                                                                                                                                                                         |
+| `From` / `?`      | See Conversions. `?` stays target-type-directed.                                                                                                                                                                                                                                                         |
+| Default arguments | Owned by the trait declaration, identical across an overload set — no interaction with selection.                                                                                                                                                                                                        |
+| Effects           | Never considered by selection; the chosen method's `with` clause is checked afterwards.                                                                                                                                                                                                                  |
+| Coherence         | Untouched. Selection picks an argument list among impls coherence already accepts; overlapping impls of one instantiation remain errors.                                                                                                                                                                 |
+| Newtypes          | Inherited impls are candidates on the newtype receiver; the same grouping and selection apply.                                                                                                                                                                                                           |
+| Monomorphization  | Unaffected. The chosen trait's spelling lands in the mangled name, which `InstantiationKey` already discriminates on.                                                                                                                                                                                    |
+| LSP / tooling     | Hover and go-to-definition read the recorded dispatch fact; synthesis leaves no persistent state.                                                                                                                                                                                                        |
 
 ### Non-goals
 
@@ -566,7 +566,7 @@ Where the pieces live:
 - The side-effect discipline: `Logger::quiet` (`logger.rs`) and, in debug
   builds, `ModuleSemantics::fact_count` asserted unchanged across a synthesis.
 - The soundness invariant: `verify_arg_synthesis`, run in debug builds over
-  *every* method-call argument — the ones selection asked about and the ones it
+  _every_ method-call argument — the ones selection asked about and the ones it
   did not — so the whole fixture corpus is the drift detector.
 - Operators: `find_arithmetic_trait_impls` collects the receiver's impls of the
   operator's trait whose right-hand parameter admits the operand's class, and
