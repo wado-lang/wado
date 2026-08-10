@@ -267,30 +267,25 @@ phase (was ~21 %); the cost is now the passes themselves.
 
 Precision.
 
-- [ ] Promote values that read locals. Today none exist: across four benchmarks
-      not one of ~110,000 reachable promoted operands contains an `Opaque` at
-      any point in the pipeline, at `-O1` / `-O2` / `-O3`. Only constants are
-      ever frozen.
+- [ ] Widen local promotion past parameters. A promoted value may now read a
+      local, but only a never-reassigned parameter qualifies, and only at the
+      post-loop freezes: 37 – 146 such operands per benchmark, against zero
+      before. The gate is the version question — one `ValueId` per local index
+      denotes one value only where the local has one version, which a parameter
+      has and an ordinary binding does not. Widening needs a def that provably
+      dominates the use and a binding that does not re-execute — the flow fact
+      the builder holds and a query-time resolver does not.
 
-      The cause is a missing base case, not a gate. `Engine::maintain_pure_node`
-      resolves `Binary` / `Unary` / `Cast` and bottoms out at every other kind,
-      so a `Local` leaf yields `None`, so a tree over locals yields `None`, so it
-      never reaches the freeze decision — and since the freeze is the only thing
-      that would promote the leaf, nothing bootstraps. Only all-constant trees
-      resolve, and those fold to a constant anyway.
+- [ ] Reach the in-loop consumers. Both freezes that may plant a local-naming
+      value run after the fixed-point loop, so the passes inside it still see
+      none: LICM's value hoist collected zero loop-entry locals in 10,900
+      queries, and `loop_entry_values` still has no working consumer, which is
+      why `inline` discarding a non-empty map 1,469 times costs nothing. An
+      in-loop freeze cannot simply be added — the early one is bound by the
+      context-free rule under "Measured dead ends". This is the born-at-`lower`
+      item above: the builder can mint a versioned value as it walks, which is
+      what this and the widening both want.
 
-      Everything downstream is inert as a result: the `promoted_*` read census
-      that six passes consult always returns empty, LICM's value hoist collected
-      zero loop-entry locals in 10,900 queries, `loop_entry_values` has no
-      working consumer (so `inline` discarding a non-empty map 1,469 times costs
-      nothing), and `promote_fields` promotes no field.
-
-      The obvious repair does not work — see "Measured dead ends". A local's
-      value is only meaningful with the version the flow walk assigns it, and
-      that version does not exist at query time. So this is not a base case to
-      add to the resolver; it is the born-at-`lower` item above, where the
-      builder still holds `current_value` and can mint a versioned value as it
-      walks.
 - [ ] Copy propagation on `ValueId`. Source-stability is not subsumed by value
       equality — a write-once `x` whose source `y` is later reassigned can read
       equal ids yet be unsafe to fold. Revisit with `Select` / `Opaque`
@@ -334,17 +329,18 @@ Each was built, verified, and reverted. Do not retry as-is.
   case. Deleted.
 - **Pooling the graph builder's output maps.** The build is compute-bound (walk +
   hash-cons + flow joins), not allocation-bound; measured no improvement.
-- **Resolving a `Local` read to a version-free opaque at query time.** Tried
-  twice. Both fail on the same point: one `ValueId` per local index spans every
-  version of that local. Promoting induction-variable reads traps
-  `closure_for_loop_mutation`. Restricting it to never-reassigned _parameters_
-  looks airtight — a parameter is entry-defined and single-version — and still
-  miscompiles, because `inline` does not preserve parameterhood: a callee
-  parameter becomes an ordinary caller local whose binding re-executes, so the
-  one canonical opaque minted for it now spans an iteration's worth of values.
-  It reproduces as `wado run package-gale/src/main.wado gen …` trapping with
-  "allocation size too large" in `String::substr_bytes`, called from
-  `trim_start`'s loop.
+- **Promoting induction-variable `Local` reads to source-bearing opaques.** One
+  `ValueId` per local index spans every version of that local, and an induction
+  variable has one per iteration. Traps `closure_for_loop_mutation`.
+- **Freezing a local-naming value before the structural passes.** The early
+  freeze is sound because a frozen value survives `inline` and `sroa` copying the
+  operand around — true of a constant, which means the same thing wherever it
+  lands, false of a value naming a local, because those passes renumber locals
+  and splice a callee body into a caller, re-contextualizing the slot underneath
+  the value. `String::substr_bytes`'s parameters, frozen early and inlined into
+  `trim_start`'s loop, read back as an iteration's worth of values and trap with
+  "allocation size too large". The invariant is now explicit at the freeze
+  decision: early plants only context-free values.
 - **A query-time entry-`FieldAccess` materialiser.** Miscompiled ~165 fixtures:
   reference and aggregate fields change copy / alias semantics.
 - **Keeping caller values across a loop-free-but-impure inline.** Over-merges two
