@@ -429,6 +429,13 @@ pub trait AstVisitor: Sized {
         walk_pattern(self, pat);
     }
 
+    /// A declaration's type parameters. Overridable because a bound is a
+    /// reference site and a visitor resolving one needs the bound itself, not
+    /// just the id [`walk_generic_params`] emits.
+    fn visit_generic_params(&mut self, params: &[GenericParam]) {
+        walk_generic_params(self, params);
+    }
+
     fn visit_type(&mut self, ty: &Type) {
         walk_type(self, ty);
     }
@@ -454,7 +461,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         }
         Item::Struct(s) => {
             v.visit_id(s.id, s.span);
-            walk_generic_params(v, &s.type_params);
+            v.visit_generic_params(&s.type_params);
             for field in &s.fields {
                 v.visit_id(field.id, field.span);
                 v.visit_type(&field.ty);
@@ -462,14 +469,14 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         }
         Item::Enum(e) => {
             v.visit_id(e.id, e.span);
-            walk_generic_params(v, &e.type_params);
+            v.visit_generic_params(&e.type_params);
             for case in &e.cases {
                 v.visit_id(case.id, case.span);
             }
         }
         Item::Variant(vr) => {
             v.visit_id(vr.id, vr.span);
-            walk_generic_params(v, &vr.type_params);
+            v.visit_generic_params(&vr.type_params);
             for case in &vr.cases {
                 v.visit_id(case.id, case.span);
                 if let Some(payload) = &case.payload {
@@ -485,17 +492,17 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         }
         Item::Newtype(n) => {
             v.visit_id(n.id, n.span);
-            walk_generic_params(v, &n.type_params);
+            v.visit_generic_params(&n.type_params);
             v.visit_type(&n.ty);
         }
         Item::TupleTypeDecl(t) => v.visit_id(t.id, t.span),
         Item::BuiltinTypeDecl(d) => {
             v.visit_id(d.id, d.span);
-            walk_generic_params(v, &d.type_params);
+            v.visit_generic_params(&d.type_params);
         }
         Item::Impl(i) => {
             v.visit_id(i.id, i.span);
-            walk_generic_params(v, &i.type_params);
+            v.visit_generic_params(&i.type_params);
             if let Some(trait_ty) = &i.trait_type {
                 v.visit_type(trait_ty);
             }
@@ -515,7 +522,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         }
         Item::Trait(t) => {
             v.visit_id(t.id, t.span);
-            walk_generic_params(v, &t.type_params);
+            v.visit_generic_params(&t.type_params);
             for assoc in &t.associated_types {
                 v.visit_id(assoc.id, assoc.span);
             }
@@ -525,7 +532,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         }
         Item::Resource(r) => {
             v.visit_id(r.id, r.span);
-            walk_generic_params(v, &r.type_params);
+            v.visit_generic_params(&r.type_params);
             for m in &r.methods {
                 v.visit_interface_method(m);
             }
@@ -546,7 +553,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
 
 pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
     v.visit_id(func.id, func.span);
-    walk_generic_params(v, &func.type_params);
+    v.visit_generic_params(&func.type_params);
     for param in &func.params {
         v.visit_id(param.id, param.span);
         v.visit_type(&param.ty);

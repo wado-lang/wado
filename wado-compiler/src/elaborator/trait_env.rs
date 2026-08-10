@@ -725,7 +725,13 @@ impl TraitEnv {
         interner: &mut ModuleSourceInterner,
         entry_module: Option<&ModuleSource>,
         invocations: &InvocationIndex,
+        resolutions: &crate::resolve::Resolutions,
     ) -> (Arc<Self>, Vec<(ModuleSource, TypeError)>) {
+        // Stage B of WEP 2026-08-10: the table is built but nothing depends on
+        // it yet. Every impl header is resolved twice — once here, once by the
+        // table — and the disagreements are reported, so the blast radius of
+        // making the table authoritative is measured rather than discovered.
+        let shadow = crate::resolve::Resolutions::shadow_enabled();
         // Pre-compute every module's `use`-derived import scope so dispatch
         // queries read it instead of rebuilding from the module AST.
         let mut module_import_scopes: IndexMap<ModuleSource, ModuleImportScope> =
@@ -997,6 +1003,15 @@ impl TraitEnv {
                     symbols,
                     type_position_decls(),
                 );
+                if shadow {
+                    shadow_compare(
+                        resolutions,
+                        symbols,
+                        module_source,
+                        &impl_block.ty,
+                        &type_key,
+                    );
+                }
                 let trait_key = impl_block.trait_type.as_ref().map(|trait_type| {
                     impl_target_key(
                         trait_type,
@@ -1621,6 +1636,54 @@ impl TraitEnv {
         };
         env.synthesised = Some(synth_impls);
         Arc::new(env)
+    }
+}
+
+/// Compare the table's answer for an `impl` header against the one this file
+/// derives, and report a difference. Stage-B instrument; it goes when the
+/// consumers take a `DeclRef` and there is only one answer to compare.
+fn shadow_compare(
+    resolutions: &crate::resolve::Resolutions,
+    symbols: &SymbolTable,
+    module_source: &ModuleSource,
+    ty: &ast::Type,
+    derived: &ImplTargetKey,
+) {
+    if name::RefKind::from_ast(ty).is_some() {
+        // Not a disagreement: the table resolves `&List<T>` to `List`, because
+        // that is what the name refers to, while the impl index deliberately
+        // buckets every reference target by kind alone. Two questions, not two
+        // answers.
+        return;
+    }
+    let Some(site) = crate::resolve::head_site(ty) else {
+        return;
+    };
+    let Some(table) = resolutions.get(site) else {
+        crate::resolve::Resolutions::report(&crate::resolve::Disagreement {
+            module: module_source.clone(),
+            written: get_type_name_static(ty),
+            table: crate::resolve::DeclRef::Unresolved,
+            consumer: format!("{derived:?} (site never walked)"),
+        });
+        return;
+    };
+    let agrees = match (resolutions.decl_key(site, symbols), derived) {
+        (Some(key), ImplTargetKey::Decl(d)) => key == *d,
+        // A binder here is a blanket's parameter, which is what `TypeParam`
+        // means on the derived side.
+        (None, ImplTargetKey::TypeParam(..)) => {
+            matches!(table, crate::resolve::DeclRef::Binder(_))
+        }
+        _ => false,
+    };
+    if !agrees {
+        crate::resolve::Resolutions::report(&crate::resolve::Disagreement {
+            module: module_source.clone(),
+            written: get_type_name_static(ty),
+            table,
+            consumer: format!("{derived:?}"),
+        });
     }
 }
 

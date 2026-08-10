@@ -102,6 +102,12 @@ A declaration's identity is the `AstId` of its declaration site, so there is no
 new id space to intern, no `(ModuleSource, String)` pair, and nothing to render
 or parse. Equality is `AstId == AstId`.
 
+`BuiltinShape` covers only the shapes written without naming anything — a tuple,
+a reference, a function type, a pack, a placeholder. The named ones are not
+special: `i32`, `()` and `!` are `internal type` declarations in
+`core:prelude/primitive.wado`, so they resolve through the same layers as
+`List`. One rule, rather than a primitive short-circuit beside it.
+
 The pass runs after module loading and before elaboration, walking each module
 with that module's scope. It is the only place a name becomes an identity, and
 it holds the site's module by construction.
@@ -170,8 +176,11 @@ Costs and risks:
   the size: ~200 parameters, plus the maps and guards keyed alongside them.
 - The pass must agree with today's answers before anything depends on it. Stage
   B is therefore shadow-only — computed, compared against the current per-site
-  answers, differences reported — so the blast radius is measured rather than
-  discovered.
+  answers under `WADO_RESOLVE_SHADOW`, differences reported — so the blast
+  radius is measured rather than discovered. Across all 2127 fixtures the
+  impl-header comparison disagrees exactly once, on
+  `inherent_impl_undeclared_type.wado`: the table answers `Unresolved` where the
+  consumer answers `TypeParam`, which is the conflation stage C removes.
 - `Resolutions` is a whole-program table built before elaboration. It must be
   populated for stdlib modules on the snapshot path too, or a snapshot restore
   resolves nothing.
@@ -183,9 +192,9 @@ Costs and risks:
          keeps the invariant, and `walk_generic_params` so the new sites are
          reachable.
 -
-  2. [ ] B — the resolution pass and `Resolutions`, in shadow mode: every site
-         resolved, every answer compared against what the consumer derives
-         today,every difference logged. Nothing reads the table yet.
+  2. [x] B — the resolution pass and `Resolutions`, in shadow mode: every site
+         resolved, every impl-header answer compared against what `TraitEnv`
+         derives, every difference logged. Nothing reads the table yet.
 -
   3. [ ] C — flip consumers to `DeclRef`, subsystem by subsystem, smallest
          first: trait-impl lookup (#1785) → bound checking → static-method

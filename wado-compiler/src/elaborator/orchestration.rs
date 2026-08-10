@@ -813,6 +813,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // This allows find_trait_method_for_type and find_indexing_trait_impl to do O(1)
         // lookups by type name instead of scanning all items in all modules per method call.
         // Also runs orphan rule checking; violations are emitted as errors.
+        // Resolve every reference site once, from the module that wrote it,
+        // before anything asks what a name means.
+        let resolutions = {
+            let _span = logger.span("elaborate/resolutions");
+            Rc::new(crate::resolve::Resolutions::build(modules, symbols))
+        };
+
         let (trait_env, orphan_violations) = {
             let _span = logger.span("elaborate/trait_env");
             super::trait_env::TraitEnv::build(
@@ -821,6 +828,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &mut interner.borrow_mut(),
                 Some(entry_module_source),
                 &invocations,
+                &resolutions,
             )
         };
         for (module_source, violation) in orphan_violations {
@@ -1222,6 +1230,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             all_enum_cases,
             all_flags_cases,
             all_resource_types,
+            resolutions,
             trait_env,
             cm_interface_registry,
             builtin_registry: Rc::new(builtin_registry),

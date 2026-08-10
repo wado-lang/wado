@@ -39,6 +39,7 @@ pub mod param_resolution;
 pub mod parser;
 pub mod path;
 pub mod remarks;
+pub mod resolve;
 pub mod resource_move_check;
 pub mod semantics;
 pub mod stdlib;
