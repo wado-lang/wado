@@ -5039,6 +5039,7 @@ impl Parser {
             let fn_signature = self.parse_fn_type_for_bound(span)?;
             let bound_name = if fn_signature.is_mut { "FnMut" } else { "Fn" };
             return Ok(crate::ast::TraitBound {
+                id: self.alloc_ast_id(),
                 name: bound_name.to_string(),
                 assoc_types: Vec::new(),
                 span,
@@ -5059,6 +5060,7 @@ impl Parser {
                 self.expect(&TokenKind::Eq)?;
                 let ty = self.parse_type()?;
                 assoc.push(crate::ast::AssocTypeBound {
+                    id: self.alloc_ast_id(),
                     name: assoc_name,
                     ty,
                     span: assoc_span,
@@ -5075,6 +5077,7 @@ impl Parser {
             Vec::new()
         };
         Ok(crate::ast::TraitBound {
+            id: self.alloc_ast_id(),
             name,
             assoc_types,
             span,

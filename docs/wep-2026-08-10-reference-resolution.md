@@ -65,12 +65,25 @@ currency of identity; leave names to syntax and to diagnostics.
 
 ### 1. Every reference site carries an id
 
-`TraitBound` and `AssocTypeBound` gain an `AstId`, and the invariant becomes: a
-node that names a declaration carries one. A test walks the AST grammar and
-fails on a reference-bearing node without an id, so a new one cannot be added
-without a place to record its answer.
+`TraitBound` and `AssocTypeBound` carry an `AstId`, and the invariant is: a node
+that names a declaration carries one. `ast.rs`'s
+`every_reference_bearing_node_carries_an_ast_id` scans its own source and fails
+on a name-bearing node with no id unless `NAMED_WITHOUT_ID` registers it with
+the reason it needs none — an attribute name, a WIT interface id, a field of an
+already-known struct type, or a `use` item, which builds the module scope rather
+than consulting it.
+
+The ids must also be reachable: `walk_generic_params` descends into each
+binder's bounds, so an id-collecting walk sees every reference site rather than
+stopping at the binder.
 
 ### 2. One pass, one answer: `Resolutions: AstId -> DeclRef`
+
+`SymbolTable` is already most of the producer. It keys every declaration by its
+declaring node's `AstId`, and its per-module `imports` map already sends a
+module's local — possibly aliased — name to that `AstId`. So an imported name's
+`DeclRef` is a lookup, not a re-derivation, and the alias handling that
+`ModuleImportScope::original_names` does by string is already done there.
 
 ```rust
 pub enum DeclRef {
@@ -92,6 +105,18 @@ or parse. Equality is `AstId == AstId`.
 The pass runs after module loading and before elaboration, walking each module
 with that module's scope. It is the only place a name becomes an identity, and
 it holds the site's module by construction.
+
+The scope is layered and ordered, and the order is the design rather than a
+lookup's incidental fallbacks: the enclosing item's binders, then the builtin
+shapes, then the module's explicit imports, then its own declarations, then the
+prelude — including the prelude's implementation modules, so a compiler item
+declared `internal` there (`ReflectStruct`, `Member`, `Ref`) still resolves for
+the module that writes its name and can be diagnosed as sealed. A name reaching
+none of the layers is `Unresolved`.
+
+A synthesized reference — the `Self: <this trait>` bound the elaborator mints
+for a trait's own body — knows its referent, so it is recorded directly rather
+than spelled and re-resolved.
 
 This is what removes the declaring-side / call-site duality. A reference has
 exactly one vantage — the module it is written in. Two resolution rules exist
@@ -154,8 +179,9 @@ Costs and risks:
 ## Migration
 
 -
-  1. [ ] A — `AstId` on `TraitBound` and `AssocTypeBound`; the AST grammar test
-         that keeps the invariant.
+  1. [x] A — `AstId` on `TraitBound` and `AssocTypeBound`; the grammar test that
+         keeps the invariant, and `walk_generic_params` so the new sites are
+         reachable.
 -
   2. [ ] B — the resolution pass and `Resolutions`, in shadow mode: every site
          resolved, every answer compared against what the consumer derives

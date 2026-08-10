@@ -1274,6 +1274,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
             "Self".to_string(),
             vec![ast::TraitBound {
+                id: ast::AstId::fresh(),
                 name: trait_decl.name.clone(),
                 assoc_types: Vec::new(),
                 span: trait_decl.span,
