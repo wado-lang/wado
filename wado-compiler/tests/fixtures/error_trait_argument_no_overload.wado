@@ -1,0 +1,27 @@
+// Zero admitted candidates is not ambiguity: the arguments told selection
+// exactly what it needed and no impl accepts them. Reporting it as "the
+// arguments do not select between …" would ask the caller to annotate an
+// argument that is already pinned (WEP 2026-07-31).
+trait Take<T> {
+    fn take(&self, v: &T) -> i32;
+}
+
+impl Take<i32> for bool {
+    fn take(&self, v: &i32) -> i32 {
+        return *v;
+    }
+}
+
+impl Take<String> for bool {
+    fn take(&self, v: &String) -> i32 {
+        return v.len() as i32;
+    }
+}
+
+export fn run() {
+    let c = 'x';
+    assert true.take(&c) == 1;
+}
+
+__DATA__
+{"compile_error": "no overload of 'take' accepts these arguments: the candidates are 'Take<i32>' and 'Take<String>'"}

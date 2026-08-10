@@ -92,6 +92,33 @@ impl ArgClass {
     }
 }
 
+/// The call site's scope, plus the names the argument expression binds for
+/// itself.
+///
+/// Synthesis reads an identifier in the *call site's* scope, and a binding the
+/// argument introduces — a block's `let`, a match arm's pattern, an `if let` —
+/// shadows it there: `l.push(match e { E::A(x) => x, … })` must not be answered
+/// with an outer `x`'s type. A shadowed name is opaque rather than typed;
+/// typing it would mean running the binder's own inference, which is the
+/// elaborator's walk and not this judgement's.
+struct SynthScope<'a> {
+    ctx: &'a FunctionContext,
+    shadowed: Vec<String>,
+}
+
+impl<'a> SynthScope<'a> {
+    fn new(ctx: &'a FunctionContext) -> Self {
+        Self {
+            ctx,
+            shadowed: Vec::new(),
+        }
+    }
+
+    fn shadows(&self, name: &str) -> bool {
+        self.shadowed.iter().any(|n| n == name)
+    }
+}
+
 /// One call's argument classes, computed on demand and remembered.
 ///
 /// Selection consults it only for an overload set — several concrete
@@ -145,6 +172,28 @@ impl<'a> ArgProbe<'a> {
     }
 }
 
+/// The names a pattern binds. Shares the walk with the or-pattern handler so
+/// one pattern shape cannot be a binder there and invisible here.
+fn pattern_binding_names(pattern: &ast::Pattern) -> Vec<String> {
+    let mut bindings = crate::hashmap::IndexMap::default();
+    super::stmt::collect_ast_pattern_binding_ids(pattern, &mut bindings);
+    bindings.into_keys().collect()
+}
+
+/// The names an `if let` / `while let` condition binds for its then-branch.
+fn condition_binding_names(condition: &ast::Condition) -> Vec<String> {
+    match condition {
+        ast::Condition::Expr(_) => Vec::new(),
+        ast::Condition::LetChain { elements, .. } => elements
+            .iter()
+            .flat_map(|element| match element {
+                ast::ConditionElement::Let { pattern, .. } => pattern_binding_names(pattern),
+                ast::ConditionElement::Expr(_) => Vec::new(),
+            })
+            .collect(),
+    }
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Classify one argument. See the module documentation for the soundness
     /// invariant and the side-effect discipline this entry point enforces.
@@ -157,7 +206,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _quiet = logger.quiet();
         #[cfg(debug_assertions)]
         let facts_before = self.sem.fact_count();
-        let class = self.with_reference_recording_suppressed(|s| s.synth(expr, ctx));
+        let mut scope = SynthScope::new(ctx);
+        let class = self.with_reference_recording_suppressed(|s| s.synth(expr, &mut scope));
         #[cfg(debug_assertions)]
         debug_assert_eq!(
             facts_before,
@@ -305,34 +355,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The judgement. One arm per `ast::Expr` variant, no wildcard: an
     /// expression form either has a rule or names the reason it has none.
-    fn synth(&mut self, expr: &ast::Expr, ctx: &FunctionContext) -> ArgClass {
+    fn synth(&mut self, expr: &ast::Expr, scope: &mut SynthScope<'_>) -> ArgClass {
         use ast::Expr;
         match expr {
             Expr::Literal(lit) => self.synth_literal(&lit.value),
             Expr::TemplateString(_) => ArgClass::StrLit,
-            Expr::Ident(id) => self.synth_ident(id, ctx),
-            Expr::Unary(u) => self.synth_unary(u, ctx),
-            Expr::Binary(b) => self.synth_binary(b, ctx),
+            Expr::Ident(id) => self.synth_ident(id, scope),
+            Expr::Unary(u) => self.synth_unary(u, scope),
+            Expr::Binary(b) => self.synth_binary(b, scope),
             Expr::ComparisonChain(_) | Expr::Matches(_) => ArgClass::Exact(TypeTable::BOOL),
             Expr::Assign(_) | Expr::CompoundAssign(_) => ArgClass::Exact(TypeTable::UNIT),
             Expr::Cast(c) => self.synth_type(&c.target_type),
-            Expr::Call(call) => self.synth_call(call, ctx),
-            Expr::MethodCall(m) => self.synth_method_call(m, ctx),
+            Expr::Call(call) => self.synth_call(call, scope),
+            Expr::MethodCall(m) => self.synth_method_call(m, scope),
             // A static call's receiver head may be generic, and then the
             // expected type supplies its arguments.
             Expr::StaticMethodCall(_) => ArgClass::Opaque(OpaqueReason::Inference),
-            Expr::FieldAccess(fa) => self.synth_field_access(fa, ctx),
-            Expr::Index(idx) => self.synth_index(idx, ctx),
-            Expr::Range(range) => self.synth_range(range, ctx),
+            Expr::FieldAccess(fa) => self.synth_field_access(fa, scope),
+            Expr::Index(idx) => self.synth_index(idx, scope),
+            Expr::Range(range) => self.synth_range(range, scope),
             Expr::StructLiteral(sl) => match &sl.name {
                 Some(name) => self.synth_named_type(name),
                 None => ArgClass::Opaque(OpaqueReason::CompoundLiteral),
             },
-            Expr::Block(block) => self.synth_tail(&block.stmts, ctx),
-            Expr::LabeledBlock(lb) => self.synth_tail(&lb.block.stmts, ctx),
-            Expr::WithHandler(w) => self.synth_tail(&w.body.stmts, ctx),
-            Expr::If(if_expr) => self.synth_if(if_expr, ctx),
-            Expr::Match(m) => self.synth_match(m, ctx),
+            Expr::Block(block) => self.synth_tail(&block.stmts, scope),
+            // A labeled block is typed by its `break label: value`s, which the
+            // tail only joins when it carries a value of its own; a tail that
+            // carries none leaves them to type the block, so reading the tail
+            // here would answer `unit` for it.
+            Expr::LabeledBlock(_) => ArgClass::Opaque(OpaqueReason::Inference),
+            Expr::WithHandler(w) => self.synth_tail(&w.body.stmts, scope),
+            Expr::If(if_expr) => self.synth_branches(
+                &if_expr.condition,
+                &if_expr.then_block,
+                if_expr.else_block.as_ref(),
+                scope,
+            ),
+            Expr::Match(m) => self.synth_match(m, scope),
             // Every remaining form is typed by what it is passed to, or by an
             // inference the call site has not run yet.
             Expr::Closure(_) => ArgClass::Opaque(OpaqueReason::Closure),
@@ -377,11 +436,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Locals, captures, globals and associated constants have a declared
     /// type. A function reference and a generic case do not: their type args
     /// come from the expected type.
-    fn synth_ident(&mut self, id: &ast::IdentExpr, ctx: &FunctionContext) -> ArgClass {
+    fn synth_ident(&mut self, id: &ast::IdentExpr, scope: &SynthScope<'_>) -> ArgClass {
+        if scope.shadows(&id.name) {
+            return ArgClass::Opaque(OpaqueReason::Inference);
+        }
         // The registries below are keyed by the canonical `ns$member` alias,
         // as `resolve_ident` reads them.
         let canonical = self.sem.imports.canonical_ns_ref(&id.name);
         let name = canonical.as_deref().unwrap_or(&id.name);
+        let ctx = scope.ctx;
         if !name.contains("::") {
             if let Some(local) = ctx.lookup(name) {
                 return self.class_of_type(local.type_id);
@@ -455,8 +518,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn synth_unary(&mut self, u: &ast::UnaryExpr, ctx: &FunctionContext) -> ArgClass {
-        let operand = self.synth(&u.expr, ctx);
+    fn synth_unary(&mut self, u: &ast::UnaryExpr, scope: &mut SynthScope<'_>) -> ArgClass {
+        let operand = self.synth(&u.expr, scope);
         let open = ArgClass::Opaque(OpaqueReason::Inference);
         match u.op {
             ast::UnaryOp::Ref | ast::UnaryOp::MutRef => {
@@ -523,7 +586,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn synth_binary(&mut self, b: &ast::BinaryExpr, ctx: &FunctionContext) -> ArgClass {
+    fn synth_binary(&mut self, b: &ast::BinaryExpr, scope: &mut SynthScope<'_>) -> ArgClass {
         use ast::BinaryOp;
         match b.op {
             BinaryOp::Eq
@@ -536,7 +599,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | BinaryOp::Or => ArgClass::Exact(TypeTable::BOOL),
             // A shift's result is its left operand's type, whatever the right
             // operand is.
-            BinaryOp::Shl | BinaryOp::Shr => self.synth_arith_operand(&b.left, ctx),
+            BinaryOp::Shl | BinaryOp::Shr => self.synth_arith_operand(&b.left, scope),
             BinaryOp::Add
             | BinaryOp::Sub
             | BinaryOp::Mul
@@ -545,8 +608,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | BinaryOp::BitAnd
             | BinaryOp::BitOr
             | BinaryOp::BitXor => {
-                let left = self.synth_arith_operand(&b.left, ctx);
-                let right = self.synth_arith_operand(&b.right, ctx);
+                let left = self.synth_arith_operand(&b.left, scope);
+                let right = self.synth_arith_operand(&b.right, scope);
                 left.meet(right)
             }
         }
@@ -555,8 +618,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// An operand of an arithmetic operator: a primitive keeps its class, a
     /// user type answers through the operator impl it dispatches to — which
     /// the meet then treats as the pinned side.
-    fn synth_arith_operand(&mut self, expr: &ast::Expr, ctx: &FunctionContext) -> ArgClass {
-        let class = self.synth(expr, ctx);
+    fn synth_arith_operand(&mut self, expr: &ast::Expr, scope: &mut SynthScope<'_>) -> ArgClass {
+        let class = self.synth(expr, scope);
         let open = ArgClass::Opaque(OpaqueReason::Inference);
         match class {
             // A user type's operator impl decides the result, and which impl
@@ -569,9 +632,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// A named function's declared return type, or an indirect call through a
     /// `fn`-typed value. A generic callee's return type is open.
-    fn synth_call(&mut self, call: &ast::CallExpr, ctx: &FunctionContext) -> ArgClass {
+    fn synth_call(&mut self, call: &ast::CallExpr, scope: &mut SynthScope<'_>) -> ArgClass {
         let ast::Expr::Ident(ident) = &call.callee else {
-            let ArgClass::Exact(callee) = self.synth(&call.callee, ctx) else {
+            let ArgClass::Exact(callee) = self.synth(&call.callee, scope) else {
                 return ArgClass::Opaque(OpaqueReason::Inference);
             };
             return match self.as_fn_signature(callee) {
@@ -579,9 +642,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None => ArgClass::Opaque(OpaqueReason::Unresolved),
             };
         };
+        // A binding the argument introduced hides whatever the call site's
+        // scope has under that name, function or local alike.
+        if scope.shadows(&ident.name) {
+            return ArgClass::Opaque(OpaqueReason::Inference);
+        }
         // A `fn`-typed local shadows a same-named function, as in `resolve_call`.
         if !ident.name.contains("::")
-            && let Some(local) = ctx.lookup(&ident.name)
+            && let Some(local) = scope.ctx.lookup(&ident.name)
             && let Some(sig) = self.as_fn_signature(local.type_id)
         {
             return self.class_of_type(sig.return_type);
@@ -611,13 +679,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .then(|| CalleeRef::from_imported_symbol(symbol))
     }
 
-    fn synth_method_call(&mut self, call: &ast::MethodCallExpr, ctx: &FunctionContext) -> ArgClass {
+    fn synth_method_call(
+        &mut self,
+        call: &ast::MethodCallExpr,
+        scope: &mut SynthScope<'_>,
+    ) -> ArgClass {
         // A turbofish means the method is generic and its own arguments shape
         // the return type; the substitution is inference's job, not this one.
         if !call.type_args.is_empty() {
             return ArgClass::Opaque(OpaqueReason::Inference);
         }
-        let ArgClass::Exact(receiver) = self.synth(&call.receiver, ctx) else {
+        let ArgClass::Exact(receiver) = self.synth(&call.receiver, scope) else {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
         match self.method_return_type(receiver, &call.method, call.span) {
@@ -684,20 +756,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn synth_field_access(
         &mut self,
         access: &ast::FieldAccessExpr,
-        ctx: &FunctionContext,
+        scope: &mut SynthScope<'_>,
     ) -> ArgClass {
-        let ArgClass::Exact(receiver) = self.synth(&access.expr, ctx) else {
+        let ArgClass::Exact(receiver) = self.synth(&access.expr, scope) else {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
         let (_, field_type) = self.lookup_field_type(receiver, &access.field, access.span);
         self.class_of_type(field_type)
     }
 
-    fn synth_index(&mut self, index: &ast::IndexExpr, ctx: &FunctionContext) -> ArgClass {
-        let ArgClass::Exact(container) = self.synth(&index.expr, ctx) else {
+    fn synth_index(&mut self, index: &ast::IndexExpr, scope: &mut SynthScope<'_>) -> ArgClass {
+        let ArgClass::Exact(container) = self.synth(&index.expr, scope) else {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
-        let key_class = self.synth(&index.index, ctx);
+        let key_class = self.synth(&index.index, scope);
         let Some(key) = self.index_key_type(&key_class) else {
             // Which impl answers depends on the key's type, so an unpinned key
             // leaves the element type unknown.
@@ -742,7 +814,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `a..<b` is a `RangeExclusive<T>`: `T` when both endpoints pin it, the
     /// head alone otherwise — which is still enough to tell the two range
     /// types apart from a plain index.
-    fn synth_range(&mut self, range: &ast::RangeExpr, ctx: &FunctionContext) -> ArgClass {
+    fn synth_range(&mut self, range: &ast::RangeExpr, scope: &mut SynthScope<'_>) -> ArgClass {
         let (item, fallback) = match range.kind {
             ast::RangeKind::Exclusive => (
                 crate::compiler_item::CompilerItem::RangeExclusive,
@@ -760,9 +832,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .compiler_struct_module(item)
             .cloned()
             .unwrap_or_else(crate::module_source::ModuleSource::range);
-        let element = self
-            .synth(&range.start, ctx)
-            .meet(self.synth(&range.end, ctx));
+        let start = self.synth(&range.start, scope);
+        let element = start.meet(self.synth(&range.end, scope));
         match element {
             ArgClass::Exact(t) => {
                 let range_type = self.tysys.type_table.borrow_mut().make_generic_instance(
@@ -776,48 +847,108 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn synth_if(&mut self, if_expr: &ast::IfExpr, ctx: &FunctionContext) -> ArgClass {
-        let then_class = self.synth_tail(&if_expr.then_block.stmts, ctx);
-        let Some(else_block) = &if_expr.else_block else {
+    /// An `if` in either spelling — the expression form and the tail-statement
+    /// form share their shape and their result rule. Without an `else` there is
+    /// no second branch to agree with, and what the position then demands is
+    /// not this judgement's to guess.
+    fn synth_branches(
+        &mut self,
+        condition: &ast::Condition,
+        then_block: &ast::Block,
+        else_block: Option<&ast::Block>,
+        scope: &mut SynthScope<'_>,
+    ) -> ArgClass {
+        let Some(else_block) = else_block else {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
-        let else_class = self.synth_tail(&else_block.stmts, ctx);
+        // An `if let` binds for the then-branch only.
+        let bound = condition_binding_names(condition);
+        let then_class = self.with_bindings(scope, bound, |s, scope| {
+            s.synth_tail(&then_block.stmts, scope)
+        });
+        let else_class = self.synth_tail(&else_block.stmts, scope);
         self.join_classes(then_class, else_class)
     }
 
-    fn synth_match(&mut self, m: &ast::MatchExpr, ctx: &FunctionContext) -> ArgClass {
-        // A pattern binds names this judgement cannot see, so an arm reading
-        // one of them stays open — which the join then widens.
+    fn synth_match(&mut self, m: &ast::MatchExpr, scope: &mut SynthScope<'_>) -> ArgClass {
         let mut arms = m.arms.iter();
         let Some(first) = arms.next() else {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
-        let mut class = self.synth_match_arm(first, ctx);
+        let mut class = self.synth_match_arm(first, scope);
         for arm in arms {
-            let next = self.synth_match_arm(arm, ctx);
+            let next = self.synth_match_arm(arm, scope);
             class = self.join_classes(class, next);
         }
         class
     }
 
-    fn synth_match_arm(&mut self, arm: &ast::MatchArm, ctx: &FunctionContext) -> ArgClass {
-        self.synth(&arm.body, ctx)
+    fn synth_match_arm(&mut self, arm: &ast::MatchArm, scope: &mut SynthScope<'_>) -> ArgClass {
+        let bound = pattern_binding_names(&arm.pattern);
+        self.with_bindings(scope, bound, |s, scope| s.synth(&arm.body, scope))
     }
 
-    /// A block's value is its tail expression's. A block that ends in an
-    /// ordinary statement has none; one that ends by diverging has whatever
-    /// type its position demands, which is not this judgement's to guess.
-    fn synth_tail(&mut self, statements: &[ast::Stmt], ctx: &FunctionContext) -> ArgClass {
-        match statements.last() {
-            Some(ast::Stmt::Expr(stmt)) => self.synth(&stmt.expr, ctx),
-            Some(
-                ast::Stmt::Return(_)
-                | ast::Stmt::TaskReturn(_)
-                | ast::Stmt::Break(_)
-                | ast::Stmt::Continue(_),
-            ) => ArgClass::Opaque(OpaqueReason::Inference),
-            Some(_) | None => ArgClass::Exact(TypeTable::UNIT),
+    /// A block's value is its trailing statement's, by the same rule
+    /// [`super::control_flow::block_result_type`] reads it back with: a tail
+    /// expression, a tail `if`/`else` or `match`, or nothing. A block that ends
+    /// by diverging has whatever type its position demands, which is not this
+    /// judgement's to guess.
+    fn synth_tail(&mut self, statements: &[ast::Stmt], scope: &mut SynthScope<'_>) -> ArgClass {
+        let Some((last, leading)) = statements.split_last() else {
+            return ArgClass::Exact(TypeTable::UNIT);
+        };
+        // A local `struct` / `impl` / `type` declares a name this judgement
+        // would resolve in the module's scope, where it means something else
+        // or nothing; the whole block stays open rather than answer for it.
+        if leading.iter().any(|s| matches!(s, ast::Stmt::Item(_))) {
+            return ArgClass::Opaque(OpaqueReason::Inference);
         }
+        let bound: Vec<String> = leading
+            .iter()
+            .filter_map(|s| match s {
+                ast::Stmt::Let(l) => Some(pattern_binding_names(&l.pattern)),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        self.with_bindings(scope, bound, |s, scope| match last {
+            ast::Stmt::Expr(stmt) => s.synth(&stmt.expr, scope),
+            ast::Stmt::Match(m) => s.synth_match(m, scope),
+            ast::Stmt::If(if_stmt) => s.synth_branches(
+                &if_stmt.condition,
+                &if_stmt.then_block,
+                if_stmt.else_block.as_ref(),
+                scope,
+            ),
+            ast::Stmt::Return(_)
+            | ast::Stmt::TaskReturn(_)
+            | ast::Stmt::Break(_)
+            | ast::Stmt::Continue(_)
+            | ast::Stmt::Error(_) => ArgClass::Opaque(OpaqueReason::Inference),
+            ast::Stmt::Let(_)
+            | ast::Stmt::While(_)
+            | ast::Stmt::For(_)
+            | ast::Stmt::ForOf(_)
+            | ast::Stmt::Loop(_)
+            | ast::Stmt::Assert(_)
+            | ast::Stmt::LabeledBlock(_)
+            | ast::Stmt::Item(_) => ArgClass::Exact(TypeTable::UNIT),
+        })
+    }
+
+    /// Run `f` with `names` shadowed, so an identifier the argument binds for
+    /// itself is not answered from the call site's scope.
+    fn with_bindings<R>(
+        &mut self,
+        scope: &mut SynthScope<'_>,
+        names: Vec<String>,
+        f: impl FnOnce(&mut Self, &mut SynthScope<'_>) -> R,
+    ) -> R {
+        let depth = scope.shadowed.len();
+        scope.shadowed.extend(names);
+        let result = f(self, scope);
+        scope.shadowed.truncate(depth);
+        result
     }
 
     /// The least upper bound — what an `if` / `match` knows when its branches

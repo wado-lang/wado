@@ -291,32 +291,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx.active_labels.pop();
                 let target = ctx.labeled_block_targets.pop().unwrap();
 
-                // Unify the types of every `break label: expr`. The use-site
-                // expected type wins when present; otherwise pick a
-                // representative break type, skipping `never` (the bottom
-                // type) and types still containing UNKNOWN (e.g. a bare
-                // `null` whose `Option<...>` inner is not yet known) so a
-                // diverging or unresolved break does not mask the real type.
-                // Mirrors `resolve_match_expr` result-type selection.
+                // Unify the types of every `break label: expr`, and of the
+                // fall-through path. The block's trailing statement is what
+                // that path leaves on the stack (`translate_stmts_as_value`
+                // pushes it, and pushes `unreachable` when it is not a value),
+                // so a tail carrying a value is one more branch and must agree
+                // with the breaks — while a tail carrying none keeps the
+                // trap-on-fall-through lowering.
+                //
+                // The use-site expected type wins when present; otherwise pick
+                // a representative branch type, skipping `never` (the bottom
+                // type) and types still containing UNKNOWN (e.g. a bare `null`
+                // whose `Option<...>` inner is not yet known) so a diverging or
+                // unresolved branch does not mask the real type. Mirrors
+                // `resolve_match_expr` result-type selection.
+                let tail_type = self.ast_block_result_type(&lb.block);
+                let mut branch_types = target.break_types.clone();
+                branch_types.push(tail_type);
                 let result_type = if let Some(ty) = expected_type {
                     ty
-                } else if !target.break_types.is_empty() {
+                } else {
                     let tt = self.tysys.type_table.borrow();
-                    target
-                        .break_types
+                    branch_types
                         .iter()
                         .copied()
                         .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
                         .or_else(|| {
-                            target
-                                .break_types
+                            branch_types
                                 .iter()
                                 .copied()
                                 .find(|&t| t != TypeTable::NEVER)
                         })
-                        .unwrap_or(target.break_types[0])
-                } else {
-                    TypeTable::UNIT
+                        // Every branch diverges: the block's value is `never`.
+                        .unwrap_or(branch_types[0])
                 };
 
                 // Report any `break label: null` whose `Option<...>` inner
@@ -330,9 +337,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Report any break whose value type disagrees with the
-                // unified result type.
+                // unified result type — and the tail when it carries a value,
+                // for the same reason: it is the value of the path that
+                // reaches the end.
                 for &break_type in &target.break_types {
                     self.check_branch_type(break_type, result_type, lb.span);
+                }
+                if tail_type != TypeTable::UNIT && tail_type != TypeTable::NEVER {
+                    self.check_branch_type(tail_type, result_type, lb.span);
                 }
 
                 // Stage 7-B: reify rebuilds the `LabeledBlock` from the AST,

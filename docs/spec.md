@@ -714,6 +714,26 @@ outer: {
 }
 ```
 
+#### As an Expression
+
+A labeled block used as a value yields through `break LABEL: expr`, and through
+its trailing statement on the path that reaches the end. Both are branches of
+the block and must agree on one type:
+
+```wado
+let found = search: {
+    for let item of items {
+        if item.key == key {
+            break search: item.value;
+        }
+    }
+    -1  // the value when no break is taken
+};
+```
+
+A block whose trailing statement is not a value has none to yield on that path,
+so reaching the end traps; write `break LABEL: expr` on every path instead.
+
 #### Design Rationale
 
 The label is mandatory because `{ field: value }` without context could be either a block with a labeled statement or a struct literal. Requiring the label removes this ambiguity.

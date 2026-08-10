@@ -564,6 +564,14 @@ outer: {
     // skipped if break taken
 }
 
+// Labeled block as a value — the breaks and the tail must agree on one type
+let n = pick: {
+    if condition {
+        break pick: 1;
+    }
+    2  // the value when no break is taken
+};
+
 // Match expression
 let result = match opt {
     Some(x) => x * 2,

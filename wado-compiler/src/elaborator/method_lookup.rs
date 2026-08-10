@@ -328,21 +328,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Used to determine what type a literal rhs should be coerced to. `rhs`
     /// is the right operand's class, which selects among several `Add<Rhs>`
     /// impls before either operand has been given a type.
+    ///
+    /// This is where the operator's unique-or-error rule bites: a literal
+    /// admits every numeric width, so leaving several admitted impls to the
+    /// dispatch below would let the literal's *default* type pick the winner,
+    /// and adding an impl would silently retarget an existing call
+    /// (WEP 2026-07-31). `span` is the right operand's — the thing to annotate.
     pub(super) fn find_operator_rhs_type(
         &mut self,
         self_type_id: TypeId,
         op: &BinaryOp,
         rhs: Option<&ArgClass>,
+        span: Span,
     ) -> Option<TypeId> {
         let struct_name = self.tysys.struct_name_for_type(self_type_id)?;
         let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
-        let trait_info = self.find_arithmetic_trait_impl(
+        let admitted = self.find_arithmetic_trait_impls(
             &struct_name,
             self_type_id,
             &trait_name,
             method_name,
             rhs,
-        )?;
+        );
+        self.report_ambiguous_operator_rhs(&admitted, self_type_id, *op, span);
+        let [trait_info] = admitted.as_slice() else {
+            return None;
+        };
         // Unwrap the &T reference wrapper if present (e.g., rhs: &Self → return Self)
         trait_info.rhs_type.map(|t| {
             let resolved = self.tysys.type_table.borrow().get(t).clone();
@@ -373,9 +384,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let tt = self.tysys.type_table.borrow();
         let candidates = admitted
             .iter()
+            // The recorded name already carries the impl's own argument
+            // (`Add<Feet>`); render the head with the right-hand type so a
+            // defaulted `Rhs = Self` impl reads the same way as a written one.
             .map(|info| match info.rhs_type {
-                Some(t) => format!("{}<{}>", info.trait_name, tt.type_name(tt.peel_refs(t))),
-                None => info.trait_name.clone(),
+                Some(t) => format!(
+                    "{}<{}>",
+                    trait_head(&info.trait_name),
+                    tt.type_name(tt.peel_refs(t))
+                ),
+                None => trait_head(&info.trait_name).to_string(),
             })
             .collect();
         let type_name = tt.type_name(base_type_id);
@@ -2775,25 +2793,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The overload set is what makes classification worth its cost, so
             // the arguments are synthesized here and nowhere earlier.
             classes = (0..probe.len()).map(|i| probe.class(self, i)).collect();
-            let admitted: Vec<usize> = concrete
+            // A candidate the call cannot fill at all is the arity error's to
+            // report, not selection's, so it is not counted as a rejection.
+            let applicable: Vec<usize> = concrete
+                .iter()
+                .copied()
+                .filter(|&i| classes.len() <= found_traits[i].method_info.param_types.len())
+                .collect();
+            let admitted: Vec<usize> = applicable
                 .iter()
                 .copied()
                 .filter(|&i| {
-                    let params = &found_traits[i].method_info.param_types;
-                    classes.len() <= params.len()
-                        && classes
-                            .iter()
-                            .zip(params.iter())
-                            .all(|(class, &param)| self.class_admits(param, class))
+                    classes
+                        .iter()
+                        .zip(found_traits[i].method_info.param_types.iter())
+                        .all(|(class, &param)| self.class_admits(param, class))
                 })
                 .collect();
-            // Unique-or-error: exactly one admitted candidate wins; zero or
-            // several leave the set for the ambiguity report below. No
+            // Unique-or-error: exactly one admitted candidate wins. No
             // ranking — a literal admits every numeric width, so it never
-            // selects between them.
-            if let [winner] = admitted.as_slice() {
-                let m = found_traits.swap_remove(*winner);
-                found_traits = vec![m];
+            // selects between them. Several leave the set for the ambiguity
+            // report; none is not ambiguity at all, and says so: a class only
+            // ever over-approximates, so no candidate admitting it means no
+            // candidate can accept the argument.
+            match admitted.as_slice() {
+                [winner] => {
+                    let m = found_traits.swap_remove(*winner);
+                    found_traits = vec![m];
+                }
+                [] if !applicable.is_empty() => {
+                    self.report_no_admitted_overload(&found_traits, method_name, &classes, span);
+                    return found_traits.into_iter().next();
+                }
+                [] | [_, _, ..] => {}
             }
         }
 
@@ -2824,32 +2856,68 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         classes: &[ArgClass],
         span: Span,
     ) {
-        let Some(first) = found_traits.first() else {
+        let Some(traits) = Self::overload_spellings(found_traits) else {
             return;
         };
+        let _ = self.emit(TypeError::AmbiguousTraitArguments {
+            method: method_name.to_string(),
+            traits,
+            arguments: self.describe_arg_classes(classes),
+            span,
+        });
+    }
+
+    /// The other end of the same rule: every argument list of the overload set
+    /// rejected the arguments. A class only ever over-approximates, so no
+    /// candidate admitting it means no candidate can accept the argument —
+    /// telling the caller to annotate one, as the ambiguity message does, would
+    /// point at an argument that is already pinned.
+    fn report_no_admitted_overload(
+        &self,
+        found_traits: &[super::types::TraitMethodMatch],
+        method_name: &str,
+        classes: &[ArgClass],
+        span: Span,
+    ) {
+        let Some(traits) = Self::overload_spellings(found_traits) else {
+            return;
+        };
+        let _ = self.emit(TypeError::NoMatchingOverload {
+            method: method_name.to_string(),
+            traits,
+            arguments: self.describe_arg_classes(classes),
+            span,
+        });
+    }
+
+    /// The competing spellings of one declaration's overload set, in candidate
+    /// order — or `None` when the candidates are not an overload set and
+    /// selection was never the question.
+    fn overload_spellings(found_traits: &[super::types::TraitMethodMatch]) -> Option<Vec<String>> {
+        let first = found_traits.first()?;
         let rivals: Vec<&super::types::TraitMethodMatch> = found_traits
             .iter()
             .filter(|m| m.trait_decl == first.trait_decl && m.trait_args != first.trait_args)
             .collect();
         if rivals.is_empty() {
-            return;
+            return None;
         }
         let mut traits: Vec<String> = std::iter::once(first)
             .chain(rivals)
             .map(|m| m.trait_name.clone())
             .collect();
         traits.dedup();
-        let arguments = classes
+        Some(traits)
+    }
+
+    /// What each argument contributed to selection, in argument order — the
+    /// reason chain both selection failures carry.
+    fn describe_arg_classes(&self, classes: &[ArgClass]) -> Vec<String> {
+        classes
             .iter()
             .enumerate()
             .map(|(i, class)| format!("argument {} {}", i + 1, self.describe_arg_class(class)))
-            .collect();
-        let _ = self.emit(TypeError::AmbiguousTraitArguments {
-            method: method_name.to_string(),
-            traits,
-            arguments,
-            span,
-        });
+            .collect()
     }
 
     /// Two *different* traits declaring one method name for one receiver. The

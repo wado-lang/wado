@@ -116,7 +116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // type. The literal has no type yet, so its class is what
                 // selects among several `Add<Rhs>` impls.
                 let rhs_class = self.synthesize_arg_class(right_ast, ctx);
-                self.find_operator_rhs_type(left, &op, Some(&rhs_class))
+                self.find_operator_rhs_type(left, &op, Some(&rhs_class), right_ast.span())
             };
             let right = self.resolve_expr(right_ast, ctx, coerce_type);
             (

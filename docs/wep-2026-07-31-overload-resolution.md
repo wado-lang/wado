@@ -264,7 +264,8 @@ yields `Head` when its head is known and `Opaque(Inference)` when it is not.
 | `a..<b`, `a..=b`                             | `Exact` when both endpoints agree; otherwise `Head(Range*)`                              |
 | named struct literal                         | `Exact` when non-generic, else `Head`                                                    |
 | anonymous struct / tuple literal / spread    | `Opaque(CompoundLiteral)`                                                                |
-| block, labeled block, `with … do`            | the tail expression's class; no tail → `Exact(unit)`                                     |
+| block, `with … do`                           | the trailing statement's class; no value there → `Exact(unit)`                           |
+| labeled block                                | `Opaque(Inference)` — it yields through `break label:`, not through its tail             |
 | `if`, `match`                                | the join of the branch classes                                                           |
 | closure                                      | `Opaque(Closure)`                                                                        |
 | `e?`, `resume`, tuple comprehension          | `Opaque(Inference)`                                                                      |
@@ -274,6 +275,17 @@ A subscript is the one position read differently from an argument: its key is
 resolved with no expected type before the indexing impl is selected, so a
 literal key takes its default type there and synthesis must read it the same
 way.
+
+Two rules are about reading a name in the right scope. An identifier is looked
+up in the *call site's* scope, so a binding the argument introduces for itself —
+a block's `let`, a match arm's pattern, an `if let` — shadows what synthesis
+would otherwise find: those names are `Opaque(Inference)`, because typing them
+would mean running the binder's own inference. A block whose leading statements
+declare a local `struct` / `impl` / `type` is opaque as a whole, for the same
+reason one step up. And a block's value is its trailing *statement*'s, by the
+same rule the elaborator reads it back with: a tail expression, a tail `if` with
+an `else`, or a tail `match` — a trailing `if` chain is the shape an `else if`
+parses to, so reading only tail expressions would answer `unit` for it.
 
 Branches widen and operands sharpen, so the two composite rules move opposite
 ways through the lattice. The join for `if` / `match` is the least upper bound:
@@ -445,6 +457,12 @@ beside `From<List<String>>`) are told apart; nested aliasing that changes the
 rendered arguments is the name-based mechanism's remaining ceiling, with full
 `TypeId` matching the eventual replacement.
 
+An argument known only by its head does not preselect at all. `Head` denotes a
+family — `Pair { a: 5 }` is a `Pair` of something — so several same-head impls
+answering it is the expected reading, not a tie, and reporting one would fail a
+call that elaborating the argument resolves. Only a class denoting a single type
+may call two candidates ambiguous.
+
 Two shapes stay carved out at the gate rather than guessed at: an inherent
 static `from` beside `From` impls answers on the trait-less path, and a
 conversion reachable only through a blanket generic in its source type
@@ -468,11 +486,17 @@ what tells the user whether the call can be fixed by annotating it. The
 no-survivor case (candidates exist, all filtered) reports each candidate with
 the position that rejected it instead of a bare "method not found".
 
+No survivor is a distinct error from ambiguity, not a degenerate case of it. A
+class only ever over-approximates, so no candidate admitting it means no
+candidate can accept the argument: the message says the arguments are not
+accepted and lists what the overload set does take, rather than asking for an
+annotation on an argument that is already pinned.
+
 ### Interactions
 
 | Feature           | Interaction                                                                                                                                                                                                                                                                                              |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Operators         | Indexing selects by the operand's type, which is the same rule read through a different entry point; the two must agree for every index expression. Arithmetic and bitwise operators select over `Add<Rhs>` and friends by the right operand's class. `Eq` / `Ord` take no trait arguments — unaffected. |
+| Operators         | Indexing selects by the operand's type, which is the same rule read through a different entry point; the two must agree for every index expression. Arithmetic and bitwise operators select over `Add<Rhs>` and friends by the right operand's class, and report the same unique-or-error where the operator is written — a literal right operand admits every width and so selects nothing. `Eq` / `Ord` take no trait arguments — unaffected. |
 | `From` / `?`      | See Conversions. `?` stays target-type-directed.                                                                                                                                                                                                                                                         |
 | Default arguments | Owned by the trait declaration, identical across an overload set — no interaction with selection.                                                                                                                                                                                                        |
 | Effects           | Never considered by selection; the chosen method's `with` clause is checked afterwards.                                                                                                                                                                                                                  |

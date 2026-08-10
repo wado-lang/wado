@@ -315,6 +315,18 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Every argument list of one trait rejected the arguments. The other end
+    /// of [`TypeError::AmbiguousTraitArguments`]: selection had what it needed
+    /// and no impl accepts it.
+    NoMatchingOverload {
+        method: String,
+        /// The candidate spellings, in candidate order.
+        traits: Vec<String>,
+        /// What each argument contributed, in argument order.
+        arguments: Vec<String>,
+        span: Span,
+    },
+
     /// An operator whose receiver implements its trait at several right-hand
     /// types, none of which the right operand selects. Same rule as a method
     /// call's argument lists, reported where the operator is written.
@@ -954,6 +966,26 @@ impl TypeError {
                             .first()
                             .map(|t| t.replacen('<', "::<", 1))
                             .expect("ambiguity reported with no candidate traits")
+                    ),
+                    arguments,
+                ),
+                *span,
+            ),
+            TypeError::NoMatchingOverload {
+                method,
+                traits,
+                arguments,
+                span,
+            } => (
+                Code::TypeMismatch,
+                append_reason_chain(
+                    format!(
+                        "no overload of '{method}' accepts these arguments: the candidates are {}",
+                        traits
+                            .iter()
+                            .map(|t| format!("'{t}'"))
+                            .collect::<Vec<_>>()
+                            .join(" and ")
                     ),
                     arguments,
                 ),

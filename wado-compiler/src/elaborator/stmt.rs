@@ -3111,7 +3111,7 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
 /// or-pattern handler to align every alternative's `defining_ast_id` with
 /// the first alternative's source node, so that LSP jump-to-def from a use
 /// in the arm body lands on the first alternative's binding.
-fn collect_ast_pattern_binding_ids(
+pub(super) fn collect_ast_pattern_binding_ids(
     pattern: &Pattern,
     out: &mut crate::hashmap::IndexMap<String, AstId>,
 ) {

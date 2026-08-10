@@ -1,0 +1,107 @@
+// Argument synthesis reads a name in the *call site's* scope, so a binding the
+// argument introduces for itself — a block's `let`, a match arm's pattern, an
+// `if let` — must not be answered with the outer name's type. And a block's
+// value is its trailing *statement*'s: a tail `if`/`else` or `match` carries
+// the block's type, while a labeled block is typed by its `break label:`.
+
+variant Tagged {
+    Num(i32),
+    Other(i32),
+}
+
+test "a match arm's binding shadows the outer name" {
+    let x: i64 = 100;
+    let t = Tagged::Num(7);
+    let mut l: List<i32> = [];
+    l.push(match t {
+        Tagged::Num(x) => x,
+        Tagged::Other(x) => x * 2,
+    });
+    assert l[0] == 7;
+    assert x == 100;
+}
+
+test "a block's let shadows the outer name" {
+    let x: i64 = 100;
+    let c = true;
+    let mut l: List<i32> = [];
+    l.push(if c {
+        let x = 3;
+        x
+    } else {
+        let x = 4;
+        x
+    });
+    assert l[0] == 3;
+    assert x == 100;
+}
+
+// The join over the two branches already widens the outer `x` away here, so
+// this one guards the rule rather than the bug: an `if let` binding is a
+// binding like any other.
+test "an if let binding shadows the outer name" {
+    let x = "outer";
+    let v: Option<i32> = Option::Some(5);
+    let mut l: List<i32> = [];
+    l.push(if let Some(x) = v { x } else { 0 });
+    assert l[0] == 5;
+    assert x == "outer";
+}
+
+test "a nested if tail carries the block's type" {
+    let c = true;
+    let mut l: List<i32> = [];
+    l.push(if c {
+        if c {
+            1
+        } else {
+            2
+        }
+    } else {
+        if c {
+            3
+        } else {
+            4
+        }
+    });
+    assert l[0] == 1;
+}
+
+test "an else-if chain carries the block's type" {
+    let n = 2;
+    let mut l: List<i32> = [];
+    l.push(if n == 1 { 10 } else if n == 2 { 20 } else { 30 });
+    assert l[0] == 20;
+}
+
+test "a tail match carries the block's type" {
+    let c = true;
+    let t = Tagged::Other(3);
+    let mut l: List<i32> = [];
+    l.push(if c {
+        match t {
+            Tagged::Num(n) => n,
+            Tagged::Other(n) => n + 1,
+        }
+    } else {
+        0
+    });
+    assert l[0] == 4;
+}
+
+// The break decides this block's type; the trailing `let` is not a value at
+// all, so reading the tail would answer `()` for an `i32`.
+test "a labeled block's tail does not type it" {
+    let c = true;
+    let mut l: List<i32> = [];
+    l.push(blk: {
+        if c {
+            break blk: 1
+        }
+        let unused = "not a value";
+    });
+    assert l[0] == 1;
+}
+
+__DATA__
+{"test": {}}

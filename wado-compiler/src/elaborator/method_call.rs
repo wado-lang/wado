@@ -3005,7 +3005,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// that carries information participates — a synthesized type selects by
     /// `TypeId` here rather than through the name hint's spelling comparison,
     /// which is what that mechanism's aliasing ceiling asks for. An `Opaque`
-    /// argument carries nothing and passes through.
+    /// argument carries nothing and passes through, and so does a class that
+    /// several impls answer without contradiction (see `Head` below).
     ///
     /// Admissibility is [`Elaborator::class_admits`] over each impl's
     /// *resolved* source type — the same table argument-directed selection
@@ -3034,6 +3035,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match admitted.as_slice() {
             [] => ConversionPreselect::Pass,
             [only] => ConversionPreselect::Selected(only.source),
+            // A `Head` names a family, not a type — `Pair { a: 5 }` is a
+            // `Pair` of something — so several same-head impls are the
+            // expected answer here, not a tie. Elaborating the argument
+            // decides between them, which is what the path below does; only a
+            // class denoting one type may call two candidates ambiguous.
+            _ if matches!(class, ArgClass::Head(_)) => ConversionPreselect::Pass,
             _ => ConversionPreselect::Ambiguous(admitted.into_iter().map(|c| c.spelling).collect()),
         }
     }
