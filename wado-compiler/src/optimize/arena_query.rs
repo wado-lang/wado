@@ -375,7 +375,8 @@ pub(super) fn bare_promoted_local(body: &Body, op: Operand) -> Option<u32> {
 }
 
 /// Whether `idx` appears anywhere in the operand — in its skeleton subtree, or
-/// among the `Opaque(Local)` leaves of a promoted value.
+/// among the `Opaque(Local)` leaves of a promoted value. A guard that misses a
+/// mention lets a rewrite move or drop code the local is still read by.
 pub(super) fn operand_mentions_local(body: &Body, op: Operand, idx: u32) -> bool {
     match op {
         Operand::Expr(e) => expr_mentions_local(body, e, idx),
@@ -401,9 +402,6 @@ fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
     {
         return true;
     }
-    // A promoted operand's read lives in the value pool, not the skeleton, so
-    // the child walk below cannot see it — and a guard that misses a mention
-    // lets a rewrite move or drop code the local is still read by.
     let mut found = false;
     body.for_each_operand(node, |op| {
         if !found && let Some(v) = op.as_value() {

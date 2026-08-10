@@ -745,8 +745,6 @@ impl ValuePool {
     /// [`ValuePool::collect_opaque_locals`], for the "does this mention the
     /// local?" guards that decide whether a rewrite may move or drop code.
     pub fn value_reads_local(&self, v: ValueId, idx: u32) -> bool {
-        // A leaf answers without a worklist, which is most operands: every
-        // constant, and the bare `local.get` a promoted read is.
         if self.child_count(v) == 0 {
             return matches!(self.kind(v), ValueKind::Opaque(oid)
                 if self.opaque_source(*oid) == Some(OpaqueSource::Local(idx)));
@@ -807,10 +805,9 @@ impl ValuePool {
     /// ([`crate::optimize::arena_query::promoted_local_reads`]). Such a source
     /// is cleared rather than remapped: the value is unreachable, and clearing
     /// it turns any use into the "no recorded extraction source" panic at WIR
-    /// build instead of a silent read of the wrong slot.
+    /// build instead of a silent read of the wrong slot. The canonical-local
+    /// cache is keyed by index, so it renumbers alongside.
     pub fn remap_opaque_locals(&mut self, remap: &[Option<u32>]) {
-        // The canonical-local cache is keyed by index, so it renumbers with the
-        // sources; an entry for a dropped local goes, like its source.
         self.canonical_locals = self
             .canonical_locals
             .iter()

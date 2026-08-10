@@ -72,9 +72,6 @@ impl Rule for LabeledBlockFusionRule {
     }
 
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
-        // The whole-body promoted-read tally, shared by every candidate in this
-        // block: the walk is per body, not per temp, and the block is left as
-        // soon as one fusion fires.
         let promoted_reads = PromotedReadCounts::default();
         let stmts = engine.body.blocks[block].stmts.clone();
         if stmts.len() < 2 {
@@ -97,9 +94,8 @@ impl Rule for LabeledBlockFusionRule {
             // (a later statement, another branch) would then read a deleted
             // local. Fuse only when every mention of the temp lives inside the
             // consumer statement.
-            // Both tallies count promoted reads: the use index sees the
-            // skeleton only, so without the whole-body count a promoted read in
-            // the consumer would balance a skeleton read outside it.
+            // The use index sees the skeleton only, so both tallies add the
+            // pool's reads or the equality compares unlike things.
             let consumer_uses =
                 count_local_uses_in_stmt(engine.body, stmts[i + 1], info.temp_local);
             let body_uses = engine.local_reads(info.temp_local).len()
@@ -112,8 +108,6 @@ impl Rule for LabeledBlockFusionRule {
             }
             let temp = info.temp_local;
             perform_fusion(engine, block, &stmts, i, info);
-            // The gate above admitted the fusion because every mention of the
-            // temp was inside the consumer, and `perform_fusion` rewrote those.
             debug_assert!(
                 !is_read(engine.body, temp),
                 "[NIR] labeled_block_fusion: temp local {temp} is still read after fusion"
@@ -1014,6 +1008,10 @@ fn slot_reads_in_operand(body: &Body, op: Operand, local_idx: u32) -> Option<Vec
     Some(slots)
 }
 
+/// Tallies the temp's reads two ways: `direct_uses` counts every one, skeleton
+/// and pool alike, and `slot_uses` counts those that are a `FieldAccess`
+/// receiver. Equal tallies mean every read is a slot read, which is the only
+/// shape the fused block can serve.
 struct SlotReadCollector {
     local_idx: u32,
     slots: IndexMap<u32, TypeId>,
@@ -1038,9 +1036,6 @@ impl NirRefVisitor for SlotReadCollector {
                 self.slots.insert(*field_index, body.exprs[e].type_id);
             }
         }
-        // A promoted read is a direct use like a skeleton `Local` node: as a
-        // slot receiver it balances the `slot_uses` bump above, and in any other
-        // position it unbalances the tally, which rejects the fusion.
         self.direct_uses += promoted_read_count_at(body, node, self.local_idx);
         self.walk_node(body, node);
     }
@@ -1072,6 +1067,7 @@ impl PromotedReadCounts {
     }
 }
 
+/// Counts every read of `local_idx`, skeleton and value pool alike.
 struct LocalUseCounter {
     local_idx: u32,
     count: usize,
@@ -1084,10 +1080,6 @@ impl NirRefVisitor for LocalUseCounter {
         {
             self.count += 1;
         }
-        // A promoted operand reads the local from the value pool, so the walk
-        // below never reaches it. The gates that compare this total against a
-        // shape-specific tally must see it, or a read they cannot rewrite goes
-        // uncounted and the temp is fused away under it.
         self.count += promoted_read_count_at(body, node, self.local_idx);
         self.walk_node(body, node);
     }

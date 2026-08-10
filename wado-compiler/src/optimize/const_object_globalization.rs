@@ -276,15 +276,11 @@ fn collect_candidates(
 ) {
     let single_decl_locals = locals_declared_once(body);
     let siblings = sibling_const_locals(body, gate, &single_decl_locals);
-    // Promoted reads count twice over: they decide "unread" (a dead binding is
-    // not a hoist target), and they are reads `rewrite_reads` must reach — the
-    // mutation drops the `let`, so a read it misses would extract a `local.get`
-    // of a local nothing defines.
+    // Reads in the pool count twice over: they decide "unread" below, and
+    // `rewrite_reads` must reach every one of them.
     let mut read_locals = IndexSet::default();
     collect_reads(body, &mut read_locals);
     promoted_local_reads(body, &mut read_locals);
-    // One census for the body: a per-candidate query would re-walk it (and
-    // every operand's value DAG) for each `let`.
     let buried = buried_promoted_reads(body);
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
@@ -808,6 +804,10 @@ fn seeded_locals_read(body: &Body, value: Operand, siblings: &SiblingConsts) -> 
 }
 
 /// Tally reads of each local in `wanted` under `node`, in a single walk.
+/// How many times each wanted local is read under `node`, skeleton and value
+/// pool alike. The confinement check compares a whole-body count against an
+/// in-initializer one, so a read either walk misses would let a sibling escape
+/// unseen.
 fn count_reads_of(body: &Body, node: NodeRef, wanted: &IndexSet<u32>) -> IndexMap<u32, usize> {
     let mut counts: IndexMap<u32, usize> = IndexMap::default();
     let mut stack = vec![node];
@@ -818,10 +818,6 @@ fn count_reads_of(body: &Body, node: NodeRef, wanted: &IndexSet<u32>) -> IndexMa
         {
             *counts.entry(*index).or_default() += 1;
         }
-        // The confinement tally below compares a whole-body count against an
-        // in-initializer one; a promoted read the skeleton walk cannot see
-        // would make a sibling read outside the initializer invisible. One walk
-        // per operand answers for every wanted local at once.
         body.for_each_operand(node, |op| {
             let Some(v) = op.as_value() else {
                 return;

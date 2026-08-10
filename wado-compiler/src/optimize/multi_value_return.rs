@@ -659,7 +659,6 @@ fn validate_stmt(
                 && let Some((func_id, _, call)) = block_tail_call(body, value, &mut prefix)
                 && let Some(&candidate_idx) = cx.candidate_ids.get(&func_id)
             {
-                // Lead statements only (see `block_tail_call`): all discarded.
                 for &s in &prefix {
                     validate_stmt(body, s, cx, invalid, tracked, true);
                 }
@@ -671,17 +670,13 @@ fn validate_stmt(
         }
         StmtKind::Expr(e) => {
             let e = *e;
-            // A call whose result is dropped (`f(x);`, what `elide_local`
-            // leaves when the binding's last read folds away) is a call site
-            // like any other: `wir_build` binds the N results to wildcards.
-            // Only its arguments are ordinary uses.
+            // A dropped result is a call site like any other — `wir_build`
+            // binds the N results to wildcards — so only the args are uses.
             let mut prefix: Vec<StmtId> = Vec::new();
             if discarded
                 && let Some((func_id, _, call)) = block_tail_call(body, e, &mut prefix)
                 && cx.candidate_ids.contains_key(&func_id)
             {
-                // `block_tail_call` hands back the statements *ahead* of the
-                // call, so each one's value goes nowhere.
                 for &s in &prefix {
                     validate_stmt(body, s, cx, invalid, tracked, true);
                 }

@@ -1239,7 +1239,8 @@ impl FunctionTranslator<'_, '_> {
 
     /// A statement-position call to a `ReturnAbi::MultiValue` function: bind its
     /// N results to wildcards, the `MultiValueLocalBind` form of dropping them.
-    /// `None` for anything else, which falls through to the ordinary `Drop`.
+    /// A single `Drop` could not consume them. `None` for anything else, which
+    /// falls through to that ordinary `Drop`.
     fn try_emit_multi_value_discard(&mut self, value: Operand) -> Option<WirInstr> {
         let mut prefix: Vec<StmtId> = Vec::new();
         let (func_id, _, call) =
@@ -1801,10 +1802,6 @@ impl FunctionTranslator<'_, '_> {
             }
             StmtKind::Expr(expr) => {
                 let expr = *expr;
-                // A discarded call to a multi-value-ABI function leaves N
-                // results on the stack, which a single `Drop` cannot consume —
-                // bind them to wildcards instead (`optimize::multi_value_return`
-                // admits the call site on the same recogniser).
                 if let Some(instrs) = self.try_emit_multi_value_discard(expr) {
                     return Some(instrs);
                 }
@@ -2442,12 +2439,10 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
-                // `optimize::multi_value_return` admits exactly three call-site
-                // shapes, and each is lowered before reaching here: a `let`
-                // bind, a discarded statement, and a pass-through tail return.
-                // Anywhere else the caller expects one value and the callee
-                // leaves N, which core Wasm validation would reject far from
-                // the cause.
+                // The three shapes `optimize::multi_value_return` admits are
+                // lowered before reaching here. Anywhere else the caller expects
+                // one value and the callee leaves N — which core Wasm validation
+                // would reject far from the cause.
                 debug_assert!(
                     self.multi_value_results_taken || !self.callee_returns_multi_value(func),
                     "[WIR] multi-value call to {} lowered as an ordinary call",

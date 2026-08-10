@@ -211,7 +211,6 @@ fn analyze_copy_binding(
         type_id: value_type,
         // Filled in by `analyze_block`, which knows the binding's position.
         source_scope_stable: false,
-        // Filled in by `analyze_function_body`, which sees the whole body.
         promoted_reads_substitutable: false,
     })
 }
@@ -244,7 +243,8 @@ struct AnalysisCtx<'a> {
 /// projection-source check ask whether any mutation falls in the open
 /// interval `(binding, use]`.
 ///
-/// `first_read`: per-local earliest statement index whose subtree reads it.
+/// `first_read`: per-local earliest statement index whose subtree reads it,
+/// counting the reads a promoted operand carries in the value pool.
 /// For a single-use projection temp this is its unique use, bounding the
 /// interval the projection stability check scans for root mutations; for
 /// every source kind it guards against backward (cross-iteration) reads.
@@ -312,8 +312,6 @@ fn scan_node(
         }
         return;
     }
-    // The scope-stability interval below is only meaningful if it also sees the
-    // reads that live in the value pool.
     let mut promoted: IndexSet<u32> = IndexSet::default();
     body.for_each_operand(node, |op| {
         if let Some(v) = op.as_value() {
@@ -378,8 +376,6 @@ fn analyze_function_body(body: &Body, ctx: &AnalysisCtx<'_>) -> AnalysisResult {
     for idx in result.promoted_reads.clone() {
         result.usage.entry(idx).or_default().read_count += 2;
     }
-    // One census for the round: a per-binding query would re-walk the body, and
-    // every operand's value DAG with it, inside the fixpoint.
     let buried = super::arena_query::buried_promoted_reads(body);
     for binding in &mut result.bindings {
         binding.promoted_reads_substitutable = matches!(
@@ -581,8 +577,6 @@ fn can_propagate_copy(
     type_table: &TypeTable,
     promoted_reads: &IndexSet<u32>,
 ) -> bool {
-    // The binding's `let` is removed (`dead_locals`), so a read left behind
-    // would dangle on a deleted local: every one of them must be substitutable.
     if promoted_reads.contains(&binding.target_local) && !binding.promoted_reads_substitutable {
         return false;
     }
@@ -915,8 +909,6 @@ fn propagate_at_root(
         substitute_promoted_reads(engine, &substitutions);
         let root = engine.body.root;
         apply_in_block(engine, root, &substitutions, &dead_locals);
-        // The round removed each target's `let`, so no read of one may survive
-        // — in the skeleton or the value pool.
         debug_assert!(
             {
                 let mut reads = IndexSet::default();
@@ -924,7 +916,8 @@ fn propagate_at_root(
                 super::arena_query::promoted_local_reads(engine.body, &mut reads);
                 dead_locals.iter().all(|l| !reads.contains(l))
             },
-            "[NIR] copy_prop: a propagated-away local is still read"
+            "[NIR] copy_prop: a propagated-away local is still read, \
+             in the skeleton or the value pool"
         );
         ever_changed = true;
         if !has_deferred {

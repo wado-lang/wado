@@ -101,9 +101,7 @@ pub(super) fn run_peephole(
     } else {
         GatedPass::PeepholePost
     };
-    // Whole-function effect summaries, computed once for the run and only when
-    // the gate has a body to visit: `ElideRule` asks them whether a dead
-    // binding's call may go with the binding.
+    // Once for the run, and only when the gate has a body to visit.
     let effects = gate
         .any_pending(gated_pass, len)
         .then(|| super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry))

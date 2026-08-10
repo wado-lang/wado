@@ -94,9 +94,7 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
     let descriptors = build_callee_descriptors(project);
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    // Whole-function effect summaries for the sweep's `ElideRule` (see there).
-    // Only a body with a loop can be versioned, so a program with none pays
-    // nothing for them.
+    // Only a body with a loop is versioned, so a program with none pays nothing.
     let effects = project
         .functions
         .iter()
