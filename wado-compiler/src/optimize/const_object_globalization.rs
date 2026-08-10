@@ -212,6 +212,11 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
                      (local {local_index}) went missing between collection and mutation"
                 );
                 inline_sibling_lets(body, local_index, &sibling_lets, &module_source, &name);
+                debug_assert!(
+                    !reads_local(body, local_index),
+                    "[NIR] const_object_globalization: local {local_index} is still read \
+                     after its `let` became a `GlobalVarSet`"
+                );
             }
             CandidateKind::InlineRef { ref_expr } => {
                 hoist_inline_ref(
@@ -1673,6 +1678,16 @@ fn rewrite_reads(
         body.exprs[id].type_id = ty;
     }
     rewrite_promoted_reads(body, local_index, module_source, name, ty);
+}
+
+/// Whether any reachable read of `idx` survives, in the skeleton or the value
+/// pool. The globalization drops the local's `let`, so one that does would
+/// extract a `local.get` of a local nothing defines.
+fn reads_local(body: &Body, idx: u32) -> bool {
+    let mut reads = IndexSet::default();
+    collect_reads(body, &mut reads);
+    promoted_local_reads(body, &mut reads);
+    reads.contains(&idx)
 }
 
 /// Rewrite the reads that live in the value pool: an operand that is exactly

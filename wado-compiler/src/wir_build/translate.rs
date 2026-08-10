@@ -980,6 +980,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     resolved_local_names,
                     immutable_locals: IndexSet::default(),
                     multi_value_split_locals: IndexMap::default(),
+                    multi_value_results_taken: false,
                     force_fixed_string_repr: false,
                 };
                 translator.translate_block(body.root)
@@ -1035,6 +1036,12 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// (which would panic at codegen since `__tmp` was never assigned a
     /// struct ref).
     pub(super) multi_value_split_locals: IndexMap<u32, IndexMap<String, (String, WirType)>>,
+    /// Set while lowering a call whose N results have a taker: the split locals
+    /// of a `let` bind, the wildcards of a discard, or the enclosing
+    /// `ReturnAbi::MultiValue` return that passes them straight through. The
+    /// `Call` arm asserts on it — a multi-value call anywhere else would leave
+    /// N results where one is expected.
+    multi_value_results_taken: bool,
     /// True while translating the value of a `GlobalVarSet` to a global with
     /// [`crate::nir::NirGlobal::prefer_fixed_string_repr`] set. Bounds-overrides
     /// `package.string_inline_max_bytes` in [`Self::translate_packed_array`]
@@ -1192,7 +1199,7 @@ impl FunctionTranslator<'_, '_> {
         let mut instrs: Vec<WirInstr> = self.translate_stmts(&prefix);
 
         // Translate the call (after dropping any borrow on `value`'s expr).
-        let call_instr = self.translate_expr(call);
+        let call_instr = self.take_multi_value_results(|t| t.translate_expr(call));
 
         // Emit DeclareLocal for each split, plus the MultiValueLocalBind.
         instrs.reserve(order.len() + 1);
@@ -1214,6 +1221,22 @@ impl FunctionTranslator<'_, '_> {
         Some(WirInstr::Seq(instrs))
     }
 
+    /// Lower `f` with the multi-value results accounted for: the caller is
+    /// binding or dropping them, so a call inside it may leave N on the stack.
+    fn take_multi_value_results<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let outer = std::mem::replace(&mut self.multi_value_results_taken, true);
+        let out = f(self);
+        self.multi_value_results_taken = outer;
+        out
+    }
+
+    /// Whether the callee returns its aggregate as N Wasm results.
+    fn callee_returns_multi_value(&self, func: &crate::nir::FunctionRef) -> bool {
+        self.ctx
+            .multi_value_return_funcs
+            .contains_key(&(func.name.clone(), func.module_source.clone()))
+    }
+
     /// A statement-position call to a `ReturnAbi::MultiValue` function: bind its
     /// N results to wildcards, the `MultiValueLocalBind` form of dropping them.
     /// `None` for anything else, which falls through to the ordinary `Drop`.
@@ -1226,7 +1249,7 @@ impl FunctionTranslator<'_, '_> {
         let fields = self.ctx.multi_value_return_funcs.get(&key)?.clone();
 
         let mut instrs: Vec<WirInstr> = self.translate_stmts(&prefix);
-        let call_instr = self.translate_expr(call);
+        let call_instr = self.take_multi_value_results(|t| t.translate_expr(call));
         instrs.push(WirInstr::MultiValueLocalBind {
             instr: Box::new(call_instr),
             locals: vec![None; fields.len()],
@@ -1805,7 +1828,15 @@ impl FunctionTranslator<'_, '_> {
             }
             StmtKind::Return { value } => {
                 if let Some(expr) = value {
+                    let outer = std::mem::replace(
+                        &mut self.multi_value_results_taken,
+                        matches!(
+                            self.tir_func.return_abi,
+                            crate::nir::ReturnAbi::MultiValue { .. }
+                        ),
+                    );
                     let value_instr = self.translate_operand(*expr);
+                    self.multi_value_results_taken = outer;
                     // For multi-value-ABI functions, unwrap leaf
                     // `StructNew` aggregate-constructions inside the
                     // return value so the function pushes the N field
@@ -2410,6 +2441,18 @@ impl FunctionTranslator<'_, '_> {
                 {
                     return instr;
                 }
+
+                // `optimize::multi_value_return` admits exactly three call-site
+                // shapes, and each is lowered before reaching here: a `let`
+                // bind, a discarded statement, and a pass-through tail return.
+                // Anywhere else the caller expects one value and the callee
+                // leaves N, which core Wasm validation would reject far from
+                // the cause.
+                debug_assert!(
+                    self.multi_value_results_taken || !self.callee_returns_multi_value(func),
+                    "[WIR] multi-value call to {} lowered as an ordinary call",
+                    func.name
+                );
 
                 let ordered: Vec<Operand> = args.iter().map(|a| a.expr).collect();
                 let (prelude, translated_args) = self.translate_args_erasing_unit(&ordered);

@@ -490,6 +490,15 @@ fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {
     // body. Closures are functor structs in NIR, so there is no nested-body
     // local namespace to skip.
     if let Some(body) = func.body.as_mut() {
+        debug_assert!(
+            {
+                let mut reads = IndexSet::default();
+                arena_query::collect_reads(body, &mut reads);
+                arena_query::promoted_local_reads(body, &mut reads);
+                reads.iter().all(|r| remap[*r as usize].is_some())
+            },
+            "[NIR] dae: dropping a local that is still read"
+        );
         remap_locals(body, &remap);
         // Promoted `Opaque(Local idx)` values (extracted as `local.get idx`)
         // live in the value pool, not the skeleton, so `remap_locals` misses

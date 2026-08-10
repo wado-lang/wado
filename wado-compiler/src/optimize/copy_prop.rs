@@ -915,6 +915,17 @@ fn propagate_at_root(
         substitute_promoted_reads(engine, &substitutions);
         let root = engine.body.root;
         apply_in_block(engine, root, &substitutions, &dead_locals);
+        // The round removed each target's `let`, so no read of one may survive
+        // — in the skeleton or the value pool.
+        debug_assert!(
+            {
+                let mut reads = IndexSet::default();
+                super::arena_query::collect_reads(engine.body, &mut reads);
+                super::arena_query::promoted_local_reads(engine.body, &mut reads);
+                dead_locals.iter().all(|l| !reads.contains(l))
+            },
+            "[NIR] copy_prop: a propagated-away local is still read"
+        );
         ever_changed = true;
         if !has_deferred {
             break;
