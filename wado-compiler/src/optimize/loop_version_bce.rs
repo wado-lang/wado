@@ -95,12 +95,15 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     // Only a body with a loop is versioned, so a program with none pays nothing.
-    let effects = project
+    let effects = if project
         .functions
         .iter()
         .any(|f| f.borrow().body.as_ref().is_some_and(body_contains_loop))
-        .then(|| super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry))
-        .unwrap_or_default();
+    {
+        super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry)
+    } else {
+        Vec::new()
+    };
     let type_table = project.type_table.borrow();
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
