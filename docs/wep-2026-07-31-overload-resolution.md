@@ -277,12 +277,12 @@ literal key takes its default type there and synthesis must read it the same
 way.
 
 Two rules are about reading a name in the right scope. An identifier is looked
-up in the *call site's* scope, so a binding the argument introduces for itself —
+up in the _call site's_ scope, so a binding the argument introduces for itself —
 a block's `let`, a match arm's pattern, an `if let` — shadows what synthesis
 would otherwise find: those names are `Opaque(Inference)`, because typing them
 would mean running the binder's own inference. A block whose leading statements
 declare a local `struct` / `impl` / `type` is opaque as a whole, for the same
-reason one step up. And a block's value is its trailing *statement*'s, by the
+reason one step up. And a block's value is its trailing _statement_'s, by the
 same rule the elaborator reads it back with: a tail expression, a tail `if` with
 an `else`, or a tail `match` — a trailing `if` chain is the shape an `else if`
 parses to, so reading only tail expressions would answer `unit` for it.
@@ -494,16 +494,16 @@ annotation on an argument that is already pinned.
 
 ### Interactions
 
-| Feature           | Interaction                                                                                                                                                                                                                                                                                              |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Operators         | Indexing selects by the operand's type, which is the same rule read through a different entry point; the two must agree for every index expression. Arithmetic and bitwise operators select over `Add<Rhs>` and friends by the right operand's class, and report the same unique-or-error where the operator is written — a literal right operand admits every width and so selects nothing. `Eq` / `Ord` take no trait arguments — unaffected. |
-| `From` / `?`      | See Conversions. `?` stays target-type-directed.                                                                                                                                                                                                                                                         |
-| Default arguments | Owned by the trait declaration, identical across an overload set — no interaction with selection.                                                                                                                                                                                                        |
-| Effects           | Never considered by selection; the chosen method's `with` clause is checked afterwards.                                                                                                                                                                                                                  |
-| Coherence         | Untouched. Selection picks an argument list among impls coherence already accepts; overlapping impls of one instantiation remain errors.                                                                                                                                                                 |
-| Newtypes          | Inherited impls are candidates on the newtype receiver; the same grouping and selection apply.                                                                                                                                                                                                           |
-| Monomorphization  | Unaffected. The chosen trait's spelling lands in the mangled name, which `InstantiationKey` already discriminates on.                                                                                                                                                                                    |
-| LSP / tooling     | Hover and go-to-definition read the recorded dispatch fact; synthesis leaves no persistent state.                                                                                                                                                                                                        |
+| Feature           | Interaction                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Operators         | Indexing selects by the operand's type, which is the same rule read through a different entry point; the two must agree for every index expression. Arithmetic and bitwise operators select over `Add<Rhs>` and friends by the right operand's class, and report the same unique-or-error at the operator. `Eq` / `Ord` take no trait arguments — unaffected. |
+| `From` / `?`      | See Conversions. `?` stays target-type-directed.                                                                                                                                                                                                                                                                                                              |
+| Default arguments | Owned by the trait declaration, identical across an overload set — no interaction with selection.                                                                                                                                                                                                                                                             |
+| Effects           | Never considered by selection; the chosen method's `with` clause is checked afterwards.                                                                                                                                                                                                                                                                       |
+| Coherence         | Untouched. Selection picks an argument list among impls coherence already accepts; overlapping impls of one instantiation remain errors.                                                                                                                                                                                                                      |
+| Newtypes          | Inherited impls are candidates on the newtype receiver; the same grouping and selection apply.                                                                                                                                                                                                                                                                |
+| Monomorphization  | Unaffected. The chosen trait's spelling lands in the mangled name, which `InstantiationKey` already discriminates on.                                                                                                                                                                                                                                         |
+| LSP / tooling     | Hover and go-to-definition read the recorded dispatch fact; synthesis leaves no persistent state.                                                                                                                                                                                                                                                             |
 
 ### Non-goals
 
@@ -604,19 +604,13 @@ Where the pieces live:
 The bounds counterpart of an overload set (`T: Take<A> + Take<B>`) cannot arise
 yet — positional trait arguments do not parse in bound position.
 
-Test surface: the `ufcs_*`, `trait_argument_*`, `from_overload_*` and
-`cross_module_same_name_*` fixture families in `wado-compiler/tests/fixtures/`
-— one fixture per rule above (selection, each ambiguity shape, each escape, the
-scope tie-break, the receiver-mode errors), plus `error_*` fixtures pinning
-every diagnostic's message. Argument synthesis adds one fixture per class of
-rule: a free-function call, a method call (`l.index_value(v.len())`), a field
-read, an operator (`i + 1`), a range, an `if` with agreeing branches, a cast to
-a generic type, a const, an enum case; negative fixtures pin what stays
-ambiguous and why (a closure, a compound literal, a generic call with an open
-return type); and a pair fixture asserts `l[e]` and `l.index_value(e)` select
-the same impl for every `e` above. `operator_rhs_selection.wado` pins the
-operator counterpart: `Add` at two right-hand types, and a literal selecting
-`Mul<i32>`.
+Test surface: the `ufcs_*`, `trait_argument_*`, `from_*`, `operator_rhs_*` and
+`cross_module_same_name_*` fixture families in `wado-compiler/tests/fixtures/` —
+one fixture per rule above, plus `error_*` fixtures pinning every diagnostic's
+message. Argument synthesis has one fixture per class of rule
+(`trait_argument_synthesized_shapes`, `_index`, `_scopes`), negative fixtures for
+what stays ambiguous and why, and a pair fixture asserting that `l[e]` and
+`l.index_value(e)` select the same impl for every `e`.
 
 ## Consequences
 

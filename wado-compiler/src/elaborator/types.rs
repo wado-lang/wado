@@ -307,10 +307,8 @@ pub enum TypeError {
         method: String,
         /// The competing trait spellings, in candidate order.
         traits: Vec<String>,
-        /// What each argument contributed to selection, in argument order —
-        /// its synthesized type, its literal class, or the reason it carried
-        /// none. Empty when the call never reached argument-directed
-        /// selection.
+        /// What each argument contributed to selection, in argument order.
+        /// Empty when the call never reached argument-directed selection.
         arguments: Vec<String>,
         span: Span,
     },
@@ -2427,7 +2425,6 @@ pub(super) struct IndexValueTraitInfo {
     pub(super) index_type: Option<TypeId>,
 }
 
-/// Info about a comparison trait implementation (`Eq` or `Ord`)
 /// Info about an operator trait implementation
 #[derive(Clone)]
 pub(super) struct ArithmeticTraitInfo {

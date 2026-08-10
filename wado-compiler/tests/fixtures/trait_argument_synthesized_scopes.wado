@@ -36,9 +36,8 @@ test "a block's let shadows the outer name" {
     assert x == 100;
 }
 
-// The join over the two branches already widens the outer `x` away here, so
-// this one guards the rule rather than the bug: an `if let` binding is a
-// binding like any other.
+// The join over the branches already widens the outer `x` away here, so this
+// one guards the rule rather than the bug.
 test "an if let binding shadows the outer name" {
     let x = "outer";
     let v: Option<i32> = Option::Some(5);
@@ -89,8 +88,8 @@ test "a tail match carries the block's type" {
     assert l[0] == 4;
 }
 
-// The break decides this block's type; the trailing `let` is not a value at
-// all, so reading the tail would answer `()` for an `i32`.
+// The break decides this block's type; the trailing `let` is no value at all,
+// so reading the tail would answer `()` for an `i32`.
 test "a labeled block's tail does not type it" {
     let c = true;
     let mut l: List<i32> = [];

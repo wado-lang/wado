@@ -68,11 +68,9 @@ pub(super) enum UnionSource {
 }
 
 /// The selected indexing impl's key type must be the one the index expression
-/// was elaborated against — the pre-selection that supplies the expected type
-/// and the post-selection that reads the impl ask the same question, so a
-/// disagreement means one of them changed. It used to be *repaired* by
-/// resolving the index a second time, which elaborated one AST node twice;
-/// asserting keeps the single elaboration honest.
+/// was elaborated against: both sides ask the same question, so a disagreement
+/// means one of them changed. This used to be *repaired* by resolving the index
+/// a second time, elaborating one AST node twice.
 fn debug_assert_key_matches(impl_key: Option<TypeId>, elaborated: TypeId) {
     if let Some(key) = impl_key {
         debug_assert_eq!(
@@ -291,20 +289,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx.active_labels.pop();
                 let target = ctx.labeled_block_targets.pop().unwrap();
 
-                // Unify the types of every `break label: expr`, and of the
-                // fall-through path. The block's trailing statement is what
-                // that path leaves on the stack (`translate_stmts_as_value`
-                // pushes it, and pushes `unreachable` when it is not a value),
-                // so a tail carrying a value is one more branch and must agree
-                // with the breaks — while a tail carrying none keeps the
-                // trap-on-fall-through lowering.
+                // Unify every `break label: expr` with the fall-through path,
+                // whose value is the trailing statement's — what
+                // `translate_stmts_as_value` leaves on the stack there, or
+                // `unreachable` when the tail is not a value.
                 //
-                // The use-site expected type wins when present; otherwise pick
-                // a representative branch type, skipping `never` (the bottom
-                // type) and types still containing UNKNOWN (e.g. a bare `null`
-                // whose `Option<...>` inner is not yet known) so a diverging or
-                // unresolved branch does not mask the real type. Mirrors
-                // `resolve_match_expr` result-type selection.
+                // The use-site expected type wins when present; otherwise pick a
+                // representative branch type, skipping `never` and types still
+                // containing UNKNOWN (a bare `null` whose `Option<...>` inner is
+                // not yet known) so a diverging or unresolved branch does not
+                // mask the real type. Mirrors `resolve_match_expr`.
                 let tail_type = self.ast_block_result_type(&lb.block);
                 let mut branch_types = target.break_types.clone();
                 branch_types.push(tail_type);
@@ -336,10 +330,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
                 }
 
-                // Report any break whose value type disagrees with the
-                // unified result type — and the tail when it carries a value,
-                // for the same reason: it is the value of the path that
-                // reaches the end.
+                // Report any branch whose type disagrees with the unified
+                // result — the tail included, when it carries a value.
                 for &break_type in &target.break_types {
                     self.check_branch_type(break_type, result_type, lb.span);
                 }
@@ -1594,12 +1586,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
-            // A subscript selects its impl by key type, so the key must be
-            // typed before the impl is chosen — the same ordering an
-            // overloaded method call has, answered the same way: by
-            // synthesizing the key. Only a key synthesis cannot type (a
-            // compound literal, whose type the impl supplies) still falls back
-            // to pre-selecting an impl for its expected type.
+            // A subscript selects its impl by key type, so the key is
+            // synthesized before the impl is chosen — the ordering an overloaded
+            // method call has, answered the same way. Only a key synthesis
+            // cannot type (a compound literal, whose type the impl supplies)
+            // still falls back to pre-selecting an impl for its expected type.
             let key_class = self.synthesize_arg_class(&index.index, ctx);
             let expected_key = self.index_key_type(&key_class).or_else(|| {
                 self.index_lookup_or_newtype_base(

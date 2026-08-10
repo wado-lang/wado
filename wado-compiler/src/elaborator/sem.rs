@@ -90,9 +90,8 @@ pub(crate) struct ModuleSemantics {
 #[cfg(debug_assertions)]
 impl ModuleSemantics {
     /// How many facts have been recorded, for the guard that a *query* left no
-    /// trace (`Elaborator::synthesize_arg_class`). A count, not a hash: the
-    /// guard catches a query that records where it must only read, and every
-    /// such recording grows a map.
+    /// trace (`Elaborator::synthesize_arg_class`). A count suffices: every
+    /// recording grows one of these maps.
     pub(crate) fn fact_count(&self) -> usize {
         let b = &self.bindings;
         let t = &self.types;

@@ -564,14 +564,6 @@ outer: {
     // skipped if break taken
 }
 
-// Labeled block as a value — the breaks and the tail must agree on one type
-let n = pick: {
-    if condition {
-        break pick: 1;
-    }
-    2  // the value when no break is taken
-};
-
 // Match expression
 let result = match opt {
     Some(x) => x * 2,
@@ -911,10 +903,6 @@ trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
 // For default value (implemented for primitives, String, List<T>,
 // Option<T>, TreeMap<K, V>; not Result)
 trait Default { fn default() -> Self; }
-
-// For + - * / % & | ^ operators. `Rhs` defaults to Self; naming it lets one
-// type take several right-hand types, and the right operand selects the impl.
-trait Add<Rhs = Self> { type Output; fn add(&self, rhs: &Rhs) -> Self::Output; }
 
 // For [] operators
 trait IndexRef<I> { type Output: Ref; fn index_ref(&self, index: I) -> &Self::Output; }

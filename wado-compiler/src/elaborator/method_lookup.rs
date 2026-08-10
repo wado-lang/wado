@@ -329,10 +329,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// is the right operand's class, which selects among several `Add<Rhs>`
     /// impls before either operand has been given a type.
     ///
-    /// This is where the operator's unique-or-error rule bites: a literal
-    /// admits every numeric width, so leaving several admitted impls to the
-    /// dispatch below would let the literal's *default* type pick the winner,
-    /// and adding an impl would silently retarget an existing call
+    /// A literal admits every numeric width, so leaving several admitted impls
+    /// to the dispatch below would let the literal's *default* type pick the
+    /// winner, and adding an impl would silently retarget an existing call
     /// (WEP 2026-07-31). `span` is the right operand's — the thing to annotate.
     pub(super) fn find_operator_rhs_type(
         &mut self,
@@ -364,13 +363,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Report an operator whose receiver implements its trait at several
-    /// right-hand types that the right operand does not tell apart — the
-    /// operator's shape of the same unique-or-error rule a method call's
-    /// argument lists follow. `admitted` is what the selection scan already
-    /// collected, so the report costs no second lookup. Silent below two
-    /// candidates: no impl at all is the caller's "operator not applicable"
-    /// error.
+    /// An operator whose receiver implements its trait at several right-hand
+    /// types the right operand does not tell apart. `admitted` is what the
+    /// selection scan already collected, so the report costs no second lookup.
+    /// Silent below two candidates: no impl at all is the caller's "operator not
+    /// applicable" error.
     pub(super) fn report_ambiguous_operator_rhs(
         &self,
         admitted: &[ArithmeticTraitInfo],
@@ -385,8 +382,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let candidates = admitted
             .iter()
             // The recorded name already carries the impl's own argument
-            // (`Add<Feet>`); render the head with the right-hand type so a
-            // defaulted `Rhs = Self` impl reads the same way as a written one.
+            // (`Add<Feet>`), so render the head with the right-hand type: a
+            // defaulted `Rhs = Self` impl then reads like a written one.
             .map(|info| match info.rhs_type {
                 Some(t) => format!(
                     "{}<{}>",
@@ -416,10 +413,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TypeId> {
         let struct_name = self.tysys.struct_name_for_type(rhs_type_id)?;
         let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
-        // Verify the trait impl exists. `1 + m` reads the impl on the right
-        // operand's type and gives the literal that same type, so the impl
-        // must be the one whose right-hand type is it — an `Add<Feet>` on
-        // `Meters` does not answer for `1 + m`.
+        // `1 + m` reads the impl on the right operand's type and gives the
+        // literal that same type, so the impl must be the one whose right-hand
+        // type is it — an `Add<Feet>` on `Meters` does not answer for `1 + m`.
         let rhs = ArgClass::Exact(rhs_type_id);
         self.find_arithmetic_trait_impl(
             &struct_name,
@@ -2810,12 +2806,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .all(|(class, &param)| self.class_admits(param, class))
                 })
                 .collect();
-            // Unique-or-error: exactly one admitted candidate wins. No
-            // ranking — a literal admits every numeric width, so it never
-            // selects between them. Several leave the set for the ambiguity
-            // report; none is not ambiguity at all, and says so: a class only
-            // ever over-approximates, so no candidate admitting it means no
-            // candidate can accept the argument.
+            // Unique-or-error: exactly one admitted candidate wins. No ranking
+            // — a literal admits every numeric width, so it never selects
+            // between them. Several leave the set for the ambiguity report; none
+            // is not ambiguity at all, and reports separately.
             match admitted.as_slice() {
                 [winner] => {
                     let m = found_traits.swap_remove(*winner);
@@ -2869,9 +2863,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The other end of the same rule: every argument list of the overload set
     /// rejected the arguments. A class only ever over-approximates, so no
-    /// candidate admitting it means no candidate can accept the argument —
-    /// telling the caller to annotate one, as the ambiguity message does, would
-    /// point at an argument that is already pinned.
+    /// candidate admitting it means no candidate can accept it — and telling the
+    /// caller to annotate an already-pinned argument would be wrong advice.
     fn report_no_admitted_overload(
         &self,
         found_traits: &[super::types::TraitMethodMatch],
@@ -2891,8 +2884,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The competing spellings of one declaration's overload set, in candidate
-    /// order — or `None` when the candidates are not an overload set and
-    /// selection was never the question.
+    /// order, or `None` when the candidates are not an overload set.
     fn overload_spellings(found_traits: &[super::types::TraitMethodMatch]) -> Option<Vec<String>> {
         let first = found_traits.first()?;
         let rivals: Vec<&super::types::TraitMethodMatch> = found_traits
@@ -2910,8 +2902,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(traits)
     }
 
-    /// What each argument contributed to selection, in argument order — the
-    /// reason chain both selection failures carry.
+    /// The reason chain both selection failures carry: what each argument
+    /// contributed, in argument order.
     fn describe_arg_classes(&self, classes: &[ArgClass]) -> Vec<String> {
         classes
             .iter()

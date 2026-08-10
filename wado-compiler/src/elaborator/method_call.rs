@@ -201,8 +201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // The handle argument-directed selection classifies through (WEP
         // 2026-07-31). Constructing it costs nothing: a class is synthesized
-        // only if the candidate set turns out to be an overload set, and the
-        // memo is what keeps the lookup attempts below from re-synthesizing.
+        // only if the candidate set turns out to be an overload set.
         let mut probe = super::synth::ArgProbe::new(args_ast, ctx);
 
         // Base (non-ref) type for method lookup. `mut`: deferred-inference may
@@ -383,9 +382,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_type_param = trait_match.blanket_type_param;
         }
 
-        // Selection is over; the classes come out of the probe so the
-        // arguments can be elaborated (which needs `ctx` mutably) and then
-        // checked against what synthesis claimed.
+        // Selection is over; the classes come out of the probe so the arguments
+        // can be elaborated (which needs `ctx` mutably) and then checked.
         let synthesized = probe.take_classes();
 
         // If still not found and receiver is a TypeParam, try trait bounds
@@ -3003,10 +3001,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// type that shapes a literal comes from the selected impl, and picking
     /// it afterwards is the circular ordering the WEP diagnoses. Every class
     /// that carries information participates — a synthesized type selects by
-    /// `TypeId` here rather than through the name hint's spelling comparison,
-    /// which is what that mechanism's aliasing ceiling asks for. An `Opaque`
-    /// argument carries nothing and passes through, and so does a class that
-    /// several impls answer without contradiction (see `Head` below).
+    /// `TypeId` rather than through the name hint's spelling comparison, which
+    /// is what that mechanism's aliasing ceiling asks for. An `Opaque` argument
+    /// carries nothing and passes through, and so does a class several impls
+    /// answer without contradiction (see `Head` below).
     ///
     /// Admissibility is [`Elaborator::class_admits`] over each impl's
     /// *resolved* source type — the same table argument-directed selection
@@ -3036,10 +3034,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             [] => ConversionPreselect::Pass,
             [only] => ConversionPreselect::Selected(only.source),
             // A `Head` names a family, not a type — `Pair { a: 5 }` is a
-            // `Pair` of something — so several same-head impls are the
-            // expected answer here, not a tie. Elaborating the argument
-            // decides between them, which is what the path below does; only a
-            // class denoting one type may call two candidates ambiguous.
+            // `Pair` of something — so several same-head impls are the expected
+            // answer, not a tie. Only a class denoting one type may call two
+            // candidates ambiguous; elaborating the argument decides the rest.
             _ if matches!(class, ArgClass::Head(_)) => ConversionPreselect::Pass,
             _ => ConversionPreselect::Ambiguous(admitted.into_iter().map(|c| c.spelling).collect()),
         }

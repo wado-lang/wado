@@ -112,9 +112,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Primitive type: coerce literal to the same type
                 Some(left)
             } else {
-                // Struct type: look up operator trait and use rhs parameter
-                // type. The literal has no type yet, so its class is what
-                // selects among several `Add<Rhs>` impls.
+                // Struct type: the literal has no type yet, so its class is
+                // what selects among several `Add<Rhs>` impls.
                 let rhs_class = self.synthesize_arg_class(right_ast, ctx);
                 self.find_operator_rhs_type(left, &op, Some(&rhs_class), right_ast.span())
             };
@@ -189,17 +188,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether an operand's own elaboration would consult the expected type,
-    /// so a comparison resolves the *other* side first and hands this one its
-    /// type. A syntactic subset of the forms argument synthesis classifies as
-    /// [`super::synth::ArgClass::Opaque`] — deliberately syntactic, because
-    /// reify decides the same order and has no synthesis to ask, and because
-    /// the order must not depend on types: inside a tuple `for-of` the two
-    /// walks visit one sub-tree once per element, and a type-dependent order
-    /// would desync them.
+    /// Whether an operand's own elaboration would consult the expected type, so
+    /// a comparison resolves the *other* side first and hands this one its type.
+    /// A syntactic subset of the forms argument synthesis classifies as
+    /// [`super::synth::ArgClass::Opaque`], and syntactic on purpose: reify
+    /// decides the same order with no synthesis to ask, and a type-dependent
+    /// order would desync the two walks inside a tuple `for-of`, where one
+    /// sub-tree is visited once per element.
     ///
-    /// Subset, not equality, is the safe side: a form left out simply
-    /// resolves on its own, which is what every operand did before.
+    /// Subset, not equality, is the safe side: a form left out resolves on its
+    /// own, as every operand did before.
     pub(super) fn takes_shape_from_expected_type(expr: &ast::Expr) -> bool {
         match expr {
             ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => true,
@@ -615,9 +613,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let (lookup_name, lookup_type_id) =
                     self.tysys.newtype_base_lookup(&struct_name, left.type_id);
 
-                // Find the arithmetic trait implementation. The right
-                // operand is resolved by now, so its type selects among the
-                // receiver's `Add<Rhs>` impls (WEP 2026-07-31).
+                // The right operand is resolved by now, so its type selects
+                // among the receiver's `Add<Rhs>` impls (WEP 2026-07-31).
                 let rhs_class = super::synth::ArgClass::Exact(right.type_id);
                 let mut admitted = self.find_arithmetic_trait_impls(
                     &struct_name,

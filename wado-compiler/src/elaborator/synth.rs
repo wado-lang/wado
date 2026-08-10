@@ -10,21 +10,18 @@
 //! # Soundness
 //!
 //! The denoted set must *contain* the type the argument really elaborates to.
-//! Over-approximating costs a resolution (the call is reported ambiguous);
-//! under-approximating selects the wrong impl, which is a compiler bug. Every
-//! rule below is admissible only because it over-approximates: a premise that
-//! is not exactly known widens to [`ArgClass::Head`] or
-//! [`ArgClass::Opaque`], never to a guess.
+//! Over-approximating costs a resolution; under-approximating selects the wrong
+//! impl, which is a compiler bug. A premise that is not exactly known widens to
+//! [`ArgClass::Head`] or [`ArgClass::Opaque`], never to a guess.
 //!
 //! # Side-effect discipline
 //!
-//! Synthesis runs during lookup, before anything is committed, so it must
-//! leave no trace but interning. It never calls `resolve_expr`, never takes
-//! `&mut FunctionContext`, never builds TIR, and never records a dispatch or
-//! desugar fact. The lookup queries it *does* call report and record on their
-//! own; [`Elaborator::synthesize_arg_class`] runs them under the logger's
-//! quiet scope and the use→def suppression, and in debug builds asserts that
-//! the module's fact count is unchanged on the way out.
+//! Synthesis runs during lookup, before anything is committed, so it must leave
+//! no trace but interning: no `resolve_expr`, no `&mut FunctionContext`, no
+//! TIR, no recorded fact. The lookup queries it does call report and record on
+//! their own, so [`Elaborator::synthesize_arg_class`] runs them under the
+//! logger's quiet scope and the use→def suppression, and asserts in debug
+//! builds that the module's fact count is unchanged.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
@@ -41,7 +38,7 @@ use super::util::is_float_only_literal;
 /// its parameter type is in that set at every position.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum ArgClass {
-    /// Exactly this type — plus a `&mut T` argument answering a `&T` parameter,
+    /// Exactly this type. A `&mut T` argument also answers a `&T` parameter —
     /// argument passing's one coercion.
     Exact(TypeId),
     /// A type whose head declaration is known but whose arguments are not:
@@ -57,10 +54,9 @@ pub(super) enum ArgClass {
     Opaque(OpaqueReason),
 }
 
-/// Why synthesis produced no type. A closed set: the judgement matches on
-/// every `ast::Expr` variant with no wildcard arm, so a new expression form
-/// must either get a rule or name the reason it has none — there is
-/// deliberately no "unsupported" catch-all.
+/// Why synthesis produced no type. A closed set: the judgement matches on every
+/// `ast::Expr` variant with no wildcard arm, so a new expression form must
+/// either get a rule or name the reason it has none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum OpaqueReason {
     /// A closure whose parameter or return types are unannotated: the
@@ -92,15 +88,11 @@ impl ArgClass {
     }
 }
 
-/// The call site's scope, plus the names the argument expression binds for
-/// itself.
-///
-/// Synthesis reads an identifier in the *call site's* scope, and a binding the
-/// argument introduces — a block's `let`, a match arm's pattern, an `if let` —
-/// shadows it there: `l.push(match e { E::A(x) => x, … })` must not be answered
-/// with an outer `x`'s type. A shadowed name is opaque rather than typed;
-/// typing it would mean running the binder's own inference, which is the
-/// elaborator's walk and not this judgement's.
+/// The call site's scope, plus the names the argument binds for itself — a
+/// block's `let`, a match arm's pattern, an `if let`. Those shadow the call
+/// site: `l.push(match e { E::A(x) => x, … })` must not be answered with an
+/// outer `x`'s type. A shadowed name is opaque rather than typed, since typing
+/// it would mean running the binder's own inference.
 struct SynthScope<'a> {
     ctx: &'a FunctionContext,
     shadowed: Vec<String>,
@@ -121,11 +113,10 @@ impl<'a> SynthScope<'a> {
 
 /// One call's argument classes, computed on demand and remembered.
 ///
-/// Selection consults it only for an overload set — several concrete
-/// candidates of one trait declaration at different argument lists — so a call
-/// with a single candidate, which is effectively all of them, pays nothing.
-/// The memo is what keeps the several lookup attempts one method call makes
-/// from re-synthesizing.
+/// Selection consults it only for an overload set — several concrete candidates
+/// of one trait declaration at different argument lists — so a call with a
+/// single candidate pays nothing. The memo keeps the several lookup attempts one
+/// method call makes from re-synthesizing.
 pub(super) struct ArgProbe<'a> {
     args: &'a [ast::Expr],
     ctx: &'a FunctionContext,
@@ -163,8 +154,7 @@ impl<'a> ArgProbe<'a> {
         if let Some(class) = &self.memo[index] {
             return class.clone();
         }
-        // Copy the two shared references out first: the synthesis call needs
-        // them while `self.memo` is written.
+        // Copied out first: synthesis needs them while `self.memo` is written.
         let (args, ctx) = (self.args, self.ctx);
         let class = elaborator.synthesize_arg_class(&args[index], ctx);
         self.memo[index] = Some(class.clone());
@@ -232,14 +222,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if *t == param {
                     return true;
                 }
-                // The one coercion argument passing applies: `&mut T` → `&T`.
                 matches!(
                     (tt.get(param), tt.get(*t)),
                     (ResolvedType::Ref(p), ResolvedType::MutRef(a)) if p == a
                 )
             }
-            // A newtype over the head is admitted too: a literal of the head's
-            // shape may coerce into it, and admitting more is the safe side.
+            // A newtype over the head is admitted too; admitting more is the
+            // safe side.
             ArgClass::Head(head) => {
                 tt.fq_base_type_name(param) == *head
                     || tt.fq_base_type_name(tt.get_ultimate_base_type(param)) == *head
@@ -282,8 +271,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Checked on *every* method-call argument in debug builds, not only the
     /// ones selection asked about: a judgement that restates typing rules the
     /// elaborator also implements drifts silently unless the whole corpus
-    /// exercises it. Arguments selection never classified are classified here
-    /// for the comparison — the same side-effect-free walk, after the fact.
+    /// exercises it.
     pub(super) fn verify_arg_synthesis(
         &mut self,
         selected_with: &[Option<ArgClass>],
@@ -292,9 +280,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[crate::tir::TirExpr],
         span: crate::token::Span,
     ) {
-        // The invariant is about well-typed programs: once an error is
-        // reported the arguments carry recovery types, which say nothing about
-        // synthesis.
+        // Once an error is reported the arguments carry recovery types, which
+        // say nothing about synthesis.
         if !cfg!(debug_assertions) || self.logger.has_errors() {
             return;
         }
@@ -379,10 +366,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None => ArgClass::Opaque(OpaqueReason::CompoundLiteral),
             },
             Expr::Block(block) => self.synth_tail(&block.stmts, scope),
-            // A labeled block is typed by its `break label: value`s, which the
-            // tail only joins when it carries a value of its own; a tail that
-            // carries none leaves them to type the block, so reading the tail
-            // here would answer `unit` for it.
+            // Typed by its `break label: value`s, which the tail joins only when
+            // it carries a value of its own — so reading the tail alone would
+            // answer `unit` for a block the breaks type.
             Expr::LabeledBlock(_) => ArgClass::Opaque(OpaqueReason::Inference),
             Expr::WithHandler(w) => self.synth_tail(&w.body.stmts, scope),
             Expr::If(if_expr) => self.synth_branches(
@@ -392,8 +378,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope,
             ),
             Expr::Match(m) => self.synth_match(m, scope),
-            // Every remaining form is typed by what it is passed to, or by an
-            // inference the call site has not run yet.
             Expr::Closure(_) => ArgClass::Opaque(OpaqueReason::Closure),
             Expr::TupleLiteral(_) | Expr::Spread(_, _) => {
                 ArgClass::Opaque(OpaqueReason::CompoundLiteral)
@@ -414,7 +398,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ArgClass::IntLit
                 }
             }
-            // A byte literal coerces like an integer literal.
             ast::Literal::Byte(_) | ast::Literal::LocationLine => ArgClass::IntLit,
             ast::Literal::String(_)
             | ast::Literal::IncludeStr(_)
@@ -425,8 +408,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Literal::Bool(_) => ArgClass::Exact(TypeTable::BOOL),
             ast::Literal::Unit => ArgClass::Exact(TypeTable::UNIT),
             ast::Literal::Null => ArgClass::NullLit,
-            // A byte-string literal is a `List<u8>` whatever the expected type
-            // says — the elaborator does not consult it here.
+            // A `List<u8>` whatever the expected type says — the elaborator
+            // does not consult it here.
             ast::Literal::Bytes(_) | ast::Literal::IncludeBytes(_) => {
                 ArgClass::Exact(self.tysys.type_table.borrow_mut().make_byte_list())
             }
@@ -552,8 +535,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     open
                 }
             }
-            // `-x` / `~x` keep a primitive operand's type; a user type answers
-            // through its operator impl.
             ast::UnaryOp::Neg => self.synth_unary_op_output(operand, "Neg", "neg"),
             ast::UnaryOp::BitNot => self.synth_unary_op_output(operand, "BitNot", "bitnot"),
         }
@@ -597,8 +578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | BinaryOp::GtEq
             | BinaryOp::And
             | BinaryOp::Or => ArgClass::Exact(TypeTable::BOOL),
-            // A shift's result is its left operand's type, whatever the right
-            // operand is.
+            // A shift's result is its left operand's type.
             BinaryOp::Shl | BinaryOp::Shr => self.synth_arith_operand(&b.left, scope),
             BinaryOp::Add
             | BinaryOp::Sub
@@ -622,8 +602,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let class = self.synth(expr, scope);
         let open = ArgClass::Opaque(OpaqueReason::Inference);
         match class {
-            // A user type's operator impl decides the result, and which impl
-            // that is depends on both operands — not this position alone.
+            // Which impl decides the result depends on both operands, not on
+            // this position alone.
             ArgClass::Exact(t) if !self.tysys.type_table.borrow().is_numeric(t) => open,
             ArgClass::IntLit | ArgClass::FloatLit | ArgClass::Exact(_) => class,
             ArgClass::Head(_) | ArgClass::StrLit | ArgClass::NullLit | ArgClass::Opaque(_) => open,
@@ -642,8 +622,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None => ArgClass::Opaque(OpaqueReason::Unresolved),
             };
         };
-        // A binding the argument introduced hides whatever the call site's
-        // scope has under that name, function or local alike.
         if scope.shadows(&ident.name) {
             return ArgClass::Opaque(OpaqueReason::Inference);
         }
@@ -698,11 +676,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The declared return type of `receiver.method(…)`, through the same
-    /// order the real dispatch uses — a concrete ref impl, then the inherent
-    /// method, then the base type's trait impls. Reading them in a different
-    /// order would answer with a signature the call never selects, which is
-    /// the under-approximation the invariant forbids.
+    /// The declared return type of `receiver.method(…)`, read in the order the
+    /// real dispatch uses — a concrete ref impl, the inherent method, the base
+    /// type's trait impls. Another order would answer with a signature the call
+    /// never selects.
     fn method_return_type(
         &mut self,
         receiver: TypeId,
@@ -847,10 +824,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// An `if` in either spelling — the expression form and the tail-statement
+    /// An `if` in either spelling: the expression form and the tail-statement
     /// form share their shape and their result rule. Without an `else` there is
-    /// no second branch to agree with, and what the position then demands is
-    /// not this judgement's to guess.
+    /// no second branch to agree with.
     fn synth_branches(
         &mut self,
         condition: &ast::Condition,
@@ -891,15 +867,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A block's value is its trailing statement's, by the same rule
     /// [`super::control_flow::block_result_type`] reads it back with: a tail
     /// expression, a tail `if`/`else` or `match`, or nothing. A block that ends
-    /// by diverging has whatever type its position demands, which is not this
-    /// judgement's to guess.
+    /// by diverging has whatever type its position demands.
     fn synth_tail(&mut self, statements: &[ast::Stmt], scope: &mut SynthScope<'_>) -> ArgClass {
         let Some((last, leading)) = statements.split_last() else {
             return ArgClass::Exact(TypeTable::UNIT);
         };
         // A local `struct` / `impl` / `type` declares a name this judgement
-        // would resolve in the module's scope, where it means something else
-        // or nothing; the whole block stays open rather than answer for it.
+        // would resolve in the module's scope, where it means something else or
+        // nothing.
         if leading.iter().any(|s| matches!(s, ast::Stmt::Item(_))) {
             return ArgClass::Opaque(OpaqueReason::Inference);
         }
@@ -1001,8 +976,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// A type carrying an unsolved inference hole is *not* closed even though
     /// it names a constructor: `let Some(b) = opt` binds `b` at `?` until the
-    /// argument position pins it, and reading the hole as the answer is
-    /// exactly the under-approximation the invariant forbids.
+    /// argument position pins it.
     fn class_of_type(&self, type_id: TypeId) -> ArgClass {
         if type_id == TypeTable::UNKNOWN || type_id == TypeTable::ERROR {
             return ArgClass::Opaque(OpaqueReason::Unresolved);

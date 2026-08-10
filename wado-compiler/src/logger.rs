@@ -132,13 +132,12 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Drop error diagnostics until the returned scope is dropped, leaving the
     /// error count untouched.
     ///
-    /// For a *query* that answers a question by running machinery which also
-    /// reports — argument synthesis walking a nested method call through the
-    /// same lookup the real elaboration will run. The real walk reaches the
-    /// same node afterwards and reports there, so emitting from the query
-    /// would duplicate the diagnostic and fail the compilation on an argument
-    /// that still compiles. Never use it to silence a decision the compiler
-    /// actually commits to.
+    /// For a *query* that answers by running machinery which also reports —
+    /// argument synthesis walking a nested method call through the lookup the
+    /// real elaboration will run anyway. That walk reaches the same node
+    /// afterwards and reports there, so emitting from the query would duplicate
+    /// the diagnostic. Never use it to silence a decision the compiler commits
+    /// to.
     pub fn quiet(&self) -> QuietScope<'_> {
         self.quiet_depth.set(self.quiet_depth.get() + 1);
         QuietScope {
