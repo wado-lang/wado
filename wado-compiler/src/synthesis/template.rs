@@ -17,7 +17,6 @@ use std::sync::Arc;
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::elaborator::trait_env::TraitEnv;
 use crate::module_source::ModuleSource;
-use crate::name::FqTraitName;
 use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
@@ -1412,13 +1411,12 @@ fn trait_impl_module(
     // every user-written `impl Trait for Type` block lives. This handles
     // cross-module impls like `impl Display for String` (defined in
     // `core:prelude/format`, not the module that declares `String`).
-    if let Some(trait_key) = local_name
-        .trait_name
-        .as_ref()
-        .and_then(FqTraitName::canonical)
-        && let Some(loc) =
-            ctx.trait_env
-                .impl_module_for(local_name.receiver(), &trait_key, type_module.as_ref())
+    if let Some(trait_name) = local_name.base_trait_name()
+        && let Some(loc) = ctx.trait_env.impl_module_for(
+            &local_name.base_struct_name(),
+            trait_name,
+            type_module.as_ref(),
+        )
     {
         return loc.clone();
     }

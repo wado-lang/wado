@@ -7,7 +7,6 @@ use std::sync::Arc;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::Receiver;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
 use crate::tir::{InstantiationKey, ResolvedType, TirFunction, TypeId, TypeTable};
 
@@ -84,20 +83,21 @@ impl FuncInstState {
         info: &LocalMethodName,
         type_module: Option<&ModuleSource>,
     ) -> Option<ModuleSource> {
-        let trait_key = info.trait_name.as_ref()?.canonical()?;
-        if let Some(m) = self.trait_env.concrete_impl_module_for(
-            &Receiver::Type(info.fq_struct_name()),
-            &trait_key,
-            type_module,
-        ) {
+        let trait_name = info.base_trait_name()?;
+        if let Some(m) =
+            self.trait_env
+                .concrete_impl_module_for(&info.struct_name(), trait_name, type_module)
+        {
             return Some(m.clone());
         }
         // Fall back to the head name for argument shapes the qualified
         // instantiated index above cannot spell (tuples, function types).
         if info.base_struct_name() != info.struct_name()
-            && let Some(m) =
-                self.trait_env
-                    .concrete_impl_module_for(info.receiver(), &trait_key, type_module)
+            && let Some(m) = self.trait_env.concrete_impl_module_for(
+                &info.base_struct_name(),
+                trait_name,
+                type_module,
+            )
         {
             return Some(m.clone());
         }
@@ -127,20 +127,17 @@ impl FuncInstState {
         info: &LocalMethodName,
         type_module: Option<&ModuleSource>,
     ) -> Option<ModuleSource> {
-        let trait_key = info.trait_name.as_ref()?.canonical()?;
-        if let Some(m) = self.trait_env.impl_module_for(
-            &Receiver::Type(info.fq_struct_name()),
-            &trait_key,
-            type_module,
-        ) {
+        let trait_name = info.base_trait_name()?;
+        if let Some(m) =
+            self.trait_env
+                .impl_module_for(&info.struct_name(), trait_name, type_module)
+        {
             return Some(m.clone());
         }
-        // The instantiated receiver (`List<i32>`) and the head it was declared
-        // on (`List`) are separate entries; a generic impl only has the head.
         if info.base_struct_name() != info.struct_name()
             && let Some(m) =
                 self.trait_env
-                    .impl_module_for(info.receiver(), &trait_key, type_module)
+                    .impl_module_for(&info.base_struct_name(), trait_name, type_module)
         {
             return Some(m.clone());
         }
@@ -661,7 +658,7 @@ impl Monomorphizer {
         method_name: &str,
         trait_name: Option<&crate::name::FqTraitName>,
     ) -> (
-        Option<FqTypeName>,
+        Option<String>,
         Vec<(String, Option<crate::name::FqTraitName>)>,
     ) {
         let own_name = self.newtype_own_struct_name_with_impl(
@@ -686,7 +683,30 @@ impl Monomorphizer {
         // The key's `impl_type_args` are empty here — the instantiation is
         // spelled into the name, so the receiver keeps its type arguments.
         push_for(super::dispatch_receiver_name(type_table, receiver_type_id));
-        (own_name, names)
+        (own_name.map(|n| n.to_mangled()), names)
+    }
+
+    /// Build the candidate struct-name set for trait-fallback template lookup,
+    /// ordered newtype-own first, then the method's base/impl struct names, then
+    /// the receiver's struct name. Mirrors the ordering of the name list from
+    /// [`Self::newtype_aware_method_names`].
+    pub fn newtype_aware_candidates<'a>(
+        &self,
+        own_name: Option<&'a str>,
+        info: Option<&'a LocalMethodName>,
+        struct_name: &'a str,
+    ) -> Vec<std::borrow::Cow<'a, str>> {
+        use std::borrow::Cow;
+        let mut c: Vec<Cow<'a, str>> = Vec::new();
+        if let Some(own) = own_name {
+            c.push(Cow::Borrowed(own));
+        }
+        if let Some(info) = info {
+            c.push(Cow::Owned(info.receiver.head_key().into_string()));
+            c.push(Cow::Owned(info.struct_name()));
+        }
+        c.push(Cow::Borrowed(struct_name));
+        c
     }
 
     /// Get the base struct name and type args from a `type_id`, unwrapping references if needed

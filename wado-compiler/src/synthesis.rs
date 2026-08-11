@@ -138,30 +138,24 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
     let mut impls = SynthesisedImpls::default();
     let ast_layer = &project.trait_env.trait_impl_modules;
-    let mut record = |receiver: crate::name::Receiver,
-                      trait_key: crate::tir::TraitKey,
-                      module: &ModuleSource,
-                      is_concrete: bool| {
-        let key = (receiver, trait_key);
-        // Skip only when the *same* module is already represented at the AST
-        // layer. Two same-name receiver types from different modules (e.g.
-        // `struct Widget` in module A and module B) each get their own
-        // auto-derived impl and both need to land in the synthesised layer —
-        // a coarser `contains_key` short-circuit would drop the second one and
-        // re-introduce the cross-module mis-dispatch the multi-valued index is
-        // meant to fix.
-        //
-        // Both layers key on the same identities, so this comparison actually
-        // fires; keyed on two different spellings it never did, and every
-        // user-written impl was duplicated here.
-        if ast_layer
-            .get(&key)
-            .is_some_and(|modules| modules.contains(module))
-        {
-            return;
-        }
-        impls.record_impl(key.0, key.1, module.clone(), is_concrete);
-    };
+    let mut record =
+        |type_name: String, trait_name: String, module: &ModuleSource, is_concrete: bool| {
+            let key = (type_name, trait_name);
+            // Skip only when the *same* module is already represented at the
+            // AST layer. Two same-name receiver types from different modules
+            // (e.g. `struct Widget` in module A and module B) each get their
+            // own auto-derived impl and both need to land in the synthesised
+            // layer — a coarser `contains_key` short-circuit would drop the
+            // second one and re-introduce the cross-module mis-dispatch the
+            // multi-valued index is meant to fix.
+            if ast_layer
+                .get(&key)
+                .is_some_and(|modules| modules.contains(module))
+            {
+                return;
+            }
+            impls.record_impl(key.0, key.1, module.clone(), is_concrete);
+        };
     for tir_module in project.tir_modules.values() {
         let module_source = &tir_module.module_source;
         let type_table = tir_module.type_table.borrow();
@@ -181,17 +175,15 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
                 {
                     continue;
                 }
-                let Some(trait_key) = trait_name.canonical() else {
-                    continue;
-                };
                 let is_concrete = func.impl_type_params.is_empty();
+                let trait_base = trait_name.base_name().to_string();
                 record(
-                    info.receiver().clone(),
-                    trait_key.clone(),
+                    info.base_struct_name(),
+                    trait_base.clone(),
                     module_source,
                     is_concrete,
                 );
-                record_concrete_instantiation(&mut record, info, &trait_key, module_source);
+                record_concrete_instantiation(&mut record, info, &trait_base, module_source);
             }
         }
     }
@@ -206,15 +198,15 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
 /// (issue #1348). The resolved spelling covers every argument shape (tuples,
 /// refs, nested generics) with no AST re-derivation.
 fn record_concrete_instantiation(
-    record: &mut impl FnMut(crate::name::Receiver, crate::tir::TraitKey, &ModuleSource, bool),
+    record: &mut impl FnMut(String, String, &ModuleSource, bool),
     info: &LocalMethodName,
-    trait_key: &crate::tir::TraitKey,
+    trait_name: &str,
     module_source: &ModuleSource,
 ) {
     if info.struct_name() != info.base_struct_name() {
         record(
-            crate::name::Receiver::Type(info.fq_struct_name()),
-            trait_key.clone(),
+            info.struct_name(),
+            trait_name.to_string(),
             module_source,
             true,
         );
