@@ -213,7 +213,7 @@ repeats them where a contributor will hit them.
   away.
 - That census is session-scoped, never per-application: it walks the whole body,
   so recomputing it per rule application is quadratic. `Engine` memoizes it and
-  holds an *empty* memo across edits — the case that decides the cost, since
+  holds an _empty_ memo across edits — the case that decides the cost, since
   inside the loop the early freeze plants context-free values only and no
   reachable operand names a local. Only a local-naming operand becoming
   reachable drops it, which the edit API reports; a rule therefore never writes
