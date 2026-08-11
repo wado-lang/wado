@@ -2202,7 +2202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     cm_name: None,
                     is_ref_impl: false,
                     method_type_param_ids,
-                    method_own_params: method_sig.own_params.clone(),
+                    method_own_params: method_sig.own_params,
                     impl_module: Some(impl_module_source.clone()),
                     from_concrete_impl: impl_is_concrete,
                     param_defaults,
