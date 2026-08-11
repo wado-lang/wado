@@ -2428,10 +2428,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect();
 
             let impl_offset = crate::tir::method_param_offset_of(impl_slots.keys().copied());
-            // Kept, not discarded: these are the method's parameters as this
-            // lookup matched them. Reporting them saves every consumer from
-            // rebuilding the same ids out of a counted offset.
-            let mut method_type_param_ids: Vec<TypeId> = Vec::new();
+            // The method's parameters as its declaration holds them. The
+            // scope registration below re-mints ids from `impl_offset`, which
+            // is itself derived by counting the impl's slots and disagrees with
+            // the declaration whenever that count is wrong — a pack parameter
+            // (`impl<T, ..F> Emit for T`) is the case that exposed it. What the
+            // signature says is authoritative, so that is what is reported.
+            let declaring =
+                (method_sig.declaring_slot_count as usize).min(method_sig.decl.type_params.len());
+            let method_type_param_ids: Vec<TypeId> = method_sig.decl.type_params[declaring..]
+                .iter()
+                .map(|(_, id)| *id)
+                .collect();
             for (i, type_param) in method_type_params.iter().enumerate() {
                 let index = impl_offset + i as u32;
                 let type_param_id =
@@ -2443,7 +2451,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             name: type_param.name.clone(),
                             index,
                         });
-                method_type_param_ids.push(type_param_id);
                 scope
                     .annotate_ctx
                     .trait_ctx
