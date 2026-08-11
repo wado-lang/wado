@@ -1,5 +1,6 @@
 //! Post-monomorphization rewrites: function call rewriting to monomorphized names.
 
+use crate::elaborator::trait_env::ImplReceiver;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::name::{MethodName, RefKind};
@@ -87,7 +88,7 @@ impl Monomorphizer {
         if let Some(trait_name) = trait_name {
             for candidate in struct_candidates {
                 if let Some(impl_module) = self.functions.trait_env.impl_module_for(
-                    candidate,
+                    ImplReceiver::Mangled(candidate),
                     &trait_name,
                     type_module_hint,
                 ) {

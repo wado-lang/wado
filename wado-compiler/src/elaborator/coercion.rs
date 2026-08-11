@@ -1,5 +1,6 @@
 //! Numeric literal coercion and type coercion.
 
+use crate::elaborator::trait_env::ImplReceiver;
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
@@ -567,7 +568,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .impl_module_for(
-                &builder_name_for_lookup,
+                ImplReceiver::Declared(&builder_name_for_lookup),
                 trait_name.base_name(),
                 builder_type_module.as_ref(),
             )

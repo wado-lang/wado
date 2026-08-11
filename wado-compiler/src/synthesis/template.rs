@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::compiler_item::{CompilerItem, CompilerItems};
-use crate::elaborator::trait_env::TraitEnv;
+use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind};
 use crate::tir::{
@@ -1413,7 +1413,7 @@ fn trait_impl_module(
     // `core:prelude/format`, not the module that declares `String`).
     if let Some(trait_name) = local_name.base_trait_name()
         && let Some(loc) = ctx.trait_env.impl_module_for(
-            &local_name.base_struct_name(),
+            ImplReceiver::Mangled(&local_name.base_struct_name()),
             trait_name,
             type_module.as_ref(),
         )

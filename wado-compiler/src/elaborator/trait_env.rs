@@ -1439,11 +1439,11 @@ impl TraitEnv {
 
     pub(crate) fn impl_module_for(
         &self,
-        type_name: &str,
+        receiver: ImplReceiver<'_>,
         trait_name: &str,
         type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
-        let key = (type_name.to_string(), trait_name.to_string());
+        let key = (receiver.spelling().to_string(), trait_name.to_string());
         let ast = self.trait_impl_modules.get(&key);
         let syn = self
             .synthesised
@@ -1633,11 +1633,11 @@ impl TraitEnv {
     /// semantics that filtered on `impl_type_params.is_empty()`.
     pub(crate) fn concrete_impl_module_for(
         &self,
-        type_name: &str,
+        receiver: ImplReceiver<'_>,
         trait_name: &str,
         type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
-        let key = (type_name.to_string(), trait_name.to_string());
+        let key = (receiver.spelling().to_string(), trait_name.to_string());
         let ast = self.concrete_trait_impl_modules.get(&key);
         let syn = self
             .synthesised
@@ -1736,6 +1736,34 @@ impl TraitEnv {
 /// Compare the table's answer for an `impl` header against the one this file
 /// derives, and report a difference. Stage-B instrument; it goes when the
 /// consumers take a `DeclRef` and there is only one answer to compare.
+/// Which namespace an impl-module query spells its receiver in.
+///
+/// The index is reachable from two, and they are not interchangeable: a
+/// mangled fq receiver picks out one declaration, a declared name picks out
+/// any declaration spelling itself that way. Today both read the same key and
+/// the storage holds only declared spellings, so a mangled query reaches only
+/// the synthesised layer, and `pick_module_union`'s AST-first precedence is
+/// never exercised for one — see WEP 2026-08-10. Naming the namespace at each
+/// call site is the step that makes those fixable without guessing which
+/// callers meant which.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum ImplReceiver<'a> {
+    /// The form a mangled method name embeds, from `name::Receiver::head_key`
+    /// — what `LocalMethodName::struct_name` and `base_struct_name` produce.
+    Mangled(&'a str),
+    /// The name a declaration writes for itself. Carries no module, so it
+    /// cannot separate two modules' same-named types.
+    Declared(&'a str),
+}
+
+impl<'a> ImplReceiver<'a> {
+    fn spelling(self) -> &'a str {
+        match self {
+            ImplReceiver::Mangled(s) | ImplReceiver::Declared(s) => s,
+        }
+    }
+}
+
 /// The static-method index's bucket for an impl whose target keys as
 /// `type_key`.
 ///

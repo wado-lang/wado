@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::elaborator::trait_env::TraitEnv;
+use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
@@ -86,7 +86,11 @@ impl FuncInstState {
         let trait_name = info.base_trait_name()?;
         if let Some(m) =
             self.trait_env
-                .concrete_impl_module_for(&info.struct_name(), trait_name, type_module)
+                .concrete_impl_module_for(
+                    ImplReceiver::Mangled(&info.struct_name()),
+                    trait_name,
+                    type_module,
+                )
         {
             return Some(m.clone());
         }
@@ -94,7 +98,7 @@ impl FuncInstState {
         // instantiated index above cannot spell (tuples, function types).
         if info.base_struct_name() != info.struct_name()
             && let Some(m) = self.trait_env.concrete_impl_module_for(
-                &info.base_struct_name(),
+                ImplReceiver::Mangled(&info.base_struct_name()),
                 trait_name,
                 type_module,
             )
@@ -130,14 +134,22 @@ impl FuncInstState {
         let trait_name = info.base_trait_name()?;
         if let Some(m) =
             self.trait_env
-                .impl_module_for(&info.struct_name(), trait_name, type_module)
+                .impl_module_for(
+                    ImplReceiver::Mangled(&info.struct_name()),
+                    trait_name,
+                    type_module,
+                )
         {
             return Some(m.clone());
         }
         if info.base_struct_name() != info.struct_name()
             && let Some(m) =
                 self.trait_env
-                    .impl_module_for(&info.base_struct_name(), trait_name, type_module)
+                    .impl_module_for(
+                        ImplReceiver::Mangled(&info.base_struct_name()),
+                        trait_name,
+                        type_module,
+                    )
         {
             return Some(m.clone());
         }

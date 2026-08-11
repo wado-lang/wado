@@ -16,7 +16,7 @@ use std::rc::Rc;
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
 
-use crate::elaborator::trait_env::TraitEnv;
+use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::package::Package;
@@ -3056,7 +3056,7 @@ impl SynthesisCtx<'_, '_, '_> {
         // the AST layer.
         if self
             .trait_env
-            .impl_module_for(type_name, &trait_key.1, None)
+            .impl_module_for(ImplReceiver::Declared(type_name), &trait_key.1, None)
             .is_some()
         {
             return true;
@@ -5716,7 +5716,11 @@ fn resolve_impl_module_via_env(
 
     if let Some(name) = candidate_name.as_deref()
         && let Some(m) =
-            trait_env.impl_module_for(name, trait_name.base_name(), type_module.as_ref())
+            trait_env.impl_module_for(
+                ImplReceiver::Declared(name),
+                trait_name.base_name(),
+                type_module.as_ref(),
+            )
     {
         return m.clone();
     }

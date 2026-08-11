@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::elaborator::trait_env::TraitEnv;
+use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
@@ -240,7 +240,11 @@ fn lookup_template_with_trait_fallback<'a, V>(
     if let Some(trait_name) = trait_name {
         for candidate in struct_candidates {
             if let Some(impl_module) =
-                trait_env.impl_module_for(candidate, trait_name, type_module_hint)
+                trait_env.impl_module_for(
+                    ImplReceiver::Mangled(candidate),
+                    trait_name,
+                    type_module_hint,
+                )
                 && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))
             {
                 return Some(v);
@@ -2946,7 +2950,7 @@ impl Monomorphizer {
         let Some(ref_module) =
             self.functions
                 .trait_env
-                .impl_module_for(ref_kind.prefix(), trait_name, None)
+                .impl_module_for(ImplReceiver::Mangled(ref_kind.prefix()), trait_name, None)
         else {
             return false;
         };
@@ -4969,7 +4973,7 @@ fn try_lower_comparison(
             .and_then(|tn| {
                 trait_env
                     .concrete_impl_module_for(
-                        &info.struct_name(),
+                        ImplReceiver::Mangled(&info.struct_name()),
                         tn.base_name(),
                         type_mod.as_ref(),
                     )
