@@ -81,6 +81,15 @@ impl AstId {
         self.space
     }
 
+    /// Whether this id was minted by [`Self::fresh`] — a synthesized node that
+    /// no module owns and no source position wrote. The resolution table is
+    /// built from the modules, so it never answers for one, and a consumer
+    /// asserting "every reference site is resolved" must exempt them.
+    #[must_use]
+    pub fn is_synthetic(self) -> bool {
+        self.space == AstIdSpace::FRESH
+    }
+
     /// A globally-unique `AstId` for a transient node never owned by a
     /// [`Module`] — synthesized `Type::Named` / `Type::Generic` operands for
     /// type-query functions, and test fixtures. It lives in the reserved

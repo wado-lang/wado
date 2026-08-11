@@ -1214,7 +1214,30 @@ impl TraitEnv {
                             ImplTargetKey::Decl((module.clone(), name.to_string()))
                         })
                         .unwrap_or_else(|| {
-                            impl_target_key_at(trait_type, module_source, symbols, resolutions)
+                            // A trait position whose site names no declaration
+                            // — a bodiless derive naming a stdlib trait the
+                            // module never `use`d. The declaration indexes are
+                            // the only thing that can answer, and they decline
+                            // when several modules declare the name. Same chain
+                            // as `Elaborator::decl_key_or_local`, so the header
+                            // and the elaborator key the trait identically.
+                            unique_declared_trait(
+                                &get_type_name_static(trait_type),
+                                &decl_index,
+                                &effect_decl_index,
+                                &resource_decl_index,
+                            )
+                            .map_or_else(
+                                || {
+                                    impl_target_key_at(
+                                        trait_type,
+                                        module_source,
+                                        symbols,
+                                        resolutions,
+                                    )
+                                },
+                                ImplTargetKey::Decl,
+                            )
                         })
                 });
                 impl_headers.insert(
@@ -1617,9 +1640,14 @@ impl TraitEnv {
                 return false;
             }
             match (trait_ref, header.trait_ref) {
-                // Both sides resolved their own reference site, so this is a
-                // question about declarations.
-                (Some(query), Some(decl)) => query == decl,
+                // Both sides named a declaration, so this is a question about
+                // declarations. Only `Decl` qualifies: `Unresolved` is a unit
+                // variant, so comparing raw answers would make any two
+                // undeclared traits the same one.
+                (
+                    Some(crate::resolve::DeclRef::Decl(query)),
+                    Some(crate::resolve::DeclRef::Decl(decl)),
+                ) => query == decl,
                 // A caller not yet carrying an identity falls back to the
                 // spelling — the old behaviour and the old hole.
                 _ => header.trait_name.as_deref() == Some(trait_name),
@@ -1808,6 +1836,18 @@ pub(crate) enum ImplReceiver<'a> {
     Declared(&'a name::DeclName),
 }
 
+impl ImplReceiver<'_> {
+    /// The spelling this query names its receiver by, for the callers that key
+    /// their own in-pass state on the same string.
+    pub(crate) fn spelling(self) -> String {
+        match self {
+            ImplReceiver::Of(r) => r.head_key().into_string(),
+            ImplReceiver::Instantiated(m) => m.as_mangled_str().to_string(),
+            ImplReceiver::Declared(d) => d.as_decl_str().to_string(),
+        }
+    }
+}
+
 /// A receiver a lookup may try, kept in the form the thing that produced it
 /// had. A candidate list is assembled from several sources — a method info's
 /// receiver, a mangled struct key — and they are not one namespace. Carrying
@@ -1856,6 +1896,24 @@ fn static_receiver_key(type_key: &ImplTargetKey, otherwise: impl FnOnce() -> Dec
 /// A site behind no declaration — a tuple, a function type, a name that
 /// reaches nothing — is keyed to the impl's own module. Nothing else claims
 /// it, and coherence for exactly those is decided per module.
+/// The one trait, effect or resource declaration named `name`, when exactly
+/// one module declares it. Declines on ambiguity: guessing between two
+/// same-named declarations is the mis-identification this design prevents.
+fn unique_declared_trait<L, E, R>(
+    name: &str,
+    decls: &IndexMap<DeclKey, L>,
+    effects: &IndexMap<DeclKey, E>,
+    resources: &IndexMap<DeclKey, R>,
+) -> Option<DeclKey> {
+    let mut hits = decls
+        .keys()
+        .chain(effects.keys())
+        .chain(resources.keys())
+        .filter(|(_, n)| n == name);
+    let first = hits.next()?;
+    hits.next().is_none().then(|| first.clone())
+}
+
 fn impl_target_key_at(
     ty: &ast::Type,
     module_source: &ModuleSource,

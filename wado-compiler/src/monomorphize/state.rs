@@ -705,6 +705,7 @@ impl Monomorphizer {
     ) -> Vec<ReceiverCandidate> {
         let mangled = |s: &str| ReceiverCandidate::Instantiated(crate::name::MangledName::new(s));
         let mut c: Vec<ReceiverCandidate> = Vec::new();
+        // `own_name` is `FqTypeName::to_mangled`, so it carries its module.
         if let Some(own) = own_name {
             c.push(mangled(own));
         }
@@ -712,7 +713,12 @@ impl Monomorphizer {
             c.push(ReceiverCandidate::Of(info.receiver.clone()));
             c.push(mangled(&info.struct_name()));
         }
-        c.push(mangled(struct_name));
+        // `struct_name` is `get_struct_name_from_type`'s rendered spelling —
+        // the declaration's own name, with no module. Asking the mangled map
+        // for it reaches nothing, because every key there is module-qualified.
+        c.push(ReceiverCandidate::Declared(crate::name::DeclName::new(
+            struct_name,
+        )));
         c
     }
 

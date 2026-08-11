@@ -652,6 +652,12 @@ pub struct TypeTable {
     /// Keyed by trait because one type may implement several declaring the
     /// same name — `f32` has both `FromStr::Err` and `LenientFromStr::Err`.
     assoc_type_resolutions: IndexMap<(TypeId, TraitKey, String), TypeId>,
+    /// [`Self::assoc_type_resolutions`] keyed by the trait's *written* name,
+    /// for the callers that hold one rather than its declaration. `None` marks
+    /// a name two declarations answer differently for — the same "decline
+    /// rather than let registration order decide" rule the scan had, without
+    /// walking the whole map per projection.
+    assoc_type_resolutions_by_trait_name: IndexMap<(TypeId, String, String), Option<TypeId>>,
     /// Generic associated type definitions:
     /// `(base decl, declaring trait, assoc_name)` → `TypeId`.
     /// The `TypeId` is typically a `TypeParam` that can be substituted using the
@@ -826,6 +832,7 @@ impl TypeTable {
             intern_map: IndexMap::default(),
             compiler_items: crate::compiler_item::CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
+            assoc_type_resolutions_by_trait_name: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
@@ -2206,6 +2213,15 @@ impl TypeTable {
         assoc_name: String,
         resolved_id: TypeId,
     ) {
+        let by_name = (concrete_id, trait_key.1.clone(), assoc_name.clone());
+        self.assoc_type_resolutions_by_trait_name
+            .entry(by_name)
+            .and_modify(|prior| {
+                if *prior != Some(resolved_id) {
+                    *prior = None;
+                }
+            })
+            .or_insert(Some(resolved_id));
         self.assoc_type_resolutions
             .insert((concrete_id, trait_key, assoc_name), resolved_id);
     }
@@ -2254,17 +2270,13 @@ impl TypeTable {
         trait_name: &str,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let mut found: Option<TypeId> = None;
-        for ((id, (_, name), assoc), &resolved) in &self.assoc_type_resolutions {
-            if *id != concrete_id || name != trait_name || assoc != assoc_name {
-                continue;
-            }
-            if found.is_some_and(|prior| prior != resolved) {
-                return None;
-            }
-            found = Some(resolved);
-        }
-        found
+        *self
+            .assoc_type_resolutions_by_trait_name
+            .get(&(
+                concrete_id,
+                trait_name.to_string(),
+                assoc_name.to_string(),
+            ))?
     }
 
     /// Resolve an associated type named `assoc_name` on `concrete_id`

@@ -1494,7 +1494,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         written: &str,
     ) -> super::trait_env::DeclKey {
         debug_assert!(
-            self.tysys.resolutions.get(site).is_some(),
+            self.tysys.resolutions.get(site).is_some() || site.is_synthetic(),
             "every reference site is resolved before elaboration, `{written}` was not"
         );
         if let Some((module, name)) = self.tysys.resolutions.declared(site) {
@@ -1646,14 +1646,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::find_method_in_trait_bounds`] for bounds that carry no reference
     /// site of their own.
     ///
-    /// `resolved` maps a bound's written name to the declaration it means,
-    /// answered where the bound was first read. An associated-type projection
-    /// is the case: it outlives the trait declaration's frame, so it records
-    /// the identities and hands them back here.
+    /// `known` maps a bound's own id to the declaration it means, answered
+    /// where the bound was first read. An associated-type projection is the
+    /// case: it outlives the trait declaration's frame, so it records the
+    /// identities and hands them back here. Keyed by id rather than by name so
+    /// two same-named traits stay two bounds.
     pub(super) fn find_method_in_trait_bounds_with(
         &mut self,
         bounds: &[ast::TraitBound],
-        known: &IndexMap<String, crate::name::FqTraitName>,
+        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
@@ -1666,7 +1667,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|b| {
                 let key = known
-                    .get(&b.name)
+                    .get(&b.id)
                     .and_then(crate::name::FqTraitName::canonical)
                     .unwrap_or_else(|| self.trait_decl_at(b.id, &b.name));
                 (b.clone(), key)
@@ -1697,7 +1698,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // not the spelling it wrote: an aliased bound (`T: G` for
         // `use { Greet as G }`) must reach the impl that defines the method.
         let fq_trait_name = known
-            .get(&trait_name)
+            .get(&bound.id)
             .cloned()
             .unwrap_or_else(|| crate::name::FqTraitName::declared(&decl.0, &decl.1));
 

@@ -3048,7 +3048,15 @@ impl SynthesisCtx<'_, '_, '_> {
     ///   module A and module B) each still get their own auto-derived
     ///   impl. Without the module component the second derivation would
     ///   be silently skipped.
-    pub(crate) fn has_impl(&self, type_name: &str, trait_key: &crate::tir::TraitKey) -> bool {
+    /// `receiver` names the namespace it is spelled in: the in-pass `pending`
+    /// set is keyed by the same string the caller holds, while the AST-layer
+    /// query must ask the map that namespace lives in — a mangled receiver
+    /// looked up as a declaration name reaches nothing.
+    pub(crate) fn has_impl(
+        &self,
+        receiver: ImplReceiver<'_>,
+        trait_key: &crate::tir::TraitKey,
+    ) -> bool {
         // Module-agnostic AST-layer check: any user-written impl, anywhere
         // in the project, counts. During synthesis the synthesised layer of
         // `TraitEnv` is empty (it is rebuilt by `collect_synthesised_impls`
@@ -3056,13 +3064,13 @@ impl SynthesisCtx<'_, '_, '_> {
         // the AST layer.
         if self
             .trait_env
-            .impl_module_for(ImplReceiver::Declared(&crate::name::DeclName::new(type_name)), &trait_key.1, None)
+            .impl_module_for(receiver, &trait_key.1, None)
             .is_some()
         {
             return true;
         }
         self.pending.contains(&(
-            type_name.to_string(),
+            receiver.spelling(),
             self.module.clone(),
             trait_key.clone(),
         ))
@@ -4324,7 +4332,10 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
                        ctx: &SynthesisCtx<'_, '_, '_>,
                        tt: &mut TypeTable|
      -> bool {
-        if ctx.has_impl(type_name, &inspect_fq.canonical().expect(KEYED)) {
+        if ctx.has_impl(
+            ImplReceiver::Declared(&crate::name::DeclName::new(type_name)),
+            &inspect_fq.canonical().expect(KEYED),
+        ) {
             return true;
         }
         let mangled = MethodName::format_local(
@@ -5262,7 +5273,10 @@ fn generate_fallback_impls(
         if ctx.has_methodful_impl_anywhere(name, &pair.target_trait.canonical().expect(KEYED)) {
             return false;
         }
-        if ctx.has_impl(name, &pair.delegate_trait.canonical().expect(KEYED)) {
+        if ctx.has_impl(
+            ImplReceiver::Declared(&crate::name::DeclName::new(name)),
+            &pair.delegate_trait.canonical().expect(KEYED),
+        ) {
             return true;
         }
         let delegate_key = MethodName::format_local(
@@ -5484,7 +5498,10 @@ fn generate_fallback_impls(
             continue;
         }
         let delegate_present =
-            ctx.has_impl(&mangled, &pair.delegate_trait.canonical().expect(KEYED)) || {
+            ctx.has_impl(
+                ImplReceiver::Instantiated(&crate::name::MangledName::new(mangled.clone())),
+                &pair.delegate_trait.canonical().expect(KEYED),
+            ) || {
                 let delegate_key = format!(
                     "{mangled}^{}::{}",
                     pair.delegate_trait, pair.delegate_method
@@ -5531,7 +5548,10 @@ fn generate_fallback_impls(
             continue;
         }
         let delegate_present =
-            ctx.has_impl(&mangled, &pair.delegate_trait.canonical().expect(KEYED)) || {
+            ctx.has_impl(
+                ImplReceiver::Instantiated(&crate::name::MangledName::new(mangled.clone())),
+                &pair.delegate_trait.canonical().expect(KEYED),
+            ) || {
                 let delegate_key = format!(
                     "{mangled}^{}::{}",
                     pair.delegate_trait, pair.delegate_method

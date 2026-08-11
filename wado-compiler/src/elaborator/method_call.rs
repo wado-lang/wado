@@ -456,19 +456,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .is_none_or(|w| b.canonical().is_some_and(|k| k == w.decl))
                         })
                         .collect();
-                    let resolved: crate::hashmap::IndexMap<String, crate::name::FqTraitName> =
-                        named
-                            .iter()
-                            .map(|b| (b.base_name().to_string(), b.clone()))
-                            .collect();
+                    // Each rebuilt bound is paired with the identity it stands
+                    // for by its own id, not by its name: two same-named traits
+                    // from different modules are two bounds, and a by-name map
+                    // would collapse them back into one.
+                    let mut resolved: crate::hashmap::IndexMap<
+                        crate::ast::AstId,
+                        crate::name::FqTraitName,
+                    > = crate::hashmap::IndexMap::default();
                     let bounds: Vec<ast::TraitBound> = named
                         .iter()
-                        .map(|b| ast::TraitBound {
-                            id: crate::ast::AstId::fresh(),
-                            name: b.base_name().to_string(),
-                            assoc_types: Vec::new(),
-                            span,
-                            fn_signature: None,
+                        .map(|b| {
+                            let id = crate::ast::AstId::fresh();
+                            resolved.insert(id, b.clone());
+                            ast::TraitBound {
+                                id,
+                                name: b.base_name().to_string(),
+                                assoc_types: Vec::new(),
+                                span,
+                                fn_signature: None,
+                            }
                         })
                         .collect();
                     self.find_method_in_trait_bounds_with(

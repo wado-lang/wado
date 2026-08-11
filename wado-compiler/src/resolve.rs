@@ -383,12 +383,23 @@ impl AstVisitor for Resolver<'_> {
                 }
             }
             Type::NamespacedGeneric(ns) => {
-                // `ns::Type` and `T::Assoc` both land here: the namespace is
-                // either an import alias or a binder, and only the former names
-                // a module whose declaration this is.
+                // `ns::Type` and `T::Assoc` both land here. A namespace import
+                // registers each member under its `ns$member` alias, and that
+                // is the only spelling naming the declaration behind
+                // `ns::Type`. A binder namespace is an associated-type
+                // projection, which names no declaration — and neither does a
+                // namespace reaching no member. Resolving the bare member in
+                // the writing module instead would confidently answer with a
+                // different declaration that happens to share the name.
                 let answer = match self.binder(&ns.namespace) {
                     Some(_) => DeclRef::Unresolved,
-                    None => self.resolve_name(&ns.name),
+                    None => self
+                        .symbols
+                        .imported(
+                            self.module,
+                            &crate::name::namespace_member_alias(&ns.namespace, &ns.name),
+                        )
+                        .map_or(DeclRef::Unresolved, |sym| DeclRef::Decl(sym.defined_at)),
                 };
                 self.record(ns.id, answer);
                 for arg in &ns.args {

@@ -896,7 +896,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let resolutions = &self.tysys.resolutions;
         let answer = resolutions.get(site);
         debug_assert!(
-            answer.is_some(),
+            answer.is_some() || site.is_synthetic(),
             "every reference site is resolved before elaboration, `{written}` was not"
         );
         if let Some(crate::resolve::DeclRef::Binder(_)) = answer {
@@ -951,7 +951,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .and_then(|site| {
                 let resolutions = &self.tysys.resolutions;
                 debug_assert!(
-                    resolutions.get(site).is_some(),
+                    resolutions.get(site).is_some() || site.is_synthetic(),
                     "every reference site is resolved before elaboration, `{written}` was not"
                 );
                 match resolutions.get(site) {
