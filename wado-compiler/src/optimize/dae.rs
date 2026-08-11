@@ -48,12 +48,10 @@
 //! `^InspectAlt` impls, where the matching wrapper adapts to the
 //! shrunken signature. Everything else flows through the general path.
 //!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the function-body work
-//! (dead-param detection, call-site validation, local renumbering, call-site
-//! rewriting) reads and mutates the arena `Body` directly. Global initializers
-//! are arena `Body`s too (Phase 5 group 1a), so the same arena routines run on
-//! them directly.
+//! Runs over the arena `Body` (see `docs/wep-2026-06-05-nir-optimizer-architecture.md`):
+//! the function-body work (dead-param detection, call-site validation, local
+//! renumbering, call-site rewriting) reads and mutates it directly. Global
+//! initializers are arena bodies too, so the same routines run on them.
 
 use cranelift_entity::EntityRef;
 

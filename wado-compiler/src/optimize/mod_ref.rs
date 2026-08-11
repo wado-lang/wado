@@ -10,8 +10,8 @@
 //! Unrelated to Wado's algebraic-effect / `with`-clause machinery; this
 //! is the classical compiler-optimization notion (cf. LLVM
 //! `ModRefInfo`, GCC `mod` / `ref` sets). Lives at NIR because that's
-//! where every modref consumer in this compiler also lives (`cse`,
-//! `dae`, `dce`, `copy_prop`, `store_load_forward`, `alias`, and the
+//! where every modref consumer in this compiler also lives (`dae`,
+//! `dce`, `copy_prop`, `store_load_forward`, `alias`, and the
 //! `elide_box_local` pass that motivated v1).
 //!
 //! ## Client API

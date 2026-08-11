@@ -32,17 +32,17 @@
 //! `new_literal` / `push_literal` / `build` methods (and, for wrapper builders,
 //! the `push_literal → self.field.push` delegation) must be inlined first so
 //! the raw `List<T> { array_new } + List::push` window is exposed. Giving
-//! constant arrays this first-class, analyzable shape lets `cse`,
+//! constant arrays this first-class, analyzable shape lets hash-consing,
 //! `const_fold`, bounds-check elimination, and constant globalization act on
 //! them; `wir_build` lowers `ArrayLiteral` to `array.new_fixed`.
 //!
-//! Ported to the worklist rewrite engine (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a block-level
+//! Runs on the worklist rewrite engine (see
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a block-level
 //! [`Rule`]: the builder window is a run of sibling statements, so it collapses
 //! a block's statement list (`set_block_stmts`), reusing the existing element
 //! expression ids (their statements are dropped, so the ids are moved, not
-//! cloned). Nested blocks are separate worklist nodes processed bottom-up,
-//! matching the old visitor's recurse-then-collapse order.
+//! cloned). Nested blocks are separate worklist nodes processed bottom-up, so
+//! an inner block collapses before its enclosing one.
 
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::hashmap::{IndexMap, IndexSet};

@@ -24,12 +24,11 @@
 //! - Requires at least one observed call site (otherwise DCE will delete
 //!   the function anyway and there is nothing to optimise).
 //!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the function-body
-//! walks (purity check, call-site validation, void rewrite, call retype) read
-//! and mutate the arena `Body` directly. Global initializers are arena `Body`s
-//! too (Phase 5 group 1a), so their use-scan (`scan_node`) and retype
-//! (`retype_calls`) reuse the same arena routines.
+//! Runs over the arena `Body` (see `docs/wep-2026-06-05-nir-optimizer-architecture.md`):
+//! the function-body walks (purity check, call-site validation, void rewrite,
+//! call retype) read and mutate it directly. Global initializers are arena
+//! bodies too, so their use-scan (`scan_node`) and retype (`retype_calls`)
+//! reuse the same routines.
 
 use crate::hashmap::IndexSet;
 use crate::nir::{FunctionKind, NirFunction};

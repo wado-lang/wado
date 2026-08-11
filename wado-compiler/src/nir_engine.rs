@@ -5,7 +5,7 @@
 //! might be reducible, rather than the ~31 whole-tree passes the current
 //! optimizer runs in a global fixed point.
 //!
-//! See `docs/wep-2026-06-05-nir-rewrite-engine-design.md`.
+//! See `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 //!
 //! The module provides the full engine: the *session* (the parent map, the
 //! local use index, and the worklist, built once per function from a `Body`),
@@ -258,7 +258,7 @@ impl<'a> Engine<'a> {
             pure_builtin_callees: None,
         };
         // The value graph lives on `Body` and is built once, then maintained
-        // through every edit (`maintain_value_after_edit` / `redirect_expr`, plus
+        // through every edit (`replace_expr_with_value` / `redirect_expr`, plus
         // structural-pass coarsening). A new session reuses it as-is — there is
         // no session-start drop and no rebuild path (build-once is invariant).
         engine.build_parents();
@@ -275,35 +275,51 @@ impl<'a> Engine<'a> {
     /// # Maintenance contract
     ///
     /// The graph is built once and maintained in place — there is no rebuild.
-    /// Edits via the engine API (`replace_expr_kind` / `redirect_expr`) keep it
-    /// current through `maintain_value_after_edit`; a structural pass that edits
-    /// the arena directly (`inline`) coarsens the touched region, then regrows
-    /// each splice point's *constants* ([`crate::nir_value_graph::builder::build_scoped`]).
-    /// A query reflects the maintained state.
+    /// Edits via the engine API (`replace_expr_kind` / `redirect_expr`) keep the
+    /// operands current, and a query re-derives through them
+    /// ([`Engine::maintain_pure_node`]); a structural pass that edits the arena
+    /// directly (`inline`) coarsens the touched region, and a caller that needs
+    /// the reaching values back regrows them into a scratch pool
+    /// ([`Engine::scoped_const_reads`]).
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
-        // `value_of` retirement: the skeleton-expr → value side-table read is
-        // removed. An expr's value now comes only from promoted operands
-        // (born-as-operands) and pure re-derivation over them; an unpromoted leaf
-        // (`Local` / `FieldAccess`) resolves to `None`. Sound — `None` is the
-        // finest partition, so consumers (cse / store_load_forward / freeze) skip
-        // the expr rather than over-merge. The remaining red is the honest measure
-        // of how much the optimizer still depends on the side-table.
+        // There is no skeleton-expr → value side-table. An expr's value comes
+        // only from promoted operands (born-as-operands) and pure re-derivation
+        // over them; an unpromoted leaf (`Local` / `FieldAccess`) resolves to
+        // `None`. Sound — `None` is the finest partition, so a consumer skips the
+        // expr rather than over-merging it with another.
         self.maintain_pure_node(expr)
     }
 
     /// Re-derive `expr`'s value from its operands (the sole value source now
     /// that `value_of` is retired). Operand-determined kinds only (`Binary`,
-    /// non-address `Unary`, `Cast`); every other kind — and any node with an
-    /// unresolved operand — yields `None`. Recurses through
-    /// [`Engine::operand_value`] so a pure subtree over promoted leaves resolves
-    /// whole. Does not cache (there is no side-table to cache into).
+    /// non-address `Unary`, `Cast`) plus a read of a stable parameter; every
+    /// other kind — and any node with an unresolved operand — yields `None`.
+    /// Recurses through [`Engine::operand_value`] so a pure subtree over promoted
+    /// leaves resolves whole. Does not cache (there is no side-table to cache
+    /// into).
+    ///
+    /// The parameter base case is load-bearing: without it every leaf of an
+    /// unpromoted tree is `None`, so only all-constant trees ever resolve and
+    /// no promoted value can name a local.
     fn maintain_pure_node(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
         let result_ty = self.body.exprs[expr].type_id;
         let tt = self.vg_type_table;
         let v = match kind {
+            // One version-free `ValueId` per local is correct only where the
+            // local has one version: a parameter is entry-defined, so its def
+            // dominates every use, and unreassigned it holds one value.
+            ExprKind::Local { index, .. } => {
+                if !self.param_locals.contains(&index) {
+                    return None;
+                }
+                if self.locals().get(index as usize).is_none_or(|l| l.is_mut) {
+                    return None;
+                }
+                self.body.values.canonical_local(index, result_ty)
+            }
             ExprKind::Binary { left, op, right } => {
                 let lhs = self.operand_value(left)?;
                 let rhs = self.operand_value(right)?;
@@ -805,7 +821,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Edit API: promote the folded constant subtree `id` to an `Operand::Value`
-    /// in its parent (WEP: The Live `ValueGraph`). Interns `value` width-preserving
+    /// in its parent. Interns `value` width-preserving
     /// (carrying `id`'s recorded type) and swaps the parent's `Operand::Expr(id)`
     /// slot to the promoted value. `id`'s node is left orphaned (later DCE'd); its
     /// own `Local` mention, if any, is dropped from the use index, matching
@@ -942,7 +958,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Edit API: intern a fresh constant value into the function's pool and
-    /// return it as an `Operand::Value` (WEP: The Live `ValueGraph`). For passes
+    /// return it as an `Operand::Value`. For passes
     /// that synthesize a constant in an operand position (a method arg, an
     /// assigned value) without a source node.
     pub fn const_operand(
