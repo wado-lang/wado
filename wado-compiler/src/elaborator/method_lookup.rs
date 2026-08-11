@@ -2428,6 +2428,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect();
 
             let impl_offset = crate::tir::method_param_offset_of(impl_slots.keys().copied());
+            // Kept, not discarded: these are the method's parameters as this
+            // lookup matched them. Reporting them saves every consumer from
+            // rebuilding the same ids out of a counted offset.
+            let mut method_type_param_ids: Vec<TypeId> = Vec::new();
             for (i, type_param) in method_type_params.iter().enumerate() {
                 let index = impl_offset + i as u32;
                 let type_param_id =
@@ -2439,6 +2443,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             name: type_param.name.clone(),
                             index,
                         });
+                method_type_param_ids.push(type_param_id);
                 scope
                     .annotate_ctx
                     .trait_ctx
@@ -2523,7 +2528,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     owner: MethodOwner::Receiver,
                     cm_name: None,
                     is_ref_impl: false,
-                    method_type_param_ids: vec![],
+                    method_type_param_ids: method_type_param_ids.clone(),
                     impl_module: Some(impl_module_source.clone()),
                     from_concrete_impl: impl_is_concrete,
                     param_defaults,
