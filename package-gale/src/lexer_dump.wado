@@ -1,0 +1,569 @@
+//! `gale dump --lexer` rendering — per lexer rule, the matcher that covers its
+//! text and the emit strategy of every decision inside it.
+//!
+//! Each strategy is the value the emitter branches on (`lexer_rule_route`,
+//! `lexer_alts_emit`, `lexer_repeat_emit`, `lexer_group_emit` in
+//! `lexer_gen.wado`), so the report names the branch emission took rather than
+//! a re-derivation of it. The walk mirrors `gen_lexer_alt_seq`'s traversal —
+//! same tail propagation, and a non-recursive fragment is reported at each use
+//! site that inlines it (prefixed with the fragment name), so every construct
+//! appears where it is emitted.
+//!
+//! Not reported: a repeat nested directly under another repeat or a `~`. There
+//! is no sequence around such a position, so there is no strategy to pick — the
+//! emitter always writes the plain loop.
+
+use {
+    Grammar,
+    GrammarOption,
+    LexerRule,
+    LexerAlternative,
+    LexerElement,
+    CharClass,
+    LexerRepeatElement,
+} from "./ir.wado";
+use {
+    LitToken,
+    KeywordInfo,
+    LexerRuleRoute,
+    LexerAltsEmit,
+    LexerRepeatEmit,
+    LexerGroupEmit,
+    collect_literal_tokens,
+    collect_keyword_rules,
+    resolve_ci,
+    lexer_try_fn_name,
+    lexer_rule_route,
+    lexer_rule_is_called,
+    lexer_alts_emit,
+    lexer_repeat_emit,
+    lexer_group_emit,
+    lexer_alt_suffix,
+    lexer_alt_last_is_tail,
+    fragment_is_recursive,
+} from "./lexer_gen.wado";
+use { grammar_needs_latn, build_latn } from "./latn.wado";
+use { TreeMap } from "core:collections";
+
+/// Read-only inputs every walk step needs. Assembled once from the grammar,
+/// exactly as `generate` assembles them for `gen_lexer`.
+struct DumpCtx {
+    rules: List<LexerRule>,
+    grammar_opts: List<GrammarOption>,
+    keywords: List<KeywordInfo>,
+    lit_tokens: List<LitToken>,
+    grammar_ci: bool,
+    /// `name -> latn rule index` for the rules routed to the runtime lexer
+    /// simulator instead of a static matcher.
+    atn_class: TreeMap<String, i32>,
+}
+
+/// The report under construction: the text plus the per-strategy tallies the
+/// trailing summary prints. `scope` prefixes a decision line with the chain of
+/// inlined fragments it was reached through (empty in the rule's own body).
+struct DumpOut {
+    text: String,
+    scope: String = "",
+    route_matcher: i32 = 0,
+    route_keyword: i32 = 0,
+    route_literal: i32 = 0,
+    route_inlined_fragment: i32 = 0,
+    route_recursive_fragment: i32 = 0,
+    route_virtual: i32 = 0,
+    route_atn: i32 = 0,
+    repeat_plain: i32 = 0,
+    repeat_lookahead: i32 = 0,
+    repeat_non_greedy: i32 = 0,
+    group_first_match: i32 = 0,
+    group_arm_scoring: i32 = 0,
+    alts_first_match: i32 = 0,
+    alts_maximal_munch: i32 = 0,
+}
+
+/// Render the per-rule lexer emit report for a grammar.
+///
+/// Takes the surface `Grammar` alone: every input the lexer emitter reads is
+/// derived from it here the same way `generate` derives it, so the report
+/// cannot drift from the emit it describes.
+pub fn render_lexer_dump(grammar: &Grammar) -> String {
+    let empty_opts: List<GrammarOption> = [];
+    let ctx = DumpCtx {
+        rules: grammar.lexer_rules,
+        grammar_opts: grammar.options,
+        keywords: collect_keyword_rules(&grammar.lexer_rules, &grammar.options),
+        lit_tokens: collect_literal_tokens(&grammar.parser_rules),
+        grammar_ci: resolve_ci(&grammar.options, &empty_opts),
+        atn_class: latn_rule_indices(grammar),
+    };
+
+    let mut o = DumpOut {
+        text: String::with_capacity(256 + 192 * grammar.lexer_rules.len()),
+    };
+    o.text.push_str(&`grammar ${grammar.name} (lexer)\n\n`);
+    for let rule of &grammar.lexer_rules {
+        render_rule(&mut o, &ctx, rule);
+    }
+    render_summary(&mut o);
+    return o.text;
+}
+
+/// The lexer-ATN routing map, built exactly as `generate` builds it: nothing
+/// unless some rule is ATN-class, then one entry per such rule.
+fn latn_rule_indices(grammar: &Grammar) -> TreeMap<String, i32> {
+    let mut out = TreeMap::<String, i32>::new();
+    if !grammar_needs_latn(grammar) {
+        return out;
+    }
+    let latn = build_latn(grammar);
+    for let name of &latn.atn_class_rules {
+        if let Some(idx) = latn.rule_index.get(*name) {
+            out[*name] = idx;
+        }
+    }
+    return out;
+}
+
+fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule) {
+    let route = lexer_rule_route(
+        rule,
+        &ctx.rules,
+        &ctx.keywords,
+        &ctx.lit_tokens,
+        &ctx.grammar_opts,
+        ctx.grammar_ci,
+    );
+
+    o.text.push_str(&`rule ${rule.name} — `);
+    // An ATN-class rule has a matcher, but its body is one `latn_match` call:
+    // the static strategies below never apply to it.
+    if let Some(idx) = ctx.atn_class.get(rule.name) {
+        o.route_atn += 1;
+        o.text.push_str(&`ATN-class: latn_match (latn rule ${idx})\n`);
+        return;
+    }
+    count_route(o, &route);
+    o.text.push_str(&route_label(rule, &route));
+    o.text.push('\n');
+
+    if route_emits_body(&route) {
+        walk_rule_body(o, ctx, rule);
+    }
+}
+
+fn count_route(o: &mut DumpOut, route: &LexerRuleRoute) {
+    match route {
+        Matcher => o.route_matcher += 1,
+        RecursiveFragment => o.route_recursive_fragment += 1,
+        InlinedFragment => o.route_inlined_fragment += 1,
+        Virtual => o.route_virtual += 1,
+        Keyword(_) => o.route_keyword += 1,
+        SharedLiteral(_) => o.route_literal += 1,
+    }
+}
+
+fn route_label(rule: &LexerRule, route: &LexerRuleRoute) -> String {
+    let try_fn = lexer_try_fn_name(&rule.name);
+    return match route {
+        Matcher => `matcher ${try_fn}`,
+        RecursiveFragment => `recursive fragment: matcher ${try_fn}`,
+        InlinedFragment => "fragment: inlined at each use site",
+        Virtual => "virtual token: no text to match",
+        Keyword(k) => `keyword classifier (carrier ${k.carrier})${also_matcher_suffix(k.also_matcher, &try_fn)}`,
+        SharedLiteral(l) => `shared literal matcher (${l.const_name})${also_matcher_suffix(l.also_matcher, &try_fn)}`,
+    };
+}
+
+/// A rule another lexer rule calls keeps its own matcher on top of whatever
+/// already covers its text.
+fn also_matcher_suffix(also: bool, try_fn: &String) -> String {
+    if !also {
+        return "";
+    }
+    return ` + matcher ${*try_fn} (another rule calls it)`;
+}
+
+/// Whether the rule's body is emitted somewhere, so its decisions belong under
+/// this entry. An inlined fragment's are reported at its use sites instead.
+fn route_emits_body(route: &LexerRuleRoute) -> bool {
+    return match route {
+        Matcher | RecursiveFragment => true,
+        Virtual | InlinedFragment => false,
+        Keyword(k) => k.also_matcher,
+        SharedLiteral(l) => l.also_matcher,
+    };
+}
+
+// ==========================================================================
+// The walk — mirrors gen_lexer_alt_seq / gen_lexer_alts / gen_lexer_elem
+// ==========================================================================
+
+fn walk_rule_body(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule) {
+    let ci = resolve_ci(&ctx.grammar_opts, &rule.options);
+    // A rule reached by call is entered with its caller's suffix still to
+    // consume, so its body alternation is not in tail position.
+    let tail = !lexer_rule_is_called(rule, &ctx.rules);
+    if rule.body.len() == 1 {
+        walk_alt(o, ctx, &rule.body[0], ci, tail);
+    } else {
+        walk_alts(o, ctx, &rule.body, ci, tail, /*top=*/ true);
+    }
+}
+
+/// `top` is the rule's own body alternation, which is reported even when it is
+/// not in tail position — that a rule's alternation cannot take maximal munch
+/// is the answer someone asks this dump for. A nested one in the same position
+/// stays quiet: the construct that encloses it already reported the decision.
+fn walk_alts(o: &mut DumpOut, ctx: &DumpCtx, alts: &List<LexerAlternative>, ci: bool, tail: bool, top: bool) {
+    let emit = lexer_alts_emit(alts, &ctx.rules, tail);
+    if top || !emit matches { FirstMatchNotTail } {
+        if emit matches { MaximalMunch } {
+            o.alts_maximal_munch += 1;
+        } else {
+            o.alts_first_match += 1;
+        }
+        decision_line(o, &`alternation ${alts_text(alts, 0)} — ${alts_emit_label(emit)}`);
+    }
+    // Maximal munch scans every arm to its end, so each arm inherits the tail
+    // position; first-match does not (`gen_lexer_alts`).
+    let arm_tail = emit matches { MaximalMunch };
+    for let alt of alts {
+        walk_alt(o, ctx, alt, ci, arm_tail);
+    }
+}
+
+fn walk_alt(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, ci: bool, tail: bool) {
+    let last_is_tail = lexer_alt_last_is_tail(alt, tail);
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        let elem = &alt.elements[i];
+        if let Repeat(rep) = elem {
+            if walk_repeat(o, ctx, alt, i, rep, ci, last_is_tail) {
+                return;
+            }
+            continue;
+        }
+        if let Group(g_alts) = elem {
+            let emit = lexer_group_emit(alt, i, &ctx.rules, ci);
+            // `SingleArm` is not an alternation and `NoSuffix` is the
+            // tail-alternation decision, reported by `walk_alts` instead.
+            if !emit matches { FirstMatchSingleArm | FirstMatchNoSuffix } {
+                if emit matches { ArmScoring } {
+                    o.group_arm_scoring += 1;
+                } else {
+                    o.group_first_match += 1;
+                }
+                decision_line(
+                    o,
+                    &`alternation ${alts_text(g_alts, 0)}${suffix_text(alt, i)} — ${group_emit_label(emit)}`,
+                );
+            }
+            if emit matches { ArmScoring } {
+                // Each arm is scanned match-only, then the suffix is peeked
+                // from where the arm ended (`gen_lexer_alts_lookahead_aware`).
+                for let g of g_alts {
+                    walk_alt(o, ctx, g, ci, false);
+                }
+                walk_suffix(o, ctx, alt, i, ci, last_is_tail);
+                continue;
+            }
+        }
+        walk_elem(o, ctx, elem, ci, last_is_tail && i == alt.elements.len() - 1);
+    }
+}
+
+/// Report and walk the repeat at `alt.elements[index]`. Returns true when the
+/// emit consumed the rest of the alternative, so the caller stops iterating.
+fn walk_repeat(
+    o: &mut DumpOut,
+    ctx: &DumpCtx,
+    alt: &LexerAlternative,
+    index: i32,
+    rep: &LexerRepeatElement,
+    ci: bool,
+    last_is_tail: bool,
+) -> bool {
+    let emit = lexer_repeat_emit(alt, index, &ctx.rules, ci);
+    match emit {
+        NonGreedy => {
+            o.repeat_non_greedy += 1;
+        },
+        LookaheadAware => {
+            o.repeat_lookahead += 1;
+        },
+        PlainOptional | PlainNoSuffix | PlainInnerNotPerChar | PlainPredicateAfter | PlainSuffixDisjoint | PlainSuffixNotPeekable => {
+            o.repeat_plain += 1;
+        },
+    }
+    decision_line(
+        o,
+        &`repeat ${elem_text(&alt.elements[index], 0)}${suffix_text(alt, index)} — ${repeat_emit_label(emit)}`,
+    );
+
+    // Every emit runs the inner as its own loop body, so nothing of the
+    // alternative follows it there.
+    walk_elem(o, ctx, &rep.element, ci, false);
+    match emit {
+        // The rest of the alt is tried before each extra iteration, outside
+        // tail position (`gen_lexer_non_greedy_repeat`).
+        NonGreedy => {
+            walk_suffix(o, ctx, alt, index, ci, false);
+            return true;
+        },
+        // The forward scan peeks the suffix at every accept position, so the
+        // suffix carries the alt's tail position (`gen_lexer_repeat_lookahead_aware`).
+        LookaheadAware => {
+            walk_suffix(o, ctx, alt, index, ci, last_is_tail);
+            return true;
+        },
+        // The suffix stays part of the sequence; the caller walks on.
+        PlainOptional | PlainNoSuffix | PlainInnerNotPerChar | PlainPredicateAfter | PlainSuffixDisjoint | PlainSuffixNotPeekable => {
+            return false;
+        },
+    }
+}
+
+/// The ` then <suffix>` a decision line carries, so the reason it gives can be
+/// read against the thing it is about. Empty when nothing follows.
+fn suffix_text(alt: &LexerAlternative, index: i32) -> String {
+    let suffix = lexer_alt_suffix(alt, index);
+    if suffix.is_empty() {
+        return "";
+    }
+    return ` then ${alt_text(&LexerAlternative { elements: suffix }, 0)}`;
+}
+
+/// Walk what follows `alt.elements[index]` as the sequence it is lowered as
+/// (`gen_lexer_suffix_seq`).
+fn walk_suffix(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: i32, ci: bool, tail: bool) {
+    let suffix = LexerAlternative { elements: lexer_alt_suffix(alt, index) };
+    walk_alt(o, ctx, &suffix, ci, tail);
+}
+
+fn walk_elem(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, ci: bool, tail: bool) {
+    match *elem {
+        Group(alts) => {
+            if alts.len() == 1 {
+                walk_alt(o, ctx, &alts[0], ci, tail);
+            } else {
+                walk_alts(o, ctx, &alts, ci, tail, /*top=*/ false);
+            }
+        },
+        // A repeat reached here runs its own loop, so nothing follows its inner
+        // within it (`gen_lexer_repeat`).
+        Repeat(rep) => walk_elem(o, ctx, &rep.element, ci, false),
+        Not(n) => walk_elem(o, ctx, &n.element, ci, false),
+        RuleRef(name) => {
+            if name == "EOF" {
+                return;
+            }
+            // A non-recursive fragment is inlined here, carrying this site's
+            // tail position; everything else lowers to a call.
+            let Some(frag) = find_inlined_fragment(&ctx.rules, &name) else {
+                return;
+            };
+            let saved = o.scope;
+            o.scope = `${o.scope}${name} › `;
+            if frag.body.len() == 1 {
+                walk_alt(o, ctx, &frag.body[0], ci, tail);
+            } else {
+                walk_alts(o, ctx, &frag.body, ci, tail, /*top=*/ false);
+            }
+            o.scope = saved;
+        },
+        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => {
+        },
+    }
+}
+
+fn find_inlined_fragment(rules: &List<LexerRule>, name: &String) -> Option<LexerRule> {
+    for let r of rules {
+        if r.name == *name && r.is_fragment && !fragment_is_recursive(r, rules) {
+            return Option::<LexerRule>::Some(*r);
+        }
+    }
+    return null;
+}
+
+fn decision_line(o: &mut DumpOut, text: &String) {
+    o.text.push_str(&"  ");
+    o.text.push_str(&o.scope);
+    o.text.push_str(text);
+    o.text.push('\n');
+}
+
+// ==========================================================================
+// Strategy labels
+// ==========================================================================
+
+fn alts_emit_label(emit: LexerAltsEmit) -> String {
+    return match emit {
+        MaximalMunch => "maximal munch: every arm scanned from the same start, longest wins",
+        FirstMatchNotTail => "first-match: not in tail position, a longer arm could strand what follows",
+        FirstMatchSingleArm => "first-match: one arm",
+        FirstMatchFixedLenArms => "first-match: every arm consumes the same fixed length",
+        FirstMatchArmPredicate => "first-match: an arm carries a semantic predicate",
+    };
+}
+
+fn group_emit_label(emit: LexerGroupEmit) -> String {
+    return match emit {
+        ArmScoring => "arm scoring: each arm scored on how far arm-plus-suffix reaches",
+        FirstMatchSingleArm => "first-match: one arm",
+        FirstMatchNoSuffix => "first-match: nothing follows",
+        FirstMatchFixedLenArms => "first-match: every arm consumes the same fixed length",
+        FirstMatchArmPredicate => "first-match: an arm carries a semantic predicate",
+        FirstMatchArmsDisjoint => "first-match: no two arms can match at the same position",
+        FirstMatchPredicateAfter => "first-match: a semantic predicate follows the alternation",
+        FirstMatchSuffixNotPeekable => "first-match: the suffix carries a semantic predicate, so it cannot be peeked",
+    };
+}
+
+fn repeat_emit_label(emit: LexerRepeatEmit) -> String {
+    return match emit {
+        NonGreedy => "non-greedy: min-match loop, the rest of the alternative is tried first",
+        LookaheadAware => "lookahead-aware: the inner can eat a char the suffix needs",
+        PlainOptional => "plain loop: one optional element, no loop to overshoot with",
+        PlainNoSuffix => "plain loop: nothing follows the repeat",
+        PlainInnerNotPerChar => "plain loop: the inner does not consume exactly one char per iteration",
+        PlainPredicateAfter => "plain loop: a semantic predicate follows the repeat",
+        PlainSuffixDisjoint => "plain loop: the inner cannot eat the suffix's first char",
+        PlainSuffixNotPeekable => "plain loop: the suffix carries a semantic predicate, so it cannot be peeked",
+    };
+}
+
+// ==========================================================================
+// Summary
+// ==========================================================================
+
+fn render_summary(o: &mut DumpOut) {
+    let routes = `routes: matcher ${o.route_matcher}, keyword classifier ${o.route_keyword}, shared literal ${o.route_literal}, inlined fragment ${o.route_inlined_fragment}, recursive fragment ${o.route_recursive_fragment}, virtual ${o.route_virtual}, ATN-class ${o.route_atn}`;
+    let repeats = `greedy repeat: plain ${o.repeat_plain}, lookahead-aware ${o.repeat_lookahead}; non-greedy repeat: ${o.repeat_non_greedy}`;
+    let groups = `alternation + suffix: first-match ${o.group_first_match}, arm scoring ${o.group_arm_scoring}`;
+    let alts = `alternation: first-match ${o.alts_first_match}, maximal munch ${o.alts_maximal_munch}`;
+    o.text.push_str(&`\nstrategies:\n  ${routes}\n  ${repeats}\n  ${groups}\n  ${alts}\n`);
+}
+
+// ==========================================================================
+// Element rendering — a short g4-shaped label so a line names its construct
+// ==========================================================================
+
+/// Nesting past this renders as `…`: the label identifies a construct, it does
+/// not reproduce the grammar.
+global ELEM_TEXT_MAX_DEPTH: i32 = 3;
+
+/// A `[\p{L}]`-style class is hundreds of ranges; enough of them to recognize
+/// the class is enough.
+global ELEM_TEXT_MAX_RANGES: i32 = 6;
+
+fn alts_text(alts: &List<LexerAlternative>, depth: i32) -> String {
+    let mut s = String::with_capacity(24);
+    s.push('(');
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i > 0 {
+            s.push_str(&" | ");
+        }
+        s.push_str(&alt_text(&alts[i], depth));
+    }
+    s.push(')');
+    return s;
+}
+
+fn alt_text(alt: &LexerAlternative, depth: i32) -> String {
+    if alt.elements.is_empty() {
+        return "ε";
+    }
+    let mut s = String::with_capacity(16);
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        if i > 0 {
+            s.push(' ');
+        }
+        s.push_str(&elem_text(&alt.elements[i], depth));
+    }
+    return s;
+}
+
+fn elem_text(elem: &LexerElement, depth: i32) -> String {
+    if depth > ELEM_TEXT_MAX_DEPTH {
+        return "…";
+    }
+    return match *elem {
+        Literal(text) => literal_text(&text),
+        CharRange(pair) => {
+            let mut s = String::with_capacity(8);
+            push_quoted_char(&mut s, pair.0);
+            s.push_str(&"..");
+            push_quoted_char(&mut s, pair.1);
+            s;
+        },
+        CharClass(cc) => char_class_text(&cc),
+        AnyChar => ".",
+        RuleRef(name) => name,
+        Group(alts) => alts_text(&alts, depth + 1),
+        Repeat(rep) => `${elem_text(&rep.element, depth)}${repeat_suffix(&rep)}`,
+        Not(n) => `~${elem_text(&n.element, depth)}`,
+    };
+}
+
+fn repeat_suffix(rep: &LexerRepeatElement) -> String {
+    let kind = match rep.kind {
+        Star => "*",
+        Plus => "+",
+        Optional => "?",
+    };
+    return if rep.non_greedy { `${kind}?` } else { kind };
+}
+
+fn literal_text(text: &String) -> String {
+    let mut s = String::with_capacity(text.len() + 2);
+    s.push('\'');
+    for let c of text.chars() {
+        push_escaped_char(&mut s, c);
+    }
+    s.push('\'');
+    return s;
+}
+
+fn char_class_text(cc: &CharClass) -> String {
+    let mut s = String::with_capacity(16);
+    if cc.negated {
+        s.push('~');
+    }
+    s.push('[');
+    for let mut i = 0; i < cc.ranges.len(); i += 1 {
+        if i >= ELEM_TEXT_MAX_RANGES {
+            s.push('…');
+            break;
+        }
+        let r = &cc.ranges[i];
+        push_escaped_char(&mut s, r.start);
+        if r.end != r.start {
+            s.push('-');
+            push_escaped_char(&mut s, r.end);
+        }
+    }
+    s.push(']');
+    return s;
+}
+
+fn push_quoted_char(s: &mut String, c: char) {
+    s.push('\'');
+    push_escaped_char(s, c);
+    s.push('\'');
+}
+
+fn push_escaped_char(s: &mut String, c: char) {
+    match c {
+        '\n' => s.push_str(&"\\n"),
+        '\r' => s.push_str(&"\\r"),
+        '\t' => s.push_str(&"\\t"),
+        '\\' => s.push_str(&"\\\\"),
+        '\'' => s.push_str(&"\\'"),
+        _ => {
+            let code = c as i32;
+            if code < 0x20 || code == 0x7F {
+                s.push_str(&`\\u{${code:x}}`);
+            } else {
+                s.push(c);
+            }
+        },
+    }
+}
