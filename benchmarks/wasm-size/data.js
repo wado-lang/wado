@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786446386465,
+  "lastUpdate": 1786461066776,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47269,6 +47269,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2f5fecff6147e033773fc3e829a60498d3743df7"
         },
         "date": 1786446385669,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267689,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "01e193b251c499ab546d71778cbb32269dc71a2d",
+          "message": "Merge pull request #1792 from wado-lang/claude/ci-config-optimization-d0q468\n\nchore(ci): publish the shared build cache, and test Wado at -O2",
+          "timestamp": "2026-08-11T23:58:30+09:00",
+          "tree_id": "7853ba6fb46c4496987d337d8cbc55f38b766a60",
+          "url": "https://github.com/wado-lang/wado/commit/01e193b251c499ab546d71778cbb32269dc71a2d"
+        },
+        "date": 1786461065893,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
