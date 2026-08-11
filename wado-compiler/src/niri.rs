@@ -190,6 +190,9 @@ impl EditSink for BodySink<'_> {
         self.body
     }
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
+        // Not an edit-API rewrite: the engine's parent map and use index no
+        // longer describe this body.
+        self.body.invalidate_engine_index();
         self.body.exprs[e].kind = kind;
     }
     fn replace_with_value(&mut self, _e: ExprId, _value: Value) -> bool {
@@ -200,6 +203,9 @@ impl EditSink for BodySink<'_> {
     }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         let node = self.body.exprs[src].clone();
+        // Not an edit-API rewrite: the engine's parent map and use index no
+        // longer describe this body.
+        self.body.invalidate_engine_index();
         self.body.exprs[dst] = node;
     }
     fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId {
@@ -216,6 +222,9 @@ impl EditSink for BodySink<'_> {
         self.body.blocks.push(BlockNode { stmts, span })
     }
     fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>) {
+        // Not an edit-API rewrite: the engine's parent map and use index no
+        // longer describe this body.
+        self.body.invalidate_engine_index();
         self.body.blocks[block].stmts = stmts;
     }
 }

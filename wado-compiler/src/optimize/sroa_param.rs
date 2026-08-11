@@ -75,6 +75,9 @@ fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
     if id == src {
         return;
     }
+    // Not an edit-API rewrite: the engine's parent map and use index no
+    // longer describe this body.
+    body.invalidate_engine_index();
     body.exprs[id] = body.take_expr(src);
 }
 
@@ -699,6 +702,9 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[u32]) {
         if let Some(inner) = local_inner {
             // The node keeps its (field-scalar) type_id / span; its kind becomes
             // the inner Local.
+            // Not an edit-API rewrite: the engine's parent map and use index no
+            // longer describe this body.
+            body.invalidate_engine_index();
             body.exprs[id].kind = body.exprs[inner].kind.clone();
             return;
         }
@@ -921,6 +927,9 @@ fn rewrite_arg(
     // Case 3: general — extract the field via FieldAccess.
     let moved = body.take_expr(arg);
     let orig = body.exprs.push(moved);
+    // Not an edit-API rewrite: the engine's parent map and use index no
+    // longer describe this body.
+    body.invalidate_engine_index();
     body.exprs[arg].kind = ExprKind::FieldAccess {
         expr: orig.into(),
         field_index: 0,

@@ -36,7 +36,7 @@
 
 use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::tir::TypeTable;
@@ -105,7 +105,6 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
         Vec::new()
     };
     let type_table = project.type_table.borrow();
-    let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -118,7 +117,7 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
         let stores_aliased = func.stores_aliased_locals.clone();
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, locals);
         engine.set_value_graph_type_table(&type_table);
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);

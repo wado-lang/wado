@@ -220,7 +220,6 @@ mod tests {
 
     use crate::nir::NirLocal;
     use crate::nir_arena::{BlockNode, Body, StmtNode};
-    use crate::nir_engine::EngineBuffers;
     use crate::tir::TypeTable;
     use crate::token::Span;
 
@@ -267,8 +266,7 @@ mod tests {
         let stores_aliased = IndexSet::default();
         // No callees in these bodies, so the summaries are unused.
         let rule = ElideRule::new(&stores_aliased, &[]);
-        let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, locals);
         engine.run(&[&rule]);
     }
 

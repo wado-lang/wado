@@ -28,7 +28,7 @@ use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -200,7 +200,6 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let panic_ids = super::condition_implication::resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::Licm, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         if func.body.is_none() {
@@ -229,7 +228,7 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             &call_immutability,
         );
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, locals);
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
@@ -576,7 +575,7 @@ fn candidate_root_ty(engine: &Engine, local_index: u32, fallback: TypeId) -> Typ
 
 /// Hoist a field read `s.f` blocked *only* by an opaque `&mut`-call clobber of
 /// `s`'s pointee type — a may-alias the compiler cannot rule out (e.g.
-/// `write_escaped_string(&mut buf, &s)` where a caller could pass `buf === s`).
+/// `write_escaped_string(&s)` where a caller could pass `buf === s`).
 /// Such a read is invariant on every clobber-free path, so it moves to the
 /// pre-header and is reloaded after each clobbering statement: the common path
 /// reads the pre-header local, a genuine alias still observes the fresh field.

@@ -29,7 +29,7 @@
 
 use crate::nir::NirFunction;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
 use super::arena_query::has_break_to;
@@ -58,14 +58,13 @@ pub fn prune_template_block_wrappers(project: &mut NirPackage) -> bool {
 fn run_rule(project: &mut NirPackage, mode: PruneMode) -> bool {
     let rule = BranchPruneRule::new(mode);
     let mut changed = false;
-    let mut buffers = EngineBuffers::default();
     let type_table = project.type_table.borrow();
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
         if let Some(body) = body.as_mut() {
-            let mut engine = Engine::new(body, &mut buffers, locals);
+            let mut engine = Engine::new(body, locals);
             // A pruned break value that is a promoted constant is re-materialized.
             engine.set_value_graph_type_table(&type_table);
             engine.set_pure_builtin_callees(&pure_builtin_callees);

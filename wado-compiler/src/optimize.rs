@@ -321,6 +321,19 @@ pub fn optimize(
     // The born-resolved invariant is now enforced by the type system: a call
     // node's `func_id` is a non-optional `FuncId`, stamped at its synthesis site.
 
+    // TEMPORARY counters — revert before commit.
+    if crate::trace::filter().enabled("engine_reuse") {
+        use std::sync::atomic::Ordering::Relaxed;
+        let hit = crate::nir_engine::REUSE_HIT.load(Relaxed);
+        let miss = crate::nir_engine::REUSE_MISS.load(Relaxed);
+        crate::compiler_trace!(
+            "engine_reuse",
+            "sessions={} reuse={hit} rebuild={miss} ({:.1}% reused)",
+            hit + miss,
+            if hit + miss == 0 { 0.0 } else { 100.0 * hit as f64 / (hit + miss) as f64 }
+        );
+    }
+
     project
 }
 

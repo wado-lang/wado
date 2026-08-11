@@ -2441,7 +2441,13 @@ fn drop_unobserved_stmts(
             kept.push(s);
         }
     }
+    // Not an edit-API rewrite: the engine's parent map and use index no
+    // longer describe this body.
+    body.invalidate_engine_index();
     body.blocks[block].stmts = kept;
+    // Reseating a statement list leaves the parent map describing the old
+    // shape, and the arena did not grow, so the length check cannot see it.
+    body.invalidate_engine_index();
 }
 
 /// Union every `(module_key, global_name)` pair read by some reachable
@@ -2545,7 +2551,13 @@ fn remove_dead_global_sets_block(
         }
         new_stmts.push(s);
     }
+    // Not an edit-API rewrite: the engine's parent map and use index no
+    // longer describe this body.
+    body.invalidate_engine_index();
     body.blocks[block].stmts = new_stmts;
+    // Reseating a statement list leaves the parent map describing the old
+    // shape, and the arena did not grow, so the length check cannot see it.
+    body.invalidate_engine_index();
 }
 
 fn remove_dead_global_sets_stmt(
@@ -2690,7 +2702,13 @@ mod tests {
             kind: StmtKind::Expr(Operand::Value(stale)),
             span: Span::default(),
         });
+        // Not an edit-API rewrite: the engine's parent map and use index no
+        // longer describe this body.
+        body.invalidate_engine_index();
         body.blocks[body.root].stmts = vec![live];
+        // Reseating a statement list leaves the parent map describing the old
+        // shape, and the arena did not grow, so the length check cannot see it.
+        body.invalidate_engine_index();
 
         let mentioned = mentioned_locals(&body);
         assert!(mentioned.contains(&3));

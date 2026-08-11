@@ -283,12 +283,10 @@ pub(super) fn freeze_pure_arith(
     early: bool,
 ) -> bool {
     use crate::nir::NirFunction;
-    use crate::nir_engine::EngineBuffers;
     let type_table = project.type_table.borrow();
     let first_param_types = super::alias::first_param_types(project);
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -334,7 +332,7 @@ pub(super) fn freeze_pure_arith(
         let mut_escaped_leaf = mut_escaped.clone();
         let pure_calls =
             super::alias::pure_calls(body, &type_table, &first_param_types, &call_immutability);
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, locals);
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
@@ -773,7 +771,7 @@ mod tests {
     use super::*;
     use crate::nir::{NirBinaryOp, NirLocal};
     use crate::nir_arena::{BlockNode, Body, ExprNode, StmtKind, StmtNode};
-    use crate::nir_engine::{EngineBuffers, Rule};
+    use crate::nir_engine::{Rule};
     use crate::tir::TypeTable;
     use crate::token::Span;
 
@@ -824,9 +822,8 @@ mod tests {
             span: Span::default(),
         });
 
-        let mut buf = EngineBuffers::default();
         let mut locals: Vec<NirLocal> = Vec::new();
-        let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let mut eng = Engine::new(&mut body, &mut locals);
         let rule = ExtractLiteralRule;
         let rules: Vec<&dyn Rule> = vec![&rule];
         let changed = eng.run(&rules);
@@ -868,9 +865,8 @@ mod tests {
         let (s1, _filler) = read_stmt(&mut body, "f");
         let (s2, u2) = read_stmt(&mut body, "a");
         body.root = block(&mut body, vec![s0, s1, s2]);
-        let mut buf = EngineBuffers::default();
         let mut locals: Vec<NirLocal> = Vec::new();
-        let eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let eng = Engine::new(&mut body, &mut locals);
         // Uses at positions 0 and 2 -> insert before position 0.
         let (s, b) = materialise_point(&eng, &[u2, u0]).unwrap();
         assert_eq!(b, eng.body.root);
@@ -904,9 +900,8 @@ mod tests {
         });
         let (lead_s, _lead) = read_stmt(&mut body, "lead");
         body.root = block(&mut body, vec![lead_s, if_s]);
-        let mut buf = EngineBuffers::default();
         let mut locals: Vec<NirLocal> = Vec::new();
-        let eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let eng = Engine::new(&mut body, &mut locals);
         let (s, b) = materialise_point(&eng, &[tu, eu]).unwrap();
         // Common dominator is the root block, at the `if` statement (position 1),
         // not inside either branch.
@@ -939,9 +934,8 @@ mod tests {
         });
         let (outer_s, outer_u) = read_stmt(&mut body, "a");
         body.root = block(&mut body, vec![outer_s, if_s]);
-        let mut buf = EngineBuffers::default();
         let mut locals: Vec<NirLocal> = Vec::new();
-        let eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let eng = Engine::new(&mut body, &mut locals);
         let (s, b) = materialise_point(&eng, &[tu, outer_u]).unwrap();
         assert_eq!(b, eng.body.root);
         assert_eq!(s, outer_s);
@@ -973,9 +967,8 @@ mod tests {
             span: Span::default(),
         });
         body.root = block(&mut body, vec![if_s]);
-        let mut buf = EngineBuffers::default();
         let mut locals: Vec<NirLocal> = Vec::new();
-        let eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let eng = Engine::new(&mut body, &mut locals);
         let (s, b) = materialise_point(&eng, &[bu2, bu0]).unwrap();
         assert_eq!(b, then_b);
         assert_eq!(s, b0);

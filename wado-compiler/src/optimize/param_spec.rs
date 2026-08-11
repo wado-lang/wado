@@ -59,7 +59,7 @@ use cranelift_entity::EntityRef;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind};
-use crate::nir_engine::{Engine, EngineBuffers};
+use crate::nir_engine::{Engine};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -962,8 +962,7 @@ fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize
     }
 
     let body = clone.body.as_mut().expect("specialized callee has a body");
-    let mut buffers = EngineBuffers::default();
-    substitute_fields(body, &mut clone.locals, &mut buffers, &bound);
+    substitute_fields(body, &mut clone.locals, &bound);
 
     let types = project.type_table.borrow();
     let param_consts: IndexMap<String, ParamSeed> = clone
@@ -1036,10 +1035,9 @@ fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bo
 fn substitute_fields(
     body: &mut Body,
     locals: &mut Vec<crate::nir::NirLocal>,
-    buffers: &mut EngineBuffers,
     bindings: &IndexMap<u32, FieldConsts>,
 ) {
-    let mut engine = Engine::new(body, buffers, locals);
+    let mut engine = Engine::new(body, locals);
     let mut reads: Vec<(ExprId, FieldConst)> = Vec::new();
     for_each_reachable(engine.body, |node| {
         let NodeRef::Expr(id) = node else {

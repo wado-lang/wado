@@ -497,9 +497,60 @@ pub struct Body {
     /// per-`Engine`-session cache (build-once). `None`
     /// until the first value query builds it.
     pub value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
+    /// The engine's parent map, use index, and post-order seed, persisted
+    /// between sessions so a pass reuses the previous pass's walk. Taken by
+    /// [`crate::nir_engine::Engine::new`] and put back when the session drops.
+    pub engine_index: EngineIndex,
+}
+
+/// [`Body::engine_index`]'s slot. A newtype only so that cloning a body yields
+/// an empty one: the clone is a different body, and `inline` renumbers the
+/// copy's locals, so the source's use index would describe neither.
+#[derive(Default)]
+pub struct EngineIndex(Option<crate::nir_engine::EngineBuffers>);
+
+impl EngineIndex {
+    /// Take the index for a session, leaving the slot empty so a nested session
+    /// over the same body derives its own rather than aliasing this one.
+    pub fn take(&mut self) -> Option<crate::nir_engine::EngineBuffers> {
+        self.0.take()
+    }
+
+    /// Put a session's index back.
+    pub fn put(&mut self, buffers: crate::nir_engine::EngineBuffers) {
+        self.0 = Some(buffers);
+    }
+
+    /// Drop the index, forcing the next session to derive one.
+    pub fn clear(&mut self) {
+        self.0 = None;
+    }
+}
+
+impl Clone for EngineIndex {
+    fn clone(&self) -> Self {
+        Self(None)
+    }
+}
+
+impl std::fmt::Debug for EngineIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EngineIndex")
+            .field("present", &self.0.is_some())
+            .finish()
+    }
 }
 
 impl Body {
+    /// Drop the persisted engine index. A pass that rewrites the arena without
+    /// going through the engine's edit API — reseating a block's statement list,
+    /// say — leaves the parent map and use index describing the old shape, and
+    /// an arena that did not grow is one [`crate::nir_engine::Engine::new`]'s
+    /// length check cannot catch.
+    pub fn invalidate_engine_index(&mut self) {
+        self.engine_index.clear();
+    }
+
     /// The type of an operand: the expr's `type_id` for `Operand::Expr`, or the
     /// promoted value's recorded source type for `Operand::Value` (WEP: operand
     /// promotion). Panics if a promoted value has no recorded type (a builder
@@ -551,6 +602,7 @@ impl Body {
             stores_aliased_locals: IndexSet::default(),
             values: ValuePool::new(),
             value_graph: None,
+            engine_index: EngineIndex::default(),
         }
     }
 
@@ -572,6 +624,7 @@ impl Body {
             // Scratch clone (niri CTFE): the value graph is a per-function
             // optimizer artifact and is not carried into a node-only working copy.
             value_graph: None,
+            engine_index: EngineIndex::default(),
         }
     }
 

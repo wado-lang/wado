@@ -497,7 +497,13 @@ fn scalarize_block(
         }
     }
 
+    // Not an edit-API rewrite: the engine's parent map and use index no
+    // longer describe this body.
+    body.invalidate_engine_index();
     body.blocks[block].stmts = new_stmts;
+    // Reseating a statement list leaves the parent map describing the old
+    // shape, and the arena did not grow, so the length check cannot see it.
+    body.invalidate_engine_index();
     changed
 }
 
@@ -1900,6 +1906,9 @@ fn append_sync_preserving_block_value(
     body.blocks[block].stmts.extend(sync_stmts);
     let trailing_sid = push_stmt(body, StmtKind::Expr(value_after), last_span);
     body.blocks[block].stmts.push(trailing_sid);
+    // Reseating a statement list leaves the parent map describing the old
+    // shape, and the arena did not grow, so the length check cannot see it.
+    body.invalidate_engine_index();
     for (idx, ty) in temps {
         ctx.free_temp(idx, ty);
     }
@@ -1950,7 +1959,13 @@ fn walk_block(body: &mut Body, block: BlockId, states: &mut ScalarStates, ctx: &
         any_effects |= ctx.interior_effects;
     }
     ctx.interior_effects = enclosing_effects || any_effects;
+    // Not an edit-API rewrite: the engine's parent map and use index no
+    // longer describe this body.
+    body.invalidate_engine_index();
     body.blocks[block].stmts = new_stmts;
+    // Reseating a statement list leaves the parent map describing the old
+    // shape, and the arena did not grow, so the length check cannot see it.
+    body.invalidate_engine_index();
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2026,6 +2041,9 @@ fn walk_stmt(
                     capture_for_sync(body, ctx, return_value, &assigned, span);
                 out.extend(bindings);
                 out.extend(sync);
+                // Not an edit-API rewrite: the engine's parent map and use index no
+                // longer describe this body.
+                body.invalidate_engine_index();
                 body.stmts[sid].kind = StmtKind::Return {
                     value: Some(new_value),
                 };
@@ -2088,6 +2106,9 @@ fn walk_stmt(
                     let (new_value, tmp_idx, tmp_type) =
                         hoist_operand_to_temp(body, break_value, out, ctx, span);
                     commit_scalar_for_escape(body, states, out, ctx, span);
+                    // Not an edit-API rewrite: the engine's parent map and use index no
+                    // longer describe this body.
+                    body.invalidate_engine_index();
                     body.stmts[sid].kind = StmtKind::Break {
                         value: Some(new_value),
                         label,
@@ -2313,6 +2334,9 @@ fn walk_nested_loop(
             span,
         ) {
             body.blocks[block].stmts.push(stmt);
+            // Reseating a statement list leaves the parent map describing the old
+            // shape, and the arena did not grow, so the length check cannot see it.
+            body.invalidate_engine_index();
         }
     }
     // Post-loop state: JOIN(entry_states, body_exit_pre_sync). The
@@ -2386,6 +2410,9 @@ fn walk_expr(
             // Walk RHS first (state may transition through it).
             walk_operand(body, value, states, true, out, ctx);
             // Commit the assignment: rewrite target in place and update state.
+            // Not an edit-API rewrite: the engine's parent map and use index no
+            // longer describe this body.
+            body.invalidate_engine_index();
             body.exprs[target].kind = ExprKind::Local {
                 index: c.new_local_index,
                 name: format!("__hfs_{}_{}", c.field_name, c.new_local_index),
@@ -2411,6 +2438,9 @@ fn walk_expr(
         if needs_re_read {
             states[cand_idx] = CanonState::Both;
         }
+        // Not an edit-API rewrite: the engine's parent map and use index no
+        // longer describe this body.
+        body.invalidate_engine_index();
         body.exprs[e].kind = ExprKind::Local {
             index: c.new_local_index,
             name: format!("__hfs_{}_{}", c.field_name, c.new_local_index),
@@ -2984,6 +3014,9 @@ fn insert_convergence_before_break(
         let (new_value, tmp_idx, tmp_type) =
             hoist_operand_to_temp(body, v, &mut inserted, ctx, span);
         inserted.extend(sync);
+        // Not an edit-API rewrite: the engine's parent map and use index no
+        // longer describe this body.
+        body.invalidate_engine_index();
         body.stmts[record.stmt].kind = StmtKind::Break {
             value: Some(new_value),
             label,
@@ -3131,6 +3164,9 @@ fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
         stmts,
         span: expr_span,
     });
+    // Not an edit-API rewrite: the engine's parent map and use index no
+    // longer describe this body.
+    body.invalidate_engine_index();
     body.exprs[e].kind = ExprKind::Block(blk);
 }
 
@@ -3191,6 +3227,9 @@ fn emit_convergence_at_expr_end(
             stmts,
             span: body_span,
         });
+        // Not an edit-API rewrite: the engine's parent map and use index no
+        // longer describe this body.
+        body.invalidate_engine_index();
         body.exprs[arm_e].kind = ExprKind::Block(blk);
         return;
     }
@@ -3207,6 +3246,9 @@ fn emit_convergence_at_expr_end(
         stmts,
         span: body_span,
     });
+    // Not an edit-API rewrite: the engine's parent map and use index no
+    // longer describe this body.
+    body.invalidate_engine_index();
     body.exprs[arm_e].kind = ExprKind::Block(blk);
     for (idx, ty) in temps {
         ctx.free_temp(idx, ty);

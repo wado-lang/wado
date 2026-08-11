@@ -20,7 +20,7 @@ use cranelift_entity::EntityRef;
 use crate::compiler_trace;
 use crate::nir::NirFunction;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
 use super::gate::{FunctionGate, GatedPass};
@@ -35,14 +35,13 @@ use super::gate::{FunctionGate, GatedPass};
 pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let rule = LetBlockFlattenRule;
     let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::LetBlockFlatten, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
         let Some(body) = body.as_mut() else {
             return false;
         };
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, locals);
         engine.run(&[&rule])
     })
 }
@@ -309,10 +308,9 @@ mod tests {
         body.blocks[a].stmts = vec![s_letp, s_lety, s_taila];
         body.blocks[r].stmts = vec![s_letx];
 
-        let mut buffers = EngineBuffers::default();
         let rule = LetBlockFlattenRule;
         {
-            let mut engine = Engine::new(&mut body, &mut buffers, &mut locals);
+            let mut engine = Engine::new(&mut body, &mut locals);
             engine.run(&[&rule]);
         }
 
