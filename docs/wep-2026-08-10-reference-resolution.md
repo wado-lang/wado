@@ -234,18 +234,29 @@ Costs and risks:
            have plumbed through" — stage B plumbed it through, and
            `impl_target_key` already computes the receiver's `ImplTargetKey` in
            the same loop that builds this index, so the stated blocker is gone.
-         - **Unverified, and worth verifying first:** the two layers of
-           `trait_impl_modules` look keyed in different namespaces. The AST
-           layer keys on `get_type_name_static(&impl_block.ty)` — the bare
-           written head — while `collect_synthesised_impls` records
-           `LocalMethodName::base_struct_name()`, which is
-           `Receiver::head_key()`, the *mangled fq* head. `impl_module_for`
-           looks both up with one key, so at most one layer can answer any
-           query: `SynthesisCtx::has_impl` passes a bare name and documents
-           that it wants only the AST layer, while the monomorphizer passes
-           `struct_name()` / `base_struct_name()` and so can only ever reach
-           the synthesised one. Whether that is a live defect or merely dead
-           weight behind other fallbacks needs an experiment, not a reading.
+         - **`trait_impl_modules`' two layers are keyed in different
+           namespaces — measured, not read.** Instrumenting both producers on
+           `cross_module_same_name_trait_direct.wado` prints AST-layer keys as
+           bare written heads (`(!, Inspect)`, `(&, Eq)`, `((), Display)`) and
+           synthesised-layer keys as mangled fq ones
+           (`(./sub/…_a.wado/Data, Describe)`). One `impl_module_for` looks
+           both up with a single key, so a query reaches exactly one layer.
+
+           Two consequences, and they currently cancel. The guard that keeps
+           the synthesised layer a "genuine delta" — `ast_layer.get(&key)`
+           before recording — compares an fq key against bare keys and so
+           never fires: `Describe`, a user-written impl, lands in the
+           *synthesised* layer. That is what lets the monomorphizer work at
+           all, because it queries with `struct_name()` / `base_struct_name()`
+           and can only ever reach that layer. Making the delta real without
+           unifying the namespaces would take user-written impls away from it.
+
+           Not a miscompile today — no fixture demonstrates wrong output — but
+           the index is only correct by two errors cancelling, and it is a
+           trap for anyone who fixes one of them. The exit is to delete it:
+           `by_receiver` is already keyed by `Receiver` identity, and "which
+           modules host an impl of trait K for receiver R" is that index
+           filtered by `ImplHeader::fq_trait`. Deleting beats re-keying here.
          - Stores that flatten a bound to its name and lose the site:
            `infer_holes`' recorded bounds, `type_param_bounds` on the struct and
            trait digests, `BlanketImpl::bounds`, and an
