@@ -3117,7 +3117,7 @@ impl SynthesisCtx<'_, '_, '_> {
             }
             ImplScope::AnyModule => self
                 .trait_env
-                .has_any_methodful_impl_by_receiver(&type_key, trait_name),
+                .has_any_methodful_impl_by_receiver(&type_key, trait_name, None),
         };
         real || self.pending_has(type_name, trait_name)
     }

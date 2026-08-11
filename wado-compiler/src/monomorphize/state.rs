@@ -585,7 +585,7 @@ impl Monomorphizer {
     ) -> bool {
         self.functions
             .trait_env
-            .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(tid), trait_name)
+            .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(tid), trait_name, None)
     }
 
     /// Peel refs/newtypes to the first newtype level satisfying `has_own_impl`

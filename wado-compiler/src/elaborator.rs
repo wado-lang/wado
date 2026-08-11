@@ -946,6 +946,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &self.type_lookup(),
             &receiver,
             trait_name,
+            None,
         ) {
             return;
         }

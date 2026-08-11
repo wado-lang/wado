@@ -1000,6 +1000,7 @@ fn peel_transparent_newtype(type_id: TypeId, trait_name: &str, ctx: &TemplateCtx
                 } if !ctx.trait_env.has_any_methodful_impl_by_receiver(
                     &Receiver::Type(FqTypeName::of_head(module_source, name)),
                     trait_name,
+                    None,
                 ) =>
                 {
                     *base_type
@@ -1260,7 +1261,7 @@ pub(crate) fn blanket_dispatch_for(
     tt: &mut TypeTable,
 ) -> Option<(MonomorphInfo, ModuleSource)> {
     let type_key = tt.impl_receiver_key(type_id);
-    if trait_env.has_any_methodful_impl_by_receiver(&type_key, trait_name) {
+    if trait_env.has_any_methodful_impl_by_receiver(&type_key, trait_name, None) {
         return None;
     }
     let type_module = type_module_hint_tt(type_id, tt);

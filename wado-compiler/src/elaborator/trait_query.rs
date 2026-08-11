@@ -1100,6 +1100,7 @@ impl TypeSystem {
                     scope,
                     &Receiver::Type(FqTypeName::of_head(module_source, name)),
                     trait_name,
+                    trait_ref,
                 );
             if !serde_blocked
                 && self.walk_structural_derive_members(scope, resolved, tr, &mut |_, member| {
@@ -1340,9 +1341,10 @@ impl TypeSystem {
         scope: &TypeLookup,
         type_key: &Receiver,
         trait_name: &str,
+        trait_ref: Option<DeclRef>,
     ) -> bool {
         self.trait_env
-            .has_any_methodful_impl_by_receiver(type_key, trait_name)
+            .has_any_methodful_impl_by_receiver(type_key, trait_name, trait_ref)
             || self.blanket_trait_impl_applies(ctx, scope, type_key, trait_name)
     }
 

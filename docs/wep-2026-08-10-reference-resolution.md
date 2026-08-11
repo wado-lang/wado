@@ -205,10 +205,15 @@ Costs and risks:
 
          What still keys on a name, each a place the class survives:
 
-         - `TraitEnv`'s impl indexes (`has_any_methodful_impl_by_receiver`,
-           `blanket_impls`, `trait_impl_modules`) are keyed by trait name, so a
-           lookup that misses the header loop falls back to a spelling. This is
-           what still rejects an aliased bound's `G::hello(x)`.
+         - `blanket_impls` and `trait_impl_modules` are keyed by trait name.
+           `has_any_methodful_impl_by_receiver` now matches on identity, from
+           the `trait_ref` `ImplHeader` reads off the table.
+         - The mangled `Type^Trait::method` name spells the trait as the *call
+           site* wrote it, so an aliased bound builds `S^G::hello` against a
+           definition named `S^Greet::hello` and WIR build reports the type as
+           not implementing the trait. The mangler must take the declared name,
+           which the site's `DeclRef` gives it. This is what still rejects
+           #1785's aliased bound.
          - Stores that flatten a bound to its name and lose the site:
            `infer_holes`' recorded bounds, `type_param_bounds` on the struct and
            trait digests, `BlanketImpl::bounds`.

@@ -308,6 +308,11 @@ pub(super) struct ImplHeader {
     /// Identity of the implemented trait, resolved the same way; `None` for
     /// inherent `impl Type { … }` blocks.
     pub(super) trait_key: Option<ImplTargetKey>,
+    /// What the trait reference in this header refers to, read from
+    /// `Resolutions` rather than resolved a second time. This is what an impl
+    /// index matches against, so a lookup compares declarations rather than
+    /// spellings two modules can share (WEP 2026-08-10).
+    pub(super) trait_ref: Option<crate::resolve::DeclRef>,
     /// Trait name for `impl Trait for Type` blocks (via `get_type_name_static`
     /// on the trait reference); `None` for inherent `impl Type { … }` blocks.
     /// The memoised head name of [`Self::trait_type`], so the index filters
@@ -1022,12 +1027,18 @@ impl TraitEnv {
                         trait_position_decls(),
                     )
                 });
+                let trait_ref = impl_block
+                    .trait_type
+                    .as_ref()
+                    .and_then(crate::resolve::head_site)
+                    .and_then(|site| resolutions.get(site));
                 impl_headers.insert(
                     (module_source.clone(), impl_block.id),
                     ImplHeader {
                         module: module_source.clone(),
                         target: type_key.clone(),
                         trait_key,
+                        trait_ref,
                         trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
                         trait_type: impl_block.trait_type.clone(),
                         ty: impl_block.ty.clone(),
@@ -1385,9 +1396,10 @@ impl TraitEnv {
         &self,
         receiver: &name::Receiver,
         trait_name: &str,
+        trait_ref: Option<crate::resolve::DeclRef>,
     ) -> bool {
         self.entries_by_receiver(receiver)
-            .any(|entry| self.methodful_header_matches(entry, trait_name))
+            .any(|entry| self.methodful_header_matches(entry, trait_name, trait_ref))
     }
 
     /// Receiver-matched form of [`Self::has_methodful_impl`].
@@ -1398,7 +1410,7 @@ impl TraitEnv {
         module_source: &ModuleSource,
     ) -> bool {
         self.entries_by_receiver(receiver).any(|entry| {
-            entry.0 == *module_source && self.methodful_header_matches(entry, trait_name)
+            entry.0 == *module_source && self.methodful_header_matches(entry, trait_name, None)
         })
     }
 
@@ -1419,9 +1431,24 @@ impl TraitEnv {
             })
     }
 
-    fn methodful_header_matches(&self, entry: &(ModuleSource, AstId), trait_name: &str) -> bool {
+    fn methodful_header_matches(
+        &self,
+        entry: &(ModuleSource, AstId),
+        trait_name: &str,
+        trait_ref: Option<crate::resolve::DeclRef>,
+    ) -> bool {
         self.impl_headers.get(entry).is_some_and(|header| {
-            header.trait_name.as_deref() == Some(trait_name) && !header.methods.is_empty()
+            if header.methods.is_empty() {
+                return false;
+            }
+            match (trait_ref, header.trait_ref) {
+                // Both sides resolved their own reference site, so this is a
+                // question about declarations.
+                (Some(query), Some(decl)) => query == decl,
+                // A caller not yet carrying an identity falls back to the
+                // spelling — the old behaviour and the old hole.
+                _ => header.trait_name.as_deref() == Some(trait_name),
+            }
         })
     }
 
@@ -2588,6 +2615,9 @@ mod tests {
         ImplHeader {
             target: resolve_for_test(&module, &self_type, &type_params),
             trait_key: Some(resolve_for_test(&module, &trait_type, &type_params)),
+            // The orphan-rule tests decide on `trait_key`; the table is not
+            // consulted here, so no site is recorded for the double's header.
+            trait_ref: None,
             module,
             trait_name: Some(get_type_name_static(&trait_type)),
             trait_type: Some(trait_type),
