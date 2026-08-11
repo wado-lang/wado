@@ -3091,103 +3091,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .to_string();
         let mut candidates: Vec<ConversionCandidate> = Vec::new();
         let mut has_blanket = false;
-<<<<<<< HEAD
-        {
-            let mut collect = |s: &Self, impl_block: &ast::ImplBlock, module: &ModuleSource| {
-                let Some(trait_type) = impl_block.trait_type.as_ref() else {
-                    return;
-                };
-                let base = super::trait_env::get_type_name_static(trait_type);
-                if super::trait_env::get_type_name_static(&impl_block.ty) != struct_name
-                    || (base != from_trait_name && base != "TryFrom")
-                    || !impl_block.methods.iter().any(|m| m.name == method_name)
-                {
-                    return;
-                }
-                if let ast::Type::Generic(g) = trait_type
-                    && let Some(arg) = g.args.first()
-                {
-                    // A source mentioning one of the impl's type parameters is
-                    // a blanket: it accepts (a family of) everything, its
-                    // presence means the trait-less path can resolve the call
-                    // through the blanket resolver, and it is never an
-                    // unmatched alternative worth listing.
-                    if ast_type_mentions_param(arg, &impl_block.type_params) {
-                        has_blanket = true;
-                        return;
-                    }
-                    // Full spelling with the head un-aliased, so the
-                    // alternatives read `List<i32>`, not a bare `List`.
-                    let head = super::trait_env::get_type_name_static(arg);
-                    let head = s.import_original_name(&head, module);
-                    let mut rendered = String::new();
-                    crate::unparse::unparse_type_into(arg, &mut rendered);
-                    let resolved = match rendered.split_once('<') {
-                        Some((_, args)) => format!("{head}<{args}"),
-                        None => head,
-                    };
-                    // The current module's impls are in the impl index too, so
-                    // the two passes below see each of them twice. Coherence
-                    // forbids two impls of one conversion, so a repeat is
-                    // always the same impl seen again.
-                    if !seen_spellings.contains(&resolved) {
-                        seen_spellings.push(resolved.clone());
-                        gathered.push((arg.clone(), module.clone(), resolved));
-                    }
-                }
-||||||| 85d9e6045
-        {
-            let mut collect = |s: &Self, impl_block: &ast::ImplBlock, module: &ModuleSource| {
-                let Some(trait_type) = impl_block.trait_type.as_ref() else {
-                    return;
-                };
-                let base = Self::get_type_name_static(trait_type);
-                if Self::get_type_name_static(&impl_block.ty) != struct_name
-                    || (base != from_trait_name && base != "TryFrom")
-                    || !impl_block.methods.iter().any(|m| m.name == method_name)
-                {
-                    return;
-                }
-                if let ast::Type::Generic(g) = trait_type
-                    && let Some(arg) = g.args.first()
-                {
-                    // A source mentioning one of the impl's type parameters is
-                    // a blanket: it accepts (a family of) everything, its
-                    // presence means the trait-less path can resolve the call
-                    // through the blanket resolver, and it is never an
-                    // unmatched alternative worth listing.
-                    if ast_type_mentions_param(arg, &impl_block.type_params) {
-                        has_blanket = true;
-                        return;
-                    }
-                    // Full spelling with the head un-aliased, so the
-                    // alternatives read `List<i32>`, not a bare `List`.
-                    let head = Self::get_type_name_static(arg);
-                    let head = s.import_original_name(&head, module);
-                    let mut rendered = String::new();
-                    crate::unparse::unparse_type_into(arg, &mut rendered);
-                    let resolved = match rendered.split_once('<') {
-                        Some((_, args)) => format!("{head}<{args}"),
-                        None => head,
-                    };
-                    // The current module's impls are in the impl index too, so
-                    // the two passes below see each of them twice. Coherence
-                    // forbids two impls of one conversion, so a repeat is
-                    // always the same impl seen again.
-                    if !seen_spellings.contains(&resolved) {
-                        seen_spellings.push(resolved.clone());
-                        gathered.push((arg.clone(), module.clone(), resolved));
-                    }
-                }
-=======
         for (module, impl_id) in self.trait_impl_keys_current_first(struct_name) {
             let header = &self.tysys.trait_env.impl_headers[&(module.clone(), impl_id)];
             let Some(trait_type) = header.trait_type.as_ref() else {
                 continue;
->>>>>>> origin/main
             };
-            let base = Self::get_type_name_static(trait_type);
-            if Self::get_type_name_static(&header.ty) != struct_name
+            let base = super::trait_env::get_type_name_static(trait_type);
+            if super::trait_env::get_type_name_static(&header.ty) != struct_name
                 || (base != from_trait_name && base != "TryFrom")
                 || !header.methods.iter().any(|m| m.name == method_name)
             {
@@ -3209,7 +3119,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Full spelling with the head un-aliased, so the alternatives read
             // `List<i32>`, not a bare `List`.
-            let head = Self::get_type_name_static(arg);
+            let head = super::trait_env::get_type_name_static(arg);
             let head = self.import_original_name(&head, &module);
             let mut rendered = String::new();
             crate::unparse::unparse_type_into(arg, &mut rendered);
@@ -3349,96 +3259,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // there — the identity of what this selection picked, so a caller
         // recording a use→def edge names the impl the argument chose rather
         // than the receiver's first same-named method.
-<<<<<<< HEAD
-        let check_impl =
-            |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<(String, AstId)> {
-                let trait_type = impl_block.trait_type.as_ref()?;
-                if super::trait_env::get_type_name_static(&impl_block.ty) != struct_name
-                    || !matches_arg_type(trait_type, impl_module, &impl_block.type_params)
-                {
-                    return None;
-                }
-                for method in &impl_block.methods {
-                    let has_self = method
-                        .params
-                        .iter()
-                        .any(|p| p.self_kind != ast::SelfKind::None);
-                    if method.name == method_name && !has_self {
-                        return Some((resolve_trait_name(trait_type), method.id));
-                    }
-                }
-                // Fall back to the trait declaration's default methods: when
-                // `impl Trait for Type` does not override a defaulted static
-                // method, the trait still provides the body, so `Type::method`
-                // (called concretely, not via a generic bound) must resolve to
-                // the trait's default. This mirrors how generic dispatch
-                // (`T::method()`) already finds default methods in
-                // `find_method_type_param_names`.
-                let trait_name_base = super::trait_env::get_type_name_static(trait_type);
-                if let Some(method) = self
-                    .trait_sig_by_name(&trait_name_base)
-                    .and_then(|sig| sig.method(method_name))
-                    && method.default_body.is_some()
-                    && method.sig.self_kind == ast::SelfKind::None
-                {
-                    return Some((resolve_trait_name(trait_type), method.sig.ast_id));
-                }
-                None
-            };
-
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && let Some((trait_name, method_id)) =
-                    check_impl(impl_block, &self.current_module_source)
-||||||| 85d9e6045
-        let check_impl =
-            |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<(String, AstId)> {
-                let trait_type = impl_block.trait_type.as_ref()?;
-                if Self::get_type_name_static(&impl_block.ty) != struct_name
-                    || !matches_arg_type(trait_type, impl_module, &impl_block.type_params)
-                {
-                    return None;
-                }
-                for method in &impl_block.methods {
-                    let has_self = method
-                        .params
-                        .iter()
-                        .any(|p| p.self_kind != ast::SelfKind::None);
-                    if method.name == method_name && !has_self {
-                        return Some((resolve_trait_name(trait_type), method.id));
-                    }
-                }
-                // Fall back to the trait declaration's default methods: when
-                // `impl Trait for Type` does not override a defaulted static
-                // method, the trait still provides the body, so `Type::method`
-                // (called concretely, not via a generic bound) must resolve to
-                // the trait's default. This mirrors how generic dispatch
-                // (`T::method()`) already finds default methods in
-                // `find_method_type_param_names`.
-                let trait_name_base = Self::get_type_name_static(trait_type);
-                if let Some(method) = self
-                    .trait_sig_by_name(&trait_name_base)
-                    .and_then(|sig| sig.method(method_name))
-                    && method.default_body.is_some()
-                    && method.sig.self_kind == ast::SelfKind::None
-                {
-                    return Some((resolve_trait_name(trait_type), method.sig.ast_id));
-                }
-                None
-            };
-
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && let Some((trait_name, method_id)) =
-                    check_impl(impl_block, &self.current_module_source)
-=======
         let check_impl = |header: &super::trait_env::ImplHeader,
                           impl_module: &ModuleSource|
          -> Option<(String, AstId)> {
             let trait_type = header.trait_type.as_ref()?;
-            if Self::get_type_name_static(&header.ty) != struct_name
+            if super::trait_env::get_type_name_static(&header.ty) != struct_name
                 || !matches_arg_type(trait_type, impl_module, &header.type_params)
->>>>>>> origin/main
             {
                 return None;
             }
@@ -3459,7 +3285,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the trait's default. This mirrors how generic dispatch
             // (`T::method()`) already finds default methods in
             // `find_method_type_param_names`.
-            let trait_name_base = Self::get_type_name_static(trait_type);
+            let trait_name_base = super::trait_env::get_type_name_static(trait_type);
             if let Some(method) = self
                 .trait_sig_by_name(&trait_name_base)
                 .and_then(|sig| sig.method(method_name))
