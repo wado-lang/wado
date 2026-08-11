@@ -544,6 +544,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         &self.type_lookup(),
                                         type_arg,
                                         bound,
+                                        None,
                                     ) {
                                         // Get the type name for the error message
                                         let type_name = self.tysys.type_id_to_string(type_arg);

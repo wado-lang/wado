@@ -3706,6 +3706,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 &self.type_lookup(),
                                 type_arg,
                                 bound,
+                                None,
                             ) {
                                 let type_name = self.tysys.type_id_to_string(type_arg);
                                 let reason = self.tysys.trait_unimpl_reason_chain(
@@ -3914,6 +3915,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &self.type_lookup(),
                     t,
                     "KeyValueLiteral",
+                    None,
                 );
                 let fields = if is_map {
                     None
@@ -3933,6 +3935,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &self.type_lookup(),
                 t,
                 "KeyValueLiteral",
+                None,
             )
         });
         // A pure key-value merge with a map-typed target is the only valid
@@ -4901,6 +4904,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &self.type_lookup(),
                 element_type,
                 &ord_trait_name,
+                None,
             )
         {
             let type_name = self.tysys.type_id_to_string(element_type);

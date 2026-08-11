@@ -266,7 +266,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         for (solution, param_name, trait_name, span) in checks {
-            self.enforce_single_bound(solution, &trait_name, &param_name, span);
+            // `infer_holes` records a hole's bounds as names, so the site that
+            // wrote them is already lost here. Migrating that store to
+            // `DeclRef` is the remaining half of WEP 2026-08-10 stage C.
+            self.enforce_single_bound(solution, &trait_name, None, &param_name, span);
         }
     }
 

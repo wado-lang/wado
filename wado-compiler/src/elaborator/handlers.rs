@@ -199,6 +199,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.type_lookup(),
                         handler_type,
                         interface_name,
+                        None,
                     ))
             {
                 let type_name = self.tysys.type_table.borrow().type_name(handler_type);

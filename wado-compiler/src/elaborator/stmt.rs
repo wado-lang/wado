@@ -2132,11 +2132,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &self.type_lookup(),
                 iterable_type_id,
                 "IntoIterator",
+                None,
             ) || self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 inner_type_id,
                 "IntoIterator",
+                None,
             ) || matches!(
                 self.tysys.type_table.borrow().get(iterable_type_id),
                 ResolvedType::Unknown | ResolvedType::TypeParam { .. }
@@ -2535,6 +2537,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.type_lookup(),
             iter_type,
             "Iterator",
+            None,
         ) && !matches!(
             self.tysys.type_table.borrow().get(iter_type),
             ResolvedType::Unknown | ResolvedType::TypeParam { .. }

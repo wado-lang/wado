@@ -2462,6 +2462,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.type_lookup(),
                         receiver_type_id,
                         bound,
+                        None,
                     )
                 })
             })

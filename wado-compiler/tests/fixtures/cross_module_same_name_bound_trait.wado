@@ -1,0 +1,23 @@
+// `S` implements module A's `Greet`. The bound below names module B's, which
+// `S` implements nowhere, so the obligation must not be discharged.
+//
+// The bound check compared the impl header's written trait name against the
+// bound's, both bare, so two declarations sharing a name compared equal and a
+// type satisfied a trait it never implements (#1785).
+
+use { Greet } from "./sub/cross_module_same_name_bound_trait_b.wado";
+use { make as make_s } from "./sub/cross_module_same_name_bound_trait_a.wado";
+
+fn call<T: Greet>(x: &T) -> i32 {
+    return Greet::hello(x);
+}
+
+test "unreachable" {
+    assert call(&make_s(3)) == 3;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "does not implement trait"
+}

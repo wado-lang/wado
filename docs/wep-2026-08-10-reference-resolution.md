@@ -196,9 +196,26 @@ Costs and risks:
          resolved, every impl-header answer compared against what `TraitEnv`
          derives, every difference logged. Nothing reads the table yet.
 -
-  3. [ ] C — flip consumers to `DeclRef`, subsystem by subsystem, smallest
-         first: trait-impl lookup (#1785) → bound checking → static-method
-         resolution → the conversion-impl survey → the CM interface registry.
+  3. [ ] C — flip consumers to `DeclRef`, subsystem by subsystem. Done:
+         `find_trait_impl_for_type_with_args` compares identities when both
+         sides have one, and the bound-enforcement choke point
+         (`enforce_single_bound` / `check_and_register_bound`) carries the
+         bound's. That closes #1785's unsound direction — a same-named foreign
+         trait no longer satisfies a bound.
+
+         What still keys on a name, each a place the class survives:
+
+         - `TraitEnv`'s impl indexes (`has_any_methodful_impl_by_receiver`,
+           `blanket_impls`, `trait_impl_modules`) are keyed by trait name, so a
+           lookup that misses the header loop falls back to a spelling. This is
+           what still rejects an aliased bound's `G::hello(x)`.
+         - Stores that flatten a bound to its name and lose the site:
+           `infer_holes`' recorded bounds, `type_param_bounds` on the struct and
+           trait digests, `BlanketImpl::bounds`.
+         - A compiler item (`Ord`, `Display`, `ReflectStruct`) is asked for by
+           name; it should carry the `DeclRef` of the declaration it names.
+         - `locate_static_method_impl`, the conversion-impl survey, and the CM
+           interface registry.
 -
   4. [ ] D — delete what the table replaces: `declaring_side_decl_key`,
          `canonical_decl_key_with`, `decl_identity_core`, `WrittenHead` and its

@@ -1941,6 +1941,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &type_lookup,
                         rt,
                         bound_trait_name,
+                        None,
                     )
                 {
                     return true;
@@ -1951,6 +1952,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &type_lookup,
                         &target.receiver(),
                         bound_trait_name,
+                        None,
                     )
                 })
             });
@@ -2094,6 +2096,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &self.type_lookup(),
                     rt,
                     &bound.name,
+                    self.tysys.resolutions.get(bound.id),
                 )
             })
         })
