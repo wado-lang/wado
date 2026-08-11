@@ -291,14 +291,14 @@ fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: crate::tir::Type
 pub(super) fn freeze_pure_arith(
     project: &mut crate::nir_package::NirPackage,
     include_fields: bool,
-    // `early`: this runs before the optimize loop, on each function's
-    // freshly-built (clean, un-restructured) graph. Only then is it sound to
-    // freeze a *constant leaf read* (`Local` / `FieldAccess`) into its literal:
-    // born here, the `Operand::Value` survives `inline` / `sroa` (both copy
+    // `Early` runs before the optimize loop, on each function's freshly-built
+    // (clean, un-restructured) graph. Only then is it sound to freeze a
+    // *constant leaf read* (`Local` / `FieldAccess`) into its literal: born
+    // here, the `Operand::Value` survives `inline` / `sroa` (both copy
     // operands), so no later pass re-contextualizes the read into a position the
-    // frozen literal is wrong for. The late freeze (post-loop) must not — its
-    // graph carries the loop's structural-edit staleness.
-    early: bool,
+    // frozen literal is wrong for. A late freeze must not — its graph carries
+    // the loop's structural-edit staleness.
+    phase: FreezePhase,
 ) -> bool {
     use crate::nir::NirFunction;
     use crate::nir_engine::EngineBuffers;
@@ -372,7 +372,7 @@ pub(super) fn freeze_pure_arith(
             mut_locals: &mut_locals,
             address_taken: &address_taken,
             param_set: &param_set,
-            early,
+            phase,
             include_fields,
         };
         let candidates: Vec<ExprId> = engine.body.exprs.keys().collect();
@@ -404,7 +404,7 @@ pub(super) fn freeze_pure_arith(
             if is_field {
                 changed |= apply_field_materialise(&mut engine, rep, &ids, id_ty, &param_set);
             } else {
-                changed |= apply_value_freeze(&mut engine, rep, &ids, id_ty, &param_set);
+                changed |= apply_value_freeze(&mut engine, rep, &ids, id_ty, &param_set, phase);
             }
         }
     }
@@ -426,7 +426,7 @@ struct FreezeCtx<'a> {
     address_taken: &'a crate::hashmap::IndexSet<u32>,
     /// Parameter locals — entry-defined and available at every point.
     param_set: &'a crate::hashmap::IndexSet<u32>,
-    early: bool,
+    phase: FreezePhase,
     include_fields: bool,
 }
 
@@ -435,6 +435,12 @@ struct FreezeCtx<'a> {
 thread_local! {
     pub(super) static FREEZE_REJECT: std::cell::RefCell<crate::hashmap::IndexMap<String, usize>> =
         std::cell::RefCell::new(crate::hashmap::IndexMap::default());
+}
+
+pub(super) fn note_inloop(reason: &str) {
+    FREEZE_REJECT.with(|m| {
+        *m.borrow_mut().entry(format!("INLOOP/{reason}")).or_default() += 1;
+    });
 }
 
 pub(super) fn note_reject(engine: &Engine, id: ExprId, reason: &str) {
@@ -449,6 +455,25 @@ pub(super) fn note_reject(engine: &Engine, id: ExprId, reason: &str) {
     FREEZE_REJECT.with(|m| {
         *m.borrow_mut().entry(format!("{kind}/{reason}")).or_default() += 1;
     });
+}
+
+/// Where a freeze sits relative to the passes that relocate operands.
+///
+/// The anchor rule (WEP: NIR Optimizer Architecture) turns on this: a frozen
+/// operand may name a local only when that local's defining statement travels
+/// with the operand. A `let _av = …` does; a parameter's entry def does not. So
+/// a freeze with relocation still to come must anchor a local-naming value in
+/// an `_av`, while the terminal freezes may name a source local directly —
+/// nothing moves them afterwards.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum FreezePhase {
+    /// Before the fixed-point loop, on each function's clean graph. Plants
+    /// context-free values only.
+    Early,
+    /// Inside the fixed-point loop, so `inline` and `sroa` still follow.
+    InLoop,
+    /// After the loop. No pass relocates an operand from here on.
+    Terminal,
 }
 
 /// Decide whether the value at `id` should be frozen, and to which
@@ -481,7 +506,7 @@ fn classify_candidate(
             .is_none_or(|root| !ctx.mut_escaped_leaf.contains(&root)),
         _ => false,
     };
-    if ctx.early
+    if ctx.phase == FreezePhase::Early
         && leaf_root_stable
         && !is_place_read(engine, id)
         && let Some(vid) = engine.value(id)
@@ -509,7 +534,7 @@ fn classify_candidate(
     // a local does not, because those passes renumber locals and splice a callee
     // body into a caller, so the slot moves out from under it. The post-loop
     // freezes take these, after the structural passes have finished.
-    if ctx.early && engine.body.values.names_a_local(rep) {
+    if ctx.phase == FreezePhase::Early && engine.body.values.names_a_local(rep) {
         note_reject(engine, id, "early-names-a-local");
         return None;
     }
@@ -722,14 +747,63 @@ fn apply_value_freeze(
     ids: &[ExprId],
     id_ty: crate::tir::TypeId,
     param_set: &crate::hashmap::IndexSet<u32>,
+    phase: FreezePhase,
 ) -> bool {
     let mut leaves = crate::hashmap::IndexSet::default();
     engine.body.values.collect_opaque_locals(rep, &mut leaves);
-    let materialize = ids.len() > 1
-        && !leaves.is_empty()
+    let anchorable = !leaves.is_empty()
         && leaves.iter().all(|l| param_set.contains(l))
-        && !value_may_trap(&engine.body.values, rep)
-        && worth_materialising(&engine.body.values, rep);
+        && !value_may_trap(&engine.body.values, rep);
+    // The anchor rule. With relocation still to come, a value naming a source
+    // local may not be planted as-is: `inline` lands the operand where the same
+    // index is assigned per call, and `canonical_local`'s one id per index then
+    // has two different values sharing it. Anchoring it in an `_av` — a
+    // single-assignment `let` in this body, which travels with any copy of the
+    // operand — is the only sound form, so refuse when that is not available.
+    // The terminal freezes need none of this: nothing moves an operand after
+    // them, which is what makes naming a source local safe there.
+    let must_anchor = phase == FreezePhase::InLoop && !leaves.is_empty();
+    // TEMPORARY census — revert. Separates "the idea does not pay" from "the
+    // gate is too narrow to have tested it".
+    if phase == FreezePhase::InLoop {
+        if leaves.is_empty() {
+            note_inloop("context-free");
+        } else if anchorable {
+            note_inloop("anchored");
+        } else {
+            note_inloop("refused/not-anchorable");
+        }
+    }
+    // Anchoring is how such a value is frozen, not a reason to freeze one.
+    // Materialising a single-use value replaces "compute it here" with "compute
+    // it into a local and read the local" — the same work plus a `local.set`.
+    let worth = ids.len() > 1 && worth_materialising(&engine.body.values, rep);
+    // TEMPORARY census — revert. Separates "the idea does not pay" from "the
+    // gate is too narrow to have tested it".
+    if phase == FreezePhase::InLoop {
+        let outcome = if leaves.is_empty() {
+            "context-free"
+        } else if !leaves.iter().all(|l| param_set.contains(l)) {
+            "names-a-non-param"
+        } else if value_may_trap(&engine.body.values, rep) {
+            "may-trap"
+        } else if ids.len() == 1 {
+            "single-use"
+        } else if !worth_materialising(&engine.body.values, rep) {
+            "not-worth"
+        } else {
+            "anchored"
+        };
+        FREEZE_REJECT.with(|m| {
+            *m.borrow_mut()
+                .entry(format!("INLOOP/{outcome}"))
+                .or_default() += 1;
+        });
+    }
+    if must_anchor && !(anchorable && worth) {
+        return false;
+    }
+    let materialize = anchorable && worth;
     let mut changed = false;
     if materialize {
         let name = format!("_av_{}", engine.locals().len());
@@ -751,9 +825,8 @@ fn apply_value_freeze(
             },
             crate::token::Span::default(),
         );
-        let (anchor, block) = match materialise_point(engine, ids) {
-            Some(point) => point,
-            None => return false,
+        let Some((anchor, block)) = materialise_point(engine, ids) else {
+            return false;
         };
         let mut stmts = engine.body.blocks[block].stmts.clone();
         let pos = stmts.iter().position(|&x| x == anchor).unwrap_or(0);

@@ -381,6 +381,25 @@ local — materialise it into an `_av` and name that.
 rule makes it the only way a local may be named, and drops the parameter
 restriction, which the anchor replaces.
 
+The rule is necessary and not sufficient. Freezing inside the loop under it was
+built and measured, and promoted nothing on either benchmark — zero candidates
+reached `apply_value_freeze`, both modules came out byte-identical, and the pass
+cost 12 % of the loop. The reason is upstream of the rule: `maintain_pure_node`
+resolves an `ExprKind::Local` only for a non-`mut` parameter, and `Binary` /
+`Unary` / `Cast` propagate that `None` through `?`, so there is no value to
+freeze in the first place. Query-time resolution cannot do better — a
+version-free id per local index is the recorded dead end — while the _builder_
+already mints one opaque per assignment and gets it right.
+
+So the convergence point has two halves, and both are needed:
+
+- The builder's versioned values have to reach every pure position, which means
+  freezing them at birth in `lower` rather than asking a query-time resolver
+  later. That is what born-at-`lower` and retiring the pure `ExprKind`s amount
+  to, and it is what supplies the material.
+- A frozen local-naming value has to be anchored, which is the rule here, and is
+  what makes planting that material sound while `inline` and `sroa` still run.
+
 Two things have to be fixed for the rule to hold.
 
 - `materialise_point` is the nearest common dominator, computed as the longest

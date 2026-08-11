@@ -75,6 +75,8 @@ use store_load_forward::forward_stores_to_loads_all;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
 
+use extract::FreezePhase;
+
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
 
@@ -266,7 +268,7 @@ pub fn optimize(
     // const-local propagation keep it default-safe.
     if opt_level != OptLevel::O0 {
         run_pass("nir/promote_fields", &mut project, profiler, |p| {
-            extract::freeze_pure_arith(p, /* include_fields */ true, /* early */ false)
+            extract::freeze_pure_arith(p, /* include_fields */ true, FreezePhase::Terminal)
         });
         // Re-run the structural BCE matcher now that `promote_fields` froze
         // invariant bounds (`arr.used`) into constant operands the in-loop
@@ -315,7 +317,7 @@ pub fn optimize(
     // root and are simply not emitted. (Early arith promotion already ran before
     // the loop; `FieldAccess` promotion ran above, after SROA.)
     run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ false)
+        extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::Terminal)
     });
 
     // The born-resolved invariant is now enforced by the type system: a call
@@ -639,7 +641,7 @@ fn run_optimization_passes(
     // the SROA passes), since SROA scalarizes the structs a promoted `FieldAccess`
     // would reference. See the late call in `optimize`.
     run_pass("nir/promote_pure_values_early", project, profiler, |p| {
-        extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ true)
+        extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::Early)
     });
     for i in 0..config.iterations {
         profiler.span_start(&format!("nir/iteration {}", i + 1));
@@ -807,6 +809,21 @@ fn run_optimization_passes(
                     iter_changed.push("nir/param_spec");
                 }
             }
+        }
+        // Anchor-rule freeze, inside the loop so the passes here can see a
+        // promoted value that reads a local — the post-loop freezes are too
+        // late for `licm`, whose value hoist wants exactly those. Local-naming
+        // values are anchored in an `_av` (see `FreezePhase`), which is what
+        // makes planting one sound while `inline` and `sroa` still follow.
+        //
+        // Its result is deliberately dropped rather than folded into `changed`:
+        // a freeze reports a change every time it promotes, which would keep the
+        // fixed point alive forever.
+        // TEMPORARY toggle — lets one binary produce both sides for the A/B.
+        if std::env::var_os("WADO_NO_INLOOP_FREEZE").is_none() {
+            run_pass("nir/freeze_in_loop", project, profiler, |p| {
+                extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::InLoop)
+            });
         }
         gated!("nir/licm", apply_licm);
         gated!("nir/tmpl_hoist", hoist_template_buffers);
