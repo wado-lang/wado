@@ -86,7 +86,7 @@ The type table keeps the two apart, because a type check asks opposite things of
 - `ResolvedType::TypeParam` is **rigid**. It stands for whatever a caller instantiates the binding item with, so inside that item it is opaque: nothing but itself is assignable to it, in either direction. `let x: T = 5` in a body that declares `T` is a type error.
 - `ResolvedType::InferVar` is **flexible**. It stands for a type the solver has yet to determine, so it accepts and records.
 
-A rigid parameter appears only inside the item that binds it. Every *use* of a polymorphic signature instantiates its slots into fresh variables first (`elaborator/instantiate.rs`), so a callee's parameter never reaches a check as itself. Without that step the two collapse: `TypeParam` is interned by `(name, index)`, so `fn f<T>`'s `T` and `fn g<T>`'s `T` are one `TypeId`, and a check meeting a bare `T` cannot tell the enclosing body's parameter from a callee's slot.
+A rigid parameter appears only inside the item that binds it. Every _use_ of a polymorphic signature instantiates its slots into fresh variables first (`elaborator/instantiate.rs`), so a callee's parameter never reaches a check as itself. Without that step the two collapse: `TypeParam` is interned by `(name, index)`, so `fn f<T>`'s `T` and `fn g<T>`'s `T` are one `TypeId`, and a check meeting a bare `T` cannot tell the enclosing body's parameter from a callee's slot.
 
 `check_assignable` therefore defers only what is genuinely undecided — an inference variable, a type pack awaiting expansion, an associated-type projection awaiting its impl, `unknown` / `error` — and compares a rigid parameter nominally.
 
