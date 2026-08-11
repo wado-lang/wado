@@ -69,10 +69,10 @@ pub(super) struct MethodInferenceInput<'a> {
     /// Method name — used to look up the method's AST for the list of
     /// method-level type parameter names.
     pub method_name: &'a str,
-    /// Number of impl-level type parameters already in scope (e.g. 2 for
-    /// `impl<A, B> Container<A, B>`). Method-level type parameters are
-    /// numbered starting from this offset.
-    pub impl_offset: u32,
+    /// The method's own slots, as the lookup that produced `param_types`
+    /// reported them ([`MethodInfo::method_type_param_ids`]). The answers
+    /// come back in this order, which is the order the caller binds them in.
+    pub slots: &'a [TypeId],
     /// Method parameter types in their `TypeParam`-based (uninstantiated)
     /// form; parallel to `args` / `raw_args`.
     pub param_types: &'a [TypeId],
@@ -600,7 +600,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let elems = type_args;
                     if method_name == "len" {
                         return Some(MethodInfo {
-                            impl_offset: None,
                             method_ast_id: None,
                             return_type: TypeTable::I32,
                             self_kind: ast::SelfKind::Ref,
@@ -642,7 +641,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         let return_type = self.tysys.type_table.borrow_mut().make_tuple(transposed);
                         return Some(MethodInfo {
-                            impl_offset: None,
                             method_ast_id: None,
                             return_type,
                             self_kind: ast::SelfKind::Ref,
@@ -895,7 +893,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
 
         Some(MethodInfo {
-            impl_offset: None,
             method_ast_id: Some(sig.ast_id),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
@@ -948,7 +945,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_type_param_ids = sig.own_type_param_ids();
 
         Some(MethodInfo {
-            impl_offset: None,
             method_ast_id: Some(sig.ast_id),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
@@ -966,6 +962,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
+    /// The index the declaration gave the first of `slots`, or 0 when there
+    /// are none. A slot carries its own index; nothing else knows it.
+    fn slot_base(&self, slots: &[TypeId]) -> u32 {
+        let table = self.tysys.type_table.borrow();
+        slots
+            .first()
+            .and_then(|&slot| match table.get(slot) {
+                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                    Some(*index)
+                }
+                _ => None,
+            })
+            .unwrap_or(0)
+    }
+
     /// Bind a still-unbound method type param to its declared default, resolving
     /// the default with `Self` set to the concrete receiver.
     fn fill_defaulted_method_type_args(
@@ -973,12 +984,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_type_params: &[ast::GenericParam],
         receiver_type: TypeId,
         trait_name: Option<&str>,
-        impl_offset: u32,
+        slots: &[TypeId],
         inferred: &mut [TypeId],
     ) {
-        if method_type_params.len() != inferred.len() {
-            return;
-        }
         let receiver_type = self.tysys.get_base_type(receiver_type);
         if self.is_unbound_type_param(receiver_type) {
             return;
@@ -993,10 +1001,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(trait_name) = trait_name {
             self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_name);
         }
+        // Re-registering the parameters gives a default like `= T` a scope to
+        // resolve against. Number them from the index the declaration gave the
+        // first slot — read off the slot, not counted from the receiver's type
+        // arguments, which overshoots on a concrete or pack-bearing impl.
+        let base = self.slot_base(slots);
         let defaults: Vec<Option<TypeId>> = self.with_self_type(receiver_type, |s| {
             let mut scope = s.enter_inherited_type_param_scope();
             scope.annotate_ctx.trait_ctx.type_params.clear();
-            scope.register_generic_params(method_type_params, impl_offset);
+            scope.register_generic_params(method_type_params, base);
             method_type_params
                 .iter()
                 .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
@@ -1042,7 +1055,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let MethodInferenceInput {
             receiver_type,
             method_name,
-            impl_offset,
+            slots,
             param_types,
             args,
             raw_args,
@@ -1060,10 +1073,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // kinds, where the bound check's struct lookup finds nothing anyway.
         let mut bound_check_params: Option<Vec<ast::GenericParam>> = None;
 
-        // Locate the method's AST just to recover the list of type parameter
-        // names (excluding effect params). We use these names together with
-        // `impl_offset` to materialise the `TypeParam` ids the solver needs
-        // to track, without re-resolving the method signature.
+        // Locate the method's AST for what only a declaration carries — each
+        // parameter's bounds and default. The slots themselves come from the
+        // lookup; this never re-resolves the signature, which in a fresh scope
+        // would emit spurious errors for `Self::Item` and the like.
         let method_type_params = match &base_type {
             ResolvedType::Struct {
                 decl_name: name,
@@ -1108,25 +1121,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
         };
 
-        let method_type_param_ids: Vec<TypeId> = {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            method_type_params
-                .iter()
-                .enumerate()
-                .map(|(i, p)| tt.make_type_param(p.name.clone(), impl_offset + i as u32))
-                .collect()
-        };
-
-        // Instantiate the method's own slots before anything is solved against
-        // them. `fn`-bound parameters are fixed by their bound, not by
-        // call-site inference, so they keep their declaration id.
-        let mint: Vec<bool> = method_type_params
-            .iter()
-            .map(|p| !p.has_fn_bound())
+        // Only the slot-consuming parameters are inferred, and the lookup
+        // reported exactly those. Pairing them here is what keeps every list
+        // downstream — the answers, the bounds to enforce, the defaults to
+        // fill — indexed the same way the caller binds them.
+        let method_type_params: Vec<ast::GenericParam> = method_type_params
+            .into_iter()
+            .filter(ast::GenericParam::is_real_type_param)
             .collect();
+        assert_eq!(
+            method_type_params.len(),
+            slots.len(),
+            "`{method_name}` declares {} slots, its signature reports {}",
+            method_type_params.len(),
+            slots.len()
+        );
+
         let inst = self.instantiate(
-            &method_type_param_ids,
-            &mint,
+            slots,
+            &[],
             &Instantiation {
                 kind: "method",
                 name: method_name,
@@ -1157,7 +1170,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method_type_params,
             receiver_type,
             trait_name,
-            impl_offset,
+            slots,
             &mut inferred,
         );
         // A slot the solver left as its own variable is unconstrained. The
@@ -2426,25 +2439,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .copied()
                 .collect();
 
-            let impl_offset = crate::tir::method_param_offset_of(impl_slots.keys().copied());
-            // The method's parameters as its declaration holds them. The
-            // scope registration below re-mints ids from `impl_offset`, which
-            // is itself derived by counting the impl's slots and disagrees with
-            // the declaration whenever that count is wrong — a pack parameter
-            // (`impl<T, ..F> Emit for T`) is the case that exposed it. What the
-            // signature says is authoritative, so that is what is reported.
+            // The method's slots as its declaration holds them. Numbering them
+            // here instead — from a count of the impl's slots — disagrees with
+            // the declaration whenever that count is wrong, which a pack
+            // parameter (`impl<T, ..F> Emit for T`) is enough to cause. Bring
+            // the same ids into scope as are reported, so the body resolves
+            // `T` to the slot the call site binds.
+            // Only the slot-consuming parameters are registered: an effect
+            // param and a `fn`-bound one occupy no slot, and the loop that
+            // numbered them positionally gave every parameter after them the
+            // wrong index.
+            let method_slot_params: Vec<&ast::GenericParam> = method_type_params
+                .iter()
+                .filter(|p| p.is_real_type_param())
+                .collect();
             let method_type_param_ids: Vec<TypeId> = method_sig.own_type_param_ids();
-            for (i, type_param) in method_type_params.iter().enumerate() {
-                let index = impl_offset + i as u32;
-                let type_param_id =
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::TypeParam {
-                            name: type_param.name.clone(),
-                            index,
-                        });
+            assert_eq!(
+                method_slot_params.len(),
+                method_type_param_ids.len(),
+                "`{method_name}` declares {} slots, its signature reports {}",
+                method_slot_params.len(),
+                method_type_param_ids.len()
+            );
+            for (type_param, &type_param_id) in
+                method_slot_params.iter().zip(method_type_param_ids.iter())
+            {
+                let index = match scope.tysys.type_table.borrow().get(type_param_id) {
+                    ResolvedType::TypeParam { index, .. }
+                    | ResolvedType::TypePack { index, .. } => *index,
+                    other => panic!("method slot is not a type parameter: {other:?}"),
+                };
                 scope
                     .annotate_ctx
                     .trait_ctx
@@ -2520,7 +2544,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_decl: trait_decl.clone(),
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
-                    impl_offset: Some(impl_offset),
                     method_ast_id: Some(method_sig.ast_id),
                     return_type,
                     self_kind,
@@ -2572,7 +2595,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
-                        impl_offset: Some(default_method.sig.declaring_slot_count),
                         method_ast_id: Some(default_method.sig.ast_id),
                         return_type: instantiated.return_type,
                         self_kind,
@@ -3556,7 +3578,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let MethodInfo {
-            impl_offset: _,
             method_ast_id: _,
             return_type,
             self_kind,

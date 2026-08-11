@@ -1590,10 +1590,6 @@ impl MethodOwner {
 
 #[derive(Debug, Clone)]
 pub(super) struct MethodInfo {
-    /// [`crate::tir::method_param_offset`] as the digest applied it, carried
-    /// so consumers read it instead of re-deriving it. `None` when the lookup
-    /// did not come from a digested impl signature.
-    pub(super) impl_offset: Option<u32>,
     /// The declaring node of the method this lookup selected, taken from its
     /// [`crate::elaborator::sig::MethodSig`]. The use→def edge for a call is
     /// recorded from here, so it names the impl dispatch actually chose.

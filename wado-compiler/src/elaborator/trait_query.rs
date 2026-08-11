@@ -1672,7 +1672,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((
             trait_name,
             MethodInfo {
-                impl_offset: Some(sig.declaring_slot_count),
                 method_ast_id: Some(sig.ast_id),
                 return_type: instantiated.return_type,
                 self_kind: sig.self_kind,
@@ -2317,7 +2316,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .intern(ResolvedType::Ref(base_type_id));
         let method_info = MethodInfo {
-            impl_offset: None,
             method_ast_id: None,
             return_type,
             self_kind: ast::SelfKind::Ref,

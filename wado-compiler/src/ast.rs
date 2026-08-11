@@ -3246,10 +3246,14 @@ impl GenericParam {
 
     /// Whether this param occupies a dense, positional slot — the "real" type
     /// params monomorphization substitutes by index. Excludes effect params
-    /// (`effect E`) and `fn`-bound params (`<F: fn(...)>`). Single source for
-    /// the projection rule shared by the annotate walk and reify.
+    /// (`effect E`) and `fn`-bound params (`<F: fn(...)>`), whose bound already
+    /// fixes them to a concrete function type. A *pack* consumes a slot
+    /// whatever it is bounded by, which is what registers it: both places that
+    /// assign slots resolve a pack's shape before they look at its bounds.
+    /// Single source for the projection rule shared by the annotate walk and
+    /// reify.
     pub fn is_real_type_param(&self) -> bool {
-        !self.is_effect && !self.has_fn_bound()
+        !self.is_effect && (self.is_pack || !self.has_fn_bound())
     }
 }
 

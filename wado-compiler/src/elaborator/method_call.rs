@@ -471,7 +471,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // does not exist.
         let method_found = method_info.is_some();
         let MethodInfo {
-            impl_offset: sig_impl_offset,
             method_ast_id: dispatched_method_ast_id,
             mut return_type,
             self_kind,
@@ -498,7 +497,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             // Default to Unknown type for error recovery
             MethodInfo {
-                impl_offset: None,
                 method_ast_id: None,
                 return_type: TypeTable::UNKNOWN,
                 self_kind: ast::SelfKind::Ref,
@@ -731,66 +729,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Adjust receiver based on what the method expects (self_kind)
         receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl, span);
 
-        // Build unified substitution context for double generics
-        // Type param indices are assigned as follows:
-        // - Impl type params (from struct): 0, 1, 2, ...
-        // - Method type params: offset, offset+1, ... (where offset = impl_type_params.len())
         let mut subst_ctx = SubstitutionContext::new();
-        let mut impl_offset = 0u32;
-
-        // A concrete-instantiation impl (`impl List<u8>`) registers no impl type
-        // params and resolves its `self`/param types to the concrete
-        // instantiation, so the receiver's type args are NOT substitution
-        // params. Method-level type params therefore start at index 0; mapping
-        // the receiver args here would clash with them (e.g. bind a method `T`
-        // at index 0 to the receiver's `u8`).
-        if from_concrete_impl {
-            // impl_offset stays 0; method type params occupy 0.. .
-        } else if trait_name.is_none() {
-            // First, add impl-level type args from receiver's generic type (use base type)
-            // IMPORTANT: Skip this for trait methods because find_trait_method_for_type already
-            // resolved the return type using associated type bindings. Adding impl_args here would
-            // incorrectly substitute TypeParams from the OUTER context (e.g., TreeMap's K, V) that
-            // happen to have the same indices as this impl's type params (e.g., List's T).
-            match self.tysys.type_table.borrow().get(base_type_id).clone() {
-                ResolvedType::GenericInstance {
-                    type_args: receiver_type_args,
-                    ..
-                }
-                | ResolvedType::GenericResource {
-                    type_args: receiver_type_args,
-                    ..
-                } if !receiver_type_args.is_empty() => {
-                    impl_offset = receiver_type_args.len() as u32;
-                }
-                // The raw GC array `Array<T>` carries a single impl-level type
-                // arg, exactly like `Container<T>`.
-                ResolvedType::BuiltinArray(_) => {
-                    impl_offset = 1;
-                }
-                _ => {}
-            }
-        } else {
-            // For trait methods, just compute impl_offset for method type args
-            match self.tysys.type_table.borrow().get(base_type_id).clone() {
-                ResolvedType::GenericInstance { type_args, .. }
-                | ResolvedType::GenericResource { type_args, .. }
-                    if !type_args.is_empty() =>
-                {
-                    impl_offset = type_args.len() as u32;
-                }
-                ResolvedType::BuiltinArray(_) => {
-                    impl_offset = 1;
-                }
-                _ => {}
-            }
-        }
-
-        // The digest's numbering wins: the derivations above count receiver
-        // arguments, which overshoots when one of them is concrete.
-        if let Some(offset) = sig_impl_offset {
-            impl_offset = offset;
-        }
 
         // Inference runs when the turbofish is omitted entirely or carries an
         // explicit `_` placeholder; in the latter case the inferred holes are
@@ -800,7 +739,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let inferred = self.infer_method_type_args(MethodInferenceInput {
                 receiver_type: receiver.type_id,
                 method_name,
-                impl_offset,
+                slots: &method_type_param_ids,
                 param_types: &expected_param_types,
                 args: &args,
                 raw_args: args_ast,
