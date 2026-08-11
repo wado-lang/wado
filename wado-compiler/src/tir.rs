@@ -136,6 +136,29 @@ impl SubstitutionContext {
         self
     }
 
+    /// [`Self::with_method_args`] keyed by the parameters' own slots.
+    ///
+    /// The offset form guesses where a method's parameters start by counting
+    /// the receiver's arguments, which a blanket impl defeats: `impl<T, ..F>
+    /// Emit for T` puts `emit<S>` at slot 2 while the receiver `Point` carries
+    /// none. Reading each parameter's index off its declaration removes the
+    /// guess.
+    pub fn with_method_slots(
+        mut self,
+        slots: &[TypeId],
+        args: &[TypeId],
+        type_table: &TypeTable,
+    ) -> Self {
+        for (&slot, &type_id) in slots.iter().zip(args.iter()) {
+            if let ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } =
+                type_table.get(slot)
+            {
+                self.substitutions.insert(*index, type_id);
+            }
+        }
+        self
+    }
+
     /// Substitute type parameters in a type
     pub fn substitute(&self, type_id: TypeId, type_table: &mut TypeTable) -> TypeId {
         match type_table.get(type_id).clone() {

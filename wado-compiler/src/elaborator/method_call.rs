@@ -480,7 +480,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             owner,
             cm_name,
             is_ref_impl,
-            method_type_param_ids: _,
+            method_type_param_ids,
             impl_module: inherent_impl_module,
             from_concrete_impl,
             param_defaults,
@@ -834,7 +834,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if !method_type_args.is_empty() {
-            subst_ctx = subst_ctx.with_method_args(&method_type_args, impl_offset);
+            subst_ctx = if method_type_param_ids.len() == method_type_args.len() {
+                subst_ctx.with_method_slots(
+                    &method_type_param_ids,
+                    &method_type_args,
+                    &self.tysys.type_table.borrow(),
+                )
+            } else {
+                subst_ctx.with_method_args(&method_type_args, impl_offset)
+            };
             // Enforce the method's type-arg bounds (shared rule); a violating
             // concrete arg would otherwise trap WIR build. Hole args are skipped
             // and re-checked in `finalize_infer_holes`. Reuse the params
