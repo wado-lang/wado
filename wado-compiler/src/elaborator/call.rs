@@ -1682,10 +1682,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let suffix = &name[pos + 2..];
             // Check if it's a static method
             if self.is_static_method(prefix, suffix) {
-                return (
-                    self.lookup_static_method_param_types(prefix, suffix),
-                    Vec::new(),
-                );
+                // The parameter types come back in the declaration's own
+                // frame, slots and all, so the call site has the same reason
+                // to instantiate them as it does for a free function.
+                let params = self.lookup_static_method_param_types(prefix, suffix);
+                let slots = self
+                    .static_method_sig(prefix, suffix)
+                    .map(|sig| sig.decl.type_params.iter().map(|(_, id)| *id).collect())
+                    .unwrap_or_default();
+                return (params, slots);
             }
 
             // Builtin functions: look up param types from core:builtin module
