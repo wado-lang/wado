@@ -721,6 +721,15 @@ fn index_impl_modules(
 ) -> ImplModuleIndex {
     let mut out = ImplModuleIndex::default();
     for header in impl_headers.values() {
+        // A bodiless derive (`impl Deserialize for Point;`) asks for an impl,
+        // it does not host one. This index answers "which module holds the
+        // code", and answering with the request sends a type-param dispatch to
+        // a module with no body — where it would otherwise have reached the
+        // blanket that serves it. The generated body registers itself in the
+        // synthesis layer, under the module it actually landed in.
+        if header.is_synthesize_request {
+            continue;
+        }
         if matches!(header.target, ImplTargetKey::TypeParam(..)) {
             continue;
         }
