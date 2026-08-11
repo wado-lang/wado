@@ -82,8 +82,8 @@ impl Monomorphizer {
         let trait_name = key
             .method_info
             .as_ref()
-            .and_then(|i| i.base_trait_name.as_ref().or(i.trait_name.as_ref()))
-            .cloned();
+            .and_then(|i| i.base_trait_name())
+            .map(str::to_string);
         if let Some(trait_name) = trait_name {
             for candidate in struct_candidates {
                 if let Some(impl_module) = self.functions.trait_env.impl_module_for(
@@ -299,13 +299,13 @@ impl Monomorphizer {
             {
                 let mut names_to_try = vec![MethodName::format_local(
                     &info.fq_base_struct_name(),
-                    info.trait_name.as_deref(),
+                    info.trait_name.as_ref(),
                     &info.method_name,
                 )];
                 if info.struct_name() != info.base_struct_name() {
                     names_to_try.push(MethodName::format_local(
                         &info.fq_struct_name(),
-                        info.trait_name.as_deref(),
+                        info.trait_name.as_ref(),
                         &info.method_name,
                     ));
                 }
@@ -315,10 +315,7 @@ impl Monomorphizer {
                 if monomorph.is_blanket {
                     names_to_try.insert(0, monomorph.generic_name.clone());
                 }
-                let blanket_trait = info
-                    .base_trait_name
-                    .as_deref()
-                    .or(info.trait_name.as_deref());
+                let blanket_trait = info.base_trait_name();
                 let impl_ta = blanket_trait
                     .filter(|_| monomorph.is_blanket)
                     .and_then(|tn| {
@@ -406,14 +403,11 @@ impl Monomorphizer {
             && method_func.method_info.as_ref().is_some_and(|i| {
                 i.ref_receiver().is_some_and(|ref_kind| {
                     let is_mut = ref_kind == RefKind::Mut;
-                    i.base_trait_name
-                        .as_deref()
-                        .or(i.trait_name.as_deref())
-                        .is_some_and(|tn| {
-                            self.functions
-                                .trait_env
-                                .has_universal_ref_blanket(tn, is_mut)
-                        })
+                    i.base_trait_name().is_some_and(|tn| {
+                        self.functions
+                            .trait_env
+                            .has_universal_ref_blanket(tn, is_mut)
+                    })
                 })
             });
         if !type_args.is_empty()
@@ -432,7 +426,7 @@ impl Monomorphizer {
                 receiver.type_id,
                 type_table,
                 &method_name,
-                trait_name_opt.as_deref(),
+                trait_name_opt.as_ref(),
             );
 
             let info_ref = method_func.method_info.as_ref();
@@ -492,7 +486,7 @@ impl Monomorphizer {
                     // Try both inherent and trait method formats
                     let mut dg_names = vec![(
                         MethodName::format_local(&receiver_head, None, &method_name),
-                        None::<String>,
+                        None::<crate::name::FqTraitName>,
                     )];
                     if let Some(ref tn) = trait_name_opt {
                         dg_names.push((
@@ -688,8 +682,7 @@ impl Monomorphizer {
                 && mono.is_blanket
             {
                 let info = method_func.method_info.as_ref();
-                let blanket_trait =
-                    info.and_then(|i| i.base_trait_name.as_deref().or(i.trait_name.as_deref()));
+                let blanket_trait = info.and_then(|i| i.base_trait_name());
                 let impl_ta = match (blanket_trait, info) {
                     (Some(tn), Some(_)) => super::func_inst::blanket_pack_dispatch_args(
                         &mono.impl_type_args,
@@ -758,7 +751,7 @@ impl Monomorphizer {
                 // A tuple is module-independent, so its receiver form is bare.
                 MethodName::format_local(
                     &FqTypeName::binder(TypeTable::TUPLE_TYPE_NAME),
-                    info.trait_name.as_deref(),
+                    info.trait_name.as_ref(),
                     &info.method_name,
                 )
             });

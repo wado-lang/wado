@@ -506,8 +506,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow()
-                        .compiler_trait_name(CompilerItem::Eq)
-                        .to_string();
+                        .compiler_trait_fq(CompilerItem::Eq);
                     let resolved = ResolvedTraitMethod {
                         trait_name: eq_trait_name,
                         method_name: "eq".to_string(),
@@ -541,8 +540,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow()
-                        .compiler_trait_name(CompilerItem::Ord)
-                        .to_string();
+                        .compiler_trait_fq(CompilerItem::Ord);
                     let resolved = ResolvedTraitMethod {
                         trait_name: ord_trait_name,
                         method_name: "cmp".to_string(),
@@ -689,7 +687,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let operand_type_id = left.type_id;
                 let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
-                let (trait_name, method_name) = match op {
+                let (_trait_name, method_name) = match op {
                     BinaryOp::Add => ("Add", "add"),
                     BinaryOp::Sub => ("Sub", "sub"),
                     BinaryOp::Mul => ("Mul", "mul"),
@@ -700,7 +698,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     BinaryOp::BitXor => ("BitXor", "bitxor"),
                     _ => unreachable!(),
                 };
-                if let Some((_found_trait, info)) =
+                if let Some((found_trait, info)) =
                     self.find_method_in_trait_bounds(&bound_names, method_name, left.type_id, span)
                 {
                     // For type-param arithmetic operators, Output == Self is the common
@@ -708,7 +706,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Using AssocTypeProjection would cause unresolved types for primitives
                     // that don't register associated types.
                     let resolved = ResolvedTraitMethod {
-                        trait_name: trait_name.to_string(),
+                        trait_name: found_trait,
                         method_name: method_name.to_string(),
                         impl_name: name.clone(),
                         impl_type_id: None,
@@ -1773,7 +1771,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // a referent of its own; a bare `Add` — like `Eq` and `Ord` —
                 // declares `&Self`, and a variadic `impl Ord for [..T]`
                 // resolves that to a shape the operand does not equal.
-                let declares_rhs = resolved.trait_name.contains('<')
+                let declares_rhs = !resolved.trait_name.args().is_empty()
                     && referent != receiver.type_id
                     && referent != self.tysys.get_base_type(receiver.type_id);
                 if declares_rhs {

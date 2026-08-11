@@ -52,33 +52,33 @@ pub(super) struct FormatStdlibNames {
     pub center_index: u32,
     pub right_name: String,
     pub right_index: u32,
-    pub display: String,
+    pub display: crate::name::FqTraitName,
     pub display_method: String,
-    pub display_alt: String,
+    pub display_alt: crate::name::FqTraitName,
     pub display_alt_method: String,
-    pub inspect: String,
+    pub inspect: crate::name::FqTraitName,
     pub inspect_method: String,
-    pub inspect_alt: String,
+    pub inspect_alt: crate::name::FqTraitName,
     pub inspect_alt_method: String,
-    pub binary: String,
+    pub binary: crate::name::FqTraitName,
     pub binary_method: String,
-    pub binary_alt: String,
+    pub binary_alt: crate::name::FqTraitName,
     pub binary_alt_method: String,
-    pub octal: String,
+    pub octal: crate::name::FqTraitName,
     pub octal_method: String,
-    pub octal_alt: String,
+    pub octal_alt: crate::name::FqTraitName,
     pub octal_alt_method: String,
-    pub lower_hex: String,
+    pub lower_hex: crate::name::FqTraitName,
     pub lower_hex_method: String,
-    pub lower_hex_alt: String,
+    pub lower_hex_alt: crate::name::FqTraitName,
     pub lower_hex_alt_method: String,
-    pub upper_hex: String,
+    pub upper_hex: crate::name::FqTraitName,
     pub upper_hex_method: String,
-    pub upper_hex_alt: String,
+    pub upper_hex_alt: crate::name::FqTraitName,
     pub upper_hex_alt_method: String,
-    pub lower_exp: String,
+    pub lower_exp: crate::name::FqTraitName,
     pub lower_exp_method: String,
-    pub upper_exp: String,
+    pub upper_exp: crate::name::FqTraitName,
     pub upper_exp_method: String,
 }
 
@@ -101,41 +101,41 @@ impl FormatStdlibNames {
             center_index,
             right_name: right_name.to_string(),
             right_index,
-            display: items.trait_name(CompilerItem::Display).to_string(),
+            display: items.trait_fq(CompilerItem::Display),
             display_method: items.trait_method_name(CompilerItem::Display).to_string(),
-            display_alt: items.trait_name(CompilerItem::DisplayAlt).to_string(),
+            display_alt: items.trait_fq(CompilerItem::DisplayAlt),
             display_alt_method: items
                 .trait_method_name(CompilerItem::DisplayAlt)
                 .to_string(),
-            inspect: items.trait_name(CompilerItem::Inspect).to_string(),
+            inspect: items.trait_fq(CompilerItem::Inspect),
             inspect_method: items.trait_method_name(CompilerItem::Inspect).to_string(),
-            inspect_alt: items.trait_name(CompilerItem::InspectAlt).to_string(),
+            inspect_alt: items.trait_fq(CompilerItem::InspectAlt),
             inspect_alt_method: items
                 .trait_method_name(CompilerItem::InspectAlt)
                 .to_string(),
-            binary: items.trait_name(CompilerItem::Binary).to_string(),
+            binary: items.trait_fq(CompilerItem::Binary),
             binary_method: items.trait_method_name(CompilerItem::Binary).to_string(),
-            binary_alt: items.trait_name(CompilerItem::BinaryAlt).to_string(),
+            binary_alt: items.trait_fq(CompilerItem::BinaryAlt),
             binary_alt_method: items.trait_method_name(CompilerItem::BinaryAlt).to_string(),
-            octal: items.trait_name(CompilerItem::Octal).to_string(),
+            octal: items.trait_fq(CompilerItem::Octal),
             octal_method: items.trait_method_name(CompilerItem::Octal).to_string(),
-            octal_alt: items.trait_name(CompilerItem::OctalAlt).to_string(),
+            octal_alt: items.trait_fq(CompilerItem::OctalAlt),
             octal_alt_method: items.trait_method_name(CompilerItem::OctalAlt).to_string(),
-            lower_hex: items.trait_name(CompilerItem::LowerHex).to_string(),
+            lower_hex: items.trait_fq(CompilerItem::LowerHex),
             lower_hex_method: items.trait_method_name(CompilerItem::LowerHex).to_string(),
-            lower_hex_alt: items.trait_name(CompilerItem::LowerHexAlt).to_string(),
+            lower_hex_alt: items.trait_fq(CompilerItem::LowerHexAlt),
             lower_hex_alt_method: items
                 .trait_method_name(CompilerItem::LowerHexAlt)
                 .to_string(),
-            upper_hex: items.trait_name(CompilerItem::UpperHex).to_string(),
+            upper_hex: items.trait_fq(CompilerItem::UpperHex),
             upper_hex_method: items.trait_method_name(CompilerItem::UpperHex).to_string(),
-            upper_hex_alt: items.trait_name(CompilerItem::UpperHexAlt).to_string(),
+            upper_hex_alt: items.trait_fq(CompilerItem::UpperHexAlt),
             upper_hex_alt_method: items
                 .trait_method_name(CompilerItem::UpperHexAlt)
                 .to_string(),
-            lower_exp: items.trait_name(CompilerItem::LowerExp).to_string(),
+            lower_exp: items.trait_fq(CompilerItem::LowerExp),
             lower_exp_method: items.trait_method_name(CompilerItem::LowerExp).to_string(),
-            upper_exp: items.trait_name(CompilerItem::UpperExp).to_string(),
+            upper_exp: items.trait_fq(CompilerItem::UpperExp),
             upper_exp_method: items.trait_method_name(CompilerItem::UpperExp).to_string(),
         }
     }
@@ -594,60 +594,49 @@ fn build_template_block(
                     .is_some_and(|fs| fs.type_char == Some('?'));
                 let is_alternate = format_spec.as_ref().is_some_and(|fs| fs.alternate);
 
-                let (trait_name, method_name): (&str, &str) = match &format_spec {
-                    Some(fs) => match (fs.type_char, fs.alternate) {
-                        (Some('b'), true) => (
-                            ctx.names.binary_alt.as_str(),
-                            ctx.names.binary_alt_method.as_str(),
-                        ),
-                        (Some('b'), false) => {
-                            (ctx.names.binary.as_str(), ctx.names.binary_method.as_str())
-                        }
-                        (Some('o'), true) => (
-                            ctx.names.octal_alt.as_str(),
-                            ctx.names.octal_alt_method.as_str(),
-                        ),
-                        (Some('o'), false) => {
-                            (ctx.names.octal.as_str(), ctx.names.octal_method.as_str())
-                        }
-                        (Some('x'), true) => (
-                            ctx.names.lower_hex_alt.as_str(),
-                            ctx.names.lower_hex_alt_method.as_str(),
-                        ),
-                        (Some('x'), false) => (
-                            ctx.names.lower_hex.as_str(),
-                            ctx.names.lower_hex_method.as_str(),
-                        ),
-                        (Some('X'), true) => (
-                            ctx.names.upper_hex_alt.as_str(),
-                            ctx.names.upper_hex_alt_method.as_str(),
-                        ),
-                        (Some('X'), false) => (
-                            ctx.names.upper_hex.as_str(),
-                            ctx.names.upper_hex_method.as_str(),
-                        ),
-                        (Some('e'), _) => (
-                            ctx.names.lower_exp.as_str(),
-                            ctx.names.lower_exp_method.as_str(),
-                        ),
-                        (Some('E'), _) => (
-                            ctx.names.upper_exp.as_str(),
-                            ctx.names.upper_exp_method.as_str(),
-                        ),
-                        (_, true) => (
-                            ctx.names.display_alt.as_str(),
-                            ctx.names.display_alt_method.as_str(),
-                        ),
-                        _ => (
-                            ctx.names.display.as_str(),
-                            ctx.names.display_method.as_str(),
-                        ),
-                    },
-                    None => (
-                        ctx.names.display.as_str(),
-                        ctx.names.display_method.as_str(),
-                    ),
-                };
+                let (trait_name, method_name): (&crate::name::FqTraitName, &str) =
+                    match &format_spec {
+                        Some(fs) => match (fs.type_char, fs.alternate) {
+                            (Some('b'), true) => {
+                                (&ctx.names.binary_alt, ctx.names.binary_alt_method.as_str())
+                            }
+                            (Some('b'), false) => {
+                                (&ctx.names.binary, ctx.names.binary_method.as_str())
+                            }
+                            (Some('o'), true) => {
+                                (&ctx.names.octal_alt, ctx.names.octal_alt_method.as_str())
+                            }
+                            (Some('o'), false) => {
+                                (&ctx.names.octal, ctx.names.octal_method.as_str())
+                            }
+                            (Some('x'), true) => (
+                                &ctx.names.lower_hex_alt,
+                                ctx.names.lower_hex_alt_method.as_str(),
+                            ),
+                            (Some('x'), false) => {
+                                (&ctx.names.lower_hex, ctx.names.lower_hex_method.as_str())
+                            }
+                            (Some('X'), true) => (
+                                &ctx.names.upper_hex_alt,
+                                ctx.names.upper_hex_alt_method.as_str(),
+                            ),
+                            (Some('X'), false) => {
+                                (&ctx.names.upper_hex, ctx.names.upper_hex_method.as_str())
+                            }
+                            (Some('e'), _) => {
+                                (&ctx.names.lower_exp, ctx.names.lower_exp_method.as_str())
+                            }
+                            (Some('E'), _) => {
+                                (&ctx.names.upper_exp, ctx.names.upper_exp_method.as_str())
+                            }
+                            (_, true) => (
+                                &ctx.names.display_alt,
+                                ctx.names.display_alt_method.as_str(),
+                            ),
+                            _ => (&ctx.names.display, ctx.names.display_method.as_str()),
+                        },
+                        None => (&ctx.names.display, ctx.names.display_method.as_str()),
+                    };
 
                 // Create or reassign Formatter local
                 let fmt_index = if let Some(idx) = fmt_local_index {
@@ -721,16 +710,13 @@ fn build_template_block(
                 );
 
                 if is_inspect {
-                    let (it_name, im_name): (&str, &str) = if is_alternate {
+                    let (it_name, im_name): (&crate::name::FqTraitName, &str) = if is_alternate {
                         (
-                            ctx.names.inspect_alt.as_str(),
+                            &ctx.names.inspect_alt,
                             ctx.names.inspect_alt_method.as_str(),
                         )
                     } else {
-                        (
-                            ctx.names.inspect.as_str(),
-                            ctx.names.inspect_method.as_str(),
-                        )
+                        (&ctx.names.inspect, ctx.names.inspect_method.as_str())
                     };
                     let call_stmts = trait_fmt_call(
                         resolved.type_id,
@@ -984,8 +970,12 @@ fn deref_to_inner(expr: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
 /// inherited impl — a newtype renders its underlying value for every format
 /// trait except `Inspect` / `InspectAlt` (which it overrides with the ` as Name`
 /// tag). A manual `impl <Trait>` on the newtype stops the peel.
-fn peel_transparent_newtype(type_id: TypeId, trait_name: &str, ctx: &TemplateCtx) -> TypeId {
-    if trait_name == ctx.names.inspect || trait_name == ctx.names.inspect_alt {
+fn peel_transparent_newtype(
+    type_id: TypeId,
+    trait_name: &crate::name::FqTraitName,
+    ctx: &TemplateCtx,
+) -> TypeId {
+    if *trait_name == ctx.names.inspect || *trait_name == ctx.names.inspect_alt {
         return type_id;
     }
     let mut tid = type_id;
@@ -999,7 +989,7 @@ fn peel_transparent_newtype(type_id: TypeId, trait_name: &str, ctx: &TemplateCtx
                     module_source,
                 } if !ctx.trait_env.has_any_methodful_impl_by_receiver(
                     &Receiver::Type(FqTypeName::of_head(module_source, name)),
-                    trait_name,
+                    trait_name.base_name(),
                     None,
                 ) =>
                 {
@@ -1016,7 +1006,7 @@ fn trait_fmt_call(
     type_id: TypeId,
     val: TirExpr,
     fmt: TirExpr,
-    trait_name: &str,
+    trait_name: &crate::name::FqTraitName,
     method_name: &str,
     span: Span,
     ctx: &TemplateCtx,
@@ -1089,7 +1079,7 @@ struct MethodCallInfo {
 /// type-specific logic is needed at the call site.
 fn method_call_info_for_type(
     type_id: TypeId,
-    trait_name: &str,
+    trait_name: &crate::name::FqTraitName,
     method_name: &str,
     ctx: &TemplateCtx,
 ) -> MethodCallInfo {
@@ -1121,13 +1111,13 @@ fn method_call_info_for_type(
             let inner_name = tt.borrow().fq_type_name(inner);
             let local_name = LocalMethodName::new_ref(
                 ref_kind,
-                Some(trait_name.to_string()),
+                Some(trait_name.clone()),
                 method_name.to_string(),
             )
             .with_struct_type_args(&[inner_name]);
             let generic_name = LocalMethodName::new_ref(
                 ref_kind,
-                Some(trait_name.to_string()),
+                Some(trait_name.clone()),
                 method_name.to_string(),
             )
             .to_mangled_name();
@@ -1256,25 +1246,26 @@ fn type_module_hint_tt(type_id: TypeId, tt: &TypeTable) -> Option<ModuleSource> 
 pub(crate) fn blanket_dispatch_for(
     trait_env: &TraitEnv,
     type_id: TypeId,
-    trait_name: &str,
+    trait_name: &crate::name::FqTraitName,
     method_name: &str,
     tt: &mut TypeTable,
 ) -> Option<(MonomorphInfo, ModuleSource)> {
     let type_key = tt.impl_receiver_key(type_id);
-    if trait_env.has_any_methodful_impl_by_receiver(&type_key, trait_name, None) {
+    if trait_env.has_any_methodful_impl_by_receiver(&type_key, trait_name.base_name(), None) {
         return None;
     }
     let type_module = type_module_hint_tt(type_id, tt);
     // Param and pack projections must come from the same blanket, or the
     // template name would name one kind and the args another.
-    let blanket =
-        trait_env.value_blanket_for_receiver(trait_name, type_module.as_ref(), &|bounds| {
-            receiver_satisfies_blanket_bounds(type_id, bounds.to_vec(), tt)
-        })?;
+    let blanket = trait_env.value_blanket_for_receiver(
+        trait_name.base_name(),
+        type_module.as_ref(),
+        &|bounds| receiver_satisfies_blanket_bounds(type_id, bounds.to_vec(), tt),
+    )?;
     let blanket_module = blanket.module.clone();
     let generic_name = LocalMethodName::new(
         FqTypeName::binder(&blanket.param),
-        Some(trait_name.to_string()),
+        Some(trait_name.clone()),
         method_name.to_string(),
     )
     .to_mangled_name();
@@ -1311,10 +1302,7 @@ fn blanket_method_call_info(
     method_name: &str,
     ctx: &TemplateCtx,
 ) -> Option<MethodCallInfo> {
-    let trait_name = local_name
-        .base_trait_name
-        .as_deref()
-        .or(local_name.trait_name.as_deref())?;
+    let trait_name = local_name.trait_name.as_ref()?;
     // A bodyless conformance marker (`impl Inspect for Point;`) registers in
     // the impl index but provides no method — under the blanket regime it means
     // "derive via the blanket", so route unless a real methodful impl exists.
@@ -1338,7 +1326,7 @@ fn blanket_method_call_info(
 /// for parameterized types like `GenericInstance`, etc.
 fn method_name_for_type(
     type_id: TypeId,
-    trait_name: &str,
+    trait_name: &crate::name::FqTraitName,
     method_name: &str,
     tt: &Rc<RefCell<TypeTable>>,
 ) -> LocalMethodName {
@@ -1352,7 +1340,7 @@ fn method_name_for_type(
             type_args.iter().map(|t| tt_ref.fq_type_name(*t)).collect();
         return LocalMethodName::new(
             tt_ref.fq_base_type_name(type_id),
-            Some(trait_name.to_string()),
+            Some(trait_name.clone()),
             method_name.to_string(),
         )
         .with_struct_type_args(&arg_names);
@@ -1362,7 +1350,7 @@ fn method_name_for_type(
         ResolvedType::TypeParam { ref name, .. } | ResolvedType::TypePack { ref name, .. } => {
             let mut info = LocalMethodName::new(
                 FqTypeName::binder(name),
-                Some(trait_name.to_string()),
+                Some(trait_name.clone()),
                 method_name.to_string(),
             );
             info.is_type_param_receiver = true;
@@ -1382,14 +1370,14 @@ fn method_name_for_type(
                 crate::name::fn_type_args(params.len(), &tt_ref.fq_type_name(return_type));
             LocalMethodName::new(
                 FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
-                Some(trait_name.to_string()),
+                Some(trait_name.clone()),
                 method_name.to_string(),
             )
             .with_struct_type_args(&type_args)
         }
         _ => LocalMethodName::new(
             tt_ref.fq_base_type_name(type_id),
-            Some(trait_name.to_string()),
+            Some(trait_name.clone()),
             method_name.to_string(),
         ),
     }
@@ -1423,10 +1411,7 @@ fn trait_impl_module(
     // every user-written `impl Trait for Type` block lives. This handles
     // cross-module impls like `impl Display for String` (defined in
     // `core:prelude/format`, not the module that declares `String`).
-    if let Some(trait_name) = local_name
-        .base_trait_name
-        .as_deref()
-        .or(local_name.trait_name.as_deref())
+    if let Some(trait_name) = local_name.base_trait_name()
         && let Some(loc) = ctx.trait_env.impl_module_for(
             &local_name.base_struct_name(),
             trait_name,

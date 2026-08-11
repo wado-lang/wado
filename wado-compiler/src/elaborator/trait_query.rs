@@ -1640,7 +1640,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
-    ) -> Option<(String, MethodInfo)> {
+    ) -> Option<(crate::name::FqTraitName, MethodInfo)> {
         let bounds = self.elaborate_bound_names(bounds);
         // Stopping at the first hit would hide the ambiguity, so every bound is
         // scanned — by predicate, leaving only the winner to clone.
@@ -1663,6 +1663,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let (trait_name, (sig, trait_assoc_types)) = resolved?;
+        // The bound answers with the trait it *declares*, not the spelling the
+        // bound wrote: an aliased bound (`T: G` for `use { Greet as G }`) must
+        // reach the same methods as the impl that defines them.
+        let fq_trait_name = self.fq_trait_name_written(&trait_name);
 
         let answers = self.trait_assoc_answers(&trait_name, &trait_assoc_types, self_type_id);
         let instantiated = sig.decl.instantiate_slots_with(
@@ -1674,7 +1678,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declaring_slots = (sig.declaring_slot_count as usize).min(sig.decl.type_params.len());
 
         Some((
-            trait_name,
+            fq_trait_name,
             MethodInfo {
                 impl_offset: Some(sig.declaring_slot_count),
                 method_ast_id: Some(sig.ast_id),
@@ -2265,7 +2269,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .intern(ResolvedType::Ref(lookup_type_id));
             (
-                trait_name.to_string(),
+                self.fq_trait_name_written(trait_name),
                 ast::SelfKind::Ref,
                 vec![ref_self_ty],
                 return_type,
@@ -2353,11 +2357,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             consumes_self: false,
         };
         let impl_module_source = self.find_struct_module_source(struct_name);
+        let trait_decl = self.trait_decl_key_in_frame(&trait_name);
         Some(TraitMethodMatch {
             // Auto-derived `Eq` / `Ord` take no type arguments.
-            trait_decl: self.trait_decl_key_in_frame(&trait_name),
+            trait_name: crate::name::FqTraitName::declared(&trait_decl.0, &trait_decl.1),
+            trait_decl,
             trait_args: vec![],
-            trait_name,
             method_info,
             impl_module_source,
             blanket_type_param: None,

@@ -55,6 +55,10 @@ pub enum DeclRef {
 #[derive(Debug, Default)]
 pub struct Resolutions {
     refs: IndexMap<AstId, DeclRef>,
+    /// Every declaration a reference reaches, by its declaring node's `AstId`.
+    /// Carried here so a consumer can name what a site resolved to without
+    /// holding the `SymbolTable` — the table is the one place both are known.
+    decls: IndexMap<AstId, (ModuleSource, String)>,
 }
 
 impl Resolutions {
@@ -75,7 +79,26 @@ impl Resolutions {
                 resolver.visit_item(item);
             }
         }
-        Self { refs }
+        let mut decls: IndexMap<AstId, (ModuleSource, String)> = IndexMap::default();
+        for answer in refs.values() {
+            if let DeclRef::Decl(id) = answer
+                && let Some(sym) = symbols.get(id)
+            {
+                decls.insert(*id, (sym.module_source().clone(), sym.name.clone()));
+            }
+        }
+        Self { refs, decls }
+    }
+
+    /// The declaration a reference site names: the module that declares it and
+    /// the name that declaration writes. `None` for a binder, a builtin shape,
+    /// an unresolved name, or a site the walk never reached.
+    #[must_use]
+    pub fn declared(&self, site: AstId) -> Option<(&ModuleSource, &str)> {
+        match self.get(site)? {
+            DeclRef::Decl(id) => self.decls.get(&id).map(|(m, n)| (m, n.as_str())),
+            DeclRef::Binder(_) | DeclRef::Builtin(_) | DeclRef::Unresolved => None,
+        }
     }
 
     /// The answer for a reference site, or `None` when the site was never

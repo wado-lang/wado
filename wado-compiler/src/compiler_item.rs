@@ -1498,6 +1498,30 @@ impl CompilerItems {
         self.require_trait(item).1
     }
 
+    /// The trait as a mangled name's trait segment names it — by the module
+    /// that declares it. This is what a synthesised `LocalMethodName` takes:
+    /// the registry holds the declaration, so no synthesis site has to spell
+    /// the trait and none can spell the wrong one.
+    #[must_use]
+    pub fn trait_fq(&self, item: CompilerItem) -> crate::name::FqTraitName {
+        let (module, name) = self.require_trait(item);
+        crate::name::FqTraitName::declared(module, name)
+    }
+
+    /// Non-panicking [`Self::trait_fq`]: `None` when the item is not
+    /// registered.
+    #[must_use]
+    pub fn trait_fq_opt(&self, item: CompilerItem) -> Option<crate::name::FqTraitName> {
+        match self.get(item)? {
+            Resolved::Trait {
+                module_source,
+                name,
+                ..
+            } => Some(crate::name::FqTraitName::declared(module_source, name)),
+            _ => None,
+        }
+    }
+
     /// Non-panicking [`Self::trait_name`]: `None` when the item is not
     /// registered. Used to classify a trait reference against optional
     /// anchors (e.g. serde traits, absent unless the program imports serde)

@@ -32,15 +32,15 @@ use crate::token::Span;
 /// implement.
 #[derive(Clone, Debug)]
 pub(super) struct SerdeStdlibNames {
-    pub deserialize: String,
-    pub field_schema: String,
+    pub deserialize: crate::name::FqTraitName,
+    pub field_schema: crate::name::FqTraitName,
 }
 
 impl SerdeStdlibNames {
     pub fn from_compiler_items(items: &CompilerItems) -> Self {
         Self {
-            deserialize: items.trait_name(CompilerItem::Deserialize).to_string(),
-            field_schema: items.trait_name(CompilerItem::FieldSchema).to_string(),
+            deserialize: items.trait_fq(CompilerItem::Deserialize),
+            field_schema: items.trait_fq(CompilerItem::FieldSchema),
         }
     }
 }
@@ -250,7 +250,7 @@ fn collect_existing_trait_methods(module: &TirModule) -> IndexSet<String> {
                 info.trait_name.as_ref().map(|trait_name| {
                     mangle_local_trait_method(
                         &info.base_struct_name(),
-                        trait_name,
+                        &trait_name.to_mangled(),
                         &info.method_name,
                     )
                 })
@@ -474,7 +474,7 @@ fn i32_eq(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
 #[allow(clippy::too_many_arguments)]
 fn field_schema_method_fn(
     type_name: &FqTypeName,
-    field_schema_trait: &str,
+    field_schema_trait: &crate::name::FqTraitName,
     method: &str,
     param_name: &str,
     param_type: TypeId,
@@ -498,7 +498,7 @@ fn field_schema_method_fn(
         monomorph_info: None,
         method_info: Some(LocalMethodName::new(
             type_name.clone(),
-            Some(field_schema_trait.to_string()),
+            Some(field_schema_trait.clone()),
             method.to_string(),
         )),
         params: vec![TirParam {
@@ -532,7 +532,7 @@ fn field_schema_method_fn(
 
 fn generate_lookup_function(
     type_name: &FqTypeName,
-    field_schema_trait: &str,
+    field_schema_trait: &crate::name::FqTraitName,
     fields: &[(String, String, TypeId, u32)],
     positional_flags: &[bool],
     key_slice_type: TypeId,
@@ -624,7 +624,7 @@ fn generate_lookup_function(
 /// assignment as `lookup`.
 fn generate_positional_at_function(
     type_name: &FqTypeName,
-    field_schema_trait: &str,
+    field_schema_trait: &crate::name::FqTraitName,
     positional_flags: &[bool],
     option_i32: TypeId,
     span: Span,

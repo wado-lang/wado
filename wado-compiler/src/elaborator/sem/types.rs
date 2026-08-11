@@ -565,9 +565,8 @@ pub(crate) struct FromCallFacts {
     /// `type_name(from_type)` — the conversion source type's name,
     /// used to build `LocalMethodName::trait_name`'s `From<…>` form.
     pub(crate) from_name: String,
-    /// `compiler_items().trait_name(From)` — the bare trait name
-    /// (typically `"From"`).
-    pub(crate) from_trait_name: String,
+    /// The `From` trait, named by the module that declares it.
+    pub(crate) from_trait_name: crate::name::FqTraitName,
 }
 
 /// Resolved `SequenceLiteralBuilder` impl data for a tuple-to-sequence
@@ -581,8 +580,9 @@ pub(crate) struct SequenceCoercionFacts {
     pub(crate) element_type: crate::tir::TypeId,
     /// `self` kind on the resolved `push_literal` method.
     pub(crate) push_self_kind: crate::ast::SelfKind,
-    /// Fully resolved trait name (e.g. `"SequenceLiteralBuilder<i32>"`).
-    pub(crate) trait_name: String,
+    /// The builder trait, named by the module that declares it (e.g.
+    /// `core:prelude/list.wado/SequenceLiteralBuilder<i32>`).
+    pub(crate) trait_name: crate::name::FqTraitName,
     /// The `Builder::build()` call's return type.
     pub(crate) output_type: crate::tir::TypeId,
     /// Module that hosts the impl block.
@@ -620,8 +620,8 @@ pub(crate) struct KeyValueCoercionFacts {
     pub(crate) value_type: crate::tir::TypeId,
     /// `self` kind on the resolved `insert_literal` method.
     pub(crate) insert_self_kind: crate::ast::SelfKind,
-    /// Fully resolved trait name.
-    pub(crate) trait_name: String,
+    /// The builder trait, named by the module that declares it.
+    pub(crate) trait_name: crate::name::FqTraitName,
     /// The block's resulting type (= `target_type`).
     pub(crate) target_type: crate::tir::TypeId,
     /// Module that hosts the impl block.
@@ -836,16 +836,14 @@ pub(crate) struct HandlerEffectEntry {
 /// types happens inside `reify_impl`.
 #[derive(Clone)]
 pub(crate) struct ImplFacts {
-    /// Full mangled trait name (e.g. `"Stream<u8>"`) — `None` for
-    /// inherent impls. Lives on `FunctionRef::method_info`'s
-    /// `trait_name` field.
-    pub(crate) trait_name_mangled: Option<String>,
-    /// Canonical `(declaring_module, base_trait_name)` key —
-    /// `None` for inherent impls. Lives on
-    /// `LocalMethodName::{base_trait_module, base_trait_name}`
-    /// and disambiguates two modules' same-named traits in the
-    /// `trait_env` dispatch indices.
-    pub(crate) trait_canonical: Option<(crate::module_source::ModuleSource, String)>,
+    /// The trait this block implements, named by the module that declares it
+    /// and carrying the header's type arguments (`Stream<u8>`) — `None` for an
+    /// inherent impl. Lives on `FunctionRef::method_info`'s `trait_name`.
+    ///
+    /// The declaration and the instantiated spelling travel together, so two
+    /// modules' same-named traits stay apart in the `trait_env` dispatch
+    /// indices and in the method mangle alike.
+    pub(crate) trait_name: Option<crate::name::FqTraitName>,
     /// Concrete `TypeId`s of the trait/resource type arguments at the
     /// impl site (`impl Future<i32> for …` → `[i32]`; `impl<T> Stream<T>`
     /// → the impl's `TypeParam` id). Written onto each method's

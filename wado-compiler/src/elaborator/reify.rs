@@ -1336,7 +1336,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // effect-dispatch handler index is built from.
         let mut naming = LocalMethodName::of(
             facts.receiver.clone(),
-            facts.trait_name_mangled.clone(),
+            facts.trait_name.clone(),
             String::new(),
         );
         if let Some(owner) = facts.concrete_owner.as_ref() {
@@ -1344,7 +1344,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         Some(crate::tir::TirImpl {
-            trait_canonical: facts.trait_canonical.clone(),
+            trait_canonical: facts
+                .trait_name
+                .as_ref()
+                .and_then(crate::name::FqTraitName::canonical),
             trait_type_args: facts.trait_type_args.clone(),
             struct_name: naming.struct_name(),
             rest: impl_block.rest,
@@ -1424,7 +1427,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let Some(facts) = self.sem.types.impl_facts.get(&impl_key).cloned() else {
             return Vec::new();
         };
-        let Some(trait_name_mangled) = facts.trait_name_mangled.clone() else {
+        let Some(trait_name_mangled) = facts.trait_name.clone() else {
             return Vec::new();
         };
         let struct_name = facts.struct_name.clone();
@@ -1627,7 +1630,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut method_info = {
             let mut info = LocalMethodName::of(
                 facts.receiver.clone(),
-                facts.trait_name_mangled.clone(),
+                facts.trait_name.clone(),
                 func.name.clone(),
             );
             info.is_ref_impl = facts.is_ref_impl;
@@ -1638,10 +1641,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // handler is keyed `Future<>` and the `Future<i32>` binding
             // finds no `DispatchPlan`.
             info.trait_type_args.clone_from(&facts.trait_type_args);
-            if let Some((module, base)) = facts.trait_canonical.clone() {
-                info.base_trait_module = Some(module);
-                info.base_trait_name = Some(base);
-            }
             info
         };
 
@@ -1652,11 +1651,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // monomorphized instance, so DCE / WIR / cross-module inclusion all
         // handle it, and `impl List<u8>` vs `impl List<i32>` stay distinct.
         if let Some(owner) = concrete_owner {
-            mangled_name = crate::name::MethodName::format_local(
-                owner,
-                facts.trait_name_mangled.as_deref(),
-                &func.name,
-            );
+            mangled_name =
+                crate::name::MethodName::format_local(owner, facts.trait_name.as_ref(), &func.name);
             method_info = method_info.with_substituted_struct_name(owner);
             impl_type_params = Vec::new();
         }
@@ -6986,7 +6982,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 "resolve_from_call records FromCallFacts at every site reify hits — \
                  ?-op, Type::from(x), and Type::<…>::from(x)",
             );
-        let from_trait = format!("{}<{}>", facts.from_trait_name, facts.from_name);
+        let from_trait = facts.from_trait_name.with_args(vec![facts.from_name]);
 
         TirExpr::new(
             TirExprKind::Call {
@@ -6998,8 +6994,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         receiver: Receiver::Type(facts.target_name),
                         struct_type_args: Vec::new(),
                         trait_name: Some(from_trait),
-                        base_trait_name: Some(facts.from_trait_name),
-                        base_trait_module: None,
                         trait_type_args: vec![],
                         method_name: "from".to_string(),
                         method_type_args: vec![],

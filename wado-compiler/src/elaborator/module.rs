@@ -448,7 +448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let trait_name = impl_block
                     .trait_type
                     .as_ref()
-                    .map(|t| scope.get_type_name(t));
+                    .map(|t| scope.fq_trait_name(t).head_only());
 
                 // Register methods that carry `#[compiler_item("...")]`
                 // against the impl's owning type. This is the only place
@@ -515,7 +515,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     let mangled_name =
-                        MethodName::format_local(&struct_name, trait_name.as_deref(), &method.name);
+                        MethodName::format_local(&struct_name, trait_name.as_ref(), &method.name);
                     scope
                         .sem
                         .decls

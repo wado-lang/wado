@@ -2176,7 +2176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         func: &Function,
         struct_name: &str,
         impl_type: &Type,
-        trait_name: Option<&str>,
+        trait_name: Option<&crate::name::FqTraitName>,
         trait_type: Option<&Type>,
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],

@@ -342,6 +342,23 @@ pub(super) struct ImplHeader {
     pub(super) span: Span,
 }
 
+impl ImplHeader {
+    /// The implemented trait as a mangled method name embeds it: named by the
+    /// module that declares it, carrying the header's written type arguments.
+    /// `None` for an inherent impl, and for a trait position filled by a
+    /// binder or a name that reaches no declaration.
+    pub(super) fn fq_trait(&self) -> Option<name::FqTraitName> {
+        let written = get_type_name_full_static(self.trait_type.as_ref()?);
+        match self.trait_key.as_ref()? {
+            ImplTargetKey::Decl((module, name)) => Some(name::FqTraitName::declared_as_written(
+                module, name, &written,
+            )),
+            ImplTargetKey::TypeParam(_, name) => Some(name::FqTraitName::binder(name)),
+            ImplTargetKey::Ref(_) => None,
+        }
+    }
+}
+
 /// Digested signature of a single method inside an [`ImplHeader`]. Holds the
 /// name and type parameters method-lookup queries need without the method
 /// body; grows field-by-field as consumers migrate off the impl-block AST.
@@ -2477,6 +2494,20 @@ pub(super) fn receiver_decl_key(ty: &ast::Type) -> String {
     match name::RefKind::from_ast(ty) {
         Some(kind) => kind.prefix().to_string(),
         None => get_type_name_static(ty),
+    }
+}
+
+/// [`get_type_name_static`] keeping the written type arguments
+/// (`Stream<u8>`), for the spellings a mangled name embeds.
+pub(super) fn get_type_name_full_static(ty: &ast::Type) -> String {
+    match ty {
+        ast::Type::Generic(generic) => {
+            let args: Vec<String> = generic.args.iter().map(get_type_name_full_static).collect();
+            format!("{}<{}>", generic.name, args.join(","))
+        }
+        ast::Type::Reference(inner) => format!("&{}", get_type_name_full_static(inner)),
+        ast::Type::MutReference(inner) => format!("&mut {}", get_type_name_full_static(inner)),
+        other => get_type_name_static(other),
     }
 }
 

@@ -4686,14 +4686,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let tt = self.tysys.type_table.borrow();
         let target_name = tt.type_name(target_type);
         let from_name = tt.type_name(from_type);
-        let from_trait_name = tt
-            .compiler_trait_name(crate::compiler_item::CompilerItem::From)
-            .to_string();
+        let from_trait_name = tt.compiler_trait_fq(crate::compiler_item::CompilerItem::From);
         drop(tt);
 
-        // Use "From<SourceType>" as the trait name in mangled names to disambiguate
-        // multiple From impls on the same target type.
-        let from_trait = format!("{from_trait_name}<{from_name}>");
+        // `From<SourceType>` as the trait segment disambiguates several `From`
+        // impls on one target type.
+        let from_trait = from_trait_name.clone().with_args(vec![from_name.clone()]);
         // The receiver the method name is built from — the same value reify
         // puts on the call's `method_info`, so the two cannot drift.
         let target_receiver = self.qualified_receiver_name(&target_name);

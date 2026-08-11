@@ -1107,7 +1107,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // declarations.
                     let final_mangled = MethodName::format_local(
                         &crate::name::FqTypeName::of_head(&struct_module, type_name),
-                        method_ref.trait_name.as_deref(),
+                        method_ref.trait_name.as_ref(),
                         method_name,
                     );
 

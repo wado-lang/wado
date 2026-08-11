@@ -2053,7 +2053,9 @@ pub(super) struct RequiredTrait {
 
 /// Result of finding a trait method for a type via `find_trait_method_for_type`.
 pub(super) struct TraitMethodMatch {
-    pub(super) trait_name: String,
+    /// The matched trait as a mangled method name embeds it: named by the
+    /// module that declares it, carrying the impl header's type arguments.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// The matched trait's declaration key, resolved from the impl's own
     /// module — two same-named traits from different modules stay distinct.
     pub(super) trait_decl: super::trait_env::DeclKey,
@@ -2380,8 +2382,8 @@ pub(super) struct IndexTraitInfo {
     pub(super) output_type: TypeId,
     /// Self kind for the `index_ref` method (&self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "`IndexRef`<i32>")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
     /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
@@ -2395,8 +2397,8 @@ pub(super) struct IndexAssignTraitInfo {
     pub(super) input_type: TypeId,
     /// Self kind for the `index_assign` method (&mut self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "`IndexAssign`<i32>")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
     /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
@@ -2410,8 +2412,8 @@ pub(super) struct IndexMutTraitInfo {
     pub(super) output_type: TypeId,
     /// Self kind for the `index_mut_ref` method (&mut self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "`IndexMutRef`")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
     /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
@@ -2425,8 +2427,8 @@ pub(super) struct IndexValueTraitInfo {
     pub(super) output_type: TypeId,
     /// Self kind for the `index_value` method (&self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "`IndexValue`<i32>")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
     /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
@@ -2441,8 +2443,8 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) output_type: TypeId,
     /// Self kind for the method (&self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "Add", "Sub")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// The resolved type of the rhs parameter (first non-self parameter)
     pub(super) rhs_type: Option<TypeId>,
 }
@@ -2459,8 +2461,8 @@ pub(super) struct ArithmeticTraitInfo {
 /// [rtq]: crate::elaborator::Elaborator::resolve_trait_method_for_op
 /// [bop]: crate::elaborator::Elaborator::build_trait_op_method_call_on_resolved
 pub(super) struct ResolvedTraitMethod {
-    /// Trait name (e.g., "Eq", "Ord", "Add", "Shl", "Neg", "`BitNot`").
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// Method name (e.g., "eq", "cmp", "add", "shl", "neg", "bitnot").
     pub(super) method_name: String,
     /// Written name of the type whose impl matched — the impl-index key. For
@@ -2495,8 +2497,8 @@ pub(super) struct KeyValueLiteralTraitInfo {
     pub(super) builder_type: TypeId,
     /// Self kind for the `insert_literal` method (&mut self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name used for method mangling (e.g., "`KeyValueLiteralBuilder`")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
 }
 
 /// Info about a `SequenceLiteralBuilder` trait implementation
@@ -2509,8 +2511,8 @@ pub(super) struct SequenceLiteralTraitInfo {
     pub(super) output_type: TypeId,
     /// Self kind for the `push_literal` method (&mut self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name used for method mangling (e.g., "`SequenceLiteralBuilder`")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// The module where the `SequenceLiteralBuilder` impl is defined.
     pub(super) impl_module_source: ModuleSource,
 }

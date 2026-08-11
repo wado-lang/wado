@@ -176,13 +176,14 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
                     continue;
                 }
                 let is_concrete = func.impl_type_params.is_empty();
+                let trait_base = trait_name.base_name().to_string();
                 record(
                     info.base_struct_name(),
-                    trait_name.clone(),
+                    trait_base.clone(),
                     module_source,
                     is_concrete,
                 );
-                record_concrete_instantiation(&mut record, info, trait_name, module_source);
+                record_concrete_instantiation(&mut record, info, &trait_base, module_source);
             }
         }
     }

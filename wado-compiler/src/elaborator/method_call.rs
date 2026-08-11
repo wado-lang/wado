@@ -302,7 +302,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let mut method_info: Option<MethodInfo> = None;
-        let mut trait_name: Option<String> = None;
+        let mut trait_name: Option<crate::name::FqTraitName> = None;
         let mut trait_impl_module_source: Option<ModuleSource> = None;
         let mut blanket_type_param: Option<String> = None;
         let mut trait_impl_struct_name: Option<FqTypeName> = None;
@@ -822,7 +822,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 raw_args: args_ast,
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
-                trait_name: trait_name.as_deref(),
+                trait_name: trait_name.as_ref().map(crate::name::FqTraitName::base_name),
                 declaring_module: Some(callee_module),
                 span,
             });
@@ -854,7 +854,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &struct_name,
                     &struct_module,
                     method_name,
-                    trait_name.as_deref(),
+                    trait_name.as_ref().map(crate::name::FqTraitName::base_name),
                     &method_type_args,
                     span,
                 ),
@@ -1009,7 +1009,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let mangled_method_name =
-            MethodName::format_local(&receiver_struct_name, trait_name.as_deref(), method_name);
+            MethodName::format_local(&receiver_struct_name, trait_name.as_ref(), method_name);
 
         // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if from_concrete_impl {
@@ -1027,7 +1027,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 let generic_name = MethodName::format_local(
                     &receiver_struct_name,
-                    trait_name.as_deref(),
+                    trait_name.as_ref(),
                     method_name,
                 );
                 Some(MonomorphInfo {
@@ -1043,7 +1043,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // monomorph_info maps from the concrete name back to the template.
             let generic_name = MethodName::format_local(
                 &FqTypeName::binder(blanket_param),
-                trait_name.as_deref(),
+                trait_name.as_ref(),
                 method_name,
             );
             Some(MonomorphInfo {
@@ -2119,7 +2119,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mangled_func_name = MethodName::format_local(
             &mangled_struct_name,
-            trait_name_opt.as_deref(),
+            trait_name_opt.as_ref(),
             &static_call.method,
         );
 
@@ -2182,7 +2182,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             let generic_name = MethodName::format_local(
                 &self.qualified_receiver_name(&struct_name),
-                trait_name_opt.as_deref(),
+                trait_name_opt.as_ref(),
                 &static_call.method,
             );
             Some(MonomorphInfo {
@@ -2420,8 +2420,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         receiver_type_id: TypeId,
         method_name: &str,
-    ) -> Option<(String, String, ModuleSource)> {
-        let candidates: Vec<(String, String, ModuleSource, Vec<String>)> = self
+    ) -> Option<(crate::name::FqTraitName, String, ModuleSource)> {
+        let candidates: Vec<(crate::name::FqTraitName, String, ModuleSource, Vec<String>)> = self
             .tysys
             .trait_env
             .blanket_impls
@@ -2453,13 +2453,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                     })
             })
-            .map(|(trait_name, b)| {
-                (
-                    trait_name.clone(),
+            // The trait comes off the impl's own header, so the blanket
+            // index's bare-name key never reaches a mangled name.
+            .filter_map(|(_, b)| {
+                let header = self
+                    .tysys
+                    .trait_env
+                    .impl_headers
+                    .get(&(b.module.clone(), b.ast_id))?;
+                Some((
+                    header.fq_trait()?,
                     b.param.clone(),
                     b.module.clone(),
                     b.bounds.clone(),
-                )
+                ))
             })
             .collect();
 
@@ -2620,7 +2627,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `find_method_type_param_names`.
         if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name)
             && let Some(default_method) = self
-                .trait_sig_by_name(&trait_name)
+                .trait_sig_by_name(trait_name.base_name())
                 .and_then(|sig| sig.method(method_name))
                 .filter(|m| m.default_body.is_some() && m.sig.self_kind == ast::SelfKind::None)
                 .cloned()
@@ -2888,7 +2895,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         struct_name: &str,
         method_name: &str,
-    ) -> Option<String> {
+    ) -> Option<crate::name::FqTraitName> {
         self.locate_static_method_impl(struct_name, method_name, None)
             .and_then(|r| r.trait_name)
     }
@@ -3188,14 +3195,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .to_string();
         let is_from_or_try_from =
             |base: &str| -> bool { base == from_trait_name || base == "TryFrom" };
-        let resolve_trait_name = |trait_type: &ast::Type| -> String {
-            let base = super::trait_env::get_type_name_static(trait_type);
-            if is_from_or_try_from(&base) {
-                self.get_type_name_full(trait_type)
-            } else {
-                base
-            }
-        };
+        // A `From` / `TryFrom` impl discriminates its methods by the source
+        // type, so its trait segment keeps the argument; every other trait
+        // names the declaration alone.
+        let resolve_trait_name =
+            |header: &super::trait_env::ImplHeader| -> Option<crate::name::FqTraitName> {
+                let fq = header.fq_trait()?;
+                Some(if is_from_or_try_from(fq.base_name()) {
+                    fq
+                } else {
+                    fq.head_only()
+                })
+            };
 
         let matches_arg_type = |trait_type: &ast::Type,
                                 impl_module: &ModuleSource,
@@ -3261,7 +3272,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // than the receiver's first same-named method.
         let check_impl = |header: &super::trait_env::ImplHeader,
                           impl_module: &ModuleSource|
-         -> Option<(String, AstId)> {
+         -> Option<(crate::name::FqTraitName, AstId)> {
             let trait_type = header.trait_type.as_ref()?;
             if super::trait_env::get_type_name_static(&header.ty) != struct_name
                 || !matches_arg_type(trait_type, impl_module, &header.type_params)
@@ -3275,7 +3286,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .method_sig(method.ast_id)
                     .expect("the decl pass records every impl-declared method's signature");
                 if sig.self_kind == ast::SelfKind::None {
-                    return Some((resolve_trait_name(trait_type), method.ast_id));
+                    return Some((resolve_trait_name(header)?, method.ast_id));
                 }
             }
             // Fall back to the trait declaration's default methods: when
@@ -3292,7 +3303,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && method.default_body.is_some()
                 && method.sig.self_kind == ast::SelfKind::None
             {
-                return Some((resolve_trait_name(trait_type), method.sig.ast_id));
+                return Some((resolve_trait_name(header)?, method.sig.ast_id));
             }
             None
         };
@@ -3320,8 +3331,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .compiler_trait_name(crate::compiler_item::CompilerItem::Default)
-                .to_string();
+                .compiler_trait_fq(crate::compiler_item::CompilerItem::Default);
             let module_source = self.find_struct_module_source(struct_name);
             self.tysys
                 .type_table
@@ -3329,7 +3339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .record_bound_driven_synth_request(
                     struct_name,
                     &module_source,
-                    &default_trait_name,
+                    default_trait_name.base_name(),
                 );
             return Some(StaticMethodRef::new(
                 module_source,

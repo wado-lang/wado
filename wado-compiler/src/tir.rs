@@ -1352,6 +1352,16 @@ impl TypeTable {
         self.compiler_items.trait_name(item)
     }
 
+    /// The compiler trait item as a mangled method name embeds it — named by
+    /// the module that declares it.
+    #[must_use]
+    pub fn compiler_trait_fq(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> crate::name::FqTraitName {
+        self.compiler_items.trait_fq(item)
+    }
+
     /// The declaration a compiler trait item names, as an identity. A compiler
     /// item is a declaration the compiler knows by construction, so a consumer
     /// asking "does this type implement *that* trait?" compares this instead of

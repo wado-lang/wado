@@ -141,6 +141,12 @@ Names survive in exactly two places — the AST, which is syntax, and diagnostic
 through `Resolutions::display(id) -> impl Display`, a renderer rather than a
 comparable value.
 
+A mangled function name is the one place a name is still the currency, because
+Wasm requires one. There it carries the identity instead of a spelling:
+`FqTypeName` names the receiver by its declaring module and `FqTraitName` names
+the trait by its. Both are constructed only from a declaration and render on
+demand; neither is parsed back.
+
 Flipping a parameter's type is what makes the work enumerable: the compiler
 lists every caller that still holds a name. That is the property this design
 needs and the reason it terminates.
@@ -197,28 +203,38 @@ Costs and risks:
          derives, every difference logged. Nothing reads the table yet.
 -
   3. [ ] C — flip consumers to `DeclRef`, subsystem by subsystem. Done:
-         `find_trait_impl_for_type_with_args` compares identities when both
-         sides have one, and the bound-enforcement choke point
-         (`enforce_single_bound` / `check_and_register_bound`) carries the
-         bound's. That closes #1785's unsound direction — a same-named foreign
-         trait no longer satisfies a bound.
+
+         - `find_trait_impl_for_type_with_args` compares identities when both
+           sides have one, and the bound-enforcement choke point
+           (`enforce_single_bound` / `check_and_register_bound`) carries the
+           bound's. That closes #1785's unsound direction — a same-named
+           foreign trait no longer satisfies a bound.
+         - `ImplHeader` reads its trait's `DeclRef` off the table, and the impl
+           index matches on it rather than on the header's spelling.
+         - **The mangled name's trait segment is a declaration.** A method
+           mangle already named its receiver by the declaring module; the trait
+           half now does too, through `name::FqTraitName` — the same
+           unforgeable-by-construction discipline `FqTypeName` carries. It
+           replaces `LocalMethodName`'s three separate fields (`trait_name`,
+           `base_trait_name`, `base_trait_module`), which could disagree, with
+           one that cannot. Its constructors take a declaration: the impl
+           header's site (through `Resolutions`), a `CompilerItems` entry
+           (`trait_fq`), or a resolved `DeclKey`. Flipping the field's type
+           enumerated every producer — ~180 of them — which is the property
+           this design was chosen for. This closes #1785's remaining direction
+           (an aliased bound reaches the impl that defines the method) and the
+           collision where two same-named traits implemented for one receiver
+           mangled to one name and one impl overwrote the other.
 
          What still keys on a name, each a place the class survives:
 
          - `blanket_impls` and `trait_impl_modules` are keyed by trait name.
-           `has_any_methodful_impl_by_receiver` now matches on identity, from
-           the `trait_ref` `ImplHeader` reads off the table.
-         - The mangled `Type^Trait::method` name spells the trait as the *call
-           site* wrote it, so an aliased bound builds `S^G::hello` against a
-           definition named `S^Greet::hello` and WIR build reports the type as
-           not implementing the trait. The mangler must take the declared name,
-           which the site's `DeclRef` gives it. This is what still rejects
-           #1785's aliased bound.
          - Stores that flatten a bound to its name and lose the site:
            `infer_holes`' recorded bounds, `type_param_bounds` on the struct and
-           trait digests, `BlanketImpl::bounds`.
-         - A compiler item (`Ord`, `Display`, `ReflectStruct`) is asked for by
-           name; it should carry the `DeclRef` of the declaration it names.
+           trait digests, `BlanketImpl::bounds`. `find_method_in_trait_bounds`
+           answers with the trait its winning bound *declares*, but derives it
+           from the spelling rather than the bound's site.
+         - The associated-type registries key on the trait's written spelling.
          - `locate_static_method_impl`, the conversion-impl survey, and the CM
            interface registry.
 -

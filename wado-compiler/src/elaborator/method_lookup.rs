@@ -399,10 +399,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|info| match info.rhs_type {
                 Some(t) => format!(
                     "{}<{}>",
-                    trait_head(&info.trait_name),
+                    info.trait_name.base_name(),
                     tt.type_name(tt.peel_refs(t))
                 ),
-                None => trait_head(&info.trait_name).to_string(),
+                None => info.trait_name.base_name().to_string(),
             })
             .collect();
         let type_name = tt.type_name(base_type_id);
@@ -2533,7 +2533,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             };
             found_traits.push(TraitMethodMatch {
-                trait_name,
+                trait_name: crate::name::FqTraitName::declared_as_written(
+                    &trait_decl.0,
+                    &trait_decl.1,
+                    &trait_name,
+                ),
                 trait_decl: trait_decl.clone(),
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
@@ -2585,7 +2589,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = default_method.sig.self_kind;
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
-                    trait_name: trait_name_str,
+                    trait_name: crate::name::FqTraitName::declared_as_written(
+                        &trait_decl.0,
+                        &trait_decl.1,
+                        &trait_name_str,
+                    ),
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
@@ -2831,7 +2839,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let mut traits: Vec<String> = std::iter::once(first)
             .chain(rivals)
-            .map(|m| m.trait_name.clone())
+            .map(|m| m.trait_name.to_display())
             .collect();
         traits.dedup();
         Some(traits)
@@ -3338,7 +3346,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // base name: it is what the mangled method name
                     // discriminates instantiations on, exactly as the indexing
                     // path records `IndexValue<i32>`.
-                    trait_name: s.get_type_name_full(header.trait_type.as_ref().unwrap()),
+                    trait_name: header.fq_trait()?,
                     rhs_type,
                 })
             },
@@ -3395,7 +3403,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
-    ) -> Option<(TypeId, ast::SelfKind, String, ModuleSource, Option<TypeId>)> {
+    ) -> Option<(
+        TypeId,
+        ast::SelfKind,
+        crate::name::FqTraitName,
+        ModuleSource,
+        Option<TypeId>,
+    )> {
         // Get concrete type arguments from the base type (for generic instances like Triple<i32>).
         // The raw GC array `Array<T>` carries its element type as the single
         // type arg, mirroring a generic instance, so `impl IndexValue for Array<T>`
@@ -3447,7 +3461,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
 
-                let trait_name = s.get_type_name_full(header.trait_type.as_ref().unwrap());
+                let trait_name = header.fq_trait()?;
                 // Find the method. Only its receiver shape is needed here —
                 // the indexing types come from the impl's associated-type
                 // bindings.
@@ -3553,7 +3567,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Look up method info to check if it needs &mut self
         let mut method_info = self.lookup_method_info(output_type, &method_call.method);
-        let mut method_trait_name: Option<String> = None;
+        let mut method_trait_name: Option<crate::name::FqTraitName> = None;
         let mut method_trait_impl_source: Option<ModuleSource> = None;
 
         // This lookup commits the call's resolution (the desugared call is
@@ -3660,11 +3674,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         let output_fq = self.tysys.fq_receiver_head(output_base_type_id);
-        let mangled_method_name = MethodName::format_local(
-            &output_fq,
-            method_trait_name.as_deref(),
-            &method_call.method,
-        );
+        let mangled_method_name =
+            MethodName::format_local(&output_fq, method_trait_name.as_ref(), &method_call.method);
 
         // `module_source` is the body's home module: trait-impl block for
         // trait methods, otherwise the output type's defining module

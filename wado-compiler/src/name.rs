@@ -418,8 +418,9 @@ pub struct MethodName {
     pub module_source: ModuleSource,
     /// The receiver this method hangs off (e.g., `./geom.wado/Point`).
     pub struct_name: FqTypeName,
-    /// The trait name if this is a trait implementation (e.g., `Display`)
-    pub trait_name: Option<String>,
+    /// The trait this is an implementation of, named by the module that
+    /// declares it (e.g. `core:prelude/fmt.wado/Display`).
+    pub trait_name: Option<FqTraitName>,
     /// The method name (e.g., `sum`)
     pub method_name: String,
 }
@@ -428,7 +429,7 @@ impl MethodName {
     pub fn new(
         module_source: ModuleSource,
         struct_name: FqTypeName,
-        trait_name: Option<String>,
+        trait_name: Option<FqTraitName>,
         method_name: String,
     ) -> Self {
         Self {
@@ -444,7 +445,7 @@ impl MethodName {
     pub fn local_name(&self) -> String {
         Self::format_local(
             &self.struct_name,
-            self.trait_name.as_deref(),
+            self.trait_name.as_ref(),
             &self.method_name,
         )
     }
@@ -453,7 +454,7 @@ impl MethodName {
     /// This is the canonical way to build method names like `Struct^Trait::method`.
     pub fn format_local(
         struct_name: &FqTypeName,
-        trait_name: Option<&str>,
+        trait_name: Option<&FqTraitName>,
         method_name: &str,
     ) -> String {
         match trait_name {
@@ -472,7 +473,7 @@ impl MethodName {
         base: &str,
         ref_kind: Option<RefKind>,
         type_args: &[String],
-        trait_name: Option<&str>,
+        trait_name: Option<&FqTraitName>,
     ) -> String {
         let struct_part = if type_args.is_empty() {
             base.to_string()
@@ -543,33 +544,14 @@ pub struct LocalMethodName {
     /// identity — the rendered `Point<i32>` spelling is [`Self::struct_name`],
     /// derived rather than stored, so the two cannot disagree.
     pub receiver: Receiver,
-    /// The trait/effect/resource name, possibly with type args
-    /// (e.g., `"Display"`, `"Stream<u8>"`).
-    pub trait_name: Option<String>,
-    /// The base trait name without type args (e.g., "Display", "Stream").
-    /// Mirrors `base_struct_name`: kept alongside `trait_name` so generic
-    /// trait/resource impls (`impl Stream<u8> for MockCM`) round-trip a
-    /// distinct mangled `trait_name` for codegen while still resolving
-    /// against the bare-name decl indices used by trait/effect/resource
-    /// dispatch.
-    pub base_trait_name: Option<String>,
-    /// Canonical declaring module of the trait this method implements.
-    /// Populated by the elaborator via
-    /// [`crate::elaborator::Elaborator::canonical_decl_key`] when constructing
-    /// the method from an `impl <Trait> for <Type>` block. Left `None` for
-    /// synthesis-derived auto-impls (Inspect / Display / Eq / Ord / From
-    /// / `serde` adapters, …) because those impls target prelude / core
-    /// traits whose name is already project-globally unique — dispatch
-    /// synthesis identifies them by name alone and never needs the
-    /// disambiguating module.
+    /// The trait / effect / resource this method implements, named by the
+    /// module that declares it — `None` for an inherent method.
     ///
-    /// When `Some`, paired with `base_trait_name` it forms the canonical
-    /// `(module, name)` key into [`crate::elaborator::trait_env::EffectDeclIndex`]
-    /// and [`crate::elaborator::trait_env::ResourceDeclIndex`]. Two modules
-    /// can each declare `pub interface Logger`; without this field the
-    /// dispatch builder would collapse both impls onto whichever Logger
-    /// landed first in the bare-name lookup table.
-    pub base_trait_module: Option<ModuleSource>,
+    /// One field, not three: the declaring module, the declaration name and
+    /// the instantiated spelling used to be stored separately and could
+    /// disagree, which is how two modules' same-named `interface Logger`
+    /// impls collapsed onto whichever landed first in a bare-name table.
+    pub trait_name: Option<FqTraitName>,
     /// Concrete `TypeId`s of the trait / resource type arguments at this
     /// impl site (e.g. `[u8]` for `impl Stream<u8> for MockCM`). Empty
     /// for non-generic traits / effects, and for the bare base form
@@ -784,6 +766,26 @@ fn head_simple_name(head: &str) -> &str {
     head.rsplit('/').next().unwrap_or(head)
 }
 
+/// Split a written or mangled name into its head and its type arguments:
+/// `"Stream<u8>"` → `("Stream", ["u8"])`, `"Display"` → `("Display", [])`.
+///
+/// For callers that hold a name where they should hold the site that wrote it;
+/// the pieces go straight back into a typed name.
+#[must_use]
+pub fn split_head_and_args(name: &str) -> (&str, Vec<String>) {
+    let Some(open) = name.find('<') else {
+        return (name, Vec::new());
+    };
+    let Some(close) = name.rfind('>') else {
+        return (name, Vec::new());
+    };
+    let args = split_type_args(&name[open + 1..close])
+        .into_iter()
+        .map(|a| a.trim().to_string())
+        .collect();
+    (&name[..open], args)
+}
+
 /// Split a mangled argument list on the commas that separate arguments,
 /// ignoring those nested inside an argument's own brackets.
 fn split_type_args(inner: &str) -> Vec<&str> {
@@ -987,36 +989,30 @@ impl LocalMethodName {
     /// IMPORTANT: `struct_name` must be the base struct name WITHOUT type parameters.
     /// Use `with_type_args()` or `with_struct_type_args()` to add type parameters.
     ///
-    /// `trait_name` may be either the bare base form (`"Display"`) or a
-    /// pre-mangled form (`"Stream<u8>"`); `base_trait_name` is derived by
-    /// truncating at the first `<`. `base_trait_module` is left `None` and
-    /// callers that have the canonical declaring module (elaborator path)
-    /// should populate it via [`Self::with_base_trait_module`]; synthesis-
-    /// derived auto-impls leave it `None` because dispatch synthesis
-    /// identifies them by name alone.
+    /// `trait_name` names the trait by its declaration, so an alias or a
+    /// second module's same-named trait cannot reach the mangle.
     #[must_use]
-    pub fn new(struct_name: FqTypeName, trait_name: Option<String>, method_name: String) -> Self {
+    pub fn new(
+        struct_name: FqTypeName,
+        trait_name: Option<FqTraitName>,
+        method_name: String,
+    ) -> Self {
         Self::of(Receiver::Type(struct_name), trait_name, method_name)
     }
 
     /// Construct a method name for a `&T` / `&mut T` ref-impl receiver.
     #[must_use]
-    pub fn new_ref(kind: RefKind, trait_name: Option<String>, method_name: String) -> Self {
+    pub fn new_ref(kind: RefKind, trait_name: Option<FqTraitName>, method_name: String) -> Self {
         Self::of(Receiver::Ref(kind), trait_name, method_name)
     }
 
     /// Construct from an explicit typed receiver — the single construction path;
     /// `new` / `new_ref` are thin typed wrappers. No string is inspected.
     #[must_use]
-    pub fn of(receiver: Receiver, trait_name: Option<String>, method_name: String) -> Self {
-        let base_trait_name = trait_name
-            .as_deref()
-            .map(|n| split_base_name(n).to_string());
+    pub fn of(receiver: Receiver, trait_name: Option<FqTraitName>, method_name: String) -> Self {
         Self {
             receiver,
             struct_type_args: Vec::new(),
-            base_trait_name,
-            base_trait_module: None,
             trait_name,
             trait_type_args: Vec::new(),
             method_name,
@@ -1027,15 +1023,28 @@ impl LocalMethodName {
         }
     }
 
+    /// The trait's declaration name without type args (`"Display"`,
+    /// `"Stream"`), which is what the by-name decl indices key on.
+    #[must_use]
+    pub fn base_trait_name(&self) -> Option<&str> {
+        self.trait_name.as_ref().map(FqTraitName::base_name)
+    }
+
+    /// The declaring module of the trait this method implements. Two modules
+    /// can each declare `interface Logger`; this is what tells their handler
+    /// impls apart.
+    #[must_use]
+    pub fn base_trait_module(&self) -> Option<&ModuleSource> {
+        self.trait_name.as_ref().and_then(FqTraitName::module)
+    }
+
     /// Create a new `LocalMethodName` with all components including method type args.
     ///
     /// IMPORTANT: `struct_name` must be the base struct name WITHOUT type parameters.
-    /// `trait_name` may be either bare or pre-mangled — see `new` for the
-    /// derivation rule for `base_trait_name`.
     #[must_use]
     pub fn with_method_type_args(
         struct_name: FqTypeName,
-        trait_name: Option<String>,
+        trait_name: Option<FqTraitName>,
         method_name: String,
         method_type_args: Vec<String>,
     ) -> Self {
@@ -1043,14 +1052,9 @@ impl LocalMethodName {
             struct_name.args().is_empty(),
             "LocalMethodName::with_method_type_args() expects a base receiver without type args, got: {struct_name}"
         );
-        let base_trait_name = trait_name
-            .as_deref()
-            .map(|n| split_base_name(n).to_string());
         Self {
             receiver: Receiver::Type(struct_name),
             struct_type_args: Vec::new(),
-            base_trait_name,
-            base_trait_module: None,
             trait_name,
             trait_type_args: Vec::new(),
             method_name,
@@ -1061,24 +1065,12 @@ impl LocalMethodName {
         }
     }
 
-    /// Attach the canonical declaring module of `base_trait_name`. Used by
-    /// the elaborator path that lifts an `impl <Trait> for <Type>` block into
-    /// TIR: the trait reference is canonicalised through
-    /// [`crate::elaborator::Elaborator::canonical_decl_key`] and then threaded
-    /// into the per-method `LocalMethodName` so dispatch synthesis can
-    /// distinguish two modules' same-named effects / resources.
-    #[must_use]
-    pub fn with_base_trait_module(mut self, module: Option<ModuleSource>) -> Self {
-        self.base_trait_module = module;
-        self
-    }
-
     /// Create a version of this `LocalMethodName` with type args applied.
     ///
     /// `impl_type_args` are applied to the struct name (e.g., "List" + ["i32"] → "List<i32>").
     /// `method_type_args` are stored separately (not embedded in `method_name`).
-    /// `base_struct_name`, `base_trait_name`, and `base_trait_module` are
-    /// preserved (not changed by type args).
+    /// The base struct name and the trait are preserved (not changed by type
+    /// args).
     #[must_use]
     pub fn with_type_args(
         &self,
@@ -1089,8 +1081,6 @@ impl LocalMethodName {
             struct_type_args: impl_type_args.to_vec(),
             receiver: self.receiver.clone(),
             trait_name: self.trait_name.clone(),
-            base_trait_name: self.base_trait_name.clone(),
-            base_trait_module: self.base_trait_module.clone(),
             trait_type_args: self.trait_type_args.clone(),
             method_name: self.method_name.clone(),
             method_type_args: method_type_args.to_vec(),
@@ -1109,28 +1099,23 @@ impl LocalMethodName {
 
     /// Create a version with the trait name mangled with type args.
     ///
-    /// `trait_type_args` are applied to the trait name (e.g.,
-    /// `"Stream"` + `["u8"]` → `"Stream<u8>"`). `base_trait_name` and
-    /// `base_trait_module` are preserved so dispatch synthesis / decl-
-    /// index lookups continue to resolve against the bare trait
-    /// declaration (and its module).
+    /// `trait_type_args` are applied to the trait (e.g. `Stream` + `["u8"]` →
+    /// `Stream<u8>`). The trait's declaration and declaring module are
+    /// untouched, so decl-index lookups still resolve against the bare
+    /// declaration.
     ///
     /// Panics if `self.trait_name` is `None` — type args on an inherent
     /// method don't have a trait to mangle.
     #[must_use]
     pub fn with_trait_type_args(&self, trait_type_args: &[String]) -> Self {
-        let base = self
-            .base_trait_name
-            .clone()
-            .expect("with_trait_type_args() requires a trait name");
-        let mangled = if trait_type_args.is_empty() {
-            base.clone()
-        } else {
-            mangle_generic_name(&base, trait_type_args)
-        };
+        let trait_name = self
+            .trait_name
+            .as_ref()
+            .expect("with_trait_type_args() requires a trait name")
+            .head_only()
+            .with_args(trait_type_args.to_vec());
         Self {
-            trait_name: Some(mangled),
-            base_trait_name: Some(base),
+            trait_name: Some(trait_name),
             ..self.clone()
         }
     }
@@ -1147,8 +1132,6 @@ impl LocalMethodName {
             receiver: Receiver::Type(resolved.head_only()),
             struct_type_args: resolved.args().to_vec(),
             trait_name: self.trait_name.clone(),
-            base_trait_name: self.base_trait_name.clone(),
-            base_trait_module: self.base_trait_module.clone(),
             trait_type_args: self.trait_type_args.clone(),
             method_name: self.method_name.clone(),
             method_type_args: self.method_type_args.clone(),
@@ -1193,12 +1176,12 @@ impl LocalMethodName {
     /// instantiation. Used where a property of the method — not the
     /// instantiation — is being keyed (e.g. whether it takes `self` by value).
     pub fn base_dispatch_key(&self) -> String {
-        match &self.base_trait_name {
+        match &self.trait_name {
             Some(trait_name) => {
                 format!(
                     "{}^{}::{}",
                     self.base_struct_name(),
-                    trait_name,
+                    trait_name.head_only(),
                     self.method_name
                 )
             }
@@ -2272,10 +2255,13 @@ mod tests {
         let method = MethodName::new(
             module.clone(),
             FqTypeName::declared(&module, "Point"),
-            Some("Display".to_string()),
+            Some(FqTraitName::declared(&module, "Display")),
             "fmt".to_string(),
         );
-        assert_eq!(method.to_string(), "./geometry.wado/Point^Display::fmt");
+        assert_eq!(
+            method.to_string(),
+            "./geometry.wado/Point^./geometry.wado/Display::fmt"
+        );
     }
 
     #[test]
@@ -2561,7 +2547,10 @@ mod tests {
         for kind in [RefKind::Shared, RefKind::Mut] {
             let mut info = LocalMethodName::new_ref(
                 kind,
-                Some("IntoIterator".to_string()),
+                Some(FqTraitName::declared(
+                    &ModuleSource::default(),
+                    "IntoIterator",
+                )),
                 "into_iter".to_string(),
             );
             info.struct_type_args = vec![
@@ -2888,6 +2877,125 @@ impl FqTypeName {
 }
 
 impl std::fmt::Display for FqTypeName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.to_mangled())
+    }
+}
+
+/// The trait half of a `Type^Trait::method` mangle.
+///
+/// The receiver half already names its subject by the module that declares it;
+/// the trait half has to answer the same question or two same-named traits
+/// implemented for one type mangle to one name and one impl overwrites the
+/// other. So the head is the trait's *declaration* — never the spelling a use
+/// site wrote, which an alias or another module's import can change — and the
+/// declaring module travels with it.
+///
+/// Type arguments (`Stream<u8>`) are carried already-mangled: they make a
+/// generic trait's per-instantiation method names distinct and are never read
+/// back apart.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FqTraitName {
+    head: TypeHead,
+    args: Vec<String>,
+}
+
+impl FqTraitName {
+    /// A trait named by the module that declares it. `module` must be the
+    /// *declaring* module — a reference site's own module answers a different
+    /// question.
+    #[must_use]
+    pub fn declared(module: &ModuleSource, name: &str) -> Self {
+        Self {
+            head: TypeHead::Declared {
+                module: module.clone(),
+                name: name.to_string(),
+            },
+            args: Vec::new(),
+        }
+    }
+
+    /// A trait position filled by a template's own binder rather than a
+    /// declaration. It has no module, like [`FqTypeName::binder`].
+    #[must_use]
+    pub fn binder(name: &str) -> Self {
+        Self {
+            head: TypeHead::Binder(name.to_string()),
+            args: Vec::new(),
+        }
+    }
+
+    /// The trait a declaration key names, carrying the type arguments a
+    /// written spelling (`Stream<u8>`) supplies. For a consumer that holds the
+    /// resolved declaration alongside the spelling the site wrote.
+    #[must_use]
+    pub fn declared_as_written(module: &ModuleSource, name: &str, written: &str) -> Self {
+        let (_, args) = split_head_and_args(written);
+        Self::declared(module, name).with_args(args)
+    }
+
+    /// The same trait with its type arguments, each already mangled.
+    #[must_use]
+    pub fn with_args(mut self, args: Vec<String>) -> Self {
+        self.args = args;
+        self
+    }
+
+    /// The trait's declaration name: no module, no type arguments. This is what
+    /// the by-name decl indices key on.
+    #[must_use]
+    pub fn base_name(&self) -> &str {
+        self.head.name()
+    }
+
+    /// The declaring module, or `None` for a binder.
+    #[must_use]
+    pub fn module(&self) -> Option<&ModuleSource> {
+        self.head.module()
+    }
+
+    /// The canonical `(declaring module, declaration name)` key, or `None` for
+    /// a binder.
+    #[must_use]
+    pub fn canonical(&self) -> Option<(ModuleSource, String)> {
+        self.module()
+            .map(|m| (m.clone(), self.base_name().to_string()))
+    }
+
+    #[must_use]
+    pub fn args(&self) -> &[String] {
+        &self.args
+    }
+
+    /// The same trait with its type arguments dropped.
+    #[must_use]
+    pub fn head_only(&self) -> Self {
+        Self {
+            head: self.head.clone(),
+            args: Vec::new(),
+        }
+    }
+
+    /// The spelling embedded in a mangled method name.
+    #[must_use]
+    pub fn to_mangled(&self) -> String {
+        let head = match &self.head {
+            TypeHead::Declared { module, name } => format!("{module}/{name}"),
+            TypeHead::Builtin(name) | TypeHead::Binder(name) => name.clone(),
+            TypeHead::Tuple => TUPLE_TYPE_NAME.to_string(),
+        };
+        mangle_generic_name(&head, &self.args)
+    }
+
+    /// The trait as source writes it: the declaring module dropped. Diagnostics
+    /// only.
+    #[must_use]
+    pub fn to_display(&self) -> String {
+        mangle_generic_name(self.head.name(), &self.args)
+    }
+}
+
+impl std::fmt::Display for FqTraitName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.to_mangled())
     }

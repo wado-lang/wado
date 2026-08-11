@@ -858,6 +858,56 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         crate::name::FqTypeName::of_head(&module, &name)
     }
 
+    /// The trait a spelling names, in the form a mangled method name embeds
+    /// it. `written` may carry type arguments (`Stream<u8>`).
+    ///
+    /// Reaching for this means the caller has a name rather than the site that
+    /// wrote it; it resolves through the current frame, which is right only
+    /// when the frame is the writing module. Prefer [`Self::fq_trait_name`],
+    /// which asks the site.
+    pub(super) fn fq_trait_name_written(&self, written: &str) -> crate::name::FqTraitName {
+        let (base, args) = crate::name::split_head_and_args(written);
+        let (module, name) = self.canonical_decl_key(base);
+        crate::name::FqTraitName::declared(&module, &name).with_args(args)
+    }
+
+    /// The trait a reference site names, in the form a mangled method name
+    /// embeds it: the declaration the site resolves to, plus the type
+    /// arguments the site wrote.
+    ///
+    /// The answer comes from [`crate::resolve::Resolutions`] — resolved once,
+    /// in the module that wrote the reference — so an alias and a second
+    /// module's same-named trait cannot reach the mangle. A site the table has
+    /// no answer for falls back to the frame's own derivation.
+    pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> crate::name::FqTraitName {
+        let written = self.get_type_name(ty);
+        let args: Vec<String> = match ty {
+            ast::Type::Generic(generic) => generic
+                .args
+                .iter()
+                .map(|a| self.get_type_name_full(a))
+                .collect(),
+            _ => Vec::new(),
+        };
+        let head = crate::resolve::head_site(ty)
+            .and_then(|site| {
+                let resolutions = &self.tysys.resolutions;
+                match resolutions.get(site) {
+                    Some(crate::resolve::DeclRef::Binder(_)) => {
+                        Some(crate::name::FqTraitName::binder(&written))
+                    }
+                    _ => resolutions
+                        .declared(site)
+                        .map(|(module, name)| crate::name::FqTraitName::declared(module, name)),
+                }
+            })
+            .unwrap_or_else(|| {
+                let (module, name) = self.canonical_decl_key(&written);
+                crate::name::FqTraitName::declared(&module, &name)
+            });
+        head.with_args(args)
+    }
+
     /// Record the impl-block resolution facts keyed by the
     /// [`crate::ast::ImplBlock`]'s [`AstId`]. Reify
     /// reads the entry verbatim — no re-resolution of the impl
@@ -1738,6 +1788,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let trait_name = impl_block
             .trait_type
             .as_ref()
+            .map(|t| scope.fq_trait_name(t));
+        // The associated-type registries are keyed by the written spelling;
+        // they are a separate migration from the method mangle.
+        let trait_written = impl_block
+            .trait_type
+            .as_ref()
             .map(|t| scope.get_type_name_full(t));
 
         // Register type parameters from impl block's generic type FIRST
@@ -1783,7 +1839,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             target_type_id,
-                            trait_name.clone().unwrap_or_default(),
+                            trait_written.clone().unwrap_or_default(),
                             binding.name.clone(),
                             type_id,
                         );
@@ -1798,7 +1854,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .borrow_mut()
                             .register_generic_assoc_type_def(
                                 base_decl,
-                                trait_name.clone().unwrap_or_default(),
+                                trait_written.clone().unwrap_or_default(),
                                 binding.name.clone(),
                                 type_id,
                             );
@@ -1817,17 +1873,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // bindings, and the handler / ref-impl flags.
         {
             let self_type = scope.resolve_type(&impl_block.ty);
-            let trait_canonical = impl_block.trait_type.as_ref().map(|t| {
-                let base = scope.get_type_name(t);
-                scope.canonical_decl_key(&base)
-            });
-            let is_handler_method = trait_canonical
+            let is_handler_method = trait_name
                 .as_ref()
-                .map(|key| {
-                    scope.tysys.trait_env.effect_decl_index.contains_key(key)
-                        || scope.tysys.trait_env.resource_decl_index.contains_key(key)
-                })
-                .unwrap_or(false);
+                .and_then(crate::name::FqTraitName::canonical)
+                .is_some_and(|key| {
+                    scope.tysys.trait_env.effect_decl_index.contains_key(&key)
+                        || scope.tysys.trait_env.resource_decl_index.contains_key(&key)
+                });
             let is_ref_impl = matches!(
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
@@ -1871,8 +1923,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             scope.record_impl_facts(
                 impl_block.id,
                 sem::types::ImplFacts {
-                    trait_name_mangled: trait_name.clone(),
-                    trait_canonical,
+                    trait_name: trait_name.clone(),
                     trait_type_args,
                     is_handler_method,
                     is_ref_impl,
@@ -1905,7 +1956,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 method,
                 &struct_name,
                 &impl_block.ty,
-                trait_name.as_deref(),
+                trait_name.as_ref(),
                 impl_block.trait_type.as_ref(),
                 impl_is_concrete,
                 &impl_block.type_params,
