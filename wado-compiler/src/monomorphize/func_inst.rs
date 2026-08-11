@@ -170,13 +170,21 @@ pub(super) fn blanket_pack_dispatch_args(
                 type_table,
             )
         })?;
-    let projected = trait_env.pack_assocs_of_blanket(blanket);
-    if projected.is_empty() {
+    // Declaration order, not "receiver then projections": a blanket may write
+    // a parameter its bounds determine before the receiver, and the arguments
+    // are consumed by position.
+    let sources = trait_env.blanket_param_sources(blanket);
+    if sources.len() <= 1 {
         return None;
     }
-    let mut out = args.to_vec();
-    for (bound_trait, assoc) in projected {
-        out.push(type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc)?);
+    let mut out = Vec::with_capacity(sources.len());
+    for source in sources {
+        match source {
+            None => out.push(receiver),
+            Some((bound_trait, assoc)) => {
+                out.push(type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc)?);
+            }
+        }
     }
     Some(out)
 }

@@ -576,59 +576,64 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         saved: &super::scope::TraitContext,
         impl_declared_params: &[ast::GenericParam],
     ) -> Vec<crate::tir::TirTypeParam> {
-        let Some(&(index, _)) = saved.type_params.get(&named.name) else {
+        let Some(&(target_index, _)) = saved.type_params.get(&named.name) else {
             return Vec::new();
         };
-        let bounds = self.saved_param_bounds(&named.name);
-        let mut params = vec![self.bind_target_param(&named.name, index, false, bounds, None)];
-        params.extend(self.bind_projected_packs(&named.name, index, saved, impl_declared_params));
+        // Declaration order, not "receiver then projections": the impl's type
+        // arguments are consumed by position, so a parameter written before
+        // the receiver must be bound before it.
+        let projected = self.blanket_projections(&named.name, impl_declared_params);
+        let mut params = Vec::new();
+        for declared in impl_declared_params {
+            if !declared.is_real_type_param() {
+                continue;
+            }
+            let Some(&(index, _)) = saved.type_params.get(&declared.name) else {
+                continue;
+            };
+            let bounds = self.saved_param_bounds(&declared.name);
+            if declared.name == named.name {
+                params.push(self.bind_target_param(&declared.name, index, false, bounds, None));
+                continue;
+            }
+            // A parameter the receiver's bound determines. One neither the
+            // target nor a bound names is rejected at the impl, so anything
+            // left here is projectable.
+            if let Some(assoc_name) = projected.get(&declared.name) {
+                params.push(self.bind_target_param(
+                    &declared.name,
+                    index,
+                    declared.is_pack,
+                    bounds,
+                    Some((target_index, assoc_name.clone())),
+                ));
+            }
+        }
         params
     }
 
-    /// A pack `F` bound only through `T`'s associated type
-    /// (`impl<T: Trait<Assoc = [..F]>, ..F: …>`) is not caller-supplied;
-    /// monomorphization projects it from `T::Assoc`.
-    fn bind_projected_packs(
-        &mut self,
+    /// Which associated type of the receiver's bound determines each of the
+    /// impl's other parameters — `..F` from `Assoc = [..F]`, `A` from
+    /// `Assoc = A`. Monomorphization projects them from the concrete receiver.
+    fn blanket_projections(
+        &self,
         target_name: &str,
-        target_index: u32,
-        saved: &super::scope::TraitContext,
         impl_declared_params: &[ast::GenericParam],
-    ) -> Vec<crate::tir::TirTypeParam> {
-        let projections: Vec<(String, String)> = impl_declared_params
+    ) -> crate::hashmap::IndexMap<String, String> {
+        let mut out = crate::hashmap::IndexMap::default();
+        for assoc in impl_declared_params
             .iter()
-            .find(|p| p.name == target_name)
-            .into_iter()
-            .flat_map(|t_param| &t_param.bounds)
+            .filter(|p| p.name == target_name)
+            .flat_map(|p| &p.bounds)
             .flat_map(|bound| &bound.assoc_types)
-            .filter_map(|assoc| match &assoc.ty {
-                ast::Type::Tuple(elems) => Some((elems, assoc.name.clone())),
-                _ => None,
-            })
-            .flat_map(|(elems, assoc_name)| {
-                elems.iter().filter_map(move |elem| match elem {
-                    ast::Type::TypePackSpread(f_name, _) => {
-                        Some((f_name.clone(), assoc_name.clone()))
-                    }
-                    _ => None,
-                })
-            })
-            .collect();
-        let mut params = Vec::new();
-        for (pack_name, assoc_name) in projections {
-            let Some(&(index, _)) = saved.type_params.get(&pack_name) else {
-                continue;
-            };
-            let bounds = self.saved_param_bounds(&pack_name);
-            params.push(self.bind_target_param(
-                &pack_name,
-                index,
-                true,
-                bounds,
-                Some((target_index, assoc_name)),
-            ));
+        {
+            let mut named = Vec::new();
+            assoc.ty.mentioned_names(&mut named);
+            for n in named {
+                out.entry(n).or_insert_with(|| assoc.name.clone());
+            }
         }
-        params
+        out
     }
 
     /// `impl<T: Bound> Trait for &T` / `&mut T` — the inner type is a

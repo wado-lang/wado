@@ -1383,6 +1383,47 @@ impl TraitEnv {
     /// `[("Bound", "Assoc")]`. The trait is carried because a bare assoc name
     /// is ambiguous: the reflection kinds all spell their member channel
     /// `Members`.
+    /// What determines each of a blanket impl's parameters, in declaration
+    /// order: `None` for the receiver, which the call site's receiver type
+    /// fills, and `Some((bound trait, associated type))` for one a predicate
+    /// fixes — `..F` in `impl<S: ReflectStruct<FieldTypes = [..F]>, ..F>`.
+    ///
+    /// Declaration order is the point: the impl's type arguments are consumed
+    /// positionally, and a receiver written after another parameter sits at a
+    /// slot that "receiver first, projections after" never fills.
+    pub(crate) fn blanket_param_sources(
+        &self,
+        blanket: &BlanketImpl,
+    ) -> Vec<Option<(String, String)>> {
+        let Some(header) = self
+            .impl_headers
+            .get(&(blanket.module.clone(), blanket.ast_id))
+        else {
+            return Vec::new();
+        };
+        header
+            .type_params
+            .iter()
+            .filter(|tp| tp.is_real_type_param())
+            .map(|tp| {
+                if tp.name == blanket.param {
+                    return None;
+                }
+                header
+                    .type_params
+                    .iter()
+                    .flat_map(|other| &other.bounds)
+                    .flat_map(|bound| bound.assoc_types.iter().map(move |a| (&bound.name, a)))
+                    .find(|(_, assoc)| {
+                        let mut named = Vec::new();
+                        assoc.ty.mentioned_names(&mut named);
+                        named.iter().any(|n| n == &tp.name)
+                    })
+                    .map(|(bound_name, assoc)| (bound_name.clone(), assoc.name.clone()))
+            })
+            .collect()
+    }
+
     pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(String, String)> {
         let Some(header) = self
             .impl_headers

@@ -1953,11 +1953,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !scope.tysys.is_known_type_name(name)
         {
             if let Some(recv_id) = receiver_type_id {
+                // At the slot the impl gave it, which is 0 only when the
+                // receiver is the first parameter written. `impl<A, T:
+                // Holder<Item = A>> Trait for T` puts it at 1, and binding it
+                // at 0 leaves the target itself unsubstituted.
+                let slot = header
+                    .type_params
+                    .iter()
+                    .filter(|p| p.is_real_type_param())
+                    .position(|p| &p.name == name)
+                    .unwrap_or(0) as u32;
                 scope
                     .annotate_ctx
                     .trait_ctx
                     .type_params
-                    .insert(name.clone(), (0, recv_id));
+                    .insert(name.clone(), (slot, recv_id));
             } else {
                 let type_id = scope
                     .tysys
