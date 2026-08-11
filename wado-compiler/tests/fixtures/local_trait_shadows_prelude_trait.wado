@@ -1,0 +1,30 @@
+// A module's own trait is its own declaration, even when the prelude declares
+// one of the same name.
+//
+// `core:prelude` declares `trait Sub` for the `-` operator, whose `sub` takes a
+// right-hand side. `ImplHeader::trait_key` came from a symbol lookup that
+// cannot see a trait — traits have no symbol-table entry — so it fell through
+// to the prelude and the impl below was rejected with "method `sub` takes 0
+// parameter(s) but `Sub` declares 1".
+
+trait Sub {
+    fn sub(&self) -> i32;
+}
+
+struct Counter {
+    n: i32,
+}
+
+impl Sub for Counter {
+    fn sub(&self) -> i32 {
+        return self.n - 1;
+    }
+}
+
+test "a local trait is not checked against the prelude's namesake" {
+    let c = Counter { n: 7 };
+    assert c.sub() == 6;
+}
+
+__DATA__
+{"test": {}}

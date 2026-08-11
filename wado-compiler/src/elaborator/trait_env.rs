@@ -1079,21 +1079,30 @@ impl TraitEnv {
                         &type_key,
                     );
                 }
-                let trait_key = impl_block.trait_type.as_ref().map(|trait_type| {
-                    impl_target_key(
-                        trait_type,
-                        module_source,
-                        &impl_block.type_params,
-                        module_import_scopes.get(module_source),
-                        symbols,
-                        trait_position_decls(),
-                    )
-                });
                 let trait_ref = impl_block
                     .trait_type
                     .as_ref()
                     .and_then(crate::resolve::head_site)
                     .and_then(|site| resolutions.get(site));
+                let trait_key = impl_block.trait_type.as_ref().map(|trait_type| {
+                    // The site the header wrote answers first. `impl_target_key`
+                    // resolves through the symbol table, which holds no entry
+                    // for a trait, so a module implementing its own `trait Sub`
+                    // fell through to `core:prelude`'s arithmetic one.
+                    trait_ref
+                        .and_then(|answer| resolutions.decl_named(answer))
+                        .map(|(module, name)| ImplTargetKey::Decl((module.clone(), name.to_string())))
+                        .unwrap_or_else(|| {
+                            impl_target_key(
+                                trait_type,
+                                module_source,
+                                &impl_block.type_params,
+                                module_import_scopes.get(module_source),
+                                symbols,
+                                trait_position_decls(),
+                            )
+                        })
+                });
                 impl_headers.insert(
                     (module_source.clone(), impl_block.id),
                     ImplHeader {
