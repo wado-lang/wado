@@ -160,9 +160,13 @@ pub(super) fn unify(
         (ResolvedType::BuiltinArray(expected_elem), ResolvedType::BuiltinArray(actual_elem)) => {
             unify(type_table, *expected_elem, *actual_elem, bindings);
         }
-        // References: unify through.
+        // References: unify through. `&mut T` where `&T` is expected is the
+        // one direction assignability allows, so it must bind the same way —
+        // otherwise `array_len(self)` inside a `&mut self` method leaves the
+        // element type unbound.
         (ResolvedType::Ref(expected_inner), ResolvedType::Ref(actual_inner))
-        | (ResolvedType::MutRef(expected_inner), ResolvedType::MutRef(actual_inner)) => {
+        | (ResolvedType::MutRef(expected_inner), ResolvedType::MutRef(actual_inner))
+        | (ResolvedType::Ref(expected_inner), ResolvedType::MutRef(actual_inner)) => {
             unify(type_table, *expected_inner, *actual_inner, bindings);
         }
         // Function types: unify params and return type.

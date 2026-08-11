@@ -16,6 +16,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::call::turbofish_holes;
 use super::infer::InferCtx;
+use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
 use super::util;
@@ -3636,6 +3637,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &struct_module_source,
                 &fields,
                 expected_type.or(spread_base_type),
+                struct_lit.span,
             );
 
             // Substitute type parameters in field value types.
@@ -4134,11 +4136,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// ids, which the monomorphizer then substitutes from the surrounding
     /// context. This matches the historical "phantoms are OK" behaviour.
     pub(super) fn infer_struct_type_args(
-        &self,
+        &mut self,
         struct_name: &str,
         struct_module: &ModuleSource,
         fields: &[TirStructField],
         expected_type: Option<TypeId>,
+        span: Span,
     ) -> Vec<TypeId> {
         let Some(struct_info) = self
             .lookup_struct_fields_in(struct_name, struct_module)
@@ -4150,15 +4153,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return vec![];
         }
 
-        let mut infer = InferCtx::new(
-            &self.tysys.type_table,
-            struct_info.type_param_type_ids.clone(),
+        // Instantiate the declaration's slots. Inside a generic body the
+        // literal's fields carry the *enclosing* item's parameters, which can
+        // share `(name, index)` with the struct's own — `IterMap { inner:
+        // *self, f }` inside `Iterator::map<U>` renders both as `IterMap<I,
+        // U>` while meaning different things.
+        let inst = self.instantiate(
+            &struct_info.type_param_type_ids,
+            &[],
+            &Instantiation {
+                kind: "struct",
+                name: struct_name,
+                span,
+            },
         );
+        let field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();
+        let field_types = self.instantiate_types(&field_types, &inst);
 
-        for (struct_field, (_, expected_field_type, _)) in
-            fields.iter().zip(struct_info.fields.iter())
-        {
-            infer.add(*expected_field_type, struct_field.value.type_id);
+        let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
+
+        for (struct_field, &expected_field_type) in fields.iter().zip(field_types.iter()) {
+            infer.add(expected_field_type, struct_field.value.type_id);
         }
 
         // Back-infer from the caller's expected type: if it's a GenericInstance
@@ -4174,17 +4189,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && name == struct_info.name
                 && expected_args.len() == struct_info.type_param_type_ids.len()
             {
-                for (&param_id, &expected_arg) in struct_info
-                    .type_param_type_ids
-                    .iter()
-                    .zip(expected_args.iter())
-                {
-                    infer.add_expected_return(param_id, expected_arg);
+                for (&var, &expected_arg) in inst.vars.iter().zip(expected_args.iter()) {
+                    infer.add_expected_return(var, expected_arg);
                 }
             }
         }
 
-        let (inferred, _) = infer.solve_with_phantoms();
+        let (mut inferred, _) = infer.solve_with_phantoms();
+        self.record_instantiation(&inst, &inferred);
+        // A phantom parameter — one no field mentions — is not an inference
+        // failure; the declaration's own parameter is the historical answer and
+        // monomorphization substitutes it. Hand back that, not the variable
+        // nobody solved, which would otherwise ride into a recorded type and
+        // trip the "no variable survives elaboration" assert in DCE.
+        for (slot, answer) in inferred.iter_mut().enumerate() {
+            if inst.vars.get(slot) == Some(answer) {
+                *answer = struct_info.type_param_type_ids[slot];
+            }
+        }
         inferred
     }
 
