@@ -13,6 +13,7 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::scope::Scope;
+use super::sem::decls::FunctionSig;
 use super::sig::MethodSig;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
@@ -462,7 +463,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let effective_name = callee_kind.effective_name();
 
         // First, determine expected parameter types to handle coercion.
-        let mut param_types = self.lookup_function_param_types(effective_name);
+        let (mut param_types, callee_slots) = self.lookup_function_signature(effective_name);
+
+        // Instantiate the callee's slots before an argument is resolved
+        // against one of its parameter types. A rigid slot is the callee's
+        // own and opaque here, so a literal checked against `List<T>` reports
+        // every element as heterogeneous; against `List<?0>` the check defers
+        // and the elements decide what `?0` is.
+        let arg_inst = (!callee_slots.is_empty()).then(|| {
+            self.instantiate(
+                &callee_slots,
+                &Instantiation {
+                    kind: "function",
+                    name: effective_name,
+                    span: call.span,
+                },
+            )
+        });
+        if let Some(inst) = &arg_inst {
+            param_types = self.instantiate_types(&param_types, inst);
+        }
 
         // Literal preselect for a conversion call (WEP 2026-07-31 phase 4):
         // see `resolve_static_method_call` — same rule, for the
@@ -550,6 +570,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 placeholder(self.resolve_expr(arg, ctx, expected_type), arg.span())
             })
             .collect();
+
+        // Settle this resolution's variables. `solve_infer_var` keeps the
+        // first answer, so a slot the arguments pinned stays pinned and one
+        // they left open goes back to the declaration's parameter — leaving
+        // inference exactly what it saw before this step existed.
+        if let Some(inst) = &arg_inst {
+            let pairs: Vec<(TypeId, TypeId)> = inst
+                .vars
+                .iter()
+                .copied()
+                .zip(callee_slots.iter().copied())
+                .collect();
+            for (var, slot) in pairs {
+                self.solve_infer_var(var, slot);
+            }
+            for arg in &mut args {
+                arg.type_id = self.apply_infer_holes(arg.type_id);
+            }
+        }
 
         // Pin a deferred hole carried into a variant payload (`Result::Ok(v)`,
         // `v = gen()?`) against the payload type. Regular call arguments are
@@ -1627,17 +1666,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or(TypeTable::UNIT)
     }
 
-    /// Look up function parameter types for a call by the effective callee
-    /// name (after any `Self::` / `T::` prefix rewriting performed by
-    /// [`Self::classify_call_callee`]).
-    pub(super) fn lookup_function_param_types(&mut self, name: &str) -> Vec<TypeId> {
+    /// Look up a callee's declared parameter types *and* the slots they
+    /// mention, by the effective callee name (after any `Self::` / `T::`
+    /// prefix rewriting performed by [`Self::classify_call_callee`]).
+    ///
+    /// Both halves come from one lookup because the call site needs both: a
+    /// parameter type is usable as an argument's expected type only once its
+    /// slots are instantiated, and a rigid slot is opaque — a literal checked
+    /// against one can only be rejected. The qualified spellings report no
+    /// slots; they infer through their own paths.
+    pub(super) fn lookup_function_signature(&mut self, name: &str) -> (Vec<TypeId>, Vec<TypeId>) {
         // Check for qualified name (Type::method or Effect::operation)
         if let Some(pos) = name.find("::") {
             let prefix = &name[..pos];
             let suffix = &name[pos + 2..];
             // Check if it's a static method
             if self.is_static_method(prefix, suffix) {
-                return self.lookup_static_method_param_types(prefix, suffix);
+                return (
+                    self.lookup_static_method_param_types(prefix, suffix),
+                    Vec::new(),
+                );
             }
 
             // Builtin functions: look up param types from core:builtin module
@@ -1647,21 +1695,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .signatures
                     .function_sig(&ModuleSource::builtin(), suffix)
             {
-                return sig.decl.param_types.clone();
+                return (sig.decl.param_types.clone(), Vec::new());
             }
 
             if let Some((params, _)) = self.resolve_effect_op_signature(prefix, suffix) {
-                return params;
+                return (params, Vec::new());
             }
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         }
+
+        let slots = |sig: &FunctionSig| sig.decl.type_params.iter().map(|(_, id)| *id).collect();
 
         if let Some(sig) = self
             .tysys
             .signatures
             .function_sig(&self.current_module_source, name)
         {
-            return sig.decl.param_types.clone();
+            return (sig.decl.param_types.clone(), slots(sig));
         }
 
         // Imported functions: the canonical signature resolved in the
@@ -1671,7 +1721,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let src = symbol.module_source().clone();
             let sym_name = symbol.name.clone();
             if let Some(sig) = self.tysys.signatures.function_sig(&src, &sym_name) {
-                return sig.decl.param_types.clone();
+                return (sig.decl.param_types.clone(), slots(sig));
             }
         }
 
@@ -1681,10 +1731,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && fallback != self.current_module_source
             && let Some(sig) = self.tysys.signatures.function_sig(&fallback, name)
         {
-            return sig.decl.param_types.clone();
+            return (sig.decl.param_types.clone(), slots(sig));
         }
 
-        Vec::new()
+        (Vec::new(), Vec::new())
     }
 
     /// Fill missing trailing arguments with the callee's declared default

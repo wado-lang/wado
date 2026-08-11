@@ -667,12 +667,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         for field in &struct_lit.fields {
             let value = self.resolve_expr(&field.value, ctx, Some(value_type));
-            if value != value_type && value != TypeTable::UNKNOWN && value != TypeTable::NEVER {
+            // Route through the shared check rather than comparing ids, for
+            // the reason the sequence path does: an undecided value type — a
+            // callee's slot the call site instantiated — defers to its solver
+            // instead of rejecting every value.
+            let incompatible = matches!(
+                super::typecheck::check_assignable(
+                    value,
+                    value_type,
+                    &self.tysys.type_table.borrow(),
+                ),
+                super::typecheck::TypeCheckResult::Incompatible
+            );
+            if incompatible && value != TypeTable::UNKNOWN && value != TypeTable::NEVER {
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected: self.tysys.type_table.borrow().type_name(value_type),
                     found: self.tysys.type_table.borrow().type_name(value),
                     span: field.value.span(),
                 });
+            } else if !incompatible {
+                // The values are what decide an open value type.
+                self.solve_infer_holes_against(value_type, value);
             }
         }
 
@@ -840,6 +855,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span: element.span(),
                 });
+            } else {
+                // Where the target left the element type open — a callee's
+                // slot the call site instantiated — the elements decide it.
+                // Nothing else can: the literal is the only evidence of what
+                // this sequence holds.
+                self.solve_infer_holes_against(element_type, elem_expr);
             }
         }
 
