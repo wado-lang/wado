@@ -328,9 +328,13 @@ pub fn optimize(
         let miss = crate::nir_engine::REUSE_MISS.load(Relaxed);
         crate::compiler_trace!(
             "engine_reuse",
-            "sessions={} reuse={hit} rebuild={miss} ({:.1}% reused)",
+            "sessions={} reuse={hit} rebuild={miss} ({:.1}% reused) | reuse={:.3}s rebuild={:.3}s total={:.3}s",
             hit + miss,
-            if hit + miss == 0 { 0.0 } else { 100.0 * hit as f64 / (hit + miss) as f64 }
+            if hit + miss == 0 { 0.0 } else { 100.0 * hit as f64 / (hit + miss) as f64 },
+            crate::nir_engine::REUSE_NANOS.load(Relaxed) as f64 / 1e9,
+            crate::nir_engine::BUILD_NANOS.load(Relaxed) as f64 / 1e9,
+            (crate::nir_engine::REUSE_NANOS.load(Relaxed)
+                + crate::nir_engine::BUILD_NANOS.load(Relaxed)) as f64 / 1e9
         );
     }
 

@@ -311,6 +311,8 @@ pub struct Engine<'a> {
 // TEMPORARY counters — revert before commit.
 pub static REUSE_HIT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 pub static REUSE_MISS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static REUSE_NANOS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static BUILD_NANOS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 impl<'a> Engine<'a> {
     /// Build a session over `body`. The parent map and use index come from
@@ -320,8 +322,12 @@ impl<'a> Engine<'a> {
     /// `locals` is the owning function's local list (see
     /// [`Engine::alloc_local`]).
     pub fn new(body: &'a mut Body, locals: &'a mut Vec<NirLocal>) -> Self {
+        let __t0 = std::time::Instant::now();
         let mut buf = body.engine_index.take().unwrap_or_default();
-        let reuse = buf.matches(body) && buf.uses.len() >= locals.len();
+        // TEMPORARY switch — lets the same binary measure reuse against rebuild.
+        static NO_REUSE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        let no_reuse = *NO_REUSE.get_or_init(|| std::env::var_os("WADO_ENGINE_NO_REUSE").is_some());
+        let reuse = !no_reuse && buf.matches(body) && buf.uses.len() >= locals.len();
         // TEMPORARY counters — revert before commit.
         if reuse {
             REUSE_HIT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -415,6 +421,15 @@ impl<'a> Engine<'a> {
                         .map(|e| format!("{e:?}={:?}", engine.body.exprs[**e].kind))
                         .collect::<Vec<_>>(),
                 );
+            }
+        }
+        {
+            use std::sync::atomic::Ordering::Relaxed;
+            let ns = __t0.elapsed().as_nanos() as u64;
+            if reuse {
+                REUSE_NANOS.fetch_add(ns, Relaxed);
+            } else {
+                BUILD_NANOS.fetch_add(ns, Relaxed);
             }
         }
         debug_assert!(
