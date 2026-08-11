@@ -17,7 +17,7 @@ use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
@@ -38,12 +38,13 @@ pub fn select_lowering(project: &mut NirPackage) -> bool {
         type_table: &type_table,
         select_id,
     };
+    let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
         if let Some(body) = body.as_mut() {
-            let mut engine = Engine::new(body, locals);
+            let mut engine = Engine::new(body, &mut buffers, locals);
             changed |= engine.run(&[&rule]);
         }
     }

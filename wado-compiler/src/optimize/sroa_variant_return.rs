@@ -706,9 +706,6 @@ fn rebox_call(
         stmts: vec![let_stmt, tail],
         span,
     });
-    // Not an edit-API rewrite: the engine's parent map and use index no
-    // longer describe this body.
-    body.invalidate_engine_index();
     body.exprs[call].kind = ExprKind::Block(block);
     body.exprs[call].type_id = variant_type;
 }
@@ -1902,9 +1899,6 @@ fn rewrite_returns(
         && let StmtKind::Return { value: Some(v) } = body.stmts[s].kind
         && let Some(new) = rewrite_return_value(body, v, cand, span, retyped)
     {
-        // Not an edit-API rewrite: the engine's parent map and use index no
-        // longer describe this body.
-        body.invalidate_engine_index();
         body.stmts[s].kind = StmtKind::Return { value: Some(new) };
     }
     let mut kids = Vec::new();
@@ -1944,9 +1938,6 @@ fn rewrite_return_value(
             ..
         } => {
             let tuple = build_result_tuple(body, cand, case_index, payload, span);
-            // Not an edit-API rewrite: the engine's parent map and use index no
-            // longer describe this body.
-            body.invalidate_engine_index();
             body.exprs[expr].kind = tuple;
             body.exprs[expr].type_id = cand.layout.tuple_type;
         }
@@ -2015,9 +2006,6 @@ fn rewrite_block_tail(
     if let StmtKind::Expr(e) = body.stmts[last].kind
         && let Some(new) = rewrite_return_value(body, e, cand, span, retyped)
     {
-        // Not an edit-API rewrite: the engine's parent map and use index no
-        // longer describe this body.
-        body.invalidate_engine_index();
         body.stmts[last].kind = StmtKind::Expr(new);
     }
 }
@@ -2037,9 +2025,6 @@ fn rewrite_let_construct(body: &mut Body, def: StmtId, cand: &Candidate, span: S
         return;
     };
     let tuple = build_result_tuple(body, cand, case_index, payload, span);
-    // Not an edit-API rewrite: the engine's parent map and use index no
-    // longer describe this body.
-    body.invalidate_engine_index();
     body.exprs[init].kind = tuple;
     body.exprs[init].type_id = cand.layout.tuple_type;
 }
@@ -2325,9 +2310,6 @@ fn hoist_call_scrutinees(
             stmts: vec![let_stmt, tail],
             span,
         });
-        // Not an edit-API rewrite: the engine's parent map and use index no
-        // longer describe this body.
-        body.invalidate_engine_index();
         body.exprs[match_expr].kind = ExprKind::Block(block);
     }
     true
@@ -2363,9 +2345,6 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                 if let Some(local) = temp_local(body, expr, cx.bound) {
                     let tuple_type = cx.layout_of(local).tuple_type;
                     let kind = tag_read(body, local, tuple_type, cx);
-                    // Not an edit-API rewrite: the engine's parent map and use index no
-                    // longer describe this body.
-                    body.invalidate_engine_index();
                     body.exprs[e].kind = kind;
                     body.exprs[e].type_id = TypeTable::I32;
                     return;
@@ -2387,9 +2366,6 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                         ValueKind::Int(u64::from(case_index), TypeTable::I32),
                         TypeTable::I32,
                     );
-                    // Not an edit-API rewrite: the engine's parent map and use index no
-                    // longer describe this body.
-                    body.invalidate_engine_index();
                     body.exprs[e].kind = ExprKind::Binary {
                         left: Operand::Expr(tag),
                         op: NirBinaryOp::Eq,
@@ -2405,9 +2381,6 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                 if let Some(local) = temp_local(body, expr, cx.bound) {
                     let layout = cx.layout_of(local).clone();
                     let read = slot_read(body, local, &layout, case_index, cx);
-                    // Not an edit-API rewrite: the engine's parent map and use index no
-                    // longer describe this body.
-                    body.invalidate_engine_index();
                     body.exprs[e].kind = body.exprs[read].kind.clone();
                     body.exprs[e].type_id = body.exprs[read].type_id;
                     return;
@@ -2641,9 +2614,6 @@ fn rewrite_match_on_temp(
         type_id: TypeTable::I32,
         span: cx.span,
     });
-    // Not an edit-API rewrite: the engine's parent map and use index no
-    // longer describe this body.
-    body.invalidate_engine_index();
     body.exprs[match_expr].kind = ExprKind::Match {
         expr: Operand::Expr(tag),
         arms: new_arms,

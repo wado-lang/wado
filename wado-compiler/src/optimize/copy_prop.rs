@@ -21,7 +21,7 @@ use crate::nir::{FuncId, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -960,6 +960,7 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
     let type_table = project.type_table.borrow();
     let param_mut = super::value_copy::mutation::build_param_mut(project);
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::CopyProp, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         if func.body.is_none() {
@@ -974,7 +975,7 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
         };
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let mut engine = Engine::new(body, locals);
+        let mut engine = Engine::new(body, &mut buffers, locals);
         engine.run(&[&rule])
     })
 }

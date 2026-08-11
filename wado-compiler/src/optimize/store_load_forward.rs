@@ -23,7 +23,7 @@ use std::cell::Cell;
 use crate::hashmap::IndexSet;
 use crate::nir::NirFunction;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
 /// Forwards stores to loads in every function. Used by the post-`field_scalarize`
@@ -35,6 +35,7 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
     let first_param_types = super::alias::first_param_types(project);
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
+    let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -44,6 +45,7 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
             &first_param_types,
             &call_immutability,
             &pure_builtin_callees,
+            &mut buffers,
         );
     }
     changed
@@ -57,6 +59,7 @@ fn forward_one(
     first_param_types: &super::alias::FirstParamTypes,
     call_immutability: &super::alias::CallImmutability,
     pure_builtin_callees: &crate::hashmap::IndexSet<crate::nir::FuncId>,
+    buffers: &mut EngineBuffers,
 ) -> bool {
     if func.body.is_none() {
         return false;
@@ -84,7 +87,7 @@ fn forward_one(
         first_param_types,
         call_immutability,
     );
-    let mut engine = Engine::new(body, locals);
+    let mut engine = Engine::new(body, buffers, locals);
     engine.set_alias_sets(aliased, untrackable, mut_escaped);
     engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);

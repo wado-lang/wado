@@ -1912,9 +1912,6 @@ fn inline_calls_in_expr(
                 span,
             },
         );
-        // Not an edit-API rewrite: the engine's parent map and use index no
-        // longer describe this body.
-        body.invalidate_engine_index();
         body.exprs[e] = moved;
     }
 }

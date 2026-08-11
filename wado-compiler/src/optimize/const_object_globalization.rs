@@ -467,9 +467,6 @@ fn hoist_value_arg(
         stmts: vec![set_stmt, get_stmt],
         span,
     });
-    // Not an edit-API rewrite: the engine's parent map and use index no
-    // longer describe this body.
-    body.invalidate_engine_index();
     body.exprs[arg_expr].kind = ExprKind::Block(wrap_block);
 }
 
@@ -1663,9 +1660,6 @@ fn rewrite_reads(
         body.for_each_child(node, |c| stack.push(c));
     }
     for id in targets {
-        // Not an edit-API rewrite: the engine's parent map and use index no
-        // longer describe this body.
-        body.invalidate_engine_index();
         body.exprs[id].kind = ExprKind::GlobalVarGet {
             module_source: module_source.clone(),
             name: name.to_string(),
@@ -2012,9 +2006,6 @@ fn replace_let_with_set(
             if let Some(is_uninitialized) = guarded {
                 let guard =
                     guard_set_on_uninit(body, set, module_source, name, ty, is_uninitialized, span);
-                // Not an edit-API rewrite: the engine's parent map and use index no
-                // longer describe this body.
-                body.invalidate_engine_index();
                 body.stmts[s].kind = body.stmts[guard].kind.clone();
             } else {
                 body.stmts[s].kind = StmtKind::Expr(set.into());

@@ -144,15 +144,9 @@ impl LoopSnapshot {
     /// behind unreferenced.
     fn restore(&self, body: &mut Body) {
         for (e, node) in &self.exprs {
-            // Not an edit-API rewrite: the engine's parent map and use index no
-            // longer describe this body.
-            body.invalidate_engine_index();
             body.exprs[*e] = node.clone();
         }
         for (s, node) in &self.stmts {
-            // Not an edit-API rewrite: the engine's parent map and use index no
-            // longer describe this body.
-            body.invalidate_engine_index();
             body.stmts[*s] = node.clone();
         }
         for (b, stmts) in &self.blocks {

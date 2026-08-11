@@ -80,7 +80,7 @@ use crate::nir::{FuncId, FunctionRef, NirFunction, NirStruct, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -311,6 +311,7 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     let type_table_rc = project.type_table.clone();
     let value_copy_ids = project.value_copy_func_ids();
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::ContainerSroa, len, |fid| {
         let func_rc = &project.functions[fid.index()];
         // Skip CM bindings (ABI bridges) and body-less declarations.
@@ -331,7 +332,7 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
         };
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let mut engine = Engine::new(body, locals);
+        let mut engine = Engine::new(body, &mut buffers, locals);
         // A promoted constant capacity is re-materialized during the rewrite;
         // `materialize_operand` falls back to a decimal repr without the type
         // table, which is exact for the non-negative capacity ints. (The session

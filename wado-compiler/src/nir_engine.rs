@@ -78,28 +78,15 @@ fn arena_slot_mut<'a, T>(
     }
 }
 
-/// The parent map, use index, worklist, and post-order seed an [`Engine`]
-/// session runs on. Lives on [`crate::nir_arena::Body::engine_index`] and
-/// outlives the session: deriving it costs one walk, and an engine-based pass
-/// builds a session for every dirty function — `peephole` twice per fixed-point
-/// iteration, `match_to_switch`, … — which on a large program is tens of
-/// thousands of walks and ~17 % of the optimize loop.
-///
-/// A session takes it and [`Engine`]'s `Drop` puts it back. The edit API keeps
-/// it current, so the next session only re-seeds the worklist;
-/// [`EngineBuffers::matches`] falls back to a rebuild when a pass grew the arena
-/// behind the engine's back.
+/// The reusable scratch buffers an [`Engine`] session needs: the parent map,
+/// use index, and worklist. Constructing an engine for every dirty function in
+/// every engine-based pass — `peephole` twice per fixed-point iteration,
+/// `match_to_switch`, … — happens tens of thousands of times on a large
+/// program, so these containers are owned by the caller once and lent to each
+/// session via [`Engine::new`], which clears and right-sizes them. Reusing the
+/// allocations keeps the optimizer off the global allocator's hot path.
 #[derive(Default)]
 pub struct EngineBuffers {
-    /// Arena lengths this index was derived at. `None` until built. A pass that
-    /// allocates outside the edit API leaves these short of the arena, which is
-    /// how a stale index is caught without re-deriving it to compare.
-    built_lens: Option<[usize; 4]>,
-    /// Every node in the post-order the worklist seeds from, recorded by the
-    /// build walk and appended to by `alloc_*`. Re-seeding from this is what
-    /// makes a reused session cheap — no traversal, and the order a fresh build
-    /// would produce.
-    post_order: Vec<NodeRef>,
     expr_parent: Vec<Option<NodeRef>>,
     stmt_parent: Vec<Option<NodeRef>>,
     block_parent: Vec<Option<NodeRef>>,
@@ -131,45 +118,6 @@ pub struct EngineBuffers {
 }
 
 impl EngineBuffers {
-    /// The arena's current node counts, the key [`EngineBuffers::matches`]
-    /// compares against.
-    fn lens_of(body: &Body) -> [usize; 4] {
-        [
-            body.exprs.len(),
-            body.stmts.len(),
-            body.blocks.len(),
-            body.pats.len(),
-        ]
-    }
-
-    /// Whether this index still describes `body`. False before the first build,
-    /// and false once a node was allocated outside the edit API.
-    fn matches(&self, body: &Body) -> bool {
-        self.built_lens == Some(Self::lens_of(body))
-    }
-
-    /// Re-seed the worklist from the recorded post-order, for a session reusing
-    /// a live index.
-    fn reseed_worklist(&mut self) {
-        self.worklist.clear();
-        // A session that only queried (`extract`'s freeze walk) never drains the
-        // worklist, so bits survive it. A memset is cheap next to the walk this
-        // whole path exists to avoid.
-        for b in [
-            &mut self.expr_queued,
-            &mut self.stmt_queued,
-            &mut self.block_queued,
-            &mut self.pat_queued,
-        ] {
-            b.fill(false);
-        }
-        for i in 0..self.post_order.len() {
-            let node = self.post_order[i];
-            self.set_queued(node, true);
-            self.worklist.push_back(node);
-        }
-    }
-
     /// Clear every buffer and size the parent / queued-bit / use-index maps to
     /// `body`'s current node and local counts, readying them for a fresh
     /// session. Capacity is retained, so a reused `EngineBuffers` allocates
@@ -199,8 +147,6 @@ impl EngineBuffers {
         self.uses.resize_with(local_count, LocalUses::default);
         self.worklist.clear();
         self.elided_locals.clear();
-        self.post_order.clear();
-        self.built_lens = None;
     }
 
     /// Mutable access to local `index`'s use record, growing `uses` on demand
@@ -241,10 +187,7 @@ impl EngineBuffers {
 /// and the function's `locals` list so rules can allocate fresh locals.
 pub struct Engine<'a> {
     pub body: &'a mut Body,
-    /// Taken from [`crate::nir_arena::Body::engine_index`] for the session and
-    /// put back on drop. Owned rather than borrowed because it lives inside the
-    /// same `Body` this session holds mutably.
-    buf: EngineBuffers,
+    buf: &'a mut EngineBuffers,
     /// The function's local list — the single source of truth for the local
     /// count, so `alloc_local` appends here and returns the new index. Sessions
     /// over a body with no owning function (a global initializer, a unit test)
@@ -308,38 +251,17 @@ pub struct Engine<'a> {
     pending_local_naming: std::cell::Cell<bool>,
 }
 
-// TEMPORARY counters — revert before commit.
-pub static REUSE_HIT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-pub static REUSE_MISS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-pub static REUSE_NANOS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-pub static BUILD_NANOS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
 impl<'a> Engine<'a> {
-    /// Build a session over `body`. The parent map and use index come from
-    /// [`crate::nir_arena::Body::engine_index`] when a previous session left one
-    /// that still describes the arena — then this only re-seeds the worklist.
-    /// Otherwise one O(n) walk derives all three (see [`Engine::build_indices`]).
-    /// `locals` is the owning function's local list (see
-    /// [`Engine::alloc_local`]).
-    pub fn new(body: &'a mut Body, locals: &'a mut Vec<NirLocal>) -> Self {
-        let __t0 = std::time::Instant::now();
-        let mut buf = body.engine_index.take().unwrap_or_default();
-        // TEMPORARY switch — lets the same binary measure reuse against rebuild.
-        static NO_REUSE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        let no_reuse = *NO_REUSE.get_or_init(|| std::env::var_os("WADO_ENGINE_NO_REUSE").is_some());
-        let reuse = !no_reuse && buf.matches(body) && buf.uses.len() >= locals.len();
-        // TEMPORARY counters — revert before commit.
-        if reuse {
-            REUSE_HIT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        } else {
-            REUSE_MISS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        }
-        if reuse {
-            buf.reseed_worklist();
-            buf.elided_locals.clear();
-        } else {
-            buf.reset_for(body, locals.len());
-        }
+    /// Build a session over `body`, reusing the caller-owned `buf`: one O(n)
+    /// walk populates the parent map and use index and seeds the worklist in
+    /// post-order (see [`Engine::build_indices`]). `locals` is the owning
+    /// function's local list (see [`Engine::alloc_local`]).
+    pub fn new(
+        body: &'a mut Body,
+        buf: &'a mut EngineBuffers,
+        locals: &'a mut Vec<NirLocal>,
+    ) -> Self {
+        buf.reset_for(body, locals.len());
         let mut engine = Self {
             body,
             buf,
@@ -360,85 +282,7 @@ impl<'a> Engine<'a> {
         // through every edit (`replace_expr_with_value` / `redirect_expr`, plus
         // structural-pass coarsening). A new session reuses it as-is — there is
         // no session-start drop and no rebuild path (build-once is invariant).
-        if reuse {
-            // Parents, defs, and the post-order seed carry over. The read set is
-            // re-derived: a rewrite can install a `Local` kind or attach a node
-            // through a slot that never calls `set_parent`, and a *missing*
-            // read is the one direction that miscompiles. The scan is flat —
-            // no traversal, no parent writes — against the walk `build_indices`
-            // pays, and `is_local_read` narrows the result by reachability so
-            // the extra mentions it records cost no elisions.
-            engine.rescan_local_reads();
-            // TEMPORARY cost probe — revert. Skipping the reseed is semantically
-            // wrong (a pass must visit every node) and exists only to measure
-            // what share of a session build the seeding is.
-            if std::env::var_os("WADO_EXP_NO_RESEED").is_some() {
-                engine.buf.worklist.clear();
-            }
-        } else {
-            engine.build_indices();
-            engine.buf.built_lens = Some(EngineBuffers::lens_of(engine.body));
-        }
-        // TEMPORARY oracle — name the first divergence between the carried index
-        // and one derived fresh. Revert once the maintenance hole is closed.
-        if reuse && std::env::var_os("WADO_ENGINE_REUSE_VERIFY").is_some() {
-            let carried: Vec<Vec<ExprId>> =
-                engine.buf.uses.iter().map(|u| u.reads.clone()).collect();
-            let n_locals = engine.locals.len();
-            engine.buf.reset_for(engine.body, n_locals);
-            engine.build_indices();
-            engine.buf.built_lens = Some(EngineBuffers::lens_of(engine.body));
-            // Only a *reachable* read matters: `is_local_read` guards a
-            // binding's deletion, and an unreachable mention going missing is
-            // the conservative direction. Walk from the root for the set that
-            // must be covered.
-            let mut reachable: crate::hashmap::IndexMap<u32, Vec<ExprId>> =
-                crate::hashmap::IndexMap::default();
-            {
-                let mut stack = vec![NodeRef::Block(engine.body.root)];
-                while let Some(node) = stack.pop() {
-                    if let NodeRef::Expr(e) = node
-                        && let ExprKind::Local { index, .. } = &engine.body.exprs[e].kind
-                    {
-                        reachable.entry(*index).or_default().push(e);
-                    }
-                    engine.body.for_each_child(node, |c| stack.push(c));
-                }
-            }
-            for (idx, want) in &reachable {
-                let have = carried.get(*idx as usize).cloned().unwrap_or_default();
-                let missing: Vec<_> = want.iter().filter(|e| !have.contains(e)).collect();
-                assert!(
-                    missing.is_empty(),
-                    "[oracle] local {idx}: carried index is missing reachable reads \
-                     {missing:?} (carried {have:?}); body {} exprs, uses.len()={}, \
-                     locals.len()={}, kinds={:?}",
-                    engine.body.exprs.len(),
-                    carried.len(),
-                    engine.locals.len(),
-                    missing
-                        .iter()
-                        .map(|e| format!("{e:?}={:?}", engine.body.exprs[**e].kind))
-                        .collect::<Vec<_>>(),
-                );
-            }
-        }
-        {
-            use std::sync::atomic::Ordering::Relaxed;
-            let ns = __t0.elapsed().as_nanos() as u64;
-            if reuse {
-                REUSE_NANOS.fetch_add(ns, Relaxed);
-            } else {
-                BUILD_NANOS.fetch_add(ns, Relaxed);
-            }
-        }
-        debug_assert!(
-            engine.buf.matches(engine.body),
-            "[NIR engine] the session index does not describe the arena it was \
-             taken from. `alloc_*` records every node it mints; a pass that \
-             pushes onto `body.exprs` / `stmts` / `blocks` / `pats` directly must \
-             go through the edit API or call `Body::invalidate_engine_index`."
-        );
+        engine.build_indices();
         engine
     }
 
@@ -798,47 +642,24 @@ impl<'a> Engine<'a> {
     ///
     /// Parents and uses are recorded on the way down, the worklist on the way
     /// up, so leaf reductions are enqueued before the contexts that fold them.
-    /// Record every `Local` node in the arena as a read, reachable or not.
-    ///
-    /// A linear scan rather than a tree walk, because a walk sees only what is
-    /// reachable *now*: a rewrite that later attaches a node the walk skipped —
-    /// or installs a `Local` kind outside the edit API — would leave the mention
-    /// unregistered, and `elide_local` reads a missing mention as "unused" and
-    /// deletes a live binding. `is_local_read` is the only consumer and wants
-    /// exactly this conservative side: a dead mention keeps a binding alive,
-    /// which costs an elision, never correctness.
-    fn rescan_local_reads(&mut self) {
-        for u in &mut self.buf.uses {
-            u.reads.clear();
-        }
-        for (id, node) in self.body.exprs.iter() {
-            if let ExprKind::Local { index, .. } = &node.kind {
-                let index = *index;
-                self.buf.uses_entry(index).reads.push(id);
-            }
-        }
-    }
-
     fn build_indices(&mut self) {
-        self.rescan_local_reads();
         let mut stack = std::mem::take(&mut self.buf.walk_stack);
         let mut children = std::mem::take(&mut self.buf.walk_children);
         stack.clear();
         stack.push((NodeRef::Block(self.body.root), false));
         while let Some((node, processed)) = stack.pop() {
             if processed {
-                self.buf.post_order.push(node);
                 self.enqueue(node);
                 continue;
             }
             stack.push((node, true));
             match node {
-                // `Local` reads are not recorded here: the walk sees only what
-                // is reachable *now*, and a rewrite that attaches a node the
-                // walk skipped would leave its mention unregistered — which
-                // `elide_local` reads as "unused" and deletes a live binding.
-                // The linear scan below covers every node instead.
-                NodeRef::Expr(_) => {}
+                NodeRef::Expr(id) => {
+                    if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
+                        let index = *index;
+                        self.buf.uses_entry(index).reads.push(id);
+                    }
+                }
                 NodeRef::Stmt(id) => {
                     if let StmtKind::Let { local_index, .. } = &self.body.stmts[id].kind {
                         let index = *local_index;
@@ -927,30 +748,7 @@ impl<'a> Engine<'a> {
     pub fn is_local_read(&self, local: u32) -> bool {
         self.local_reads(local)
             .iter()
-            .any(|&mention| !self.is_assign_target(mention) && self.is_reachable(mention))
-    }
-
-    /// Whether `e` still hangs off the body root.
-    ///
-    /// The read set is deliberately an over-approximation — a mention is added
-    /// when a node is minted, given a `Local` kind, or attached, and dropping
-    /// one on every path that could detach it is what a carried index cannot
-    /// do. Reachability is recovered here instead, at query time, by walking the
-    /// parent chain: bounded by nesting depth, against the whole-body walk an
-    /// exact set would cost. Missing a reachable read deletes a live binding;
-    /// counting an unreachable one only costs an elision — so the set errs wide
-    /// and this narrows it.
-    fn is_reachable(&self, e: ExprId) -> bool {
-        let mut node = NodeRef::Expr(e);
-        loop {
-            if node == NodeRef::Block(self.body.root) {
-                return true;
-            }
-            match self.parent_of(node) {
-                Some(p) => node = p,
-                None => return false,
-            }
-        }
+            .any(|&mention| !self.is_assign_target(mention))
     }
 
     /// How many reachable promoted operands read `local` — the half of a use
@@ -1050,22 +848,6 @@ impl<'a> Engine<'a> {
     }
 
     fn set_parent(&mut self, child: NodeRef, parent: Option<NodeRef>) {
-        // Attaching re-registers the child's `Local` mention. Orphaning drops it
-        // (see `replace_operand_to`), and a rewrite that re-attaches the same
-        // node would otherwise leave a reachable read the use index does not
-        // know — which `elide_local` reads as "unused" and deletes a live
-        // binding. Idempotent, so the common re-parent of an already-registered
-        // child changes nothing.
-        if parent.is_some()
-            && let NodeRef::Expr(e) = child
-            && let ExprKind::Local { index, .. } = &self.body.exprs[e].kind
-        {
-            let index = *index;
-            let entry = self.buf.uses_entry(index);
-            if !entry.reads.contains(&e) {
-                entry.reads.push(e);
-            }
-        }
         *arena_slot_mut(
             child,
             &mut self.buf.expr_parent,
@@ -1292,26 +1074,8 @@ impl<'a> Engine<'a> {
             let index = *index;
             self.buf.uses_entry(index).reads.push(id);
         }
-        self.note_allocated(NodeRef::Expr(id));
         self.enqueue(NodeRef::Expr(id));
         id
-    }
-
-    /// Record a node `alloc_*` just minted into the persisted index: the
-    /// post-order seed a later session re-seeds from, and the arena length
-    /// [`EngineBuffers::matches`] checks. Appending is post-order-correct — a
-    /// fresh node's children already exist, so they precede it.
-    fn note_allocated(&mut self, node: NodeRef) {
-        self.buf.post_order.push(node);
-        if let Some(lens) = self.buf.built_lens.as_mut() {
-            let slot = match node {
-                NodeRef::Expr(_) => 0,
-                NodeRef::Stmt(_) => 1,
-                NodeRef::Block(_) => 2,
-                NodeRef::Pat(_) => 3,
-            };
-            lens[slot] += 1;
-        }
     }
 
     /// Edit API: intern a fresh constant value into the function's pool and
@@ -1342,7 +1106,6 @@ impl<'a> Engine<'a> {
             let index = *local_index;
             self.buf.uses_entry(index).def = Some(id);
         }
-        self.note_allocated(NodeRef::Stmt(id));
         self.enqueue(NodeRef::Stmt(id));
         id
     }
@@ -1357,7 +1120,6 @@ impl<'a> Engine<'a> {
         for s in kids {
             self.set_parent(NodeRef::Stmt(s), Some(NodeRef::Block(id)));
         }
-        self.note_allocated(NodeRef::Block(id));
         self.enqueue(NodeRef::Block(id));
         id
     }
@@ -1374,7 +1136,6 @@ impl<'a> Engine<'a> {
         for c in children {
             self.set_parent(c, Some(NodeRef::Pat(id)));
         }
-        self.note_allocated(NodeRef::Pat(id));
         self.enqueue(NodeRef::Pat(id));
         id
     }
@@ -1756,14 +1517,6 @@ impl<'a> Engine<'a> {
     }
 }
 
-impl Drop for Engine<'_> {
-    /// Hand the index back to the body so the next session reuses it. The edit
-    /// API kept it current through every rewrite this session made.
-    fn drop(&mut self) {
-        self.body.engine_index.put(std::mem::take(&mut self.buf));
-    }
-}
-
 /// A single-node local rewrite. The engine applies rules at a node when it is
 /// popped from the worklist or re-enqueued after a neighbouring change. A rule
 /// overrides whichever entry point(s) it needs; the rest default to a no-op.
@@ -1884,8 +1637,9 @@ mod tests {
     #[test]
     fn use_index_tracks_def_and_reads() {
         let mut body = sample_body();
+        let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng: Vec<NirLocal> = Vec::new();
-        let eng = Engine::new(&mut body, &mut __locals_eng);
+        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // local 0 is read once (the `return x`) and defined once (the `let`).
         assert_eq!(eng.local_reads(0).len(), 1);
         assert!(eng.local_def(0).is_some());
@@ -1899,8 +1653,9 @@ mod tests {
     #[cfg(debug_assertions)]
     fn elided_local_with_a_surviving_read_trips_the_session_audit() {
         let mut body = sample_body();
+        let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng: Vec<NirLocal> = Vec::new();
-        let mut eng = Engine::new(&mut body, &mut __locals_eng);
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // `sample_body` still contains `return x`, so claiming local 0 was
         // elided is exactly the bug the audit exists to catch.
         eng.note_elided_local(0);
@@ -1912,8 +1667,9 @@ mod tests {
     #[test]
     fn an_unreported_local_never_trips_the_session_audit() {
         let mut body = sample_body();
+        let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng: Vec<NirLocal> = Vec::new();
-        let mut eng = Engine::new(&mut body, &mut __locals_eng);
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         eng.run(&[]);
     }
 
@@ -1921,8 +1677,9 @@ mod tests {
     fn parents_link_children_to_their_node() {
         let mut body = sample_body();
         let root = body.root;
+        let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng: Vec<NirLocal> = Vec::new();
-        let eng = Engine::new(&mut body, &mut __locals_eng);
+        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // Every statement of the root block has the root block as its parent.
         for &s in &eng.body.blocks[root].stmts {
             assert_eq!(eng.parent_of(NodeRef::Stmt(s)), Some(NodeRef::Block(root)));
@@ -1978,8 +1735,9 @@ mod tests {
             vec![let_stmt]
         });
         {
+            let mut __buf_eng = EngineBuffers::default();
             let mut __locals_eng: Vec<NirLocal> = Vec::new();
-            let mut eng = Engine::new(&mut body, &mut __locals_eng);
+            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.run(&[&FoldAddMulConst]);
         }
         // The let's value is now the promoted constant 12.
@@ -2013,8 +1771,9 @@ mod tests {
         };
         let before = body.exprs.len();
         let clone = {
+            let mut __buf_eng = EngineBuffers::default();
             let mut __locals_eng: Vec<NirLocal> = Vec::new();
-            let mut eng = Engine::new(&mut body, &mut __locals_eng);
+            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.clone_expr(original)
         };
         // Only the Binary node is copied: its `1` and `2` are pure-value operands
@@ -2070,8 +1829,9 @@ mod tests {
         let root = body.root;
         assert_eq!(body.blocks[root].stmts.len(), 3);
         {
+            let mut __buf_eng = EngineBuffers::default();
             let mut __locals_eng: Vec<NirLocal> = Vec::new();
-            let mut eng = Engine::new(&mut body, &mut __locals_eng);
+            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             assert!(eng.run(&[&DropUnitStmts]));
         }
         // The `()` statement is gone; the `let` and `return` remain in order.
@@ -2102,8 +1862,9 @@ mod tests {
             let assign_stmt = s(b, StmtKind::Expr(assign.into()));
             vec![let_stmt, assign_stmt]
         });
+        let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng: Vec<NirLocal> = Vec::new();
-        let eng = Engine::new(&mut body, &mut __locals_eng);
+        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         assert!(!eng.is_local_read(0));
 
         // The same body with a trailing `return x` makes local 0 read.
@@ -2115,8 +1876,9 @@ mod tests {
             let ret = ret_x(b);
             vec![let2, ret]
         });
+        let mut __buf_eng2 = EngineBuffers::default();
         let mut __locals_eng2: Vec<NirLocal> = Vec::new();
-        let eng2 = Engine::new(&mut body2, &mut __locals_eng2);
+        let eng2 = Engine::new(&mut body2, &mut __buf_eng2, &mut __locals_eng2);
         assert!(eng2.is_local_read(0));
     }
 
@@ -2140,8 +1902,9 @@ mod tests {
             panic!("expected expr stmt");
         };
         {
+            let mut __buf_eng = EngineBuffers::default();
             let mut __locals_eng: Vec<NirLocal> = Vec::new();
-            let mut eng = Engine::new(&mut body, &mut __locals_eng);
+            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             // Before: local 0 is read only by the `x` node.
             assert_eq!(eng.local_reads(0), &[lx]);
             eng.become_expr(add, lx);
@@ -2160,8 +1923,9 @@ mod tests {
     fn worklist_seeds_every_node_once() {
         let mut body = sample_body();
         let total = body.exprs.len() + body.stmts.len() + body.blocks.len() + body.pats.len();
+        let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng: Vec<NirLocal> = Vec::new();
-        let mut eng = Engine::new(&mut body, &mut __locals_eng);
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         let mut popped = 0;
         while eng.pop().is_some() {
             popped += 1;
@@ -2179,8 +1943,9 @@ mod tests {
     #[test]
     fn alloc_block_and_alloc_pat_extend_the_queued_bitsets() {
         let mut body = sample_body();
+        let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng: Vec<NirLocal> = Vec::new();
-        let mut eng = Engine::new(&mut body, &mut __locals_eng);
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // Drain the worklist seeded at construction so only the freshly
         // `alloc_*`'d nodes remain below.
         while eng.pop().is_some() {}
@@ -2217,8 +1982,9 @@ mod tests {
         // index 0 for `x`) so the newly `alloc_local`'d index doesn't collide
         // with a pre-existing `Local` mention.
         let mut body = mk_body(|_| Vec::new());
+        let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng: Vec<NirLocal> = Vec::new();
-        let mut eng = Engine::new(&mut body, &mut __locals_eng);
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
 
         // The session starts with 0 locals (`__locals_eng` is empty), so
         // `reset_for` pre-sizes `uses` to length 0; `alloc_local` mints an
@@ -2254,8 +2020,9 @@ mod tests {
             vec![let_x(b, init, false)]
         });
         let root = body.root;
+        let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
-        let mut eng = Engine::new(&mut body, &mut __locals_eng);
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // Fills the memo: nothing in the pool reads `x` yet.
         assert!(!eng.reads_promoted_local(0));
         assert_eq!(eng.promoted_read_count(0), 0);
@@ -2303,8 +2070,9 @@ mod tests {
             first = Some(s1);
             vec![s1, s2]
         });
+        let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
-        let eng = Engine::new(&mut body, &mut __locals_eng);
+        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         assert_eq!(eng.local_def(0), first);
     }
 
@@ -2326,8 +2094,9 @@ mod tests {
             vec![let_x(b, init, false)]
         });
         let root = body.root;
+        let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
-        let mut eng = Engine::new(&mut body, &mut __locals_eng);
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
 
         // Allocated detached: the operand names `x`, but nothing reaches it.
         let read = eng.body.values.canonical_local(0, TypeTable::I32);

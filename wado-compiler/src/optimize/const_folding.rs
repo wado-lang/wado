@@ -35,7 +35,7 @@ use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
     CalleeMap, CtfeBuiltin, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
@@ -113,9 +113,10 @@ pub fn fold_constants(
     let maps = &cache.as_ref().expect("just populated").maps;
     let globals = build_global_view(project, &type_table, maps);
     let mut visitor = new_visitor(&type_table, maps, &globals);
+    let mut buffers = EngineBuffers::default();
     let len = project.functions.len();
     gate.run_gated(GatedPass::ConstFold, len, |fid| {
-        fold_function(&project.functions[fid.index()], &mut visitor)
+        fold_function(&project.functions[fid.index()], &mut visitor, &mut buffers)
     })
 }
 
@@ -127,9 +128,10 @@ pub fn fold_constants_all(project: &mut NirPackage) -> bool {
     let maps = build_fold_maps(project, &type_table);
     let globals = build_global_view(project, &type_table, &maps);
     let mut visitor = new_visitor(&type_table, &maps, &globals);
+    let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
-        changed |= fold_function(func_rc, &mut visitor);
+        changed |= fold_function(func_rc, &mut visitor, &mut buffers);
     }
     changed
 }
@@ -152,6 +154,7 @@ fn new_visitor<'a>(
 fn fold_function(
     func_rc: &RefCell<NirFunction>,
     visitor: &mut ConstFoldVisitor<'_>,
+    buffers: &mut EngineBuffers,
 ) -> bool {
     let mut func = func_rc.borrow_mut();
     let NirFunction { body, locals, .. } = &mut *func;
@@ -162,7 +165,7 @@ fn fold_function(
     visitor.interpreter.enter_function();
     visitor.interpreter.record_ref_global_aliases(body);
     visitor.interpreter.record_aggregate_locals(body);
-    let mut engine = Engine::new(body, locals);
+    let mut engine = Engine::new(body, buffers, locals);
     let root = engine.body.root;
     visitor.visit_block(&mut engine, root)
 }

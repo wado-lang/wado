@@ -26,7 +26,7 @@ use crate::nir::{FunctionRef, NirFunction, NirLiteralPattern};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind,
 };
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
 use crate::token::Span;
@@ -56,12 +56,13 @@ pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let type_table = project.type_table.borrow();
     let rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
+    let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
         if let Some(body) = body.as_mut() {
-            let mut engine = Engine::new(body, locals);
+            let mut engine = Engine::new(body, &mut buffers, locals);
             engine.set_value_graph_type_table(&type_table);
             engine.set_pure_builtin_callees(&pure_builtin_callees);
             changed |= engine.run(&[&rule]);
@@ -73,6 +74,7 @@ pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
             &rule,
             &type_table,
             &pure_builtin_callees,
+            &mut buffers,
         )
 }
 
@@ -86,11 +88,13 @@ pub(super) fn match_to_switch_globals(project: &mut NirPackage) -> bool {
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let type_table = project.type_table.borrow();
     let rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
+    let mut buffers = EngineBuffers::default();
     run_globals(
         &mut project.globals,
         &rule,
         &type_table,
         &pure_builtin_callees,
+        &mut buffers,
     )
 }
 
@@ -99,6 +103,7 @@ fn run_globals(
     rule: &MatchToSwitchRule,
     type_table: &TypeTable,
     pure_builtin_callees: &crate::hashmap::IndexSet<crate::nir::FuncId>,
+    buffers: &mut EngineBuffers,
 ) -> bool {
     let mut changed = false;
     // Global initializer bodies have no owning function — and no locals (any
@@ -107,7 +112,10 @@ fn run_globals(
     // allocates, so it stays empty.
     let mut no_locals: Vec<crate::nir::NirLocal> = Vec::new();
     for global in globals {
-        let mut engine = Engine::new(global.init.slot_expr_mut().body_mut(), &mut no_locals,
+        let mut engine = Engine::new(
+            global.init.slot_expr_mut().body_mut(),
+            buffers,
+            &mut no_locals,
         );
         engine.set_value_graph_type_table(type_table);
         engine.set_pure_builtin_callees(pure_builtin_callees);

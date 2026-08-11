@@ -53,7 +53,7 @@ use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
@@ -130,6 +130,7 @@ pub fn hoist_template_buffers(project: &mut NirPackage, gate: &mut FunctionGate)
     let type_table = project.type_table.clone();
     let callee_ids = TmplCalleeIds::resolve(project);
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::TmplHoist, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         if func.body.is_none() {
@@ -142,7 +143,7 @@ pub fn hoist_template_buffers(project: &mut NirPackage, gate: &mut FunctionGate)
         };
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let mut engine = Engine::new(body, locals);
+        let mut engine = Engine::new(body, &mut buffers, locals);
         engine.run(&[&rule])
     })
 }

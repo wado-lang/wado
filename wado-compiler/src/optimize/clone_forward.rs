@@ -31,7 +31,7 @@ use super::alias::{FirstParamTypes, first_param_types, method_mutates_receiver};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::TypeTable;
 
@@ -528,6 +528,7 @@ pub fn forward_redundant_clones(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.clone();
     let type_table = type_table.borrow();
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     let mut any = false;
     for fi in 0..len {
         let mut func = project.functions[fi].borrow_mut();
@@ -541,7 +542,7 @@ pub fn forward_redundant_clones(project: &mut NirPackage) -> bool {
         };
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let mut engine = Engine::new(body, locals);
+        let mut engine = Engine::new(body, &mut buffers, locals);
         any |= engine.run(&[&rule]);
     }
     any

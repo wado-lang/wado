@@ -43,7 +43,7 @@
 use cranelift_entity::EntityRef;
 
 use crate::nir::NirFunction;
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
 use super::array_literal::{Collapser, resolve_array_new_ids, resolve_array_push_ids};
@@ -92,6 +92,7 @@ pub(super) fn run_peephole(
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
 
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     // The pre- and post-inline runs apply different rule sets, so they keep
     // separate watermark columns: a function quiescent for one must still be
     // revisited by the other.
@@ -173,7 +174,7 @@ pub(super) fn run_peephole(
         if let Some(const_ascii_push_rule) = const_ascii_push_rule.as_ref() {
             rules.push(const_ascii_push_rule);
         }
-        let mut engine = Engine::new(body, locals);
+        let mut engine = Engine::new(body, &mut buffers, locals);
         // `MatchToSwitchRule` materializes promoted constant scrutinees / arm
         // bodies; the extractor reads `prim` from the type table for literal repr.
         engine.set_value_graph_type_table(&type_table);

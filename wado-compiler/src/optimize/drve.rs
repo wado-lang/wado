@@ -333,9 +333,6 @@ fn void_returns(body: &mut Body) {
         body.for_each_child(node, |c| stack.push(c));
     }
     for s in returns {
-        // Not an edit-API rewrite: the engine's parent map and use index no
-        // longer describe this body.
-        body.invalidate_engine_index();
         body.stmts[s].kind = StmtKind::Return { value: None };
     }
 }

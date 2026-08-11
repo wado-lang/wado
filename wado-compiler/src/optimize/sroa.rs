@@ -43,7 +43,7 @@ use crate::nir::NirFunction;
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -92,6 +92,7 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
     let stores_lookup = build_stores_lookup(project);
     let value_copy_ids = project.value_copy_func_ids();
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::Sroa, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         if func.body.is_none() {
@@ -108,7 +109,7 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
         let changed = {
             let NirFunction { body, locals, .. } = &mut *func;
             let body = body.as_mut().expect("checked above");
-            let mut engine = Engine::new(body, locals);
+            let mut engine = Engine::new(body, &mut buffers, locals);
             engine.run(&[&rule])
         };
         let newly = rule.newly_aliased.into_inner();

@@ -100,11 +100,13 @@ pub(super) fn resolve_panic_ids(
 /// blocks are removed.
 pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackage) -> bool {
     use crate::nir::NirFunction;
+    use crate::nir_engine::EngineBuffers;
     let type_table = project.type_table.borrow();
     let first_param_types = super::alias::first_param_types(project);
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
+    let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -130,7 +132,7 @@ pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackag
             &call_immutability,
         );
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
-        let mut engine = Engine::new(body, locals);
+        let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
