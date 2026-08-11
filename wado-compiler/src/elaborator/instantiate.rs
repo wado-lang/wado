@@ -64,6 +64,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// bound already fixes its shape (`<F: fn(...)>`) is constrained
     /// structurally rather than by call-site inference, so minting a variable
     /// for it would only produce an unsolvable one.
+    ///
+    /// A type *pack* (`..T`) is likewise left rigid. A variable stands for one
+    /// type; a pack stands for a list of them, and the unifier splices it by
+    /// recognising `TypePack` inside the expected tuple. Rewriting `[..T]` to
+    /// `[?0]` would hide the shape that arm matches on and the pack would
+    /// never bind. Instantiating a pack needs a pack-shaped variable, which
+    /// does not exist yet.
     pub(super) fn instantiate(
         &mut self,
         slots: &[TypeId],
@@ -77,8 +84,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let named_slot = {
                 let tt = self.tysys.type_table.borrow();
                 match tt.get(slot) {
-                    ResolvedType::TypeParam { index, name }
-                    | ResolvedType::TypePack { index, name, .. } => Some((*index, name.clone())),
+                    ResolvedType::TypeParam { index, name } => Some((*index, name.clone())),
                     _ => None,
                 }
             };
