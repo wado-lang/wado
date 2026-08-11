@@ -1,13 +1,8 @@
 # Publishes the shared cargo caches every other build restores from:
 #
-#   cargo/registry/linux-x86_64.tar.gz  registry index, .crate files, unpacked sources
-#   cargo/sccache/linux-x86_64.tar.gz   sccache content-addressed compile cache
-#   v0-rust-ci-Linux-x64-*              ci.yml's target/ and registry
-#
-# The first two go to GCS, for non-GitHub environments (e.g. the Claude Code web
-# container). The third is an Actions cache that ci.yml restores read-only; only
-# a main-branch run can write it, because a cache saved on a PR branch is
-# invisible to main and to sibling branches.
+#   cargo/registry/linux-x86_64.tar.gz  registry index, .crate files, unpacked sources (GCS)
+#   cargo/sccache/linux-x86_64.tar.gz   sccache content-addressed compile cache (GCS)
+#   v0-rust-ci-Linux-x64-*              ci.yml's target/ and registry (Actions cache)
 #
 # The registry cache saves the download and the unpack; the sccache cache saves
 # compiling every dependency. See .claude/hooks/cargo-cache-restore.mts
@@ -45,7 +40,6 @@ on:
       - "*/Cargo.toml"
       - rust-toolchain.toml
       - .github/workflows/cargo-cache.yml
-      # ci.yml's env is hashed into the Actions cache key (see the job below).
       - .github/workflows/ci.yml
   workflow_dispatch:
 
@@ -142,8 +136,6 @@ jobs:
           destination: ${{ vars.GCP_CACHE_BUCKET }}/cargo/sccache
           parent: false
 
-  # ENV PARITY AGAIN: rust-cache hashes the CARGO_*/RUST* env set into the cache
-  # key, so this job's env must be exactly ci.yml's — none of the sccache vars.
   actions-cache:
     name: Warm ci.yml's Actions cache
     runs-on: ubuntu-latest
@@ -167,5 +159,4 @@ jobs:
         with:
           shared-key: ci
 
-      # `--all-targets` for the dev-dependencies only ci.yml's test binaries need.
       - run: cargo build --workspace --locked --all-targets
