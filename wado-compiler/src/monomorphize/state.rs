@@ -94,15 +94,15 @@ impl FuncInstState {
         {
             return Some(m.clone());
         }
-        // Fall back to the head name for argument shapes the qualified
-        // instantiated index above cannot spell (tuples, function types).
-        if info.base_struct_name() != info.struct_name()
-            && let Some(m) = self.trait_env.concrete_impl_module_for(
-                ImplReceiver::Of(info.receiver()),
-                trait_name,
-                type_module,
-            )
-        {
+        // Then the receiver identity. Not a same-spelling retry: the
+        // instantiated form above asks the mangled namespace only, while an
+        // identity is answered from whichever namespace holds it — a receiver
+        // that never carried its declaring module is reachable only here.
+        if let Some(m) = self.trait_env.concrete_impl_module_for(
+            ImplReceiver::Of(info.receiver()),
+            trait_name,
+            type_module,
+        ) {
             return Some(m.clone());
         }
         None
@@ -142,14 +142,9 @@ impl FuncInstState {
         {
             return Some(m.clone());
         }
-        if info.base_struct_name() != info.struct_name()
-            && let Some(m) =
-                self.trait_env
-                    .impl_module_for(
-                        ImplReceiver::Of(info.receiver()),
-                        trait_name,
-                        type_module,
-                    )
+        if let Some(m) =
+            self.trait_env
+                .impl_module_for(ImplReceiver::Of(info.receiver()), trait_name, type_module)
         {
             return Some(m.clone());
         }
