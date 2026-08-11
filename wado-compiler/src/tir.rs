@@ -435,8 +435,12 @@ pub enum ResolvedType {
     /// opposite questions at a type check: a rigid parameter rejects anything
     /// but itself, a variable accepts and records.
     ///
-    /// Never survives elaboration — `finalize_infer_holes` substitutes every
-    /// variable (solved → concrete, unsolved → `error`) before lowering.
+    /// Reaches no recorded fact: `finalize_infer_holes` substitutes every
+    /// variable (solved → concrete, unsolved → `error`) before lowering. The
+    /// intermediate types built on one stay interned, as every type ever
+    /// considered does, so a pass enumerating [`TypeTable::all_types`] must
+    /// select with [`TypeTable::is_concrete`] rather than assume the table
+    /// holds only live types.
     InferVar(InferVarId),
     /// Type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
     /// Used inside tuples before monomorphization; expanded to concrete types during substitution.
@@ -3006,6 +3010,16 @@ impl TypeTable {
             }
             _ => false,
         }
+    }
+
+    /// Whether `id` is fully determined: no type parameter, no inference
+    /// variable, no projection awaiting a bound's impl, nothing unresolved —
+    /// anywhere inside it. A type that can be named, monomorphized, and
+    /// emitted. The negation of [`Self::contains_type_param`], spelled
+    /// positively so a caller filtering for real types need not reinvent the
+    /// recursion.
+    pub fn is_concrete(&self, id: TypeId) -> bool {
+        !self.contains_type_param(id)
     }
 
     /// Check if a type is or contains type parameters or unresolved types (Unknown/Error)
