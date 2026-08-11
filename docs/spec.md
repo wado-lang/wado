@@ -2752,6 +2752,25 @@ impl<T: CollectionBuilder<Output = T>> Collection for T {
 
 This avoids the need for explicit `impl Collection for ...` on every self-building type. The compiler resolves `T::Element` via associated type projection on the type parameter.
 
+#### Impl Type Parameters Must Be Determined
+
+An `impl`'s target and trait reference between them must name every type parameter it declares. A use site determines them from the receiver and the trait arguments and from nothing else, so one neither mentions has no value to be given:
+
+```wado
+impl<A: Eq, T: Eq> Dup for T { ... }  // ERROR: the type parameter `A` is not
+                                      //        constrained by the impl target
+                                      //        or the trait reference
+```
+
+A bound determines one too, through the types it writes:
+
+```wado
+// `S` fixes `FieldTypes`, which fixes `..F`
+impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S { ... }
+```
+
+The bound's subject is not itself determined this way: `A: Eq` says what `A` must satisfy, not what `A` is.
+
 #### Standard Library Traits
 
 The prelude defines `IndexValue`, `IndexAssign`, and `Index` traits using associated types. See [Indexing Traits](#indexing-traits) for full definitions.

@@ -782,11 +782,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// Require that the impl's target and trait reference between them name
     /// every type parameter it declares.
     ///
-    /// A use site determines an impl's parameters from its receiver and its
-    /// trait arguments, and from nothing else. One the two do not mention has
-    /// no value to be given: substitution fills the impl's slots from what the
-    /// receiver said and leaves the rest, which then reach codegen as bare
-    /// parameters. Rust rejects the same shape (E0207).
+    /// A use site determines them from the receiver and the trait arguments
+    /// and from nothing else, so one the two do not mention has no value to be
+    /// given. Rust rejects the same shape (E0207).
     ///
     /// A *predicate* determines one too: `impl<S: ReflectStruct<FieldTypes =
     /// [..F]>, ..F> Inspect for S` fixes `F` once `S` is known, so the
