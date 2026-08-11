@@ -1834,7 +1834,7 @@ mod tests {
             .register(
                 CompilerItem::Option,
                 Resolved::Trait {
-                decl: crate::ast::AstId::fresh(),
+                    decl: crate::ast::AstId::fresh(),
                     module_source: ModuleSource::types(),
                     name: "Option".into(),
                     method_name: None,

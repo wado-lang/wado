@@ -36,13 +36,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         field_defaults.push(field.default.clone());
                     }
                     // Extract type parameter bounds
-                    let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
+                    let type_param_bounds: Vec<(String, Vec<super::types::BoundRef>)> = struct_decl
                         .type_params
                         .iter()
                         .map(|p| {
                             (
                                 p.name.clone(),
-                                p.bounds.iter().map(|b| b.name.clone()).collect(),
+                                p.bounds
+                                    .iter()
+                                    .map(|b| super::types::BoundRef {
+                                        name: b.name.clone(),
+                                        site: b.id,
+                                    })
+                                    .collect(),
                             )
                         })
                         .collect();

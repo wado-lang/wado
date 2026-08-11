@@ -3701,19 +3701,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 &self.annotate_ctx,
                                 &self.type_lookup(),
                                 type_arg,
-                                bound,
-                                None,
+                                &bound.name,
+                                self.tysys.resolutions.get(bound.site),
                             ) {
                                 let type_name = self.tysys.type_id_to_string(type_arg);
                                 let reason = self.tysys.trait_unimpl_reason_chain(
                                     &self.annotate_ctx,
                                     &self.type_lookup(),
                                     type_arg,
-                                    bound,
+                                    &bound.name,
                                 );
                                 let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                                     type_name,
-                                    trait_name: bound.clone(),
+                                    trait_name: bound.name.clone(),
                                     param_name: param_name.clone(),
                                     reason,
                                     span: struct_lit.span,

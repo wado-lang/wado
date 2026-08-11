@@ -182,16 +182,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Item::Struct(struct_decl) => {
                         // Insert with empty fields first - will be populated in second sub-pass
                         // Extract type parameter bounds
-                        let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
-                            .type_params
-                            .iter()
-                            .map(|p| {
-                                (
-                                    p.name.clone(),
-                                    p.bounds.iter().map(|b| b.name.clone()).collect(),
-                                )
-                            })
-                            .collect();
+                        let type_param_bounds: Vec<(String, Vec<super::types::BoundRef>)> =
+                            struct_decl
+                                .type_params
+                                .iter()
+                                .map(|p| {
+                                    (
+                                        p.name.clone(),
+                                        p.bounds
+                                            .iter()
+                                            .map(|b| super::types::BoundRef {
+                                                name: b.name.clone(),
+                                                site: b.id,
+                                            })
+                                            .collect(),
+                                    )
+                                })
+                                .collect();
                         all_struct_fields
                             .entry(module_source.clone())
                             .or_default()
@@ -552,16 +559,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             field_defaults.push(field.default.clone());
                         }
                         // Extract type parameter bounds
-                        let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
-                            .type_params
-                            .iter()
-                            .map(|p| {
-                                (
-                                    p.name.clone(),
-                                    p.bounds.iter().map(|b| b.name.clone()).collect(),
-                                )
-                            })
-                            .collect();
+                        let type_param_bounds: Vec<(String, Vec<super::types::BoundRef>)> =
+                            struct_decl
+                                .type_params
+                                .iter()
+                                .map(|p| {
+                                    (
+                                        p.name.clone(),
+                                        p.bounds
+                                            .iter()
+                                            .map(|b| super::types::BoundRef {
+                                                name: b.name.clone(),
+                                                site: b.id,
+                                            })
+                                            .collect(),
+                                    )
+                                })
+                                .collect();
                         // Collect TypeIds for struct's own type params in declaration order.
                         // This allows infer_struct_type_args to fill phantom type params
                         // that don't appear in any field (e.g., D in struct DirMap<D, V>).

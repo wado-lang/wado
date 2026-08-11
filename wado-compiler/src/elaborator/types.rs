@@ -28,13 +28,22 @@ pub(crate) struct StructFieldInfo {
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
-    /// Type parameter bounds: (`param_name`, `trait_bounds`)
-    /// E.g., for `struct Sorted<T: Ord>`, this would be `[("T", ["Ord"])]`
-    pub(super) type_param_bounds: Vec<(String, Vec<String>)>,
+    /// Type parameter bounds: (`param_name`, bounds). Each bound keeps the
+    /// reference site that wrote it, so a consumer asks which trait it means
+    /// rather than comparing the spelling (WEP 2026-08-10).
+    pub(super) type_param_bounds: Vec<(String, Vec<BoundRef>)>,
     /// `TypeIds` of the struct's own type parameters in declaration order.
     /// Used by `infer_struct_type_args` to fill phantom type params
     /// (e.g., `D` in `struct DirMap<D, V>` where D doesn't appear in any field).
     pub(super) type_param_type_ids: Vec<TypeId>,
+}
+
+/// A trait bound as a declaration digest records it: the site that wrote it,
+/// which is what says *which* trait, plus the spelling for diagnostics.
+#[derive(Clone, Debug)]
+pub(super) struct BoundRef {
+    pub(super) name: String,
+    pub(super) site: crate::ast::AstId,
 }
 
 /// Variant case info: case name and payload type
