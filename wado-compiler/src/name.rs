@@ -675,6 +675,15 @@ impl Receiver {
         }
     }
 
+    /// Whether this receiver is a template's own type-parameter binder.
+    ///
+    /// A binder names no declaration, so it has no spelling in the declaration
+    /// namespace — only the mangled one, where it is scoped to its template.
+    #[must_use]
+    pub fn is_binder(&self) -> bool {
+        matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Binder(_)))
+    }
+
     /// The name an `impl` header writes its target as — no module, no type
     /// arguments.
     ///

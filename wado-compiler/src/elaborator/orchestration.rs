@@ -792,6 +792,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _span = logger.span("elaborate/cm_interface_registry");
             let (mut cm_interface_registry, world_registry) =
                 CmInterfaceRegistry::build_from_stdlib();
+            // `build_from_stdlib` hands back a process-wide cached `Arc`, and
+            // this compilation answers reference sites into the registry's
+            // interior-mutable table. Take a private copy before anything can
+            // write, or one compilation's answers become every later one's.
+            let _ = Arc::make_mut(&mut cm_interface_registry);
             // Resolve `Interface::method` calls into CM components during
             // annotate — the same role build_from_stdlib plays for WASI.
             fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set);

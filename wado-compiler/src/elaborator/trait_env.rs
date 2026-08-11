@@ -666,10 +666,24 @@ impl ImplModuleIndex {
     /// Record `module` under both spellings of one receiver identity, so the
     /// two namespaces cannot drift apart.
     pub fn record(&mut self, receiver: &name::Receiver, trait_name: &str, module: &ModuleSource) {
-        let mangled = receiver.head_key().into_string();
-        let declared = receiver.decl_key().into_string();
-        push_module(&mut self.by_mangled, mangled, trait_name, module);
-        push_module(&mut self.by_declared, declared, trait_name, module);
+        push_module(
+            &mut self.by_mangled,
+            receiver.head_key().into_string(),
+            trait_name,
+            module,
+        );
+        // A type parameter names no declaration, so it has no entry in the
+        // declaration namespace. Giving it one lets a generic impl's own `T`
+        // answer for a user `struct T` — the two are not the same receiver, and
+        // only the mangled namespace keeps a binder scoped to its template.
+        if !receiver.is_binder() {
+            push_module(
+                &mut self.by_declared,
+                receiver.decl_key().into_string(),
+                trait_name,
+                module,
+            );
+        }
     }
 
     /// Record an impl on a generic head under its *instantiated* mangled
