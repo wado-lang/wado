@@ -256,9 +256,34 @@ pub(crate) enum ImplTargetKey {
     /// impl out of the bucket of a type that happens to share the parameter's
     /// name. The module is the impl's own — the parameter is scoped to it.
     TypeParam(ModuleSource, String),
+    /// A shape no module declares — the tuple family (`[..T]`), a function
+    /// type. It reaches no declaration by name, so no module qualifies it, and
+    /// a definition and a lookup agree without either knowing where the other
+    /// stood. A primitive is *not* here: `i32` and `()` are `internal type`
+    /// declarations and resolve like any other name.
+    Builtin(String),
 }
 
 impl ImplTargetKey {
+    /// The key for a head written in `module`.
+    ///
+    /// The declaration the head names, from the resolution table. A shape that
+    /// names none drops the module; a name that reaches nothing at all keeps
+    /// it, since the writing module is the only vantage left.
+    pub(crate) fn of_written(
+        name: &str,
+        module: &ModuleSource,
+        symbols: &SymbolTable,
+        resolutions: &crate::resolve::Resolutions,
+    ) -> Self {
+        if let Some(key) = resolutions.declaration_named(module, name, symbols) {
+            return ImplTargetKey::Decl(key);
+        }
+        if name::is_builtin_shape_name(name) {
+            return ImplTargetKey::Builtin(name.to_string());
+        }
+        ImplTargetKey::Decl((module.clone(), name.to_string()))
+    }
     /// The receiver this target indexes under. Built from the same
     /// `(module, name)` pair `TypeTable::impl_receiver_key` reads off a
     /// resolved type, so a definition and a lookup agree by construction.
@@ -272,12 +297,17 @@ impl ImplTargetKey {
                 name::Receiver::Type(name::FqTypeName::binder(name))
             }
             ImplTargetKey::Ref(kind) => name::Receiver::Ref(*kind),
+            ImplTargetKey::Builtin(name) => {
+                name::Receiver::Type(name::FqTypeName::builtin(name))
+            }
         }
     }
 
     pub(crate) fn type_name(&self) -> Option<&str> {
         match self {
-            ImplTargetKey::Decl((_, name)) | ImplTargetKey::TypeParam(_, name) => Some(name),
+            ImplTargetKey::Decl((_, name))
+            | ImplTargetKey::TypeParam(_, name)
+            | ImplTargetKey::Builtin(name) => Some(name),
             ImplTargetKey::Ref(_) => None,
         }
     }
@@ -286,7 +316,9 @@ impl ImplTargetKey {
     /// reference prefix for a `&T` / `&mut T` target.
     pub(crate) fn display_name(&self) -> &str {
         match self {
-            ImplTargetKey::Decl((_, name)) | ImplTargetKey::TypeParam(_, name) => name,
+            ImplTargetKey::Decl((_, name))
+            | ImplTargetKey::TypeParam(_, name)
+            | ImplTargetKey::Builtin(name) => name,
             ImplTargetKey::Ref(kind) => kind.prefix(),
         }
     }
@@ -371,7 +403,7 @@ impl ImplHeader {
                 module, name, &written,
             )),
             ImplTargetKey::TypeParam(_, name) => Some(name::FqTraitName::binder(name)),
-            ImplTargetKey::Ref(_) => None,
+            ImplTargetKey::Ref(_) | ImplTargetKey::Builtin(_) => None,
         }
     }
 }
@@ -1129,7 +1161,7 @@ impl TraitEnv {
                     continue;
                 };
                 let type_name = get_type_name_static(&impl_block.ty);
-                let type_key = impl_target_key_at(&impl_block.ty, module_source, resolutions);
+                let type_key = impl_target_key_at(&impl_block.ty, module_source, symbols, resolutions);
                 if shadow {
                     shadow_compare(
                         resolutions,
@@ -1155,7 +1187,7 @@ impl TraitEnv {
                             ImplTargetKey::Decl((module.clone(), name.to_string()))
                         })
                         .unwrap_or_else(|| {
-                            impl_target_key_at(trait_type, module_source, resolutions)
+                            impl_target_key_at(trait_type, module_source, symbols, resolutions)
                         })
                 });
                 impl_headers.insert(
@@ -1276,7 +1308,7 @@ impl TraitEnv {
         // fall back to comparing spellings.
         let resolve_written =
             |module: &ModuleSource, ty: &ast::Type, _type_params: &[ast::GenericParam]| {
-                impl_target_key_at(ty, module, resolutions)
+                impl_target_key_at(ty, module, symbols, resolutions)
             };
 
         let mut violations = check_all_orphan_rules(
@@ -1738,7 +1770,9 @@ impl<'a> ImplReceiver<'a> {
 fn static_receiver_key(type_key: &ImplTargetKey, otherwise: impl FnOnce() -> DeclKey) -> DeclKey {
     match type_key {
         ImplTargetKey::Decl(key) => key.clone(),
-        ImplTargetKey::Ref(_) | ImplTargetKey::TypeParam(..) => otherwise(),
+        ImplTargetKey::Ref(_) | ImplTargetKey::TypeParam(..) | ImplTargetKey::Builtin(_) => {
+            otherwise()
+        }
     }
 }
 
@@ -1757,10 +1791,11 @@ fn static_receiver_key(type_key: &ImplTargetKey, otherwise: impl FnOnce() -> Dec
 fn impl_target_key_at(
     ty: &ast::Type,
     module_source: &ModuleSource,
+    symbols: &SymbolTable,
     resolutions: &crate::resolve::Resolutions,
 ) -> ImplTargetKey {
     sited_impl_target_key(ty, module_source, resolutions).unwrap_or_else(|| {
-        ImplTargetKey::Decl((module_source.clone(), get_type_name_static(ty)))
+        ImplTargetKey::of_written(&get_type_name_static(ty), module_source, symbols, resolutions)
     })
 }
 
@@ -1906,7 +1941,10 @@ fn classify_position(
         Type::Named(_) | Type::Generic(_) => {
             match resolve(&header.module, ty, &header.type_params) {
                 ImplTargetKey::Decl(key) if local.types.contains(&key) => PositionKind::LocalType,
-                ImplTargetKey::Decl(_) | ImplTargetKey::Ref(_) | ImplTargetKey::TypeParam(..) => {
+                ImplTargetKey::Decl(_)
+                | ImplTargetKey::Ref(_)
+                | ImplTargetKey::TypeParam(..)
+                | ImplTargetKey::Builtin(_) => {
                     PositionKind::ForeignType
                 }
             }

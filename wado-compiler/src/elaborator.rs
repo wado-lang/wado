@@ -1335,7 +1335,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// impl indexes. Goes through [`Self::canonical_decl_key`], so an alias
     /// and its original resolve to the same key.
     pub(crate) fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
-        trait_env::ImplTargetKey::Decl(self.canonical_decl_key(type_name))
+        trait_env::ImplTargetKey::of_written(
+            type_name,
+            &self.current_module_source,
+            self.symbols,
+            &self.tysys.resolutions,
+        )
     }
 
     /// Impl-target key for a receiver whose `TypeId` is known. The type
