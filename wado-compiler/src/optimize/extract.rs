@@ -477,7 +477,14 @@ fn classify_candidate(
         return None;
     }
     let Some(rep) = engine.value(id) else {
-        note_reject(engine, id, "no-graph-value");
+        // Split the two causes: the size gate skipped the whole body's graph, or
+        // the graph exists but has no value for this node.
+        let reason = if engine.body.value_graph.is_none() {
+            "no-graph-value/body-has-no-graph"
+        } else {
+            "no-graph-value/node-absent"
+        };
+        note_reject(engine, id, reason);
         return None;
     };
     // An early freeze may plant only context-free values. A constant means the
