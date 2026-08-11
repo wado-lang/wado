@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786408007254,
+  "lastUpdate": 1786410162996,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47093,6 +47093,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d3e7a2a0395407b9a12b12b4fecec81e75201588"
         },
         "date": 1786408006597,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267689,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4741f0604dcbe5e763ada1368b4b4993c3a3fe28",
+          "message": "Merge pull request #1786 from wado-lang/claude/nir-optimize-docs-consolidate-u0l949\n\ndocs(optimizer): consolidate the NIR optimizer WEPs, and promote values that read parameters",
+          "timestamp": "2026-08-11T09:50:00+09:00",
+          "tree_id": "796403a9a3357f49ede945a69885e311d81e5f7e",
+          "url": "https://github.com/wado-lang/wado/commit/4741f0604dcbe5e763ada1368b4b4993c3a3fe28"
+        },
+        "date": 1786410162121,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
