@@ -296,13 +296,13 @@ pub fn cm_type_to_type_id(
             // scoping by package alone returns whichever registered first. The
             // package lookups behind it cover a type with no recorded interface;
             // neither is ever a bare-name scan.
-            _ => registry.source_interface(named)
+            _ => cm_interface_registry.source_interface(named)
                 .and_then(|fq| registry.cm_interface_module_source_of(fq))
                 .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
                 // A stdlib WASI interface has no recorded `ModuleSource`, so
                 // derive the module the FQ maps to and match it exactly.
                 .or_else(|| {
-                    registry.source_interface(named)
+                    cm_interface_registry.source_interface(named)
                         .and_then(cm_interface_module_name)
                         .and_then(|m| type_table.find_named_type_by_module_name(&named.name, &m))
                 })
@@ -440,7 +440,7 @@ pub(super) fn canonical_wasi_package<'a>(
 /// name is converted to Wado's `snake_case` filename convention (matching
 /// `wado-from-idl`'s output). Returns an empty string if the source is not a
 /// `wasi:` interface (such inputs never occur in WASI-side synthesis because
-/// every caller supplies a `registry.source_interface(NamedType)` populated by stdlib
+/// every caller supplies a `cm_interface_registry.source_interface(NamedType)` populated by stdlib
 /// bootstrap from a WASI module, but we're defensive).
 pub(super) fn wasi_interface_suffix(source_interface: &str) -> String {
     let Some(after_colon) = source_interface.strip_prefix("wasi:") else {
@@ -520,7 +520,7 @@ pub(super) fn is_gc_passthrough_param(
 ) -> bool {
     match ty {
         Type::Named(n) if n.name == names.string => true,
-        Type::Named(n) => registry.source_interface(n).is_some_and(|s| {
+        Type::Named(n) => cm_interface_registry.source_interface(n).is_some_and(|s| {
             cm_interface_registry
                 .get_variant_cases_by_source(s, &n.name)
                 .is_some()
@@ -869,7 +869,7 @@ pub(super) fn cm_param_store_plan(
         if named.name == names.string {
             return vec![(0, "i32_store"), (4, "i32_store")];
         }
-        let source = registry.source_interface(named)
+        let source = cm_interface_registry.source_interface(named)
             .filter(|s| s.starts_with("wasi:"));
         // Check WASI flags types.
         if let Some(members) =
