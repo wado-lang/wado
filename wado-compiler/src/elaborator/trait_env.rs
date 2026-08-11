@@ -276,9 +276,19 @@ impl ImplTargetKey {
         symbols: &SymbolTable,
         resolutions: &crate::resolve::Resolutions,
     ) -> Self {
-        if let Some(key) = resolutions.declaration_named(module, name, symbols) {
-            return ImplTargetKey::Decl(key);
-        }
+        let (declaring, declared) = resolutions
+            .declaration_named(module, name, symbols)
+            .unwrap_or_else(|| (module.clone(), name.to_string()));
+        Self::of_decl(&declaring, &declared)
+    }
+
+    /// The key for a declaration already identified.
+    ///
+    /// The one place the builtin decision is made, mirroring
+    /// [`name::FqTypeName::of_head`]: a shape no module declares drops its
+    /// module, so a definition reached through a written head and a lookup
+    /// reached through a resolved type land on the same key.
+    pub(crate) fn of_decl(module: &ModuleSource, name: &str) -> Self {
         if name::is_builtin_shape_name(name) {
             return ImplTargetKey::Builtin(name.to_string());
         }
@@ -1820,7 +1830,7 @@ fn sited_impl_target_key(
         )),
         answer @ crate::resolve::DeclRef::Decl(_) => resolutions
             .decl_named(answer)
-            .map(|(module, name)| ImplTargetKey::Decl((module.clone(), name.to_string()))),
+            .map(|(module, name)| ImplTargetKey::of_decl(module, name)),
         crate::resolve::DeclRef::Builtin(_) | crate::resolve::DeclRef::Unresolved => None,
     }
 }

@@ -1354,7 +1354,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         fallback_name: &crate::name::DeclName,
     ) -> trait_env::ImplTargetKey {
         match self.type_decl_key(type_id) {
-            Some(key) => trait_env::ImplTargetKey::Decl(key),
+            Some((module, name)) => trait_env::ImplTargetKey::of_decl(&module, &name),
             None => self.impl_target(fallback_name.as_decl_str()),
         }
     }
