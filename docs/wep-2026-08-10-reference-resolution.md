@@ -229,6 +229,23 @@ Costs and risks:
          What still keys on a name, each a place the class survives:
 
          - `blanket_impls` and `trait_impl_modules` are keyed by trait name.
+           `TraitImplModuleIndex`'s doc says re-keying the receiver "would
+           require build-time import resolution that `TraitEnv::build` doesn't
+           have plumbed through" — stage B plumbed it through, and
+           `impl_target_key` already computes the receiver's `ImplTargetKey` in
+           the same loop that builds this index, so the stated blocker is gone.
+         - **Unverified, and worth verifying first:** the two layers of
+           `trait_impl_modules` look keyed in different namespaces. The AST
+           layer keys on `get_type_name_static(&impl_block.ty)` — the bare
+           written head — while `collect_synthesised_impls` records
+           `LocalMethodName::base_struct_name()`, which is
+           `Receiver::head_key()`, the *mangled fq* head. `impl_module_for`
+           looks both up with one key, so at most one layer can answer any
+           query: `SynthesisCtx::has_impl` passes a bare name and documents
+           that it wants only the AST layer, while the monomorphizer passes
+           `struct_name()` / `base_struct_name()` and so can only ever reach
+           the synthesised one. Whether that is a live defect or merely dead
+           weight behind other fallbacks needs an experiment, not a reading.
          - Stores that flatten a bound to its name and lose the site:
            `infer_holes`' recorded bounds, `type_param_bounds` on the struct and
            trait digests, `BlanketImpl::bounds`, and an
