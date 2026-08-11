@@ -338,16 +338,43 @@ Costs and risks:
            the impl block" or "where is the code" — which the current
            signature cannot express.
 
-           The order is therefore forced: **type the query parameter first**.
-           Give `impl_module_for` a `&name::Receiver` (or a `MangledName`)
-           instead of `&str` and the compiler enumerates every caller and
-           makes each say which namespace it holds — the same flip that made
-           the trait side tractable. With the callers enumerated, the two
-           questions can be split into two methods, and only then can the
-           storage be unified or the index deleted in favour of `by_receiver`
-           filtered by `ImplHeader::fq_trait`. Every attempt that starts at
-           the storage fails, and this WEP now has three measurements saying
-           so.
+           The query parameter is now typed — `ImplReceiver::{Mangled,
+           Declared}`, enumerated by the compiler across all twelve callers,
+           nine mangled and three declared. That is landed and green, and it
+           is the precondition for everything below.
+
+           It is not sufficient. With the callers classified, the obvious next
+           step is: record both spellings, and let the layer order follow the
+           namespace — declared keeps AST-first, mangled gets
+           synthesised-first, which is argued to be additive because a mangled
+           query cannot reach the AST layer today and so has only ever seen
+           synthesised answers. **Measured: the same 31 fixtures.** Two
+           reasons, both worth writing down because they are what the argument
+           missed:
+
+           - `pick_module_union`'s `prefer` hint searches *both* layers before
+             falling back to either's first entry. So a hint that matches a
+             newly-reachable AST entry wins over a synthesised entry that
+             would otherwise have answered. Reachability alone is never
+             additive while that hint path exists.
+           - Making the AST layer reachable also arms the delta guard in
+             `collect_synthesised_impls`, and that guard drops more than
+             duplicates: `record_concrete_instantiation`'s entries, keyed by
+             the resolved instantiated receiver (`List<…/Token>`), exist
+             *only* in the synthesised layer. Dropping a user-written impl
+             from that layer takes its instantiation entries with it, and
+             `concrete_impl_module_for` has nowhere else to find them.
+
+           So the index has four entangled behaviours, not three: storage
+           namespace, layer precedence, the hint search, and the guard's
+           interaction with instantiation entries. Repairing it in place means
+           holding all four fixed at once, which is why every partial attempt
+           lands on the same 31 fixtures. Deleting it is the way out —
+           `by_receiver` is keyed by `Receiver` identity and `ImplHeader`
+           carries `fq_trait`, so "which modules host an impl of trait K for
+           receiver R" is that index filtered, with the instantiation entries
+           rebuilt from TIR rather than inherited from a layer that also
+           serves as a dedup cache.
          - **An impl header's trait is the declaration its site resolved to.**
            Found by accident: a fixture declaring
            `trait Sub { fn sub(&self) -> i32; }` and implementing it was
