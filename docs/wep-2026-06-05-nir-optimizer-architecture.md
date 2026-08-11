@@ -356,7 +356,48 @@ lever it looks like.
 - [ ] Arena compaction. In-place rewrites orphan nodes that are never freed
       mid-run (~1.66× bloat measured at end-of-optimize on `package-gale`).
 
-Precision.
+Precision. All of it waits on one rule.
+
+### The anchor rule
+
+A frozen operand may name a local only when that local's defining statement
+travels with the operand.
+
+A source local fails that. A parameter's def is the function entry, which is not
+a statement, so `inline` splices the operand into a caller where the same index
+is assigned once per call — and because `ValuePool::canonical_local` hands out
+one `ValueId` per local index, two reads that now denote different values share
+an id. That is the over-merge behind `String::substr_bytes` under
+"Measured dead ends", and the current guard (every leaf is a parameter) is a
+proxy for "this local has one version" that inlining invalidates, since
+parameter-ness does not survive being inlined.
+
+A freeze-minted temp satisfies it by construction. `let _av = <value>` is a
+statement in the same body, non-`mut`, and assigned once, so any pass that
+copies the operand copies the def with it, and one `ValueId` per `_av` stays
+true in every context it lands in. So: never freeze a value naming a source
+local — materialise it into an `_av` and name that.
+`apply_value_freeze` already mints `_av` this way for the multi-use case; the
+rule makes it the only way a local may be named, and drops the parameter
+restriction, which the anchor replaces.
+
+Two things have to be fixed for the rule to hold.
+
+- `materialise_point` is the nearest common dominator, computed as the longest
+  common prefix of `block_path`, and `block_path` has no notion of a loop
+  boundary. With one use inside a loop and one outside, the `let` lands outside
+  and the in-loop use reads a value from before the loop. Placement has to be
+  clamped to the innermost loop enclosing any use.
+- A `FieldAccess` value carries the `heap_ver` it was read at, which the anchor
+  does not supply, so `_av` has to be placed where that version still holds.
+  Until that is expressed, the rule unlocks arithmetic and local reads but not
+  `FieldAccess` — the query-time materialiser stays a dead end.
+
+The cost is a local and a store per frozen value, today gated on
+`ids.len() > 1 && worth_materialising`. Widening that gate to the single-use
+case buys a promotion for a store; measure module size and benchmark runtime
+before doing it. `value_may_trap` keeps gating regardless — hoisting a trapping
+value to a dominator changes when it traps.
 
 - [ ] Widen local promotion past parameters. A promoted value may read a local
       only at the post-loop freezes, and the value freeze takes it only when
@@ -380,14 +421,10 @@ Precision.
       in-loop freeze cannot simply be added — the early one is bound by the
       context-free rule under "Measured dead ends". Moving the build to `lower`
       does not lift that bound: it is the extraction that is point-dependent,
-      not the build. This and the widening above share one prerequisite — a
-      local-naming value that still reads correctly after `inline` / `sroa`
-      move the operand, whether by materialising the value at its def into a
-      slot the operand can name, or by re-materialising instead of relocating
-      such operands. Retiring the skeleton's pure `ExprKind`s waits on the same
-      thing — not only its `Local` half, since the arithmetic above a local read
-      resolves to no value either. So this prerequisite gates the precision work
-      and nearly all of that compile-speed item at once.
+      not the build. This and the widening above share one prerequisite, the
+      anchor rule below, which also gates nearly all of retiring the pure
+      `ExprKind`s — not only its `Local` half, since the arithmetic above a
+      local read resolves to no value either.
 
 - [ ] Copy propagation on `ValueId`. Source-stability is not subsumed by value
       equality — a write-once `x` whose source `y` is later reassigned can read
