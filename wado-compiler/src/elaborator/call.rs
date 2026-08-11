@@ -656,7 +656,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let holes = turbofish_holes(&call.type_args);
                     merge_turbofish_type_args(&mut method_type_args, &holes, &method_args);
                 }
-                // Stage 5 (Gap 1 of WEP 2026-05-26): record the combined
+                // WEP 2026-05-26: record the combined
                 // `(impl_args, method_args)` for the static-method call
                 // site. Reify needs both halves to reconstruct the
                 // mangled `__<Type>__<method>` name with the same type
@@ -688,8 +688,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let arg_type = args[0].type_id;
                     let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
 
-                    // Reflexive: T::from(T_val) — identity conversion. Stage 5
-                    // (Gap 9): the outer Call AstId evaporates, so tag it with
+                    // Reflexive: T::from(T_val) — identity conversion. The
+                    // outer Call AstId evaporates, so tag it with
                     // `NewtypeFromCollapse` for reify to recognise — otherwise
                     // reify would emit a `TirExprKind::Call` the elaborator
                     // never built. The inner argument's `expression_types`
@@ -735,7 +735,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             call.id,
                             super::sem::types::DesugarKind::NewtypeFromUnwrap,
                         );
-                        // Stage 7-B: reify rebuilds the newtype `Cast` from the
+                        // Reify rebuilds the newtype `Cast` from the
                         // recorded `DesugarKind`; project only the result type.
                         return base_id;
                     }
@@ -754,7 +754,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 call.id,
                                 super::sem::types::DesugarKind::NewtypeFromWrap,
                             );
-                            // Stage 7-B: reify rebuilds the newtype `Cast` from
+                            // Reify rebuilds the newtype `Cast` from
                             // the recorded `DesugarKind`; project only the type.
                             return newtype_type_id;
                         }
@@ -789,7 +789,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                // Stage 5/7-B (WEP 2026-05-26): `resolve_static_method_call_from_qualified`
+                // WEP 2026-05-26: `resolve_static_method_call_from_qualified`
                 // records the resolved `FunctionRef` under `call.id` itself
                 // (`static_method_dispatch`) so reify can reproduce the same
                 // `Call` shape without re-running impl lookup, mangled-name
@@ -816,7 +816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(prefix_seg) = ident.segments.first() {
                     self.record_item_reference_by_name(prefix_seg.id, prefix);
                 }
-                // Stage 7-B: reify rebuilds the flags `none()` / `all()`
+                // Reify rebuilds the flags `none()` / `all()`
                 // constant from the AST + flags info; the combined walk
                 // projects only the result type.
                 return flags_info.type_id;
@@ -882,7 +882,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     };
 
-                    // Stage 5 (Gap 1 of WEP 2026-05-26): record generic
+                    // WEP 2026-05-26: record generic
                     // type args for variant constructors. Non-generic
                     // variants emit a `Variant` (no type_args) and the
                     // recording is skipped via the empty-`type_args`
@@ -893,7 +893,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     self.record_generic_instantiation(call.id, type_args, variant_type);
 
-                    // Stage 7-B: reify rebuilds the `VariantConstruct` from
+                    // Reify rebuilds the `VariantConstruct` from
                     // the AST + variant info + recorded `generic_instantiations`;
                     // the combined walk projects only the result type. The
                     // payload was resolved above (and fed variant type-arg
@@ -1047,8 +1047,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 }
                             };
 
-                            // Stage 5 (Gap 1): record generic type args
-                            // for namespace-qualified variant ctors.
+                            // Record generic type args for
+                            // namespace-qualified variant ctors.
                             let type_args = match self.tysys.type_table.borrow().get(variant_type) {
                                 ResolvedType::GenericInstance { type_args, .. } => {
                                     type_args.clone()
@@ -1057,7 +1057,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             };
                             self.record_generic_instantiation(call.id, type_args, variant_type);
 
-                            // Stage 7-B: reify rebuilds the `VariantConstruct`;
+                            // Reify rebuilds the `VariantConstruct`;
                             // the combined walk projects only the result type.
                             return variant_type;
                         }
@@ -1168,7 +1168,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         },
                     );
 
-                    // Stage 7-B: reify rebuilds the `Call` from the recorded
+                    // Reify rebuilds the `Call` from the recorded
                     // `static_method_dispatch`; the combined walk projects
                     // only the result type.
                     return return_type;
@@ -1384,7 +1384,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = self.substitute_type_params(return_type, &type_args);
         }
 
-        // Stage 5 (Gap 1 of WEP 2026-05-26): record the inferred /
+        // WEP 2026-05-26: record the inferred /
         // explicit `type_args` so reify can emit
         // `TirExprKind::Call { type_args, … }` without re-running
         // inference. Free-function calls have no `GenericInstance`-style
@@ -1452,7 +1452,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             monomorph_info: None,
             method_info: None, // Free function call,
         };
-        // Stage 5 (WEP 2026-05-26): record the resolved callee for the
+        // WEP 2026-05-26: record the resolved callee for the
         // free / builtin / namespaced call paths so reify reproduces
         // the same FunctionRef shape (module_source, mangled name,
         // method_info) without re-running the dispatch logic. The
@@ -1472,7 +1472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self_in_args: false,
             },
         );
-        // Stage 7-B: reify rebuilds the `Call` TIR from the recorded
+        // Reify rebuilds the `Call` TIR from the recorded
         // `static_method_dispatch` + `generic_instantiations` +
         // `call_param_types` and the resolved args; the combined walk
         // projects only the result type.
@@ -1528,7 +1528,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Stage 7-B: reify (`reify_call`'s indirect-call branch) rebuilds
+        // Reify (`reify_call`'s indirect-call branch) rebuilds
         // the `IndirectCall` from the AST — resolving the callee, applying
         // `deref_to_value_static`, and reifying the args — so the combined walk
         // projects only the result type. The `args` Vec was built above for the
@@ -2893,7 +2893,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
             );
 
-            // Stage 7-B: reify rebuilds the `T::method(...)` `Call` from the
+            // Reify rebuilds the `T::method(...)` `Call` from the
             // recorded `static_method_dispatch`; project only the result type.
             return final_return_type;
         }

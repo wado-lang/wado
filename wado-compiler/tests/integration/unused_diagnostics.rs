@@ -1,5 +1,5 @@
-//! Unused diagnostics tests (WEP `wep-2026-05-16-unused-diagnostics.md`,
-//! Stage 6 of `wep-2026-05-26-elaborator-rearchitecture.md`).
+//! Unused diagnostics tests (`wep-2026-05-16-unused-diagnostics.md` for the
+//! policy, `wep-2026-05-26-elaborator-rearchitecture.md` for the mechanism).
 //!
 //! Slice 1 covers `DeadFunction` / `DeadGlobal` for free functions and
 //! globals: an item never reachable from the export boundary is reported;

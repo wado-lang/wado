@@ -130,25 +130,34 @@ fn relative_under_root(
     Ok(root()?.join(relative))
 }
 
-/// Write `bytes` to `path` atomically: create the parent dir, write a sibling
-/// temp file, then rename into place. A crash or a concurrent writer can only
-/// leave a stray temp file, never a half-written `component.wasm` that the
-/// `is_file()` cache check would then trust forever.
-pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+const STAGING_INFIX: &str = ".tmp-wado-";
+
+/// The sibling [`write_atomic`] stages `file_name` in, unique per process and
+/// per thread so two writers never rename away each other's temp.
+pub fn staging_file_name(file_name: &str) -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);
 
+    format!(
+        "{file_name}{STAGING_INFIX}{}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+pub fn is_staging_file(file_name: &str) -> bool {
+    file_name.contains(STAGING_INFIX)
+}
+
+/// Write `bytes` to `path` atomically. A crash or a concurrent writer can only
+/// leave a stray staging file, never a half-written one the `is_file()` cache
+/// check would then trust forever.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    // A per-write temp sibling, unique across processes (pid) and across threads
-    // within one process (the counter): a parallel compile fetches the same
-    // component from several files at once, so two writers must never share — and
-    // rename away — each other's temp file. The rename is the atomic publish step.
-    let tmp = path.with_extension(format!(
-        "tmp-{}-{}",
-        std::process::id(),
-        SEQ.fetch_add(1, Ordering::Relaxed)
+    let tmp = path.with_file_name(staging_file_name(
+        &path.file_name().unwrap_or_default().to_string_lossy(),
     ));
     std::fs::write(&tmp, bytes)?;
     match std::fs::rename(&tmp, path) {
@@ -166,10 +175,6 @@ mod tests {
 
     #[test]
     fn write_atomic_is_concurrency_safe_for_the_same_path() {
-        // A parallel compile fetches the same registry component from several
-        // files at once, so `write_atomic` runs concurrently on one path. Every
-        // writer must succeed and leave the full bytes — no writer may rename
-        // another's temp file out from under it.
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("ghcr.io/ns/pkg/0.1.0/component.wasm");
         let bytes: Vec<u8> = (0..4096).map(|i| (i % 251) as u8).collect();

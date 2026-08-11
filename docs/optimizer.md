@@ -2,7 +2,7 @@
 
 The optimizer rewrites the Normalized IR (NIR; see [WEP: NIR Layer](./wep-2026-05-11-nir.md)) in place before lowering to WIR, then runs a smaller set of WIR-level passes before Wasm emission. Pass span names used by `WADO_LIST_PASSES` / `WADO_SKIP_PASS` / `WADO_DUMP_PASS_*` carry a `nir/` or `wir/` prefix.
 
-The module-level docs in `src/optimize.rs` and `src/wir_optimize.rs` are the authoritative pass index and ordering; per-pass design lives in each pass's source. This document is an architectural overview with a one-line summary per pass.
+This document is the inventory, one line per pass. The canonical pass order is the code: the `run_pass` sequence in `src/optimize.rs` and the phase sequence in `src/wir_optimize.rs`, each position justified in the comment beside it. Per-pass design lives in that pass's module doc.
 
 ## Philosophy
 
@@ -12,46 +12,34 @@ When WebAssembly provides a native instruction for a feature, prefer it over a c
 
 All levels run DCE on functions, types, and globals.
 
-| Flag            | Iterations | Inline threshold | Notes                                             |
-| --------------- | ---------- | ---------------- | ------------------------------------------------- |
-| `-O0`           | 0          | N/A              | DCE only + `match_to_switch` + post-loop rewrites |
-| `-O1`           | 2          | 4                |                                                   |
-| `-O2` (default) | 10         | 13               |                                                   |
-| `-O3`           | 30         | 32               |                                                   |
-| `-Os`           | 10         | 13               | strips the Wasm name section                      |
+| Flag            | Iterations | Inline threshold | Notes                                           |
+| --------------- | ---------- | ---------------- | ----------------------------------------------- |
+| `-O0`           | 0          | N/A              | DCE only + `match_to_switch` + backend rewrites |
+| `-O1`           | 2          | 4                |                                                 |
+| `-O2` (default) | 10         | 13               |                                                 |
+| `-O3`           | 30         | 32               |                                                 |
+| `-Os`           | 10         | 13               | strips the Wasm name section                    |
 
-The fixed-point loop exits early on convergence. The backend-required rewrites (`select_lowering`, `multi_value_return`) and `match_to_switch` run at every level, including `-O0`.
+The fixed-point loop exits early on convergence. The backend-required rewrites (`select_lowering`, `multi_value_return`, `freeze_pure_arith`) and `match_to_switch` run at every level, including `-O0`.
 
 ## Architecture
 
-### Live value graph
+The optimizer runs on a two-tier NIR: a skeleton arena carrying effect order, control flow, and allocation, plus a hash-consed graph of pure values the skeleton reaches through promoted operands. Local rewrites are rules on a worklist engine over one function at a time, scheduled by a per-function dirty-set gate; promoted values are extracted back to concrete form once, at WIR build. Whole optimizations fall out of that structure rather than existing as passes — CSE and GVN out of hash-consing, pure copy propagation out of shared value identity.
 
-Pure values are the optimizer's source of truth, not re-derived per pass. Each operand position is either a skeleton subtree or a promoted pure value interned in a per-function pool, hash-consed so congruent values share one node. The graph is built once per function and maintained in place across passes via e-class union, never rebuilt — so pure-value CSE falls out of the pool, constant folding reads pooled values, and bounds-check elimination recognises them structurally. See [WEP: The Live ValueGraph](./wep-2026-06-15-live-value-graph.md).
-
-A promoted read lives in the pool rather than the skeleton, so a pass that decides a local is unused, or that rewrites every read of one, must count the pool's reads too — `arena_query`'s `promoted_*` queries supply them. They are scoped to the operands the skeleton still carries: the pool is append-only, so it also holds the values of reads that folded away, and treating those as live pins locals forever.
-
-### Worklist rewrite engine
-
-Genuinely-local NIR rewrites run as rules on a worklist engine over one function's arena: a node is revisited only when an edit may have made it reducible, rather than via repeated whole-tree sweeps. The engine owns the session state and a mutating edit API that keeps it coherent. Flow-sensitive passes that need per-block dataflow keep their own walkers. See [WEP: NIR Rewrite Engine](./wep-2026-06-05-nir-rewrite-engine-design.md).
-
-### Unified peephole session
-
-The position-flexible local rules run together over one engine session per function, interleaved on a single worklist. It runs twice per iteration — before and after `inline` — so each rule sees the instruction window the other exposes.
-
-### Per-function dirty-set gating
-
-A function gate lets every loop pass skip functions unchanged since it last ran; interprocedural passes still scan all functions but report only the ones they touched. Gating affects only which functions a pass visits, never the IR a visit produces, so an imprecise gate can cost optimization quality (a missed rewrite) but never correctness.
+The design, its soundness invariants, the standing "do not reintroduce" rules, and the open architectural work are [WEP: NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md). This document does not restate them.
 
 ## Pipeline
 
 `optimize.rs` orchestrates the NIR stages; `wir_optimize.rs` runs the WIR stages.
 
 1. Early DCE — remove unreachable functions/types/globals.
-2. Fixed-point loop (skipped at `-O0`): container SROA, peephole (pre-inline), value-copy demotion, parameter SROA, inlining, peephole (post-inline), SROA, copy propagation, dead-argument and dead-return elimination, constant folding, parameter specialization, LICM, template hoisting.
-3. Post-loop, once: field scalarization, store-load forwarding, template-wrapper cleanup, constant-object globalization, and a final folding pass.
-4. Final DCE.
-5. Backend-required rewrites (all levels): select lowering, multi-value returns.
-6. WIR-level passes — see [WIR optimizations](#wir-optimizations).
+2. Before the loop: dense `Match` → `Switch` over global initializer bodies, then the early arithmetic promotion.
+3. Fixed-point loop (skipped at `-O0`): container SROA, peephole (pre-inline), value-copy demotion, parameter SROA, variant-return scalarization, inlining, peephole (post-inline), let-block flattening, SROA, copy propagation, dead-argument and dead-return elimination, constant folding, parameter specialization, LICM, template hoisting.
+4. Post-loop, once: field scalarization, store-load forwarding, template-wrapper cleanup, constant-object globalization, a final folding pass, scalar-temp forwarding, and clone forwarding.
+5. Final DCE.
+6. Field promotion and the bounds-check work it unblocks (`promote_fields`, then the `condition_implication` rerun and `loop_version_bce`); skipped at `-O0`.
+7. Backend-required rewrites (all levels): select lowering, multi-value returns, and the final arithmetic freeze.
+8. WIR-level passes — see [WIR optimizations](#wir-optimizations).
 
 ## NIR passes
 
@@ -64,7 +52,9 @@ Allocation and aggregate:
 - `sroa_variant_return` — rewrite a variant return into a `[tag, slots…]` tuple, so a `Result`-returning call stops being one opaque boxed value to every later pass. The return-position dual of `sroa_param`; `multi_value_return` then flattens the tuple to the Wasm multi-value ABI. See [WEP: Variant Return Scalarization at NIR](./wep-2026-08-03-variant-return-abi.md).
 - `elide_box_local` — collapse a box bound once and read once into its inner value.
 - `array_literal` — fold an array-builder window into a single fixed-array literal.
+- `string_push` — expand a short `push_str("…")` literal into per-byte pushes, and specialize a constant-ASCII `push` to `push_ascii_unchecked`, skipping `encode_char`'s UTF-8 width dispatch.
 - `value_copy_demote` — demote a deep list value-copy to a shallow spine copy when its elements are provably never mutated through the binding.
+- `clone_forward` — collapse `array_clone(&array_clone(&place))` into a single clone, where inlining plus globalization left a read-only binding whose only reader is the outer clone.
 
 There is no value-copy _elision_ pass: defensive copies are chosen at the lower phase by the ownership analysis, before NIR exists, so none are reachable from here and an imprecise one is that analysis's to fix — see [WEP: Ownership Analysis](./wep-2026-05-21-resource-ownership.md), which records the standing case (a by-value `for` binding copies each element of a `List` of aggregates).
 
@@ -81,6 +71,8 @@ Scalar and dataflow:
 - `drve` — make a function void-returning when its result is dropped at every call site.
 - `store_load_forward` — forward a stored literal to a later unmodified load.
 - `elide_local` — drop a binding that is never read (keeping its value if impure).
+- `let_block_flatten` — the value-block normal form: hoist the straight-line leading statements out of a block-tailed binding (`let x = { stmts…; tail }` → `stmts…; let x = tail`), which is the shape `sroa`'s direct-literal matcher keys on.
+- `scalar_forward` — fold the inliner's leftover single-use pure-scalar value-parameter temps into their one use, so the backend emits the operand instead of a `local.set` / `local.get` round-trip.
 - `const_folding` — partial evaluation: constant arithmetic (an `enum` case counts as one — it interns as the discriminant it lowers to), compile-time execution, immutable-global reads, constant-branch collapse, short-circuit simplification (a neutral operand keeps the other, an absorbing one becomes the result when the deleted operand can neither trap nor be observed), and constant struct / tuple / variant values (field projection, aggregate arguments and results of a compile-time call, and struct / tuple / variant / enum patterns over a constant scrutinee, with the arm's bindings and guard — except a binding that names storage rather than a value). A constant sequence's length and elements read out of it too, whether it is a local literal or a global. An immutable global's value is read from the assignment that fills its slot as well as from its initializer, since a non-trivial initializer is extracted into module init; a global something writes through, or hands a part of to a local, is not read at all. A compile-time call runs the callee's statements — `let` sequences, decided branches, early returns, loops, and the expression-position blocks inlining leaves — bounded by a work budget rather than by a constant trip count, and abandons the call rather than stepping past a statement it cannot perform. It also writes: a store, an element write, an allocation and a copy all land in the value the frame itself built, and a call writing through a `&mut` parameter runs and writes back into the caller's place. So a container filled at compile time — `push` and the growth it triggers included — is a compile-time value, and one whose elements are bytes leaves the engine as the literal a source string lowers to — as does a container literal still computing contents the engine already knows, which is what a value copy of a constant leaves behind. A closed block — one that builds its value in locals of its own, writes only to those, and yields the result — runs as a frame of its own, which is what folds a fully-constant string template to the literal it denotes. Only a frame may step past a write, since only a frame performs one; an ordinary walk keeps no value across a call that writes.
 - `const_branch_prune` — simplify trivial blocks and fold a constant-condition `if` to its taken arm.
 
@@ -95,6 +87,7 @@ Loop and field:
 Whole-program and backend:
 
 - `dce` — remove unreachable functions, types, string/bytes literals, and WASI imports by call-graph reachability.
+- `promote_fields` / `freeze_pure_arith` (`extract.rs`) — freeze a pure operand position into the `ValueId` it denotes. Arithmetic freezes before the loop (on the clean graph, which is what makes freezing a constant leaf read sound) and again last, after every binary-walking pass; scalar `FieldAccess` over a stable receiver freezes between them, once SROA has settled the struct shape.
 - `match_to_switch` — lower a dense integer/enum `match` to a `br_table` switch.
 - `select_lowering` — lower an `if` with pure arms to a branchless `builtin::select`.
 - `multi_value_return` — emit the multi-value ABI for tuple/struct returns whose call sites destructure.
@@ -143,6 +136,8 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 `mise run emi-calibrate` runs the calibration stage: an empty guard goes in at every statement boundary of every e2e fixture, and the fixtures whose output is unmoved land in `target/emi/corpus.txt`. One that does move observes something an injection perturbs — a column, an allocation, a generated test-export name — and cannot serve as an oracle; `target/emi/calibration.txt` records it with the reason. The mutation stages draw only on the calibrated corpus.
 
 ## Not yet implemented
+
+Missing optimizations, one entry per pass-shaped gap. Architectural work — compile speed, graph precision, the saturation end state — is tracked in [WEP: NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md) instead.
 
 - [ ] Sparse Conditional Constant Propagation (SCCP) and interprocedural SCCP.
 - [ ] Global Value Numbering across effectful nodes (pure-value hash-consing already exists in the value graph).

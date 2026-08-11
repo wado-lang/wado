@@ -3,7 +3,7 @@
 // caller cannot name that type — the caller never writes it, the default does.
 // This is the `core:log` shape: `info(msg)` with a private `NoFields` sentinel.
 
-use { plain, generic } from "./sub/default_arg_xmod_private_lib.wado";
+use { plain, generic, Holder } from "./sub/default_arg_xmod_private_lib.wado";
 
 test "cross-module value default constructs a callee-private type" {
     // The caller cannot name `Priv`, so only the default form is callable.
@@ -13,6 +13,22 @@ test "cross-module value default constructs a callee-private type" {
 test "cross-module default type param uses a callee-private default type" {
     assert generic() == 5;
     assert generic(9) == 9;
+}
+
+// A method's defaults resolve in the declaring module too — the free-function
+// path pointed `default_scope_module` at the callee and the method path did
+// not, so `Priv` resolved to nothing here, on both the value-default and the
+// type-parameter-default paths.
+test "cross-module method value default constructs a callee-private type" {
+    let h = Holder { base: 1 };
+    assert h.scaled() == 6;
+    assert h.scaled(9) == 10;
+}
+
+test "cross-module method type param default names a callee-private type" {
+    let h = Holder { base: 1 };
+    assert h.offset() == 101;
+    assert h.offset::<i32>() == 1;
 }
 
 __DATA__

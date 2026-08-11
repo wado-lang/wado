@@ -2,7 +2,7 @@
 //!
 //! Rule: scope state is mutated only through the guards and `with_*`
 //! helpers in this file — every entry has exactly one panic-safe restore
-//! path (WEP 2026-07-10).
+//! path (WEP 2026-05-26).
 
 use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};

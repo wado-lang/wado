@@ -1141,7 +1141,7 @@ impl TraitEnv {
     /// checks each candidate impl individually instead of collapsing on the
     /// `(name, trait)` key.
     /// The pre-computed import scope for `module`, cloned for callers that
-    /// install it via `with_module_perspective` (which takes the maps by
+    /// install it via `with_module_perspective_for` (which takes the maps by
     /// value). Returns empty maps for a module with no recorded scope,
     /// matching the previous `…unwrap_or_default()` behaviour.
     pub(super) fn import_scope(&self, module: &ModuleSource) -> ModuleImportScope {

@@ -1,0 +1,57 @@
+// A promoted value whose leaves are parameters may be materialized once into a
+// `let _av = ...` every use reads. Availability at the materialization point is
+// not permission to evaluate there: both uses of `a / b` sit under `b != 0`, so
+// running the division at that point traps a program that never divides by zero.
+//
+// Two uses are needed — a single use redirects to the pooled value inline and
+// never materializes.
+
+use { println, Stdout } from "core:cli";
+
+fn guarded_div(a: i32, b: i32) -> i32 {
+    if b != 0 {
+        return (a / b) + (a / b);
+    }
+    return 0;
+}
+
+fn guarded_rem(a: i32, b: i32) -> i32 {
+    if b != 0 {
+        return (a % b) + (a % b);
+    }
+    return 0;
+}
+
+// Placement alone does not cover this one: the uses sit in different arms, so
+// their nearest common dominator is above both guards. Only refusing to
+// materialize a trapping value keeps each division inside the arm that proved
+// `b != 0`.
+fn guarded_split(a: i32, b: i32, c: bool) -> i32 {
+    if c {
+        if b != 0 {
+            return (a / b) + 1;
+        }
+        return 1;
+    }
+    if b != 0 {
+        return (a / b) + 2;
+    }
+    return 2;
+}
+
+export fn run() with Stdout {
+    assert guarded_split(10, 0, true) == 1;
+    assert guarded_split(10, 0, false) == 2;
+    assert guarded_split(10, 2, true) == 6;
+    assert guarded_split(10, 2, false) == 7;
+    assert guarded_div(10, 0) == 0;
+    assert guarded_div(10, 2) == 10;
+    assert guarded_rem(10, 0) == 0;
+    assert guarded_rem(10, 3) == 2;
+    println(`${guarded_div(10, 0)} ${guarded_rem(10, 0)}`);
+}
+
+__DATA__
+{
+    "stdout": "0 0\n"
+}

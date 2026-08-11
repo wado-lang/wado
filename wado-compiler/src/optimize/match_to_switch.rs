@@ -10,9 +10,9 @@
 //! `Match` shape and treats `Switch` as a codegen-friendly optimised form
 //! the optimizer materialises.
 //!
-//! This is the second peephole pass ported to the worklist rewrite engine
-//! (Phase 4 stage C; see `docs/wep-2026-06-05-nir-rewrite-engine-design.md`):
-//! it runs as a [`Rule`] over each function's arena `Body`. The arm bodies are
+//! Runs as a [`Rule`] on the worklist rewrite engine (see
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) over each function's
+//! arena `Body`. The arm bodies are
 //! deep-cloned via the engine's edit API because the same arm can appear at
 //! multiple `br_table` offsets, and the arena is a tree (one parent per node).
 //! Global initializers are arena `ExprBody`s, so the same rule runs on each

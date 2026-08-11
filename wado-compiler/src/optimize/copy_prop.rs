@@ -4,8 +4,8 @@
 //! `let x = &mut y`, or a copy of a promoted operand by propagating the source
 //! to all uses of the target. See `can_propagate_copy` for the safety gates.
 //!
-//! Runs on the worklist rewrite engine (combine migration; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
+//! Runs on the worklist rewrite engine (see
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a [`Rule`]: a
 //! per-function standalone engine session whose `apply_block` fires once at
 //! the body root and runs the analyse/substitute fixpoint to convergence in
 //! one shot. The substitute-and-remove rewrites route through

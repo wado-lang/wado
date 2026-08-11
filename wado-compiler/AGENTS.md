@@ -12,12 +12,13 @@ The Wado compiler crate: frontend, IR pipeline, optimizer, and codegen.
 
 The live value graph is the source of truth for pure values: built once per
 function (`Body::value_graph`, set lazily on first query and reused across every
-pass) and rewritten eagerly in place via e-class union (the aegraph model —
-build once, rewrite, extract once), not re-derived per pass. Operand promotion
-("born as operands") makes a pure skeleton position carry its `ValueId` directly
-as `Operand::Value` in the pool (`body.values`), so a pass reads the value off
-the operand instead of looking it up — there is no `ExprId`→value side-table.
-BCE recognisers are structural.
+pass) and rewritten eagerly in place, not re-derived per pass. Interning is pure
+hash-consing: a `ValueId` is stable once allocated, so a rewrite repoints an
+operand at another value rather than merging two ids, and no consumer resolves a
+representative. Operand promotion ("born as operands") makes a pure skeleton
+position carry its `ValueId` directly as `Operand::Value` in the pool
+(`body.values`), so a pass reads the value off the operand instead of looking it
+up — there is no `ExprId`→value side-table. BCE recognisers are structural.
 
 A pass that decides a local is unused, or that rewrites every read of one, must
 count the reads that live in the pool as `Operand::Value`, not just the skeleton
@@ -46,7 +47,7 @@ tree — two attempts each lost the string-builder folds. The rule, its
 mechanism, and its measurement live on `aggregate_safe_locals`; the two
 `still_vouches` tests in `tests/integration/niri.rs` pin it.
 
-Details: `docs/wep-2026-06-15-live-value-graph.md`.
+Details: `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 
 ## Development Cycle
 

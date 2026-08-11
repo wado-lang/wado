@@ -496,6 +496,6 @@ across the block's dynamic extent.
 - [Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md)
 - [Lenient String Parsing (`LenientFromStr`)](./wep-2026-06-22-lenient-from-str.md)
 - [Optimizer Remarks for Missed Optimizations](./wep-2026-06-03-optimizer-remarks.md)
-- [The Live ValueGraph](./wep-2026-06-15-live-value-graph.md)
+- [NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md)
 - Rust [`tracing`](https://docs.rs/tracing), [`log`](https://docs.rs/log)
 - Go [`log/slog`](https://pkg.go.dev/log/slog)

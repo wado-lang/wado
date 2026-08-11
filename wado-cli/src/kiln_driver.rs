@@ -40,6 +40,7 @@ use wado_compiler::kiln::{
 use wado_compiler::{Code, Diagnostic, Severity};
 use wado_manifest::Manifest;
 
+use crate::cache::{is_staging_file, write_atomic};
 use crate::kiln_metadata::{
     self, FileHash as MetaFileHash, METADATA_VERSION, Metadata, OutputEntry as MetaOutputEntry,
 };
@@ -290,15 +291,9 @@ pub async fn execute_with_mode<H: CompilerHost>(
                         normalized.as_str(),
                     );
                 }
-                // Atomic publish (temp + rename): the same generated output can
-                // be written by several files' compiles at once during a parallel
-                // `wado test` sweep, and a plain `fs::write` lets a concurrent
-                // reader observe a torn, half-written module.
-                crate::cache::write_atomic(&full_path, &bytes).map_err(|source| {
-                    ExecuteError::Io {
-                        path: full_path.clone(),
-                        source,
-                    }
+                write_atomic(&full_path, &bytes).map_err(|source| ExecuteError::Io {
+                    path: full_path.clone(),
+                    source,
                 })?;
             }
             ExecuteMode::DryRun => {
@@ -595,6 +590,9 @@ fn walk_and_delete(
             continue;
         }
         if !ft.is_file() {
+            continue;
+        }
+        if is_staging_file(&entry.file_name().to_string_lossy()) {
             continue;
         }
         let Ok(content) = std::fs::read_to_string(&path) else {
@@ -1679,6 +1677,7 @@ mod tests {
 
     mod cache_tests {
         use super::*;
+        use crate::cache::staging_file_name;
         use indexmap::IndexMap;
         use std::sync::Mutex;
         use wado_compiler::compiler_host::{
@@ -1962,6 +1961,20 @@ mod tests {
             assert!(kept_path.exists());
             assert!(!orphan_path.exists());
             assert!(hand_written_path.exists());
+        }
+
+        #[test]
+        fn reconcile_outputs_spares_a_concurrent_writers_staging_temp() {
+            let tmp = tempfile::tempdir().unwrap();
+            let out_dir = tmp.path().join("build/kiln/proto");
+            std::fs::create_dir_all(&out_dir).unwrap();
+            let staging = out_dir.join(staging_file_name("gen.wado"));
+            std::fs::write(&staging, "#![generated(by = \"gen\", sources = [])]\n").unwrap();
+
+            let deleted = reconcile_outputs(tmp.path(), &out_dir, &[]).unwrap();
+
+            assert!(deleted.is_empty(), "a staging temp is not an orphan");
+            assert!(staging.exists());
         }
 
         #[test]

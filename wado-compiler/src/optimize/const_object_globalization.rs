@@ -38,12 +38,10 @@
 //! (`return s.data`), which the return-convention fixpoint calls owned and the
 //! caller then mutates. [`param_storage_escapes`] rules that out.
 //!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): a project-level pass
-//! whose analysis (read-only gate, const check) and mutation (read rewrite,
-//! `let` → `GlobalVarSet`) read and mutate the arena `Body` directly. The
-//! `expr_readonly` arms mirror the former tree gate exactly to keep the
-//! soundness decision — and therefore codegen — identical.
+//! A project-level pass over the arena `Body` (see
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`): the analysis (read-only
+//! gate, const check) is a read-only walk and the mutation (read rewrite,
+//! `let` → `GlobalVarSet`) edits the body in place.
 
 use cranelift_entity::EntityRef;
 use std::cell::RefCell;
