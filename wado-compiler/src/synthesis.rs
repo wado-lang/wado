@@ -22,7 +22,6 @@ pub mod traits;
 
 use crate::elaborator::trait_env::{SynthesisedImpls, TraitEnv};
 use crate::module_source::ModuleSource;
-use crate::name::LocalMethodName;
 use crate::package::Package;
 use crate::tir::ResolvedType;
 

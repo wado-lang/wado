@@ -1085,7 +1085,7 @@ fn compile_after_load<H: CompilerHost>(
     // `--lib` package spreads its API (and the types it exposes) across
     // submodules. Captured here (owned) so it outlives the `sem` destructure
     // below and can be registered into the CM interface registry.
-    let mut lib_surface = if options.lib_world.is_some() {
+    let lib_surface = if options.lib_world.is_some() {
         collect_lib_surface(&sem.entry_module_source, &sem.modules)
     } else {
         LibSurface {
@@ -2277,6 +2277,7 @@ export fn id_bool(v: bool) -> bool { return v; }
 "#;
         let module = super::parse(src).ast;
         let world = synthesize_lib_world_info(
+            &crate::component_model::CmInterfaceRegistry::new(),
             "wado:mylib/mylib@0.1.0",
             Some(&module),
             &[],
@@ -2301,6 +2302,7 @@ export fn id_bool(v: bool) -> bool { return v; }
     #[test]
     fn empty_when_no_entry_module() {
         let world = synthesize_lib_world_info(
+            &crate::component_model::CmInterfaceRegistry::new(),
             "wado:x/x@0.1.0",
             None,
             &[],
@@ -2322,6 +2324,7 @@ export fn id_points(v: List<Point>) -> List<Point> { return v; }
 "#;
         let module = super::parse(src).ast;
         let world = synthesize_lib_world_info(
+            &crate::component_model::CmInterfaceRegistry::new(),
             "wado:geo/geo@0.1.0",
             Some(&module),
             &[],
@@ -2347,6 +2350,7 @@ export fn id_opt(v: Option<String>) -> Option<String> { return v; }
 "#;
         let module = super::parse(src).ast;
         let world = synthesize_lib_world_info(
+            &crate::component_model::CmInterfaceRegistry::new(),
             "wado:c/c@0.1.0",
             Some(&module),
             &[],

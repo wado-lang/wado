@@ -112,13 +112,12 @@ impl StructuralMember<'_> {
 pub(super) fn canonical_assoc_const_key(
     key: &str,
     current_module_source: &ModuleSource,
-    imports: &super::sem::ModuleImports,
     symbols: &crate::symbol::SymbolTable,
-    trait_env: &super::trait_env::TraitEnv,
+    resolutions: &crate::resolve::Resolutions,
 ) -> Option<(ModuleSource, String)> {
     let (prefix, _) = key.split_once("::")?;
     let (type_module, canon_name) =
-        canonical_decl_key_with(prefix, current_module_source, imports, symbols, trait_env);
+        declaration_named_or_local(prefix, current_module_source, symbols, resolutions);
     let canon_key = if canon_name == prefix {
         key.to_string()
     } else {
@@ -127,6 +126,21 @@ pub(super) fn canonical_assoc_const_key(
     Some((type_module, canon_key))
 }
 
+
+/// The declaration `name` means from `module`'s vantage, for the free-standing
+/// callers that hold the inputs rather than an `Elaborator`. Mirrors
+/// [`crate::elaborator::Elaborator::canonical_decl_key`], through the same
+/// resolution-table lookup.
+fn declaration_named_or_local(
+    name: &str,
+    module: &ModuleSource,
+    symbols: &crate::symbol::SymbolTable,
+    resolutions: &crate::resolve::Resolutions,
+) -> (ModuleSource, String) {
+    resolutions
+        .declaration_named(module, name, symbols)
+        .unwrap_or_else(|| (module.clone(), name.to_string()))
+}
 
 /// Whether `ty` spells one of the declaration's own type packs
 /// (`Trait<Assoc = [..P]>`). Such a binding names a parameter to project into,
@@ -168,18 +182,13 @@ fn mentions_self(ty: &ast::Type) -> bool {
 pub(crate) fn trait_sig_by_name_with<'a>(
     trait_name: &str,
     current_module_source: &ModuleSource,
-    imports: &super::sem::ModuleImports,
     symbols: &crate::symbol::SymbolTable,
+    resolutions: &crate::resolve::Resolutions,
     trait_env: &super::trait_env::TraitEnv,
     signatures: &'a super::sig::Signatures,
 ) -> Option<&'a super::sig::TraitSig> {
-    let canonical_key = canonical_decl_key_with(
-        trait_name,
-        current_module_source,
-        imports,
-        symbols,
-        trait_env,
-    );
+    let canonical_key =
+        declaration_named_or_local(trait_name, current_module_source, symbols, resolutions);
     let (_, decl_id) = trait_env.decl_index.get(&canonical_key)?;
     signatures.trait_sig(*decl_id)
 }
@@ -337,8 +346,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_sig_by_name_with(
             trait_name,
             &self.current_module_source,
-            &self.sem.imports,
             self.symbols,
+            &self.tysys.resolutions,
             &self.tysys.trait_env,
             &self.tysys.signatures,
         )
@@ -349,7 +358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         trait_name: &str,
     ) -> Option<&super::trait_env::TraitDeclHeader> {
-        self.trait_decl_header_of(&self.trait_decl_key_in_frame(trait_name))
+        self.trait_decl_header_of(&self.canonical_decl_key(trait_name))
     }
 
     /// The declaration header of a trait already identified.
@@ -1481,7 +1490,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return key;
             }
         }
-        self.trait_decl_key_in_frame(written)
+        self.canonical_decl_key(written)
     }
 
 

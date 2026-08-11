@@ -1233,11 +1233,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (WEP 2026-07-31). A trait's *static* method is not included: it has no
     /// receiver argument to bind `Self` from.
     pub(super) fn is_trait_instance_method(&self, trait_name: &str, method_name: &str) -> bool {
-        let declared = self.declared_trait_name(trait_name);
-        self.tysys
-            .trait_env
-            .find_trait_decl_key(&declared)
-            .is_some()
+        let key = self.canonical_decl_key(trait_name);
+        let declared = key.1.clone();
+        self.tysys.trait_env.declares_trait(&key)
             && self
                 .trait_sig_by_name(&declared)
                 .and_then(|sig| sig.method(method_name))
@@ -1258,7 +1256,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let required = super::types::RequiredTrait {
             decl: head_site.map_or_else(
-                || self.trait_decl_key_in_frame(trait_name),
+                || self.canonical_decl_key(trait_name),
                 |site| self.trait_decl_at(site, trait_name),
             ),
             args: None,
@@ -1467,7 +1465,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // unreported it types `unknown` and lowering builds an invalid module.
         if target_type_id == TypeTable::UNKNOWN
             && let ast::Type::Generic(g) = &static_call.target_type
-            && self.tysys.trait_env.find_trait_decl_key(&g.name).is_some()
+            && self
+                .tysys
+                .trait_env
+                .declares_trait(&self.canonical_decl_key(&g.name))
         {
             // `Take::<A>::take(recv, …)` — the trait-turbofish qualified call
             // (WEP 2026-07-31): the turbofish pins one argument list by the

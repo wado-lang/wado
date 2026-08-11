@@ -59,6 +59,9 @@ pub struct Resolutions {
     /// Carried here so a consumer can name what a site resolved to without
     /// holding the `SymbolTable` — the table is the one place both are known.
     decls: IndexMap<AstId, (ModuleSource, String)>,
+    /// The prelude's declarations, kept so [`Self::declaration_named`] performs
+    /// the same lookup the walk did rather than a second one beside it.
+    prelude: IndexMap<String, AstId>,
 }
 
 impl Resolutions {
@@ -87,7 +90,30 @@ impl Resolutions {
                 decls.insert(*id, (sym.module_source().clone(), sym.name.clone()));
             }
         }
-        Self { refs, decls }
+        Self {
+            refs,
+            decls,
+            prelude,
+        }
+    }
+
+    /// The declaration `name` means from `module`'s vantage, with no reference
+    /// site to key on.
+    ///
+    /// Runs the same scope order the walk runs at every site, minus the
+    /// binders — a caller holding a bare name is outside any item's type
+    /// parameters. Sharing the lookup is the point: a second chain beside it is
+    /// how a consumer's answer came to differ from the table's.
+    #[must_use]
+    pub fn declaration_named(
+        &self,
+        module: &ModuleSource,
+        name: &str,
+        symbols: &SymbolTable,
+    ) -> Option<(ModuleSource, String)> {
+        module_scope_lookup(module, name, symbols, &self.prelude)
+            .and_then(|id| symbols.get(&id))
+            .map(|sym| (sym.module_source().clone(), sym.name.clone()))
     }
 
     /// The declaration a [`DeclRef`] names, for a consumer that already holds
@@ -172,6 +198,30 @@ fn prelude_declarations(symbols: &SymbolTable) -> IndexMap<String, AstId> {
     out
 }
 
+/// Which declaration `name` reaches from `module`, ignoring type-parameter
+/// binders: the module's own `use` imports, then its own declarations, then the
+/// prelude's public surface, then the prelude's `internal` declarations.
+///
+/// The one implementation of the scope order, so the site walk and a name-only
+/// caller cannot answer differently.
+fn module_scope_lookup(
+    module: &ModuleSource,
+    name: &str,
+    symbols: &SymbolTable,
+    prelude: &IndexMap<String, AstId>,
+) -> Option<AstId> {
+    if let Some(sym) = symbols.imported(module, name) {
+        return Some(sym.defined_at);
+    }
+    if let Some(sym) = symbols.lookup_in_module(module, name) {
+        return Some(sym.defined_at);
+    }
+    if let Some(sym) = symbols.lookup_in_module(&ModuleSource::prelude(), name) {
+        return Some(sym.defined_at);
+    }
+    prelude.get(name).copied()
+}
+
 fn is_prelude_module(module: &ModuleSource) -> bool {
     matches!(module, ModuleSource::Core { name } if name.as_str() == "prelude"
         || name.as_str().starts_with("prelude/"))
@@ -215,22 +265,8 @@ impl Resolver<'_> {
         if let Some(id) = self.binder(name) {
             return DeclRef::Binder(id);
         }
-        if let Some(sym) = self.symbols.imported(self.module, name) {
-            return DeclRef::Decl(sym.defined_at);
-        }
-        if let Some(sym) = self.symbols.lookup_in_module(self.module, name) {
-            return DeclRef::Decl(sym.defined_at);
-        }
-        if let Some(sym) = self
-            .symbols
-            .lookup_in_module(&ModuleSource::prelude(), name)
-        {
-            return DeclRef::Decl(sym.defined_at);
-        }
-        if let Some(id) = self.prelude.get(name) {
-            return DeclRef::Decl(*id);
-        }
-        DeclRef::Unresolved
+        module_scope_lookup(self.module, name, self.symbols, self.prelude)
+            .map_or(DeclRef::Unresolved, DeclRef::Decl)
     }
 
     fn record(&mut self, site: AstId, answer: DeclRef) {

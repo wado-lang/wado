@@ -777,7 +777,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             let head = scope.get_type_name(trait_type);
             match crate::resolve::head_site(trait_type) {
                 Some(site) => scope.trait_decl_at(site, &head),
-                None => scope.trait_decl_key_in_frame(&head),
+                None => scope.canonical_decl_key(&head),
             }
         });
         let self_type = scope
@@ -818,12 +818,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// there is no reliable answer to build on.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
         let name = super::trait_env::get_type_name_static(trait_type);
+        let key = self.canonical_decl_key(&name);
         if self.trait_decl_header_in_frame(&name).is_some()
-            || self
-                .tysys
-                .trait_env
-                .find_effect_or_resource_decl_key(&name)
-                .is_some()
+            || self.tysys.trait_env.declares_effect_or_resource(&key)
         {
             return;
         }

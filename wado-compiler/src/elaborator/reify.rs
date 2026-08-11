@@ -335,9 +335,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (type_module, canon_key) = super::trait_query::canonical_assoc_const_key(
             key,
             &self.current_module_source,
-            &self.sem.imports,
             self.symbols,
-            &self.tysys.trait_env,
+            &self.tysys.resolutions,
         )?;
         self.tysys
             .signatures
@@ -1441,8 +1440,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let Some(trait_sig) = super::trait_query::trait_sig_by_name_with(
             &trait_decl_name,
             &self.current_module_source,
-            &self.sem.imports,
             self.symbols,
+            &self.tysys.resolutions,
             &self.tysys.trait_env,
             &self.tysys.signatures,
         ) else {

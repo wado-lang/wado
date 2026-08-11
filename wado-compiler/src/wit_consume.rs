@@ -660,6 +660,8 @@ mod tests {
     fn builds_catalog_bindings() {
         let (resolve, world) = decode_fixture();
         let b = build_bindings(&resolve, world).expect("build bindings");
+        let registry = crate::component_model::CmInterfaceRegistry::new();
+        registry.extend_source_interfaces(b.source_interfaces.clone());
         assert_eq!(
             b.interface_fqs,
             vec!["wado-lang:cm-catalog/cm-catalog@0.0.16"]
@@ -709,7 +711,7 @@ mod tests {
             Type::Named(n) => {
                 assert_eq!(n.name, "Point");
                 assert_eq!(
-                    registry.source_interface(n),
+                    registry.source_interface(n).as_deref(),
                     Some("wado-lang:cm-catalog/cm-catalog@0.0.16")
                 );
             }
@@ -731,7 +733,7 @@ mod tests {
             Type::Named(n) => {
                 assert_eq!(n.name, "Meters");
                 assert_eq!(
-                    registry.source_interface(n),
+                    registry.source_interface(n).as_deref(),
                     Some("wado-lang:cm-catalog/cm-catalog@0.0.16")
                 );
             }

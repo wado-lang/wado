@@ -735,7 +735,6 @@ pub struct TraitEnv {
     /// Every type-shaped declaration's identity (struct / variant / enum /
     /// flags / newtype). Kept so [`Self::declaring_side_key`] can offer the
     /// same by-name fallbacks `build` did; nothing else reads it.
-    type_decl_index: IndexMap<DeclKey, ModuleSource>,
     /// Digested headers for every indexed impl block, keyed by
     /// `(ModuleSource, AstId)`. Trait/method queries read this instead of
     /// re-fetching the impl block AST from `loaded_modules`. See [`ImplHeader`].
@@ -1332,7 +1331,6 @@ impl TraitEnv {
                 resource_static_method_index,
                 trait_impl_modules,
                 concrete_trait_impl_modules,
-                type_decl_index,
                 synthesised: None,
             }),
             violations,
@@ -1418,6 +1416,16 @@ impl TraitEnv {
     /// enum / builtin) by name, when the name picks out exactly one. Several
     /// modules declaring the name leaves it unresolved rather than guessing:
     /// a wrong module is worse than the caller's existing fallback.
+    /// Whether `key` names a trait declaration.
+    pub(crate) fn declares_trait(&self, key: &DeclKey) -> bool {
+        self.decl_index.contains_key(key)
+    }
+
+    /// Whether `key` names an effect or a resource declaration.
+    pub(crate) fn declares_effect_or_resource(&self, key: &DeclKey) -> bool {
+        self.effect_decl_index.contains_key(key) || self.resource_decl_index.contains_key(key)
+    }
+
     pub(crate) fn find_struct_like_decl_key(&self, name: &str) -> Option<DeclKey> {
         let modules = self.struct_like_decl_modules.get(name)?;
         match modules.as_slice() {

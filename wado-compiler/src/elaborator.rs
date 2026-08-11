@@ -72,30 +72,6 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
     index
 }
 
-/// `true` if `name` denotes a built-in type resolved by name alone. Must
-/// list exactly what `resolve_named_type` answers before consulting any
-/// declaration: a name treated as builtin there but not here reaches
-/// [`Elaborator::canonical_decl_key`] and `TraitEnv::build` by different
-/// routes, and they key it to different modules.
-pub(crate) fn is_primitive_type_name(name: &str) -> bool {
-    matches!(
-        name,
-        "i8" | "i16"
-            | "i32"
-            | "i64"
-            | "u8"
-            | "u16"
-            | "u32"
-            | "u64"
-            | "f32"
-            | "f64"
-            | "v128"
-            | "bool"
-            | "char"
-            | "()"
-            | "!"
-    )
-}
 pub use types::TypeError;
 use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
@@ -528,10 +504,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> Vec<trait_env::DeclKey> {
         let mut keys = vec![self.canonical_decl_key(written_name)];
         if let Some(module) = receiver_module {
-            let by_receiver =
-                self.tysys
-                    .trait_env
-                    .declaring_side_key(self.symbols, module, written_name);
+            // From the receiver's own vantage, not the call site's.
+            let by_receiver = self
+                .tysys
+                .resolutions
+                .declaration_named(module, written_name, self.symbols)
+                .unwrap_or_else(|| (module.clone(), written_name.to_string()));
             if by_receiver != keys[0] {
                 keys.push(by_receiver);
             }
@@ -856,6 +834,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         let (module, name) = self.canonical_decl_key(written);
         crate::name::FqTypeName::of_head(&module, &name)
+    }
+
+    /// The declared name of the trait `trait_name` refers to here — the same
+    /// name past a `use … as` alias.
+    pub(super) fn declared_trait_name(&self, trait_name: &str) -> String {
+        self.canonical_decl_key(trait_name).1
+    }
+
+    /// The declaration `name` means from this module's vantage, for the callers
+    /// that hold a name and no reference site to key on.
+    ///
+    /// Runs the resolution table's own scope lookup rather than a second chain
+    /// beside it, so a name-only caller and the site that wrote the same name
+    /// cannot disagree. A name reaching nothing stays with the writing module:
+    /// nothing else claims it.
+    pub(crate) fn canonical_decl_key(&self, name: &str) -> trait_env::DeclKey {
+        self.tysys
+            .resolutions
+            .declaration_named(&self.current_module_source, name, self.symbols)
+            .unwrap_or_else(|| (self.current_module_source.clone(), name.to_string()))
     }
 
     /// The trait a bound's reference site names. `written` supplies the type
@@ -1195,9 +1193,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let (type_module, canon_key) = trait_query::canonical_assoc_const_key(
             key,
             &self.current_module_source,
-            &self.sem.imports,
             self.symbols,
-            &self.tysys.trait_env,
+            &self.tysys.resolutions,
         )?;
         self.tysys
             .signatures
