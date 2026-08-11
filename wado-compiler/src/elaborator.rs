@@ -868,6 +868,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// modules declare the name rather than picking one — guessing between
     /// them is the mis-identification this design exists to prevent.
     pub(crate) fn decl_key_or_local(&self, name: &str) -> trait_env::DeclKey {
+        // A type parameter in scope shadows every declaration of that name, so
+        // a frame writing `T` means its own binder even where a `struct T`
+        // exists. The indexes cannot see binders and would answer with the
+        // struct.
+        if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
+            return (self.current_module_source.clone(), name.to_string());
+        }
         let env = &self.tysys.trait_env;
         self.canonical_decl_key(name)
             .or_else(|| env.find_struct_like_decl_key(name))
