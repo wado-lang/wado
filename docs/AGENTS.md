@@ -159,4 +159,3 @@ history is the SSoT for how the design got here.
 - [Overload Resolution](./wep-2026-07-31-overload-resolution.md)
 - [Variant Return Scalarization at NIR](./wep-2026-08-03-variant-return-abi.md)
 - [`core:icu` — Internationalization as One Facade](./wep-2026-08-09-core-icu.md)
-- [Rigid and Flexible Type Variables](./wep-2026-08-11-rigid-and-flexible-type-variables.md)
