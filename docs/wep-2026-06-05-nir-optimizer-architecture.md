@@ -335,6 +335,15 @@ lever it looks like.
       new invariant (see "Not a session index carried across passes"). Measure
       `Engine::new` (1.03 s, ~17 % of the loop) again afterwards: the remaining
       compile-speed items are all sized against a skeleton this shrinks.
+      Over reachable nodes (the arena is only 62 % live, the rest is
+      compaction's job) the target is 71 775 of 169 976 — 42 % of the live
+      skeleton — after setting aside what must stay: an assign place (5 521) and
+      `Ref` / `MutRef` / `Deref`, which are not pure (13 916). It splits in two.
+      `Binary` / `Unary` / `Cast` / `FieldAccess` in value positions are 26 % of
+      the target and independent. `Local` is the other 74 %, and retiring it
+      means every local read becomes `Operand::Value(Opaque(Local i))` — which
+      is the widening under Precision below, blocked on the same prerequisite.
+      Do the independent part first; the rest lands with that prerequisite.
 - [ ] Arena compaction. In-place rewrites orphan nodes that are never freed
       mid-run (~1.66× bloat measured at end-of-optimize on `package-gale`).
 
@@ -366,7 +375,9 @@ Precision.
       local-naming value that still reads correctly after `inline` / `sroa`
       move the operand, whether by materialising the value at its def into a
       slot the operand can name, or by re-materialising instead of relocating
-      such operands.
+      such operands. Retiring the skeleton's `Local` nodes waits on the same
+      thing, and is 74 % of that item — so this prerequisite gates the precision
+      work and the larger half of the compile-speed work at once.
 
 - [ ] Copy propagation on `ValueId`. Source-stability is not subsumed by value
       equality — a write-once `x` whose source `y` is later reassigned can read
