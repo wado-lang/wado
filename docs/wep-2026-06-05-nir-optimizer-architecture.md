@@ -279,7 +279,28 @@ lever it looks like.
       API, the way the graph already is. `Engine::new` costs one walk rather
       than three — `build_indices` records parents and uses on the way down and
       seeds the worklist on the way up — but it is still paid per pass per
-      function (~8 % of compile CPU when three walks were profiled).
+      function: 36 421 sessions and 20.9 M nodes walked on
+      `benchmark/sqlite_parse`, **1.08 s, ~17 % of the loop**. The ten
+      engine-based passes sit in three consecutive runs
+      (`container_sroa` + pre-`peephole`; post-`peephole` + `let_block_flatten`
+      + `sroa` + `copy_prop`; `const_fold` + `param_spec` + `licm` +
+      `tmpl_hoist`), so surviving a run would take 10 sessions per iteration to
+      3.
+      Persisting the index needs no gate and no engine/non-engine pass
+      classification: record the arena lengths the index was derived at, and a
+      pass that allocated behind the engine's back no longer matches. Only a
+      rewrite that reseats structure without growing the arena escapes that —
+      `dce` and `field_scalarize` reseating a block's statement list are the
+      only two, both outside the loop, and an explicit invalidation covers them.
+      What blocks it is that the edit API maintains the use index well enough
+      for one session but not across passes: with the index carried, an
+      `elide_local` in a later pass drops a binding whose read is still
+      reachable (caught by the elided-local audit, `local 6` on
+      `benchmark/sqlite_parse`). Today every pass rebuilds, so a rewrite's
+      under-report is repaired before the next pass reads it. Find and fix that
+      maintenance hole first — a build-both-ways oracle over the carried index
+      against a fresh one names it — because carrying the index is what turns a
+      latent inaccuracy into a miscompile.
 - [ ] Function-level parallelism. The per-function build and walk are
       independent.
 - [ ] Fold the graph build into `lower` (born-at-`lower`). What this buys is one
