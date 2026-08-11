@@ -243,6 +243,10 @@ pub struct Engine<'a> {
     /// asked for the census, and only its final state, so a stale answer some
     /// later invalidation happened to cover leaves no trace.
     promoted_reads: OnceCell<IndexMap<u32, usize>>,
+    /// Whether a local-naming operand is sitting in the arena unaccounted for by
+    /// the memo — see [`Engine::census_note_structure`]. A `Cell` because the
+    /// memo fills behind `&self`, and filling is where it is decided.
+    pending_local_naming: std::cell::Cell<bool>,
 }
 
 impl<'a> Engine<'a> {
@@ -270,6 +274,7 @@ impl<'a> Engine<'a> {
             panic_callee_ids: None,
             pure_builtin_callees: None,
             promoted_reads: OnceCell::new(),
+            pending_local_naming: std::cell::Cell::new(false),
         };
         // The value graph lives on `Body` and is built once, then maintained
         // through every edit (`replace_expr_with_value` / `redirect_expr`, plus
@@ -757,28 +762,23 @@ impl<'a> Engine<'a> {
     }
 
     fn promoted_read_counts(&self) -> &IndexMap<u32, usize> {
-        self.promoted_reads
-            .get_or_init(|| self.body.promoted_read_counts())
+        self.promoted_reads.get_or_init(|| {
+            // The census is reachability-scoped, so a node allocated and not yet
+            // spliced in is absent from it — correctly, but only until it is
+            // attached. Record that one is waiting; the attach then knows to
+            // drop the memo instead of trusting it.
+            self.pending_local_naming
+                .set(self.body.any_operand_names_a_local());
+            self.body.promoted_read_counts()
+        })
     }
 
     /// Record an operand this edit writes into the skeleton, dropping the
     /// memoized census if it can no longer be trusted.
     ///
-    /// The census is a function of the reachable operand set and the values it
-    /// names. A `ValueId` is stable and its kind immutable once interned
-    /// (hash-consing, no e-class merges), so only a change to *which* operands
-    /// the skeleton carries can move the answer, and during a session the edit
-    /// API is the only path to that.
-    ///
-    /// An **empty** census is stable under removal — dropping operands cannot
-    /// conjure a local read — so only writing a local-naming value disturbs it.
-    /// That is the case worth special-casing: inside the fixed-point loop the
-    /// early freeze plants context-free values only and the local-naming
-    /// freezes have not run, so the census is empty on essentially every
-    /// session (1228 of 1228, measured on the Gale-generated `SQLite` parser).
-    /// Dropping it on every edit instead costs a whole-body walk per rewrite.
-    ///
-    /// A non-empty census can shrink as well as grow, so any edit drops it.
+    /// Nothing to do when nothing is memoized: the next fill walks the body as
+    /// it stands. That short-circuit is what keeps the hook off the allocator's
+    /// hot path, so it is worth the arena probe at fill time that pays for it.
     fn census_note_operand(&mut self, op: Operand) {
         let stale = match self.promoted_reads.get() {
             None => false,
@@ -813,16 +813,36 @@ impl<'a> Engine<'a> {
         }
     }
 
-    /// Record that this edit changed which nodes are reachable without writing
-    /// an operand of its own — splicing a statement list, re-parenting.
+    /// Drop the memoized census unless this edit provably cannot have moved it.
     ///
-    /// Every node such an edit can attach was either already reachable, or was
-    /// built during this session through the edit API, whose operands
-    /// [`Engine::census_note_operand`] has already seen. So an empty census
-    /// stays empty and only a non-empty one has to go. [`Engine::run`] audits
-    /// that induction under debug assertions.
+    /// The census is a function of the reachable operand set and the values it
+    /// names. A `ValueId` is stable and its kind immutable once interned
+    /// (hash-consing, no e-class merges), so only a change to *which* operands
+    /// the skeleton carries can move the answer, and during a session the edit
+    /// API is the only path to that.
+    ///
+    /// An **empty** census survives removal — nothing can conjure a read — and
+    /// survives an attach as long as nothing local-naming is waiting to be
+    /// attached. That second half is the subtle one: a node is allocated
+    /// detached and spliced in later, so the memo can be filled between the two,
+    /// find the operand unreachable, and be stale the moment it lands.
+    /// `licm`'s pre-header hoist has exactly that shape, and it never runs the
+    /// worklist, so the audit in [`Engine::run`] would not catch it either.
+    /// `pending_local_naming`, decided by an arena-wide probe when the memo
+    /// fills, is what closes it.
+    ///
+    /// Keeping the empty case is what makes the memo worth having: inside the
+    /// fixed-point loop the early freeze plants context-free values only and
+    /// the local-naming freezes have not run, so the census is empty on
+    /// essentially every session (1228 of 1228, measured on the Gale-generated
+    /// `SQLite` parser). Dropping it on every edit costs a whole-body walk per
+    /// rewrite, which measured slower than having no memo at all.
+    ///
+    /// A non-empty census can shrink as well as grow, so any edit drops it.
     fn census_note_structure(&mut self) {
-        if self.promoted_reads.get().is_some_and(|c| !c.is_empty()) {
+        if self.pending_local_naming.get()
+            || self.promoted_reads.get().is_some_and(|c| !c.is_empty())
+        {
             self.promoted_reads.take();
         }
     }
@@ -851,21 +871,22 @@ impl<'a> Engine<'a> {
     /// The one edit that installs operands without touching node structure, for
     /// a pass rewriting a whole subtree's slots in one sweep (`licm`'s
     /// pre-header hoist). A promoted value carries no skeleton node, so there is
-    /// no parent edge to move and nothing new to enqueue — which is also why
-    /// `f` may not hand back a *different* `Operand::Expr`: that is a structural
-    /// splice, and `redirect_expr` / `replace_expr_kind` are what maintain it.
+    /// no parent edge to move and nothing new to enqueue — which is also why `f`
+    /// may only rewrite one promoted value to another. Either direction across
+    /// the `Operand::Expr` boundary is a structural splice.
     pub fn map_operands(&mut self, node: NodeRef, f: &mut impl FnMut(Operand) -> Operand) {
         let mut spliced = false;
         self.body.for_each_operand_mut(node, |slot| {
             let new = f(*slot);
-            spliced |= new != *slot && new.as_expr().is_some();
+            spliced |= new != *slot && (new.as_expr().is_some() || slot.as_expr().is_some());
             *slot = new;
         });
         assert!(
             !spliced,
-            "[NIR engine] map_operands({node:?}) installed a skeleton operand: that \
-             is a structural splice, so the parent map and worklist need \
-             `redirect_expr` / `replace_expr_kind` instead"
+            "[NIR engine] map_operands({node:?}) moved a skeleton operand: installing \
+             one is a splice, and replacing one orphans its subtree while the parent \
+             map still claims it. Both need `redirect_expr` / `replace_expr_kind`, \
+             which maintain the edge; this rewrites promoted values only."
         );
         self.census_note_node_operands(node);
     }
@@ -1106,6 +1127,7 @@ impl<'a> Engine<'a> {
         let id = self.body.blocks.push(BlockNode { stmts, span });
         self.buf.block_parent.push(None);
         self.buf.block_queued.push(false);
+        self.census_note_structure();
         let kids: Vec<StmtId> = self.body.blocks[id].stmts.clone();
         for s in kids {
             self.set_parent(NodeRef::Stmt(s), Some(NodeRef::Block(id)));
@@ -1997,5 +2019,43 @@ mod tests {
         );
         assert!(eng.reads_promoted_local(0));
         assert_eq!(eng.promoted_read_count(0), 1);
+    }
+
+    /// A node is allocated detached and spliced in later, so the census can be
+    /// filled in between — while the local-naming operand is still unreachable
+    /// and correctly absent. The splice has to drop that memo. `licm`'s
+    /// pre-header hoist has exactly this shape (`all_hoist_stmts`), and it
+    /// never runs the worklist, so the end-of-`run` audit would not catch it.
+    #[test]
+    fn promoted_read_census_survives_an_allocate_then_attach() {
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let init = e(
+                b,
+                ExprKind::Cast {
+                    expr: one,
+                    target_type: TypeTable::I32,
+                },
+            );
+            vec![let_x(b, init, false)]
+        });
+        let root = body.root;
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+
+        // Allocated detached: the operand names `x`, but nothing reaches it.
+        let read = eng.body.values.canonical_local(0, TypeTable::I32);
+        let stmt = eng.alloc_stmt(StmtKind::Expr(Operand::Value(read)), Span::default());
+        // Fill the memo while it is still detached — correctly empty.
+        assert!(!eng.reads_promoted_local(0));
+
+        let stmts = eng.body.blocks[root].stmts.clone();
+        eng.set_block_stmts(root, [stmts, vec![stmt]].concat());
+
+        assert!(
+            eng.reads_promoted_local(0),
+            "attaching a detached local-naming operand must not leave the empty census standing"
+        );
     }
 }

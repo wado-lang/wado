@@ -29,9 +29,10 @@ What a contributor trips over:
   `promoted_read_count`, memoized: recomputing it per rule application is
   quadratic. The memo holds only because the edit API sees every operand
   written, so write operands through `Engine` (`map_operands` included), never
-  through `engine.body`, and have a new mutating edit report itself
-  (`census_note_operand` / `census_note_node_operands` /
-  `census_note_structure`).
+  through `engine.body`, and have a new mutating edit report itself —
+  `census_note_operand` / `census_note_node_operands` for what it writes, and
+  `census_note_structure` for what it attaches, which an edit that allocates now
+  and splices later needs just as much.
 - niri's `scratch_folds` is the one surviving `ExprId` memo. The rewrite that
   commits an aggregate consumes the node that produced it, so an enclosing fold
   cannot re-derive the value from the tree — folding a string-building region to

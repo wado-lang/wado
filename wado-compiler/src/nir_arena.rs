@@ -13,7 +13,7 @@
 //! the arena directly — there is no tree representation to convert from. See
 //! `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 
-use cranelift_entity::{PrimaryMap, entity_impl};
+use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBinaryOp, NirLocal, NirUnaryOp};
@@ -1103,37 +1103,90 @@ impl Body {
         }
     }
 
-    /// The promoted-read census: for every local some reachable promoted
-    /// operand reads, how many operand slots read it. A read that operand
-    /// promotion moved into the [`ValuePool`] has no skeleton node, so a walk
-    /// over nodes alone — the engine's use index included — cannot see it, and
-    /// a pass deciding a local is unused must add this in.
+    /// The distinct promoted values the reachable skeleton carries, and how many
+    /// operand slots hold each. The one node walk behind both censuses below,
+    /// which differ only in how they accumulate over it.
     ///
     /// Scoped to *reachable* operands. The pool is append-only, so it still
     /// holds the values of reads that folded away long ago; seeding from the
     /// pool instead would keep their locals alive forever.
-    ///
-    /// Hash-consing makes one `ValueId` fill many operand slots, so each
-    /// distinct value's leaves are collected once and counted per occurrence.
-    pub fn promoted_read_counts(&self) -> crate::hashmap::IndexMap<u32, usize> {
-        let mut counts: crate::hashmap::IndexMap<u32, usize> = crate::hashmap::IndexMap::default();
-        let mut leaves_of: crate::hashmap::IndexMap<ValueId, Vec<u32>> =
+    fn reachable_operand_values(&self) -> crate::hashmap::IndexMap<ValueId, usize> {
+        let mut slots: crate::hashmap::IndexMap<ValueId, usize> =
             crate::hashmap::IndexMap::default();
         self.for_each_reachable_node(|node| {
             self.for_each_operand(node, |op| {
-                let Some(v) = op.as_value() else {
-                    return;
-                };
-                let leaves = leaves_of.entry(v).or_insert_with(|| {
-                    let mut out = IndexSet::default();
-                    self.values.collect_opaque_locals(v, &mut out);
-                    out.into_iter().collect()
-                });
-                for &idx in leaves.iter() {
-                    *counts.entry(idx).or_default() += 1;
+                if let Some(v) = op.as_value() {
+                    *slots.entry(v).or_default() += 1;
                 }
             });
         });
+        slots
+    }
+
+    /// Whether *any* operand slot in the arena holds a value naming a local,
+    /// reachable or not.
+    ///
+    /// The reachability-scoped censuses below cannot see a node that has been
+    /// allocated but not yet spliced in, and the engine's memo has to know one
+    /// is waiting (see `Engine::census_note_structure`). Short-circuits on the
+    /// first hit.
+    ///
+    /// Deliberately coarse: it counts orphans too, which nothing can re-attach,
+    /// so a stale one costs the memo for the rest of the session. Narrowing it
+    /// to the nodes a session itself allocated measured no faster, and the
+    /// answer is only ever "recompute the census", never a wrong one.
+    pub fn any_operand_names_a_local(&self) -> bool {
+        let mut found = false;
+        for node in (0..self.exprs.len())
+            .map(|i| NodeRef::Expr(ExprId::new(i)))
+            .chain((0..self.stmts.len()).map(|i| NodeRef::Stmt(StmtId::new(i))))
+            .chain((0..self.pats.len()).map(|i| NodeRef::Pat(PatId::new(i))))
+        {
+            if found {
+                break;
+            }
+            self.for_each_operand(node, |op| {
+                if let Some(v) = op.as_value() {
+                    found |= self.values.names_a_local(v);
+                }
+            });
+        }
+        found
+    }
+
+    /// Every local a reachable promoted operand reads, unioned into `out`.
+    ///
+    /// A read that operand promotion moved into the [`ValuePool`] has no
+    /// skeleton node, so a walk over nodes alone — the engine's use index
+    /// included — cannot see it, and a pass deciding a local is unused must add
+    /// this in.
+    ///
+    /// One `seen` set spans every value, so the value DAG is walked once no
+    /// matter how many operands share a subtree.
+    pub fn promoted_local_reads(&self, out: &mut IndexSet<u32>) {
+        let mut seen = IndexSet::default();
+        for &v in self.reachable_operand_values().keys() {
+            self.values.collect_opaque_locals_seen(v, &mut seen, out);
+        }
+    }
+
+    /// [`Body::promoted_local_reads`] as a per-local tally of the operand slots
+    /// that read each — what a gate comparing a whole-body count against a
+    /// scoped one needs.
+    ///
+    /// Attribution is per value, so a subtree shared by two distinct values is
+    /// walked once for each; hash-consing keeps that to the distinct values the
+    /// skeleton actually carries, not the slots.
+    pub fn promoted_read_counts(&self) -> crate::hashmap::IndexMap<u32, usize> {
+        let mut counts: crate::hashmap::IndexMap<u32, usize> = crate::hashmap::IndexMap::default();
+        let mut leaves = IndexSet::default();
+        for (&v, &slots) in &self.reachable_operand_values() {
+            leaves.clear();
+            self.values.collect_opaque_locals(v, &mut leaves);
+            for &idx in &leaves {
+                *counts.entry(idx).or_default() += slots;
+            }
+        }
         counts
     }
 

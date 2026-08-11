@@ -52,7 +52,7 @@ pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
 /// which memoizes the census for the session; this is the entry point for the
 /// standalone passes, which run one census per pass.
 pub(super) fn promoted_local_reads(body: &Body, out: &mut IndexSet<u32>) {
-    out.extend(body.promoted_read_counts().into_keys());
+    body.promoted_local_reads(out);
 }
 
 /// The first of `locals` that still has a reachable read, in the skeleton or the

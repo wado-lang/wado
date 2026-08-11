@@ -2565,6 +2565,12 @@ fn hoist_invariant_value_operands(
     let (expr_ids, stmt_ids) = collect_loop_subtree(engine.body, loop_body);
 
     // Phase 1: snapshot every operand slot in the subtree, in a fixed order.
+    // `map_operands` is the canonical slot walk, so this also covers a
+    // statement-position operand (`StmtKind::Expr`) — a slot the hand-written
+    // walk it replaced dropped through a wildcard arm. Such an operand is a
+    // discarded pure value, which `elide_local` deletes before this pass runs,
+    // so the wider set costs nothing and removes a restatement of the node
+    // shape.
     let mut ops: Vec<Operand> = Vec::new();
     for &e in &expr_ids {
         engine.map_operands(NodeRef::Expr(e), &mut |op| {
