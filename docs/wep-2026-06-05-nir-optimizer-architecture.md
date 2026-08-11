@@ -257,22 +257,34 @@ because it is derived. See "Measured dead ends".
 
 ## Remaining work
 
-Compile speed. The build-once redesign met its structural goals but not its
-2× CPU target: `package-gale`'s optimize phase measured ~15.7 s against a ~7.5 s
-target. The premise was wrong — with build-once, the graph build is ~6 % of the
-phase (was ~21 %); the cost is now the passes themselves.
+Compile speed here means the debug build (`cargo build`, the dev profile) — the
+compiler-developer inner loop, not a release binary. Every timing in this
+section and in "Measured dead ends" is a debug-build number, so
+`wado-compiler`'s `debug_assert!`s are inside the measured cost, the
+promoted-read census audit at the end of `Engine::run` among them.
 
-- [ ] Pass-level cost: `peephole` and the iteration count dominate. The cost
-      concentrates rather than spreads — on `benchmark/sqlite_parse` (the
-      Gale-generated SQLite parser) one fixed-point iteration's two `peephole`
-      runs took 4.4 s of a 9.9 s optimize while every other run took under
-      0.25 s. That spike was the promoted-read census, which `elide_local` and
-      `labeled_block_fusion` recomputed per block: 1228 whole-body walks,
-      38.5 M node visits, every one of them returning an empty map.
-      Session-scoping it and fusing the session build into one walk took
-      `optimize` to 8.2 s and `peephole` to 3.2 s. What remains is the iteration
-      count and the per-node rule dispatch; neither has been profiled since, so
-      measure before cutting.
+The build-once redesign met its structural goals but not its 2× CPU target:
+`package-gale`'s optimize phase measured ~15.7 s against a ~7.5 s target. The
+premise was wrong — with build-once, the graph build is ~6 % of the phase (was
+~21 %); the cost is now the passes themselves.
+
+- [ ] Pass-level cost: the one-iteration `peephole` spike is `surviving_read`,
+      the debug assertion guarding `elide_local` and `labeled_block_fusion`. It
+      takes two whole-body walks (`collect_reads` + `promoted_local_reads`) per
+      rule application — the same per-application quadratic the promoted-read
+      census had, surviving in the assertions that guard those same two rules.
+      Skipping it alone takes `benchmark/sqlite_parse`'s loop from 9.5 s to
+      6.3 s and its `peephole` from 5.1 s to 1.4 s, and
+      `benchmark/syntax_highlight`'s loop from 11.2 s to 6.1 s; the spike
+      (4.9 s of a 9.5 s loop, against 0.2 - 0.4 s for every other iteration)
+      disappears and the per-iteration profile goes flat. Disabling every other
+      `wado-compiler` `debug_assert!` on top of that gains at most ~0.9 s more
+      (nothing at all on `syntax_highlight`), and
+      skipping the `Engine::run` census audit alone gains nothing — it is not
+      the cost. Session-scope the check the way the census was scoped rather
+      than dropping it. What is left after that spreads (`peephole` 23 %,
+      `copy_prop` / `const_fold` / `licm` 13 % each), and the iteration count is
+      not the problem: under the gate, iterations 5 - 8 cost 0.2 - 0.4 s each.
 - [ ] Build the engine session once per function and maintain it through the edit
       API, the way the graph already is. `Engine::new` costs one walk rather
       than three — `build_indices` records parents and uses on the way down and
@@ -281,7 +293,16 @@ phase (was ~21 %); the cost is now the passes themselves.
 - [ ] Function-level parallelism. The per-function build and walk are
       independent.
 - [ ] Fold the graph build into `lower` (born-at-`lower`), retiring the lazy
-      first-query build.
+      first-query build and with it `Engine::ensure_value_graph`'s
+      `VG_MAX_EXPRS` size gate. That gate skips the graph for a body over 5000
+      expressions, citing the build plus `build_scoped`'s scratch clone OOMing
+      under `wado test`'s parallel compilation. Measured, the memory it saves is
+      not there: on `driver_cst_sqlite_oracle_test` (the ANTLR4-driver shape the
+      gate names) raising it covers the one over-threshold body — 113 823 of the
+      program's 274 143 expressions — for +24 479 pool nodes, +3 MB peak RSS and
+      +5 % compile time, and emits a byte-identical module. So the gate costs no
+      optimization quality today and buys no headroom; born-at-`lower` inherits
+      a memory question far smaller than the comment implies.
 - [ ] Arena compaction. In-place rewrites orphan nodes that are never freed
       mid-run (~1.66× bloat measured at end-of-optimize on `package-gale`).
 
