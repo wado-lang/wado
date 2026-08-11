@@ -81,7 +81,10 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
 ///
 /// One construction, so no call site decides which namespace a candidate is
 /// in — the form each one arrives in does.
-pub(super) fn receiver_candidates(info: Option<&LocalMethodName>, extra: &[&str]) -> Vec<ReceiverCandidate> {
+pub(super) fn receiver_candidates(
+    info: Option<&LocalMethodName>,
+    declared: &[&str],
+) -> Vec<ReceiverCandidate> {
     let mut c: Vec<ReceiverCandidate> = Vec::new();
     if let Some(info) = info {
         c.push(ReceiverCandidate::Of(info.receiver().clone()));
@@ -90,9 +93,9 @@ pub(super) fn receiver_candidates(info: Option<&LocalMethodName>, extra: &[&str]
         ));
     }
     c.extend(
-        extra
+        declared
             .iter()
-            .map(|s| ReceiverCandidate::Instantiated(crate::name::MangledName::new(*s))),
+            .map(|s| ReceiverCandidate::Declared(crate::name::DeclName::new(*s))),
     );
     c
 }

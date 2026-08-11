@@ -1780,6 +1780,7 @@ pub(crate) enum ImplReceiver<'a> {
 pub(crate) enum ReceiverCandidate {
     Of(name::Receiver),
     Instantiated(name::MangledName),
+    Declared(name::DeclName),
 }
 
 impl ReceiverCandidate {
@@ -1787,6 +1788,7 @@ impl ReceiverCandidate {
         match self {
             ReceiverCandidate::Of(r) => ImplReceiver::Of(r),
             ReceiverCandidate::Instantiated(m) => ImplReceiver::Instantiated(m),
+            ReceiverCandidate::Declared(d) => ImplReceiver::Declared(d),
         }
     }
 }
