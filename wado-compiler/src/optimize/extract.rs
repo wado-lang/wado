@@ -430,41 +430,14 @@ struct FreezeCtx<'a> {
     include_fields: bool,
 }
 
-// TEMPORARY census — revert. Why a pure value position was not promoted, which
-// is exactly the set retiring the pure `ExprKind`s has to move.
-thread_local! {
-    pub(super) static FREEZE_REJECT: std::cell::RefCell<crate::hashmap::IndexMap<String, usize>> =
-        std::cell::RefCell::new(crate::hashmap::IndexMap::default());
-}
-
-pub(super) fn note_inloop(reason: &str) {
-    FREEZE_REJECT.with(|m| {
-        *m.borrow_mut().entry(format!("INLOOP/{reason}")).or_default() += 1;
-    });
-}
-
-pub(super) fn note_reject(engine: &Engine, id: ExprId, reason: &str) {
-    let kind = match &engine.body.exprs[id].kind {
-        ExprKind::Binary { .. } => "Binary",
-        ExprKind::Unary { .. } => "Unary",
-        ExprKind::Cast { .. } => "Cast",
-        ExprKind::FieldAccess { .. } => "FieldAccess",
-        ExprKind::Local { .. } => "Local",
-        _ => return,
-    };
-    FREEZE_REJECT.with(|m| {
-        *m.borrow_mut().entry(format!("{kind}/{reason}")).or_default() += 1;
-    });
-}
-
 /// Where a freeze sits relative to the passes that relocate operands.
 ///
 /// The anchor rule (WEP: NIR Optimizer Architecture) turns on this: a frozen
 /// operand may name a local only when that local's defining statement travels
 /// with the operand. A `let _av = …` does; a parameter's entry def does not. So
-/// a freeze with relocation still to come must anchor a local-naming value in
-/// an `_av`, while the terminal freezes may name a source local directly —
-/// nothing moves them afterwards.
+/// a freeze with relocation still to come anchors a local-naming value in an
+/// `_av`, while the terminal freezes may name a source local directly — nothing
+/// moves them afterwards.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum FreezePhase {
     /// Before the fixed-point loop, on each function's clean graph. Plants
@@ -485,7 +458,6 @@ fn classify_candidate(
     id: ExprId,
 ) -> Option<(ExprId, ValueId)> {
     if engine.is_assign_target(id) || is_let_value(engine, id) {
-        note_reject(engine, id, "assign-target-or-let-value");
         return None;
     }
     // Constant-leaf promotion (early only, clean graph). A value-position
@@ -515,27 +487,15 @@ fn classify_candidate(
         return Some((id, vid));
     }
     if !is_pure_arith(engine, id, ctx.include_fields) {
-        note_reject(engine, id, "not-pure-arith");
         return None;
     }
-    let Some(rep) = engine.value(id) else {
-        // Split the two causes: the size gate skipped the whole body's graph, or
-        // the graph exists but has no value for this node.
-        let reason = if engine.body.value_graph.is_none() {
-            "no-graph-value/body-has-no-graph"
-        } else {
-            "no-graph-value/node-absent"
-        };
-        note_reject(engine, id, reason);
-        return None;
-    };
+    let rep = engine.value(id)?;
     // An early freeze may plant only context-free values. A constant means the
     // same thing wherever `inline` and `sroa` copy the operand to; a value naming
     // a local does not, because those passes renumber locals and splice a callee
     // body into a caller, so the slot moves out from under it. The post-loop
     // freezes take these, after the structural passes have finished.
     if ctx.phase == FreezePhase::Early && engine.body.values.names_a_local(rep) {
-        note_reject(engine, id, "early-names-a-local");
         return None;
     }
     // A standalone `FieldAccess` is reemittable when its receiver is (it
@@ -593,11 +553,9 @@ fn classify_candidate(
             .value_fully_reemittable_locally(rep, ctx.mut_locals),
     };
     if !reemittable {
-        note_reject(engine, id, "not-reemittable");
         return None;
     }
     if engine.body.values.extraction_duplicates_work(rep) {
-        note_reject(engine, id, "extraction-duplicates-work");
         return None;
     }
     Some((id, rep))
@@ -763,47 +721,17 @@ fn apply_value_freeze(
     // The terminal freezes need none of this: nothing moves an operand after
     // them, which is what makes naming a source local safe there.
     let must_anchor = phase == FreezePhase::InLoop && !leaves.is_empty();
-    // TEMPORARY census — revert. Separates "the idea does not pay" from "the
-    // gate is too narrow to have tested it".
-    if phase == FreezePhase::InLoop {
-        if leaves.is_empty() {
-            note_inloop("context-free");
-        } else if anchorable {
-            note_inloop("anchored");
-        } else {
-            note_inloop("refused/not-anchorable");
-        }
-    }
-    // Anchoring is how such a value is frozen, not a reason to freeze one.
-    // Materialising a single-use value replaces "compute it here" with "compute
-    // it into a local and read the local" — the same work plus a `local.set`.
-    let worth = ids.len() > 1 && worth_materialising(&engine.body.values, rep);
-    // TEMPORARY census — revert. Separates "the idea does not pay" from "the
-    // gate is too narrow to have tested it".
-    if phase == FreezePhase::InLoop {
-        let outcome = if leaves.is_empty() {
-            "context-free"
-        } else if !leaves.iter().all(|l| param_set.contains(l)) {
-            "names-a-non-param"
-        } else if value_may_trap(&engine.body.values, rep) {
-            "may-trap"
-        } else if ids.len() == 1 {
-            "single-use"
-        } else if !worth_materialising(&engine.body.values, rep) {
-            "not-worth"
-        } else {
-            "anchored"
-        };
-        FREEZE_REJECT.with(|m| {
-            *m.borrow_mut()
-                .entry(format!("INLOOP/{outcome}"))
-                .or_default() += 1;
-        });
-    }
-    if must_anchor && !(anchorable && worth) {
+    // Anchoring is how such a value is frozen, not a reason to freeze one:
+    // materialising a single-use value trades its computation for a `local.set`
+    // plus a `local.get` of the same thing. So the sharing gate still decides,
+    // and a value that must be anchored but does not clear it stays put.
+    let worth = anchorable
+        && ids.len() > 1
+        && worth_materialising(&engine.body.values, rep);
+    if must_anchor && !worth {
         return false;
     }
-    let materialize = anchorable && worth;
+    let materialize = worth;
     let mut changed = false;
     if materialize {
         let name = format!("_av_{}", engine.locals().len());

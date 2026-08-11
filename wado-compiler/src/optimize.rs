@@ -323,95 +323,6 @@ pub fn optimize(
     // The born-resolved invariant is now enforced by the type system: a call
     // node's `func_id` is a non-optional `FuncId`, stamped at its synthesis site.
 
-    // TEMPORARY census — revert.
-    if crate::trace::filter().enabled("freeze_reject") {
-        extract::FREEZE_REJECT.with(|m| {
-            let mut rows: Vec<(String, usize)> =
-                m.borrow().iter().map(|(k, v)| (k.clone(), *v)).collect();
-            rows.sort_by_key(|(_, v)| std::cmp::Reverse(*v));
-            for (k, v) in rows.iter().take(14) {
-                crate::compiler_trace!("freeze_reject", "{v:>8}  {k}");
-            }
-        });
-    }
-
-    // TEMPORARY census — revert. Sizes what retiring the pure `ExprKind`s
-    // removes, over reachable nodes only: the arena keeps every orphan a
-    // rewrite left behind, and counting those measures compaction's job.
-    if crate::trace::filter().enabled("skel_kinds") {
-        use crate::nir_arena::{ExprKind, NodeRef};
-        let (mut live, mut arena, mut pure, mut locals) = (0usize, 0usize, 0usize, 0usize);
-        let (mut place_local, mut place_field, mut ref_unary) = (0usize, 0usize, 0usize);
-        let mut places: crate::hashmap::IndexSet<crate::nir_arena::ExprId> =
-            crate::hashmap::IndexSet::default();
-        for f in &project.functions {
-            let f = f.borrow();
-            let Some(b) = f.body.as_ref() else { continue };
-            arena += b.exprs.len();
-            places.clear();
-            let mut stack = vec![NodeRef::Block(b.root)];
-            let mut seen = crate::hashmap::IndexSet::default();
-            while let Some(node) = stack.pop() {
-                if !seen.insert(node) {
-                    continue;
-                }
-                if let NodeRef::Expr(e) = node {
-                    live += 1;
-                    if let ExprKind::Assign { target, .. } = &b.exprs[e].kind {
-                        places.insert(*target);
-                    }
-                    match &b.exprs[e].kind {
-                        ExprKind::Local { .. } => {
-                            pure += 1;
-                            locals += 1;
-                            if places.contains(&e) {
-                                place_local += 1;
-                            }
-                        }
-                        ExprKind::Unary { op, .. } => {
-                            pure += 1;
-                            if matches!(
-                                op,
-                                crate::nir::NirUnaryOp::Ref
-                                    | crate::nir::NirUnaryOp::MutRef
-                                    | crate::nir::NirUnaryOp::Deref
-                            ) {
-                                ref_unary += 1;
-                            }
-                        }
-                        ExprKind::FieldAccess { .. } => {
-                            pure += 1;
-                            if places.contains(&e) {
-                                place_field += 1;
-                            }
-                        }
-                        ExprKind::Binary { .. } | ExprKind::Cast { .. } => pure += 1,
-                        _ => {}
-                    }
-                }
-                b.for_each_child(node, |c| stack.push(c));
-            }
-        }
-        crate::compiler_trace!(
-            "skel_kinds",
-            "reachable={live}/{arena} ({:.1}% live) | pure={pure} ({:.1}%) Local={locals} | must stay: assign-place Local={place_local} field={place_field}, Ref/MutRef/Deref={ref_unary} | promotable={}",
-            100.0 * live as f64 / arena as f64,
-            100.0 * pure as f64 / live as f64,
-            pure - place_local - place_field - ref_unary
-        );
-    }
-
-    // TEMPORARY census — revert.
-    if crate::trace::filter().enabled("ref_arg_alias") {
-        use std::sync::atomic::Ordering::Relaxed;
-        let only = alias::REF_ARG_ONLY.load(Relaxed);
-        let total = alias::REF_ARG_TOTAL.load(Relaxed);
-        crate::compiler_trace!(
-            "ref_arg_alias",
-            "ref-arg alias marks={total}, of which the sole reason the local is aliased={only}"
-        );
-    }
-
     project
 }
 
@@ -819,12 +730,9 @@ fn run_optimization_passes(
         // Its result is deliberately dropped rather than folded into `changed`:
         // a freeze reports a change every time it promotes, which would keep the
         // fixed point alive forever.
-        // TEMPORARY toggle — lets one binary produce both sides for the A/B.
-        if std::env::var_os("WADO_NO_INLOOP_FREEZE").is_none() {
-            run_pass("nir/freeze_in_loop", project, profiler, |p| {
-                extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::InLoop)
-            });
-        }
+        run_pass("nir/freeze_in_loop", project, profiler, |p| {
+            extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::InLoop)
+        });
         gated!("nir/licm", apply_licm);
         gated!("nir/tmpl_hoist", hoist_template_buffers);
         profiler.span_end(&format!("nir/iteration {}", i + 1));

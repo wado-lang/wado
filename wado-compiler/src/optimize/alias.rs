@@ -937,21 +937,10 @@ fn escape_ref_arg(
         return;
     }
     if let Some(r) = storage_root(body, ae) {
-        // TEMPORARY census — revert. How many of these marks are the only
-        // reason the local is aliased, i.e. what narrowing this could win.
-        if !aliased.contains(r) {
-            REF_ARG_ONLY.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        }
-        REF_ARG_TOTAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         aliased.insert(r);
         syntactic_mut.insert(r);
     }
 }
-
-// TEMPORARY census — revert.
-pub(super) static REF_ARG_ONLY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-pub(super) static REF_ARG_TOTAL: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(0);
 
 fn collect_mut_escaped_node(
     body: &Body,
