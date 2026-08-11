@@ -756,6 +756,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         if let Some(trait_type) = &impl_block.trait_type {
             scope.check_impl_trait_resolves(impl_block, trait_type);
         }
+        scope.check_impl_params_constrained(impl_block);
 
         let mut associated_types = crate::hashmap::IndexMap::default();
         for binding in &impl_block.associated_types {
@@ -776,6 +777,61 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 associated_types,
             },
         );
+    }
+
+    /// Require that the impl's target and trait reference between them name
+    /// every type parameter it declares.
+    ///
+    /// A use site determines an impl's parameters from its receiver and its
+    /// trait arguments, and from nothing else. One the two do not mention has
+    /// no value to be given: substitution fills the impl's slots from what the
+    /// receiver said and leaves the rest, which then reach codegen as bare
+    /// parameters. Rust rejects the same shape (E0207).
+    ///
+    /// A *predicate* determines one too: `impl<S: ReflectStruct<FieldTypes =
+    /// [..F]>, ..F> Inspect for S` fixes `F` once `S` is known, so the
+    /// arguments a bound writes count as mentions. Its subject does not — `A`
+    /// in `A: Eq` is what the bound constrains, not what constrains `A`.
+    ///
+    /// A parameter whose name is really a concrete type (`impl<i32, T>`) is not
+    /// one, and an effect parameter is bound by the handler rather than the
+    /// target.
+    fn check_impl_params_constrained(&mut self, impl_block: &ast::ImplBlock) {
+        let mut named: Vec<String> = Vec::new();
+        impl_block.ty.mentioned_names(&mut named);
+        if let Some(trait_type) = &impl_block.trait_type {
+            trait_type.mentioned_names(&mut named);
+        }
+        for binding in &impl_block.associated_types {
+            binding.ty.mentioned_names(&mut named);
+        }
+        for param in &impl_block.type_params {
+            for bound in &param.bounds {
+                for assoc in &bound.assoc_types {
+                    assoc.ty.mentioned_names(&mut named);
+                }
+                if let Some(sig) = &bound.fn_signature {
+                    for p in &sig.params {
+                        p.mentioned_names(&mut named);
+                    }
+                    sig.return_type.mentioned_names(&mut named);
+                }
+            }
+        }
+        for param in &impl_block.type_params {
+            if param.is_effect
+                || named.iter().any(|n| n == &param.name)
+                || self
+                    .tysys
+                    .is_known_type_name_in(&self.current_module_source, &param.name)
+            {
+                continue;
+            }
+            let _ = self.emit(TypeError::UnconstrainedImplTypeParam {
+                param_name: param.name.clone(),
+                span: impl_block.span,
+            });
+        }
     }
 
     /// Require that the name an `impl` implements is declared.

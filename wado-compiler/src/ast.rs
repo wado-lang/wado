@@ -3020,6 +3020,43 @@ pub enum Type {
 }
 
 impl Type {
+    /// Every identifier this type mentions, at any depth. A caller matching
+    /// them against a declaration's parameter names learns which of those the
+    /// type determines — a name that is really a concrete type simply matches
+    /// no parameter.
+    pub fn mentioned_names(&self, out: &mut Vec<String>) {
+        match self {
+            Type::Named(n) => out.push(n.name.clone()),
+            Type::Generic(g) => {
+                out.push(g.name.clone());
+                for a in &g.args {
+                    a.mentioned_names(out);
+                }
+            }
+            Type::NamespacedGeneric(g) => {
+                out.push(g.namespace.clone());
+                out.push(g.name.clone());
+                for a in &g.args {
+                    a.mentioned_names(out);
+                }
+            }
+            Type::Function(f) => {
+                for p in &f.params {
+                    p.mentioned_names(out);
+                }
+                f.return_type.mentioned_names(out);
+            }
+            Type::Tuple(elems) => {
+                for e in elems {
+                    e.mentioned_names(out);
+                }
+            }
+            Type::Reference(inner) | Type::MutReference(inner) => inner.mentioned_names(out),
+            Type::TypePackSpread(name, _) => out.push(name.clone()),
+            Type::Infer(_) | Type::Error(_) => {}
+        }
+    }
+
     /// Whether this is the unit type, spelled `()`.
     #[must_use]
     pub fn is_unit(&self) -> bool {

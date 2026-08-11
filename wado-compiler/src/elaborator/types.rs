@@ -525,6 +525,15 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` type parameter that its target and trait reference do not
+    /// mention. Nothing at a use site says what such a parameter is: the
+    /// receiver determines the ones the target names and no more, so the rest
+    /// reach codegen unsubstituted. Rust rejects the same shape (E0207).
+    UnconstrainedImplTypeParam {
+        param_name: String,
+        span: Span,
+    },
+
     /// Coherence violation: an inherent `impl Type { ... }` on a foreign type
     /// (one defined outside this package — a primitive, `Array<T>`, `String`,
     /// or any other stdlib type). Inherent impls may only extend types owned by
@@ -1249,6 +1258,13 @@ impl TypeError {
             TypeError::UnsupportedVariadicImplTarget { span } => (
                 Code::OrphanRule,
                 "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) or under a reference (`&[..T]`) is not supported yet".to_string(),
+                *span,
+            ),
+            TypeError::UnconstrainedImplTypeParam { param_name, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "the type parameter `{param_name}` is not constrained by the impl target or the trait reference"
+                ),
                 *span,
             ),
             TypeError::InherentImplOnForeignType {
