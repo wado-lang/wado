@@ -917,6 +917,13 @@ impl LocalMethodName {
         }
     }
 
+    /// [`Self::struct_name`] in the mangled namespace, so a consumer that keys
+    /// on it cannot be handed a declaration name instead.
+    #[must_use]
+    pub fn mangled_struct_name(&self) -> MangledName {
+        MangledName::new(self.struct_name())
+    }
+
     /// The base receiver identity string: `Point`, `&`, `&mut`, `S::SeqSerializer`.
     #[must_use]
     pub fn base_struct_name(&self) -> String {

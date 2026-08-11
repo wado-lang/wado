@@ -568,7 +568,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .impl_module_for(
-                ImplReceiver::Declared(&builder_name_for_lookup),
+                ImplReceiver::Declared(&crate::name::DeclName::new(&builder_name_for_lookup)),
                 trait_name.base_name(),
                 builder_type_module.as_ref(),
             )

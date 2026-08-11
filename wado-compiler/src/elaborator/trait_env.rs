@@ -218,7 +218,7 @@ fn layers_in_query_order<'a>(
     syn: Option<&'a Vec<ModuleSource>>,
 ) -> (Option<&'a Vec<ModuleSource>>, Option<&'a Vec<ModuleSource>>) {
     match receiver {
-        ImplReceiver::Mangled(_) => (syn, ast),
+        ImplReceiver::Of(_) | ImplReceiver::Instantiated(_) => (syn, ast),
         ImplReceiver::Declared(_) => (ast, syn),
     }
 }
@@ -662,11 +662,19 @@ pub struct ImplModuleIndex {
 
 impl ImplModuleIndex {
     fn get(&self, receiver: ImplReceiver<'_>, trait_name: &str) -> Option<&Vec<ModuleSource>> {
-        let map = match receiver {
-            ImplReceiver::Mangled(_) => &self.by_mangled,
-            ImplReceiver::Declared(_) => &self.by_declared,
-        };
-        map.get(&(receiver.spelling().to_string(), trait_name.to_string()))
+        let key = |spelling: String| (spelling, trait_name.to_string());
+        match receiver {
+            // One identity, so both namespaces are this receiver's own — no
+            // choice to get wrong, and no reason to prefer either.
+            ImplReceiver::Of(r) => self
+                .by_mangled
+                .get(&key(r.head_key().into_string()))
+                .or_else(|| self.by_declared.get(&key(r.decl_key().into_string()))),
+            ImplReceiver::Instantiated(m) => {
+                self.by_mangled.get(&key(m.as_mangled_str().to_string()))
+            }
+            ImplReceiver::Declared(d) => self.by_declared.get(&key(d.as_decl_str().to_string())),
+        }
     }
 
     /// Record `module` under both spellings of one receiver identity, so the
@@ -1755,18 +1763,33 @@ impl TraitEnv {
 /// callers meant which.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ImplReceiver<'a> {
-    /// The form a mangled method name embeds, from `name::Receiver::head_key`
-    /// — what `LocalMethodName::struct_name` and `base_struct_name` produce.
-    Mangled(&'a str),
-    /// The name a declaration writes for itself. Carries no module, so it
-    /// cannot separate two modules' same-named types.
-    Declared(&'a str),
+    /// The receiver itself. Both spellings are derived from it here, so the
+    /// query names no namespace and cannot name the wrong one.
+    Of(&'a name::Receiver),
+    /// A receiver with its type arguments applied (`List<…/Token>`). Only the
+    /// mangled namespace can spell an instantiation.
+    Instantiated(&'a name::MangledName),
+    /// A declaration name and nothing more. Carries no module, so it cannot
+    /// separate two modules' same-named types — which is why it is a distinct
+    /// variant rather than a receiver a caller flattened.
+    Declared(&'a name::DeclName),
 }
 
-impl<'a> ImplReceiver<'a> {
-    fn spelling(self) -> &'a str {
+/// A receiver a lookup may try, kept in the form the thing that produced it
+/// had. A candidate list is assembled from several sources — a method info's
+/// receiver, a mangled struct key — and they are not one namespace. Carrying
+/// each in its own form is what keeps the query from having to guess.
+#[derive(Debug, Clone)]
+pub(crate) enum ReceiverCandidate {
+    Of(name::Receiver),
+    Instantiated(name::MangledName),
+}
+
+impl ReceiverCandidate {
+    pub(crate) fn as_receiver(&self) -> ImplReceiver<'_> {
         match self {
-            ImplReceiver::Mangled(s) | ImplReceiver::Declared(s) => s,
+            ReceiverCandidate::Of(r) => ImplReceiver::Of(r),
+            ReceiverCandidate::Instantiated(m) => ImplReceiver::Instantiated(m),
         }
     }
 }

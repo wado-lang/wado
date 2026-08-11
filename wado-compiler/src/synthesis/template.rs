@@ -1413,7 +1413,7 @@ fn trait_impl_module(
     // `core:prelude/format`, not the module that declares `String`).
     if let Some(trait_name) = local_name.base_trait_name()
         && let Some(loc) = ctx.trait_env.impl_module_for(
-            ImplReceiver::Mangled(&local_name.base_struct_name()),
+            ImplReceiver::Of(local_name.receiver()),
             trait_name,
             type_module.as_ref(),
         )

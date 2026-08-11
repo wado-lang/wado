@@ -3056,7 +3056,7 @@ impl SynthesisCtx<'_, '_, '_> {
         // the AST layer.
         if self
             .trait_env
-            .impl_module_for(ImplReceiver::Declared(type_name), &trait_key.1, None)
+            .impl_module_for(ImplReceiver::Declared(&crate::name::DeclName::new(type_name)), &trait_key.1, None)
             .is_some()
         {
             return true;
@@ -5717,7 +5717,7 @@ fn resolve_impl_module_via_env(
     if let Some(name) = candidate_name.as_deref()
         && let Some(m) =
             trait_env.impl_module_for(
-                ImplReceiver::Declared(name),
+                ImplReceiver::Declared(&crate::name::DeclName::new(name)),
                 trait_name.base_name(),
                 type_module.as_ref(),
             )

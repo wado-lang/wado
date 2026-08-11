@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
+use crate::elaborator::trait_env::{ImplReceiver, ReceiverCandidate, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
@@ -87,7 +87,7 @@ impl FuncInstState {
         if let Some(m) =
             self.trait_env
                 .concrete_impl_module_for(
-                    ImplReceiver::Mangled(&info.struct_name()),
+                    ImplReceiver::Instantiated(&info.mangled_struct_name()),
                     trait_name,
                     type_module,
                 )
@@ -98,7 +98,7 @@ impl FuncInstState {
         // instantiated index above cannot spell (tuples, function types).
         if info.base_struct_name() != info.struct_name()
             && let Some(m) = self.trait_env.concrete_impl_module_for(
-                ImplReceiver::Mangled(&info.base_struct_name()),
+                ImplReceiver::Of(info.receiver()),
                 trait_name,
                 type_module,
             )
@@ -135,7 +135,7 @@ impl FuncInstState {
         if let Some(m) =
             self.trait_env
                 .impl_module_for(
-                    ImplReceiver::Mangled(&info.struct_name()),
+                    ImplReceiver::Instantiated(&info.mangled_struct_name()),
                     trait_name,
                     type_module,
                 )
@@ -146,7 +146,7 @@ impl FuncInstState {
             && let Some(m) =
                 self.trait_env
                     .impl_module_for(
-                        ImplReceiver::Mangled(&info.base_struct_name()),
+                        ImplReceiver::Of(info.receiver()),
                         trait_name,
                         type_module,
                     )
@@ -707,17 +707,17 @@ impl Monomorphizer {
         own_name: Option<&'a str>,
         info: Option<&'a LocalMethodName>,
         struct_name: &'a str,
-    ) -> Vec<std::borrow::Cow<'a, str>> {
-        use std::borrow::Cow;
-        let mut c: Vec<Cow<'a, str>> = Vec::new();
+    ) -> Vec<ReceiverCandidate> {
+        let mangled = |s: &str| ReceiverCandidate::Instantiated(crate::name::MangledName::new(s));
+        let mut c: Vec<ReceiverCandidate> = Vec::new();
         if let Some(own) = own_name {
-            c.push(Cow::Borrowed(own));
+            c.push(mangled(own));
         }
         if let Some(info) = info {
-            c.push(Cow::Owned(info.receiver.head_key().into_string()));
-            c.push(Cow::Owned(info.struct_name()));
+            c.push(ReceiverCandidate::Of(info.receiver.clone()));
+            c.push(mangled(&info.struct_name()));
         }
-        c.push(Cow::Borrowed(struct_name));
+        c.push(mangled(struct_name));
         c
     }
 
