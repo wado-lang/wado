@@ -472,9 +472,7 @@ impl CmFunctionInfo {
     /// populated), otherwise falls back to the unique `wasi:*` source.
     fn named_type_payload_requires_memory(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
         if let Type::Named(named) = ty {
-            let source = named
-                .source_interface
-                .as_deref()
+            let source = self.source_interface(named)
                 .map(str::to_string)
                 .or_else(|| {
                     registry
@@ -602,6 +600,16 @@ impl CmInterfaceInfo {
 /// - Iteration over interfaces for Component Model import generation
 #[derive(Debug, Clone, Default)]
 pub struct CmInterfaceRegistry {
+    /// The CM interface each type reference resolves to, keyed by the
+    /// reference site.
+    ///
+    /// This was a `String` field on `NamedType`. A resolved fact does not
+    /// belong on the syntax node: stored there it was a second answer beside
+    /// `crate::resolve::Resolutions`, which keys the same `AstId`, and the two
+    /// could disagree. Keyed here, one pass writes it and every consumer reads
+    /// the same entry (WEP 2026-08-10).
+    source_interfaces: IndexMap<crate::ast::AstId, String>,
+
     /// `Effect::method` -> function info
     effect_to_func: IndexMap<String, CmFunctionInfo>,
 
@@ -835,9 +843,7 @@ fn lookup_by_module<'a>(
 /// naming no newtype, is returned unchanged, as are other type shapes.
 fn resolve_type(ty: &Type, aliases: &IndexMap<(String, String), Type>) -> Type {
     match ty {
-        Type::Named(named) => named
-            .source_interface
-            .as_deref()
+        Type::Named(named) => self.source_interface(named)
             .and_then(|source| aliases.get(&(source.to_string(), named.name.clone())))
             .cloned()
             .unwrap_or_else(|| ty.clone()),
@@ -1101,7 +1107,7 @@ fn resolve_use_source<'a>(
 }
 
 /// Walk every `Type` node reachable from `module` and set
-/// `NamedType.source_interface` from `local_names` whenever the name is known.
+/// `self.source_interface(NamedType)` from `local_names` whenever the name is known.
 ///
 /// References whose name is not in `local_names` are intentionally left as
 /// `None` — those are primitives (`String`, `bool`, `i32`, ...), generic type
@@ -1160,16 +1166,16 @@ fn populate_named_type_sources(
 }
 
 /// Recursively descend into a Wado `Type` and populate
-/// `NamedType.source_interface` on every named leaf whose identifier appears
+/// `self.source_interface(NamedType)` on every named leaf whose identifier appears
 /// in `local_names`.
 fn walk_type(ty: &mut crate::ast::Type, local_names: &IndexMap<String, String>) {
     use crate::ast::Type;
     match ty {
         Type::Named(n) => {
-            if n.source_interface.is_none()
+            if self.source_interface(n).is_none()
                 && let Some(source) = local_names.get(&n.name)
             {
-                n.source_interface = Some(source.clone());
+                self.set_source_interface(n.id, source.clone());
             }
         }
         Type::Generic(g) => {
@@ -1223,6 +1229,20 @@ impl CmInterfaceRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The CM interface the reference at `named` resolves to, or `None` when
+    /// no pass has answered for that site.
+    #[must_use]
+    pub fn source_interface(&self, named: &crate::ast::NamedType) -> Option<&str> {
+        self.source_interfaces.get(&named.id).map(String::as_str)
+    }
+
+    /// Record the interface a reference site resolves to. First writer wins:
+    /// an already-resolved reference — a shared `core:kiln/types` record —
+    /// keeps its own interface, which CM lift/lower needs to find its fields.
+    pub fn set_source_interface(&mut self, site: crate::ast::AstId, interface: String) {
+        self.source_interfaces.entry(site).or_insert(interface);
     }
 
     /// Return the canonical source interface that owns `(kind, name)` — i.e.
@@ -1340,7 +1360,7 @@ impl CmInterfaceRegistry {
         //
         // Pass 2: for each module, build a local name -> source_interface map
         // (local definitions + resolved `use` imports) and walk every `Type`
-        // node to populate `NamedType.source_interface`. Register the
+        // node to populate `self.source_interface(NamedType)`. Register the
         // walked module afterwards.
         let mut modules: Vec<(&'static str, crate::ast::Module)> = Vec::new();
         let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
@@ -2166,7 +2186,7 @@ impl CmInterfaceRegistry {
     //
     // A handful of synthesis paths operate on a Wado-side type *name* that
     // arrived via resolved symbol info (not an AST `Type::Named` node), so
-    // they cannot consult `NamedType.source_interface`. These helpers walk
+    // they cannot consult `self.source_interface(NamedType)`. These helpers walk
     // every `wasi:*` interface and return the unique match; an ambiguous
     // name (the same type declared by two different wasi packages) returns
     // `None`, which the caller must propagate. Kiln and other non-wasi
@@ -2291,7 +2311,7 @@ impl CmInterfaceRegistry {
         named: &'a crate::ast::NamedType,
         wasi_package_hint: Option<&str>,
     ) -> Option<&'a str> {
-        if let Some(s) = named.source_interface.as_deref() {
+        if let Some(s) = self.source_interface(named) {
             return if s.starts_with("wasi:") {
                 Some(s)
             } else {
@@ -2346,7 +2366,7 @@ impl CmInterfaceRegistry {
         named: &'a crate::ast::NamedType,
         wasi_package_hint: Option<&str>,
     ) -> Option<&'a str> {
-        if let Some(s) = named.source_interface.as_deref() {
+        if let Some(s) = self.source_interface(named) {
             return Some(s);
         }
         if let Some(s) = self.resolve_wasi_source_for(named, wasi_package_hint) {
@@ -2397,7 +2417,7 @@ impl CmInterfaceRegistry {
     /// same-named newtype resolve to their own base — never a bare-name guess.
     /// A source-less reference is not a known newtype here.
     fn resolve_newtype_ref(&self, named: &crate::ast::NamedType) -> Option<&Type> {
-        let source = named.source_interface.as_deref()?;
+        let source = self.source_interface(named)?;
         self.get_newtype_by_source(source, &crate::name::DeclName::new(&named.name))
     }
 
@@ -2654,7 +2674,7 @@ impl CmInterfaceRegistry {
             && g.name == "Option"
             && g.args.len() == 1
             && let Type::Named(inner) = &g.args[0]
-            && let Some(source) = inner.source_interface.as_deref()
+            && let Some(source) = self.source_interface(inner)
             && let Some(cm_name) = self.get_resource_cm_name_by_source(source, &inner.name)
         {
             return Some((inner.name.clone(), cm_name.to_string()));
@@ -3089,7 +3109,7 @@ impl CmInterfaceRegistry {
             Type::Named(named) => {
                 if preserve_local
                     && self
-                        .local_newtype_base(named.source_interface.as_deref(), &named.name)
+                        .local_newtype_base(self.source_interface(named), &named.name)
                         .is_some()
                 {
                     ty.clone()
@@ -3603,7 +3623,7 @@ impl CmTypeGen {
                     // Preserve a local newtype as a named CM alias
                     // (`type meters = f64`) so the structural type matches
                     // `wado wit` instead of erasing to its base (issue #1456).
-                    let source = named.source_interface.as_deref();
+                    let source = self.source_interface(named);
                     if let Some((canonical_source, base)) = cm_interface_registry
                         .local_newtype_base(source, name)
                         .map(|(s, ty)| (s.to_string(), ty.clone()))
@@ -3662,9 +3682,7 @@ impl CmTypeGen {
                                     .is_some();
                             hit.then(|| h.to_string())
                         });
-                    let source_owned: String = named
-                        .source_interface
-                        .as_deref()
+                    let source_owned: String = self.source_interface(named)
                         .filter(|s| cm_interface_registry.is_cm_source(s))
                         .map(str::to_string)
                         .or(interface_hint_match)
@@ -3806,9 +3824,7 @@ impl CmTypeGen {
             },
             Type::Reference(inner) | Type::MutReference(inner) => {
                 if let Type::Named(n) = inner.as_ref()
-                    && let Some(source) = n
-                        .source_interface
-                        .as_deref()
+                    && let Some(source) = self.source_interface(n)
                         .filter(|s| s.starts_with("wasi:"))
                         .or_else(|| cm_interface_registry.find_wasi_resource_source(&n.name))
                     && let Some(cm_name) =
@@ -4459,7 +4475,6 @@ mod tests {
                 id: crate::ast::AstId::fresh(),
                 name: "u8".to_string(),
                 span: make_span(),
-                source_interface: None,
             })],
             span: make_span(),
         })
@@ -4475,7 +4490,6 @@ mod tests {
                     id: crate::ast::AstId::fresh(),
                     name: "ErrorCode".to_string(),
                     span: make_span(),
-                    source_interface: None,
                 }),
             ],
             span: make_span(),
@@ -4633,7 +4647,6 @@ mod tests {
                 id: crate::ast::AstId::fresh(),
                 name: "String".to_string(),
                 span: make_span(),
-                source_interface: None,
             })],
             span: make_span(),
         });
@@ -4648,13 +4661,11 @@ mod tests {
                 id: crate::ast::AstId::fresh(),
                 name: "String".to_string(),
                 span: make_span(),
-                source_interface: None,
             }),
             Type::Named(NamedType {
                 id: crate::ast::AstId::fresh(),
                 name: "String".to_string(),
                 span: make_span(),
-                source_interface: None,
             }),
         ]);
         let array_tuple = Type::Generic(GenericType {
@@ -4676,7 +4687,6 @@ mod tests {
                 id: crate::ast::AstId::fresh(),
                 name: "String".to_string(),
                 span: make_span(),
-                source_interface: None,
             })],
             span: make_span(),
         });

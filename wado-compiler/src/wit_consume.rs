@@ -698,7 +698,7 @@ mod tests {
             Type::Named(n) => {
                 assert_eq!(n.name, "Point");
                 assert_eq!(
-                    n.source_interface.as_deref(),
+                    registry.source_interface(n),
                     Some("wado-lang:cm-catalog/cm-catalog@0.0.16")
                 );
             }
@@ -720,7 +720,7 @@ mod tests {
             Type::Named(n) => {
                 assert_eq!(n.name, "Meters");
                 assert_eq!(
-                    n.source_interface.as_deref(),
+                    registry.source_interface(n),
                     Some("wado-lang:cm-catalog/cm-catalog@0.0.16")
                 );
             }

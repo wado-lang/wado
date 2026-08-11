@@ -6350,7 +6350,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             id: seg.id,
             name: seg.name.clone(),
             span: seg.span,
-            source_interface: None,
         };
         // `resolve_type` yields a `TypeParam` (pack-ness is erased), but its
         // index is the pack's positional slot — the value monomorphization keys

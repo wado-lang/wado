@@ -2495,7 +2495,6 @@ mod tests {
             id: crate::ast::AstId::fresh(),
             name: name.to_string(),
             span: dummy_span(),
-            source_interface: None,
         })
     }
 

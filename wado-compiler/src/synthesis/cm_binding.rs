@@ -1155,7 +1155,6 @@ mod tests {
             id: crate::ast::AstId::fresh(),
             name: name.to_string(),
             span: synth_span(),
-            source_interface: None,
         })
     }
 
@@ -1346,7 +1345,6 @@ mod tests {
                 id: crate::ast::AstId::fresh(),
                 name: name.to_string(),
                 span: synth_span(),
-                source_interface: Some(source.to_string()),
             })
         };
         assert_eq!(

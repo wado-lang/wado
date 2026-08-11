@@ -613,8 +613,8 @@ fn annotate_lib_local_sources(
             // Only untagged, package-local names: an already-resolved type (a
             // shared `core:kiln/types` record) keeps its own interface, which
             // the CM lift/lower needs to find its fields.
-            if named.source_interface.is_none() && local_type_names.contains(&named.name) {
-                named.source_interface = Some(fq.to_string());
+            if registry.source_interface(named).is_none() && local_type_names.contains(&named.name) {
+                registry.set_source_interface(named.id, fq.to_string());
             }
         }
         Type::Generic(g) => {

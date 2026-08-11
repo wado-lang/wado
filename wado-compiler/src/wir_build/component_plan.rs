@@ -389,9 +389,7 @@ fn resolve_cm_export_type(
         // leaves `source_interface = None`. `CmInterfaceRegistry::resolve_cm_source_for`
         // already chains the `wasi:*` and `core:kiln/*` by-name lookups for
         // exactly this case — re-use it instead of duplicating the chain.
-        let interface_fq = named
-            .source_interface
-            .as_deref()
+        let interface_fq = registry.source_interface(named)
             .or_else(|| {
                 world_namespace_prefix.and_then(|prefix| {
                     cm_interface_registry.resolve_cm_source_with_prefix(named, prefix)

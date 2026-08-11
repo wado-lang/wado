@@ -740,7 +740,7 @@ fn collect_resources_in_type(
 ) {
     match ty {
         Type::Named(named)
-            if named.source_interface.as_deref().is_some_and(|s| {
+            if registry.source_interface(named).is_some_and(|s| {
                 s.starts_with("wasi:")
                     && cm_interface_registry
                         .get_resource_cm_name_by_source(s, &named.name)
@@ -2586,7 +2586,7 @@ fn generate_cm_imports(
                             .cm_interface_registry
                             .resolve_type_preserving_local_newtypes(ty);
                         let is_struct = matches!(&resolved_ty, Type::Named(named)
-                        if named.source_interface.as_deref().is_some_and(|s| {
+                        if registry.source_interface(named).is_some_and(|s| {
                             project
                                 .cm_interface_registry
                                 .get_struct_fields_by_source(s, &named.name)
@@ -2597,7 +2597,7 @@ fn generate_cm_imports(
                         let is_local_newtype = matches!(&resolved_ty, Type::Named(named)
                         if project
                             .cm_interface_registry
-                            .local_newtype_base(named.source_interface.as_deref(), &named.name)
+                            .local_newtype_base(registry.source_interface(named), &named.name)
                             .is_some());
                         let val_type = if is_component_import || is_struct || is_local_newtype {
                             let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
@@ -2641,7 +2641,7 @@ fn generate_cm_imports(
                         .cm_interface_registry
                         .resolve_type_preserving_local_newtypes(ty);
                     let is_struct = matches!(&resolved_ty, Type::Named(named)
-                    if named.source_interface.as_deref().is_some_and(|s| {
+                    if registry.source_interface(named).is_some_and(|s| {
                         project
                             .cm_interface_registry
                             .get_struct_fields_by_source(s, &named.name)
@@ -2650,7 +2650,7 @@ fn generate_cm_imports(
                     let is_local_newtype = matches!(&resolved_ty, Type::Named(named)
                     if project
                         .cm_interface_registry
-                        .local_newtype_base(named.source_interface.as_deref(), &named.name)
+                        .local_newtype_base(registry.source_interface(named), &named.name)
                         .is_some());
                     if is_component_import || is_struct || is_local_newtype {
                         let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
@@ -3151,7 +3151,7 @@ fn component_type_idx_for_signature_type(
             // variant) resolves to the `{pkg}-{cm}` component type the
             // resource-defining pass aliased to the outer scope. `type_idx`
             // fails loudly if the type was not exposed there.
-            let source = named.source_interface.as_deref().unwrap_or_else(|| {
+            let source = registry.source_interface(named).unwrap_or_else(|| {
                 panic!(
                     "composite signature type `{}` has no source interface",
                     named.name

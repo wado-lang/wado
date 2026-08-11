@@ -134,7 +134,7 @@ pub fn inject_kiln_request_adapter(
     // to an i32 handle when lifted as a `List<InputFile>` element.
     let input_file_ty = |module: &mut Module| {
         let mut named = NamedType::new(module.alloc_ast_id(), "InputFile".to_string(), span);
-        named.source_interface = Some(KILN_TYPES_INTERFACE.to_string());
+        registry.set_source_interface(named.id, KILN_TYPES_INTERFACE.to_string());
         Type::Named(named)
     };
     let param = |module: &mut Module, name: &str, ty: Type| Param {

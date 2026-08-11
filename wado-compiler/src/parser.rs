@@ -916,7 +916,6 @@ impl Parser {
                 id: self.alloc_ast_id(),
                 name: first_name,
                 span: start_span,
-                source_interface: None,
             })
         };
 
@@ -1830,7 +1829,6 @@ impl Parser {
                     id: self.alloc_ast_id(),
                     name: "Self".to_string(),
                     span: start_span,
-                    source_interface: None,
                 });
                 let ty = if is_mut {
                     Type::MutReference(Box::new(self_type))
@@ -1881,7 +1879,6 @@ impl Parser {
                 id: self.alloc_ast_id(),
                 name: "Self".to_string(),
                 span: start_span,
-                source_interface: None,
             });
             return Ok(Param {
                 id,
@@ -4697,7 +4694,6 @@ impl Parser {
                 id,
                 name: "!".to_string(),
                 span: start_span,
-                source_interface: None,
             }));
         }
 
@@ -4729,7 +4725,6 @@ impl Parser {
                     id: self.alloc_ast_id(),
                     name: "()".to_string(),
                     span: start_span,
-                    source_interface: None,
                 })
             };
 
@@ -4775,7 +4770,6 @@ impl Parser {
                     id,
                     name: "()".to_string(),
                     span: start_span,
-                    source_interface: None,
                 }));
             }
             // Parenthesized type for grouping (not tuple in this case)
@@ -4858,7 +4852,6 @@ impl Parser {
                 id: self.alloc_ast_id(),
                 name,
                 span: start_span,
-                source_interface: None,
             }))
         }
     }
@@ -5118,7 +5111,6 @@ impl Parser {
                 id: self.alloc_ast_id(),
                 name: "()".to_string(),
                 span: start_span,
-                source_interface: None,
             })
         };
 
@@ -5753,7 +5745,6 @@ impl Parser {
                     id: self.alloc_ast_id(),
                     name: param_name,
                     span: param_span,
-                    source_interface: None,
                 }));
             } else {
                 // Full type: bare ident, generic type like List<String>, reference, etc.

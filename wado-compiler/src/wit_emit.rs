@@ -725,7 +725,7 @@ impl<'a> Emitter<'a> {
     ) -> String {
         let cm_name = self
             .cm_interface_registry
-            .zip(named.source_interface.as_deref())
+            .zip(registry.source_interface(named))
             .and_then(|(reg, src)| {
                 reg.get_struct_cm_name_by_source(src, &named.name)
                     .or_else(|| reg.get_variant_cm_name_by_source(src, &named.name))
@@ -735,7 +735,7 @@ impl<'a> Emitter<'a> {
             })
             .map(str::to_string)
             .unwrap_or_else(|| to_kebab(&named.name));
-        if let Some(src) = &named.source_interface
+        if let Some(src) = registry.source_interface(named)
             && src != current_fq
         {
             uses.push((src.clone(), cm_name.clone()));
@@ -1198,7 +1198,7 @@ fn collect_named_type_sources(ty: &crate::ast::Type, out: &mut Vec<String>) {
     use crate::ast::Type;
     match ty {
         Type::Named(named) => {
-            if let Some(src) = &named.source_interface
+            if let Some(src) = registry.source_interface(named)
                 && (src.starts_with("wasi:") || src.starts_with("core:"))
             {
                 out.push(src.clone());

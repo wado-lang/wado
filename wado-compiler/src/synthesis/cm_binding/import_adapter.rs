@@ -143,7 +143,7 @@ fn synthesize_lift_flat_result(
             // `try_lift_wasi_variant_or_enum` returns None for non-CM types, so
             // we fall back to a bare Err.
             let lifted_variant = if let Type::Named(n) = err_ty
-                && let Some(source) = n.source_interface.as_deref()
+                && let Some(source) = registry.source_interface(n)
             {
                 try_lift_wasi_variant_or_enum(
                     n,
@@ -715,14 +715,14 @@ fn classify_param<'t>(
             ParamLowering::ListBuffer { elem: &g.args[0] }
         }
         Type::Named(n)
-            if n.source_interface
+            if registry.source_interface(n)
                 .as_deref()
                 .is_some_and(|s| registry.get_struct_fields_by_source(s, &n.name).is_some()) =>
         {
             ParamLowering::RecordFlatten { named: n }
         }
         Type::Named(n)
-            if n.source_interface
+            if registry.source_interface(n)
                 .as_deref()
                 .is_some_and(|s| registry.get_variant_cases_by_source(s, &n.name).is_some()) =>
         {
@@ -921,9 +921,7 @@ impl<'a> AdapterBuilder<'a> {
                     self.emit_list_buffer(plan.name, param_local, elem);
                 }
                 ParamLowering::RecordFlatten { named } => {
-                    let source = named
-                        .source_interface
-                        .as_deref()
+                    let source = registry.source_interface(named)
                         .expect("wasi struct source_interface present");
                     let wado_fields = self
                         .lower_ctx
@@ -1339,9 +1337,7 @@ impl<'a> AdapterBuilder<'a> {
                 // WASI variants: lower directly to the buffer using
                 // registry-aware layout. flat_args has one entry (the GC ref).
                 ParamLowering::Variant { named } => {
-                    let source = named
-                        .source_interface
-                        .as_deref()
+                    let source = registry.source_interface(named)
                         .expect("classified WASI variant has a source interface");
                     let variant_value = self.flat_args[flat_idx].clone();
                     flat_idx += 1;

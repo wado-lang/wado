@@ -317,9 +317,7 @@ fn references_cli_error_code(ty: &Type) -> bool {
     match ty {
         Type::Named(named) => {
             named.name == "ErrorCode"
-                && named
-                    .source_interface
-                    .as_deref()
+                && registry.source_interface(named)
                     .is_some_and(|s| s.starts_with("wasi:cli/types"))
         }
         Type::Generic(generic) => generic.args.iter().any(references_cli_error_code),
