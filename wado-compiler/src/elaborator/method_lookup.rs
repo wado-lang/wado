@@ -1199,11 +1199,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for header in self.tysys.trait_env.trait_decl_headers.values() {
             if trait_names.iter().any(|n| n == &header.name) {
                 for trait_method in &header.methods {
-                    if trait_method.name == method_name
-                        && let Some(params) =
-                            Self::non_effect_generic_params(&trait_method.type_params)
-                    {
-                        return Some(params);
+                    if trait_method.name == method_name {
+                        return Some(Self::non_effect_generic_params(&trait_method.type_params));
                     }
                 }
             }
@@ -1212,22 +1209,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The non-effect subset of a type-parameter list (cloned, in declaration
-    /// order), or `None` when empty. Operates on the bare parameter slice so
-    /// digested headers ([`super::trait_env::ImplMethodHeader`]) can reuse it
-    /// without the method AST.
-    fn non_effect_generic_params(
-        type_params: &[ast::GenericParam],
-    ) -> Option<Vec<ast::GenericParam>> {
-        let params: Vec<ast::GenericParam> = type_params
+    /// order). Empty means the method declares none — which is an answer, not
+    /// an absence: the name match is what decides whether a method was found,
+    /// and folding "no parameters" into `None` sent every parameterless method
+    /// on to a by-name scan that adopts an unrelated one's parameters.
+    /// Operates on the bare parameter slice so digested headers
+    /// ([`super::trait_env::ImplMethodHeader`]) can reuse it without the
+    /// method AST.
+    fn non_effect_generic_params(type_params: &[ast::GenericParam]) -> Vec<ast::GenericParam> {
+        type_params
             .iter()
             .filter(|p| !p.is_effect)
             .cloned()
-            .collect();
-        if params.is_empty() {
-            None
-        } else {
-            Some(params)
-        }
+            .collect()
     }
 
     /// Enforce an instance method's type-parameter trait bounds, looking up
@@ -1306,10 +1300,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(header) = self.resolve_trait_decl_header(tn)
         {
             for m in &header.methods {
-                if m.name == method_name
-                    && let Some(names) = Self::non_effect_generic_params(&m.type_params)
-                {
-                    return Some(names);
+                if m.name == method_name {
+                    return Some(Self::non_effect_generic_params(&m.type_params));
                 }
             }
         }
@@ -1333,23 +1325,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(names);
         }
 
-        // An inherent method is authoritative: if the receiver's type declares
-        // one by this name, its type parameters (empty when the search above
-        // returned `None`) are the answer. Stop before the by-name trait scans,
-        // which would otherwise adopt an unrelated trait method's type
-        // parameters (e.g. `List::get` wrongly taking `Producer::get<T>`'s `T`).
-        if self.has_inherent_method(struct_name, method_name, struct_module_source) {
-            return Some(vec![]);
-        }
-
         // Fallback: trait default methods (those with a body).
         for header in self.tysys.trait_env.trait_decl_headers.values() {
             for m in &header.methods {
-                if m.name == method_name
-                    && m.has_body
-                    && let Some(names) = Self::non_effect_generic_params(&m.type_params)
-                {
-                    return Some(names);
+                if m.name == method_name && m.has_body {
+                    return Some(Self::non_effect_generic_params(&m.type_params));
                 }
             }
         }
@@ -1378,10 +1358,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // through a trait impl that reuses the declared type params.
         for header in self.tysys.trait_env.trait_decl_headers.values() {
             for m in &header.methods {
-                if m.name == method_name
-                    && let Some(names) = Self::non_effect_generic_params(&m.type_params)
-                {
-                    return Some(names);
+                if m.name == method_name {
+                    return Some(Self::non_effect_generic_params(&m.type_params));
                 }
             }
         }
@@ -1421,54 +1399,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             for method in &header.methods {
-                if method.name == method_name
-                    && let Some(names) = Self::non_effect_generic_params(&method.type_params)
-                {
-                    return Some(names);
+                if method.name == method_name {
+                    return Some(Self::non_effect_generic_params(&method.type_params));
                 }
             }
         }
         None
-    }
-
-    /// Whether the receiver's own inherent impls declare a method named
-    /// `method_name`, regardless of its type parameters. Distinguishes "the
-    /// inherent method exists but has no method-level type parameters" from
-    /// "no such inherent method" — a distinction
-    /// [`Self::search_impl_headers_method_tps`] erases by returning `None` in
-    /// both cases.
-    fn has_inherent_method(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-        only_module: Option<&ModuleSource>,
-    ) -> bool {
-        let Some(candidates) = self
-            .tysys
-            .trait_env
-            .all_impl_index
-            .get(&self.impl_target(struct_name))
-        else {
-            return false;
-        };
-        candidates.iter().any(|key| {
-            if let Some(m) = only_module
-                && &key.0 != m
-            {
-                return false;
-            }
-            self.tysys
-                .trait_env
-                .impl_headers
-                .get(key)
-                .is_some_and(|header| {
-                    header.trait_name.is_none()
-                        && header
-                            .methods
-                            .iter()
-                            .any(|method| method.name == method_name)
-                })
-        })
     }
 
     /// Reject a `&mut self` method call whose receiver place is rooted at an
