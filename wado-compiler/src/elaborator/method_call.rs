@@ -480,6 +480,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             cm_name,
             is_ref_impl,
             method_type_param_ids,
+            method_own_params,
             impl_module: inherent_impl_module,
             from_concrete_impl,
             param_defaults,
@@ -506,6 +507,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 cm_name: None,
                 is_ref_impl: false,
                 method_type_param_ids: vec![],
+                method_own_params: vec![],
                 impl_module: None,
                 from_concrete_impl: false,
                 param_defaults: vec![],
@@ -735,11 +737,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // explicit `_` placeholder; in the latter case the inferred holes are
         // merged into the explicit args, which always win.
         let has_hole = type_arg_holes.iter().any(|&h| h);
-        let (method_type_args, reuse_params) = if type_args.is_empty() || has_hole {
+        let method_type_args = if type_args.is_empty() || has_hole {
             let inferred = self.infer_method_type_args(MethodInferenceInput {
                 receiver_type: receiver.type_id,
                 method_name,
                 slots: &method_type_param_ids,
+                own_params: &method_own_params,
                 param_types: &expected_param_types,
                 args: &args,
                 raw_args: args_ast,
@@ -749,18 +752,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
             if type_args.is_empty() {
-                (inferred.type_args, inferred.bound_check_params)
+                inferred
             } else {
                 let mut merged = type_args;
-                super::call::merge_turbofish_type_args(
-                    &mut merged,
-                    &type_arg_holes,
-                    &inferred.type_args,
-                );
-                (merged, inferred.bound_check_params)
+                super::call::merge_turbofish_type_args(&mut merged, &type_arg_holes, &inferred);
+                merged
             }
         } else {
-            (type_args, None)
+            type_args
         };
 
         if !method_type_args.is_empty() {
@@ -768,21 +767,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // method's own parameters remain — and it reports them.
             subst_ctx = subst_ctx.bind(&method_type_param_ids, &method_type_args);
             // Enforce the method's type-arg bounds (shared rule); a violating
-            // concrete arg would otherwise trap WIR build. Hole args are skipped
-            // and re-checked in `finalize_infer_holes`. Reuse the params
-            // `infer_method_type_args` already looked up; the explicit-turbofish
-            // path (no inference) falls back to a fresh lookup.
-            match reuse_params {
-                Some(params) => self.enforce_type_arg_bounds(&params, &method_type_args, span),
-                None => self.check_method_type_arg_bounds(
-                    &struct_name,
-                    &struct_module,
-                    method_name,
-                    trait_name.as_deref(),
-                    &method_type_args,
-                    span,
-                ),
-            }
+            // concrete arg would otherwise trap WIR build. Hole args are
+            // skipped and re-checked in `finalize_infer_holes`. The parameters
+            // come from the signature dispatch chose, so the explicit-turbofish
+            // path checks against the same declaration inference would have.
+            self.enforce_type_arg_bounds(&method_own_params, &method_type_args, span);
         }
 
         // Apply unified substitution

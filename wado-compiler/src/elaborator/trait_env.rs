@@ -321,10 +321,6 @@ pub(super) struct ImplMethodHeader {
     /// digest, so a header lookup reaches the signature without the AST.
     pub(super) ast_id: AstId,
     pub(super) type_params: Vec<ast::GenericParam>,
-    /// Whether the method has a body. Always true for impl methods; for trait
-    /// declarations it distinguishes default methods from bare signatures,
-    /// which method-lookup's fallback ordering depends on.
-    pub(super) has_body: bool,
 }
 
 /// The receiver shape of a blanket impl.
@@ -920,7 +916,6 @@ impl TraitEnv {
                                     name: m.name.clone(),
                                     ast_id: m.id,
                                     type_params: m.type_params.clone(),
-                                    has_body: m.body.is_some(),
                                 })
                                 .collect(),
                             assoc_types: trait_decl.associated_types.clone(),
@@ -953,7 +948,6 @@ impl TraitEnv {
                                 name: m.name.clone(),
                                 ast_id: m.id,
                                 type_params: m.type_params.clone(),
-                                has_body: m.body.is_some(),
                             })
                             .collect(),
                         associated_types: impl_block.associated_types.clone(),

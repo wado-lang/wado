@@ -73,6 +73,9 @@ pub(super) struct MethodInferenceInput<'a> {
     /// reported them ([`MethodInfo::method_type_param_ids`]). The answers
     /// come back in this order, which is the order the caller binds them in.
     pub slots: &'a [TypeId],
+    /// The same slots as the declaration wrote them
+    /// ([`MethodInfo::method_own_params`]), parallel to `slots`.
+    pub own_params: &'a [ast::GenericParam],
     /// Method parameter types in their `TypeParam`-based (uninstantiated)
     /// form; parallel to `args` / `raw_args`.
     pub param_types: &'a [TypeId],
@@ -94,15 +97,6 @@ pub(super) struct MethodInferenceInput<'a> {
     /// Call-site span, used to anchor a "cannot infer type parameter"
     /// diagnostic when inference leaves a method type parameter dangling.
     pub span: Span,
-}
-
-/// Result of [`Elaborator::infer_method_type_args`]: the inferred method
-/// type-argument `TypeId`s, plus the method's generic params when they were
-/// looked up via the struct/generic-instance path — so the caller's bound
-/// check can reuse them instead of repeating the lookup.
-pub(super) struct InferredMethodTypeArgs {
-    pub type_args: Vec<TypeId>,
-    pub bound_check_params: Option<Vec<ast::GenericParam>>,
 }
 
 impl TypeSystem {
@@ -609,6 +603,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             cm_name: None,
                             is_ref_impl: false,
                             method_type_param_ids: vec![],
+                            method_own_params: vec![],
                             impl_module: None,
                             from_concrete_impl: false,
                             param_defaults: vec![],
@@ -650,6 +645,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             cm_name: None,
                             is_ref_impl: false,
                             method_type_param_ids: vec![],
+                            method_own_params: vec![],
                             impl_module: None,
                             from_concrete_impl: false,
                             param_defaults: vec![],
@@ -902,6 +898,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             cm_name: None,
             is_ref_impl: false,
             method_type_param_ids: sig.own_type_param_ids(),
+            method_own_params: sig.own_params.clone(),
             impl_module: Some(impl_ref.0.clone()),
             from_concrete_impl: self.impl_is_concrete_instantiation(
                 &header.ty,
@@ -954,6 +951,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             cm_name: sig.cm_name,
             is_ref_impl: false,
             method_type_param_ids,
+            method_own_params: sig.own_params.clone(),
             impl_module: None,
             from_concrete_impl: false,
             param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
@@ -1051,11 +1049,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn infer_method_type_args(
         &mut self,
         input: MethodInferenceInput<'_>,
-    ) -> InferredMethodTypeArgs {
+    ) -> Vec<TypeId> {
         let MethodInferenceInput {
             receiver_type,
             method_name,
             slots,
+            own_params,
             param_types,
             args,
             raw_args,
@@ -1065,77 +1064,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
         } = input;
 
-        let base_type_id = self.tysys.get_base_type(receiver_type);
-        let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
-
-        // Params from the struct/generic-instance lookup, returned so the bound
-        // check reuses them instead of repeating it. `None` for other receiver
-        // kinds, where the bound check's struct lookup finds nothing anyway.
-        let mut bound_check_params: Option<Vec<ast::GenericParam>> = None;
-
-        // Locate the method's AST for what only a declaration carries — each
-        // parameter's bounds and default. The slots themselves come from the
-        // lookup; this never re-resolves the signature, which in a fresh scope
-        // would emit spurious errors for `Self::Item` and the like.
-        let method_type_params = match &base_type {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            }
-            | ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => {
-                let params = self.find_method_type_param_names(
-                    name,
-                    Some(module_source),
-                    method_name,
-                    trait_name,
-                );
-                bound_check_params.clone_from(&params);
-                params
-            }
-            ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => self
-                .annotate_ctx
-                .trait_ctx
-                .type_param_bounds
-                .get(name)
-                .cloned()
-                .and_then(|bounds| {
-                    self.find_method_type_params_in_trait_bounds(
-                        &bounds.iter().map(|b| b.name.clone()).collect::<Vec<_>>(),
-                        method_name,
-                    )
-                }),
-            ResolvedType::AssocTypeProjection { bounds, .. } => {
-                self.find_method_type_params_in_trait_bounds(bounds, method_name)
-            }
-            _ => None,
-        };
-        let Some(method_type_params) = method_type_params else {
-            return InferredMethodTypeArgs {
-                type_args: vec![],
-                bound_check_params,
-            };
-        };
-
-        // Only the slot-consuming parameters are inferred, and the lookup
-        // reported exactly those. Pairing them here is what keeps every list
-        // downstream — the answers, the bounds to enforce, the defaults to
-        // fill — indexed the same way the caller binds them.
-        let method_type_params: Vec<ast::GenericParam> = method_type_params
-            .into_iter()
-            .filter(ast::GenericParam::is_real_type_param)
-            .collect();
-        assert_eq!(
-            method_type_params.len(),
-            slots.len(),
-            "`{method_name}` declares {} slots, its signature reports {}",
-            method_type_params.len(),
-            slots.len()
-        );
+        // The declaration dispatch selected, in both its forms: the slots to
+        // solve, and the parameters that wrote them. They are parallel by
+        // construction, so nothing here looks the method up again — a name
+        // scan cannot tell which declaration was chosen, and answered with an
+        // unrelated trait's same-named method.
+        let method_type_params = own_params.to_vec();
+        if method_type_params.is_empty() {
+            return vec![];
+        }
 
         let inst = self.instantiate(
             slots,
@@ -1179,232 +1116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // enclosing generic happens to be named cannot be confused with it.
         self.record_instantiation(&inst, &inferred);
         self.blame_unsolved(&inst, &inferred);
-        InferredMethodTypeArgs {
-            type_args: inferred,
-            bound_check_params,
-        }
-    }
-
-    /// Find the non-effect method type parameter names by searching the
-    /// declarations of the given trait bounds. Used when the receiver is a
-    /// type parameter or an associated-type projection whose concrete type is
-    /// unknown at inference time.
-    fn find_method_type_params_in_trait_bounds(
-        &self,
-        trait_names: &[String],
-        method_name: &str,
-    ) -> Option<Vec<ast::GenericParam>> {
-        // `trait_decl_headers` covers every loaded module (incl. the current
-        // one), so one pass suffices.
-        for header in self.tysys.trait_env.trait_decl_headers.values() {
-            if trait_names.iter().any(|n| n == &header.name) {
-                for trait_method in &header.methods {
-                    if trait_method.name == method_name {
-                        return Some(Self::non_effect_generic_params(&trait_method.type_params));
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    /// The non-effect subset of a type-parameter list (cloned, in declaration
-    /// order). Empty means the method declares none — which is an answer, not
-    /// an absence: the name match is what decides whether a method was found,
-    /// and folding "no parameters" into `None` sent every parameterless method
-    /// on to a by-name scan that adopts an unrelated one's parameters.
-    /// Operates on the bare parameter slice so digested headers
-    /// ([`super::trait_env::ImplMethodHeader`]) can reuse it without the
-    /// method AST.
-    fn non_effect_generic_params(type_params: &[ast::GenericParam]) -> Vec<ast::GenericParam> {
-        type_params
-            .iter()
-            .filter(|p| !p.is_effect)
-            .cloned()
-            .collect()
-    }
-
-    /// Enforce an instance method's type-parameter trait bounds, looking up
-    /// the method's generic params and delegating to the shared
-    /// [`Self::enforce_type_arg_bounds`] (the same rule the free-function and
-    /// static-method paths use, so the three cannot drift).
-    pub(super) fn check_method_type_arg_bounds(
-        &mut self,
-        struct_name: &str,
-        struct_module: &ModuleSource,
-        method_name: &str,
-        trait_name: Option<&str>,
-        method_type_args: &[TypeId],
-        span: Span,
-    ) {
-        let Some(params) = self.find_method_type_param_names(
-            struct_name,
-            Some(struct_module),
-            method_name,
-            trait_name,
-        ) else {
-            return;
-        };
-        self.enforce_type_arg_bounds(&params, method_type_args, span);
-    }
-
-    /// Resolve a trait declaration header by name through the module-
-    /// disambiguated canonical key (issue #1298), mirroring
-    /// [`Self::find_trait_decl_type_params`].
-    fn resolve_trait_decl_header(
-        &self,
-        trait_name: &str,
-    ) -> Option<&super::trait_env::TraitDeclHeader> {
-        let canonical_key = self.canonical_decl_key(trait_name);
-        if let Some(loc) = self.tysys.trait_env.decl_index.get(&canonical_key)
-            && let Some(header) = self.tysys.trait_env.trait_decl_headers.get(loc)
-        {
-            return Some(header);
-        }
-        self.tysys
-            .trait_env
-            .trait_decl_headers
-            .iter()
-            .find(|(key, h)| key.0 == self.current_module_source && h.name == trait_name)
-            .map(|(_, h)| h)
-    }
-
-    /// Find the non-effect type parameter names of an instance method, in
-    /// declaration order, for use by `infer_method_type_args` and the bound
-    /// check.
-    ///
-    /// Searches in priority order:
-    /// 0. When the dispatch resolved a specific trait, that trait's
-    ///    declaration of the method (disambiguates same-named methods on
-    ///    different traits, e.g. `payload` on Serialize vs Deserialize).
-    /// 1. Inherent impls on `struct_name` in the struct's own module.
-    /// 2. Inherent impls on `struct_name` in any other loaded module.
-    /// 3. Inherent impls on `struct_name` in the current module.
-    /// 4. Trait default methods (in any loaded module) — these have no
-    ///    enclosing impl block, so "impl type params" are empty and
-    ///    `impl_offset` is already correct.
-    ///
-    /// Returns `None` when no matching method exists or when the matched
-    /// method has no non-effect type parameters (nothing to infer).
-    fn find_method_type_param_names(
-        &self,
-        struct_name: &str,
-        struct_module_source: Option<&ModuleSource>,
-        method_name: &str,
-        trait_name: Option<&str>,
-    ) -> Option<Vec<ast::GenericParam>> {
-        // Prefer the resolved trait's declaration, via the module-disambiguated
-        // canonical key — a bare-name scan would read whichever same-named trait
-        // the map iterates first, defeating the disambiguation.
-        if let Some(tn) = trait_name
-            && let Some(header) = self.resolve_trait_decl_header(tn)
-        {
-            for m in &header.methods {
-                if m.name == method_name {
-                    return Some(Self::non_effect_generic_params(&m.type_params));
-                }
-            }
-        }
-
-        // Impl-method passes read the digested headers (which cover every loaded
-        // module, incl. the current one). Inherent impls first
-        // (include_trait = false), preferring the receiver's home module.
-        if let Some(module_source) = struct_module_source
-            && let Some(names) = self.search_impl_headers_method_tps(
-                struct_name,
-                method_name,
-                false,
-                Some(module_source),
-            )
-        {
-            return Some(names);
-        }
-        if let Some(names) =
-            self.search_impl_headers_method_tps(struct_name, method_name, false, None)
-        {
-            return Some(names);
-        }
-
-        // Fallback: trait default methods (those with a body).
-        for header in self.tysys.trait_env.trait_decl_headers.values() {
-            for m in &header.methods {
-                if m.name == method_name && m.has_body {
-                    return Some(Self::non_effect_generic_params(&m.type_params));
-                }
-            }
-        }
-
-        // Fallback: trait impls on the struct. When the method is defined in
-        // `impl Trait for Struct`, it still has its own type parameters
-        // (e.g. `fn put<T: Display>(&mut self, v: &T)`), which the inference
-        // solver needs to materialise.
-        if let Some(module_source) = struct_module_source
-            && let Some(names) = self.search_impl_headers_method_tps(
-                struct_name,
-                method_name,
-                true,
-                Some(module_source),
-            )
-        {
-            return Some(names);
-        }
-        if let Some(names) =
-            self.search_impl_headers_method_tps(struct_name, method_name, true, None)
-        {
-            return Some(names);
-        }
-
-        // Fallback: trait method declarations (any body). These can be called
-        // through a trait impl that reuses the declared type params.
-        for header in self.tysys.trait_env.trait_decl_headers.values() {
-            for m in &header.methods {
-                if m.name == method_name {
-                    return Some(Self::non_effect_generic_params(&m.type_params));
-                }
-            }
-        }
-
-        None
-    }
-
-    /// Scan the digested impl headers for a method named `method_name` on
-    /// `struct_name` (by exact name or generic base name) and return its
-    /// non-effect type parameters. `include_trait` controls whether trait
-    /// impls participate (inherent-only when false); `only_module` restricts
-    /// the scan to a single module's impls when set.
-    fn search_impl_headers_method_tps(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-        include_trait: bool,
-        only_module: Option<&ModuleSource>,
-    ) -> Option<Vec<ast::GenericParam>> {
-        // `all_impl_index` is already in global build order, so iterating it
-        // directly preserves the original order with no merge or per-call sort.
-        let candidates = self
-            .tysys
-            .trait_env
-            .all_impl_index
-            .get(&self.impl_target(struct_name))?;
-        for key in candidates {
-            if let Some(m) = only_module
-                && &key.0 != m
-            {
-                continue;
-            }
-            let Some(header) = self.tysys.trait_env.impl_headers.get(key) else {
-                continue;
-            };
-            if !include_trait && header.trait_name.is_some() {
-                continue;
-            }
-            for method in &header.methods {
-                if method.name == method_name {
-                    return Some(Self::non_effect_generic_params(&method.type_params));
-                }
-            }
-        }
-        None
+        inferred
     }
 
     /// Reject a `&mut self` method call whose receiver place is rooted at an
@@ -2489,6 +2201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     cm_name: None,
                     is_ref_impl: false,
                     method_type_param_ids,
+                    method_own_params: method_sig.own_params.clone(),
                     impl_module: Some(impl_module_source.clone()),
                     from_concrete_impl: impl_is_concrete,
                     param_defaults,
@@ -2542,6 +2255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         cm_name: None,
                         is_ref_impl: false,
                         method_type_param_ids: default_method.sig.own_type_param_ids(),
+                        method_own_params: default_method.sig.own_params.clone(),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
                         param_defaults: default_method
@@ -3521,6 +3235,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_is_mut: method_param_is_mut,
             owner: _,
             cm_name: _,
+            method_own_params: _,
             is_ref_impl: method_is_ref_impl,
             method_type_param_ids: _,
             impl_module: _,

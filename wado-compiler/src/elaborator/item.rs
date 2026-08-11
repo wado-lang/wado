@@ -1110,6 +1110,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                         .collect(),
                     declaring_slot_count,
+                    own_params: super::sig::own_params_of(&method.type_params),
                     cm_name: method
                         .attrs
                         .iter()
@@ -1346,10 +1347,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .trait_ctx
                 .install_effect_params(&method.type_params);
             method_scope.register_generic_params(&method.type_params, next_slot);
+            // Only slot-consuming parameters. A `fn`-bound one registers as
+            // its bound's function type, so admitting it here put a
+            // `Function` where a slot belongs — and made a trait's signature
+            // count its parameters differently from an impl's, which counts
+            // them by the same rule below.
             let method_slots: Vec<(String, TypeId)> = method
                 .type_params
                 .iter()
-                .filter(|p| !p.is_effect)
+                .filter(|p| p.is_real_type_param())
                 .filter_map(|tp| {
                     method_scope
                         .annotate_ctx
@@ -1399,6 +1405,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             })
                             .collect(),
                         declaring_slot_count: decl_slots.len() as u32,
+                        own_params: super::sig::own_params_of(&method.type_params),
                         cm_name: method
                             .attrs
                             .iter()
@@ -1590,6 +1597,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self_kind,
                     params: sig_params,
                     declaring_slot_count: decl_slots.len() as u32,
+                    // An `interface` / `resource` operation declares no type
+                    // parameters of its own.
+                    own_params: Vec::new(),
                     cm_name: cm_name.clone(),
                     is_async: method.is_async,
                 },

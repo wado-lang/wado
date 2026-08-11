@@ -162,6 +162,15 @@ pub(crate) struct MethodSig {
     /// separately (`Type<A>::method<B>()`), so it needs the split; nothing
     /// else does, because a slot carries its own index.
     pub(crate) declaring_slot_count: u32,
+    /// The method's own slots as the declaration wrote them, parallel to
+    /// [`Self::own_type_params`]. Bounds and defaults are irreducibly AST and
+    /// live nowhere else, and a use site needs them to enforce the one and
+    /// fill the other.
+    ///
+    /// Carried rather than re-found by name. A name scan cannot tell which
+    /// declaration dispatch actually chose, so it could answer with an
+    /// unrelated trait's same-named method — and did.
+    pub(crate) own_params: Vec<crate::ast::GenericParam>,
     /// Canonical name from `#[cm("…")]`, resolved at the declaration.
     pub(crate) cm_name: Option<String>,
     pub(crate) is_async: bool,
@@ -194,6 +203,19 @@ impl Param {
             .map(|p| (p.name.clone(), p.default.clone()))
             .collect()
     }
+}
+
+/// The slot-consuming subset of a declaration's type parameters, in order —
+/// the AST counterpart of [`MethodSig::own_type_params`], filtered by the same
+/// rule so the two stay parallel by construction.
+pub(super) fn own_params_of(
+    type_params: &[crate::ast::GenericParam],
+) -> Vec<crate::ast::GenericParam> {
+    type_params
+        .iter()
+        .filter(|p| p.is_real_type_param())
+        .cloned()
+        .collect()
 }
 
 impl MethodSig {

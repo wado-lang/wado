@@ -1619,15 +1619,13 @@ pub(super) struct MethodInfo {
     /// True when the method was found on a reference type impl (e.g., `impl Trait for &T`).
     /// The receiver needs an additional auto-ref for `&self` methods (Self is &T, so &self is &&T).
     pub(super) is_ref_impl: bool,
-    /// Method-level type parameter `TypeId`s in declaration order (excluding effect params).
-    ///
-    /// Populated only by lookups that also set up method-level type params in their
-    /// resolution scope — currently [`Elaborator::find_method_in_trait_bounds`] for
-    /// `T::method()` style calls through a type parameter bound. Other producers
-    /// leave it empty because their call sites have no method-level inference to
-    /// perform (either the method is non-generic, or its type args come from a
-    /// separate method-AST lookup such as [`Elaborator::infer_method_type_args`]).
+    /// The method's own slots, in declaration order, as the signature dispatch
+    /// selected holds them. Empty where the method declares none.
     pub(super) method_type_param_ids: Vec<TypeId>,
+    /// The same slots as the declaration wrote them, parallel to
+    /// [`Self::method_type_param_ids`] — the bounds to enforce and the
+    /// defaults to fill, which only AST carries.
+    pub(super) method_own_params: Vec<ast::GenericParam>,
     /// The module the matched `impl` block lives in. For inherent methods this
     /// is where the method body is registered, which is NOT always the receiver
     /// type's defining module (e.g. a user-written `impl List<u8>` on the
