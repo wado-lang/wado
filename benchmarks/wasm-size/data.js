@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786410162996,
+  "lastUpdate": 1786413036433,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47137,6 +47137,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4741f0604dcbe5e763ada1368b4b4993c3a3fe28"
         },
         "date": 1786410162121,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267689,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b6185860b552180db152d363b9852fd64ec93b36",
+          "message": "Merge pull request #1788 from wado-lang/claude/trait-qualified-supertrait-bounds-e2z9m1\n\nfix(elaborator): let a trait-qualified call name a bound's implied supertraits",
+          "timestamp": "2026-08-11T10:37:52+09:00",
+          "tree_id": "a7a91834dbc957aec80f99ae5404d44ddb12dafe",
+          "url": "https://github.com/wado-lang/wado/commit/b6185860b552180db152d363b9852fd64ec93b36"
+        },
+        "date": 1786413035745,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
