@@ -321,6 +321,18 @@ pub fn optimize(
     // The born-resolved invariant is now enforced by the type system: a call
     // node's `func_id` is a non-optional `FuncId`, stamped at its synthesis site.
 
+    // TEMPORARY census — revert.
+    if crate::trace::filter().enabled("freeze_reject") {
+        extract::FREEZE_REJECT.with(|m| {
+            let mut rows: Vec<(String, usize)> =
+                m.borrow().iter().map(|(k, v)| (k.clone(), *v)).collect();
+            rows.sort_by_key(|(_, v)| std::cmp::Reverse(*v));
+            for (k, v) in rows.iter().take(14) {
+                crate::compiler_trace!("freeze_reject", "{v:>8}  {k}");
+            }
+        });
+    }
+
     // TEMPORARY census — revert. Sizes what retiring the pure `ExprKind`s
     // removes, over reachable nodes only: the arena keeps every orphan a
     // rewrite left behind, and counting those measures compaction's job.

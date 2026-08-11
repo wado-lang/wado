@@ -415,12 +415,35 @@ struct FreezeCtx<'a> {
 /// Decide whether the value at `id` should be frozen, and to which
 /// representative. `None` leaves it in the skeleton. Two admission paths: an
 /// early constant-leaf promotion, and the pure-arith reemittability gate.
+
+// TEMPORARY census — revert. Why a pure value position was not promoted, which
+// is exactly the set retiring the pure `ExprKind`s has to move.
+thread_local! {
+    pub(super) static FREEZE_REJECT: std::cell::RefCell<crate::hashmap::IndexMap<String, usize>> =
+        std::cell::RefCell::new(crate::hashmap::IndexMap::default());
+}
+
+pub(super) fn note_reject(engine: &Engine, id: ExprId, reason: &str) {
+    let kind = match &engine.body.exprs[id].kind {
+        ExprKind::Binary { .. } => "Binary",
+        ExprKind::Unary { .. } => "Unary",
+        ExprKind::Cast { .. } => "Cast",
+        ExprKind::FieldAccess { .. } => "FieldAccess",
+        ExprKind::Local { .. } => "Local",
+        _ => return,
+    };
+    FREEZE_REJECT.with(|m| {
+        *m.borrow_mut().entry(format!("{kind}/{reason}")).or_default() += 1;
+    });
+}
+
 fn classify_candidate(
     engine: &mut Engine,
     ctx: &FreezeCtx,
     id: ExprId,
 ) -> Option<(ExprId, ValueId)> {
     if engine.is_assign_target(id) || is_let_value(engine, id) {
+        note_reject(engine, id, "assign-target-or-let-value");
         return None;
     }
     // Constant-leaf promotion (early only, clean graph). A value-position
@@ -450,15 +473,20 @@ fn classify_candidate(
         return Some((id, vid));
     }
     if !is_pure_arith(engine, id, ctx.include_fields) {
+        note_reject(engine, id, "not-pure-arith");
         return None;
     }
-    let rep = engine.value(id)?;
+    let Some(rep) = engine.value(id) else {
+        note_reject(engine, id, "no-graph-value");
+        return None;
+    };
     // An early freeze may plant only context-free values. A constant means the
     // same thing wherever `inline` and `sroa` copy the operand to; a value naming
     // a local does not, because those passes renumber locals and splice a callee
     // body into a caller, so the slot moves out from under it. The post-loop
     // freezes take these, after the structural passes have finished.
     if ctx.early && engine.body.values.names_a_local(rep) {
+        note_reject(engine, id, "early-names-a-local");
         return None;
     }
     // A standalone `FieldAccess` is reemittable when its receiver is (it
@@ -515,7 +543,15 @@ fn classify_candidate(
             .values
             .value_fully_reemittable_locally(rep, ctx.mut_locals),
     };
-    (reemittable && !engine.body.values.extraction_duplicates_work(rep)).then_some((id, rep))
+    if !reemittable {
+        note_reject(engine, id, "not-reemittable");
+        return None;
+    }
+    if engine.body.values.extraction_duplicates_work(rep) {
+        note_reject(engine, id, "extraction-duplicates-work");
+        return None;
+    }
+    Some((id, rep))
 }
 
 /// Apply strategy for a `FieldAccess` representative: pin the load in a `let _av
