@@ -739,19 +739,7 @@ impl Monomorphizer {
                             None,
                         ) {
                             let generic_func = generic_func_rc.borrow();
-                            // impl_type_args and method_type_args are now separate.
-                            // For variadic impls, impl_type_args may be empty — extract
-                            // from the struct name if needed.
-                            let impl_type_args = if monomorph.impl_type_args.is_empty()
-                                && !generic_func.impl_type_params.is_empty()
-                                && info.struct_name() != info.base_struct_name()
-                            {
-                                type_table
-                                    .find_type_args_by_mangled_name(&info.struct_name())
-                                    .unwrap_or_default()
-                            } else {
-                                monomorph.impl_type_args.clone()
-                            };
+                            let impl_type_args = monomorph.impl_type_args.clone();
                             let blanket_trait = info
                                 .base_trait_name
                                 .as_deref()
