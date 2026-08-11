@@ -423,7 +423,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ident.name[..pos].to_string(),
                 ident.name[pos + 2..].to_string(),
             );
+            // The path's leading segment is the trait's reference site.
+            let head_site = ident.segments.first().map(|seg| seg.id);
             return self.resolve_trait_qualified_call(
+                head_site,
                 &trait_name,
                 &method_name,
                 call,

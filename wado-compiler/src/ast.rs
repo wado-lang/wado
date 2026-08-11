@@ -436,6 +436,14 @@ pub trait AstVisitor: Sized {
         walk_generic_params(self, params);
     }
 
+    /// Every list of trait bounds reaches a visitor here — a parameter's
+    /// `<T: Trait>`, a trait's supertraits, an associated type's `type A:
+    /// Trait`. They are the same kind of reference, so a visitor that answers
+    /// for one answers for all three.
+    fn visit_trait_bounds(&mut self, bounds: &[TraitBound]) {
+        walk_trait_bounds(self, bounds);
+    }
+
     fn visit_type(&mut self, ty: &Type) {
         walk_type(self, ty);
     }
@@ -523,8 +531,10 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         Item::Trait(t) => {
             v.visit_id(t.id, t.span);
             v.visit_generic_params(&t.type_params);
+            v.visit_trait_bounds(&t.supertraits);
             for assoc in &t.associated_types {
                 v.visit_id(assoc.id, assoc.span);
+                v.visit_trait_bounds(&assoc.bounds);
             }
             for m in &t.methods {
                 v.visit_function(m);
@@ -875,15 +885,19 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
 pub fn walk_generic_params<V: AstVisitor>(v: &mut V, params: &[GenericParam]) {
     for p in params {
         v.visit_id(p.id, p.span);
-        for bound in &p.bounds {
-            v.visit_id(bound.id, bound.span);
-            for assoc in &bound.assoc_types {
-                v.visit_id(assoc.id, assoc.span);
-                v.visit_type(&assoc.ty);
-            }
-        }
+        v.visit_trait_bounds(&p.bounds);
         if let Some(default) = &p.default {
             v.visit_type(default);
+        }
+    }
+}
+
+pub fn walk_trait_bounds<V: AstVisitor>(v: &mut V, bounds: &[TraitBound]) {
+    for bound in bounds {
+        v.visit_id(bound.id, bound.span);
+        for assoc in &bound.assoc_types {
+            v.visit_id(assoc.id, assoc.span);
+            v.visit_type(&assoc.ty);
         }
     }
 }

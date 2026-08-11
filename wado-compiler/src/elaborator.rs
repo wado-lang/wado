@@ -858,38 +858,47 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         crate::name::FqTypeName::of_head(&module, &name)
     }
 
-    /// The trait a spelling names, in the form a mangled method name embeds
-    /// it. `written` may carry type arguments (`Stream<u8>`).
-    ///
-    /// Reaching for this means the caller has a name rather than the site that
-    /// wrote it; it resolves through the current frame, which is right only
-    /// when the frame is the writing module. Prefer [`Self::fq_trait_name`],
-    /// which asks the site.
-    pub(super) fn fq_trait_name_written(&self, written: &str) -> crate::name::FqTraitName {
-        let (base, args) = crate::name::split_head_and_args(written);
-        let (module, name) = self.canonical_decl_key(base);
-        crate::name::FqTraitName::declared(&module, &name).with_args(args)
-    }
-
     /// The trait a bound's reference site names. `written` supplies the type
     /// arguments and the diagnostic spelling.
     ///
-    /// A bound the table has no answer for — a synthesized one, or a position
-    /// the walk never reached — falls back to the frame's derivation.
+    /// A site that names no declaration falls back to the frame's derivation;
+    /// see [`Self::fq_trait_name_undeclared`].
     pub(super) fn fq_trait_name_at(
         &self,
         site: crate::ast::AstId,
         written: &str,
     ) -> crate::name::FqTraitName {
         let resolutions = &self.tysys.resolutions;
-        if let Some(crate::resolve::DeclRef::Binder(_)) = resolutions.get(site) {
+        let answer = resolutions.get(site);
+        debug_assert!(
+            answer.is_some(),
+            "every reference site is resolved before elaboration, `{written}` was not"
+        );
+        if let Some(crate::resolve::DeclRef::Binder(_)) = answer {
             return crate::name::FqTraitName::binder(written);
         }
-        let (_, args) = crate::name::split_head_and_args(written);
-        resolutions.declared(site).map_or_else(
-            || self.fq_trait_name_written(written),
-            |(module, name)| crate::name::FqTraitName::declared(module, name).with_args(args),
-        )
+        let (base, args) = crate::name::split_head_and_args(written);
+        resolutions
+            .declared(site)
+            .map_or_else(
+                || self.fq_trait_name_undeclared(base),
+                |(module, name)| crate::name::FqTraitName::declared(module, name),
+            )
+            .with_args(args)
+    }
+
+    /// The answer for a trait reference whose site names no declaration the
+    /// resolution walk can see: a name reaching no import, no declaration of
+    /// the writing module and no prelude entry.
+    ///
+    /// That is not always an error — a bodiless derive (`impl Deserialize for
+    /// Point;`) may name a stdlib trait the module never `use`d — and only the
+    /// declaration indexes can answer for it, which is what the frame
+    /// derivation consults past its import layers. A genuinely unknown trait
+    /// also lands here and is reported elsewhere.
+    fn fq_trait_name_undeclared(&self, base: &str) -> crate::name::FqTraitName {
+        let (module, name) = self.canonical_decl_key(base);
+        crate::name::FqTraitName::declared(&module, &name)
     }
 
     /// The trait a reference site names, in the form a mangled method name
@@ -898,8 +907,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// The answer comes from [`crate::resolve::Resolutions`] — resolved once,
     /// in the module that wrote the reference — so an alias and a second
-    /// module's same-named trait cannot reach the mangle. A site the table has
-    /// no answer for falls back to the frame's own derivation.
+    /// module's same-named trait cannot reach the mangle. A site that names no
+    /// declaration falls back to [`Self::fq_trait_name_undeclared`].
     pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> crate::name::FqTraitName {
         let written = self.get_type_name(ty);
         let args: Vec<String> = match ty {
@@ -913,6 +922,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let head = crate::resolve::head_site(ty)
             .and_then(|site| {
                 let resolutions = &self.tysys.resolutions;
+                debug_assert!(
+                    resolutions.get(site).is_some(),
+                    "every reference site is resolved before elaboration, `{written}` was not"
+                );
                 match resolutions.get(site) {
                     Some(crate::resolve::DeclRef::Binder(_)) => {
                         Some(crate::name::FqTraitName::binder(&written))
@@ -922,10 +935,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .map(|(module, name)| crate::name::FqTraitName::declared(module, name)),
                 }
             })
-            .unwrap_or_else(|| {
-                let (module, name) = self.canonical_decl_key(&written);
-                crate::name::FqTraitName::declared(&module, &name)
-            });
+            .unwrap_or_else(|| self.fq_trait_name_undeclared(&written));
         head.with_args(args)
     }
 

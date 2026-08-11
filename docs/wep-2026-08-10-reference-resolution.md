@@ -225,6 +225,45 @@ Costs and risks:
            (an aliased bound reaches the impl that defines the method) and the
            collision where two same-named traits implemented for one receiver
            mangled to one name and one impl overwrote the other.
+         - **Every bound position is a reference site.** The resolution walk
+           reached a generic parameter's bounds and nothing else: `walk_item`'s
+           `Item::Trait` arm visited neither `trait Sub: Super`'s supertraits
+           nor `type A: Bound`'s bounds, so those sites had no entry and every
+           consumer of an inherited bound fell back to resolving a spelling.
+           All three positions now route through
+           `AstVisitor::visit_trait_bounds`, which is one rule rather than
+           three copies of one.
+         - **The table ranked the prelude above a module's own declarations.**
+           `resolve_name` asked `SymbolTable::lookup` first, which is imports
+           *then prelude*, before the module's own declarations — the shape of
+           #1298, in the table meant to end it. The layers are now ordered
+           binders → explicit imports → own declarations → prelude, matching
+           what the consumers derive.
+         - **A qualified path in expression position is a reference site too.**
+           `Trait::method(recv, …)` reaches dispatch as a substring of an
+           `Ident`'s name, which no vantage owns. The path's leading segment
+           already carries its own `AstId` for LSP navigation; the resolution
+           walk now records it, and the UFCS dispatcher names the required
+           trait from it.
+         - `AssocTypeProjection` carries its bounds as `FqTraitName`, answered
+           where the trait declaration wrote them. It was the last bound store
+           that kept a spelling, and it kept one because the sites it needed
+           were the ones the walk never reached.
+
+           Measured on the e2e suite by making the frame fallback panic:
+           4141 trait references reached it before these three fixes, 4 after,
+           and those 4 are sites the table *does* hold — with `Unresolved`,
+           for a name that reaches no import, no local declaration and no
+           prelude entry. A bodiless derive (`impl Deserialize for Point;`)
+           may legitimately name a stdlib trait the module never `use`d, and
+           only the declaration indexes can answer for it. So the rule the
+           code now asserts is: **a site absent from the table is a bug in the
+           walk; a site present but undeclared is the frame derivation's to
+           answer.**
+         - `fq_trait_name_written` is gone. Its one real caller was operator
+           dispatch falling back to an auto-derived `Eq` / `Ord`, which knows
+           the trait as a compiler item; `auto_derive_by_trait` now hands that
+           item back, so the trait is named by its declaration.
 
          What still keys on a name, each a place the class survives:
 
@@ -257,13 +296,23 @@ Costs and risks:
            `by_receiver` is already keyed by `Receiver` identity, and "which
            modules host an impl of trait K for receiver R" is that index
            filtered by `ImplHeader::fq_trait`. Deleting beats re-keying here.
+
+           Re-keying was tried and reverted. Keying the AST layer by the same
+           mangled fq strings the synthesised layer uses left 64 serde/reflect
+           e2e failures. The requests and `impl_module_for` were both correct
+           under the new keys; what broke was downstream — `generic_functions`
+           held only binder-headed blanket templates, so blanket routing found
+           no `monomorph_info` for a receiver the index now answered for.
+           `SynthesisCtx::receiver` compounds it: it builds the receiver from
+           `self.module` rather than from the type's declaring module, so the
+           key it forms is right only when synthesis runs in the declaring
+           module. Whoever takes this next starts from those two, not from the
+           index.
          - Stores that flatten a bound to its name and lose the site:
            `infer_holes`' recorded bounds, `type_param_bounds` on the struct and
-           trait digests, `BlanketImpl::bounds`, and an
-           `AssocTypeProjection`'s. `find_method_in_trait_bounds` now takes the
-           bounds themselves and answers from the winning one's site, so only
-           the projection path — which has no sites to give it — still resolves
-           a spelling in the consumer's frame.
+           trait digests, and `BlanketImpl::bounds`.
+           `find_method_in_trait_bounds` takes the bounds themselves and
+           answers from the winning one's site.
          - The associated-type registries key on `tir::TraitKey`, the trait's
            declaring module and declared name, filled from the impl header's
            site and from each blanket bound's. What still asks by spelling is
@@ -284,9 +333,9 @@ has itself created:
 
 | | at the start | now |
 | ------------------------------------------ | ------------ | --- |
-| `trait_name: &str` parameters               | 114          | 67  |
+| `trait_name: &str` parameters               | 114          | 63  |
 | `struct_name` / `type_name: &str`           | 93           | 94  |
-| `.base_name()` — an identity flattened back | 0            | 22  |
+| `.base_name()` — an identity flattened back | 0            | 26  |
 
 The receiver half has not moved. Flipping a parameter's type is what makes the
 work enumerable, and that flip has not been run on the receiver side; until it
@@ -295,9 +344,15 @@ unbuilt.
 
 `.base_name()` is the shape of the remaining compromise: a caller holds an
 identity and flattens it to a name because the API it calls has not been
-flipped yet. Each one is a place the class survives. `fq_trait_name_written`
-is the same debt in function form — it resolves a spelling in the consumer's
-frame, which is the defect generator this WEP names. Both should reach zero.
+flipped yet. Each one is a place the class survives, and the count rose
+because flipping `AssocTypeProjection`'s bounds to identities put four more
+callers in that position. It should reach zero.
+
+`trait_decl_key_in_frame` is the same debt in function form — it resolves a
+spelling in the consumer's frame, which is the defect generator this WEP
+names. It has one reachable caller left in expression position and two frame
+lookups (`trait_decl_header_in_frame`, `trait_sig_in_frame`) that take a name
+and no site; the rest now go through `trait_decl_at`, which asks the site.
          - `locate_static_method_impl`, the conversion-impl survey, and the CM
            interface registry.
 -
@@ -305,3 +360,8 @@ frame, which is the defect generator this WEP names. Both should reach zero.
          `canonical_decl_key_with`, `decl_identity_core`, `WrittenHead` and its
          `spelling_pending_migration` escape, `DeclKey = (ModuleSource, String)`,
          and `NamedType::source_interface`.
+
+         `canonical_decl_key` is what the rest still reaches through, and it is
+         a receiver-side API as much as a trait-side one — the second row of
+         the measurements table is its call graph. Deleting it is the receiver
+         flip, not a cleanup that follows one.

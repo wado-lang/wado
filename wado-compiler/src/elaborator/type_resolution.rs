@@ -188,8 +188,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             {
                 let assoc_bounds = self.find_assoc_type_bounds(self_type, &namespaced.name);
-                let bound_names: Vec<String> =
-                    assoc_bounds.iter().map(|b| b.name.clone()).collect();
+                let bound_names: Vec<crate::name::FqTraitName> = assoc_bounds
+                    .iter()
+                    .map(|b| self.fq_trait_name_at(b.id, &b.name))
+                    .collect();
                 let assoc_type_bindings =
                     self.frame_assoc_bindings(self_type, "Self", &assoc_bounds);
                 let owning_trait = self.bound_declaring_assoc_type("Self", &namespaced.name);
@@ -265,7 +267,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Look up trait bounds on the associated type from the trait declaration.
             let assoc_bounds = self.find_assoc_type_bounds(param_type_id, &namespaced.name);
-            let bound_names: Vec<String> = assoc_bounds.iter().map(|b| b.name.clone()).collect();
+            let bound_names: Vec<crate::name::FqTraitName> = assoc_bounds
+                .iter()
+                .map(|b| self.fq_trait_name_at(b.id, &b.name))
+                .collect();
 
             // Compute assoc_type_bindings by resolving Self::X in the assoc type's bounds.
             // e.g., IntoIterator::Iter has bound Iterator<Item = Self::Item>.

@@ -775,7 +775,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let target_fq = scope.qualified_receiver_name(&scope.get_type_name(&impl_block.ty));
         let trait_decl = impl_block.trait_type.as_ref().map(|trait_type| {
             let head = scope.get_type_name(trait_type);
-            scope.trait_decl_key_in_frame(&head)
+            match crate::resolve::head_site(trait_type) {
+                Some(site) => scope.trait_decl_at(site, &head),
+                None => scope.trait_decl_key_in_frame(&head),
+            }
         });
         let self_type = scope
             .annotate_ctx

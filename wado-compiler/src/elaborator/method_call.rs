@@ -416,7 +416,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .filter(|b| {
                             required_trait
-                                .is_none_or(|w| self.trait_decl_key_in_frame(&b.name) == w.decl)
+                                .is_none_or(|w| self.trait_decl_at(b.id, &b.name) == w.decl)
                         })
                         .cloned()
                         .collect();
@@ -445,23 +445,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if let Some(bounds) = assoc_bounds
                 && let Some((found_trait, info)) = {
-                    // A projection records its bounds as names, so these
-                    // carry no reference site and the lookup falls back to
-                    // resolving the spelling in this frame.
-                    let bounds: Vec<ast::TraitBound> = bounds
+                    // A projection carries its bounds as identities, answered
+                    // where the trait declaration wrote them. The `ast` bounds
+                    // rebuilt here are spellings for the by-name lookups only;
+                    // which trait each means comes from `resolved`.
+                    let named: Vec<crate::name::FqTraitName> = bounds
                         .into_iter()
-                        .filter(|n| {
-                            required_trait.is_none_or(|w| self.trait_decl_key_in_frame(n) == w.decl)
+                        .filter(|b| {
+                            required_trait
+                                .is_none_or(|w| b.canonical().is_some_and(|k| k == w.decl))
                         })
-                        .map(|name| ast::TraitBound {
+                        .collect();
+                    let resolved: crate::hashmap::IndexMap<String, crate::name::FqTraitName> = named
+                        .iter()
+                        .map(|b| (b.base_name().to_string(), b.clone()))
+                        .collect();
+                    let bounds: Vec<ast::TraitBound> = named
+                        .iter()
+                        .map(|b| ast::TraitBound {
                             id: crate::ast::AstId::fresh(),
-                            name,
+                            name: b.base_name().to_string(),
                             assoc_types: Vec::new(),
                             span,
                             fn_signature: None,
                         })
                         .collect();
-                    self.find_method_in_trait_bounds(&bounds, method_name, base_type_id, span)
+                    self.find_method_in_trait_bounds_with(
+                        &bounds,
+                        &resolved,
+                        method_name,
+                        base_type_id,
+                        span,
+                    )
                 }
             {
                 trait_name = Some(found_trait);
@@ -1233,6 +1248,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// constraint on which impl may answer.
     pub(super) fn resolve_trait_qualified_call(
         &mut self,
+        head_site: Option<crate::ast::AstId>,
         trait_name: &str,
         method_name: &str,
         call: &ast::CallExpr,
@@ -1240,7 +1256,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let required = super::types::RequiredTrait {
-            decl: self.trait_decl_key_in_frame(trait_name),
+            decl: head_site.map_or_else(
+                || self.trait_decl_key_in_frame(trait_name),
+                |site| self.trait_decl_at(site, trait_name),
+            ),
             args: None,
             display: self.declared_trait_name(trait_name),
         };
@@ -1468,7 +1487,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let args_spelled: Vec<String> =
                     g.args.iter().map(|a| self.get_type_name_full(a)).collect();
                 let required = super::types::RequiredTrait {
-                    decl: self.trait_decl_key_in_frame(&g.name),
+                    decl: self.trait_decl_at(g.id, &g.name),
                     args: Some(trait_args),
                     display: format!("{declared_head}<{}>", args_spelled.join(", ")),
                 };

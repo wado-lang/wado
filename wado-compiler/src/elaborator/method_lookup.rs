@@ -1109,7 +1109,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                 }),
             ResolvedType::AssocTypeProjection { bounds, .. } => {
-                self.find_method_type_params_in_trait_bounds(bounds, method_name)
+                self.find_method_type_params_in_trait_bounds(
+                    &bounds
+                        .iter()
+                        .map(|b| b.base_name().to_string())
+                        .collect::<Vec<_>>(),
+                    method_name,
+                )
             }
             _ => None,
         };
@@ -2203,8 +2209,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && required_trait.is_none_or(|wanted| {
                 self.tysys
                     .auto_derive_by_method(method_name)
-                    .is_some_and(|(derived, _)| {
-                        self.trait_decl_key_in_frame(&derived) == wanted.decl
+                    .is_some_and(|(item, _, _)| {
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .compiler_trait_fq(item)
+                            .canonical()
+                            .is_some_and(|decl| decl == wanted.decl)
                     })
             })
         {

@@ -315,7 +315,10 @@ impl TypeSystem {
     /// Resolve the auto-derived trait that declares `method_name`, returning its
     /// trait name and fixed return type, or `None` when no auto-derived trait
     /// declares that method.
-    pub(super) fn auto_derive_by_method(&self, method_name: &str) -> Option<(String, TypeId)> {
+    pub(super) fn auto_derive_by_method(
+        &self,
+        method_name: &str,
+    ) -> Option<(crate::compiler_item::CompilerItem, String, TypeId)> {
         let item = Self::AUTO_DERIVED_METHODS
             .iter()
             .find(|(_, m)| *m == method_name)
@@ -325,13 +328,20 @@ impl TypeSystem {
             .borrow()
             .compiler_trait_name(item)
             .to_string();
-        Some((trait_name, self.auto_derive_return_type(item)))
+        Some((item, trait_name, self.auto_derive_return_type(item)))
     }
 
     /// Mirror of [`Self::auto_derive_by_method`] keyed by trait name, for
-    /// operator dispatch which already knows the trait. Returns the fixed
-    /// return type, or `None` when `trait_name` is not an auto-derived trait.
-    pub(super) fn auto_derive_by_trait(&self, trait_name: &str) -> Option<TypeId> {
+    /// operator dispatch which already knows the trait. Returns the compiler
+    /// item the name matched and its fixed return type, or `None` when
+    /// `trait_name` is not an auto-derived trait.
+    ///
+    /// Returning the item, not just the type, is what lets the caller name the
+    /// trait by its declaration rather than re-deriving one from the spelling.
+    pub(super) fn auto_derive_by_trait(
+        &self,
+        trait_name: &str,
+    ) -> Option<(crate::compiler_item::CompilerItem, TypeId)> {
         let item = Self::AUTO_DERIVED_METHODS.iter().find_map(|(item, _)| {
             let name = self
                 .type_table
@@ -340,7 +350,7 @@ impl TypeSystem {
                 .to_string();
             (name == trait_name).then_some(*item)
         })?;
-        Some(self.auto_derive_return_type(item))
+        Some((item, self.auto_derive_return_type(item)))
     }
 
     /// Check that concrete type args at non-type-parameter positions match the impl type.
@@ -1308,7 +1318,7 @@ impl TypeSystem {
                 // An associated type projection T::Assoc implements a trait if
                 // the trait declaration for Assoc declares that bound.
                 // e.g., I::Iter: Iterator when IntoIterator::Iter: Iterator
-                return bounds.iter().any(|b| b == trait_name);
+                return bounds.iter().any(|b| b.base_name() == trait_name);
             }
             ResolvedType::Newtype {
                 name,
@@ -1547,12 +1557,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.canonical_decl_key(trait_name).1
     }
 
+    /// The trait declaration a reference site names.
+    ///
+    /// The answer comes from [`crate::resolve::Resolutions`] — resolved in the
+    /// module that wrote the reference — so an alias and a second module's
+    /// same-named trait cannot displace it. `written` feeds the fallback only:
+    /// the table is position-agnostic, so a site answering with something that
+    /// is no trait at all (a same-named enum case in the prelude) is the frame
+    /// derivation's to settle.
+    pub(super) fn trait_decl_at(
+        &self,
+        site: crate::ast::AstId,
+        written: &str,
+    ) -> super::trait_env::DeclKey {
+        debug_assert!(
+            self.tysys.resolutions.get(site).is_some(),
+            "every reference site is resolved before elaboration, `{written}` was not"
+        );
+        if let Some((module, name)) = self.tysys.resolutions.declared(site) {
+            let key = (module.clone(), name.to_string());
+            if self.tysys.trait_env.decl_index.contains_key(&key) {
+                return key;
+            }
+        }
+        self.trait_decl_key_in_frame(written)
+    }
+
     /// The declaration key of the trait `name` names in the current frame.
     ///
     /// Only trait declarations are candidates. Traits have no symbol-table
     /// entry, so [`Elaborator::canonical_decl_key`] answers `Left` with
     /// `core:prelude/format`'s enum case and would displace a module's own
     /// `trait Left`. A local trait wins unless an import names a trait too.
+    ///
+    /// Reaching for this means the caller has a name rather than the site that
+    /// wrote it, which is right only when the frame is the writing module.
+    /// Prefer [`Self::trait_decl_at`].
     pub(super) fn trait_decl_key_in_frame(&self, name: &str) -> super::trait_env::DeclKey {
         let canonical = self.canonical_decl_key(name);
         let names_a_trait =
@@ -1653,7 +1693,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for decl in assoc_types {
             let known = self.frame_projection(self_type_id, &self_name, &decl.name);
             let answer = known.unwrap_or_else(|| {
-                let bound_names: Vec<String> = decl.bounds.iter().map(|b| b.name.clone()).collect();
+                let bound_names: Vec<crate::name::FqTraitName> = decl
+                    .bounds
+                    .iter()
+                    .map(|b| self.fq_trait_name_at(b.id, &b.name))
+                    .collect();
                 let bindings = self.frame_assoc_bindings(self_type_id, &self_name, &decl.bounds);
                 self.tysys
                     .type_table
@@ -1678,6 +1722,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
         bounds: &[ast::TraitBound],
+        method_name: &str,
+        self_type_id: TypeId,
+        span: Span,
+    ) -> Option<(crate::name::FqTraitName, MethodInfo)> {
+        self.find_method_in_trait_bounds_with(
+            bounds,
+            &IndexMap::default(),
+            method_name,
+            self_type_id,
+            span,
+        )
+    }
+
+    /// [`Self::find_method_in_trait_bounds`] for bounds that carry no reference
+    /// site of their own.
+    ///
+    /// `resolved` maps a bound's written name to the declaration it means,
+    /// answered where the bound was first read. An associated-type projection
+    /// is the case: it outlives the trait declaration's frame, so it records
+    /// the identities and hands them back here.
+    pub(super) fn find_method_in_trait_bounds_with(
+        &mut self,
+        bounds: &[ast::TraitBound],
+        known: &IndexMap<String, crate::name::FqTraitName>,
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
@@ -1708,7 +1776,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The bound answers with the trait its own reference site resolves to,
         // not the spelling it wrote: an aliased bound (`T: G` for
         // `use { Greet as G }`) must reach the impl that defines the method.
-        let fq_trait_name = self.fq_trait_name_at(bound.id, &trait_name);
+        let fq_trait_name = known
+            .get(&trait_name)
+            .cloned()
+            .unwrap_or_else(|| self.fq_trait_name_at(bound.id, &trait_name));
 
         let answers = self.trait_assoc_answers(&trait_name, &trait_assoc_types, self_type_id);
         let instantiated = sig.decl.instantiate_slots_with(
@@ -2312,10 +2383,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) = self
             .find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_name, method_name, None)
         {
-            let return_type = auto_derive.unwrap_or(info.output_type);
+            let return_type = auto_derive.map_or(info.output_type, |(_, ty)| ty);
             let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
             (info.trait_name, info.self_kind, param_types, return_type)
-        } else if let Some(return_type) = auto_derive
+        } else if let Some((item, return_type)) = auto_derive
             && self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
@@ -2330,7 +2401,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .intern(ResolvedType::Ref(lookup_type_id));
             (
-                self.fq_trait_name_written(trait_name),
+                self.tysys.type_table.borrow().compiler_trait_fq(item),
                 ast::SelfKind::Ref,
                 vec![ref_self_ty],
                 return_type,
@@ -2381,7 +2452,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_id: TypeId,
     ) -> Option<TraitMethodMatch> {
-        let (trait_name, return_type) = self.tysys.auto_derive_by_method(method_name)?;
+        let (item, trait_name, return_type) = self.tysys.auto_derive_by_method(method_name)?;
         let base_type_id = self.tysys.get_base_type(receiver_type_id);
         if !self.tysys.auto_derive_eligible_kind(base_type_id) {
             return None;
@@ -2418,10 +2489,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             consumes_self: false,
         };
         let impl_module_source = self.find_struct_module_source(struct_name);
-        let trait_decl = self.trait_decl_key_in_frame(&trait_name);
+        // The auto-derived trait is a compiler item, so it is named by the
+        // declaration the registry holds, not by a spelling resolved here.
+        let trait_fq = self.tysys.type_table.borrow().compiler_trait_fq(item);
+        let trait_decl = trait_fq
+            .canonical()
+            .expect("a compiler trait item names a declaration");
         Some(TraitMethodMatch {
             // Auto-derived `Eq` / `Ord` take no type arguments.
-            trait_name: crate::name::FqTraitName::declared(&trait_decl.0, &trait_decl.1),
+            trait_name: trait_fq,
             trait_decl,
             trait_args: vec![],
             method_info,

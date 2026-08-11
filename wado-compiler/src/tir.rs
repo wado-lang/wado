@@ -455,8 +455,11 @@ pub enum ResolvedType {
         /// builder had no trait, which makes resolution require the name to
         /// be unambiguous.
         owning_trait: Option<String>,
-        /// Trait bounds on this associated type (from the trait declaration)
-        bounds: Vec<String>,
+        /// Trait bounds on this associated type, named by the declarations the
+        /// trait's own `type A: Bound` references resolve to. A projection
+        /// outlives the frame that built it, so a spelling here would be read
+        /// back from a vantage that never wrote it.
+        bounds: Vec<crate::name::FqTraitName>,
         /// Resolved associated type bindings (e.g., [("Item", `u8_typeid`)] for `I::Iter`
         /// when I: `IntoIterator`<Item = u8> and `IntoIterator::Iter`: Iterator<Item = `Self::Item`>)
         assoc_type_bindings: Vec<(String, TypeId)>,
@@ -2162,7 +2165,7 @@ impl TypeTable {
         &mut self,
         param_id: TypeId,
         assoc_name: String,
-        bounds: Vec<String>,
+        bounds: Vec<crate::name::FqTraitName>,
         assoc_type_bindings: Vec<(String, TypeId)>,
     ) -> TypeId {
         self.make_assoc_type_projection_of_trait(
@@ -2181,7 +2184,7 @@ impl TypeTable {
         param_id: TypeId,
         owning_trait: Option<String>,
         assoc_name: String,
-        bounds: Vec<String>,
+        bounds: Vec<crate::name::FqTraitName>,
         assoc_type_bindings: Vec<(String, TypeId)>,
     ) -> TypeId {
         self.intern(ResolvedType::AssocTypeProjection {
@@ -5943,7 +5946,7 @@ mod tests {
         let iter = table.make_assoc_type_projection(
             self_param,
             "Iter".to_string(),
-            vec!["Iterator".to_string()],
+            vec![crate::name::FqTraitName::declared(&ModuleSource::prelude(), "Iterator")],
             vec![("Item".to_string(), item)],
         );
 
@@ -5978,7 +5981,7 @@ mod tests {
         let projection = table.make_assoc_type_projection(
             self_param,
             "Acc".to_string(),
-            vec!["Default".to_string()],
+            vec![crate::name::FqTraitName::declared(&ModuleSource::prelude(), "Default")],
             vec![("Item".to_string(), TypeTable::I32)],
         );
 
@@ -5996,7 +5999,10 @@ mod tests {
             panic!("expected a projection");
         };
         assert_eq!(param_id, receiver);
-        assert_eq!(bounds, vec!["Default".to_string()]);
+        assert_eq!(
+            bounds,
+            vec![crate::name::FqTraitName::declared(&ModuleSource::prelude(), "Default")]
+        );
         assert_eq!(
             assoc_type_bindings,
             vec![("Item".to_string(), TypeTable::I32)]

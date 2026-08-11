@@ -207,14 +207,24 @@ impl Resolver<'_> {
     /// the prelude — including its implementation modules, so `i32`, `List` and
     /// a compiler item declared `internal` there (`ReflectStruct`, `Member`)
     /// all resolve for a module that never `use`d them.
+    ///
+    /// The module's own declarations rank above the prelude, so a module that
+    /// declares `trait Left` means its own, not `core:prelude/format`'s enum
+    /// case of that name (issue #1298).
     fn resolve_name(&self, name: &str) -> DeclRef {
         if let Some(id) = self.binder(name) {
             return DeclRef::Binder(id);
         }
-        if let Some(sym) = self.symbols.lookup(self.module, name) {
+        if let Some(sym) = self.symbols.imported(self.module, name) {
             return DeclRef::Decl(sym.defined_at);
         }
         if let Some(sym) = self.symbols.lookup_in_module(self.module, name) {
+            return DeclRef::Decl(sym.defined_at);
+        }
+        if let Some(sym) = self
+            .symbols
+            .lookup_in_module(&ModuleSource::prelude(), name)
+        {
             return DeclRef::Decl(sym.defined_at);
         }
         if let Some(id) = self.prelude.get(name) {
@@ -282,24 +292,45 @@ impl AstVisitor for Resolver<'_> {
     }
 
     fn visit_generic_params(&mut self, params: &[GenericParam]) {
-        // A bound is a reference to a trait, and its associated-type bindings
-        // are references to that trait's members.
         for p in params {
-            for bound in &p.bounds {
-                let answer = self.resolve_name(&bound.name);
-                self.record(bound.id, answer);
-                for assoc in &bound.assoc_types {
-                    // The member is named relative to the bound's trait, not to
-                    // this module, so the site is recorded and left for the
-                    // consumer that knows the trait.
-                    self.record(assoc.id, DeclRef::Unresolved);
-                    self.visit_type(&assoc.ty);
-                }
-            }
+            self.visit_trait_bounds(&p.bounds);
             if let Some(default) = &p.default {
                 self.visit_type(default);
             }
         }
+    }
+
+    /// A bound is a reference to a trait, and its associated-type bindings are
+    /// references to that trait's members. Every bound position routes here —
+    /// `<T: Trait>`, `trait Sub: Super`, `type A: Trait` — so an inherited
+    /// supertrait bound carries a resolved site just like a written one.
+    fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
+        for bound in bounds {
+            let answer = self.resolve_name(&bound.name);
+            self.record(bound.id, answer);
+            for assoc in &bound.assoc_types {
+                // The member is named relative to the bound's trait, not to
+                // this module, so the site is recorded and left for the
+                // consumer that knows the trait.
+                self.record(assoc.id, DeclRef::Unresolved);
+                self.visit_type(&assoc.ty);
+            }
+        }
+    }
+
+    /// A qualified path in expression position (`Trait::method`, `Type::CONST`)
+    /// names a declaration with its leading segment, and that segment carries
+    /// its own site. Without this the only trait reference a UFCS call has is
+    /// a substring of the callee's name, which no vantage owns.
+    fn visit_expr(&mut self, expr: &ast::Expr) {
+        if let ast::Expr::Ident(ident) = expr
+            && let [head, _rest @ ..] = ident.segments.as_slice()
+            && ident.segments.len() > 1
+        {
+            let answer = self.resolve_name(&head.name);
+            self.record(head.id, answer);
+        }
+        ast::walk_expr(self, expr);
     }
 
     fn visit_type(&mut self, ty: &Type) {

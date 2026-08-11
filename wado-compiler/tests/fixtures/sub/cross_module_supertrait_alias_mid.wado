@@ -1,0 +1,25 @@
+use { Base as B } from "./cross_module_supertrait_alias_base.wado";
+
+export trait Sub: B {
+    fn sub(&self) -> i32;
+}
+
+export struct S {
+    n: i32,
+}
+
+impl B for S {
+    fn base(&self) -> i32 {
+        return self.n;
+    }
+}
+
+impl Sub for S {
+    fn sub(&self) -> i32 {
+        return self.n * 2;
+    }
+}
+
+export fn make(n: i32) -> S {
+    return S { n: n };
+}
