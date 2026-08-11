@@ -953,7 +953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve one method parameter's type. A receiver comes from the impl
     /// target — the parser desugars `self` / `&self` / `&mut self` into
     /// `Self`-based annotations — and anything else from its annotation.
-    fn resolve_method_param_type(&mut self, param: &ast::Param, impl_type: &Type) -> TypeId {
+    fn resolve_method_param_type(&mut self, param: &ast::Param) -> TypeId {
         // The receiver takes the `Self` the impl frame already fixed, not a
         // re-resolution of the written target. By the time a parameter is
         // typed the method's own type parameters are in scope, and they are
@@ -2347,7 +2347,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => func
                 .params
                 .iter()
-                .map(|param| scope.resolve_method_param_type(param, impl_type))
+                .map(|param| scope.resolve_method_param_type(param))
                 .collect(),
         };
 
