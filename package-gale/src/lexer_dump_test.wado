@@ -46,6 +46,28 @@ fn str_contains(haystack: &String, needle: &String) -> bool {
     return false;
 }
 
+fn str_count(haystack: &String, needle: &String) -> i32 {
+    let h_len = haystack.len();
+    let n_len = needle.len();
+    if n_len == 0 || n_len > h_len {
+        return 0;
+    }
+    let mut count = 0;
+    for let mut i = 0; i <= h_len - n_len; i += 1 {
+        let mut found = true;
+        for let mut j = 0; j < n_len; j += 1 {
+            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
+                found = false;
+                break;
+            }
+        }
+        if found {
+            count += 1;
+        }
+    }
+    return count;
+}
+
 test "lexer dump names the grammar and summarizes strategies" {
     let report = lexer_dump(&"grammar T;
 r : ID ;
@@ -130,6 +152,32 @@ I : ('a' | 'ab') 'bc' ;");
 
     assert str_contains(&report, &"alternation ('a' | 'ab') then 'bc' — arm scoring"), report;
     assert str_contains(&report, &"arm scoring 1"), report;
+}
+
+test "lexer dump reports a scored alternation's suffix once" {
+    // `gen_lexer_alts_lookahead_aware` only PEEKS the suffix — it restores `pos`
+    // and the element loop `continue`s, so the sequence commits it exactly once.
+    // Reporting it from both places would double every construct behind a
+    // scored alternation, and double the summary's tally with it.
+    let report = lexer_dump(&"grammar T;
+r : I ;
+I : ('a' | 'ab') [0-9]* 'z' ;");
+
+    assert str_count(&report, &"repeat [0-9]* then 'z'") == 1, report;
+    assert str_contains(&report, &"greedy repeat: plain 1"), report;
+}
+
+test "lexer dump sees a predicate re-based onto a non-greedy repeat's rest" {
+    // The non-greedy emit returns rather than falling out of the element loop,
+    // so it carries the alt's later predicates onto the rest alternative. The
+    // `{true}?` therefore lands between the `.*` and the alt's end, which is
+    // what keeps that repeat on the plain loop.
+    let report = lexer_dump(&"grammar T;
+r : S ;
+S : 'a' .*? .* {true}? 'x' ;");
+
+    assert str_contains(&report, &"repeat .* then 'x' — plain loop: a semantic predicate follows the repeat"), report;
+    assert str_contains(&report, &"plain 1, lookahead-aware 0"), report;
 }
 
 test "lexer dump reports disjoint arms with a suffix as first-match" {

@@ -4,10 +4,16 @@
 //! Each strategy is the value the emitter branches on (`lexer_rule_route`,
 //! `lexer_alts_emit`, `lexer_repeat_emit`, `lexer_group_emit` in
 //! `lexer_gen.wado`), so the report names the branch emission took rather than
-//! a re-derivation of it. The walk mirrors `gen_lexer_alt_seq`'s traversal —
-//! same tail propagation, and a non-recursive fragment is reported at each use
-//! site that inlines it (prefixed with the fragment name), so every construct
-//! appears where it is emitted.
+//! a re-derivation of it.
+//!
+//! The traversal that reaches each decision is mirrored rather than shared, so
+//! it has to match `gen_lexer_alt_seq` step for step: the same tail
+//! propagation, the same alternative handed to a cut-out suffix (a non-greedy
+//! repeat gets the alt's later actions re-based onto it, everything else the
+//! bare elements), the same stop-or-continue after a construct that consumed
+//! the rest of the sequence, and a non-recursive fragment reported at each use
+//! site that inlines it (prefixed with the fragment name). Every construct then
+//! appears exactly where it is emitted, once.
 //!
 //! Not reported: a repeat nested directly under another repeat or a `~`. There
 //! is no sequence around such a position, so there is no strategy to pick — the
@@ -39,6 +45,7 @@ use {
     lexer_repeat_emit,
     lexer_group_emit,
     lexer_alt_suffix,
+    lexer_alt_rest,
     lexer_alt_last_is_tail,
     fragment_is_recursive,
 } from "./lexer_gen.wado";
@@ -257,12 +264,13 @@ fn walk_alt(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, ci: bool, ta
                 );
             }
             if emit matches { ArmScoring } {
-                // Each arm is scanned match-only, then the suffix is peeked
-                // from where the arm ended (`gen_lexer_alts_lookahead_aware`).
+                // Each arm is scanned match-only, outside tail position
+                // (`gen_lexer_alts_lookahead_aware`). The suffix is only peeked
+                // there — `pos` is restored and the emit `continue`s — so the
+                // sequence still commits it, and this loop walks it next.
                 for let g of g_alts {
                     walk_alt(o, ctx, g, ci, false);
                 }
-                walk_suffix(o, ctx, alt, i, ci, last_is_tail);
                 continue;
             }
         }
@@ -302,16 +310,20 @@ fn walk_repeat(
     // alternative follows it there.
     walk_elem(o, ctx, &rep.element, ci, false);
     match emit {
-        // The rest of the alt is tried before each extra iteration, outside
-        // tail position (`gen_lexer_non_greedy_repeat`).
+        // The rest of the alt — its re-based predicates included — is tried
+        // before each extra iteration, outside tail position
+        // (`gen_lexer_non_greedy_repeat`).
         NonGreedy => {
-            walk_suffix(o, ctx, alt, index, ci, false);
+            walk_alt(o, ctx, &lexer_alt_rest(alt, index), ci, false);
             return true;
         },
-        // The forward scan peeks the suffix at every accept position, so the
-        // suffix carries the alt's tail position (`gen_lexer_repeat_lookahead_aware`).
+        // The forward scan peeks and then commits the suffix at the accept
+        // position, as the bare element sequence `gen_lexer_suffix_seq` lowers
+        // — the alt's own predicates stay with the alt, whose post-loop pass
+        // still places the trailing one after the `break`. It carries the alt's
+        // tail position (`gen_lexer_repeat_lookahead_aware`).
         LookaheadAware => {
-            walk_suffix(o, ctx, alt, index, ci, last_is_tail);
+            walk_alt(o, ctx, &suffix_alt(alt, index), ci, last_is_tail);
             return true;
         },
         // The suffix stays part of the sequence; the caller walks on.
@@ -324,18 +336,18 @@ fn walk_repeat(
 /// The ` then <suffix>` a decision line carries, so the reason it gives can be
 /// read against the thing it is about. Empty when nothing follows.
 fn suffix_text(alt: &LexerAlternative, index: i32) -> String {
-    let suffix = lexer_alt_suffix(alt, index);
-    if suffix.is_empty() {
+    let suffix = suffix_alt(alt, index);
+    if suffix.elements.is_empty() {
         return "";
     }
-    return ` then ${alt_text(&LexerAlternative { elements: suffix }, 0)}`;
+    return ` then ${alt_text(&suffix, 0)}`;
 }
 
-/// Walk what follows `alt.elements[index]` as the sequence it is lowered as
-/// (`gen_lexer_suffix_seq`).
-fn walk_suffix(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: i32, ci: bool, tail: bool) {
-    let suffix = LexerAlternative { elements: lexer_alt_suffix(alt, index) };
-    walk_alt(o, ctx, &suffix, ci, tail);
+/// What follows `alt.elements[index]`, as the alternative `gen_lexer_suffix_seq`
+/// lowers: the trailing elements alone. An emit that re-bases the alt's actions
+/// onto its remainder uses `lexer_alt_rest` instead.
+fn suffix_alt(alt: &LexerAlternative, index: i32) -> LexerAlternative {
+    return LexerAlternative { elements: lexer_alt_suffix(alt, index) };
 }
 
 fn walk_elem(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, ci: bool, tail: bool) {

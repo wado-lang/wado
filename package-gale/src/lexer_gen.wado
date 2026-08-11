@@ -1752,6 +1752,23 @@ pub fn lexer_alt_suffix(alt: &LexerAlternative, after: i32) -> List<LexerElement
     return out;
 }
 
+/// The rest of `alt` after `after`, as the alternative a non-greedy repeat
+/// consumes: the trailing elements with every action from `after + 1` onwards
+/// re-based onto them (`before_index - (after + 1)`).
+///
+/// The re-basing is what keeps a predicate positioned after the repeat — the
+/// trailing one included — placed: the non-greedy emit returns instead of
+/// falling out of the element loop, so the loop's post-pass never runs for it.
+pub fn lexer_alt_rest(alt: &LexerAlternative, after: i32) -> LexerAlternative {
+    let mut actions: List<AltAction> = [];
+    for let a of &alt.actions {
+        if a.before_index >= after + 1 {
+            actions.push(AltAction { kind: a.kind, source: a.source, before_index: a.before_index - (after + 1) });
+        }
+    }
+    return LexerAlternative { elements: lexer_alt_suffix(alt, after), actions };
+}
+
 /// Whether the alternative's last element inherits the sequence's tail
 /// position. It does not when a trailing predicate follows it: the
 /// maximal-munch emit would gate the longest arm on a predicate a shorter one
@@ -1796,23 +1813,9 @@ fn gen_lexer_alt_seq(
         if let Repeat(rep) = elem {
             match lexer_repeat_emit(alt, i, all_rules, ci) {
                 NonGreedy => {
-                    // Re-base the suffix's predicates onto the rest alt
-                    // (`before_index - (i + 1)`) so one after the repeat is still
-                    // emitted, inside the suffix the non-greedy emit consumes.
-                    // `return`: the rest alt covers `i + 1` through the trailing one.
-                    let mut rest_actions: List<AltAction> = [];
-                    for let a of &alt.actions {
-                        if a.before_index >= i + 1 {
-                            rest_actions.push(
-                                AltAction { kind: a.kind, source: a.source, before_index: a.before_index - (i + 1) },
-                            );
-                        }
-                    }
-                    let rest_alt = LexerAlternative {
-                        elements: lexer_alt_suffix(alt, i),
-                        actions: rest_actions,
-                    };
-                    gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci, ea, hm);
+                    // `return`: the rest alt covers `i + 1` through the trailing
+                    // predicate, so the post-loop pass must not run again.
+                    gen_lexer_non_greedy_repeat(w, rep, &lexer_alt_rest(alt, i), all_rules, fail_action, ci, ea, hm);
                     return;
                 },
                 LookaheadAware => {
