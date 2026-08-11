@@ -1132,9 +1132,10 @@ impl Body {
     /// first hit.
     ///
     /// Deliberately coarse: it counts orphans too, which nothing can re-attach,
-    /// so a stale one costs the memo for the rest of the session. Narrowing it
-    /// to the nodes a session itself allocated measured no faster, and the
-    /// answer is only ever "recompute the census", never a wrong one.
+    /// so one of those costs the memo for the rest of the session. It answered
+    /// `false` on all 356 fills of a `benchmark/sqlite_parse` `-O2` compile, and
+    /// its only wrong answer is "recompute the census", never a wrong census —
+    /// so precision here buys nothing that measurement has found.
     pub fn any_operand_names_a_local(&self) -> bool {
         let mut found = false;
         for node in (0..self.exprs.len())

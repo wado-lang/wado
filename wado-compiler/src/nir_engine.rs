@@ -659,7 +659,15 @@ impl<'a> Engine<'a> {
                 NodeRef::Stmt(id) => {
                     if let StmtKind::Let { local_index, .. } = &self.body.stmts[id].kind {
                         let index = *local_index;
-                        self.buf.uses_entry(index).def = Some(id);
+                        // First in source order, not last. A local should have
+                        // one `Let`, but cloning a block (`labeled_block_fusion`)
+                        // copies `local_index` with it, and `def` feeds
+                        // `extract`'s dominance gate — so pick explicitly rather
+                        // than let the traversal direction decide.
+                        let entry = self.buf.uses_entry(index);
+                        if entry.def.is_none() {
+                            entry.def = Some(id);
+                        }
                     }
                 }
                 NodeRef::Block(_) | NodeRef::Pat(_) => {}
@@ -767,8 +775,16 @@ impl<'a> Engine<'a> {
             // spliced in is absent from it — correctly, but only until it is
             // attached. Record that one is waiting; the attach then knows to
             // drop the memo instead of trusting it.
-            self.pending_local_naming
-                .set(self.body.any_operand_names_a_local());
+            //
+            // Sticky once set: a true answer only ever means "drop the memo",
+            // so keeping it spares the probe on every later fill and bounds a
+            // pathological session at one census per edit rather than two. It
+            // came back false on all 356 fills of a `benchmark/sqlite_parse`
+            // `-O2` compile.
+            if !self.pending_local_naming.get() {
+                self.pending_local_naming
+                    .set(self.body.any_operand_names_a_local());
+            }
             self.body.promoted_read_counts()
         })
     }
@@ -780,37 +796,35 @@ impl<'a> Engine<'a> {
     /// it stands. That short-circuit is what keeps the hook off the allocator's
     /// hot path, so it is worth the arena probe at fill time that pays for it.
     fn census_note_operand(&mut self, op: Operand) {
-        let stale = match self.promoted_reads.get() {
-            None => false,
-            Some(census) if census.is_empty() => {
-                matches!(op, Operand::Value(v) if self.body.values.names_a_local(v))
-            }
-            Some(_) => true,
-        };
-        if stale {
-            self.promoted_reads.take();
+        if self.promoted_reads.get().is_none() {
+            return;
         }
+        if matches!(op, Operand::Value(v) if self.body.values.names_a_local(v)) {
+            self.promoted_reads.take();
+            return;
+        }
+        // Not a local-naming value, but an `Operand::Expr` slot attaches a whole
+        // subtree, so the structural question still has to be asked.
+        self.census_note_structure();
     }
 
     /// [`Engine::census_note_operand`] over every operand slot of `node` — for
     /// an edit that installs a whole node kind rather than one slot.
     fn census_note_node_operands(&mut self, node: NodeRef) {
-        let stale = match self.promoted_reads.get() {
-            None => false,
-            Some(census) if census.is_empty() => {
-                let mut hit = false;
-                self.body.for_each_operand(node, |op| {
-                    if let Operand::Value(v) = op {
-                        hit |= self.body.values.names_a_local(v);
-                    }
-                });
-                hit
-            }
-            Some(_) => true,
-        };
-        if stale {
-            self.promoted_reads.take();
+        if self.promoted_reads.get().is_none() {
+            return;
         }
+        let mut writes_local = false;
+        self.body.for_each_operand(node, |op| {
+            if let Operand::Value(v) = op {
+                writes_local |= self.body.values.names_a_local(v);
+            }
+        });
+        if writes_local {
+            self.promoted_reads.take();
+            return;
+        }
+        self.census_note_structure();
     }
 
     /// Drop the memoized census unless this edit provably cannot have moved it.
@@ -2019,6 +2033,41 @@ mod tests {
         );
         assert!(eng.reads_promoted_local(0));
         assert_eq!(eng.promoted_read_count(0), 1);
+    }
+
+    /// `def` is the first `Let` in source order. A local should have exactly
+    /// one, but a cloned block carries its `local_index` along, and the pick
+    /// used to fall out of which way the use-index walk happened to visit
+    /// siblings — so it is pinned here rather than left to the traversal.
+    #[test]
+    fn local_def_is_the_first_binding_in_source_order() {
+        let mut first = None;
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let a = e(
+                b,
+                ExprKind::Cast {
+                    expr: one,
+                    target_type: TypeTable::I32,
+                },
+            );
+            let two = lit(b, 2);
+            let c = e(
+                b,
+                ExprKind::Cast {
+                    expr: two,
+                    target_type: TypeTable::I32,
+                },
+            );
+            let s1 = let_x(b, a, false);
+            let s2 = let_x(b, c, false);
+            first = Some(s1);
+            vec![s1, s2]
+        });
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
+        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        assert_eq!(eng.local_def(0), first);
     }
 
     /// A node is allocated detached and spliced in later, so the census can be
