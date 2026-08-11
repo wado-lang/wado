@@ -3500,21 +3500,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if coercion_deferred {
                     deferred_coercions.push((provided_idx, provided_idx));
                 }
-                // A field whose declared type names a slot of the struct's own
-                // frame is not a constraint on the value — the value is what
-                // fixes the slot. `struct Context<T> { fields: T }` accepts
-                // whatever the literal puts in `fields`, and `Holder<T> { items:
-                // List<T> }` accepts any `List`. Comparing against the slot
-                // itself only rejects every value that is not literally it.
-                //
-                // Nor is it checked once the slot is known: the pass that
-                // re-runs the held-back sequence coercion compares against
-                // whatever the *expected* type had already put in the slot,
-                // which is not this literal's answer (it turned `chain<J>`'s
-                // `IterChain { first: *self, second: other }` into `expected
-                // StrCharIter, found J` across the prelude's iterators). Where
-                // the slot has to agree with something, the literal's own
-                // inferred type carries it to that boundary.
+                // A field whose declared type names a slot is not a constraint
+                // on the value — the value is what fixes the slot. Fields
+                // sharing a slot are compared to each other in
+                // `infer_struct_type_args`; comparing one against the
+                // *inferred* argument instead reads back whatever the caller's
+                // expected type put there, not this literal's answer.
                 let field_names_slot = expected_field_type
                     .is_some_and(|t| self.tysys.type_table.borrow().contains_rigid_param(t));
                 let check_deferred = coercion_deferred || field_names_slot;
@@ -4214,6 +4205,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();
         let field_types = self.instantiate_types(&decl_field_types, &inst);
 
+        // Two fields mentioning one slot are each other's evidence: the slot
+        // takes what the first of them says, so a later one has to agree.
+        // Nothing else compares them — the first-pass check is skipped for a
+        // field naming a slot (the value is what fixes the slot), and checking
+        // against the *inferred* argument instead cannot work here, because the
+        // caller's expected type fills the same slot: that is what turned the
+        // prelude's `IterChain { first: *self, second: other }` into `expected
+        // StrCharIter, found J`. Only the literal's own fields are consulted.
+        let mut agreed: IndexMap<TypeId, TypeId> = IndexMap::default();
+        for (struct_field, &expected_field_type) in fields.iter().zip(field_types.iter()) {
+            let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
+            super::infer::unify(
+                &self.tysys.type_table,
+                expected_field_type,
+                struct_field.value.type_id,
+                &mut bindings,
+            );
+            for (var, answer) in bindings {
+                let Some(&first) = agreed.get(&var) else {
+                    agreed.insert(var, answer);
+                    continue;
+                };
+                let disagrees = {
+                    let table = self.tysys.type_table.borrow();
+                    !table.contains_undecided(first)
+                        && !table.contains_undecided(answer)
+                        && matches!(
+                            super::typecheck::check_assignable(answer, first, &table),
+                            super::typecheck::TypeCheckResult::Incompatible
+                        )
+                };
+                if disagrees {
+                    let _ = self.emit(TypeError::TypeMismatch {
+                        expected: self.tysys.type_table.borrow().type_name(first),
+                        found: self.tysys.type_table.borrow().type_name(answer),
+                        span: struct_field.value.span,
+                    });
+                }
+            }
+        }
+
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
 
         for (struct_field, &expected_field_type) in fields.iter().zip(field_types.iter()) {
@@ -4242,16 +4274,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (mut inferred, _) = infer.solve_with_phantoms();
         self.record_instantiation(&inst, &inferred);
         // A phantom parameter — one no field mentions — is not an inference
-        // failure; the declaration's own parameter is the historical answer and
-        // monomorphization substitutes it. Hand back that, not the variable
-        // nobody solved, which would otherwise ride into a recorded type and
-        // trip the "no variable survives elaboration" assert in DCE.
-        //
-        // A slot a field *does* mention and nothing solved is a failure, and
-        // handing back the declaration's parameter there is what let
-        // `Holder { items: 5 }` — `items: List<T>`, nothing pinning `T` —
-        // build a rigid `Holder<T>` that reached WIR and trapped it. Leave the
-        // variable in place so it is blamed and reported.
+        // failure: the declaration's own parameter is the answer, and
+        // monomorphization substitutes it. A slot a field *does* mention and
+        // nothing solved is a failure, so its variable stays put to be blamed
+        // and reported.
         for (slot, answer) in inferred.iter_mut().enumerate() {
             let decl_param = struct_info.type_param_type_ids[slot];
             let is_phantom = {

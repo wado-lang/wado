@@ -665,6 +665,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // As in the sequence path: the first value decides an open value type,
+        // and the rest are checked against that answer.
+        let mut value_type = value_type;
         for field in &struct_lit.fields {
             let value = self.resolve_expr(&field.value, ctx, Some(value_type));
             // Route through the shared check rather than comparing ids, for
@@ -688,6 +691,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else if !incompatible {
                 // The values are what decide an open value type.
                 self.solve_infer_holes_against(value_type, value);
+                value_type = self.apply_infer_holes(value_type);
             }
         }
 
@@ -829,6 +833,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Walk each element for fact recording + heterogeneous-element
         // diagnostics. Reify rebuilds the `__seq_lit:` desugar block from
         // the recorded `SequenceCoercionFacts` + the AST.
+        // The first element decides an open element type; every element after
+        // it is checked against that answer. Reading `element_type` afresh
+        // each round is what makes the decision stick — left as the variable,
+        // it would defer for every later element and wave through
+        // `[1, "abc"]`.
+        let mut element_type = element_type;
         for element in &tuple_lit.elements {
             let elem_expr = self.resolve_expr(element, ctx, Some(element_type));
             // Route through the shared check rather than comparing ids: a
@@ -861,6 +871,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Nothing else can: the literal is the only evidence of what
                 // this sequence holds.
                 self.solve_infer_holes_against(element_type, elem_expr);
+                element_type = self.apply_infer_holes(element_type);
             }
         }
 
