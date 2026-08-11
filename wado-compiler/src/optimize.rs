@@ -321,6 +321,38 @@ pub fn optimize(
     // The born-resolved invariant is now enforced by the type system: a call
     // node's `func_id` is a non-optional `FuncId`, stamped at its synthesis site.
 
+    // TEMPORARY census — revert before commit. How much of the skeleton is a
+    // pure kind C1 would move into the pool, and how much of that is the
+    // `Local` reads the engine's use index is made of.
+    if crate::trace::filter().enabled("skel_kinds") {
+        use crate::nir_arena::ExprKind;
+        let (mut total, mut pure, mut locals) = (0usize, 0usize, 0usize);
+        for f in &project.functions {
+            let f = f.borrow();
+            let Some(b) = f.body.as_ref() else { continue };
+            for (_, n) in b.exprs.iter() {
+                total += 1;
+                match &n.kind {
+                    ExprKind::Local { .. } => {
+                        pure += 1;
+                        locals += 1;
+                    }
+                    ExprKind::Binary { .. }
+                    | ExprKind::Unary { .. }
+                    | ExprKind::Cast { .. }
+                    | ExprKind::FieldAccess { .. } => pure += 1,
+                    _ => {}
+                }
+            }
+        }
+        crate::compiler_trace!(
+            "skel_kinds",
+            "exprs={total} pure_kinds={pure} ({:.1}%) of which Local={locals} ({:.1}% of all exprs)",
+            100.0 * pure as f64 / total as f64,
+            100.0 * locals as f64 / total as f64
+        );
+    }
+
     // TEMPORARY counters — revert before commit.
     if crate::trace::filter().enabled("engine_reuse") {
         use std::sync::atomic::Ordering::Relaxed;
