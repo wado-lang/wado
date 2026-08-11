@@ -79,6 +79,24 @@ The elaborator covers trait selection, generic inference, method dispatch, coerc
 
 One trait implemented for one receiver at several argument lists is chosen by the arguments, which are classified before they are elaborated (`elaborator/synth.rs`, [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)). That classification is a read-only query: it runs under `Logger::quiet`, and debug builds assert it recorded no fact.
 
+### Rigid and flexible type variables
+
+The type table keeps the two apart, because a type check asks opposite things of them:
+
+- `ResolvedType::TypeParam` is **rigid**. It stands for whatever a caller instantiates the binding item with, so inside that item it is opaque: nothing but itself is assignable to it, in either direction. `let x: T = 5` in a body that declares `T` is a type error.
+- `ResolvedType::InferVar` is **flexible**. It stands for a type the solver has yet to determine, so it accepts and records.
+
+A rigid parameter appears only inside the item that binds it. Every *use* of a polymorphic signature instantiates its slots into fresh variables first (`elaborator/instantiate.rs`), so a callee's parameter never reaches a check as itself. Without that step the two collapse: `TypeParam` is interned by `(name, index)`, so `fn f<T>`'s `T` and `fn g<T>`'s `T` are one `TypeId`, and a check meeting a bare `T` cannot tell the enclosing body's parameter from a callee's slot.
+
+`check_assignable` therefore defers only what is genuinely undecided — an inference variable, a type pack awaiting expansion, an associated-type projection awaiting its impl, `unknown` / `error` — and compares a rigid parameter nominally.
+
+Two consequences worth knowing when adding a check:
+
+- **Check a value where its expected type is known.** A generic method's parameter types still name its own slots until inference runs, so arguments are checked once, after substitution — not before. The same holds for a struct literal's fields and a parameter's default.
+- **A bare slot is not a constraint.** `struct Context<T> { fields: T }` accepts whatever the literal puts in `fields`; that value is what fixes `T`. There is nothing to check it against.
+
+Variables never survive elaboration: `finalize_infer_holes` substitutes solved ones away and pins unsolved ones to `error` after reporting them, and the backend passes panic on one rather than classifying it.
+
 ## Synthesis
 
 `synthesis::synthesize` (`synthesis.rs`) generates synthetic TIR that the user does not write:
