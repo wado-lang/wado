@@ -2,7 +2,7 @@
 //! `SkelTree`.
 //!
 //! In the live-ValueGraph design (see
-//! `docs/wep-2026-06-15-live-value-graph.md`) an expression's value is a
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) an expression's value is a
 //! hash-consed [`ValueId`]; the extractor walks the skeleton and lowers each
 //! pure operand to that value's concrete form.
 //!
@@ -38,9 +38,9 @@ impl crate::nir_engine::Rule for ExtractLiteralRule {
         let Some(value) = extract_const(e, vid, id) else {
             return false;
         };
-        // Promote the node to the pooled constant in its parent slot (WEP: The
-        // Live ValueGraph). Idempotent: a promoted (orphaned) node has no parent
-        // slot, so the retry reports no change and the worklist terminates.
+        // Promote the node to the pooled constant in its parent slot. Idempotent:
+        // a promoted (orphaned) node has no parent slot, so the retry reports no
+        // change and the worklist terminates.
         e.replace_expr_with_value(id, value)
     }
 }
@@ -63,7 +63,7 @@ fn is_let_value(e: &Engine, id: ExprId) -> bool {
 /// True if `id` is a pure-arith node (`Binary` / `Cast` / pure `Unary`) — a
 /// freeze candidate. Under early promotion, `FieldAccess` reads also qualify
 /// (their value re-emits as a `StructGet`; reemittability + the shared `heap_ver`
-/// keep it sound), extending promotion toward every pure value (WEP P2).
+/// keep it sound).
 fn is_pure_arith(e: &Engine, id: ExprId, include_fields: bool) -> bool {
     matches!(
         &e.body.exprs[id].kind,
@@ -126,8 +126,7 @@ fn block_path(e: &Engine, expr: ExprId) -> Option<Vec<(crate::nir_arena::BlockId
 /// common ancestor block precedes (dominates) each use. The uses share one
 /// `ValueId`, so no heap bump separates them — the field/value is constant
 /// across the span, and a load pinned at this point reproduces it for all.
-/// Generalises the former single-block placement to cross-block uses (WEP P2,
-/// availability-aware extraction). `None` if any use lacks a path.
+/// `None` if any use lacks a path.
 fn materialise_point(
     e: &Engine,
     ids: &[ExprId],
@@ -187,7 +186,7 @@ fn stmt_block_path(
 /// the deepest block common to both paths (not nested in a sibling branch
 /// `before_stmt` does not enter) and `def_stmt` must sit strictly earlier there.
 /// Used to admit a non-param `FieldAccess` receiver only when its single-assignment
-/// def is live at the materialisation point (WEP P2 receiver-availability gate).
+/// def is live at the materialisation point (the receiver-availability gate).
 fn def_dominates(
     e: &Engine,
     def_stmt: crate::nir_arena::StmtId,
@@ -368,7 +367,7 @@ pub(super) fn freeze_pure_arith(
 
         // Phase 2: apply. No further graph queries. Group by representative so a
         // value used by several slots can be **materialised once** (availability
-        // extraction, WEP P2) — a single pre-header `let _av = <value>` whose uses
+        // extraction) — a single pre-header `let _av = <value>` whose uses
         // read `local.get _av` — instead of re-emitting the computation at each
         // use. `record_value_tree_types` stamps the tree's width and skips a
         // width-conflicting value; the two apply strategies then diverge on whether
@@ -454,6 +453,14 @@ fn classify_candidate(
         return None;
     }
     let rep = engine.value(id)?;
+    // An early freeze may plant only context-free values. A constant means the
+    // same thing wherever `inline` and `sroa` copy the operand to; a value naming
+    // a local does not, because those passes renumber locals and splice a callee
+    // body into a caller, so the slot moves out from under it. The post-loop
+    // freezes take these, after the structural passes have finished.
+    if ctx.early && engine.body.values.names_a_local(rep) {
+        return None;
+    }
     // A standalone `FieldAccess` is reemittable when its receiver is (it
     // materialises via the source-point path). For every other value,
     // `FieldAccess` is non-reemittable (it cannot be inlined), so
@@ -462,7 +469,7 @@ fn classify_candidate(
     let reemittable = match engine.body.values.kind(rep) {
         ValueKind::FieldAccess { receiver, .. } => {
             let recv = *receiver;
-            // Two gates make a `FieldAccess` materialisation sound (WEP P2).
+            // Two gates make a `FieldAccess` materialisation sound.
             // (1) Field-value-type gate: only a **scalar** field — a primitive copy
             // is value-independent, so pinning + sharing it is sound; an aggregate /
             // reference field (`List.repr`, a nested struct) aliases a mutable
@@ -514,7 +521,7 @@ fn classify_candidate(
 /// Apply strategy for a `FieldAccess` representative: pin the load in a `let _av
 /// = <value>` at a statement dominating its uses and rewrite each use to a
 /// **skeleton** `Local _av` read, so receiver-position passes see an ordinary
-/// local (materialiser-first, WEP P2). A `FieldAccess` is never inline-reemittable
+/// local (materialiser-first). A `FieldAccess` is never inline-reemittable
 /// (re-emitting a load at an arbitrary slot is unsound once a pass moves the
 /// operand), so this is its only promotion path. Single-use places at the use's
 /// own statement; multi-use shares one load at the nearest common dominator of
@@ -567,12 +574,88 @@ fn apply_field_materialise(
     changed
 }
 
+/// Whether re-emitting the value tree at `v` can trap. A materialisation runs it
+/// once at a point that dominates the uses — which the uses' own guards do not
+/// reach — so a trapping value has to stay where the program put it.
+///
+/// Conservative on `Cast`: classifying one needs the operand's source type, and
+/// nothing guarantees the type-erased tree recorded it.
+fn value_may_trap(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool {
+    match pool.kind(v).clone() {
+        ValueKind::Binary { op, lhs, rhs, .. } => {
+            super::arena_query::binary_op_may_trap(op)
+                || value_may_trap(pool, lhs)
+                || value_may_trap(pool, rhs)
+        }
+        ValueKind::Unary { operand, .. } => value_may_trap(pool, operand),
+        ValueKind::Cast { .. } => true,
+        ValueKind::Select { cond, then, else_ } => {
+            value_may_trap(pool, cond) || value_may_trap(pool, then) || value_may_trap(pool, else_)
+        }
+        ValueKind::FieldAccess { .. } | ValueKind::LoopPhi { .. } => true,
+        ValueKind::Int(..)
+        | ValueKind::Float(..)
+        | ValueKind::Bool(_)
+        | ValueKind::Char(_)
+        | ValueKind::Null
+        | ValueKind::Unit
+        | ValueKind::Const(..)
+        | ValueKind::Opaque(_) => false,
+    }
+}
+
+/// Whether one shared local beats re-emitting `v` at each use. Re-emission pays
+/// the tree's operations per use; the local pays one `local.set`, a `local.get`
+/// per use, and a slot. A single operation over leaves does not clear that —
+/// `0 - precision` is one `i32.sub`, cheaper to repeat than to store and reload
+/// — so materialising wants at least two.
+///
+/// A stand-in for the extraction cost model, on the conservative side: refusing
+/// leaves the value re-emitted, which is what every use did before it was a
+/// candidate.
+fn worth_materialising(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool {
+    fn count(pool: &crate::nir_value_graph::ValuePool, v: ValueId, n: &mut u32) {
+        if *n >= 2 {
+            return;
+        }
+        match pool.kind(v).clone() {
+            ValueKind::Binary { lhs, rhs, .. } => {
+                *n += 1;
+                count(pool, lhs, n);
+                count(pool, rhs, n);
+            }
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                *n += 1;
+                count(pool, operand, n);
+            }
+            ValueKind::Select { cond, then, else_ } => {
+                *n += 1;
+                count(pool, cond, n);
+                count(pool, then, n);
+                count(pool, else_, n);
+            }
+            _ => {}
+        }
+    }
+    let mut n = 0;
+    count(pool, v, &mut n);
+    n >= 2
+}
+
 /// Apply strategy for a non-`FieldAccess` (pure-arith / constant) representative.
 /// A value used by several slots whose leaves are all non-`mut` parameters is
-/// **materialised once** — a single entry `let _av = <value>` all uses read via
-/// `local.get _av`, available and unchanged at function entry where the `let` is
-/// inserted, so it dominates every use soundly. Every other case redirects each
+/// **materialised once** — a single `let _av = <value>` all uses read via
+/// `local.get _av` — placed at the nearest point dominating every use, the same
+/// placement [`apply_field_materialise`] uses. Every other case redirects each
 /// use to the pooled representative inline.
+///
+/// The leaves being parameters bounds none of the hazards: availability says
+/// where the value *can* be computed, not that the program wanted it computed
+/// there, nor that computing it once is cheaper. So a trapping value is refused
+/// (hoisting `a / b` out of `if b != 0` traps a program that never divides by
+/// zero), the point is the nearest common dominator rather than function entry,
+/// keeping a branch-only value out of every call, and a value too cheap to share
+/// stays re-emitted ([`worth_materialising`]).
 fn apply_value_freeze(
     engine: &mut Engine,
     rep: ValueId,
@@ -582,8 +665,11 @@ fn apply_value_freeze(
 ) -> bool {
     let mut leaves = crate::hashmap::IndexSet::default();
     engine.body.values.collect_opaque_locals(rep, &mut leaves);
-    let materialize =
-        ids.len() > 1 && !leaves.is_empty() && leaves.iter().all(|l| param_set.contains(l));
+    let materialize = ids.len() > 1
+        && !leaves.is_empty()
+        && leaves.iter().all(|l| param_set.contains(l))
+        && !value_may_trap(&engine.body.values, rep)
+        && worth_materialising(&engine.body.values, rep);
     let mut changed = false;
     if materialize {
         let name = format!("_av_{}", engine.locals().len());
@@ -605,10 +691,14 @@ fn apply_value_freeze(
             },
             crate::token::Span::default(),
         );
-        let root = engine.body.root;
-        let mut stmts = engine.body.blocks[root].stmts.clone();
-        stmts.insert(0, let_stmt);
-        engine.set_block_stmts(root, stmts);
+        let (anchor, block) = match materialise_point(engine, ids) {
+            Some(point) => point,
+            None => return false,
+        };
+        let mut stmts = engine.body.blocks[block].stmts.clone();
+        let pos = stmts.iter().position(|&x| x == anchor).unwrap_or(0);
+        stmts.insert(pos, let_stmt);
+        engine.set_block_stmts(block, stmts);
         for &id in ids {
             changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Value(read));
         }

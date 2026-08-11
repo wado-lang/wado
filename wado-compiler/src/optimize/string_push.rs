@@ -30,13 +30,12 @@
 //!
 //! Empty literals are also skipped: `push_str("")` is a no-op already.
 //!
-//! Ported to the worklist rewrite engine (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a block-level
+//! Runs on the worklist rewrite engine (see
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a block-level
 //! [`Rule`]: `push_str` is a `&mut self` method whose result is dropped, so it
 //! always appears as a statement, and expanding it produces N statements — a
 //! statement-list edit (`set_block_stmts`). Nested blocks are separate worklist
-//! nodes, so the rule only ever rewrites one block's direct statement list,
-//! matching the old visitor's recurse-then-rewrite order.
+//! nodes, so the rule only ever rewrites one block's direct statement list.
 
 use crate::compiler_item::CompilerItem;
 use crate::nir::NirUnaryOp;

@@ -710,4 +710,4 @@ The measurable difference between the two designs is everything in
 - `wado-compiler/src/wir_optimize/nullable_ref.rs` — the lowering that makes
   the `Option<T>` slot free.
 - [Variant Wasm GC Representation](./wep-2026-02-08-variant-representation.md)
-- [NIR Rewrite Engine — Detailed Design](./wep-2026-06-05-nir-rewrite-engine-design.md)
+- [NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md)

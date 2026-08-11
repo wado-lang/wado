@@ -18,7 +18,7 @@
 //! (`let r: &T = &v.f1.f2`), substituting the chain at each `r.field` use.
 //!
 //! Runs as `RefElimRule` inside the unified post-inline peephole session
-//! (combine migration; see `docs/wep-2026-06-05-worklist-rewrite-engine.md`).
+//! (see `docs/wep-2026-06-05-nir-optimizer-architecture.md`).
 //! `build_ref_elim` collects all `let r = &v` bindings and classifies every use
 //! of each `r` (field-access-only or not), plus the disjoint deref-only set, in
 //! one pristine-body analysis per function. The rule then drops eliminable

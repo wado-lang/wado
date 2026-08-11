@@ -101,8 +101,7 @@ pub struct Semantics {
     pub local_types: IndexMap<AstId, TypeId>,
     /// Resolved [`TypeId`] for every expression visited by the elaborator
     /// body walk, keyed by the expression's `(module, AstId)` pair. The
-    /// future `reify` pass (Stage 5 of the elaborator re-architecture WEP)
-    /// reads this map to set `TirExpr::type_id` without re-running
+    /// reify pass reads this map to set `TirExpr::type_id` without re-running
     /// inference; LSP hover can consult it for a type at the cursor.
     /// Empty when resolve did not run or bailed before any expression was
     /// visited.
@@ -425,8 +424,7 @@ impl Semantics {
     /// [`crate::elaborator::sem::types::MethodDispatch`] for the data
     /// shape.
     ///
-    /// `#[allow(dead_code)]` until the consumer (`reify`, Stage 5 of the
-    /// WEP) lands.
+    /// `#[allow(dead_code)]` until `reify` consumes it.
     #[allow(dead_code)]
     #[must_use]
     pub(crate) fn method_dispatch_at(
@@ -436,7 +434,7 @@ impl Semantics {
         self.method_dispatch.get(&id)
     }
 
-    /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
+    /// WEP 2026-05-26: stable public view onto the recorded
     /// method-dispatch decision at `key`.
     ///
     /// Returns `(resolved_function_name, defining_module, self_kind_str)`
@@ -495,7 +493,7 @@ impl Semantics {
         self.method_dispatch.keys().copied()
     }
 
-    /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
+    /// WEP 2026-05-26: stable public view onto the recorded
     /// coercion choice at `key`.
     ///
     /// Returns `(coercion_kind_str, target_type_id)` for an expression
@@ -528,7 +526,7 @@ impl Semantics {
         self.coercions.keys().copied()
     }
 
-    /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
+    /// WEP 2026-05-26: stable public view onto the recorded
     /// desugar tag at `key`.
     ///
     /// Returns the variant name (`lower_snake_case`) for a TIR-direct

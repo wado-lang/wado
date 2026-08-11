@@ -10,7 +10,7 @@
 //! Consumed by [`crate::nir_engine::Engine::value`] (which lazily builds the
 //! per-function graph via [`builder::build`]) and through that by the CSE
 //! and store-load-forward rules. See
-//! `docs/wep-2026-06-05-worklist-rewrite-engine.md`.
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 
 pub mod builder;
 
@@ -680,6 +680,15 @@ impl ValuePool {
         self.set_type(v, ty);
         self.canonical_locals.insert(idx, v);
         v
+    }
+
+    /// Whether the value tree at `v` reads any local (an `Opaque(Local)` leaf).
+    /// One that names none is context-free — it denotes the same thing at every
+    /// program point.
+    pub fn names_a_local(&self, v: ValueId) -> bool {
+        let mut out = IndexSet::default();
+        self.collect_opaque_locals(v, &mut out);
+        !out.is_empty()
     }
 
     /// Collect into `out` every local index named by an `Opaque(Local)`

@@ -21,7 +21,7 @@
 //! Copy propagation then eliminates the trivial copies.
 //!
 //! Runs on the worklist rewrite engine
-//! (`docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
+//! (`docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a [`Rule`]: a
 //! per-function standalone engine session whose `apply_block` fires once at
 //! the function root and performs the whole-function decomposition in one
 //! shot. The analysis phases (candidate collection, escape / soft-escape) read

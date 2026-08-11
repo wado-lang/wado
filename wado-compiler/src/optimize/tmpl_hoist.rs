@@ -37,8 +37,8 @@
 //! result tails, or through uncopied alias `let`s (see [`EscapeScan`]). The
 //! inner `__r` buffer is checked too ([`template_buf_escapes`]).
 //!
-//! Runs on the worklist rewrite engine (combine migration; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
+//! Runs on the worklist rewrite engine (see
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a [`Rule`]: a
 //! per-function standalone engine session whose `apply_block` fires once at
 //! the body root and walks every loop in the function, applying the template-
 //! string buffer hoist per loop. All mutations route through the engine edit

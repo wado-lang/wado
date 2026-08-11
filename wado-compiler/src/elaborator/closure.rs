@@ -173,7 +173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
 
-        // Stage 5 (Gap 4 of WEP 2026-05-26): the only signal reify needs
+        // WEP 2026-05-26: the only signal reify needs
         // for the closure's capture analysis.
         self.record_closure_captures(
             closure.id,

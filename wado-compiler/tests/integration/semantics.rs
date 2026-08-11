@@ -276,7 +276,7 @@ export fn run() with Stdout {
     assert_eq!(r1.1, "println");
 }
 
-/// Stage 4 of the elaborator re-architecture WEP: every `MethodCallExpr`
+/// WEP 2026-05-26: every `MethodCallExpr`
 /// the body walk reaches must leave its dispatch decision in
 /// `ModuleSemantics::types.method_dispatch`, surfaced through
 /// `Semantics::method_dispatch_view`. The synthetic helper calls used by
@@ -310,7 +310,7 @@ export fn run() {
     );
 }
 
-/// Stage 4 of the elaborator re-architecture WEP: each TIR-direct
+/// WEP 2026-05-26: each TIR-direct
 /// desugar site (`assert`, `matches`, comparison chain, for-of, `while`,
 /// compound assignment) records its variant in
 /// `ModuleSemantics::types.desugars`. Verify a few representative kinds
@@ -405,7 +405,7 @@ export fn run() {
     }
 }
 
-/// Stage 4 of the elaborator re-architecture WEP: every successful
+/// WEP 2026-05-26: every successful
 /// branch of `try_coerce` records its [`CoercionKind`] on
 /// `ModuleSemantics::types.coercions`. Verify the numeric-literal
 /// (`1 → u32`) and null-to-option (`null → Option<i32>`) variants both
@@ -449,7 +449,7 @@ export fn run() {
     );
 }
 
-/// Stage 4 of the elaborator re-architecture WEP: every expression
+/// WEP 2026-05-26: every expression
 /// visited by the body walk must leave its resolved [`TypeId`] in
 /// [`Semantics::expression_types`], keyed by the expression's
 /// `(module, AstId)`. Verify a few representative sub-expressions
@@ -494,7 +494,7 @@ export fn run() {
     assert_eq!(sem.types.type_name(x_ty), "i32");
 }
 
-/// Stage 4 / WEP 2026-05-26: `try_coerce_*` sub-helpers record the
+/// WEP 2026-05-26: `try_coerce_*` sub-helpers record the
 /// coercion at the decision point, so the callers that bypass
 /// `try_coerce` (the `as`-cast path in `resolve_cast`, the struct
 /// literal target in `resolve_let`, the deferred coercion fixup for
@@ -525,7 +525,7 @@ export fn run() {
     );
 }
 
-/// Stage 4 / WEP 2026-05-26: post-inference `recoerce_literal_args`
+/// WEP 2026-05-26: post-inference `recoerce_literal_args`
 /// re-coerces generic literal arguments after the type parameter is
 /// resolved; the re-coercion must update `expression_types` so the map
 /// matches the TIR's resolved type (otherwise reify would emit the
@@ -565,11 +565,11 @@ export fn run() {
     );
 }
 
-/// Stage 4 / WEP 2026-05-26: failed method lookup emits a `MethodNotFound`
+/// WEP 2026-05-26: failed method lookup emits a `MethodNotFound`
 /// diagnostic and falls through with a placeholder `MethodInfo` so error
 /// recovery can continue. The dispatch-recording gate must skip writing
 /// to `method_dispatch` in this case — recording a `FunctionRef` whose
-/// mangled name targets a non-existent method would mislead Stage 5
+/// mangled name targets a non-existent method would mislead
 /// reify into lowering a call to a function that does not exist.
 #[test]
 fn semantics_skips_method_dispatch_when_lookup_failed() {
@@ -596,7 +596,7 @@ export fn run() {
     );
 }
 
-/// Stage 4 / WEP 2026-05-26: top-level `match` at statement position
+/// WEP 2026-05-26: top-level `match` at statement position
 /// goes through `resolve_match_expr` directly (not `resolve_expr`), so
 /// the stmt arm must explicitly record `expression_types` for the match
 /// to keep the per-AstId annotation map populated.

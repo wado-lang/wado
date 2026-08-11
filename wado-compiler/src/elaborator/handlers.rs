@@ -13,11 +13,11 @@
 //!   performed by the existing return-type checker (resume lowers to
 //!   `Return { value }` in the dispatch synthesis pass).
 //!
-//! Stage 7-B: the combined walk records `HandlerBindingFacts` (and walks
-//! every handler value + body for sub-expression facts) but no longer
-//! constructs `TirHandlerBinding` / `TirExprKind::WithHandler` /
-//! `TirExprKind::Resume`. Reify rebuilds those from the AST + the
-//! recorded facts (`sem.types.handler_bindings`).
+//! The combined walk records `HandlerBindingFacts` (and walks every handler
+//! value + body for sub-expression facts); it constructs no
+//! `TirHandlerBinding` / `TirExprKind::WithHandler` / `TirExprKind::Resume`.
+//! Reify rebuilds those from the AST + the recorded facts
+//! (`sem.types.handler_bindings`).
 //!
 //! Bundled handlers (`with &mut h do`) record the per-effect enumeration
 //! (one entry per `impl <Effect> for <Type>` in scope) plus a shared
@@ -40,7 +40,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// Reify rebuilds the `WithHandler` node — its handler bindings from
     /// `HandlerBindingFacts` and its body from the AST. The combined walk's
-    /// TIR is dead after Stage 5 (the AST-level missing-return analysis in
+    /// TIR is dead (the AST-level missing-return analysis in
     /// `control_flow.rs` reads `with`/`resume` off the AST, not the resolved
     /// node), so this arm records facts and projects the body's result type.
     pub(super) fn resolve_with_handler(
@@ -79,7 +79,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // level) so it does not depend on the body TIR.
         let result_type = self.ast_block_result_type(&with_expr.body);
 
-        // Stage 7-B: reify rebuilds the `WithHandler` node — its handler
+        // Reify rebuilds the `WithHandler` node — its handler
         // bindings from `sem.types.handler_bindings` (recorded by
         // `resolve_handler_binding` above) and its body from the AST — so the
         // combined walk only resolves the body for its fact-recording side
@@ -225,7 +225,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => Vec::new(),
         };
 
-        // Stage 5 / Gap 13 — record this explicit binding so
+        // Record this explicit binding so
         // reify_with_handler reads the single-effect entry without
         // re-resolving the effect reference.
         if let Some(EffectRef::Concrete {
@@ -327,7 +327,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let bundle_group = *next_bundle_group;
         *next_bundle_group += 1;
 
-        // Stage 5 / Gap 13 — record the bundled binding's effect
+        // Record the bundled binding's effect
         // enumeration so reify_with_handler reproduces the same list
         // without re-running collect_effect_impls_for_type.
         self.record_handler_binding_facts(
@@ -466,7 +466,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// into `Return { value }`, which is checked against the enclosing
     /// handler method's return type by the existing return-type rules.
     ///
-    /// Stage 7-B: returns a placeholder. Missing-return analysis recognises
+    /// Returns a placeholder. Missing-return analysis recognises
     /// `fn handler_method(&self) -> Mark { resume self.mark }` as a definite
     /// exit off the AST (`control_flow::expr_always_exits`'s `Expr::Resume`
     /// arm), and reify rebuilds the `Resume` node from the AST, so the

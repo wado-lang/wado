@@ -379,4 +379,4 @@ client.
 - [Resource Inheritance and Downcast](./wep-2026-04-28-resource-inheritance.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
 - [Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
-- [The Live ValueGraph](./wep-2026-06-15-live-value-graph.md)
+- [NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md)

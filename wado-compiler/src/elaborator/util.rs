@@ -3,7 +3,7 @@
 use crate::tir::{PrimitiveType, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
-/// Stage 7-B placeholder. The combined walk records facts and returns
+/// The combined walk records facts and returns
 /// `TypeId`; reify is the sole TIR producer. The few combined-walk sites that
 /// hand an already-resolved operand to a reify-shared builder (which still
 /// takes a `TirExpr`) wrap the resolved type with this `Unit` sentinel — only

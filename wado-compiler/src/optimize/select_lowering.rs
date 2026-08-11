@@ -5,14 +5,13 @@
 //! Wasm `select` instruction. Both branches must be pure (no side effects, no
 //! traps) since `select` evaluates both operands eagerly.
 //!
-//! This is the first peephole pass ported to the worklist rewrite engine
-//! (Phase 4 stage C; see `docs/wep-2026-06-05-nir-rewrite-engine-design.md`):
-//! it runs as a [`Rule`] over each function's arena `Body` directly, with no
-//! `Body ↔ tree` bridge. The `select` Call reuses the existing condition / arm
-//! expression ids, so the rewrite is a single `replace_expr_kind` with no node
-//! allocation. The rule is confluent — a `select` arm must be leaf-pure, so an
-//! arm can never itself be an `If` / `Call`, and the worklist's bottom-up order
-//! produces the same result the old top-down visitor did.
+//! Runs as a [`Rule`] on the worklist rewrite engine (see
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) over each function's
+//! arena `Body`. The `select` Call reuses the existing
+//! condition / arm expression ids, so the rewrite is a single
+//! `replace_expr_kind` with no node allocation. The rule is confluent — a
+//! `select` arm must be leaf-pure, so an arm can never itself be an
+//! `If` / `Call`.
 
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;
@@ -133,18 +132,23 @@ fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Opti
         }
         StmtKind::Expr(Operand::Value(v)) => {
             let v = *v;
-            is_select_eligible_value(body, v).then_some(Operand::Value(v))
+            is_select_eligible_value(body, v, type_table).then_some(Operand::Value(v))
         }
         _ => None,
     }
 }
 
-/// A promoted pure value is select-eligible when it is a scalar constant leaf or
-/// a local read: both are duplicable and cannot trap, so evaluating it in both
-/// `select` operand positions is observation-free. A [`ValueKind::Const`]
-/// aggregate is not — materialising it in both arms allocates twice, and
-/// `select` takes scalars anyway.
-fn is_select_eligible_value(body: &Body, v: ValueId) -> bool {
+/// A promoted pure value is select-eligible under the same rule as a skeleton
+/// arm ([`is_select_eligible`]): a duplicable leaf — a scalar constant or a local
+/// read — or pure non-trapping operators over such leaves.
+///
+/// The two rules must stay in step. Which one an arm reaches depends only on
+/// whether promotion froze it, so a shape one accepts and the other refuses
+/// costs the lowering silently.
+///
+/// A [`ValueKind::Const`] aggregate stays out: materialising it in both arms
+/// allocates twice, and `select` takes scalars anyway.
+fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> bool {
     let kind = body.values.kind(v);
     if kind.is_operand_constant() {
         return true;
@@ -156,6 +160,22 @@ fn is_select_eligible_value(body: &Body, v: ValueId) -> bool {
                 Some(OpaqueSource::Local(_))
             )
         }
+        ValueKind::Unary { op, operand, .. } => {
+            matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
+                && is_select_eligible_value(body, *operand, type_table)
+        }
+        ValueKind::Binary { op, lhs, rhs, .. } => {
+            !super::arena_query::binary_op_may_trap(*op)
+                && is_select_eligible_value(body, *lhs, type_table)
+                && is_select_eligible_value(body, *rhs, type_table)
+        }
+        // `value_fully_reemittable_locally` refuses a value nesting a `Cast`,
+        // for want of the operand's source type — the type a trap test would
+        // need here too. Asserted, not refused: were the freeze to admit one,
+        // a `false` would hide the missing trap test as a lost lowering.
+        ValueKind::Cast { .. } => unreachable!(
+            "select-arm eligibility reached a promoted `Cast`; the freeze decision refuses one"
+        ),
         ValueKind::Int(..)
         | ValueKind::Float(..)
         | ValueKind::Bool(_)
@@ -163,22 +183,21 @@ fn is_select_eligible_value(body: &Body, v: ValueId) -> bool {
         | ValueKind::Null
         | ValueKind::Unit
         | ValueKind::Const(..)
-        | ValueKind::Binary { .. }
-        | ValueKind::Unary { .. }
-        | ValueKind::Cast { .. }
         | ValueKind::Select { .. }
         | ValueKind::LoopPhi { .. }
         | ValueKind::FieldAccess { .. } => false,
     }
 }
 
-/// True when `id` is eligible to appear as a `builtin::select` arm: a
-/// duplicable leaf (`Local`, literal) or a single layer of pure leaf
-/// operators over leaf-pure operands, none of which traps. See the original
-/// pass doc for the full rationale.
+/// True when `op` is eligible inside a `builtin::select` arm, whichever form it
+/// takes. Both must be asked: refusing a promoted operand loses every lowering
+/// whose operand happens to be frozen, and admitting one unasked speculates a
+/// trapping `a / b`, since `select` evaluates both arms.
 fn is_select_eligible_operand(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
-    op.as_expr()
-        .is_some_and(|e| is_select_eligible(body, e, type_table))
+    match op {
+        Operand::Expr(e) => is_select_eligible(body, e, type_table),
+        Operand::Value(v) => is_select_eligible_value(body, v, type_table),
+    }
 }
 
 fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
@@ -194,12 +213,8 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
             // both arms unconditionally. The trap taxonomy is shared with
             // `arena_query` so it cannot drift from the other trap consumers.
             !super::arena_query::binary_op_may_trap(*op)
-                && left
-                    .as_expr()
-                    .is_none_or(|e| is_select_eligible(body, e, type_table))
-                && right
-                    .as_expr()
-                    .is_none_or(|e| is_select_eligible(body, e, type_table))
+                && is_select_eligible_operand(body, *left, type_table)
+                && is_select_eligible_operand(body, *right, type_table)
         }
         ExprKind::Cast {
             expr: inner,

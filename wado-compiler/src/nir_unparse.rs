@@ -43,12 +43,17 @@ pub struct NirUnparser<'a> {
     /// Calls render their callee by the stamped `func_id`; empty when unparsing
     /// a bare module with no package context.
     callees: Vec<crate::nir::FunctionRef>,
+    /// Local names of the function being unparsed. A skeleton `Local` node
+    /// carries its own name; a promoted `Opaque(Local)` carries only the index,
+    /// so it reads the name from here.
+    locals: Vec<String>,
 }
 
 impl<'a> NirUnparser<'a> {
     pub fn new(type_table: &'a TypeTable) -> Self {
         Self {
             type_table,
+            locals: Vec::new(),
             output: String::new(),
             indent_level: 0,
             callees: Vec::new(),
@@ -275,6 +280,7 @@ impl<'a> NirUnparser<'a> {
     }
 
     fn unparse_function(&mut self, f: &NirFunction) {
+        self.locals = f.locals.iter().map(|l| l.name.clone()).collect();
         if let Some(attr) = inline_hint_attr(f.inline_hint) {
             self.write_indent();
             self.output.push_str(attr);
@@ -563,10 +569,56 @@ impl<'a> NirUnparser<'a> {
                     // form, and `format_repr` panics rather than invent one.
                     self.output.push_str(&value.format_repr());
                 } else {
-                    self.output.push_str(&format!("%{}", v.index()));
+                    self.unparse_value(body, v);
                 }
             }
             Operand::Expr(e) => self.unparse_expr(body, e),
+        }
+    }
+
+    /// Render a promoted value as the expression it denotes, the way the same
+    /// value reads when it still lives in the skeleton. A dump is read against
+    /// the source, so `(oldptr + oldsize)` has to stay legible once promotion
+    /// moves it into the pool; a bare `%id` would hide every arithmetic operand
+    /// the freeze touches. Falls back to `%id` for a value with no expression
+    /// form (a flow merge, a heap read whose receiver is itself opaque).
+    fn unparse_value(&mut self, body: &Body, v: crate::nir_value_graph::ValueId) {
+        use crate::nir_value_graph::{OpaqueSource, ValueKind};
+        match body.values.kind(v).clone() {
+            ValueKind::Opaque(oid) => match body.values.opaque_source(oid) {
+                Some(OpaqueSource::Local(idx)) => match self.locals.get(idx as usize) {
+                    Some(name) => self.output.push_str(name),
+                    None => self.output.push_str(&format!("local_{idx}")),
+                },
+                _ => self.output.push_str(&format!("%{}", v.index())),
+            },
+            ValueKind::Binary { op, lhs, rhs, .. } => {
+                self.output.push('(');
+                self.unparse_value(body, lhs);
+                self.output.push(' ');
+                self.output.push_str(nir_binary_op_str(op));
+                self.output.push(' ');
+                self.unparse_value(body, rhs);
+                self.output.push(')');
+            }
+            ValueKind::Unary { op, operand, .. } => {
+                self.output.push_str(nir_unary_op_str(op));
+                self.unparse_value(body, operand);
+            }
+            ValueKind::Cast { operand, target } => {
+                self.unparse_value(body, operand);
+                self.output.push_str(" as ");
+                self.output.push_str(&self.type_table.type_name(target));
+            }
+            _ => {
+                let op = crate::nir_arena::Operand::Value(v);
+                match crate::const_eval::Value::from_operand(body, op, self.type_table)
+                    .filter(crate::const_eval::Value::is_scalar)
+                {
+                    Some(value) => self.output.push_str(&value.format_repr()),
+                    None => self.output.push_str(&format!("%{}", v.index())),
+                }
+            }
         }
     }
 

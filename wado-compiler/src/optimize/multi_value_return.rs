@@ -15,10 +15,9 @@
 //! `FieldAccess(Local(__tmp), name)`. See the per-function comments below for
 //! the exact gates.
 //!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): a pure classification
-//! pass — every body walk is read-only and the only mutation sets
-//! `return_abi` — so it reads the arena `Body` directly.
+//! A pure classification pass over the arena `Body` (see
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`): every body walk is
+//! read-only and the only mutation sets `return_abi`.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirFunction, NirStruct, ReturnAbi};
