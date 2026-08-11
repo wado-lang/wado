@@ -123,9 +123,9 @@ CMT : '/*' ~'*'* '*/' ;");
 }
 
 test "lexer dump reports a lookahead-aware greedy repeat" {
-    // `~('b')+` can eat the `'c'`... it cannot; `.` can. A `.`-led greedy
-    // repeat with a suffix is exactly the over-shoot the forward scan with
-    // accept-state tracking exists for.
+    // `.` matches the `'c'` the suffix needs, so a plain greedy loop would eat
+    // it and strand the suffix at end-of-input — the over-shoot the forward
+    // scan with accept-state tracking exists for.
     let report = lexer_dump(&"grammar T;
 r : S ;
 S : 'a' .+ 'c' ;");

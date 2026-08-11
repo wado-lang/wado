@@ -6,18 +6,21 @@
 //! `lexer_gen.wado`), so the report names the branch emission took rather than
 //! a re-derivation of it.
 //!
-//! The traversal that reaches each decision is mirrored rather than shared, so
-//! it has to match `gen_lexer_alt_seq` step for step: the same tail
-//! propagation, the same alternative handed to a cut-out suffix (a non-greedy
-//! repeat gets the alt's later actions re-based onto it, everything else the
-//! bare elements), the same stop-or-continue after a construct that consumed
-//! the rest of the sequence, and a non-recursive fragment reported at each use
-//! site that inlines it (prefixed with the fragment name). Every construct then
-//! appears exactly where it is emitted, once.
+//! The traversal reaching each decision is mirrored rather than shared, so it
+//! must match `gen_lexer_alt_seq` step for step:
 //!
-//! Not reported: a repeat nested directly under another repeat or a `~`. There
-//! is no sequence around such a position, so there is no strategy to pick — the
-//! emitter always writes the plain loop.
+//! - the same tail propagation;
+//! - the same alternative handed to a cut-out suffix — a non-greedy repeat gets
+//!   the alt's later actions re-based onto it (`lexer_alt_rest`), every other
+//!   emit the bare elements;
+//! - the same stop-or-continue after a construct that consumed the rest of the
+//!   sequence;
+//! - a non-recursive fragment reported at each use site that inlines it.
+//!
+//! Every construct then appears exactly where it is emitted, once.
+//!
+//! Not reported: a repeat directly under another repeat or a `~`. No sequence
+//! surrounds such a position, so there is no strategy to pick.
 
 use {
     Grammar,
@@ -89,9 +92,8 @@ struct DumpOut {
 
 /// Render the per-rule lexer emit report for a grammar.
 ///
-/// Takes the surface `Grammar` alone: every input the lexer emitter reads is
-/// derived from it here the same way `generate` derives it, so the report
-/// cannot drift from the emit it describes.
+/// Takes the surface `Grammar` alone, deriving every input `gen_lexer` reads
+/// the way `generate` derives it.
 pub fn render_lexer_dump(grammar: &Grammar) -> String {
     let empty_opts: List<GrammarOption> = [];
     let ctx = DumpCtx {
@@ -180,8 +182,7 @@ fn route_label(rule: &LexerRule, route: &LexerRuleRoute) -> String {
     };
 }
 
-/// A rule another lexer rule calls keeps its own matcher on top of whatever
-/// already covers its text.
+/// A called rule keeps its own matcher on top of whatever else covers its text.
 fn also_matcher_suffix(also: bool, try_fn: &String) -> String {
     if !also {
         return "";
@@ -216,10 +217,10 @@ fn walk_rule_body(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule) {
     }
 }
 
-/// `top` is the rule's own body alternation, which is reported even when it is
-/// not in tail position — that a rule's alternation cannot take maximal munch
-/// is the answer someone asks this dump for. A nested one in the same position
-/// stays quiet: the construct that encloses it already reported the decision.
+/// `top` is the rule's own body alternation. It is reported even out of tail
+/// position — that a rule's alternation cannot take maximal munch is a thing
+/// someone asks this dump for — while a nested one there stays quiet, its
+/// enclosing construct having already reported the decision.
 fn walk_alts(o: &mut DumpOut, ctx: &DumpCtx, alts: &List<LexerAlternative>, ci: bool, tail: bool, top: bool) {
     let emit = lexer_alts_emit(alts, &ctx.rules, tail);
     if top || !emit matches { FirstMatchNotTail } {
@@ -317,11 +318,11 @@ fn walk_repeat(
             walk_alt(o, ctx, &lexer_alt_rest(alt, index), ci, false);
             return true;
         },
-        // The forward scan peeks and then commits the suffix at the accept
-        // position, as the bare element sequence `gen_lexer_suffix_seq` lowers
-        // — the alt's own predicates stay with the alt, whose post-loop pass
-        // still places the trailing one after the `break`. It carries the alt's
-        // tail position (`gen_lexer_repeat_lookahead_aware`).
+        // The forward scan peeks and then commits the suffix as the bare
+        // element sequence `gen_lexer_suffix_seq` lowers, carrying the alt's
+        // tail position (`gen_lexer_repeat_lookahead_aware`). The alt's own
+        // predicates stay with the alt: it `break`s, so the post-loop pass
+        // still places the trailing one.
         LookaheadAware => {
             walk_alt(o, ctx, &suffix_alt(alt, index), ci, last_is_tail);
             return true;

@@ -34,10 +34,9 @@ pub struct KeywordInfo {
     pub rule_name: String,
     pub lowercase_text: String,
     pub char_ci: List<bool>,
-    /// The carrier rule whose match `classify_keyword` reclassifies into this
-    /// keyword — the rule that admitted the shortcut (`keyword_carrier_admits`).
-    /// Empty on a candidate that has not been admitted yet; `collect_keyword_rules`
-    /// fills it on every entry it returns. Reported by `gale dump --lexer`.
+    /// The rule whose match `classify_keyword` reclassifies into this keyword.
+    /// Filled by `collect_keyword_rules`, which only returns admitted
+    /// candidates; empty on one still being considered.
     pub carrier: String = "",
 }
 
@@ -510,9 +509,7 @@ fn gen_lexer_match_fns(
 /// lexer rule references is called by name and needs one whatever dispatch
 /// decided; a non-recursive fragment is inlined at each use site instead.
 ///
-/// `lexer_rule_has_match_fn` is this reduced to "does the rule get its own",
-/// and `gale dump --lexer` prints the route, so the report names the branch the
-/// emitter took.
+/// `lexer_rule_has_match_fn` is this reduced to "does the rule get its own".
 pub variant LexerRuleRoute {
     /// Own `try_` matcher, reached from the first-char dispatch.
     Matcher,
@@ -1449,9 +1446,7 @@ fn lexer_rule_body_prefers_longest(rule: &LexerRule, all_rules: &List<LexerRule>
 }
 
 /// How an alternation is emitted once it is in tail position, and — when the
-/// cheap first-match emit already gives ANTLR4's answer — why. Every emit site
-/// that has to agree on the maximal-munch decision reads it through
-/// `lexer_alts_prefer_longest`; `gale dump --lexer` prints the reason.
+/// cheap first-match emit already gives ANTLR4's answer — why.
 pub enum LexerAltsScan {
     /// Maximal munch: every arm is scanned from the same start, longest wins.
     Longest,
@@ -1629,7 +1624,6 @@ fn lexer_elem_fixed_len(elem: &LexerElement, all_rules: &List<LexerRule>) -> Opt
 
 /// How a repeat at `alt.elements[index]` is emitted, and — when the plain
 /// greedy loop is enough — why the lookahead-aware one was not needed.
-/// `gen_lexer_alt_seq` branches on this and `gale dump --lexer` prints it.
 pub enum LexerRepeatEmit {
     /// `*?` / `+?`: min-match loop that tries the rest of the alt first.
     NonGreedy,
@@ -1840,8 +1834,7 @@ fn gen_lexer_alt_seq(
                     );
                     break;
                 },
-                // The plain loop already stops where the suffix must start,
-                // or there is no suffix to strand.
+                // Plain greedy loop: emitted below, as the element it is.
                 PlainOptional | PlainNoSuffix | PlainInnerNotPerChar | PlainPredicateAfter | PlainSuffixDisjoint | PlainSuffixNotPeekable => {
                 },
             }
