@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786443905591,
+  "lastUpdate": 1786446386465,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47225,6 +47225,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/49945d3f4a33f15566f0e41d9444c2c8f93d8d7e"
         },
         "date": 1786443905222,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267689,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2f5fecff6147e033773fc3e829a60498d3743df7",
+          "message": "Merge pull request #1791 from wado-lang/claude/gale-dump-lexer-view-vqgt6f\n\nfeat(gale): add `dump --lexer` for the per-rule lexer emit strategy",
+          "timestamp": "2026-08-11T19:54:19+09:00",
+          "tree_id": "c46437a0c79e59901e8b239295111b6920d8f908",
+          "url": "https://github.com/wado-lang/wado/commit/2f5fecff6147e033773fc3e829a60498d3743df7"
+        },
+        "date": 1786446385669,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
