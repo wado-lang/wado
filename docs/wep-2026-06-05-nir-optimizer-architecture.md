@@ -253,6 +253,30 @@ JIT cannot do). Its prerequisites are visualisation tooling
 a budget hit must degrade gracefully to the partially saturated graph, never
 panic and never produce worse output than the input.
 
+### Not a session index carried across passes
+
+`Engine::new` derives the parent map, use index, and post-order seed per pass
+per function — 1.03 s of a ~5.8 s loop, over 36 000 sessions. Carrying it was
+built and measured: 91 % of sessions reuse it and the derivation drops to
+0.33 s (−68 %). It still does not pay.
+
+- It optimizes the structure the terminal ideal retires. Pure `ExprKind`s are
+  52 % of the arena, and the `Local` nodes the use index is made of are 34 %;
+  moving them into the pool shrinks `build_indices` without a new invariant.
+- It does nothing for where the precision items move the load. A promoted read
+  lives in the pool, so widening local promotion shifts reads off the use index
+  and onto the promoted-read census, which a carried index does not touch.
+- Reuse changes the output (+3.3 KB), so the carried state is not equivalent to
+  a fresh one. `def` is carried and never re-derived, and `extract`'s dominance
+  gate reads it.
+- Soundness would rest on 36 `Body::invalidate_engine_index` calls plus every
+  future direct arena write — unenforced, and failing as a silent miscompile
+  rather than a panic, since a stale index reads to `elide_local` as "unused".
+
+Closing the arena's mutation surface (226 mutating sites over 57 files) so the
+type system carries that invariant is the prerequisite that would change this
+verdict.
+
 ### Not incremental rebuild, and not a richer cache
 
 Both were prototyped and measured, and both are the wrong shape: they make
@@ -275,32 +299,6 @@ costs 6.2 s on `benchmark/sqlite_parse` and 6.0 s on
 iterations 5 - 8 cost 0.2 - 0.4 s each, so the iteration count is not the
 lever it looks like.
 
-- [ ] Build the engine session once per function and maintain it through the edit
-      API, the way the graph already is. `Engine::new` costs one walk rather
-      than three — `build_indices` records parents and uses on the way down and
-      seeds the worklist on the way up — but it is still paid per pass per
-      function: 36 421 sessions and 20.9 M nodes walked on
-      `benchmark/sqlite_parse`, **1.08 s, ~17 % of the loop**. The ten
-      engine-based passes sit in three consecutive runs
-      (`container_sroa` + pre-`peephole`; post-`peephole` + `let_block_flatten`
-      + `sroa` + `copy_prop`; `const_fold` + `param_spec` + `licm` +
-      `tmpl_hoist`), so surviving a run would take 10 sessions per iteration to
-      3.
-      Persisting the index needs no gate and no engine/non-engine pass
-      classification: record the arena lengths the index was derived at, and a
-      pass that allocated behind the engine's back no longer matches. Only a
-      rewrite that reseats structure without growing the arena escapes that —
-      `dce` and `field_scalarize` reseating a block's statement list are the
-      only two, both outside the loop, and an explicit invalidation covers them.
-      What blocks it is that the edit API maintains the use index well enough
-      for one session but not across passes: with the index carried, an
-      `elide_local` in a later pass drops a binding whose read is still
-      reachable (caught by the elided-local audit, `local 6` on
-      `benchmark/sqlite_parse`). Today every pass rebuilds, so a rewrite's
-      under-report is repaired before the next pass reads it. Find and fix that
-      maintenance hole first — a build-both-ways oracle over the carried index
-      against a fresh one names it — because carrying the index is what turns a
-      latent inaccuracy into a miscompile.
 - [ ] Function-level parallelism. The per-function build and walk are
       independent.
 - [ ] Fold the graph build into `lower` (born-at-`lower`). What this buys is one
