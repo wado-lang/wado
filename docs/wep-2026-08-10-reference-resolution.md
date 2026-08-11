@@ -308,22 +308,34 @@ Costs and risks:
            key it forms is right only when synthesis runs in the declaring
            module. Whoever takes this next starts from those two, not from the
            index.
-         - **A user trait sharing a prelude trait's name is still displaced in
-           the impl arity check.** Found by accident: a fixture declaring
-           `trait Sub { fn sub(&self) -> i32; }` and implementing it is
+         - **An impl header's trait is the declaration its site resolved to.**
+           Found by accident: a fixture declaring
+           `trait Sub { fn sub(&self) -> i32; }` and implementing it was
            rejected with "method `sub` takes 0 parameter(s) but `Sub` declares
            1" — the arity came from `core:prelude`'s arithmetic `Sub`, whose
-           `sub` takes a right-hand side. The resolution table answers this
-           correctly (a module's own declaration outranks the prelude), and
-           the arity check itself compares `ImplHeader::trait_key` — an
-           identity. What is wrong is where that key comes from:
-           `impl_target_key`, over `decl_identity_core`, whose
-           `is_defined_in_module` layer cannot see a trait because a trait has
-           no symbol-table entry, so it falls through to the prelude. The
-           header already carries `trait_ref`, the site's answer, beside it.
-           Deriving `trait_key` from `trait_ref` is the fix, and it needs its
-           own verification: it also changes the key for re-export chains,
-           which `declaring_side_decl_key` resolves and the table does not.
+           `sub` takes a right-hand side. Renaming the trait made the same
+           program compile, which is this class's signature.
+
+           The arity check already compared identities; the identity was
+           wrong. `ImplHeader::trait_key` came from `impl_target_key`, over
+           `decl_identity_core`, whose `is_defined_in_module` layer cannot see
+           a trait because a trait has no symbol-table entry, so it fell
+           through to the prelude. The header already carried `trait_ref` —
+           the table's answer for the site the header wrote — beside it. That
+           answers first now; `impl_target_key` is the fallback for a site the
+           table holds no declaration for.
+
+           The **receiver** half of the same header is the next step and is
+           the larger risk. `type_key` still comes from `impl_target_key`, and
+           the site can answer it the same way — `RefKind::from_ast` first
+           (`head_site` unwraps references, so `impl T for &U` would otherwise
+           key as `U`), then `Binder` → `TypeParam`, `Decl` → `Decl`. What
+           needs checking before trusting it is the three names
+           `decl_identity_core` shortcuts by hand: a primitive keys to
+           `ModuleSource::primitive()`, `Array<T>` to `array()`, the tuple type
+           to `types()`. Those must agree with what the table answers for the
+           same spelling, or the impl indexes split in two — which is how
+           `f169efe54` failed.
          - Stores that flatten a bound to its name and lose the site:
            `infer_holes`' recorded bounds, `type_param_bounds` on the struct and
            trait digests, and `BlanketImpl::bounds`.
@@ -347,8 +359,8 @@ Costs and risks:
 The two counts the Context section opened with, plus the debt this migration
 has itself created:
 
-| | at the start | now |
-| ------------------------------------------ | ------------ | --- |
+|                                             | at the start | now |
+| ------------------------------------------- | ------------ | --- |
 | `trait_name: &str` parameters               | 114          | 63  |
 | `struct_name` / `type_name: &str`           | 93           | 94  |
 | `.base_name()` — an identity flattened back | 0            | 26  |
@@ -364,20 +376,14 @@ flipped yet. Each one is a place the class survives, and the count rose
 because flipping `AssocTypeProjection`'s bounds to identities put four more
 callers in that position. It should reach zero.
 
-`trait_decl_key_in_frame` is the same debt in function form — it resolves a
-spelling in the consumer's frame, which is the defect generator this WEP
-names. It has one reachable caller left in expression position and two frame
-lookups (`trait_decl_header_in_frame`, `trait_sig_in_frame`) that take a name
-and no site; the rest now go through `trait_decl_at`, which asks the site.
-         - `locate_static_method_impl`, the conversion-impl survey, and the CM
-           interface registry.
--
-  4. [ ] D — delete what the table replaces: `declaring_side_decl_key`,
-         `canonical_decl_key_with`, `decl_identity_core`, `WrittenHead` and its
-         `spelling_pending_migration` escape, `DeclKey = (ModuleSource, String)`,
-         and `NamedType::source_interface`.
+## `trait_decl_key_in_frame` is the same debt in function form — it resolves aspelling in the consumer's frame, which is the defect generator this WEPnames. It has one reachable caller left in expression position and two framelookups (`trait_decl_header_in_frame`, `trait_sig_in_frame`) that take a nameand no site; the rest now go through `trait_decl_at`, which asks the site.- `locate_static_method_impl`, the conversion-impl survey, and the CMinterface registry.
 
-         `canonical_decl_key` is what the rest still reaches through, and it is
-         a receiver-side API as much as a trait-side one — the second row of
-         the measurements table is its call graph. Deleting it is the receiver
-         flip, not a cleanup that follows one.
+4. [ ] D — delete what the table replaces: `declaring_side_decl_key`,
+       `canonical_decl_key_with`, `decl_identity_core`, `WrittenHead` and its
+       `spelling_pending_migration` escape, `DeclKey = (ModuleSource, String)`,
+       and `NamedType::source_interface`.
+
+       `canonical_decl_key` is what the rest still reaches through, and it is
+       a receiver-side API as much as a trait-side one — the second row of
+       the measurements table is its call graph. Deleting it is the receiver
+       flip, not a cleanup that follows one.

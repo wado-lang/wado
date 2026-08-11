@@ -1091,7 +1091,9 @@ impl TraitEnv {
                     // fell through to `core:prelude`'s arithmetic one.
                     trait_ref
                         .and_then(|answer| resolutions.decl_named(answer))
-                        .map(|(module, name)| ImplTargetKey::Decl((module.clone(), name.to_string())))
+                        .map(|(module, name)| {
+                            ImplTargetKey::Decl((module.clone(), name.to_string()))
+                        })
                         .unwrap_or_else(|| {
                             impl_target_key(
                                 trait_type,

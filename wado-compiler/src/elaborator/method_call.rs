@@ -456,10 +456,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .is_none_or(|w| b.canonical().is_some_and(|k| k == w.decl))
                         })
                         .collect();
-                    let resolved: crate::hashmap::IndexMap<String, crate::name::FqTraitName> = named
-                        .iter()
-                        .map(|b| (b.base_name().to_string(), b.clone()))
-                        .collect();
+                    let resolved: crate::hashmap::IndexMap<String, crate::name::FqTraitName> =
+                        named
+                            .iter()
+                            .map(|b| (b.base_name().to_string(), b.clone()))
+                            .collect();
                     let bounds: Vec<ast::TraitBound> = named
                         .iter()
                         .map(|b| ast::TraitBound {

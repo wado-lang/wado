@@ -1108,15 +1108,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     )
                 }),
-            ResolvedType::AssocTypeProjection { bounds, .. } => {
-                self.find_method_type_params_in_trait_bounds(
+            ResolvedType::AssocTypeProjection { bounds, .. } => self
+                .find_method_type_params_in_trait_bounds(
                     &bounds
                         .iter()
                         .map(|b| b.base_name().to_string())
                         .collect::<Vec<_>>(),
                     method_name,
-                )
-            }
+                ),
             _ => None,
         };
         let Some(method_type_params) = method_type_params else {

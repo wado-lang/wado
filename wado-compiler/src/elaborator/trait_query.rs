@@ -1644,11 +1644,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether the trait named `trait_name` declares `method_name`. The cheap
     /// form of [`Self::find_trait_decl_method`], for counting candidates
     /// without cloning each one's declaration.
-    fn trait_declares_method_of(
-        &self,
-        key: &super::trait_env::DeclKey,
-        method_name: &str,
-    ) -> bool {
+    fn trait_declares_method_of(&self, key: &super::trait_env::DeclKey, method_name: &str) -> bool {
         self.trait_decl_header_of(key)
             .is_some_and(|header| header.methods.iter().any(|m| m.name == method_name))
     }

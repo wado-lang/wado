@@ -5946,7 +5946,10 @@ mod tests {
         let iter = table.make_assoc_type_projection(
             self_param,
             "Iter".to_string(),
-            vec![crate::name::FqTraitName::declared(&ModuleSource::prelude(), "Iterator")],
+            vec![crate::name::FqTraitName::declared(
+                &ModuleSource::prelude(),
+                "Iterator",
+            )],
             vec![("Item".to_string(), item)],
         );
 
@@ -5981,7 +5984,10 @@ mod tests {
         let projection = table.make_assoc_type_projection(
             self_param,
             "Acc".to_string(),
-            vec![crate::name::FqTraitName::declared(&ModuleSource::prelude(), "Default")],
+            vec![crate::name::FqTraitName::declared(
+                &ModuleSource::prelude(),
+                "Default",
+            )],
             vec![("Item".to_string(), TypeTable::I32)],
         );
 
@@ -6001,7 +6007,10 @@ mod tests {
         assert_eq!(param_id, receiver);
         assert_eq!(
             bounds,
-            vec![crate::name::FqTraitName::declared(&ModuleSource::prelude(), "Default")]
+            vec![crate::name::FqTraitName::declared(
+                &ModuleSource::prelude(),
+                "Default"
+            )]
         );
         assert_eq!(
             assoc_type_bindings,
