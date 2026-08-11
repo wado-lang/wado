@@ -10,6 +10,7 @@ use { lower } from "./lower.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { render_dump } from "./dump.wado";
+use { render_lexer_dump } from "./lexer_dump.wado";
 use { build_atn, dump_atn } from "./atn.wado";
 
 // CLI shape, parsed by `core:args` from the `Command` subcommand variant.
@@ -26,6 +27,7 @@ impl Deserialize for GenArgs;
 
 struct DumpArgs {
     atn: bool = false,
+    lexer: bool = false,
     #[wire(positional)]
     grammars: List<String> = [],
 }
@@ -45,7 +47,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
             cmd_gen(g.grammars, &g.output, g.trace);
         },
         Ok(Command::Dump(d)) => {
-            cmd_dump(d.grammars, d.atn);
+            cmd_dump(d.grammars, d.atn, d.lexer);
         },
         Err(e) => {
             // Prefix with the subcommand (`core:args` reports only kind/message;
@@ -68,7 +70,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
 
 fn usage() with Stderr {
     eprintln("Usage: gale gen [--trace] [--output <file>] <grammar.g4> [grammar2.g4 ...] [highlights.scm]");
-    eprintln("       gale dump [--atn] <grammar.g4> [grammar2.g4 ...]");
+    eprintln("       gale dump [--atn | --lexer] <grammar.g4> [grammar2.g4 ...]");
 }
 
 fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with Stdout, Stderr, Preopens, Exit {
@@ -145,9 +147,13 @@ fn write_output(path: &String, source: &String) with Stderr, Preopens, Exit {
     sub.drop();
 }
 
-fn cmd_dump(paths: List<String>, atn: bool) with Stdout, Stderr, Preopens, Exit {
+fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) with Stdout, Stderr, Preopens, Exit {
     if paths.len() == 0 {
         eprintln("gale dump: no grammar files given");
+        exit(1);
+    }
+    if atn && lexer {
+        eprintln("gale dump: --atn and --lexer are separate reports; pass one");
         exit(1);
     }
     let mut merged = load_and_merge(&paths);
@@ -164,6 +170,14 @@ fn cmd_dump(paths: List<String>, atn: bool) with Stdout, Stderr, Preopens, Exit 
         normalize_caches(&mut merged);
         let built = build_atn(&merged);
         print(dump_atn(&built, &merged));
+        return;
+    }
+
+    // `--lexer` reports the lexer emit instead: the GIR dump covers the parser
+    // only, and lexer strategies are decided at emit time from the surface IR.
+    if lexer {
+        normalize_caches(&mut merged);
+        print(render_lexer_dump(&merged));
         return;
     }
 

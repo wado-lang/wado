@@ -34,6 +34,10 @@ pub struct KeywordInfo {
     pub rule_name: String,
     pub lowercase_text: String,
     pub char_ci: List<bool>,
+    /// The rule whose match `classify_keyword` reclassifies into this keyword.
+    /// Filled by `collect_keyword_rules`, which only returns admitted
+    /// candidates; empty on one still being considered.
+    pub carrier: String = "",
 }
 
 /// ANTLR4 `caseInsensitive` resolution: a rule-level option (when present)
@@ -497,13 +501,76 @@ fn gen_lexer_match_fns(
     }
 }
 
-/// Whether `rule` gets its own `try_` matcher.
+/// Which matcher covers a lexer rule's text.
 ///
-/// Dispatch needs one unless another matcher already covers the rule's text — a
+/// Dispatch needs a `try_` matcher unless another one already covers the text — a
 /// keyword rides its carrier's reclassification, a fixed literal the shared
 /// literal matcher — and a virtual token has no text at all. A rule another
 /// lexer rule references is called by name and needs one whatever dispatch
 /// decided; a non-recursive fragment is inlined at each use site instead.
+///
+/// `lexer_rule_has_match_fn` is this reduced to "does the rule get its own".
+pub variant LexerRuleRoute {
+    /// Own `try_` matcher, reached from the first-char dispatch.
+    Matcher,
+    /// A `tokens { }` entry: no text, so nothing to match.
+    Virtual,
+    /// Non-recursive fragment: inlined into each rule that references it.
+    InlinedFragment,
+    /// Recursive fragment: reached by call, so it keeps its own matcher.
+    RecursiveFragment,
+    /// Folded into the keyword classifier, which rewrites the carrier rule's
+    /// match into this keyword.
+    Keyword(LexerKeywordRoute),
+    /// Same fixed text as a parser literal, so the shared literal matcher
+    /// covers it.
+    SharedLiteral(LexerLiteralRoute),
+}
+
+pub struct LexerKeywordRoute {
+    pub carrier: String,
+    /// A rule another lexer rule calls keeps a `try_` matcher on top of the
+    /// classifier shortcut.
+    pub also_matcher: bool,
+}
+
+pub struct LexerLiteralRoute {
+    pub const_name: String,
+    /// As `LexerKeywordRoute::also_matcher`.
+    pub also_matcher: bool,
+}
+
+pub fn lexer_rule_route(
+    rule: &LexerRule,
+    lexer_rules: &List<LexerRule>,
+    keywords: &List<KeywordInfo>,
+    lit_tokens: &List<LitToken>,
+    grammar_opts: &List<GrammarOption>,
+    grammar_ci: bool,
+) -> LexerRuleRoute {
+    if rule.is_virtual {
+        return LexerRuleRoute::Virtual;
+    }
+    if rule.is_fragment {
+        return if fragment_is_recursive(rule, lexer_rules) {
+            LexerRuleRoute::RecursiveFragment;
+        } else {
+            LexerRuleRoute::InlinedFragment;
+        };
+    }
+    let called = lexer_rule_is_called(rule, lexer_rules);
+    for let kw of keywords {
+        if kw.rule_name == rule.name {
+            return LexerRuleRoute::Keyword(LexerKeywordRoute { carrier: kw.carrier, also_matcher: called });
+        }
+    }
+    if let Some(const_name) = literal_duplicate_const(rule, lit_tokens, grammar_opts, grammar_ci) {
+        return LexerRuleRoute::SharedLiteral(LexerLiteralRoute { const_name, also_matcher: called });
+    }
+    return LexerRuleRoute::Matcher;
+}
+
+/// Whether `rule` gets its own `try_` matcher.
 fn lexer_rule_has_match_fn(
     rule: &LexerRule,
     lexer_rules: &List<LexerRule>,
@@ -512,16 +579,12 @@ fn lexer_rule_has_match_fn(
     grammar_opts: &List<GrammarOption>,
     grammar_ci: bool,
 ) -> bool {
-    if rule.is_virtual {
-        return false;
-    }
-    if rule.is_fragment {
-        return fragment_is_recursive(rule, lexer_rules);
-    }
-    if !is_keyword_rule_name(&rule.name, keywords) && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-        return true;
-    }
-    return lexer_rule_is_called(rule, lexer_rules);
+    return match lexer_rule_route(rule, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci) {
+        Matcher | RecursiveFragment => true,
+        Virtual | InlinedFragment => false,
+        Keyword(k) => k.also_matcher,
+        SharedLiteral(l) => l.also_matcher,
+    };
 }
 
 /// Every `try_` call the emitter is about to make resolves to a matcher.
@@ -590,7 +653,9 @@ fn collect_lexer_calls(elem: &LexerElement, all_rules: &List<LexerRule>, out: &m
     }
 }
 
-fn fragment_is_recursive(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
+/// Whether a fragment references itself (directly or through another
+/// fragment), which is what keeps it from being inlined at its use sites.
+pub fn fragment_is_recursive(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     let mut visited: List<String> = [];
     return fragment_refs_self(&rule.name, &rule.body, all_rules, &mut visited);
 }
@@ -662,7 +727,7 @@ pub fn lexer_try_fn_name(name: &String) -> String {
 /// entered with the caller's suffix still to consume, so its body alternation
 /// must not take the maximal-munch emit. An inlined fragment is safe: the inline
 /// path carries the caller's tail position with it.
-fn lexer_rule_is_called(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
+pub fn lexer_rule_is_called(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     if rule.is_fragment && !fragment_is_recursive(rule, all_rules) {
         return false;
     }
@@ -1380,18 +1445,28 @@ fn lexer_rule_body_prefers_longest(rule: &LexerRule, all_rules: &List<LexerRule>
     return !lexer_rule_is_called(rule, all_rules) && lexer_alts_prefer_longest(&rule.body, all_rules);
 }
 
-/// Whether a tail-position alternation needs the maximal-munch emit. It does not
-/// when every alternative consumes the same fixed number of chars (longest and
-/// first-match coincide, so the cheaper emit stays byte-identical), nor when any
-/// alternative carries a predicate anywhere below it (scanning every arm would
-/// change how often a predicate is evaluated).
-fn lexer_alts_prefer_longest(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {
+/// How an alternation is emitted once it is in tail position, and — when the
+/// cheap first-match emit already gives ANTLR4's answer — why.
+pub enum LexerAltsScan {
+    /// Maximal munch: every arm is scanned from the same start, longest wins.
+    Longest,
+    /// Fewer than two arms — no choice to make.
+    SingleArm,
+    /// Every arm consumes the same fixed number of chars, so longest and
+    /// first-match coincide and the cheaper emit stays byte-identical.
+    FixedLenArms,
+    /// An arm carries a semantic predicate anywhere below it; scanning every
+    /// arm would change how often the grammar sees it.
+    ArmPredicate,
+}
+
+pub fn lexer_alts_scan(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> LexerAltsScan {
     if alts.len() < 2 {
-        return false;
+        return LexerAltsScan::SingleArm;
     }
     for let alt of alts {
         if lexer_alt_has_predicate_below(alt, all_rules) {
-            return false;
+            return LexerAltsScan::ArmPredicate;
         }
     }
     let mut common = -1;
@@ -1401,13 +1476,42 @@ fn lexer_alts_prefer_longest(alts: &List<LexerAlternative>, all_rules: &List<Lex
             if common < 0 {
                 common = n;
             } else if common != n {
-                return true;
+                return LexerAltsScan::Longest;
             }
         } else {
-            return true;
+            return LexerAltsScan::Longest;
         }
     }
-    return false;
+    return LexerAltsScan::FixedLenArms;
+}
+
+/// Whether a tail-position alternation needs the maximal-munch emit.
+fn lexer_alts_prefer_longest(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {
+    return lexer_alts_scan(alts, all_rules) matches { Longest };
+}
+
+/// The emit an alternation takes, tail position included: the whole
+/// `gen_lexer_alts` decision as one value.
+pub enum LexerAltsEmit {
+    MaximalMunch,
+    /// Something after the alternation still has to be consumed, so a longer
+    /// arm could strand it.
+    FirstMatchNotTail,
+    FirstMatchSingleArm,
+    FirstMatchFixedLenArms,
+    FirstMatchArmPredicate,
+}
+
+pub fn lexer_alts_emit(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, tail: bool) -> LexerAltsEmit {
+    if !tail {
+        return LexerAltsEmit::FirstMatchNotTail;
+    }
+    return match lexer_alts_scan(alts, all_rules) {
+        Longest => LexerAltsEmit::MaximalMunch,
+        SingleArm => LexerAltsEmit::FirstMatchSingleArm,
+        FixedLenArms => LexerAltsEmit::FirstMatchFixedLenArms,
+        ArmPredicate => LexerAltsEmit::FirstMatchArmPredicate,
+    };
 }
 
 /// Whether `alt` carries a semantic predicate at its own level or anywhere the
@@ -1518,6 +1622,155 @@ fn lexer_elem_fixed_len(elem: &LexerElement, all_rules: &List<LexerRule>) -> Opt
     };
 }
 
+/// How a repeat at `alt.elements[index]` is emitted, and — when the plain
+/// greedy loop is enough — why the lookahead-aware one was not needed.
+pub enum LexerRepeatEmit {
+    /// `*?` / `+?`: min-match loop that tries the rest of the alt first.
+    NonGreedy,
+    /// Forward scan with accept-state tracking, so the loop can hand back the
+    /// chars the suffix needs (`gen_lexer_repeat_lookahead_aware`).
+    LookaheadAware,
+    /// `?` — one optional element, no loop that could overshoot.
+    PlainOptional,
+    /// Nothing follows the repeat, so it cannot strand a suffix.
+    PlainNoSuffix,
+    /// The inner does not consume exactly one char per iteration, so there is
+    /// no per-iteration position for the scan to record.
+    PlainInnerNotPerChar,
+    /// A semantic predicate sits between the repeat and the alt's end; peeking
+    /// the suffix would evaluate it once per iteration.
+    PlainPredicateAfter,
+    /// The inner cannot eat a char the suffix needs, so the plain loop already
+    /// stops where the suffix must start.
+    PlainSuffixDisjoint,
+    /// The suffix carries a semantic predicate, so peeking it would change how
+    /// often the grammar sees it.
+    PlainSuffixNotPeekable,
+}
+
+pub fn lexer_repeat_emit(alt: &LexerAlternative, index: i32, all_rules: &List<LexerRule>, ci: bool) -> LexerRepeatEmit {
+    let Repeat(rep) = &alt.elements[index] else {
+        panic("lexer_repeat_emit: element is not a Repeat");
+    };
+    if rep.non_greedy {
+        return LexerRepeatEmit::NonGreedy;
+    }
+    if !rep.kind matches { Plus | Star } {
+        return LexerRepeatEmit::PlainOptional;
+    }
+    if index + 1 >= alt.elements.len() {
+        return LexerRepeatEmit::PlainNoSuffix;
+    }
+    if !lexer_element_can_consume_simple(&rep.element) {
+        return LexerRepeatEmit::PlainInnerNotPerChar;
+    }
+    if lexer_alt_has_predicate_after(alt, index) {
+        return LexerRepeatEmit::PlainPredicateAfter;
+    }
+    let suffix = lexer_alt_suffix(alt, index);
+    if !lexer_repeat_can_eat_suffix(&rep.element, &suffix, all_rules, ci) {
+        return LexerRepeatEmit::PlainSuffixDisjoint;
+    }
+    if !lexer_suffix_is_peekable(&suffix, all_rules) {
+        return LexerRepeatEmit::PlainSuffixNotPeekable;
+    }
+    return LexerRepeatEmit::LookaheadAware;
+}
+
+/// How an alternation at `alt.elements[index]` that has a suffix after it is
+/// emitted, and — when first-match already gives ANTLR4's answer — why the arms
+/// need not be scored against the suffix. A tail-position alternation (no
+/// suffix) is `lexer_alts_emit`'s decision instead.
+pub enum LexerGroupEmit {
+    /// Each arm is scored on how far arm-plus-suffix reaches
+    /// (`gen_lexer_alts_lookahead_aware`).
+    ArmScoring,
+    FirstMatchSingleArm,
+    /// Nothing follows: `lexer_alts_emit` decides this one.
+    FirstMatchNoSuffix,
+    /// Every arm consumes the same fixed number of chars.
+    FirstMatchFixedLenArms,
+    /// An arm carries a semantic predicate anywhere below it.
+    FirstMatchArmPredicate,
+    /// No two arms can match at the same position, so which arm wins is not a
+    /// decision at all.
+    FirstMatchArmsDisjoint,
+    /// A semantic predicate sits between the alternation and the alt's end.
+    FirstMatchPredicateAfter,
+    /// The suffix carries a semantic predicate, so it cannot be peeked.
+    FirstMatchSuffixNotPeekable,
+}
+
+pub fn lexer_group_emit(alt: &LexerAlternative, index: i32, all_rules: &List<LexerRule>, ci: bool) -> LexerGroupEmit {
+    let Group(g_alts) = &alt.elements[index] else {
+        panic("lexer_group_emit: element is not a Group");
+    };
+    if g_alts.len() < 2 {
+        return LexerGroupEmit::FirstMatchSingleArm;
+    }
+    if index + 1 >= alt.elements.len() {
+        return LexerGroupEmit::FirstMatchNoSuffix;
+    }
+    match lexer_alts_scan(g_alts, all_rules) {
+        SingleArm => {
+            return LexerGroupEmit::FirstMatchSingleArm;
+        },
+        FixedLenArms => {
+            return LexerGroupEmit::FirstMatchFixedLenArms;
+        },
+        ArmPredicate => {
+            return LexerGroupEmit::FirstMatchArmPredicate;
+        },
+        Longest => {
+        },
+    }
+    if !lexer_alts_can_collide(g_alts, all_rules, ci) {
+        return LexerGroupEmit::FirstMatchArmsDisjoint;
+    }
+    if lexer_alt_has_predicate_after(alt, index) {
+        return LexerGroupEmit::FirstMatchPredicateAfter;
+    }
+    if !lexer_suffix_is_peekable(&lexer_alt_suffix(alt, index), all_rules) {
+        return LexerGroupEmit::FirstMatchSuffixNotPeekable;
+    }
+    return LexerGroupEmit::ArmScoring;
+}
+
+/// The elements of `alt` after `after` — what a repeat or an alternation at
+/// that position has to leave behind for the rest of the sequence.
+pub fn lexer_alt_suffix(alt: &LexerAlternative, after: i32) -> List<LexerElement> {
+    let mut out: List<LexerElement> = [];
+    for let mut j = after + 1; j < alt.elements.len(); j += 1 {
+        out.push(alt.elements[j]);
+    }
+    return out;
+}
+
+/// The rest of `alt` after `after`, as the alternative a non-greedy repeat
+/// consumes: the trailing elements with every action from `after + 1` onwards
+/// re-based onto them (`before_index - (after + 1)`).
+///
+/// The re-basing is what keeps a predicate positioned after the repeat — the
+/// trailing one included — placed: the non-greedy emit returns instead of
+/// falling out of the element loop, so the loop's post-pass never runs for it.
+pub fn lexer_alt_rest(alt: &LexerAlternative, after: i32) -> LexerAlternative {
+    let mut actions: List<AltAction> = [];
+    for let a of &alt.actions {
+        if a.before_index >= after + 1 {
+            actions.push(AltAction { kind: a.kind, source: a.source, before_index: a.before_index - (after + 1) });
+        }
+    }
+    return LexerAlternative { elements: lexer_alt_suffix(alt, after), actions };
+}
+
+/// Whether the alternative's last element inherits the sequence's tail
+/// position. It does not when a trailing predicate follows it: the
+/// maximal-munch emit would gate the longest arm on a predicate a shorter one
+/// might have satisfied.
+pub fn lexer_alt_last_is_tail(alt: &LexerAlternative, tail: bool) -> bool {
+    return tail && !lexer_alt_has_predicate_at(alt, alt.elements.len());
+}
+
 /// Whether `alt` has a semantic predicate strictly between element `after` and
 /// the trailing position (`after < before_index < elements.len()`).
 fn lexer_alt_has_predicate_after(alt: &LexerAlternative, after: i32) -> bool {
@@ -1540,10 +1793,7 @@ fn gen_lexer_alt_seq(
     tail: bool,
     replay: bool,
 ) {
-    // The last element inherits the sequence's tail position, unless a trailing
-    // predicate follows it: the maximal-munch emit would gate the longest arm on
-    // a predicate that a shorter one might have satisfied.
-    let last_is_tail = tail && !lexer_alt_has_predicate_at(alt, alt.elements.len());
+    let last_is_tail = lexer_alt_last_is_tail(alt, tail);
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         // Every `before_index == i` predicate (alt-initial and mid-alt); the
         // trailing one is emitted post-loop. Emitting here rather than in the
@@ -1555,51 +1805,26 @@ fn gen_lexer_alt_seq(
         }
         let elem = &alt.elements[i];
         if let Repeat(rep) = elem {
-            if rep.non_greedy {
-                // Re-base the suffix's predicates onto the rest alt
-                // (`before_index - (i + 1)`) so one after the repeat is still
-                // emitted, inside the suffix the non-greedy emit consumes.
-                // `return`: the rest alt covers `i + 1` through the trailing one.
-                let mut rest_elems: List<LexerElement> = [];
-                for let mut j = i + 1; j < alt.elements.len(); j += 1 {
-                    rest_elems.push(alt.elements[j]);
-                }
-                let mut rest_actions: List<AltAction> = [];
-                for let a of &alt.actions {
-                    if a.before_index >= i + 1 {
-                        rest_actions.push(
-                            AltAction { kind: a.kind, source: a.source, before_index: a.before_index - (i + 1) },
-                        );
-                    }
-                }
-                let rest_alt = LexerAlternative { elements: rest_elems, actions: rest_actions };
-                gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci, ea, hm);
-                return;
-            }
-            // A naive greedy loop can over-shoot and strand the suffix at
-            // end-of-input (`'a' ~('b')+ 'c'` over `abc`, the canonical
-            // `Sets/UnicodeNegated*` descriptor). ANTLR4's lexer gets the
-            // longest match by NFA→DFA simulation; the same answer comes out
-            // of a single forward pass with explicit accept-state tracking —
-            // each iteration peeks whether the suffix could start here and
-            // records the latest such position, and once the inner stops
-            // matching the cursor resumes there. Only an inner that can eat a
-            // char the suffix needs has that problem; everywhere else the loop
-            // already stops where the suffix must start.
-            if rep.kind matches { Plus | Star }
-                && i + 1 < alt.elements.len()
-                && lexer_element_can_consume_simple(&rep.element)
-                && !lexer_alt_has_predicate_after(alt, i) {
-                let mut suffix_elems: List<LexerElement> = [];
-                for let mut j = i + 1; j < alt.elements.len(); j += 1 {
-                    suffix_elems.push(alt.elements[j]);
-                }
-                if lexer_repeat_can_eat_suffix(&rep.element, &suffix_elems, all_rules, ci)
-                    && lexer_suffix_is_peekable(&suffix_elems, all_rules) {
+            match lexer_repeat_emit(alt, i, all_rules, ci) {
+                NonGreedy => {
+                    // `return`: the rest alt covers `i + 1` through the trailing
+                    // predicate, so the post-loop pass must not run again.
+                    gen_lexer_non_greedy_repeat(w, rep, &lexer_alt_rest(alt, i), all_rules, fail_action, ci, ea, hm);
+                    return;
+                },
+                LookaheadAware => {
+                    // A naive greedy loop can over-shoot and strand the suffix at
+                    // end-of-input (`'a' ~('b')+ 'c'` over `abc`, the canonical
+                    // `Sets/UnicodeNegated*` descriptor). ANTLR4's lexer gets the
+                    // longest match by NFA→DFA simulation; the same answer comes out
+                    // of a single forward pass with explicit accept-state tracking —
+                    // each iteration peeks whether the suffix could start here and
+                    // records the latest such position, and once the inner stops
+                    // matching the cursor resumes there.
                     gen_lexer_repeat_lookahead_aware(
                         w,
                         rep,
-                        &suffix_elems,
+                        &lexer_alt_suffix(alt, i),
                         all_rules,
                         fail_action,
                         ci,
@@ -1608,37 +1833,30 @@ fn gen_lexer_alt_seq(
                         last_is_tail,
                     );
                     break;
-                }
+                },
+                // Plain greedy loop: emitted below, as the element it is.
+                PlainOptional | PlainNoSuffix | PlainInnerNotPerChar | PlainPredicateAfter | PlainSuffixDisjoint | PlainSuffixNotPeekable => {
+                },
             }
         }
         // An alternation with something after it cannot be decided by which arm
         // matches first — unless no two arms can match at the same position,
         // where first-match already is the answer.
         if let Group(g_alts) = elem {
-            if g_alts.len() >= 2
-                && i + 1 < alt.elements.len()
-                && lexer_alts_prefer_longest(g_alts, all_rules)
-                && lexer_alts_can_collide(g_alts, all_rules, ci)
-                && !lexer_alt_has_predicate_after(alt, i) {
-                let mut suffix_elems: List<LexerElement> = [];
-                for let mut j = i + 1; j < alt.elements.len(); j += 1 {
-                    suffix_elems.push(alt.elements[j]);
-                }
-                if lexer_suffix_is_peekable(&suffix_elems, all_rules) {
-                    gen_lexer_alts_lookahead_aware(
-                        w,
-                        g_alts,
-                        &suffix_elems,
-                        all_rules,
-                        fail_action,
-                        ci,
-                        ea,
-                        hm,
-                        replay,
-                        last_is_tail,
-                    );
-                    continue;
-                }
+            if lexer_group_emit(alt, i, all_rules, ci) matches { ArmScoring } {
+                gen_lexer_alts_lookahead_aware(
+                    w,
+                    g_alts,
+                    &lexer_alt_suffix(alt, i),
+                    all_rules,
+                    fail_action,
+                    ci,
+                    ea,
+                    hm,
+                    replay,
+                    last_is_tail,
+                );
+                continue;
             }
         }
         gen_lexer_elem(
@@ -2713,15 +2931,16 @@ pub fn collect_keyword_rules(lexer_rules: &List<LexerRule>, grammar_opts: &List<
     let mut result: List<KeywordInfo> = [];
     for let mut c = 0; c < candidates.len(); c += 1 {
         let kw = &candidates[c];
-        if keyword_carrier_admits(
+        let carrier = keyword_carrier_admits(
             kw,
             candidate_indices[c],
             &carrier_indices,
             &carrier_first_chars,
             &carrier_is_wildcard,
             &carrier_max_len,
-        ) {
-            result.push(*kw);
+        );
+        if carrier >= 0 {
+            result.push(KeywordInfo { ..*kw, carrier: lexer_rules[carrier_indices[carrier]].name });
         }
     }
     return result;
@@ -2805,6 +3024,10 @@ fn lexer_element_bounded_len(elem: &LexerElement) -> i32 {
 /// Using the first character as the collision proxy is conservative: a rejected
 /// candidate simply falls back to regular first-character dispatch, where the
 /// strict `>` longest-match comparison already honours declaration order.
+///
+/// Returns the position in `carrier_indices` of the first admitting carrier, or
+/// -1 when the candidate is rejected. The scan runs to the end either way: a
+/// carrier declared before the keyword vetoes it however late it appears.
 fn keyword_carrier_admits(
     kw: &KeywordInfo,
     kw_index: i32,
@@ -2812,12 +3035,12 @@ fn keyword_carrier_admits(
     carrier_first_chars: &List<List<[char, char]>>,
     carrier_is_wildcard: &List<bool>,
     carrier_max_len: &List<i32>,
-) -> bool {
+) -> i32 {
     let first_char = kw.lowercase_text.chars().next().unwrap();
     let first_ci = kw.char_ci[0];
     let upper = if first_ci { first_char.to_ascii_uppercase() } else { first_char };
     let kw_len = kw.lowercase_text.chars().count();
-    let mut has_later_carrier = false;
+    let mut carrier = -1;
     for let mut i = 0; i < carrier_indices.len(); i += 1 {
         let covers = carrier_is_wildcard[i]
             || char_matches_ranges(first_char, &carrier_first_chars[i])
@@ -2830,14 +3053,16 @@ fn keyword_carrier_admits(
             // priority — the shortcut would mis-reclassify its match. The
             // first character stays the proxy here: a carrier ruled out for
             // reachability may still collide, and rejecting is the safe side.
-            return false;
+            return -1;
         }
         if carrier_max_len[i] >= 0 && carrier_max_len[i] < kw_len {
             continue;
         }
-        has_later_carrier = true;
+        if carrier < 0 {
+            carrier = i;
+        }
     }
-    return has_later_carrier;
+    return carrier;
 }
 
 fn is_keyword_rule_name(name: &String, keywords: &List<KeywordInfo>) -> bool {
@@ -2866,33 +3091,44 @@ fn try_extract_fixed_text(rule: &LexerRule) -> Option<String> {
     return Option::<String>::Some(text);
 }
 
-/// Check if a lexer rule has the same fixed text as any literal token.
+/// The literal token constant covering a lexer rule's fixed text, when the
+/// shared literal matcher can stand in for the rule's own `try_*` function.
 ///
 /// Parser literals inherit the grammar-level `caseInsensitive` setting, so a
 /// lexer rule with a divergent rule-level CI override must keep its own
 /// `try_*` function instead of being deduped against the shared literal.
+fn literal_duplicate_const(
+    rule: &LexerRule,
+    lit_tokens: &List<LitToken>,
+    grammar_opts: &List<GrammarOption>,
+    grammar_ci: bool,
+) -> Option<String> {
+    if rule.mode != 0 {
+        return null;
+    }
+    let rule_ci = resolve_ci(grammar_opts, &rule.options);
+    if rule_ci != grammar_ci {
+        return null;
+    }
+    let text = try_extract_fixed_text(rule);
+    if let Some(t) = &text {
+        for let lit of lit_tokens {
+            if lit.text == *t {
+                return Option::<String>::Some(lit.const_name);
+            }
+        }
+    }
+    return null;
+}
+
+/// Whether the shared literal matcher already covers this rule's text.
 fn is_literal_duplicate(
     rule: &LexerRule,
     lit_tokens: &List<LitToken>,
     grammar_opts: &List<GrammarOption>,
     grammar_ci: bool,
 ) -> bool {
-    if rule.mode != 0 {
-        return false;
-    }
-    let rule_ci = resolve_ci(grammar_opts, &rule.options);
-    if rule_ci != grammar_ci {
-        return false;
-    }
-    let text = try_extract_fixed_text(rule);
-    if let Some(t) = &text {
-        for let lit of lit_tokens {
-            if lit.text == *t {
-                return true;
-            }
-        }
-    }
-    return false;
+    return literal_duplicate_const(rule, lit_tokens, grammar_opts, grammar_ci) matches { Some(_) };
 }
 
 /// Sentinel for the keyword-length min-finding loop below: larger than
