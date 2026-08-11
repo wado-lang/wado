@@ -180,30 +180,47 @@ fn collect_case_names(
 use super::types::TypeError;
 use crate::symbol::SymbolTable;
 
-/// Pick the right `ModuleSource` out of the AST + synthesised candidate
-/// lists. If `prefer` is supplied and present in either list, return that
-/// one; otherwise fall back to the first AST entry, then the first
-/// synthesised entry. The union prevents an AST-layer entry from masking
-/// a same-keyed synthesised entry (e.g. core's variadic
-/// `impl<..T> Inspect for [..T]` registers `("[]", "Inspect")` at the
-/// AST layer; a user `struct Tuple` whose auto-derived `Tuple^Inspect`
-/// lives in the synthesised layer must still be reachable when its module
-/// matches the hint).
+/// Pick a `ModuleSource` out of two candidate lists in the order given. A
+/// `prefer` hint wins wherever it appears; otherwise the first list's first
+/// entry answers, then the second's.
+///
+/// The union is what keeps one layer from masking the other on a shared key —
+/// core's variadic `impl<..T> Inspect for [..T]` and a user `struct Tuple`'s
+/// auto-derived `Tuple^Inspect` collide there, and the hint separates them.
 fn pick_module_union<'a>(
-    ast: Option<&'a Vec<ModuleSource>>,
-    syn: Option<&'a Vec<ModuleSource>>,
+    first: Option<&'a Vec<ModuleSource>>,
+    second: Option<&'a Vec<ModuleSource>>,
     prefer: Option<&ModuleSource>,
 ) -> Option<&'a ModuleSource> {
     let in_list = |list: Option<&'a Vec<ModuleSource>>, hint: &ModuleSource| {
         list.and_then(|l| l.iter().find(|m| *m == hint))
     };
     if let Some(hint) = prefer
-        && let Some(m) = in_list(ast, hint).or_else(|| in_list(syn, hint))
+        && let Some(m) = in_list(first, hint).or_else(|| in_list(second, hint))
     {
         return Some(m);
     }
-    ast.and_then(|l| l.first())
-        .or_else(|| syn.and_then(|l| l.first()))
+    first
+        .and_then(|l| l.first())
+        .or_else(|| second.and_then(|l| l.first()))
+}
+
+/// Which layer answers first, decided by what the query is asking.
+///
+/// A mangled receiver comes from a mangled method name, so the question is
+/// *where the code is*: the synthesis layer, which holds the generated body,
+/// answers before the AST layer, which only says where the `impl` block was
+/// written. A declared receiver is asking the other question — which module
+/// hosts the impl — so the AST layer leads.
+fn layers_in_query_order<'a>(
+    receiver: ImplReceiver<'_>,
+    ast: Option<&'a Vec<ModuleSource>>,
+    syn: Option<&'a Vec<ModuleSource>>,
+) -> (Option<&'a Vec<ModuleSource>>, Option<&'a Vec<ModuleSource>>) {
+    match receiver {
+        ImplReceiver::Mangled(_) => (syn, ast),
+        ImplReceiver::Declared(_) => (ast, syn),
+    }
 }
 
 /// Canonical key for a declaration that lives in some module. Used by every
@@ -631,15 +648,6 @@ impl ImplModuleIndex {
         push_module(&mut self.by_mangled, mangled, trait_name, module);
     }
 
-    fn records(
-        &self,
-        receiver: ImplReceiver<'_>,
-        trait_name: &str,
-        module: &ModuleSource,
-    ) -> bool {
-        self.get(receiver, trait_name)
-            .is_some_and(|modules| modules.contains(module))
-    }
 
     #[must_use]
     pub fn contains_declared(&self, type_name: &str, trait_name: &str) -> bool {
@@ -1434,16 +1442,6 @@ impl TraitEnv {
         }
     }
 
-    /// Whether the AST layer already places `impl <trait_name> for <receiver>`
-    /// in `module` — the test the synthesis layer uses to stay a genuine delta.
-    pub(crate) fn ast_layer_records(
-        &self,
-        receiver: ImplReceiver<'_>,
-        trait_name: &str,
-        module: &ModuleSource,
-    ) -> bool {
-        self.trait_impl_modules.records(receiver, trait_name, module)
-    }
 
     pub(crate) fn impl_module_for(
         &self,
@@ -1456,7 +1454,8 @@ impl TraitEnv {
             .synthesised
             .as_ref()
             .and_then(|s| s.trait_impl_modules.get(receiver, trait_name));
-        pick_module_union(ast, syn, type_module)
+        let (first, second) = layers_in_query_order(receiver, ast, syn);
+        pick_module_union(first, second, type_module)
     }
 
     /// Every impl entry whose target *head* matches `receiver`, across all
@@ -1649,7 +1648,8 @@ impl TraitEnv {
             .synthesised
             .as_ref()
             .and_then(|s| s.concrete_trait_impl_modules.get(receiver, trait_name));
-        pick_module_union(ast, syn, type_module)
+        let (first, second) = layers_in_query_order(receiver, ast, syn);
+        pick_module_union(first, second, type_module)
     }
 
 

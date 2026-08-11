@@ -136,27 +136,15 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
     let mut impls = SynthesisedImpls::default();
     let mut instantiations: Vec<(String, String, ModuleSource)> = Vec::new();
-    let trait_env = &project.trait_env;
-    // Skip only when the *same* module is already represented at the AST
-    // layer. Two same-name receiver types from different modules (e.g.
-    // `struct Widget` in module A and module B) each get their own
-    // auto-derived impl and both need to land in the synthesised layer — a
-    // coarser by-name short-circuit would drop the second one and
-    // re-introduce the cross-module mis-dispatch the index is meant to fix.
+    // Every impl TIR carries is recorded, user-written ones included. This
+    // layer answers "where is the code", and reify flattens a user impl's
+    // methods into `module.functions` exactly like a generated one — so
+    // excluding them would leave a mangled query with nothing to find.
     let mut record =
         |receiver: &crate::name::Receiver,
          trait_name: &str,
          module: &ModuleSource,
          is_concrete: bool| {
-            if trait_env.ast_layer_records(
-                crate::elaborator::trait_env::ImplReceiver::Mangled(
-                    receiver.head_key().as_mangled_str(),
-                ),
-                trait_name,
-                module,
-            ) {
-                return;
-            }
             impls.record_impl(receiver, trait_name, module, is_concrete);
         };
     for tir_module in project.tir_modules.values() {
