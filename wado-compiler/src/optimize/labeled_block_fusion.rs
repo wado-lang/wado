@@ -41,8 +41,8 @@ use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::{
-    block_contains_loop, collect_reads, has_break_to, is_local, is_local_operand,
-    promoted_local_reads, promoted_read_count_at, single_payload_binding,
+    block_contains_loop, has_break_to, is_local, is_local_operand, promoted_read_count_at,
+    single_payload_binding, surviving_read,
 };
 
 /// The slot `sroa_variant_return` reserves for the tag in every scalarized
@@ -104,8 +104,9 @@ impl Rule for LabeledBlockFusionRule {
             let temp = info.temp_local;
             perform_fusion(engine, block, &stmts, i, info);
             debug_assert!(
-                !is_read(engine.body, temp),
-                "[NIR] labeled_block_fusion: temp local {temp} is still read after fusion"
+                surviving_read(engine.body, &[temp]).is_none(),
+                "[NIR] labeled_block_fusion: temp local {temp} is still read after \
+                 fusion, which deleted the binding that defined it"
             );
             return true;
         }
@@ -1041,16 +1042,6 @@ impl NirRefVisitor for SlotReadCollector {
 /// The engine's use index sees the skeleton only, hence the second term.
 fn body_uses(engine: &Engine, local: u32) -> usize {
     engine.local_reads(local).len() + engine.promoted_read_count(local)
-}
-
-/// Whether any reachable read of `local` survives, in the skeleton or the value
-/// pool. The fusion deletes the temp's binding, so one that does would read a
-/// local nothing defines.
-fn is_read(body: &Body, local: u32) -> bool {
-    let mut reads = IndexSet::default();
-    collect_reads(body, &mut reads);
-    promoted_local_reads(body, &mut reads);
-    reads.contains(&local)
 }
 
 /// Counts every read of `local_idx`, skeleton and value pool alike.

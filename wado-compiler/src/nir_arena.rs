@@ -716,90 +716,6 @@ impl Body {
         })
     }
 
-    /// Map every operand slot of a single expression node. A scoped rewrite
-    /// (e.g. a loop subtree) collects the node ids and calls this on each.
-    pub fn map_expr_operands(&mut self, id: ExprId, f: &mut impl FnMut(Operand) -> Operand) {
-        match &mut self.exprs[id].kind {
-            ExprKind::GlobalVarSet { value, .. } => *value = f(*value),
-            ExprKind::Binary { left, right, .. } => {
-                *left = f(*left);
-                *right = f(*right);
-            }
-            ExprKind::Unary { expr, .. }
-            | ExprKind::Cast { expr, .. }
-            | ExprKind::FieldAccess { expr, .. }
-            | ExprKind::VariantTag { expr }
-            | ExprKind::VariantTest { expr, .. }
-            | ExprKind::VariantPayload { expr, .. } => *expr = f(*expr),
-            ExprKind::Assign { value, .. } => *value = f(*value),
-            ExprKind::Index { expr, index } => {
-                *expr = f(*expr);
-                *index = f(*index);
-            }
-            ExprKind::Call { args, .. } => {
-                for a in args {
-                    a.expr = f(a.expr);
-                }
-            }
-            ExprKind::CmRawCall { args, .. } => {
-                for a in args {
-                    *a = f(*a);
-                }
-            }
-            ExprKind::If { condition, .. } => *condition = f(*condition),
-            ExprKind::Match { expr, arms } => {
-                *expr = f(*expr);
-                for arm in arms {
-                    if let Some(g) = arm.guard {
-                        arm.guard = Some(f(g));
-                    }
-                    arm.body = f(arm.body);
-                }
-            }
-            ExprKind::StructLiteral { fields, .. } => {
-                for fld in fields {
-                    fld.value = f(fld.value);
-                }
-            }
-            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-                for el in elements {
-                    *el = f(*el);
-                }
-            }
-            ExprKind::IndirectCall { callee, args } => {
-                *callee = f(*callee);
-                for a in args {
-                    *a = f(*a);
-                }
-            }
-            ExprKind::ClosureToCanonical { functor, .. } => *functor = f(*functor),
-            ExprKind::VariantConstruct { payload, .. } => {
-                if let Some(p) = payload {
-                    *payload = Some(f(*p));
-                }
-            }
-            ExprKind::Switch { scrutinee, .. } => *scrutinee = f(*scrutinee),
-            _ => {}
-        }
-    }
-
-    /// Map every operand slot of a single statement node, the statement
-    /// counterpart of [`Body::map_expr_operands`].
-    pub fn map_stmt_operands(&mut self, id: StmtId, f: &mut impl FnMut(Operand) -> Operand) {
-        match &mut self.stmts[id].kind {
-            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-                *value = f(*value);
-            }
-            StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-                if let Some(v) = value {
-                    *value = Some(f(*v));
-                }
-            }
-            StmtKind::If { condition, .. } => *condition = f(*condition),
-            _ => {}
-        }
-    }
-
     /// Take a node's content, leaving the slot `Dead` so every id pointing at it
     /// stays valid. The arena half of a node move — a caller holding an index
     /// (the rewrite engine's use index) layers its own bookkeeping on top.
@@ -1167,7 +1083,7 @@ impl Body {
     ///
     /// A body still under construction has no root block; there every arena
     /// slot counts as live, since nothing has been spliced into a tree yet.
-    pub fn for_each_reachable_node(&self, f: &mut impl FnMut(NodeRef)) {
+    pub fn for_each_reachable_node(&self, mut f: impl FnMut(NodeRef)) {
         if self.blocks.is_empty() {
             for (e, _) in &self.exprs {
                 f(NodeRef::Expr(e));
@@ -1203,7 +1119,7 @@ impl Body {
         let mut counts: crate::hashmap::IndexMap<u32, usize> = crate::hashmap::IndexMap::default();
         let mut leaves_of: crate::hashmap::IndexMap<ValueId, Vec<u32>> =
             crate::hashmap::IndexMap::default();
-        self.for_each_reachable_node(&mut |node| {
+        self.for_each_reachable_node(|node| {
             self.for_each_operand(node, |op| {
                 let Some(v) = op.as_value() else {
                     return;

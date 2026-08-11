@@ -237,6 +237,11 @@ pub struct Engine<'a> {
     pure_builtin_callees: Option<&'a IndexSet<crate::nir::FuncId>>,
     /// Memoized promoted-read census ([`Body::promoted_read_counts`]) for the
     /// session. See [`Engine::promoted_read_count`].
+    ///
+    /// [`Engine::run`] compares it against a fresh walk under debug assertions.
+    /// That backstop is partial by construction: it sees only a session that
+    /// asked for the census, and only its final state, so a stale answer some
+    /// later invalidation happened to cover leaves no trace.
     promoted_reads: OnceCell<IndexMap<u32, usize>>,
 }
 
@@ -748,7 +753,7 @@ impl<'a> Engine<'a> {
     /// Whether any reachable promoted operand reads `local`
     /// ([`Engine::promoted_read_count`] as a predicate).
     pub fn reads_promoted_local(&self, local: u32) -> bool {
-        self.promoted_read_counts().contains_key(&local)
+        self.promoted_read_count(local) > 0
     }
 
     fn promoted_read_counts(&self) -> &IndexMap<u32, usize> {
@@ -841,7 +846,7 @@ impl<'a> Engine<'a> {
         ) = parent;
     }
 
-    /// Edit API: rewrite every operand slot of expression `id` through `f`.
+    /// Edit API: rewrite every operand slot of `node` through `f`.
     ///
     /// The one edit that installs operands without touching node structure, for
     /// a pass rewriting a whole subtree's slots in one sweep (`licm`'s
@@ -849,36 +854,17 @@ impl<'a> Engine<'a> {
     /// no parent edge to move and nothing new to enqueue — which is also why
     /// `f` may not hand back a *different* `Operand::Expr`: that is a structural
     /// splice, and `redirect_expr` / `replace_expr_kind` are what maintain it.
-    pub fn map_expr_operands(&mut self, id: ExprId, f: &mut impl FnMut(Operand) -> Operand) {
-        let node = NodeRef::Expr(id);
+    pub fn map_operands(&mut self, node: NodeRef, f: &mut impl FnMut(Operand) -> Operand) {
         let mut spliced = false;
-        self.body.map_expr_operands(id, &mut |op| {
-            let new = f(op);
-            spliced |= new != op && new.as_expr().is_some();
-            new
+        self.body.for_each_operand_mut(node, |slot| {
+            let new = f(*slot);
+            spliced |= new != *slot && new.as_expr().is_some();
+            *slot = new;
         });
         assert!(
             !spliced,
-            "[NIR engine] map_expr_operands({id:?}) installed a skeleton operand: \
-             that is a structural splice, so the parent map and worklist need \
-             `redirect_expr` / `replace_expr_kind` instead"
-        );
-        self.census_note_node_operands(node);
-    }
-
-    /// [`Engine::map_expr_operands`] for a statement's operand slots.
-    pub fn map_stmt_operands(&mut self, id: StmtId, f: &mut impl FnMut(Operand) -> Operand) {
-        let node = NodeRef::Stmt(id);
-        let mut spliced = false;
-        self.body.map_stmt_operands(id, &mut |op| {
-            let new = f(op);
-            spliced |= new != op && new.as_expr().is_some();
-            new
-        });
-        assert!(
-            !spliced,
-            "[NIR engine] map_stmt_operands({id:?}) installed a skeleton operand: \
-             that is a structural splice, so the parent map and worklist need \
+            "[NIR engine] map_operands({node:?}) installed a skeleton operand: that \
+             is a structural splice, so the parent map and worklist need \
              `redirect_expr` / `replace_expr_kind` instead"
         );
         self.census_note_node_operands(node);
@@ -1502,15 +1488,13 @@ impl<'a> Engine<'a> {
             self.promoted_reads
                 .get()
                 .is_none_or(|memo| *memo == self.body.promoted_read_counts()),
-            "[NIR engine] the promoted-read census the session ends on disagrees \
-             with a fresh walk, so some edit changed which operands are \
-             reachable without reporting it — every mutating edit method must \
-             call `census_note_operand` / `census_note_node_operands` / \
-             `census_note_structure`. Left unreported, `elide_local` deletes a \
-             binding the value pool still reads. Note the check only covers a \
-             session that asked for the census at all, and only its final \
-             state: a stale answer a later invalidation happened to cover is \
-             invisible here."
+            "[NIR engine] the promoted-read census this session ends on disagrees \
+             with a fresh walk, so an edit changed which operands are reachable \
+             without reporting it — every mutating edit method must call \
+             `census_note_operand` / `census_note_node_operands` / \
+             `census_note_structure`, and a rule must write operands through \
+             `Engine`, never through `engine.body`. Left unreported, \
+             `elide_local` deletes a binding the value pool still reads."
         );
         any
     }

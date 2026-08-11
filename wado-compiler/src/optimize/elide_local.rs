@@ -11,7 +11,7 @@
 //! (`copy_prop` / `const_fold` / `dce`), which the WIR-level pass cannot.
 
 use crate::hashmap::IndexSet;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
 use super::arena_query;
@@ -83,10 +83,14 @@ impl Rule for ElideRule<'_> {
         if changed {
             engine.set_block_stmts(id, new_stmts);
         }
-        debug_assert!(
-            surviving_read(engine.body, &elided).is_none(),
-            "[NIR] elide_local: a local was elided while a read of it survived"
-        );
+        #[cfg(debug_assertions)]
+        if let Some(local) = arena_query::surviving_read(engine.body, &elided) {
+            panic!(
+                "[NIR] elide_local: local {local} was elided from block {id:?} while a \
+                 reachable read of it survived — the binding it named is gone and \
+                 that read now has no definition"
+            );
+        }
         changed
     }
 }
@@ -105,23 +109,6 @@ fn bound_local(engine: &Engine, stmt: StmtId) -> Option<u32> {
         },
         _ => None,
     }
-}
-
-/// The first of `elided` that still has a reachable read, in the skeleton or
-/// the value pool — `None` when the elision was clean.
-///
-/// One census for the whole batch: each half costs a body walk, and a block
-/// that elided several locals would otherwise pay both walks per local. Kept
-/// independent of the engine's use index and census memo, which are what the
-/// elision decision itself read, so the check can still catch them drifting.
-fn surviving_read(body: &Body, elided: &[u32]) -> Option<u32> {
-    if elided.is_empty() {
-        return None;
-    }
-    let mut reads = IndexSet::default();
-    arena_query::collect_reads(body, &mut reads);
-    arena_query::promoted_local_reads(body, &mut reads);
-    elided.iter().copied().find(|l| reads.contains(l))
 }
 
 /// Classify a statement for write-only-local elimination. Mirrors the former
@@ -235,7 +222,7 @@ mod tests {
     use super::*;
 
     use crate::nir::NirLocal;
-    use crate::nir_arena::{BlockNode, StmtNode};
+    use crate::nir_arena::{BlockNode, Body, StmtNode};
     use crate::nir_engine::EngineBuffers;
     use crate::tir::TypeTable;
     use crate::token::Span;

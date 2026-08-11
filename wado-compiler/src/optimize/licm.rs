@@ -2567,13 +2567,13 @@ fn hoist_invariant_value_operands(
     // Phase 1: snapshot every operand slot in the subtree, in a fixed order.
     let mut ops: Vec<Operand> = Vec::new();
     for &e in &expr_ids {
-        engine.map_expr_operands(e, &mut |op| {
+        engine.map_operands(NodeRef::Expr(e), &mut |op| {
             ops.push(op);
             op
         });
     }
     for &s in &stmt_ids {
-        engine.map_stmt_operands(s, &mut |op| {
+        engine.map_operands(NodeRef::Stmt(s), &mut |op| {
             ops.push(op);
             op
         });
@@ -2657,14 +2657,14 @@ fn hoist_invariant_value_operands(
         .collect();
     let mut i = 0;
     for &e in &expr_ids {
-        engine.map_expr_operands(e, &mut |_| {
+        engine.map_operands(NodeRef::Expr(e), &mut |_| {
             let r = new_ops[i];
             i += 1;
             r
         });
     }
     for &s in &stmt_ids {
-        engine.map_stmt_operands(s, &mut |_| {
+        engine.map_operands(NodeRef::Stmt(s), &mut |_| {
             let r = new_ops[i];
             i += 1;
             r
@@ -2675,8 +2675,9 @@ fn hoist_invariant_value_operands(
 
 /// Collect every expression and statement id reachable from `loop_body` (the
 /// whole loop subtree, including nested loops — a pre-header temp dominates
-/// them, so rewriting their slots stays sound). Patterns are excluded: they
-/// carry no operand slots the caller rewrites.
+/// them, so rewriting their slots stays sound). Patterns are excluded: their
+/// one operand slot holds a match constant, which names no local and so is
+/// never a hoist candidate.
 fn collect_loop_subtree(body: &Body, loop_body: BlockId) -> (Vec<ExprId>, Vec<StmtId>) {
     let mut expr_ids = Vec::new();
     let mut stmt_ids = Vec::new();
