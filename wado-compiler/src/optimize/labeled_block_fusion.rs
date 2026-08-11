@@ -42,7 +42,7 @@ use crate::token::Span;
 
 use super::arena_query::{
     block_contains_loop, has_break_to, is_local, is_local_operand, promoted_read_count_at,
-    single_payload_binding, surviving_read,
+    single_payload_binding,
 };
 
 /// The slot `sroa_variant_return` reserves for the tag in every scalarized
@@ -103,11 +103,10 @@ impl Rule for LabeledBlockFusionRule {
             }
             let temp = info.temp_local;
             perform_fusion(engine, block, &stmts, i, info);
-            debug_assert!(
-                surviving_read(engine.body, &[temp]).is_none(),
-                "[NIR] labeled_block_fusion: temp local {temp} is still read after \
-                 fusion, which deleted the binding that defined it"
-            );
+            // `perform_fusion` deleted the binding that defined `temp`; the
+            // session end audits that no read of it survived. See
+            // `Engine::note_elided_local`.
+            engine.note_elided_local(temp);
             return true;
         }
         false

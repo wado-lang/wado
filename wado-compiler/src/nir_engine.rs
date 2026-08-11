@@ -111,6 +111,10 @@ pub struct EngineBuffers {
     stmt_queued: Vec<bool>,
     block_queued: Vec<bool>,
     pat_queued: Vec<bool>,
+    /// Locals whose defining binding a rule deleted this session, audited once
+    /// at [`Engine::run`]'s end. Only written under debug assertions — the
+    /// audit is the sole reader. See [`Engine::note_elided_local`].
+    elided_locals: Vec<u32>,
 }
 
 impl EngineBuffers {
@@ -142,6 +146,7 @@ impl EngineBuffers {
         self.uses.clear();
         self.uses.resize_with(local_count, LocalUses::default);
         self.worklist.clear();
+        self.elided_locals.clear();
     }
 
     /// Mutable access to local `index`'s use record, growing `uses` on demand
@@ -586,6 +591,21 @@ impl<'a> Engine<'a> {
             self.vg_type_table,
         );
         self.body.value_graph = Some(build);
+    }
+
+    /// Report that this rewrite deleted the binding that defined `local`, so
+    /// the session end can check no read of it survived.
+    ///
+    /// A rule must not run that check itself: `Body::surviving_read` walks the
+    /// whole body, and per rule application that is quadratic — the cost that
+    /// made one fixed-point iteration's `peephole` runs 4.9 s of a 9.5 s loop.
+    /// Reporting here pays one walk per session instead, and keeps the audit
+    /// independent of the use index and census memo the rewrite decided on.
+    pub fn note_elided_local(&mut self, local: u32) {
+        #[cfg(debug_assertions)]
+        self.buf.elided_locals.push(local);
+        #[cfg(not(debug_assertions))]
+        let _ = local;
     }
 
     /// Read-only view of the owning function's local list. Some rules
@@ -1474,6 +1494,15 @@ impl<'a> Engine<'a> {
                 }
             }
         }
+        #[cfg(debug_assertions)]
+        if let Some(local) = self.body.surviving_read(&self.buf.elided_locals) {
+            panic!(
+                "[NIR engine] a rule reported eliding local {local}, but a reachable \
+                 read of it survived this session — the binding it named is gone and \
+                 that read now has no definition. The reporting rules are \
+                 `elide_local` and `labeled_block_fusion`."
+            );
+        }
         debug_assert!(
             self.promoted_reads
                 .get()
@@ -1614,6 +1643,34 @@ mod tests {
         // local 0 is read once (the `return x`) and defined once (the `let`).
         assert_eq!(eng.local_reads(0).len(), 1);
         assert!(eng.local_def(0).is_some());
+    }
+
+    /// A rule that reports eliding a local whose read is still reachable is a
+    /// rewrite that deleted a binding out from under a live read. The session
+    /// end catches it, so no rule has to walk the body per application.
+    #[test]
+    #[should_panic(expected = "reported eliding local 0")]
+    #[cfg(debug_assertions)]
+    fn elided_local_with_a_surviving_read_trips_the_session_audit() {
+        let mut body = sample_body();
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        // `sample_body` still contains `return x`, so claiming local 0 was
+        // elided is exactly the bug the audit exists to catch.
+        eng.note_elided_local(0);
+        eng.run(&[]);
+    }
+
+    /// The audit is scoped to what a rule actually reported, so an untouched
+    /// local — read or not — never trips it.
+    #[test]
+    fn an_unreported_local_never_trips_the_session_audit() {
+        let mut body = sample_body();
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        eng.run(&[]);
     }
 
     #[test]

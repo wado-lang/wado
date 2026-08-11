@@ -300,9 +300,14 @@ premise was wrong — with build-once, the graph build is ~6 % of the phase (was
       not there: on `driver_cst_sqlite_oracle_test` (the ANTLR4-driver shape the
       gate names) raising it covers the one over-threshold body — 113 823 of the
       program's 274 143 expressions — for +24 479 pool nodes, +3 MB peak RSS and
-      +5 % compile time, and emits a byte-identical module. So the gate costs no
-      optimization quality today and buys no headroom; born-at-`lower` inherits
-      a memory question far smaller than the comment implies.
+      +6 - 10 % compile time over three runs, and emits a byte-identical module.
+      So the gate costs no optimization quality today and buys no headroom;
+      born-at-`lower` inherits a memory question far smaller than the comment
+      implies. Retire it with this item and not before: on its own the removal
+      is a pure regression, because the graph it would then build for that body
+      has no consumer until the in-loop freeze lands, leaving only the
+      slowdown. The parallel-`wado test` OOM the comment claims is still
+      untested — that is this item's entry check, not a settled fact.
 - [ ] Arena compaction. In-place rewrites orphan nodes that are never freed
       mid-run (~1.66× bloat measured at end-of-optimize on `package-gale`).
 
