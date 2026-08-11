@@ -1371,15 +1371,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    pub(crate) fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
-        super::elaborator::trait_query::canonical_decl_key_with(
-            name,
-            &self.current_module_source,
-            &self.sem.imports,
-            self.symbols,
-            &self.tysys.trait_env,
-        )
-    }
 
     /// Canonical decl identity `(module, name)` of the declared type behind
     /// `type_id` (refs peeled), or `None` for a type parameter, an associated

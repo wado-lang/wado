@@ -1373,26 +1373,6 @@ impl TraitEnv {
             .map_or(&[], Vec::as_slice)
     }
 
-    /// The identity `build` keyed a type name by, for a lookup that holds the
-    /// same vantage — the module that declared or wrote the name. See
-    /// [`declaring_side_decl_key`].
-    pub(super) fn declaring_side_key(
-        &self,
-        symbols: &SymbolTable,
-        module_source: &ModuleSource,
-        name: &str,
-    ) -> DeclKey {
-        declaring_side_decl_key(
-            module_source,
-            name,
-            symbols,
-            self.decl_index
-                .keys()
-                .chain(self.effect_decl_index.keys())
-                .chain(self.resource_decl_index.keys())
-                .chain(self.type_decl_index.keys()),
-        )
-    }
 
     /// Keys of every impl block on `type_key`, in global build order —
     /// inherent and trait alike.
@@ -1646,33 +1626,7 @@ impl TraitEnv {
         pick_module_union(ast, syn, type_module)
     }
 
-    /// Find the canonical `(declaring module, name)` key for any trait
-    /// declaration with the given bare name. Returns `None` if no module
-    /// declares a trait by this name.
-    ///
-    /// Linear scan over `decl_index`. Intended for synthesis sites
-    /// (auto-derived `Inspect` / `Display` / `Eq`, `serde` adapters, …)
-    /// that have only a bare trait name (e.g. via `compiler_items()`) and
-    /// no per-module import context to canonicalise it through
-    /// `Elaborator::canonical_decl_key`. When two modules declare same-
-    /// named traits the first match is returned; the synthesis path that
-    /// uses this is well-defined only for core traits whose name is
-    /// project-globally unique, so the ambiguity does not matter in
-    /// practice.
-    pub fn find_trait_decl_key(&self, name: &str) -> Option<DeclKey> {
-        self.decl_index.keys().find(|(_, n)| n == name).cloned()
-    }
 
-    /// Find the canonical `(declaring module, name)` key for any effect
-    /// or resource declaration with the given bare name. See
-    /// [`Self::find_trait_decl_key`] for the lookup contract.
-    pub fn find_effect_or_resource_decl_key(&self, name: &str) -> Option<DeclKey> {
-        self.effect_decl_index
-            .keys()
-            .chain(self.resource_decl_index.keys())
-            .find(|(_, n)| n == name)
-            .cloned()
-    }
 
     /// The stdlib's declaration of `name`, as the key an `impl` header
     /// resolves to. A compiler item (`Member`, `ReflectStruct`, …) is a
@@ -1695,21 +1649,6 @@ impl TraitEnv {
         self.trait_decl_headers.get(loc)
     }
 
-    /// Find any canonical receiver [`DeclKey`] currently registered in
-    /// the static-method index whose bare name matches `name`. Used as a
-    /// final fallback in [`crate::elaborator::Elaborator::canonical_decl_key`]
-    /// for receiver names the per-module import context and symbol table
-    /// can't canonicalise — most commonly the built-in primitives
-    /// (`char`, `i32`, `f64`, …) which have `impl <prim> { … }` blocks in
-    /// `core:prelude/primitive` but no `Symbol` entry to consult through
-    /// `lookup_in_module`.
-    pub fn find_static_method_decl_key(&self, name: &str) -> Option<DeclKey> {
-        self.static_method_index
-            .keys()
-            .chain(self.resource_static_method_index.keys())
-            .find(|(_, n)| n == name)
-            .cloned()
-    }
 
     /// Produce a new `TraitEnv` with the synthesis-layer impls populated.
     ///
@@ -2503,111 +2442,7 @@ fn check_all_orphan_rules(
     violations
 }
 
-/// Extract a type name from an AST type without needing an Elaborator instance.
-/// The typed [`name::Receiver`] key an `impl` target indexes under.
-/// A `&T` / `&mut T` target keys as `Receiver::Ref` (from the typed AST, never
-/// a `"&"` string); everything else keys as `Receiver::Type` over the canonical
-/// [`get_type_name_static`] head, so the key domain matches the old string keys
-/// exactly apart from the ref shape being typed.
-/// Canonical [`ImplTargetKey`] for an impl target written in `module_source`.
-/// The declaring module and original name come from that module's import
-/// scope, so `impl T for Alias` keys the same as `impl T for Original`.
-/// Which declaration a type name means, read from the module that *wrote*
-/// the name — the vantage an `impl` header has and a use site does not.
-///
-/// This is the rule [`TraitEnv::build`] keys its impl indexes by, so any later
-/// lookup holding the same vantage reaches it through here rather than
-/// re-deriving one: canonicalising the bare name from the *call site* instead
-/// answers with the caller's same-named type.
-///
-/// The call-site counterpart is
-/// [`super::trait_query::canonical_decl_key_with`], over
-/// [`super::trait_query::decl_identity_core`]. The two are disjoint, not a
-/// redundant pair: every branch the core has past the builtin names is
-/// import-driven, and an `impl` header is read before any import scope
-/// exists, so it declines at this vantage. What answers here is the re-export
-/// resolution below, which it has no branch for.
-///
-/// `decl_keys` are the declaration identities to fall back to by bare name,
-/// in priority order, for a name the vantage module does not define.
-pub(super) fn declaring_side_decl_key<'a>(
-    module_source: &ModuleSource,
-    name: &str,
-    symbols: &SymbolTable,
-    decl_keys: impl Iterator<Item = &'a DeclKey>,
-) -> DeclKey {
-    // Built-in primitives (`i32`, `f64`, `char`, …) have no `Symbol` entry
-    // and no decl item, but they share a known canonical module:
-    // `core:prelude/primitive`. The call-site rule uses the same shortcut, so
-    // every inherent `impl <primitive> { … }` block keys into the same bucket
-    // regardless of which file the impl lives in.
-    if super::is_primitive_type_name(name) {
-        return (ModuleSource::primitive(), name.to_string());
-    }
-    // Resolves re-export chains, so an alias keys to the origin declaration.
-    if let Some(sym) = symbols.lookup_in_module(module_source, name) {
-        return (sym.module_source().clone(), sym.name.clone());
-    }
-    if let Some(key) = decl_keys.into_iter().find(|(_, n)| n == name) {
-        return key.clone();
-    }
-    // A blanket type parameter, or a reference whose target is no top-level
-    // declaration: the writing module is the whole identity.
-    (module_source.clone(), name.to_string())
-}
 
-/// `decl_keys` are the declarations to fall back to by bare name, for a name
-/// the import scope and symbol table both miss — a prelude `internal trait`
-/// such as `ReflectStruct`, which no module `use`s and no symbol exports.
-///
-/// It must list only the declarations that can inhabit this position: a
-/// spelling alone cannot say whether `Codec` means one module's `trait Codec`
-/// or another's `struct Codec`, and only the position knows which is even
-/// admissible. [`TraitEnv::build`] scopes it per position
-/// (`type_position_decls` / `trait_position_decls`).
-pub(super) fn impl_target_key<'a>(
-    ty: &ast::Type,
-    module_source: &ModuleSource,
-    type_params: &[ast::GenericParam],
-    scope: Option<&ModuleImportScope>,
-    symbols: &SymbolTable,
-    decl_keys: impl Iterator<Item = &'a DeclKey>,
-) -> ImplTargetKey {
-    if let Some(kind) = name::RefKind::from_ast(ty) {
-        ImplTargetKey::Ref(kind)
-    } else {
-        let written = get_type_name_static(ty);
-        // The impl's own binder shadows any declaration of the same name, so
-        // `impl<T> Trait for T` written where a `struct T` exists stays a
-        // blanket rather than joining that struct's bucket.
-        if type_params.iter().any(|p| p.name == written) {
-            return ImplTargetKey::TypeParam(module_source.clone(), written);
-        }
-        let empty_sources: IndexMap<String, ModuleSource> = IndexMap::default();
-        let empty_names: IndexMap<String, String> = IndexMap::default();
-        let key = super::trait_query::decl_identity_core(
-            &written,
-            module_source,
-            scope.map_or(&empty_sources, |s| &s.sources),
-            &empty_sources,
-            scope.map_or(&empty_names, |s| &s.original_names),
-            symbols,
-        );
-        match key {
-            Some(key) => ImplTargetKey::Decl(key),
-            // Reached through no import and no symbol: a prelude-implicit name
-            // (`Display`, `ReflectStruct`, `Ord`) that the writing module never
-            // `use`d still names a declaration, so fall back to the program's
-            // declarations by bare name — the same fallback
-            // `declaring_side_decl_key` offers. Only a name reaching none of
-            // them is a blanket parameter.
-            None => match decl_keys.into_iter().find(|(_, n)| *n == written) {
-                Some(key) => ImplTargetKey::Decl(key.clone()),
-                None => ImplTargetKey::TypeParam(module_source.clone(), written),
-            },
-        }
-    }
-}
 
 /// The declaration name an `impl` header writes its target as.
 ///

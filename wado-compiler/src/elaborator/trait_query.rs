@@ -127,77 +127,6 @@ pub(super) fn canonical_assoc_const_key(
     Some((type_module, canon_key))
 }
 
-/// Free-function form of [`Elaborator::canonical_decl_key`], callable from
-/// any module that has the inputs in hand. Reify uses this for trait
-/// default-method synthesis (it has no `Elaborator` instance but does carry
-/// the same `imports` / `symbols` / `trait_env` / `current_module_source`
-/// references).
-/// The part of [`canonical_decl_key_with`] that needs nothing but a name, a
-/// vantage module, that module's imported type sources, and the symbol table.
-///
-/// Split out so `TraitEnv::build` can key its impl indexes by the same
-/// identity the elaborator will later look them up with. Two implementations
-/// of "which type is this name?" is how the indexes came to disagree with
-/// their callers — a primitive keyed to whichever module wrote the `impl`,
-/// while lookups asked for `primitive()`.
-///
-/// Returns `None` when the name resolves through none of these; the caller
-/// decides what a still-unresolved name means.
-pub(crate) fn decl_identity_core(
-    name: &str,
-    vantage: &ModuleSource,
-    imported_sources: &IndexMap<String, ModuleSource>,
-    imported_effect_sources: &IndexMap<String, ModuleSource>,
-    import_original_names: &IndexMap<String, String>,
-    symbols: &crate::symbol::SymbolTable,
-) -> Option<(ModuleSource, String)> {
-    // Types with one instance per name, so the name determines the type and
-    // both sides agree without resolving anything. The module is where each
-    // is declared: `[..T]` and `Array<T>` are real `internal type`
-    // declarations, and answering `primitive()` for them contradicts the
-    // declaration index, which knows better. Primitives and `()` have no
-    // declaration to point at yet.
-    if super::is_primitive_type_name(name) {
-        return Some((ModuleSource::primitive(), name.to_string()));
-    }
-    if name == crate::tir::TypeTable::TUPLE_TYPE_NAME {
-        return Some((ModuleSource::types(), name.to_string()));
-    }
-    if name == crate::tir::TypeTable::ARRAY_TYPE_NAME {
-        return Some((ModuleSource::array(), name.to_string()));
-    }
-    if let Some(src) = imported_sources.get(name) {
-        let original = import_original_names
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| name.to_string());
-        let canonical = symbols
-            .lookup_in_module(src, &original)
-            .map(|sym| sym.module_source().clone())
-            .unwrap_or_else(|| src.clone());
-        return Some((canonical, original));
-    }
-    // An effect import ranks with the type imports above, not below the
-    // lookups: `symbols.lookup` falls back to the prelude, so a demoted
-    // effect import loses its own declaring module to any prelude symbol
-    // that happens to share the name.
-    if let Some(src) = imported_effect_sources.get(name) {
-        let canonical = symbols
-            .lookup_in_module(src, name)
-            .map(|sym| sym.module_source().clone())
-            .unwrap_or_else(|| src.clone());
-        return Some((canonical, name.to_string()));
-    }
-    // A name defined in the vantage module resolves to it, ahead of any
-    // by-name fallback that could pick a same-named declaration elsewhere.
-    if symbols.is_defined_in_module(vantage, name) {
-        return Some((vantage.clone(), name.to_string()));
-    }
-    if let Some(sym) = symbols.lookup(vantage, name) {
-        return Some((sym.module_source().clone(), name.to_string()));
-    }
-    None
-}
 
 /// Whether `ty` spells one of the declaration's own type packs
 /// (`Trait<Assoc = [..P]>`). Such a binding names a parameter to project into,
@@ -231,40 +160,6 @@ fn mentions_self(ty: &ast::Type) -> bool {
     }
 }
 
-pub(crate) fn canonical_decl_key_with(
-    name: &str,
-    current_module_source: &ModuleSource,
-    imports: &super::sem::ModuleImports,
-    symbols: &crate::symbol::SymbolTable,
-    trait_env: &super::trait_env::TraitEnv,
-) -> (ModuleSource, String) {
-    if let Some(key) = decl_identity_core(
-        name,
-        current_module_source,
-        &imports.imported_type_sources,
-        &imports.effect_sources,
-        &imports.import_original_names,
-        symbols,
-    ) {
-        return key;
-    }
-    if let Some(key) = trait_env.find_trait_decl_key(name) {
-        return key;
-    }
-    if let Some(key) = trait_env.find_effect_or_resource_decl_key(name) {
-        return key;
-    }
-    if let Some(key) = trait_env.find_static_method_decl_key(name) {
-        return key;
-    }
-    // A struct-like type the caller never imported — e.g. an iterator handed
-    // back by a method, named nowhere in this module's `use` declarations.
-    // Without this the fallback below would claim it for the current module.
-    if let Some(key) = trait_env.find_struct_like_decl_key(name) {
-        return key;
-    }
-    (current_module_source.clone(), name.to_string())
-}
 
 /// The recorded declaration facts of the trait named `trait_name`, for a
 /// caller holding the inputs rather than an `Elaborator` — reify's
@@ -1562,11 +1457,6 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The name a trait was declared under, undoing a `use ... as` alias — a
-    /// declaration only ever carries its own name.
-    pub(super) fn declared_trait_name(&self, trait_name: &str) -> String {
-        self.canonical_decl_key(trait_name).1
-    }
 
     /// The trait declaration a reference site names.
     ///
@@ -1594,29 +1484,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.trait_decl_key_in_frame(written)
     }
 
-    /// The declaration key of the trait `name` names in the current frame.
-    ///
-    /// Only trait declarations are candidates. Traits have no symbol-table
-    /// entry, so [`Elaborator::canonical_decl_key`] answers `Left` with
-    /// `core:prelude/format`'s enum case and would displace a module's own
-    /// `trait Left`. A local trait wins unless an import names a trait too.
-    ///
-    /// Reaching for this means the caller has a name rather than the site that
-    /// wrote it, which is right only when the frame is the writing module.
-    /// Prefer [`Self::trait_decl_at`].
-    pub(super) fn trait_decl_key_in_frame(&self, name: &str) -> super::trait_env::DeclKey {
-        let canonical = self.canonical_decl_key(name);
-        let names_a_trait =
-            |key: &super::trait_env::DeclKey| self.tysys.trait_env.decl_index.contains_key(key);
-        if self.sem.imports.imported_type_sources.contains_key(name) && names_a_trait(&canonical) {
-            return canonical;
-        }
-        let local = (self.current_module_source.clone(), name.to_string());
-        if names_a_trait(&local) {
-            return local;
-        }
-        canonical
-    }
 
     /// Whether the trait declaration `decl` is in scope in the current frame:
     /// declared by the current module, or imported into it under any local
