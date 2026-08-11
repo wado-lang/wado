@@ -3496,18 +3496,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ast::Expr::TupleLiteral(t)
                         if !t.elements.iter().any(|e| matches!(e, Expr::Spread(..)))
                 );
-                // Defer this field's check when its declared type still names
-                // a slot of the struct's own frame: the literal's type
-                // arguments are not inferred yet, so the comparison would be
-                // against `T` rather than what this literal makes of it. The
-                // second pass runs it once the arguments are known — and
-                // likewise runs the sequence coercion that was held back.
-                let check_deferred = (needs_deferred_coercion && tuple_is_spread_free)
-                    || expected_field_type
-                        .is_some_and(|t| self.tysys.type_table.borrow().contains_rigid_param(t));
-                if check_deferred {
+                let coercion_deferred = needs_deferred_coercion && tuple_is_spread_free;
+                if coercion_deferred {
                     deferred_coercions.push((provided_idx, provided_idx));
                 }
+                // A field declared as a bare slot of the struct's own frame is
+                // unconstrained: `struct Context<T> { fields: T }` accepts
+                // whatever the literal puts there, and that value is what fixes
+                // `T`. There is nothing to check it against — comparing it with
+                // `T` itself only rejects every value that is not literally a
+                // `T`. Where the slot actually has to agree with something, the
+                // literal's own type carries it to that boundary.
+                let field_is_bare_slot = expected_field_type.is_some_and(|t| {
+                    matches!(
+                        self.tysys.type_table.borrow().get(t),
+                        ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                    )
+                });
+                let check_deferred = coercion_deferred || field_is_bare_slot;
 
                 // Check field name exists in struct definition
                 if struct_fields_known && !struct_field_types.iter().any(|(n, _)| n == &field.name)
@@ -3711,13 +3717,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     fields[field_idx].value = coerced;
                 }
-                // The check the first pass skipped, now that the field holds
-                // what the coercion made of it.
-                self.typecheck(
-                    fields[field_idx].value.type_id,
-                    concrete_type,
-                    ast_field.value.span(),
-                );
+                // The check the first pass skipped — but only once the slot is
+                // actually filled. A field type that still names a rigid
+                // parameter is one this literal did not pin, and comparing
+                // against a declaration's own slot is the very thing the first
+                // pass was skipping.
+                if !self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_rigid_param(concrete_type)
+                {
+                    self.typecheck(
+                        fields[field_idx].value.type_id,
+                        concrete_type,
+                        ast_field.value.span(),
+                    );
+                }
             }
 
             // Check trait bounds on inferred type arguments
