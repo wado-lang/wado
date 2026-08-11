@@ -297,17 +297,30 @@ Costs and risks:
            modules host an impl of trait K for receiver R" is that index
            filtered by `ImplHeader::fq_trait`. Deleting beats re-keying here.
 
-           Re-keying was tried and reverted. Keying the AST layer by the same
-           mangled fq strings the synthesised layer uses left 64 serde/reflect
-           e2e failures. The requests and `impl_module_for` were both correct
-           under the new keys; what broke was downstream — `generic_functions`
-           held only binder-headed blanket templates, so blanket routing found
-           no `monomorph_info` for a receiver the index now answered for.
-           `SynthesisCtx::receiver` compounds it: it builds the receiver from
-           `self.module` rather than from the type's declaring module, so the
-           key it forms is right only when synthesis runs in the declaring
-           module. Whoever takes this next starts from those two, not from the
-           index.
+           Re-keying was tried twice and reverted twice, and the second
+           attempt says why the first failed. Keying the AST layer's receiver
+           through `name::Receiver::head_key` — provably the same rendering
+           the monomorphizer's `base_struct_name` produces, so the two layers
+           agree by construction — still broke 182 fixtures immediately.
+
+           **Unifying the storage cannot work, because the split is in the
+           queries.** `impl_module_for` takes `type_name: &str`, and its
+           callers do not agree on what that string is: monomorphize passes a
+           mangled fq receiver, while `coercion`'s
+           `KeyValueLiteralBuilder` path and `synthesis::traits` pass a
+           declared name. Whichever namespace the storage picks, the other
+           half of the callers stop finding anything. The two layers were
+           never the disease — they are two populations of caller, each
+           served by the layer that happens to speak its namespace.
+
+           So the order is forced: **type the query parameter first**. Give
+           `impl_module_for` a `&name::Receiver` (or a `MangledName`) instead
+           of `&str` and the compiler enumerates every caller and makes each
+           one say which namespace it holds — the same flip that made the
+           trait side tractable. Only once every query speaks one namespace
+           can the storage be unified, or the index deleted in favour of
+           `by_receiver` filtered by `ImplHeader::fq_trait`. Re-keying the
+           storage before that step is what fails, and it will fail again.
          - **An impl header's trait is the declaration its site resolved to.**
            Found by accident: a fixture declaring
            `trait Sub { fn sub(&self) -> i32; }` and implementing it was

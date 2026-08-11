@@ -1062,14 +1062,17 @@ impl TraitEnv {
                     continue;
                 };
                 let type_name = get_type_name_static(&impl_block.ty);
-                let type_key = impl_target_key(
-                    &impl_block.ty,
-                    module_source,
-                    &impl_block.type_params,
-                    module_import_scopes.get(module_source),
-                    symbols,
-                    type_position_decls(),
-                );
+                let type_key = sited_impl_target_key(&impl_block.ty, module_source, resolutions)
+                    .unwrap_or_else(|| {
+                        impl_target_key(
+                            &impl_block.ty,
+                            module_source,
+                            &impl_block.type_params,
+                            module_import_scopes.get(module_source),
+                            symbols,
+                            type_position_decls(),
+                        )
+                    });
                 if shadow {
                     shadow_compare(
                         resolutions,
@@ -1202,7 +1205,9 @@ impl TraitEnv {
                     // parameter) join the same canonical bucket as
                     // inherent statics. `f64::from_bits` and friends in
                     // `core:prelude/int128.wado` flow through this path.
-                    let recv_key = canonical_key(module_source, &type_name);
+                    let recv_key = static_receiver_key(&type_key, || {
+                        canonical_key(module_source, &type_name)
+                    });
                     for method in &impl_block.methods {
                         let has_self = method
                             .params
@@ -1221,7 +1226,9 @@ impl TraitEnv {
                 } else {
                     // Inherent impl: already in `all_impl_index`; here only its
                     // static methods need the dedicated index.
-                    let recv_key = canonical_key(module_source, &type_name);
+                    let recv_key = static_receiver_key(&type_key, || {
+                        canonical_key(module_source, &type_name)
+                    });
                     for method in &impl_block.methods {
                         let has_self = method
                             .params
@@ -1729,6 +1736,52 @@ impl TraitEnv {
 /// Compare the table's answer for an `impl` header against the one this file
 /// derives, and report a difference. Stage-B instrument; it goes when the
 /// consumers take a `DeclRef` and there is only one answer to compare.
+/// The static-method index's bucket for an impl whose target keys as
+/// `type_key`.
+///
+/// A declared target is that declaration, so the two indexes agree by
+/// construction rather than by two derivations happening to match. A blanket
+/// parameter or a reference kind names no declaration, so those still ask.
+fn static_receiver_key(type_key: &ImplTargetKey, otherwise: impl FnOnce() -> DeclKey) -> DeclKey {
+    match type_key {
+        ImplTargetKey::Decl(key) => key.clone(),
+        ImplTargetKey::Ref(_) | ImplTargetKey::TypeParam(..) => otherwise(),
+    }
+}
+
+/// The key an `impl` header's target resolves to, from the site the header
+/// wrote — the vantage the target name belongs to.
+///
+/// `None` where the site names no declaration: a builtin shape, a name the walk
+/// could not resolve, or a position with no head at all. Those keep
+/// [`impl_target_key`], which has by-bare-name fallbacks the table deliberately
+/// does not.
+fn sited_impl_target_key(
+    ty: &ast::Type,
+    module_source: &ModuleSource,
+    resolutions: &crate::resolve::Resolutions,
+) -> Option<ImplTargetKey> {
+    // A reference target buckets by kind alone: the table resolves `&List<T>`
+    // to `List`, which is the referent, not the bucket.
+    if let Some(kind) = name::RefKind::from_ast(ty) {
+        return Some(ImplTargetKey::Ref(kind));
+    }
+    let site = crate::resolve::head_site(ty)?;
+    match resolutions.get(site)? {
+        // The impl's own binder, which shadows any declaration of that name —
+        // `impl<T> Trait for T` written where a `struct T` exists stays a
+        // blanket.
+        crate::resolve::DeclRef::Binder(_) => Some(ImplTargetKey::TypeParam(
+            module_source.clone(),
+            get_type_name_static(ty),
+        )),
+        answer @ crate::resolve::DeclRef::Decl(_) => resolutions
+            .decl_named(answer)
+            .map(|(module, name)| ImplTargetKey::Decl((module.clone(), name.to_string()))),
+        crate::resolve::DeclRef::Builtin(_) | crate::resolve::DeclRef::Unresolved => None,
+    }
+}
+
 fn shadow_compare(
     resolutions: &crate::resolve::Resolutions,
     symbols: &SymbolTable,
