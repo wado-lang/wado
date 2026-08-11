@@ -1,13 +1,13 @@
-# Publishes the shared cargo caches every other environment restores from.
+# Publishes the shared cargo caches every other build restores from:
 #
-#   cargo/registry/linux-x86_64.tar.gz  registry index, .crate files, unpacked sources (GCS)
-#   cargo/sccache/linux-x86_64.tar.gz   sccache content-addressed compile cache (GCS)
-#   v0-rust-ci-Linux-x64-*              ci.yml's target/ and registry (Actions cache)
+#   cargo/registry/linux-x86_64.tar.gz  registry index, .crate files, unpacked sources
+#   cargo/sccache/linux-x86_64.tar.gz   sccache content-addressed compile cache
+#   v0-rust-ci-Linux-x64-*              ci.yml's target/ and registry
 #
-# The GCS objects serve non-GitHub environments (e.g. the Claude Code web
-# container); the Actions cache serves ci.yml, which restores `shared-key: ci`
-# with `save-if: false`. It must be written from main: an Actions cache written
-# on a PR branch is invisible to main and to every other branch.
+# The first two go to GCS, for non-GitHub environments (e.g. the Claude Code web
+# container). The third is an Actions cache that ci.yml restores read-only; only
+# a main-branch run can write it, because a cache saved on a PR branch is
+# invisible to main and to sibling branches.
 #
 # The registry cache saves the download and the unpack; the sccache cache saves
 # compiling every dependency. See .claude/hooks/cargo-cache-restore.mts
@@ -23,7 +23,7 @@
 # (Ubuntu 24.04 `apt` sccache) so the on-disk cache format matches.
 #
 # CARGO_* ENV PARITY IS ALSO LOAD-BEARING. sccache hashes every CARGO_* env var
-# into the Rust cache key, so this job's CARGO_* set (CARGO_HOME,
+# into the Rust cache key, so the `upload` job's CARGO_* set (CARGO_HOME,
 # CARGO_TARGET_DIR, CARGO_INCREMENTAL) must match the container's warm-cache
 # build (mise.toml) exactly.
 #
@@ -31,12 +31,12 @@
 #   vars.GCP_WIF_PROVIDER    workload identity provider resource name
 #   vars.GCP_CACHE_WRITER_SA writer service-account email (roles/storage.objectAdmin on the bucket)
 #   vars.GCP_CACHE_BUCKET    GCS bucket name (e.g. wado-lang-cache)
-name: Cargo caches (registry + sccache)
+name: Cargo caches
 
 on:
   push:
     branches: [main]
-    # All of these feed the sccache cache key. Without a republish the
+    # All of these feed both cache keys. Without a republish the
     # container silently falls back to a cold build; `warm-cache` reports the
     # hit rate so that stays visible.
     paths:
@@ -140,9 +140,8 @@ jobs:
           destination: ${{ vars.GCP_CACHE_BUCKET }}/cargo/sccache
           parent: false
 
-  # ENV PARITY IS LOAD-BEARING HERE TOO. rust-cache hashes the CARGO_*/RUST* env
-  # set into the cache key, so this job's env must be exactly ci.yml's, with none
-  # of the sccache vars above, or ci.yml computes a different key and never hits.
+  # ENV PARITY AGAIN: rust-cache hashes the CARGO_*/RUST* env set into the cache
+  # key, so this job's env must be exactly ci.yml's — none of the sccache vars.
   actions-cache:
     name: Warm ci.yml's Actions cache
     runs-on: ubuntu-latest
@@ -166,6 +165,5 @@ jobs:
         with:
           shared-key: ci
 
-      # `--all-targets` also covers the dev-dependencies only ci.yml's test
-      # binaries pull in.
+      # `--all-targets` for the dev-dependencies only ci.yml's test binaries need.
       - run: cargo build --workspace --locked --all-targets
