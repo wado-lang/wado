@@ -1,0 +1,36 @@
+// `B` and the `Base` the imported `Derived` implies are one declaration, so
+// `impl B for Local` discharges `impl Derived for Local`'s obligation and the
+// bound list is not ambiguous.
+//
+// The bound order matters here and should not — see issue #1785.
+use { Base as B, Derived } from "./sub/ufcs_supertrait_frame_dep.wado";
+
+struct Local {
+    v: i32,
+}
+
+impl B for Local {
+    fn extra(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Derived for Local {
+    fn tag(&self) -> i32 {
+        return self.v * 2;
+    }
+}
+
+fn both<T: B + Derived>(x: &T) -> i32 {
+    return x.extra() + x.tag();
+}
+
+test "an aliased bound and the implied supertrait are one declaration" {
+    let l = Local { v: 3 };
+    assert l.extra() == 3;
+    assert l.tag() == 6;
+    assert both(&l) == 9;
+}
+
+__DATA__
+{"test": {}}

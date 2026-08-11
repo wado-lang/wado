@@ -14,6 +14,19 @@ use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
 use super::Elaborator;
+use super::trait_env::{DeclKey, InheritedBound, push_unique_bound};
+
+/// A bound name paired with the declaration it resolves to.
+pub(super) struct ElaboratedBound {
+    pub(super) name: String,
+    pub(super) decl: DeclKey,
+}
+
+fn push_unique_elaborated(bounds: &mut Vec<ElaboratedBound>, bound: ElaboratedBound) {
+    if !bounds.iter().any(|b| b.decl == bound.decl) {
+        bounds.push(bound);
+    }
+}
 
 /// Mutable trait resolution context scoped to the current resolution site.
 ///
@@ -197,36 +210,44 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn elaborate_bounds(&self, bounds: &[ast::TraitBound]) -> Vec<ast::TraitBound> {
         let mut elaborated = Vec::with_capacity(bounds.len());
         for bound in bounds {
-            super::trait_env::push_unique_bound(&mut elaborated, bound);
+            push_unique_bound(&mut elaborated, bound);
             if bound.fn_signature.is_some() {
                 continue;
             }
-            for inherited in self
-                .tysys
-                .supertraits_of(&self.type_lookup(), &bound.name)
-                .to_vec()
-            {
-                super::trait_env::push_unique_bound(&mut elaborated, &inherited);
+            for inherited in self.supertraits_of_bound(&bound.name) {
+                push_unique_bound(&mut elaborated, &inherited.bound);
             }
         }
         elaborated
     }
 
+    fn supertraits_of_bound(&self, name: &str) -> Vec<InheritedBound> {
+        self.tysys
+            .trait_env
+            .supertrait_closure(&self.trait_decl_key_in_frame(name))
+            .to_vec()
+    }
+
     /// [`Self::elaborate_bounds`] over bare trait names.
-    pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<String> {
-        let mut elaborated: Vec<String> = Vec::with_capacity(names.len());
+    ///
+    /// Each name keeps its writing frame's spelling — it reaches method
+    /// mangling, where rewriting it hides the impl in the trait's own module.
+    pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<ElaboratedBound> {
+        let mut elaborated: Vec<ElaboratedBound> = Vec::with_capacity(names.len());
         for name in names {
-            if !elaborated.contains(name) {
-                elaborated.push(name.clone());
-            }
-            for inherited in self
-                .tysys
-                .supertraits_of(&self.type_lookup(), name)
-                .to_vec()
-            {
-                if !elaborated.contains(&inherited.name) {
-                    elaborated.push(inherited.name);
-                }
+            let written = ElaboratedBound {
+                name: name.clone(),
+                decl: self.trait_decl_key_in_frame(name),
+            };
+            push_unique_elaborated(&mut elaborated, written);
+            for inherited in self.supertraits_of_bound(name) {
+                push_unique_elaborated(
+                    &mut elaborated,
+                    ElaboratedBound {
+                        name: inherited.bound.name,
+                        decl: inherited.decl,
+                    },
+                );
             }
         }
         elaborated

@@ -405,21 +405,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(&name)
                     .cloned()
                 && let Some((found_trait, info)) = {
-                    // A qualified call names one bound, so the others are not
-                    // competitors — without this filter the collision it exists
-                    // to resolve is still reported inside a generic body, and
-                    // the first bound answers regardless of which was named.
-                    // Bounds are compared as declarations, so a same-named
-                    // trait from another module does not answer for the one
-                    // the call named.
-                    let bound_names: Vec<String> = bounds
-                        .iter()
-                        .map(|b| b.name.clone())
-                        .filter(|n| {
-                            required_trait.is_none_or(|w| self.trait_decl_key_in_frame(n) == w.decl)
-                        })
-                        .collect();
-                    self.find_method_in_trait_bounds(&bound_names, method_name, base_type_id, span)
+                    let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
+                    self.find_method_in_trait_bounds(
+                        &bound_names,
+                        method_name,
+                        base_type_id,
+                        span,
+                        required_trait,
+                    )
                 }
             {
                 trait_name = Some(found_trait);
@@ -443,15 +436,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             };
             if let Some(bounds) = assoc_bounds
-                && let Some((found_trait, info)) = {
-                    let bounds: Vec<String> = bounds
-                        .into_iter()
-                        .filter(|n| {
-                            required_trait.is_none_or(|w| self.trait_decl_key_in_frame(n) == w.decl)
-                        })
-                        .collect();
-                    self.find_method_in_trait_bounds(&bounds, method_name, base_type_id, span)
-                }
+                && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
+                    &bounds,
+                    method_name,
+                    base_type_id,
+                    span,
+                    required_trait,
+                )
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);
