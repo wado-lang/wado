@@ -454,5 +454,91 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 sub_vec(tt, &mut mi.method_type_args);
             }
         }
+        for t in types.function_task_returns.values_mut() {
+            *t = sub(tt, *t);
+        }
+        for c in types.coercions.values_mut() {
+            c.target_type = sub(tt, c.target_type);
+        }
+        for od in types
+            .operator_dispatch
+            .values_mut()
+            .chain(types.index_assign_dispatch.values_mut())
+        {
+            od.return_type = sub(tt, od.return_type);
+        }
+        for f in types.for_of_iterator.values_mut() {
+            f.item_type = sub(tt, f.item_type);
+            f.iter_type = sub(tt, f.iter_type);
+        }
+        for h in types.handler_bindings.values_mut() {
+            h.handler_type = sub(tt, h.handler_type);
+        }
+        for i in types.impl_facts.values_mut() {
+            sub_vec(tt, &mut i.trait_type_args);
+        }
+        for sc in types.sequence_coercions.values_mut() {
+            sc.builder_type = sub(tt, sc.builder_type);
+            sc.element_type = sub(tt, sc.element_type);
+            sc.output_type = sub(tt, sc.output_type);
+            sc.newtype_cast_to = sc.newtype_cast_to.map(|t| sub(tt, t));
+            sub_vec(tt, &mut sc.type_arg_ids);
+            // The builder's per-method names are mangled from the type
+            // arguments before anything is solved, exactly as a struct
+            // literal's are. Rebuild them from the swept arguments.
+            sc.type_arg_names = sc
+                .type_arg_ids
+                .iter()
+                .map(|&t| tt.fq_type_name(t))
+                .collect();
+            let builder = sc
+                .builder_base_name
+                .clone()
+                .with_args(sc.type_arg_names.clone());
+            let m = |method: &str| {
+                crate::name::MethodName::format_local(&builder, Some(&sc.trait_name), method)
+            };
+            sc.new_mangled_name = m("new_literal");
+            sc.push_mangled_name = m("push_literal");
+            sc.build_mangled_name = m("build");
+        }
+        for kv in types.key_value_coercions.values_mut() {
+            kv.builder_type = sub(tt, kv.builder_type);
+            kv.value_type = sub(tt, kv.value_type);
+            kv.target_type = sub(tt, kv.target_type);
+            sub_vec(tt, &mut kv.type_arg_ids);
+            kv.type_arg_names = kv
+                .type_arg_ids
+                .iter()
+                .map(|&t| tt.fq_type_name(t))
+                .collect();
+            let builder = kv
+                .builder_base_name
+                .clone()
+                .with_args(kv.type_arg_names.clone());
+            let m = |method: &str| {
+                crate::name::MethodName::format_local(&builder, Some(&kv.trait_name), method)
+            };
+            kv.new_mangled_name = m("new_literal");
+            kv.insert_mangled_name = m("insert_literal");
+            kv.insert_all_mangled_name = m("insert_all");
+            kv.build_mangled_name = kv.build_mangled_name.as_ref().map(|_| m("build"));
+        }
+        for overlays in types.tuple_overlays.values_mut() {
+            for overlay in overlays.iter_mut().flatten() {
+                for t in overlay.expression_types.values_mut() {
+                    *t = sub(tt, *t);
+                }
+                for t in overlay.local_types.values_mut() {
+                    *t = sub(tt, *t);
+                }
+                for t in overlay.let_annotated_types.values_mut() {
+                    *t = sub(tt, *t);
+                }
+                for v in overlay.call_param_types.values_mut() {
+                    sub_vec(tt, v);
+                }
+            }
+        }
     }
 }
