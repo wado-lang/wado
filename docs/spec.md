@@ -2612,8 +2612,10 @@ fn dedup_sorted<T: Ord>(items: List<T>) -> List<T> { ... }
 
 A trait that reaches itself through supertraits is an error. A method name
 reachable through more than one of a receiver's bounds is ambiguous at the call
-site; name the trait to resolve it (`Left::name(&x)` — see
-[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)).
+site; name the trait that declares it to resolve it (`Left::name(&x)` — see
+[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)). The bounds
+a body may name that way include the implied ones, so `Eq::eq(&a, &b)` resolves
+under `T: Ord`.
 
 #### Multiple Traits
 

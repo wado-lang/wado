@@ -417,11 +417,19 @@ pub(super) type TraitDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 /// and [`SupertraitClosureIndex`] use.
 type TraitDeclLoc = (ModuleSource, AstId);
 
+/// A supertrait paired with the declaration it resolved to. The bound keeps the
+/// declaring module's spelling, which need not name the same trait elsewhere.
+#[derive(Clone, Debug)]
+pub(super) struct InheritedBound {
+    pub(super) bound: ast::TraitBound,
+    pub(super) decl: DeclKey,
+}
+
 /// Pre-built index: trait declaration → the transitive closure of its
-/// supertraits, deduplicated by name and excluding the trait itself. A
+/// supertraits, deduplicated by declaration and excluding the trait itself. A
 /// declared bound `T: Sub` expands through this so `T: Ord` alone carries
 /// `Eq`.
-pub(super) type SupertraitClosureIndex = IndexMap<TraitDeclLoc, Vec<ast::TraitBound>>;
+pub(super) type SupertraitClosureIndex = IndexMap<TraitDeclLoc, Vec<InheritedBound>>;
 
 /// Pre-built index: `(declaring module, effect name)` → (`ModuleSource`,
 /// `AstId`) for effect declarations. Effects are first-class citizens distinct
@@ -545,7 +553,7 @@ pub struct TraitEnv {
     /// The same closures keyed by bare trait name, for names declared exactly
     /// once. Prelude-implicit names (`Ord`, `Eq`, …) reach a query through no
     /// import, so a scoped lookup cannot canonicalise them.
-    supertrait_closures_by_name: IndexMap<String, Vec<ast::TraitBound>>,
+    supertrait_closures_by_name: IndexMap<String, Vec<InheritedBound>>,
     /// Free-function type parameters keyed by `(declaring module, function
     /// name)`. Lets `lookup_function_type_params` read a callee's type params
     /// without scanning the module AST.
@@ -1143,10 +1151,30 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
+    /// The trait declaration `name` refers to as written inside `module` — the
+    /// query-time twin of the `resolve_trait` closure `build` uses.
+    pub(super) fn trait_decl_key_in(&self, module: &ModuleSource, name: &str) -> Option<DeclKey> {
+        let scope = self.module_import_scopes.get(module);
+        let declared = scope
+            .and_then(|s| s.original_names.get(name))
+            .map_or(name, String::as_str);
+        if let Some(source) = scope.and_then(|s| s.sources.get(name)) {
+            let imported = (source.clone(), declared.to_string());
+            if self.decl_index.contains_key(&imported) {
+                return Some(imported);
+            }
+        }
+        let local = (module.clone(), declared.to_string());
+        if self.decl_index.contains_key(&local) {
+            return Some(local);
+        }
+        self.find_trait_decl_key(declared)
+    }
+
     /// The transitive supertraits of the trait `key` names, deduplicated by
-    /// name and excluding the trait itself. Empty for a trait with no
+    /// declaration and excluding the trait itself. Empty for a trait with no
     /// supertrait clause, and for a name that declares no trait.
-    pub(super) fn supertrait_closure(&self, key: &DeclKey) -> &[ast::TraitBound] {
+    pub(super) fn supertrait_closure(&self, key: &DeclKey) -> &[InheritedBound] {
         self.decl_index
             .get(key)
             .and_then(|loc| self.supertrait_closures.get(loc))
@@ -1156,7 +1184,7 @@ impl TraitEnv {
     /// [`Self::supertrait_closure`] for a caller holding a bare name with no
     /// import context to canonicalise it. Empty when the name is declared by
     /// more than one module.
-    pub(super) fn supertrait_closure_named(&self, name: &str) -> &[ast::TraitBound] {
+    pub(super) fn supertrait_closure_named(&self, name: &str) -> &[InheritedBound] {
         self.supertrait_closures_by_name
             .get(name)
             .map_or(&[], Vec::as_slice)
@@ -1654,6 +1682,18 @@ pub(super) fn push_unique_bound(bounds: &mut Vec<ast::TraitBound>, bound: &ast::
     }
 }
 
+/// [`push_unique_bound`] keyed by declaration, so two spellings of one
+/// supertrait collapse.
+fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBound) {
+    let Some(existing) = bounds.iter_mut().find(|b| b.decl == bound.decl) else {
+        bounds.push(bound.clone());
+        return;
+    };
+    if existing.bound.assoc_types.is_empty() && !bound.bound.assoc_types.is_empty() {
+        *existing = bound.clone();
+    }
+}
+
 /// Expand every trait's direct supertraits into its transitive closure,
 /// reporting each trait that reaches itself. A cycle's edge is cut rather than
 /// followed, keeping the closure finite.
@@ -1690,7 +1730,7 @@ fn expand_supertraits(
     stack: &mut Vec<TraitDeclLoc>,
     reported: &mut IndexSet<TraitDeclLoc>,
     cycles: &mut Vec<(ModuleSource, TypeError)>,
-) -> Vec<ast::TraitBound> {
+) -> Vec<InheritedBound> {
     if let Some(done) = closures.get(loc) {
         return done.clone();
     }
@@ -1699,7 +1739,7 @@ fn expand_supertraits(
     };
 
     stack.push(loc.clone());
-    let mut closure: Vec<ast::TraitBound> = Vec::new();
+    let mut closure: Vec<InheritedBound> = Vec::new();
     for direct in &header.supertraits {
         let Some(super_loc) = resolve(&loc.0, &direct.name) else {
             // Blame the declaration, not every implementor of it.
@@ -1718,11 +1758,23 @@ fn expand_supertraits(
             report_supertrait_cycle(pos, stack, headers, reported, cycles);
             continue;
         }
-        push_unique_bound(&mut closure, direct);
+        // `direct.name` is meaningful only here; record what `resolve` named.
+        let super_decl = headers
+            .get(&super_loc)
+            .expect("resolve answers with a header's own location")
+            .name
+            .clone();
+        push_unique_inherited(
+            &mut closure,
+            &InheritedBound {
+                bound: direct.clone(),
+                decl: (super_loc.0.clone(), super_decl),
+            },
+        );
         for inherited in expand_supertraits(
             &super_loc, headers, resolve, closures, stack, reported, cycles,
         ) {
-            push_unique_bound(&mut closure, &inherited);
+            push_unique_inherited(&mut closure, &inherited);
         }
     }
     stack.pop();
@@ -1736,8 +1788,8 @@ fn expand_supertraits(
 fn index_closures_by_name(
     headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
     closures: &SupertraitClosureIndex,
-) -> IndexMap<String, Vec<ast::TraitBound>> {
-    let mut by_name: IndexMap<String, Option<Vec<ast::TraitBound>>> = IndexMap::default();
+) -> IndexMap<String, Vec<InheritedBound>> {
+    let mut by_name: IndexMap<String, Option<Vec<InheritedBound>>> = IndexMap::default();
     for (loc, header) in headers {
         let closure = closures.get(loc).cloned().unwrap_or_default();
         by_name
