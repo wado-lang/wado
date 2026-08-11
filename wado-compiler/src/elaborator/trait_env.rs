@@ -586,6 +586,115 @@ pub(super) type ResourceStaticMethodIndex =
 /// they apply structurally and don't have a concrete receiver type name.
 pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), Vec<ModuleSource>>;
 
+/// Where each `impl <trait> for <type>` lives, reachable from both receiver
+/// namespaces.
+///
+/// The two are not interchangeable — a mangled head (`mod/Widget`) picks out
+/// one declaration, a declared name (`Widget`) picks out any declaration
+/// spelling itself that way — so they get separate storage and a query answers
+/// only from the namespace it named. Storing both in one map is what let a
+/// mangled query reach only the synthesised layer and a declared query only the
+/// AST layer (WEP 2026-08-10).
+#[derive(Debug, Default, Clone)]
+pub struct ImplModuleIndex {
+    by_mangled: TraitImplModuleIndex,
+    by_declared: TraitImplModuleIndex,
+}
+
+impl ImplModuleIndex {
+    fn get(&self, receiver: ImplReceiver<'_>, trait_name: &str) -> Option<&Vec<ModuleSource>> {
+        let map = match receiver {
+            ImplReceiver::Mangled(_) => &self.by_mangled,
+            ImplReceiver::Declared(_) => &self.by_declared,
+        };
+        map.get(&(receiver.spelling().to_string(), trait_name.to_string()))
+    }
+
+    /// Record `module` under both spellings of one receiver identity, so the
+    /// two namespaces cannot drift apart.
+    pub fn record(&mut self, receiver: &name::Receiver, trait_name: &str, module: &ModuleSource) {
+        let mangled = receiver.head_key().into_string();
+        let declared = receiver.decl_key().into_string();
+        push_module(&mut self.by_mangled, mangled, trait_name, module);
+        push_module(&mut self.by_declared, declared, trait_name, module);
+    }
+
+    /// Record an impl on a generic head under its *instantiated* mangled
+    /// receiver (`List<…/Token>`), distinct from the bare head. Mangled-only:
+    /// the declaration namespace has no spelling for an instantiation.
+    pub fn record_instantiated(
+        &mut self,
+        mangled: String,
+        trait_name: &str,
+        module: &ModuleSource,
+    ) {
+        push_module(&mut self.by_mangled, mangled, trait_name, module);
+    }
+
+    fn records(
+        &self,
+        receiver: ImplReceiver<'_>,
+        trait_name: &str,
+        module: &ModuleSource,
+    ) -> bool {
+        self.get(receiver, trait_name)
+            .is_some_and(|modules| modules.contains(module))
+    }
+
+    #[must_use]
+    pub fn contains_declared(&self, type_name: &str, trait_name: &str) -> bool {
+        self.by_declared
+            .contains_key(&(type_name.to_string(), trait_name.to_string()))
+    }
+}
+
+fn push_module(
+    map: &mut TraitImplModuleIndex,
+    receiver: String,
+    trait_name: &str,
+    module: &ModuleSource,
+) {
+    let modules = map.entry((receiver, trait_name.to_string())).or_default();
+    if !modules.contains(module) {
+        modules.push(module.clone());
+    }
+}
+
+/// Where every non-blanket `impl` block lives, in both receiver namespaces,
+/// read off the headers' resolved identities rather than the heads they wrote.
+///
+/// `concrete_only` keeps just the impl blocks with no type parameters: the
+/// monomorphizer redirects a substituted call to a concrete impl's own module,
+/// while a generic impl's instance is materialised in the receiver type's
+/// module by convention.
+///
+/// A value blanket (`impl<T: Bound> Trait for T`) has no per-type home, and its
+/// target keys as [`ImplTargetKey::TypeParam`] — so excluding that variant is
+/// the same set the receiver classification used to compute.
+fn index_impl_modules(
+    impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
+    concrete_only: bool,
+) -> ImplModuleIndex {
+    let mut out = ImplModuleIndex::default();
+    for header in impl_headers.values() {
+        if matches!(header.target, ImplTargetKey::TypeParam(..)) {
+            continue;
+        }
+        if concrete_only && !header.type_params.is_empty() {
+            continue;
+        }
+        let Some(fq_trait) = header.fq_trait() else {
+            continue;
+        };
+        out.record(
+            &header.target.receiver(),
+            fq_trait.base_name(),
+            &header.module,
+        );
+    }
+    out
+}
+
 /// Immutable global knowledge base for trait resolution.
 ///
 /// Contains pre-built indices for fast lookup of trait implementations,
@@ -684,6 +793,14 @@ pub struct TraitEnv {
     pub(super) static_method_index: StaticMethodIndex,
     /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for resource static methods.
     pub(super) resource_static_method_index: ResourceStaticMethodIndex,
+    /// Where every non-blanket AST-level `impl` block lives, in both receiver
+    /// namespaces. Built from the impl headers' resolved identities, so an
+    /// entry names the declaration the header meant rather than the head it
+    /// wrote.
+    trait_impl_modules: ImplModuleIndex,
+    /// The concrete-only subset of [`Self::trait_impl_modules`] — impl blocks
+    /// with no type parameters. See [`Self::concrete_impl_module_for`].
+    concrete_trait_impl_modules: ImplModuleIndex,
     /// Layer added in the synthesis phase: auto-derived / generated impls
     /// (`Eq`, `Ord`, `Inspect`, `Display`, `From`, serde adapters, …) that
     /// were not present in the AST. `None` until `extend_with_synthesised`
@@ -697,18 +814,16 @@ pub struct TraitEnv {
 /// Populated by [`TraitEnv::extend_with_synthesised`].
 #[derive(Debug, Default, Clone)]
 pub struct SynthesisedImpls {
-    /// `(type_name, trait_name)` → `ModuleSource` for synthesized non-blanket
-    /// trait impls (auto-derives plus the impls produced by `from_synth` /
-    /// `serde_synth`). Mirrors the AST-level `trait_impl_modules` shape and
-    /// participates in the same lookup via [`TraitEnv::impl_module_for`].
+    /// Where each synthesized non-blanket trait impl lives (auto-derives plus
+    /// the impls produced by `from_synth` / `serde_synth`). Same shape as the
+    /// AST layer and consulted through the same [`TraitEnv::impl_module_for`].
     /// Includes both concrete (e.g. auto-derived `Inspect for Wrapper`) and
     /// generic synthesised impls.
-    pub trait_impl_modules: TraitImplModuleIndex,
-    /// Concrete-only subset (no impl-block type parameters). Mirrors the
-    /// AST-level [`TraitEnv::concrete_trait_impl_modules`] field; see its
-    /// docs for why mono needs to distinguish concrete impls from generic
-    /// ones.
-    pub concrete_trait_impl_modules: TraitImplModuleIndex,
+    pub trait_impl_modules: ImplModuleIndex,
+    /// Concrete-only subset (no impl-block type parameters). See
+    /// [`TraitEnv::concrete_impl_module_for`] for why mono needs to
+    /// distinguish concrete impls from generic ones.
+    pub concrete_trait_impl_modules: ImplModuleIndex,
 }
 
 impl SynthesisedImpls {
@@ -720,36 +835,38 @@ impl SynthesisedImpls {
     /// "first registered" fallback when no `type_module` hint is supplied.
     pub fn record_impl(
         &mut self,
-        type_name: String,
-        trait_name: String,
-        module: ModuleSource,
+        receiver: &name::Receiver,
+        trait_name: &str,
+        module: &ModuleSource,
         is_concrete: bool,
     ) {
-        let key = (type_name, trait_name);
         if is_concrete {
-            // Concrete impls populate both views; clone once for the
-            // duplicated entry. Generic impls only appear in the all-impls
-            // view, so they avoid the clone entirely.
-            let modules = self
-                .concrete_trait_impl_modules
-                .entry(key.clone())
-                .or_default();
-            if !modules.contains(&module) {
-                modules.push(module.clone());
-            }
+            self.concrete_trait_impl_modules
+                .record(receiver, trait_name, module);
         }
-        let modules = self.trait_impl_modules.entry(key).or_default();
-        if !modules.contains(&module) {
-            modules.push(module);
-        }
+        self.trait_impl_modules.record(receiver, trait_name, module);
+    }
+
+    /// Record a concrete impl on a generic head (`impl Tag for List<Token>`)
+    /// under its instantiated receiver, so it does not collide with another
+    /// module's `impl Tag for List<OtherToken>` on the shared head (#1348).
+    pub fn record_instantiation(
+        &mut self,
+        mangled: String,
+        trait_name: &str,
+        module: &ModuleSource,
+    ) {
+        self.concrete_trait_impl_modules
+            .record_instantiated(mangled.clone(), trait_name, module);
+        self.trait_impl_modules
+            .record_instantiated(mangled, trait_name, module);
     }
 
     /// `true` if `impl <trait_name> for <type_name>` has already been
     /// recorded in this synthesis layer (regardless of concreteness).
     #[must_use]
     pub fn has_impl(&self, type_name: &str, trait_name: &str) -> bool {
-        self.trait_impl_modules
-            .contains_key(&(type_name.to_string(), trait_name.to_string()))
+        self.trait_impl_modules.contains_declared(type_name, trait_name)
     }
 }
 
@@ -813,8 +930,6 @@ impl TraitEnv {
             IndexMap::default();
         let mut struct_like_decl_modules: IndexMap<String, Vec<ModuleSource>> = IndexMap::default();
         let mut newtype_decl_modules: IndexMap<String, Vec<ModuleSource>> = IndexMap::default();
-        let mut trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
-        let mut concrete_trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
         // (declaring module, type name) → module source, for orphan rule
         // "is this type local?" checks. Keyed by canonical decl key so
         // two modules can declare a same-named type without colliding.
@@ -931,43 +1046,6 @@ impl TraitEnv {
             }
         }
 
-        // The declarations that may inhabit each `impl` header position, for
-        // the by-bare-name fallback in `impl_target_key`. A spelling cannot say
-        // whether `Codec` means a `trait Codec` or a `struct Codec`; the
-        // position can, so each scope lists only what is admissible there. An
-        // unscoped scan hands an `impl Codec { … }` target the trait's key —
-        // the wrong bucket in `all_impl_index`, and a bogus coherence error.
-        let type_position_decls = || type_decl_index.keys().chain(resource_decl_index.keys());
-        let trait_position_decls = || {
-            decl_index
-                .keys()
-                .chain(effect_decl_index.keys())
-                .chain(resource_decl_index.keys())
-        };
-
-        // Canonicalise a bare type / trait name referenced in
-        // `module_source` (an impl block's home module). Looks first
-        // through `symbols` (per-module imports + that module's own
-        // declarations), then falls back to scanning the decl indices
-        // built above so that prelude-implicit names (`Eq`, `Ord`,
-        // `Display`, …) resolve to their declaring module even when
-        // the impl's module never `use`'d them. The final fallback —
-        // `(module_source, name)` — applies to blanket type parameters
-        // and to references whose target wasn't registered as a
-        // top-level declaration.
-        let canonical_key = |module_source: &ModuleSource, name: &str| -> DeclKey {
-            declaring_side_decl_key(
-                module_source,
-                name,
-                symbols,
-                decl_index
-                    .keys()
-                    .chain(effect_decl_index.keys())
-                    .chain(resource_decl_index.keys())
-                    .chain(type_decl_index.keys()),
-            )
-        };
-
         // Pass 2: walk impl blocks now that all decl indices are
         // populated, so the per-impl canonicalisation above can resolve
         // every PascalCase reference to its declaring module.
@@ -1044,17 +1122,7 @@ impl TraitEnv {
                     continue;
                 };
                 let type_name = get_type_name_static(&impl_block.ty);
-                let type_key = sited_impl_target_key(&impl_block.ty, module_source, resolutions)
-                    .unwrap_or_else(|| {
-                        impl_target_key(
-                            &impl_block.ty,
-                            module_source,
-                            &impl_block.type_params,
-                            module_import_scopes.get(module_source),
-                            symbols,
-                            type_position_decls(),
-                        )
-                    });
+                let type_key = impl_target_key_at(&impl_block.ty, module_source, resolutions);
                 if shadow {
                     shadow_compare(
                         resolutions,
@@ -1080,14 +1148,7 @@ impl TraitEnv {
                             ImplTargetKey::Decl((module.clone(), name.to_string()))
                         })
                         .unwrap_or_else(|| {
-                            impl_target_key(
-                                trait_type,
-                                module_source,
-                                &impl_block.type_params,
-                                module_import_scopes.get(module_source),
-                                symbols,
-                                trait_position_decls(),
-                            )
+                            impl_target_key_at(trait_type, module_source, resolutions)
                         })
                 });
                 impl_headers.insert(
@@ -1151,34 +1212,6 @@ impl TraitEnv {
                                 bounds,
                             });
                     }
-                    // A value blanket (`impl<T: Bound> Trait for T`) has no
-                    // per-type home to index; every other impl (concrete, shape
-                    // generic, or ref blanket) registers its module below.
-                    let is_value_blanket = matches!(
-                        classify_blanket_receiver(&impl_block.ty, &impl_block.type_params),
-                        Some((BlanketReceiver::Value, _))
-                    );
-                    if !is_value_blanket {
-                        let key = (type_name.clone(), trait_name.clone());
-                        let modules = trait_impl_modules.entry(key.clone()).or_default();
-                        if !modules.contains(module_source) {
-                            modules.push(module_source.clone());
-                        }
-                        // Track the concrete subset separately: only impl
-                        // blocks with no type parameters at all qualify
-                        // (e.g. `impl Display for String`, not
-                        // `impl<T> Inspect for List<T>`). Indexed by the bare
-                        // head only; a concrete impl on a generic head
-                        // (`impl Trait for List<u8>`) is additionally indexed
-                        // under its resolved instantiated name post-resolution
-                        // by `synthesis::collect_synthesised_impls`.
-                        if impl_block.type_params.is_empty() {
-                            let cmodules = concrete_trait_impl_modules.entry(key).or_default();
-                            if !cmodules.contains(module_source) {
-                                cmodules.push(module_source.clone());
-                            }
-                        }
-                    }
                     impl_index
                         .entry(type_key.clone())
                         .or_default()
@@ -1188,7 +1221,7 @@ impl TraitEnv {
                     // inherent statics. `f64::from_bits` and friends in
                     // `core:prelude/int128.wado` flow through this path.
                     let recv_key = static_receiver_key(&type_key, || {
-                        canonical_key(module_source, &type_name)
+                        (module_source.clone(), type_name.clone())
                     });
                     for method in &impl_block.methods {
                         let has_self = method
@@ -1209,7 +1242,7 @@ impl TraitEnv {
                     // Inherent impl: already in `all_impl_index`; here only its
                     // static methods need the dedicated index.
                     let recv_key = static_receiver_key(&type_key, || {
-                        canonical_key(module_source, &type_name)
+                        (module_source.clone(), type_name.clone())
                     });
                     for method in &impl_block.methods {
                         let has_self = method
@@ -1235,15 +1268,8 @@ impl TraitEnv {
         // takes it rather than reading a head off the AST, so no check can
         // fall back to comparing spellings.
         let resolve_written =
-            |module: &ModuleSource, ty: &ast::Type, type_params: &[ast::GenericParam]| {
-                impl_target_key(
-                    ty,
-                    module,
-                    type_params,
-                    module_import_scopes.get(module),
-                    symbols,
-                    type_position_decls(),
-                )
+            |module: &ModuleSource, ty: &ast::Type, _type_params: &[ast::GenericParam]| {
+                impl_target_key_at(ty, module, resolutions)
             };
 
         let mut violations = check_all_orphan_rules(
@@ -1253,20 +1279,21 @@ impl TraitEnv {
             &resolve_written,
         );
 
-        // `canonical_key` goes through `symbols`, which does not carry a
-        // `use ... as` alias; the module's import scope does.
-        let resolve_trait = |module: &ModuleSource, name: &str| {
-            let scope = module_import_scopes.get(module);
-            let declared = scope
-                .and_then(|s| s.original_names.get(name))
-                .map_or(name, String::as_str);
-            if let Some(source) = scope.and_then(|s| s.sources.get(name))
-                && let Some(loc) = decl_index.get(&(source.clone(), declared.to_string()))
-            {
-                return Some(loc.clone());
-            }
-            decl_index.get(&canonical_key(module, declared)).cloned()
+        // The bound's own site says which trait it names, so an aliased
+        // supertrait (`use { Base as B }; trait Extra: B`) keys on `Base`'s
+        // declaration without the import scope being consulted a second time.
+        let resolve_trait = |module: &ModuleSource, bound: &ast::TraitBound| {
+            let key = resolutions
+                .declared(bound.id)
+                .map_or_else(
+                    || (module.clone(), bound.name.clone()),
+                    |(decl_module, name)| (decl_module.clone(), name.to_string()),
+                );
+            decl_index.get(&key).cloned()
         };
+        let trait_impl_modules = index_impl_modules(&impl_headers, false);
+        let concrete_trait_impl_modules = index_impl_modules(&impl_headers, true);
+
         violations.extend(check_variadic_impl_overlap(&impl_headers));
         violations.extend(check_inherent_impl_collisions(&impl_headers));
 
@@ -1399,18 +1426,28 @@ impl TraitEnv {
         }
     }
 
+    /// Whether the AST layer already places `impl <trait_name> for <receiver>`
+    /// in `module` — the test the synthesis layer uses to stay a genuine delta.
+    pub(crate) fn ast_layer_records(
+        &self,
+        receiver: ImplReceiver<'_>,
+        trait_name: &str,
+        module: &ModuleSource,
+    ) -> bool {
+        self.trait_impl_modules.records(receiver, trait_name, module)
+    }
+
     pub(crate) fn impl_module_for(
         &self,
         receiver: ImplReceiver<'_>,
         trait_name: &str,
         type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
-        let key = (receiver.spelling().to_string(), trait_name.to_string());
-        let ast = self.trait_impl_modules.get(&key);
+        let ast = self.trait_impl_modules.get(receiver, trait_name);
         let syn = self
             .synthesised
             .as_ref()
-            .and_then(|s| s.trait_impl_modules.get(&key));
+            .and_then(|s| s.trait_impl_modules.get(receiver, trait_name));
         pick_module_union(ast, syn, type_module)
     }
 
@@ -1599,12 +1636,11 @@ impl TraitEnv {
         trait_name: &str,
         type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
-        let key = (receiver.spelling().to_string(), trait_name.to_string());
-        let ast = self.concrete_trait_impl_modules.get(&key);
+        let ast = self.concrete_trait_impl_modules.get(receiver, trait_name);
         let syn = self
             .synthesised
             .as_ref()
-            .and_then(|s| s.concrete_trait_impl_modules.get(&key));
+            .and_then(|s| s.concrete_trait_impl_modules.get(receiver, trait_name));
         pick_module_union(ast, syn, type_module)
     }
 
@@ -1705,6 +1741,21 @@ fn static_receiver_key(type_key: &ImplTargetKey, otherwise: impl FnOnce() -> Dec
 /// could not resolve, or a position with no head at all. Those keep
 /// [`impl_target_key`], which has by-bare-name fallbacks the table deliberately
 /// does not.
+/// The impl header's target, from the site the header wrote.
+///
+/// A site behind no declaration — a tuple, a function type, a name that
+/// reaches nothing — is keyed to the impl's own module. Nothing else claims
+/// it, and coherence for exactly those is decided per module.
+fn impl_target_key_at(
+    ty: &ast::Type,
+    module_source: &ModuleSource,
+    resolutions: &crate::resolve::Resolutions,
+) -> ImplTargetKey {
+    sited_impl_target_key(ty, module_source, resolutions).unwrap_or_else(|| {
+        ImplTargetKey::Decl((module_source.clone(), get_type_name_static(ty)))
+    })
+}
+
 fn sited_impl_target_key(
     ty: &ast::Type,
     module_source: &ModuleSource,
@@ -1909,7 +1960,7 @@ fn check_orphan_rfc2451(
 
 /// Resolves a supertrait name referenced in a trait's own module to that
 /// supertrait's declaration. `None` for a name that declares no trait.
-type ResolveTrait<'a> = &'a dyn Fn(&ModuleSource, &str) -> Option<TraitDeclLoc>;
+type ResolveTrait<'a> = &'a dyn Fn(&ModuleSource, &ast::TraitBound) -> Option<TraitDeclLoc>;
 
 /// Resolves a type written in one module — the vantage — to the declaration it
 /// names, shadowed by the surrounding item's own type parameters. The single
@@ -1978,7 +2029,7 @@ fn expand_supertraits(
     stack.push(loc.clone());
     let mut closure: Vec<ast::TraitBound> = Vec::new();
     for direct in &header.supertraits {
-        let Some(super_loc) = resolve(&loc.0, &direct.name) else {
+        let Some(super_loc) = resolve(&loc.0, direct) else {
             // Blame the declaration, not every implementor of it.
             cycles.push((
                 loc.0.clone(),

@@ -116,9 +116,8 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 /// which holds every function in the module — reify flattens impl-block
 /// methods into it alongside free functions and synthesized wrappers.
 ///
-/// User-written impls already live in [`TraitEnv::trait_impl_modules`] from
-/// the AST layer, so they are excluded here to keep the synthesis layer a
-/// genuine "delta" on top of the AST.
+/// User-written impls already live in the AST layer, so they are excluded here
+/// to keep the synthesis layer a genuine "delta" on top of the AST.
 ///
 /// Concrete-ness is propagated alongside each entry so that the
 /// monomorphizer can later distinguish "the impl is fully resolved (use the
@@ -137,24 +136,29 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 /// handles their dispatch via its own per-`ResolvedType` fallback.
 fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
     let mut impls = SynthesisedImpls::default();
-    let ast_layer = &project.trait_env.trait_impl_modules;
+    let mut instantiations: Vec<(String, String, ModuleSource)> = Vec::new();
+    let trait_env = &project.trait_env;
+    // Skip only when the *same* module is already represented at the AST
+    // layer. Two same-name receiver types from different modules (e.g.
+    // `struct Widget` in module A and module B) each get their own
+    // auto-derived impl and both need to land in the synthesised layer — a
+    // coarser by-name short-circuit would drop the second one and
+    // re-introduce the cross-module mis-dispatch the index is meant to fix.
     let mut record =
-        |type_name: String, trait_name: String, module: &ModuleSource, is_concrete: bool| {
-            let key = (type_name, trait_name);
-            // Skip only when the *same* module is already represented at the
-            // AST layer. Two same-name receiver types from different modules
-            // (e.g. `struct Widget` in module A and module B) each get their
-            // own auto-derived impl and both need to land in the synthesised
-            // layer — a coarser `contains_key` short-circuit would drop the
-            // second one and re-introduce the cross-module mis-dispatch the
-            // multi-valued index is meant to fix.
-            if ast_layer
-                .get(&key)
-                .is_some_and(|modules| modules.contains(module))
-            {
+        |receiver: &crate::name::Receiver,
+         trait_name: &str,
+         module: &ModuleSource,
+         is_concrete: bool| {
+            if trait_env.ast_layer_records(
+                crate::elaborator::trait_env::ImplReceiver::Mangled(
+                    receiver.head_key().as_mangled_str(),
+                ),
+                trait_name,
+                module,
+            ) {
                 return;
             }
-            impls.record_impl(key.0, key.1, module.clone(), is_concrete);
+            impls.record_impl(receiver, trait_name, module, is_concrete);
         };
     for tir_module in project.tir_modules.values() {
         let module_source = &tir_module.module_source;
@@ -177,40 +181,22 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
                 }
                 let is_concrete = func.impl_type_params.is_empty();
                 let trait_base = trait_name.base_name().to_string();
-                record(
-                    info.base_struct_name(),
-                    trait_base.clone(),
-                    module_source,
-                    is_concrete,
-                );
-                record_concrete_instantiation(&mut record, info, &trait_base, module_source);
+                record(info.receiver(), &trait_base, module_source, is_concrete);
+                if info.struct_name() != info.base_struct_name() {
+                    instantiations.push((
+                        info.struct_name(),
+                        trait_base,
+                        module_source.clone(),
+                    ));
+                }
             }
         }
     }
-    impls
-}
-
-/// Index a concrete impl on a generic head (`impl Tag for List<Token>`) under
-/// its resolved instantiated receiver (`info.struct_name()`, e.g.
-/// `List<.../Token>`), distinct from the bare head (`info.base_struct_name()`),
-/// so the monomorphizer routes it to this module instead of colliding with
-/// another module's `impl Tag for List<OtherToken>` on the shared head key
-/// (issue #1348). The resolved spelling covers every argument shape (tuples,
-/// refs, nested generics) with no AST re-derivation.
-fn record_concrete_instantiation(
-    record: &mut impl FnMut(String, String, &ModuleSource, bool),
-    info: &LocalMethodName,
-    trait_name: &str,
-    module_source: &ModuleSource,
-) {
-    if info.struct_name() != info.base_struct_name() {
-        record(
-            info.struct_name(),
-            trait_name.to_string(),
-            module_source,
-            true,
-        );
+    drop(record);
+    for (mangled, trait_name, module) in instantiations {
+        impls.record_instantiation(mangled, &trait_name, &module);
     }
+    impls
 }
 
 /// Decide whether a synthesised trait-method impl whose `&self` parameter
