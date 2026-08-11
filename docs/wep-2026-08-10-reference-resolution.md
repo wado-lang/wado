@@ -236,7 +236,13 @@ Costs and risks:
            bounds themselves and answers from the winning one's site, so only
            the projection path — which has no sites to give it — still resolves
            a spelling in the consumer's frame.
-         - The associated-type registries key on the trait's written spelling.
+         - The associated-type registries key on `tir::TraitKey`, the trait's
+           declaring module and declared name, filled from the impl header's
+           site and from each blanket bound's. What still asks by spelling is
+           `resolve_assoc_type_qualified`, because an `AssocTypeProjection`
+           records the trait as a `String`; it declines when two declarations
+           sharing the name disagree rather than letting registration order
+           decide.
          - `locate_static_method_impl`, the conversion-impl survey, and the CM
            interface registry.
 -

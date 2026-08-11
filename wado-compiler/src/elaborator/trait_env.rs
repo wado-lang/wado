@@ -359,6 +359,46 @@ impl ImplHeader {
     }
 }
 
+/// The pack-bound associated types each blanket impl projects, keyed by the
+/// blanket's `(module, ast_id)`.
+///
+/// The bound's own reference site says which trait declares the associated
+/// type, so two modules' same-named bounds stay apart — the spelling the
+/// blanket wrote cannot answer that.
+fn blanket_pack_assocs(
+    impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
+    blanket_impls: &IndexMap<String, Vec<BlanketImpl>>,
+    resolutions: &crate::resolve::Resolutions,
+) -> IndexMap<(ModuleSource, AstId), Vec<(DeclKey, String)>> {
+    let mut out: IndexMap<(ModuleSource, AstId), Vec<(DeclKey, String)>> = IndexMap::default();
+    for blanket in blanket_impls.values().flatten() {
+        let key = (blanket.module.clone(), blanket.ast_id);
+        let Some(header) = impl_headers.get(&key) else {
+            continue;
+        };
+        let pairs: Vec<(DeclKey, String)> = header
+            .type_params
+            .iter()
+            .flat_map(|tp| &tp.bounds)
+            .flat_map(|bound| bound.assoc_types.iter().map(move |a| (bound, a)))
+            .filter(|(_, assoc)| {
+                matches!(&assoc.ty, ast::Type::Tuple(elems)
+                    if elems
+                        .iter()
+                        .any(|e| matches!(e, ast::Type::TypePackSpread(..))))
+            })
+            .filter_map(|(bound, assoc)| {
+                let (module, name) = resolutions.declared(bound.id)?;
+                Some(((module.clone(), name.to_string()), assoc.name.clone()))
+            })
+            .collect();
+        if !pairs.is_empty() {
+            out.insert(key, pairs);
+        }
+    }
+    out
+}
+
 /// Digested signature of a single method inside an [`ImplHeader`]. Holds the
 /// name and type parameters method-lookup queries need without the method
 /// body; grows field-by-field as consumers migrate off the impl-block AST.
@@ -591,6 +631,11 @@ pub struct TraitEnv {
     /// `(ModuleSource, AstId)`. Trait/method queries read this instead of
     /// re-fetching the impl block AST from `loaded_modules`. See [`ImplHeader`].
     pub(super) impl_headers: IndexMap<(ModuleSource, AstId), ImplHeader>,
+    /// Per blanket impl, the `(declaring trait, associated type)` pairs whose
+    /// binding is a type pack. Resolved once at build time from each bound's
+    /// own reference site, so the trait is a declaration rather than the
+    /// spelling the blanket wrote (WEP 2026-08-10).
+    pub(super) blanket_pack_assocs: IndexMap<(ModuleSource, AstId), Vec<(DeclKey, String)>>,
     /// Digested headers for every `trait` declaration, keyed by
     /// `(ModuleSource, AstId)`. Lets method-lookup queries read trait
     /// method signatures without re-fetching the trait AST. See
@@ -1238,6 +1283,11 @@ impl TraitEnv {
                 decl_index,
                 effect_decl_index,
                 resource_decl_index,
+                blanket_pack_assocs: blanket_pack_assocs(
+                    &impl_headers,
+                    &blanket_impls,
+                    resolutions,
+                ),
                 impl_headers,
                 supertrait_closures_by_name: index_closures_by_name(
                     &trait_decl_headers,
@@ -1548,29 +1598,11 @@ impl TraitEnv {
     /// `[("Bound", "Assoc")]`. The trait is carried because a bare assoc name
     /// is ambiguous: the reflection kinds all spell their member channel
     /// `Members`.
-    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(String, String)> {
-        let Some(header) = self
-            .impl_headers
+    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(DeclKey, String)> {
+        self.blanket_pack_assocs
             .get(&(blanket.module.clone(), blanket.ast_id))
-        else {
-            return Vec::new();
-        };
-        header
-            .type_params
-            .iter()
-            .flat_map(|tp| &tp.bounds)
-            .flat_map(|bound| bound.assoc_types.iter().map(move |a| (&bound.name, a)))
-            .filter_map(|(bound_name, assoc)| match &assoc.ty {
-                ast::Type::Tuple(elems)
-                    if elems
-                        .iter()
-                        .any(|e| matches!(e, ast::Type::TypePackSpread(..))) =>
-                {
-                    Some((bound_name.clone(), assoc.name.clone()))
-                }
-                _ => None,
-            })
-            .collect()
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Like [`impl_module_for`] but only returns a hit when the impl block

@@ -1108,7 +1108,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // module is resolved, so resolving module X can look up an associated
         // type from module Y's impl even when Y is processed later. Keyed by
         // the declaring `AstId`, so it must follow the index above.
-        Self::register_all_generic_assoc_type_defs(modules, &type_table, &stdlib_set);
+        Self::register_all_generic_assoc_type_defs(modules, &type_table, &stdlib_set, &resolutions);
 
         // Seed per-module semantics with the snapshot's pre-resolved stdlib
         // entries so the LSP edges remain consistent and the body walk on
@@ -3490,6 +3490,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         modules: &IndexMap<ModuleSource, Module>,
         type_table: &Rc<RefCell<TypeTable>>,
         stdlib_set: &IndexSet<ModuleSource>,
+        resolutions: &crate::resolve::Resolutions,
     ) {
         for (module_source, module) in modules {
             if stdlib_set.contains(module_source) {
@@ -3506,11 +3507,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 // Determine the struct name (base name without type args)
                 let struct_name = super::trait_env::get_type_name_static(&impl_block.ty);
-                let trait_name = impl_block
+                // The header's own reference site says which trait declares
+                // these bindings; a block naming a trait that reaches no
+                // declaration registers nothing.
+                let Some(trait_key) = impl_block
                     .trait_type
                     .as_ref()
-                    .map(super::trait_env::get_type_name_static)
-                    .unwrap_or_default();
+                    .and_then(crate::resolve::head_site)
+                    .and_then(|site| resolutions.declared(site))
+                    .map(|(module, name)| (module.clone(), name.to_string()))
+                else {
+                    continue;
+                };
 
                 // Build a mapping from type param name to index from the explicit `impl<...>` header.
                 let type_param_idx: IndexMap<String, u32> = impl_block
@@ -3568,7 +3576,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,
-                            trait_name.clone(),
+                            trait_key.clone(),
                             binding.name.clone(),
                             type_param_id,
                         );

@@ -734,20 +734,24 @@ fn register_reflect_assoc_types(
     assocs: &[(&str, TypeId)],
 ) {
     let base_decl = tt.decl_of_type(self_type);
-    let trait_name = tt.compiler_items().trait_name(owning_trait).to_string();
+    let trait_key = tt
+        .compiler_items()
+        .trait_fq(owning_trait)
+        .canonical()
+        .expect("a compiler trait item names a declaration, so it always has a declaring module");
     for (assoc_name, resolved) in assocs {
         if is_generic {
             let Some(base_decl) = base_decl else { continue };
             tt.register_generic_assoc_type_def(
                 base_decl,
-                trait_name.clone(),
+                trait_key.clone(),
                 (*assoc_name).to_string(),
                 *resolved,
             );
         } else {
             tt.register_assoc_type_resolution(
                 self_type,
-                trait_name.clone(),
+                trait_key.clone(),
                 (*assoc_name).to_string(),
                 *resolved,
             );
@@ -2270,10 +2274,8 @@ fn generate_enum_reflect_methods(
         );
         let members_tuple_type =
             tt.make_tuple(std::iter::repeat_n(member_type, target.cases.len()).collect());
-        let reflect_enum = tt
-            .compiler_items()
-            .trait_name(CompilerItem::ReflectEnum)
-            .to_string();
+        let reflect_enum = tt.compiler_items().require_trait(CompilerItem::ReflectEnum);
+        let reflect_enum = (reflect_enum.0.clone(), reflect_enum.1.to_string());
         tt.register_assoc_type_resolution(
             enum_type,
             reflect_enum,
@@ -2720,8 +2722,8 @@ fn generate_flags_reflect_methods(
             tt.make_tuple(std::iter::repeat_n(member_type, target.members.len()).collect());
         let reflect_flags = tt
             .compiler_items()
-            .trait_name(CompilerItem::ReflectFlags)
-            .to_string();
+            .require_trait(CompilerItem::ReflectFlags);
+        let reflect_flags = (reflect_flags.0.clone(), reflect_flags.1.to_string());
         tt.register_assoc_type_resolution(
             target.flags_type,
             reflect_flags,

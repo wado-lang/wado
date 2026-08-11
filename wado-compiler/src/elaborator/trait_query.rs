@@ -1929,11 +1929,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if mentions_self(&constraint.ty) || mentions_type_pack(&constraint.ty) {
                 continue;
             }
-            let Some(actual) = self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
-                type_arg,
-                &bound.name,
-                &constraint.name,
-            ) else {
+            // The bound's own site says which trait declares the constraint.
+            let trait_key = self.fq_trait_name_at(bound.id, &bound.name).canonical();
+            let Some(actual) = trait_key.and_then(|key| {
+                self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
+                    type_arg,
+                    &key,
+                    &constraint.name,
+                )
+            }) else {
                 continue;
             };
             let expected = self.resolve_type(&constraint.ty);
@@ -2024,6 +2028,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_params: Vec<ast::GenericParam>,
             impl_ty_param_names: Vec<String>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
+            /// The trait this block implements, as its own header names it —
+            /// the key the registration must use.
+            trait_key: crate::tir::TraitKey,
         }
         let trait_env = self.tysys.trait_env.clone();
         let impl_infos: Vec<ImplInfo> = {
@@ -2051,10 +2058,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .collect(),
                             _ => vec![],
                         };
+                        let Some(trait_key) = header.fq_trait().and_then(|t| t.canonical()) else {
+                            continue;
+                        };
                         result.push(ImplInfo {
                             type_params: header.type_params.clone(),
                             impl_ty_param_names,
                             assoc_types: header.associated_types.clone(),
+                            trait_key,
                         });
                     }
                 }
@@ -2092,6 +2103,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Resolve and register each associated type in this substituted context
+            let trait_key = info.trait_key.clone();
             for binding in &info.assoc_types {
                 let resolved_id = scope.resolve_type(&binding.ty);
                 if !scope
@@ -2106,7 +2118,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
-                            trait_name.to_string(),
+                            trait_key.clone(),
                             binding.name.clone(),
                             resolved_id,
                         );
@@ -2122,6 +2134,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_param_name: String,
             blanket_param_bounds: Vec<ast::TraitBound>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
+            /// The trait this blanket implements, as its own header names it.
+            trait_key: crate::tir::TraitKey,
         }
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
@@ -2159,10 +2173,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                 });
                 if bounds_ok {
+                    let Some(trait_key) = header.fq_trait().and_then(|t| t.canonical()) else {
+                        continue;
+                    };
                     result.push(BlanketImplInfo {
                         blanket_param_name: blanket_param.name.clone(),
                         blanket_param_bounds: blanket_param.bounds.clone(),
                         assoc_types: header.associated_types.clone(),
+                        trait_key,
                     });
                 }
             }
@@ -2187,6 +2205,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .insert(info.blanket_param_name.clone(), info.blanket_param_bounds);
 
             // Resolve and register each associated type
+            let trait_key = info.trait_key.clone();
             for binding in &info.assoc_types {
                 let resolved_id = scope.resolve_type(&binding.ty);
                 if !scope
@@ -2201,7 +2220,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
-                            trait_name.to_string(),
+                            trait_key.clone(),
                             binding.name.clone(),
                             resolved_id,
                         );

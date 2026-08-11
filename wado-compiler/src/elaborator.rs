@@ -1810,12 +1810,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .trait_type
             .as_ref()
             .map(|t| scope.fq_trait_name(t));
-        // The associated-type registries are keyed by the written spelling;
-        // they are a separate migration from the method mangle.
-        let trait_written = impl_block
-            .trait_type
-            .as_ref()
-            .map(|t| scope.get_type_name_full(t));
 
         // Register type parameters from impl block's generic type FIRST
         // e.g., impl IndexValue<i32> for Triple<T> needs T registered
@@ -1853,6 +1847,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
                 // Register in TypeTable for substitution resolution
                 // Only for concrete types (not generic impls like impl<T> Trait for List<T>)
+                let Some(trait_key) = trait_name
+                    .as_ref()
+                    .and_then(crate::name::FqTraitName::canonical)
+                else {
+                    continue;
+                };
                 if is_concrete {
                     scope
                         .tysys
@@ -1860,7 +1860,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             target_type_id,
-                            trait_written.clone().unwrap_or_default(),
+                            trait_key,
                             binding.name.clone(),
                             type_id,
                         );
@@ -1875,7 +1875,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .borrow_mut()
                             .register_generic_assoc_type_def(
                                 base_decl,
-                                trait_written.clone().unwrap_or_default(),
+                                trait_key,
                                 binding.name.clone(),
                                 type_id,
                             );
