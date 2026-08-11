@@ -904,7 +904,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             owner: MethodOwner::Receiver,
             cm_name: None,
             is_ref_impl: false,
-            method_type_param_ids: vec![],
+            method_type_param_ids: super::sig::method_own_params(&sig),
             impl_module: Some(impl_ref.0.clone()),
             from_concrete_impl: self.impl_is_concrete_instantiation(
                 &header.ty,
@@ -945,6 +945,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decl
             .instantiate(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
+        let method_type_param_ids = super::sig::method_own_params(&sig);
 
         Some(MethodInfo {
             impl_offset: None,
@@ -956,7 +957,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             owner: MethodOwner::Receiver,
             cm_name: sig.cm_name,
             is_ref_impl: false,
-            method_type_param_ids: vec![],
+            method_type_param_ids,
             impl_module: None,
             from_concrete_impl: false,
             param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),

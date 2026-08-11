@@ -196,6 +196,20 @@ impl Param {
     }
 }
 
+/// The method's own type parameters — the signature's slots past the ones its
+/// declaring block contributes.
+///
+/// A lookup reports these so a use site can bind them. Rebuilding them from a
+/// counted offset instead is what let `impl<T, ..F> Emit for T` number
+/// `emit<S>` at a slot its signature does not use.
+pub(super) fn method_own_params(sig: &MethodSig) -> Vec<crate::tir::TypeId> {
+    let split = (sig.declaring_slot_count as usize).min(sig.decl.type_params.len());
+    sig.decl.type_params[split..]
+        .iter()
+        .map(|(_, id)| *id)
+        .collect()
+}
+
 impl MethodSig {
     /// Index of the first non-receiver parameter in `decl.param_types`.
     pub(crate) fn first_value_param(&self) -> usize {
