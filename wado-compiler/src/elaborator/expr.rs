@@ -4205,15 +4205,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // U>` while meaning different things.
         let inst = self.instantiate(
             &struct_info.type_param_type_ids,
-            &[],
             &Instantiation {
                 kind: "struct",
                 name: struct_name,
                 span,
             },
         );
-        let field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();
-        let field_types = self.instantiate_types(&field_types, &inst);
+        let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();
+        let field_types = self.instantiate_types(&decl_field_types, &inst);
 
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
 
@@ -4247,11 +4246,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // monomorphization substitutes it. Hand back that, not the variable
         // nobody solved, which would otherwise ride into a recorded type and
         // trip the "no variable survives elaboration" assert in DCE.
+        //
+        // A slot a field *does* mention and nothing solved is a failure, and
+        // handing back the declaration's parameter there is what let
+        // `Holder { items: 5 }` — `items: List<T>`, nothing pinning `T` —
+        // build a rigid `Holder<T>` that reached WIR and trapped it. Leave the
+        // variable in place so it is blamed and reported.
         for (slot, answer) in inferred.iter_mut().enumerate() {
-            if inst.vars.get(slot) == Some(answer) {
-                *answer = struct_info.type_param_type_ids[slot];
+            let decl_param = struct_info.type_param_type_ids[slot];
+            let is_phantom = {
+                let table = self.tysys.type_table.borrow();
+                let index = match table.get(decl_param) {
+                    ResolvedType::TypeParam { index, .. }
+                    | ResolvedType::TypePack { index, .. } => *index,
+                    _ => continue,
+                };
+                !decl_field_types
+                    .iter()
+                    .any(|&f| table.contains_type_param_index(f, index))
+            };
+            if inst.vars.get(slot) == Some(answer) && is_phantom {
+                *answer = decl_param;
             }
         }
+        self.blame_unsolved(&inst, &inferred);
         inferred
     }
 

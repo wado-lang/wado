@@ -60,27 +60,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Instantiate `slots` — a declaration's type parameters, in order — with
     /// one fresh inference variable each.
     ///
-    /// `mint[i]` declines the `i`th slot, leaving it rigid. A parameter whose
-    /// bound already fixes its shape (`<F: fn(...)>`) is constrained
-    /// structurally rather than by call-site inference, so minting a variable
-    /// for it would only produce an unsolvable one.
-    ///
-    /// A type *pack* (`..T`) is likewise left rigid. A variable stands for one
-    /// type; a pack stands for a list of them, and the unifier splices it by
+    /// A type *pack* (`..T`) is left rigid. A variable stands for one type; a
+    /// pack stands for a list of them, and the unifier splices it by
     /// recognising `TypePack` inside the expected tuple. Rewriting `[..T]` to
     /// `[?0]` would hide the shape that arm matches on and the pack would
     /// never bind. Instantiating a pack needs a pack-shaped variable, which
     /// does not exist yet.
-    pub(super) fn instantiate(
-        &mut self,
-        slots: &[TypeId],
-        mint: &[bool],
-        of: &Instantiation<'_>,
-    ) -> Instantiated {
+    pub(super) fn instantiate(&mut self, slots: &[TypeId], of: &Instantiation<'_>) -> Instantiated {
         let mut vars = Vec::with_capacity(slots.len());
         let mut diags = Vec::with_capacity(slots.len());
         let mut subst = IndexMap::default();
-        for (i, &slot) in slots.iter().enumerate() {
+        for &slot in slots {
             let named_slot = {
                 let tt = self.tysys.type_table.borrow();
                 match tt.get(slot) {
@@ -88,8 +78,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => None,
                 }
             };
-            let Some((index, name)) = named_slot.filter(|_| mint.get(i).copied().unwrap_or(true))
-            else {
+            let Some((index, name)) = named_slot else {
                 vars.push(slot);
                 diags.push(None);
                 continue;

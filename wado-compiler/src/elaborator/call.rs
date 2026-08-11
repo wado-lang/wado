@@ -1889,7 +1889,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             let inst = self.instantiate(
                 &param_ids,
-                &[],
                 &Instantiation {
                     kind: "builtin",
                     name: func_name,
@@ -1968,7 +1967,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // make the two distinguishable rather than merely distinguishable-ish.
         let inst = self.instantiate(
             &param_ids,
-            &[],
             &Instantiation {
                 kind: "function",
                 name: func_name,

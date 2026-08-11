@@ -1139,7 +1139,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let inst = self.instantiate(
             slots,
-            &[],
             &Instantiation {
                 kind: "method",
                 name: method_name,
