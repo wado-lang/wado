@@ -1,75 +1,15 @@
 //! Optimization passes for Wado NIR.
 //!
-//! The optimizer rewrites the [`NirPackage`] in place. The full pass list and
-//! ordering rationale lives in [`docs/optimizer.md`](../../../docs/optimizer.md);
-//! the inventory below is just an index of the modules under `optimize/`.
+//! The optimizer rewrites the [`NirPackage`] in place. Each pass lives in its
+//! own module under `optimize/` and documents itself there; the sequence of
+//! [`run_pass`] calls below is the only statement of what runs and in what
+//! order, with the rationale for each position in the comment beside it.
 //!
-//! Fixed-point loop ([`run_optimization_passes`], in execution order):
-//! 1.  `container_sroa` — `AoS` → `SoA` for `List<Tuple<...>>` / `List<Struct>`.
-//! 2.  `peephole` (pre-inline) — unified engine session: `MatchToSwitchRule`
-//!     (dense `Match` → `Switch`), `string_push` (`buf.push_str("short")` →
-//!     per-byte `push`), `const_ascii_push` (`push(<const char < 0x80>)` →
-//!     `push_ascii_unchecked`, skipping `encode_char`'s UTF-8 width dispatch),
-//!     `elide_local` (write-only local elimination), env-free
-//!     `const_fold` (literal arithmetic + pure CTFE), and `const_branch_prune`
-//!     (trivial-block / dead-statement cleanup). See `optimize/peephole.rs`.
-//! 3.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
-//!     copy when elements are provably immutable through the binding. (Every
-//!     `$value_copy$T` is already inserted precisely at the lower phase; there is
-//!     no elision pass to recover redundant copies — see `lower::plan::value_copy`.)
-//! 4.  `sroa_param` — single-field (`Box<T>`) parameter SROA.
-//! 5.  `inline` — function inlining.
-//! 6.  `peephole` (post-inline) — unified engine session: `RefElimRule` (drop
-//!     reference bindings inlining exposes), `ElideBoxLocalRule` (collapse
-//!     `let x = Box{value: inner}; … x.value …` shells),
-//!     `LabeledBlockFusionRule` (collapse inlined-helper `Option<T>` /
-//!     `Result<T, E>` allocations into the consumer's `if-let` / `match` site),
-//!     `array_literal` (materialize `ArrayLiteral` from the `array_new + push`
-//!     window), `elide_local`, env-free `const_fold`, and `const_branch_prune`.
-//! 7.  `let_block_flatten` — the value-block normal form: flatten block-tailed
-//!     `let` bindings (`let x = { stmts…; tail }` → `stmts…; let x = tail`) so
-//!     `sroa`'s direct-literal matcher sees every candidate. A separate pass —
-//!     never a peephole rule — so the session's pristine-map rules and this
-//!     reshaping never interleave.
-//! 8.  `sroa` — Scalar Replacement of Aggregates.
-//! 9.  `copy_prop` — copy propagation.
-//! 10. `dae` — Dead Argument Elimination.
-//! 11. `drve` — Dead Return Value Elimination.
-//! 12. `cse` — Loop-level Common Subexpression Elimination.
-//! 13. `store_load_forward` — store-to-load forwarding.
-//! 14. `const_folding` — partial evaluation via [`crate::niri`] (also drives
-//!     alias-aware field-knowledge tracking; see `alias`). The flow-sensitive
-//!     half; the env-free folds and trivial-block pruning run in `peephole`.
-//! 15. `param_spec` — clone a callee on the constant fields of a by-reference
-//!     struct its caller passes, substituting those reads.
-//! 16. `licm` — Loop-Invariant Code Motion.
-//! 17. `condition_implication` — eliminate conditions implied by dominators.
-//! 18. `tmpl_hoist` — hoist template-string backing buffers out of loops.
-//!
-//! Dense `Match` → `Switch` on global initializer bodies runs once before the
-//! loop (`match_to_switch_globals`); `-O0` skips the loop and lowers everything
-//! via `match_to_switch_all`.
-//!
-//! Once after the loop converges: `field_scalarize` (Hot Field Scalarization),
-//! then `promote_fields`, the post-promote structural BCE rerun, and
-//! `loop_version_bce` (loop-versioned BCE: statically-unprovable in-loop
-//! bounds asserts get a runtime residual guard and a checkless fast clone;
-//! a constant-fill fast loop collapses to `array.fill`). Last, after every
-//! scalarization / globalization recognizer has matched its shape,
-//! `scalar_forward` folds the inliner's leftover single-use pure-scalar
-//! value-parameter temps into their uses.
-//!
-//! Outside the loop ([`optimize`]): Dead Code Elimination (`dce`, around the
-//! loop) plus the always-on post-optimization rewrites the Wasm backend
-//! depends on — `select_lowering` and `multi_value_return` classification.
-//!
-//! The `$value_copy$T` insertion + synthesis steps that materialize Wado's
-//! value-copy semantics live in the lower phase (`lower::plan::value_copy`) —
-//! by the time NIR reaches the optimizer, every defensive deep-copy is
-//! explicit and precise: the fold inserts a copy only where the ownership
-//! analysis (move / confinement / freshness) could not prove it unnecessary.
-//! The optimizer only demotes a deep copy to a shallow one, via
-//! `value_copy_demote` (deep → shallow) when the elements are never mutated.
+//! [`docs/optimizer.md`](../../../docs/optimizer.md) is the reader-facing
+//! inventory, and
+//! [`docs/wep-2026-06-05-nir-optimizer-architecture.md`](../../../docs/wep-2026-06-05-nir-optimizer-architecture.md)
+//! describes the two-tier NIR, the rewrite engine, and the gate the passes run
+//! on.
 
 mod alias;
 mod arena_query;
@@ -166,10 +106,9 @@ struct OptConfig {
 /// | Os    | Yes | 10         | 13               |
 ///
 /// "Iterations" / "Inline Threshold" describe the fixed-point
-/// optimization loop. Post-loop rewrites that the Wasm backend depends
-/// on (`select_lowering`, multi-value-return classification) always
-/// run, including at `O0`; only the fixed-point loop itself is skipped
-/// there.
+/// optimization loop. The post-loop rewrites the Wasm backend depends on
+/// always run, including at `O0`; only the fixed-point loop itself is
+/// skipped there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
     /// No optimization loop. DCE plus the always-on post-optimization
@@ -318,8 +257,8 @@ pub fn optimize(
         }
     }
 
-    // FieldAccess promotion (WEP P2): scalar fields over stable receivers freeze
-    // to operands (born-as-operands), so store-load forwarding / cse become
+    // FieldAccess promotion: scalar fields over stable receivers freeze to
+    // operands (born-as-operands), so store-load forwarding / cse become
     // operand reads. Runs after the optimization loop (so the struct shape is
     // post-SROA) but BEFORE select_lowering / multi_value_return, which rewrite
     // the body into WIR-shaped forms the value-graph build would misread. The
@@ -575,24 +514,11 @@ pub mod pass_dump {
 
 /// Run optimization passes with a fixed-point iteration strategy.
 ///
-/// Container SROA runs early because it needs to see `List<T>` *method
-/// calls* (push, `index_value`, `index_assign`, len, ...) before `inline`
-/// expands them into raw field-accesses and `builtin::array_get` /
-/// `array_set` pairs. Running it before `inline` in each iteration — rather
-/// than only in iteration 0 — also lets the optimization loop re-run
-/// container SROA on newly-inlined code that exposes fresh
-/// `List<Tuple<...>>` locals.
+/// `config` controls the number of iterations and the inline threshold. More
+/// iterations can find more opportunities but take longer; the loop exits early
+/// once an iteration changes nothing.
 ///
-/// The exact in-loop pass list and its ordering rationale lives on the
-/// module doc above; the `step!` calls below are the canonical source for
-/// pass names and order.
-///
-/// The `config` parameter controls the number of iterations and inline
-/// threshold. More iterations can find more optimization opportunities but
-/// take longer.
-///
-/// Hot Field Scalarization (HFS) runs once after the loop converges; see
-/// `optimize` for the rationale.
+/// Each pass's position is justified in the comment beside its call.
 fn run_optimization_passes(
     project: &mut NirPackage,
     config: &OptConfig,
@@ -600,7 +526,7 @@ fn run_optimization_passes(
 ) {
     let threshold = config.inline_threshold;
     let trace_loop = crate::trace::filter().enabled("opt_loop");
-    // Per-function dirty-set gate (WEP Phase 6). Every loop pass is gate-aware:
+    // Per-function dirty-set gate. Every loop pass is gate-aware:
     // a per-function pass (`gated!`) skips functions unchanged since it last ran;
     // an interprocedural pass scans all functions but reports exactly the ones
     // it touched. Both go through `&mut gate`.
@@ -617,7 +543,7 @@ fn run_optimization_passes(
     run_pass("nir/match_to_switch_globals", project, profiler, |p| {
         match_to_switch_globals(p)
     });
-    // Operand-promotion keystone (WEP: The Live ValueGraph). Pure values are
+    // Operand-promotion keystone. Pure values are
     // frozen into `Operand::Value` before the value passes, so the passes read
     // operands (`engine.operand_value`) instead of rebuilding the value graph.
     // Arith only here (before the loop); `FieldAccess` promotion runs late (after
@@ -722,8 +648,8 @@ fn run_optimization_passes(
         // expose first — the `SequenceLiteralBuilder` methods (and, for wrapper
         // builders such as `SeqVec { items: List<T> }`, the `push_literal →
         // self.field.push` delegation) are inlined into the raw `array_new +
-        // push` window, direct or field-rooted. Later `cse` / `const_fold` in
-        // this same loop then see the normalized literal. `elide_local` runs
+        // push` window, direct or field-rooted. Hash-consing and the later
+        // `const_fold` in this same loop then see the normalized literal. `elide_local` runs
         // again here over inline's freshly dead bindings. No `MatchToSwitchRule`
         // here (`include_match = false`): the pre-inline run already lowered
         // every reachable `Match`, and `inline` copies `Switch`-shaped bodies.
@@ -737,7 +663,7 @@ fn run_optimization_passes(
         gated!("nir/sroa", scalar_replace_aggregates);
         gated!("nir/copy_prop", propagate_copies);
         // DAE / DRVE after `copy_prop` shrinks signatures and discards unused
-        // let-bindings before `cse` / `const_fold` revisit the simplified body.
+        // let-bindings before `const_fold` revisits the simplified body.
         // Running here (rather than at WIR level) lets `inline` see the slimmer
         // signatures on the next iteration and lets `dce` clean up the freshly
         // dead computation in the same fixed-point loop. (Write-only local
@@ -746,7 +672,7 @@ fn run_optimization_passes(
         gated!("nir/drve", eliminate_dead_return_values);
         // Pure-value CSE is subsumed by hash-consing (identical values already
         // share a ValueId), and store-load forwarding by FieldAccess promoting at
-        // its heap version, so no separate `cse` pass runs (WEP: The Live ValueGraph).
+        // its heap version, so no separate `cse` pass runs.
         // The flow-sensitive half of constant folding; the env-free half
         // (literal arithmetic + pure CTFE) runs in the `nir/peephole` passes.
         // This walker handles the folds that need per-function dataflow state —

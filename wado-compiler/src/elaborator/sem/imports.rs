@@ -3,8 +3,7 @@
 //!
 //! Populated by [`super::super::orchestration::Elaborator::build_tir_from_state`]
 //! before the body walk starts, and consulted by name-resolution sites in
-//! the elaborator (Stage 3 of
-//! [`wep-2026-05-26-elaborator-rearchitecture.md`]).
+//! the elaborator ([`wep-2026-05-26-elaborator-rearchitecture.md`]).
 //!
 //! # Membership rule
 //!

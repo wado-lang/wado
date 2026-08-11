@@ -1,7 +1,7 @@
 //! Method call and static method call resolution.
 
 use super::trait_env::ImplTargetKey;
-use crate::ast::{self, AstId, Item};
+use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
@@ -45,7 +45,7 @@ fn static_call_symbol_name(static_call: &ast::StaticMethodCallExpr) -> String {
 ///
 /// `call_id == None` likewise suppresses recording the dispatch decision
 /// in [`super::sem::TypeAnnotations::method_dispatch`]: the future
-/// `reify` pass (Stage 5 of WEP 2026-05-26) only walks source-level
+/// `reify` pass (WEP 2026-05-26) only walks source-level
 /// `MethodCallExpr` nodes, so a synthesised call has no AST id under which
 /// to file an entry.
 pub(super) struct MethodCallInput<'a> {
@@ -328,7 +328,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let result = self.find_trait_method_for_type(
                     &ImplTargetKey::Ref(ref_kind),
                     method_name,
-                    &struct_module,
                     receiver_type_args_for_trait.as_deref(),
                     Some(base_type_id),
                     span,
@@ -364,7 +363,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(trait_match) = self.find_trait_method_for_type(
                 &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
                 method_name,
-                &struct_module,
                 receiver_type_args_for_trait.as_deref(),
                 Some(base_type_id),
                 span,
@@ -407,21 +405,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(&name)
                     .cloned()
                 && let Some((found_trait, info)) = {
-                    // A qualified call names one bound, so the others are not
-                    // competitors — without this filter the collision it exists
-                    // to resolve is still reported inside a generic body, and
-                    // the first bound answers regardless of which was named.
-                    // Bounds are compared as declarations, so a same-named
-                    // trait from another module does not answer for the one
-                    // the call named.
-                    let bound_names: Vec<String> = bounds
-                        .iter()
-                        .map(|b| b.name.clone())
-                        .filter(|n| {
-                            required_trait.is_none_or(|w| self.trait_decl_key_in_frame(n) == w.decl)
-                        })
-                        .collect();
-                    self.find_method_in_trait_bounds(&bound_names, method_name, base_type_id, span)
+                    let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
+                    self.find_method_in_trait_bounds(
+                        &bound_names,
+                        method_name,
+                        base_type_id,
+                        span,
+                        required_trait,
+                    )
                 }
             {
                 trait_name = Some(found_trait);
@@ -445,15 +436,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             };
             if let Some(bounds) = assoc_bounds
-                && let Some((found_trait, info)) = {
-                    let bounds: Vec<String> = bounds
-                        .into_iter()
-                        .filter(|n| {
-                            required_trait.is_none_or(|w| self.trait_decl_key_in_frame(n) == w.decl)
-                        })
-                        .collect();
-                    self.find_method_in_trait_bounds(&bounds, method_name, base_type_id, span)
-                }
+                && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
+                    &bounds,
+                    method_name,
+                    base_type_id,
+                    span,
+                    required_trait,
+                )
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);
@@ -467,8 +456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // FunctionRef we then build mangles a non-existent method
         // against the receiver's struct module — we MUST NOT record that
         // as a successful dispatch in `sem.types.method_dispatch`, or
-        // Stage 5 reify would try to lower a call to a function that
-        // does not exist.
+        // reify would try to lower a call to a function that does not exist.
         let method_found = method_info.is_some();
         let MethodInfo {
             method_ast_id: dispatched_method_ast_id,
@@ -663,6 +651,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
 
+        // The module that declares this method: the scope its own defaults —
+        // parameter values and type-parameter defaults alike — resolve in,
+        // since a default may name a type the call site cannot (WEP
+        // 2026-04-11). The chain `method_module_source` takes below, without
+        // its inherited-owner steps.
+        let callee_module = trait_impl_module_source
+            .clone()
+            .or_else(|| inherent_impl_module.clone())
+            .unwrap_or_else(|| struct_module.clone());
+
         // Pad missing trailing args with declared parameter defaults.
         // Earlier-parameter references inside a default (e.g. `fn f(w, h = w)`)
         // are handled by substituting the caller's arg ASTs for those parameter
@@ -676,19 +674,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     subs.insert(name.clone(), arg_ast.clone());
                 }
             }
-            for i in args.len()..expected_param_types.len() {
-                let Some(Some(default_ast)) = param_defaults.get(i) else {
-                    break;
-                };
-                let expected_type = expected_param_types[i];
-                let mut default_expr = default_ast.clone();
-                default_expr.substitute_idents(&subs);
-                let resolved = self.resolve_expr(&default_expr, ctx, Some(expected_type));
-                args.push(placeholder(resolved, default_expr.span()));
-                if let Some(name) = param_names.get(i) {
-                    subs.insert(name.clone(), default_expr);
+            self.with_default_scope_module(Some(callee_module.clone()), |s| {
+                for i in args.len()..expected_param_types.len() {
+                    let Some(Some(default_ast)) = param_defaults.get(i) else {
+                        break;
+                    };
+                    let expected_type = expected_param_types[i];
+                    let mut default_expr = default_ast.clone();
+                    default_expr.substitute_idents(&subs);
+                    let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
+                    args.push(placeholder(resolved, default_expr.span()));
+                    if let Some(name) = param_names.get(i) {
+                        subs.insert(name.clone(), default_expr);
+                    }
                 }
-            }
+            });
         }
 
         // Pin a deferred hole that rode a prior binding into an argument
@@ -719,7 +719,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Address-taken tracking for an implicit `&mut self` borrow on a
         // primitive local receiver is owned by reify (`reify.rs` method-call
         // arm marks `address_taken_locals` on the TIR it emits); the combined
-        // walk no longer computes it now that `resolve_ident` returns a
+        // walk does not compute it, since `resolve_ident` returns a
         // placeholder.
 
         if self_kind == ast::SelfKind::MutRef && !is_ref_impl {
@@ -747,6 +747,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
                 trait_name: trait_name.as_deref(),
+                declaring_module: Some(callee_module),
                 span,
             });
             if type_args.is_empty() {
@@ -1066,7 +1067,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info: Some(method_info),
         };
 
-        // Stage 4 of WEP 2026-05-26: record the dispatch decision so the
+        // WEP 2026-05-26: record the dispatch decision so the
         // future `reify` pass can emit the same method-call TIR without
         // re-running trait lookup / method-name mangling. Skipped when:
         //  - `call_id == None` (synthetic call: for-of's `.into_iter()`
@@ -1635,7 +1636,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return TypeTable::ERROR;
                     }
 
-                    // Stage 7-B: reify rebuilds the `VariantConstruct` from
+                    // Reify rebuilds the `VariantConstruct` from
                     // the AST + variant info; the combined walk projects only
                     // the result type.
                     return target_type_id;
@@ -1752,7 +1753,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
 
-                    // Stage 7-B: reify rebuilds the `VariantConstruct` from
+                    // Reify rebuilds the `VariantConstruct` from
                     // the AST + variant info; the combined walk projects only
                     // the result type. The payload was already resolved (and
                     // typechecked) above for its fact-recording side effects.
@@ -1796,7 +1797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .get_newtype_base(target_type_id);
             let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
             if base_of_target == Some(arg_type) || base_of_arg == Some(target_type_id) {
-                // Stage 7-B: reify rebuilds the newtype `Cast`; the combined
+                // Reify rebuilds the newtype `Cast`; the combined
                 // walk projects only the result type.
                 return target_type_id;
             }
@@ -2147,7 +2148,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info: Some(method_info),
         };
 
-        // Stage 5 (WEP 2026-05-26): record the resolved static-method
+        // WEP 2026-05-26: record the resolved static-method
         // call so reify reproduces the same `FunctionRef` (mangled name,
         // monomorph info, and `cm_name` for CM binding synthesis) without
         // re-resolving the target type — reify's from-scratch resolution
@@ -2168,7 +2169,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        // Stage 7-B: reify rebuilds the static-method `Call` TIR from the
+        // Reify rebuilds the static-method `Call` TIR from the
         // recorded `static_method_dispatch` + resolved args; the combined
         // walk projects only the result type. `args` was resolved above for
         // its fact-recording side effects.
@@ -2704,26 +2705,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Vec::new()
     }
 
-    /// Impl blocks on `struct_name`, current-module-first. `all_impl_index` is
-    /// already in global order, so the partition needs no per-call sort.
-    fn impl_blocks_for_type<'b>(&'b self, type_key: &ImplTargetKey) -> Vec<&'b ast::ImplBlock> {
-        let Some(keys) = self.tysys.trait_env.all_impl_index.get(type_key) else {
+    /// Keys of the *trait* impl blocks whose target head is written
+    /// `struct_name`, current-module-first.
+    ///
+    /// A written name reaches two receiver namespaces. It usually names a
+    /// declaration, but an impl that bound it as its own type parameter
+    /// (`impl<V: Bound> Trait for V`) keys under that parameter's *binder*,
+    /// which no declaration lookup can reach. Both are searched inside the
+    /// current module, where a bare name may mean either; outside it only the
+    /// declaration namespace is, since a foreign impl's type parameter is not
+    /// this name. Consumers re-check the impl's own spelling, so the widening
+    /// cannot over-match.
+    fn trait_impl_keys_current_first(&self, struct_name: &str) -> Vec<(ModuleSource, AstId)> {
+        let env = &self.tysys.trait_env;
+        let declared = env.entries_by_receiver_vec(&self.impl_target(struct_name).receiver());
+        let binder = env.entries_by_receiver_vec(&Receiver::Type(FqTypeName::binder(struct_name)));
+        let is_current =
+            |(module, _): &&(ModuleSource, AstId)| *module == self.current_module_source;
+        let mut keys: Vec<(ModuleSource, AstId)> = declared
+            .iter()
+            .chain(binder.iter())
+            .filter(is_current)
+            .cloned()
+            .collect();
+        keys.extend(declared.iter().filter(|k| !is_current(k)).cloned());
+        keys
+    }
+
+    /// Canonical signatures of the methods named `method_name` declared on
+    /// `type_key`, current-module-first. `all_impl_index` is already in global
+    /// order, so the partition needs no per-call sort.
+    fn impl_method_sigs<'b>(
+        &'b self,
+        type_key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Vec<&'b super::sig::MethodSig> {
+        let env = &self.tysys.trait_env;
+        let Some(keys) = env.all_impl_index.get(type_key) else {
             return Vec::new();
         };
-        let mut current: Vec<&ast::ImplBlock> = Vec::new();
-        let mut others: Vec<&ast::ImplBlock> = Vec::new();
+        let mut current: Vec<&super::sig::MethodSig> = Vec::new();
+        let mut others: Vec<&super::sig::MethodSig> = Vec::new();
         for key in keys {
-            let Some(Item::Impl(impl_block)) = self
-                .loaded_modules
-                .get(&key.0)
-                .and_then(|m| m.item_by_id(key.1))
-            else {
-                continue;
-            };
-            if key.0 == self.current_module_source {
-                current.push(impl_block);
-            } else {
-                others.push(impl_block);
+            let header = &env.impl_headers[key];
+            for method in header.methods.iter().filter(|m| m.name == method_name) {
+                let sig = self
+                    .tysys
+                    .signatures
+                    .method_sig(method.ast_id)
+                    .expect("the decl pass records every impl-declared method's signature");
+                if key.0 == self.current_module_source {
+                    current.push(sig);
+                } else {
+                    others.push(sig);
+                }
             }
         }
         current.extend(others);
@@ -2733,19 +2768,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Look up whether each non-self parameter of an instance method is `mut`.
     /// Returns empty vec (conservative) for unknown methods.
     fn lookup_method_param_is_mut(&self, type_key: &ImplTargetKey, method_name: &str) -> Vec<bool> {
-        for impl_block in self.impl_blocks_for_type(type_key) {
-            for method in &impl_block.methods {
-                if method.name == method_name {
-                    return method
-                        .params
-                        .iter()
-                        .filter(|p| p.self_kind == ast::SelfKind::None)
-                        .map(|p| p.is_mut)
-                        .collect();
-                }
-            }
-        }
-        Vec::new()
+        self.impl_method_sigs(type_key, method_name)
+            .first()
+            .map(|sig| super::sig::Param::is_mut_flags(&sig.params))
+            .unwrap_or_default()
     }
 
     /// Look up whether each parameter of a static method is `mut`.
@@ -2756,18 +2782,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> Vec<bool> {
         let type_target = self.impl_target(struct_name);
-        for impl_block in self.impl_blocks_for_type(&type_target) {
-            for method in &impl_block.methods {
-                let has_self = method
-                    .params
-                    .iter()
-                    .any(|p| p.self_kind != ast::SelfKind::None);
-                if method.name == method_name && !has_self {
-                    return method.params.iter().map(|p| p.is_mut).collect();
-                }
-            }
-        }
-        Vec::new()
+        self.impl_method_sigs(&type_target, method_name)
+            .into_iter()
+            .find(|sig| sig.self_kind == ast::SelfKind::None)
+            .map(|sig| super::sig::Param::is_mut_flags(&sig.params))
+            .unwrap_or_default()
     }
 
     /// Find the trait name for a static method on a struct, if the method belongs to a trait impl.
@@ -2998,7 +3017,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::locate_static_method_impl`]'s early-return traversal, because
     /// its consumers need the full candidate list.
     pub(super) fn conversion_impl_survey(
-        &mut self,
+        &self,
         struct_name: &str,
         method_name: &str,
     ) -> (Vec<ConversionCandidate>, bool) {
@@ -3008,87 +3027,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .compiler_trait_name(crate::compiler_item::CompilerItem::From)
             .to_string();
-        let mut gathered: Vec<(ast::Type, ModuleSource, String)> = Vec::new();
-        let mut seen_spellings: Vec<String> = Vec::new();
+        let mut candidates: Vec<ConversionCandidate> = Vec::new();
         let mut has_blanket = false;
-        {
-            let mut collect = |s: &Self, impl_block: &ast::ImplBlock, module: &ModuleSource| {
-                let Some(trait_type) = impl_block.trait_type.as_ref() else {
-                    return;
-                };
-                let base = Self::get_type_name_static(trait_type);
-                if Self::get_type_name_static(&impl_block.ty) != struct_name
-                    || (base != from_trait_name && base != "TryFrom")
-                    || !impl_block.methods.iter().any(|m| m.name == method_name)
-                {
-                    return;
-                }
-                if let ast::Type::Generic(g) = trait_type
-                    && let Some(arg) = g.args.first()
-                {
-                    // A source mentioning one of the impl's type parameters is
-                    // a blanket: it accepts (a family of) everything, its
-                    // presence means the trait-less path can resolve the call
-                    // through the blanket resolver, and it is never an
-                    // unmatched alternative worth listing.
-                    if ast_type_mentions_param(arg, &impl_block.type_params) {
-                        has_blanket = true;
-                        return;
-                    }
-                    // Full spelling with the head un-aliased, so the
-                    // alternatives read `List<i32>`, not a bare `List`.
-                    let head = Self::get_type_name_static(arg);
-                    let head = s.import_original_name(&head, module);
-                    let mut rendered = String::new();
-                    crate::unparse::unparse_type_into(arg, &mut rendered);
-                    let resolved = match rendered.split_once('<') {
-                        Some((_, args)) => format!("{head}<{args}"),
-                        None => head,
-                    };
-                    // The current module's impls are in the impl index too, so
-                    // the two passes below see each of them twice. Coherence
-                    // forbids two impls of one conversion, so a repeat is
-                    // always the same impl seen again.
-                    if !seen_spellings.contains(&resolved) {
-                        seen_spellings.push(resolved.clone());
-                        gathered.push((arg.clone(), module.clone(), resolved));
-                    }
-                }
+        for (module, impl_id) in self.trait_impl_keys_current_first(struct_name) {
+            let header = &self.tysys.trait_env.impl_headers[&(module.clone(), impl_id)];
+            let Some(trait_type) = header.trait_type.as_ref() else {
+                continue;
             };
-
-            for item in self.current_module_items {
-                if let Item::Impl(impl_block) = item {
-                    collect(self, impl_block, &self.current_module_source);
-                }
-            }
-            if let Some(entries) = self
-                .tysys
-                .trait_env
-                .impl_index
-                .get(&self.impl_target(struct_name))
+            let base = Self::get_type_name_static(trait_type);
+            if Self::get_type_name_static(&header.ty) != struct_name
+                || (base != from_trait_name && base != "TryFrom")
+                || !header.methods.iter().any(|m| m.name == method_name)
             {
-                for (module_source, item_id) in entries {
-                    if let Some(module) = self.loaded_modules.get(module_source)
-                        && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
-                    {
-                        collect(self, impl_block, module_source);
-                    }
-                }
+                continue;
             }
+            let ast::Type::Generic(g) = trait_type else {
+                continue;
+            };
+            let Some(arg) = g.args.first() else {
+                continue;
+            };
+            // A source mentioning one of the impl's type parameters is a
+            // blanket: it accepts (a family of) everything, its presence means
+            // the trait-less path can resolve the call through the blanket
+            // resolver, and it is never an unmatched alternative worth listing.
+            if ast_type_mentions_param(arg, &header.type_params) {
+                has_blanket = true;
+                continue;
+            }
+            // Full spelling with the head un-aliased, so the alternatives read
+            // `List<i32>`, not a bare `List`.
+            let head = Self::get_type_name_static(arg);
+            let head = self.import_original_name(&head, &module);
+            let mut rendered = String::new();
+            crate::unparse::unparse_type_into(arg, &mut rendered);
+            let spelling = match rendered.split_once('<') {
+                Some((_, args)) => format!("{head}<{args}"),
+                None => head,
+            };
+            if candidates.iter().any(|c| c.spelling == spelling) {
+                continue;
+            }
+            // The source type as the impl's own frame resolved it, so a
+            // private or aliased name means what the impl wrote.
+            let source = *self
+                .tysys
+                .signatures
+                .impl_sig(impl_id)
+                .expect("the decl pass records every impl block's declaration facts")
+                .trait_type_args
+                .first()
+                .expect("the trait reference is generic, so its arguments were resolved");
+            candidates.push(ConversionCandidate { spelling, source });
         }
-
-        // Resolve each source in its impl's frame, so a private or aliased
-        // name means what the impl wrote. Recording is suppressed: these are
-        // (possibly foreign) declaration nodes, not uses at this call site.
-        let candidates = gathered
-            .into_iter()
-            .map(|(arg, module, spelling)| {
-                let source = self.with_reference_recording_suppressed(|s| {
-                    s.with_module_perspective_for(&module, |s2| s2.resolve_type(&arg))
-                });
-                ConversionCandidate { spelling, source }
-            })
-            .collect();
         (candidates, has_blanket)
     }
 
@@ -3206,6 +3197,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // there — the identity of what this selection picked, so a caller
         // recording a use→def edge names the impl the argument chose rather
         // than the receiver's first same-named method.
+<<<<<<< HEAD
         let check_impl =
             |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<(String, AstId)> {
                 let trait_type = impl_block.trait_type.as_ref()?;
@@ -3245,37 +3237,97 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Item::Impl(impl_block) = item
                 && let Some((trait_name, method_id)) =
                     check_impl(impl_block, &self.current_module_source)
+||||||| 85d9e6045
+        let check_impl =
+            |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<(String, AstId)> {
+                let trait_type = impl_block.trait_type.as_ref()?;
+                if Self::get_type_name_static(&impl_block.ty) != struct_name
+                    || !matches_arg_type(trait_type, impl_module, &impl_block.type_params)
+                {
+                    return None;
+                }
+                for method in &impl_block.methods {
+                    let has_self = method
+                        .params
+                        .iter()
+                        .any(|p| p.self_kind != ast::SelfKind::None);
+                    if method.name == method_name && !has_self {
+                        return Some((resolve_trait_name(trait_type), method.id));
+                    }
+                }
+                // Fall back to the trait declaration's default methods: when
+                // `impl Trait for Type` does not override a defaulted static
+                // method, the trait still provides the body, so `Type::method`
+                // (called concretely, not via a generic bound) must resolve to
+                // the trait's default. This mirrors how generic dispatch
+                // (`T::method()`) already finds default methods in
+                // `find_method_type_param_names`.
+                let trait_name_base = Self::get_type_name_static(trait_type);
+                if let Some(method) = self
+                    .trait_sig_by_name(&trait_name_base)
+                    .and_then(|sig| sig.method(method_name))
+                    && method.default_body.is_some()
+                    && method.sig.self_kind == ast::SelfKind::None
+                {
+                    return Some((resolve_trait_name(trait_type), method.sig.ast_id));
+                }
+                None
+            };
+
+        for item in self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some((trait_name, method_id)) =
+                    check_impl(impl_block, &self.current_module_source)
+=======
+        let check_impl = |header: &super::trait_env::ImplHeader,
+                          impl_module: &ModuleSource|
+         -> Option<(String, AstId)> {
+            let trait_type = header.trait_type.as_ref()?;
+            if Self::get_type_name_static(&header.ty) != struct_name
+                || !matches_arg_type(trait_type, impl_module, &header.type_params)
+>>>>>>> origin/main
             {
+                return None;
+            }
+            for method in header.methods.iter().filter(|m| m.name == method_name) {
+                let sig = self
+                    .tysys
+                    .signatures
+                    .method_sig(method.ast_id)
+                    .expect("the decl pass records every impl-declared method's signature");
+                if sig.self_kind == ast::SelfKind::None {
+                    return Some((resolve_trait_name(trait_type), method.ast_id));
+                }
+            }
+            // Fall back to the trait declaration's default methods: when
+            // `impl Trait for Type` does not override a defaulted static
+            // method, the trait still provides the body, so `Type::method`
+            // (called concretely, not via a generic bound) must resolve to
+            // the trait's default. This mirrors how generic dispatch
+            // (`T::method()`) already finds default methods in
+            // `find_method_type_param_names`.
+            let trait_name_base = Self::get_type_name_static(trait_type);
+            if let Some(method) = self
+                .trait_sig_by_name(&trait_name_base)
+                .and_then(|sig| sig.method(method_name))
+                && method.default_body.is_some()
+                && method.sig.self_kind == ast::SelfKind::None
+            {
+                return Some((resolve_trait_name(trait_type), method.sig.ast_id));
+            }
+            None
+        };
+
+        for (module_source, impl_id) in self.trait_impl_keys_current_first(struct_name) {
+            let header = &self.tysys.trait_env.impl_headers[&(module_source.clone(), impl_id)];
+            if let Some((trait_name, method_id)) = check_impl(header, &module_source) {
                 return Some(StaticMethodRef::new(
-                    self.current_module_source.clone(),
+                    module_source,
                     struct_name,
                     method_name,
                     Some(trait_name),
                     Some(method_id),
                 ));
-            }
-        }
-
-        // Use trait_env.impl_index for O(1) lookup instead of scanning all modules
-        if let Some(entries) = self
-            .tysys
-            .trait_env
-            .impl_index
-            .get(&self.impl_target(struct_name))
-        {
-            for (module_source, item_id) in entries {
-                if let Some(module) = self.loaded_modules.get(module_source)
-                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
-                    && let Some((trait_name, method_id)) = check_impl(impl_block, module_source)
-                {
-                    return Some(StaticMethodRef::new(
-                        module_source.clone(),
-                        struct_name,
-                        method_name,
-                        Some(trait_name),
-                        Some(method_id),
-                    ));
-                }
             }
         }
 
@@ -3609,11 +3661,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }),
         };
 
-        // Stage 7-B: record the static-method dispatch decision (formerly
-        // recovered by the caller from the built `Call` TIR) so reify can
-        // reproduce the same `Call` shape without re-running impl lookup,
-        // mangled-name construction, or monomorph-info shaping. The per-arg
-        // `is_mut` flags match what the old `CallArg`s carried.
+        // Record the static-method dispatch decision so reify can reproduce
+        // the same `Call` shape without re-running impl lookup, mangled-name
+        // construction, or monomorph-info shaping.
         let param_is_mut: Vec<bool> = args
             .iter()
             .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))

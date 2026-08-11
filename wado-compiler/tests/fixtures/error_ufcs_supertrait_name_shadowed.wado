@@ -1,0 +1,19 @@
+// The implied `Base` is the imported module's; the local `Base` is another
+// declaration, so the qualified call must not resolve.
+use { Derived, S } from "./sub/ufcs_supertrait_frame_dep.wado";
+
+trait Base {
+    fn extra(&self) -> i32;
+}
+
+fn shadowed<T: Derived>(x: &T) -> i32 {
+    return Base::extra(x);
+}
+
+test "a local trait sharing a supertrait's name does not answer" {
+    let s = S { v: 3 };
+    assert shadowed(&s) == 3;
+}
+
+__DATA__
+{"test": {}, "compile_error": "no method 'extra' found on type 'T'"}

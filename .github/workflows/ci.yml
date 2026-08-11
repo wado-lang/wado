@@ -188,52 +188,6 @@ jobs:
       # component) without pushing, so no wkg or credentials are needed.
       - run: cargo run --locked -p wado-cli -- publish --dry-run
 
-  test-gale-o1:
-    name: Test (Gale O1)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ci
-          save-if: false
-      - uses: jdx/mise-action@v4.2.3
-        with:
-          cache: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          MISE_VERBOSE: ${{ runner.debug }}
-
-      - run: mise run test-gale-o1
-
-  test-gale-o2:
-    name: Test (Gale O2)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ci
-          save-if: false
-      - uses: jdx/mise-action@v4.2.3
-        with:
-          cache: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          MISE_VERBOSE: ${{ runner.debug }}
-
-      - run: mise run test-gale-o2
-
   test-gale-o3:
     name: Test (Gale O3)
     needs: changes
@@ -299,8 +253,6 @@ jobs:
         changes,
         test-core,
         test-wado,
-        test-gale-o1,
-        test-gale-o2,
         test-gale-o3,
         test-e2e-o0,
         test-e2e-o1,
@@ -326,7 +278,7 @@ jobs:
             echo "Docs-only change: test jobs skipped, reporting success."
             exit 0
           fi
-          results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-gale-o1.result }} ${{ needs.test-gale-o2.result }} ${{ needs.test-gale-o3.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o1.result }} ${{ needs.test-e2e-o2.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check.result }}"
+          results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-gale-o3.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o1.result }} ${{ needs.test-e2e-o2.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check.result }}"
           for result in $results; do
             if [ "$result" != "success" ]; then
               echo "One or more jobs failed"

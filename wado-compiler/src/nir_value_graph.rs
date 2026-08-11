@@ -10,7 +10,7 @@
 //! Consumed by [`crate::nir_engine::Engine::value`] (which lazily builds the
 //! per-function graph via [`builder::build`]) and through that by the CSE
 //! and store-load-forward rules. See
-//! `docs/wep-2026-06-05-worklist-rewrite-engine.md`.
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 
 pub mod builder;
 
@@ -680,6 +680,40 @@ impl ValuePool {
         self.set_type(v, ty);
         self.canonical_locals.insert(idx, v);
         v
+    }
+
+    /// Whether the value tree at `v` reads any local (an `Opaque(Local)` leaf).
+    /// One that names none is context-free — it denotes the same thing at every
+    /// program point.
+    ///
+    /// Answers without materialising the leaf set: the engine asks this of
+    /// every operand it writes, and nearly all of them are constant leaves,
+    /// where the question is one `match` and no allocation.
+    pub fn names_a_local(&self, v: ValueId) -> bool {
+        if self.child_count(v) == 0 {
+            return self.is_local_opaque(v);
+        }
+        let mut seen = IndexSet::default();
+        let mut stack = vec![v];
+        while let Some(v) = stack.pop() {
+            if !seen.insert(v) {
+                continue;
+            }
+            if matches!(self.kind(v), ValueKind::Opaque(_)) {
+                if self.is_local_opaque(v) {
+                    return true;
+                }
+                continue;
+            }
+            self.push_value_children(v, &mut stack);
+        }
+        false
+    }
+
+    /// Whether `v` is itself an `Opaque` sourced from a local.
+    fn is_local_opaque(&self, v: ValueId) -> bool {
+        matches!(self.kind(v), ValueKind::Opaque(oid)
+            if matches!(self.opaque_source(*oid), Some(OpaqueSource::Local(_))))
     }
 
     /// Collect into `out` every local index named by an `Opaque(Local)`

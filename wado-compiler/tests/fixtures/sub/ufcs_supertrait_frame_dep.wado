@@ -1,0 +1,25 @@
+// A subtrait beside its supertrait. Importers may know `Base` under another
+// name, or none.
+pub trait Base {
+    fn extra(&self) -> i32;
+}
+
+pub trait Derived: Base {
+    fn tag(&self) -> i32;
+}
+
+pub struct S {
+    pub v: i32,
+}
+
+impl Base for S {
+    fn extra(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Derived for S {
+    fn tag(&self) -> i32 {
+        return self.v * 2;
+    }
+}

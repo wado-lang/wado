@@ -3,15 +3,11 @@
 # Schema: https://mise.jdx.dev/schema/mise.json
 
 [tools]
-# Rust toolchain - mise respects rust-toolchain.toml automatically
-
-# Markdown formatting is provided by `wado-dev-tools format-md`, which
-# embeds the dprint markdown plugin as a Cargo dependency. No external
-# dprint CLI is required.
-
-# Node.js - required for VS Code extension development and the jco runtime.
+# Rust is absent because mise reads rust-toolchain.toml; dprint because
+# `wado-dev-tools format-md` embeds the markdown plugin as a Cargo dependency.
+#
 # Node 26 (V8 14.6) ships stable JSPI, so `WebAssembly.Suspending` works without
-# `--experimental-wasm-jspi` (which Node 26 no longer accepts).
+# `--experimental-wasm-jspi`, which Node 26 no longer accepts.
 node = "26"
 
 [settings]
@@ -35,14 +31,12 @@ mise run warm-cache
 description = "Reconstruct target/ from the restored sccache cache"
 run = """
 #!/usr/bin/env bash
-# Turns the restored sccache cache (see .claude/hooks/cargo-cache-restore.mts)
-# into a warm target/. sccache is used ONLY here, because its cache key depends
-# on the CARGO_* set normalized below — a plain `cargo build` in this container
-# has a different set and would only add misses.
+# Turns the restored sccache cache (.claude/hooks/cargo-cache-restore.mts) into
+# a warm target/. sccache is used ONLY here: its key depends on the CARGO_* set
+# normalized below, which a plain `cargo build` here does not reproduce.
 set -e -o pipefail
 export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cargo/sccache}"
-# Match the ceiling cargo-cache.yml publishes under, so a cache that outgrows
-# sccache's 10 GiB default is not LRU-trimmed after we restore it.
+# cargo-cache.yml's ceiling; the 10 GiB default would LRU-trim what we restored.
 export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-30G}"
 if ! command -v sccache >/dev/null 2>&1; then
   echo "sccache not installed; skipping warm-cache (normal cold build applies)"
@@ -79,24 +73,19 @@ if [ ! -d "$SCCACHE_DIR" ] || [ -z "$(ls -A "$SCCACHE_DIR" 2>/dev/null)" ]; then
   echo "no sccache cache at $SCCACHE_DIR; skipping warm-cache (already warmed, or none published)"
   exit 0
 fi
-# Reconstruct dependency artifacts from the content-addressed cache. sccache
-# hashes every CARGO_* env var into the Rust cache key, so expose exactly the
-# CARGO_* set the cargo-cache.yml runner used — this container otherwise leaks
-# CARGO_HTTP_CAINFO and drops the runner's three.
+# sccache hashes every CARGO_* env var into the key, so expose exactly the set
+# cargo-cache.yml used — this container otherwise leaks CARGO_HTTP_CAINFO.
 unset $(compgen -e | grep '^CARGO_' || true)
 warm() {
   env CARGO_HOME="$HOME/.cargo" CARGO_TARGET_DIR="$PWD/target" CARGO_INCREMENTAL=0 \
     RUSTC_WRAPPER=sccache "$@"
 }
-# Disjoint artifact sets that cargo derives neither from the other: `check`
-# emits .rmeta, `build` .rlib and the linked binaries. Keep in step with
-# cargo-cache.yml, which publishes entries for both.
+# Disjoint artifact sets, neither derived from the other: `check` emits .rmeta,
+# `build` .rlib and the binaries. cargo-cache.yml publishes entries for both.
 warm cargo check --workspace --locked
 warm cargo build --workspace --locked --all-targets
-# The dev loop also runs with CARGO_INCREMENTAL=0 (see AGENTS.md), so a later
-# plain `cargo build` reuses these directly.
 
-# Every cache-key input is pinned in two places at once, so drift is otherwise
+# Cache-key inputs are pinned in two places at once, so drift is otherwise
 # invisible: warm-cache still exits 0 and just quietly costs a cold build.
 stats=$(sccache --show-stats 2>/dev/null || true)
 echo "${stats}"
@@ -116,9 +105,9 @@ if [ "${total}" -gt 0 ]; then
 fi
 
 # Nothing reads the cache once target/ is warm, so reclaim its gigabytes — but
-# only in the container, where it is a disposable download. Elsewhere
-# $SCCACHE_DIR is the developer's and may back every other project.
-# A later `cargo clean` in the container therefore costs a full cold build.
+# only in the container, where it is a disposable download and a later
+# `cargo clean` is understood to cost a cold build. Elsewhere $SCCACHE_DIR is
+# the developer's and may back every other project.
 if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
   sccache --stop-server >/dev/null 2>&1 || true
   rm -rf "${SCCACHE_DIR}"
@@ -159,18 +148,11 @@ run = """
 #!/usr/bin/env bash
 set -e -o pipefail
 
-# wado pins the wasm-tools family (wasmparser/wasm-encoder/wasmprinter/wit-parser/
-# wat) to the same generation wasmtime depends on, so cargo dedupes instead of
-# compiling parallel 0.x trees. See [workspace.dependencies] in Cargo.toml. This
-# guard fails when a new duplicate sneaks in (e.g. a dep bumped back to a
-# different generation, or `wat` floating up past its tilde pin).
-#
-# A few duplicates are irreducible: they come from transitive deps we do not pin
-# directly. List their exact versions in `allow` so the guard ignores them:
+# The wasm-tools family is pinned to wasmtime's generation in
+# [workspace.dependencies], so cargo dedupes instead of compiling parallel 0.x
+# trees. `allow` holds the duplicates from transitive deps we cannot pin:
 #   wasmparser / wasm-encoder 0.245.1  <- walrus 0.26
 #   wast 35.0.2                        <- witx <- wasmtime-wasi (wiggle)
-# (wit-bindgen's 0.244 generation is pulled by the target-gated `wasip3` guest
-#  crate, never reaches the host tree, and so never shows up in `cargo tree -d`.)
 family='wasm-encoder|wasmparser|wasmprinter|wasm-metadata|wat|wast|wit-parser|wit-component'
 allow='wasmparser v0.245.1|wasm-encoder v0.245.1|wast v35.0.2'
 
@@ -244,9 +226,8 @@ description = "Build the wasmtime CLI from vendor/wasmtime (matches the embedded
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# vendor/wasmtime is a separate workspace tracking upstream dev; its source is
-# not warning-clean, so build it with an empty RUSTFLAGS to ignore any
-# deny-warnings flags inherited from the environment.
+# vendor/wasmtime tracks upstream dev and is not warning-clean, so drop any
+# deny-warnings RUSTFLAGS inherited from the environment.
 RUSTFLAGS= cargo build --release -p wasmtime-cli --manifest-path vendor/wasmtime/Cargo.toml
 """
 
@@ -261,12 +242,8 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 touch wado-compiler/tests/e2e.rs
-# Run the harness with nproc-1 (floor 1) threads. Each e2e test compiles a
-# Wado program and runs it under wasmtime; wasmtime spawns its own worker
-# threads (codegen, epoch ticker, async I/O), so leaving one core free for
-# them avoids contention. The previous fixed cap of 2 was a workaround for
-# SIGSEGV from resource exhaustion on a constrained sandbox; reinstate that
-# cap if it recurs.
+# Leave a core for the threads wasmtime spawns per e2e test (codegen, epoch
+# ticker, async I/O). Drop back to a fixed 2 if a constrained sandbox SIGSEGVs.
 n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
 cargo test -- --test-threads="$threads"
 """
@@ -276,45 +253,14 @@ description = "Run Wado module tests"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# `wado test` walks the repo-root wado.toml and recurses into every
-# nested package. In CI, package-gale runs in its own per-optlevel jobs
-# (test-gale-o1/o2/o3), so we exclude it here to keep this job fast.
-# Locally we include everything so a single `mise run test-wado` covers
-# it all. CI also switches to `--format tap` for its machine-readable
-# per-test output; the default `heartbeat` format is for local/agent use.
-#
-# benchmark/* test blocks use only inline data — the `Preopens`-driven
-# file reads sit in `export fn run()`, which the test world does not
-# invoke — so they need no `--dir` setup of their own.
+# package-gale is excluded in CI only, where test-gale-o3 covers it; locally
+# one run walks every nested package. benchmark/* test blocks need no `--dir`:
+# their file reads sit in `export fn run()`, which the test world never calls.
 extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--exclude 'package-gale/**' --format tap)
 fi
-cargo run -p wado-cli -- test "${extra_args[@]}"
-"""
-
-[tasks.test-gale-o1]
-description = "Run package-gale tests with -O1"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
-extra_args=()
-if [ -n "${CI:-}" ]; then
-    extra_args+=(--format tap)
-fi
-cargo run -p wado-cli -- test -O1 package-gale "${extra_args[@]}"
-"""
-
-[tasks.test-gale-o2]
-description = "Run package-gale tests with -O2"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
-extra_args=()
-if [ -n "${CI:-}" ]; then
-    extra_args+=(--format tap)
-fi
-cargo run -p wado-cli -- test -O2 package-gale "${extra_args[@]}"
+cargo run -p wado-cli -- test -O2 "${extra_args[@]}"
 """
 
 [tasks.test-gale-o3]
@@ -368,10 +314,8 @@ description = "Format all Wado source files"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# Format the whole workspace. Each package's wado.toml [format] section
-# controls its own exclusions (e.g. wado-compiler excludes `tests/**`);
-# generated/ and build/ directories, vendor submodules, and gitignored paths
-# are skipped automatically.
+# Exclusions come from each package's wado.toml [format] (wado-compiler excludes
+# `tests/**`); generated/, build/, submodules and gitignored paths are automatic.
 cargo run --bin wado -- format -w .
 """
 
@@ -393,14 +337,9 @@ depends = ["build-golden-tools"]
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# golden-dump overwrites each golden file in place and, only after every file
-# has been regenerated, prunes the stale ones (no matching fixture). There is
-# no point at which the golden files are all deleted, so `git status` never
-# shows a scary mass deletion mid-run.
 mkdir -p wado-compiler/tests/generated/fixtures
-# A fixture with no __DATA__ section defaults to the test world (matching the
-# e2e harness), so `--default-world test` keeps golden-dump and the harness in
-# agreement.
+# `--default-world test` matches the e2e harness, which reads a fixture with no
+# __DATA__ section as the test world.
 ./target/debug/wado-dev-tools golden-dump \
     --in 'wado-compiler/tests/fixtures/{name}.wado' \
     --emit wir:'wado-compiler/tests/generated/fixtures/{name}.wir.wado' \
@@ -469,12 +408,8 @@ description = "Build the wado-lsp wasm32-wasip1 binary (-Os) into wado-vscode/ou
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# @vscode/wasm-wasi-lsp hosts wasm32-wasip1 modules only; the p2 component
-# target is not yet consumable by the VS Code Wasm host. See
-# docs/wep-2026-04-18-lsp-architecture.md (fallback noted in Prerequisites).
-# Build for size (-Os + LTO, mirroring wado-bundled-libm and the browser
-# playground): the bundled server ships in the VSIX and gains nothing from
-# speed-oriented codegen.
+# @vscode/wasm-wasi-lsp hosts wasm32-wasip1 modules only, not p2 components; see
+# docs/wep-2026-04-18-lsp-architecture.md. Size over speed: it ships in the VSIX.
 CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true \
   cargo build -p wado-lsp --bin wado-lsp --target wasm32-wasip1 --release
 mkdir -p wado-vscode/out
@@ -488,8 +423,7 @@ run = """
 set -xe -o pipefail
 mise run build-wado-lsp-wasm-rust
 
-# Compile the extension TS so wado-vscode/out/extension.js stays in sync —
-# otherwise a Reload Window picks up stale JS that doesn't match the wasm.
+# Without this, a Reload Window picks up JS that no longer matches the wasm.
 ( cd wado-vscode && [ -d node_modules ] || npm install )
 ( cd wado-vscode && npm run compile )
 """
@@ -500,22 +434,16 @@ run = """
 #!/usr/bin/env bash
 set -e -o pipefail
 
-# Make sure node_modules exists before launching tsc -watch.
 ( cd wado-vscode && [ -d node_modules ] || npm install )
 
-# tsc -watch rebuilds wado-vscode/out/extension.js on every TS edit. VS Code
-# does not auto-reload extension code, so you still need
-# "Developer: Reload Window" after a TS change — but extension.js is always
-# in sync once tsc has rebuilt it.
+# A TS change still needs "Developer: Reload Window"; VS Code does not reload
+# extension code on its own.
 ( cd wado-vscode && exec npm run watch ) &
 TSC_PID=$!
 trap 'kill -TERM $TSC_PID 2>/dev/null || true; wait $TSC_PID 2>/dev/null || true' EXIT INT TERM
 
-# cargo watch rebuilds the wasm on every Rust change. The extension's
-# FileSystemWatcher picks the new wasm up and restarts the LSP server,
-# so Rust-only changes do not require a Reload Window. Use the rust-only
-# build task so we don't kick off a redundant `npm run compile` on every
-# Rust edit (the tsc watcher above already keeps extension.js fresh).
+# A Rust change does not: the extension's FileSystemWatcher restarts the server
+# on the new wasm. Rust-only build task, since tsc above already covers the TS.
 cargo watch \\
     -w wado-lsp \\
     -w wado-compiler \\
@@ -573,8 +501,7 @@ description = "Regenerate core:kiln stdlib submodules from WIT file (facade is h
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# Clean the auto-generated submodules; the facade `lib/core/kiln.wado`
-# is hand-written and must be preserved.
+# Submodules only — the facade `lib/core/kiln.wado` is hand-written.
 rm -f wado-compiler/lib/core/kiln/*.wado
 cargo run -p wado-from-idl -- \
     --wit-dir wado-compiler/lib/core/kiln \
@@ -673,8 +600,7 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 cd vendor/jco
-# Apply the Wado patches on top of the pinned upstream checkout (idempotent:
-# skip if they are already applied to the working tree).
+# Idempotent: skip if the patches are already in the working tree.
 if git apply --reverse --check ../../vendor/jco.patch 2>/dev/null; then
   echo "jco.patch already applied"
 else

@@ -146,7 +146,7 @@ The restriction is enforced by the effect system: default expressions must have 
 
 #### Name Resolution: Declaration Scope
 
-A default expression resolves its names in the scope of the declaration (the function's or struct's defining module), not the use site. Call-site expansion inserts the expression, but the names inside it bind exactly as they would at the declaration:
+A default expression resolves its names in the scope of the declaration (the function's, method's or struct's defining module), not the use site. Call-site expansion inserts the expression, but the names inside it bind exactly as they would at the declaration:
 
 - A default may reference the defining module's private items (`port: i32 = DEFAULT_PORT` where `DEFAULT_PORT` is a file-private `global`); callers need no access to them.
 - A default may reference qualified type paths (`mode: Mode = Mode::Fast`); the use site does not need to import `Mode`.
@@ -154,7 +154,9 @@ A default expression resolves its names in the scope of the declaration (the fun
 
 The exceptions are deliberate and syntactic, not scoped lookups: location literals (`#file`/`#line`/`#function`) evaluate at the call site (see the interaction table below), and earlier-parameter references substitute the caller's argument expression (next section).
 
-This mirrors Kotlin/Swift/C#: encapsulation of the declaring module is preserved, and a default behaves identically at every use site. Regression fixtures: `default_field_xmod_variant_case.wado`, `default_arg_xmod_variant_case.wado` (issue #1486), `bug_default_arg_xmod.wado`.
+The same rule governs a **type parameter's** default (`<T = Priv>`): it names a type in the declaring module's scope, which the use site may not be able to name at all.
+
+This mirrors Kotlin/Swift/C#: encapsulation of the declaring module is preserved, and a default behaves identically at every use site. Regression fixtures: `default_field_xmod_variant_case.wado`, `default_arg_xmod_variant_case.wado` (issue #1486), `bug_default_arg_xmod.wado`, `default_arg_xmod_private_type.wado` (free function and method, value default and type-parameter default).
 
 Default expressions may reference earlier parameters in the same function:
 

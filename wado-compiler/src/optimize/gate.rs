@@ -1,5 +1,5 @@
 //! Per-function identity and dirty-set gating for the optimizer fixed-point
-//! loop (WEP Phase 6).
+//! loop (WEP: NIR Optimizer Architecture).
 //!
 //! The loop runs every pass over every function each iteration, even though
 //! after the first few rounds only a handful of functions still change. This

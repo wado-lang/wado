@@ -1,7 +1,7 @@
 //! [`ModuleBindings`] — `use → def` edges and locally defined symbols.
 //!
-//! Populated by the body walk (Stage 3 of
-//! [`wep-2026-05-26-elaborator-rearchitecture.md`]) — every call site that
+//! Populated by the body walk
+//! ([`wep-2026-05-26-elaborator-rearchitecture.md`]) — every call site that
 //! resolves an identifier to its defining symbol writes here, and every
 //! site that introduces a user-visible local binding registers it here.
 //!
@@ -32,7 +32,7 @@ use crate::symbol::Symbol;
 ///
 /// Keys are bare [`AstId`]s — globally unique, so an edge recorded while a
 /// walk visits foreign AST (e.g. under
-/// [`super::super::Elaborator::with_module_perspective`]) still names its node
+/// [`super::super::Elaborator::with_module_perspective_for`]) still names its node
 /// exactly, whichever module's `ModuleBindings` it lands in; the sole consumer
 /// ([`crate::semantics::semantics_with_logger`]) flattens them into single
 /// `Semantics` maps. Def-side values are bare `AstId`s too; navigation

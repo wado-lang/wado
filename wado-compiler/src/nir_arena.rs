@@ -11,9 +11,9 @@
 //! rewrite [`crate::nir_engine::Engine`] that consumes this arena, not on
 //! `Body` itself (so they don't burden every body). `lower::translate` builds
 //! the arena directly — there is no tree representation to convert from. See
-//! `docs/wep-2026-06-05-nir-skeleton-arena.md`.
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 
-use cranelift_entity::{PrimaryMap, entity_impl};
+use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBinaryOp, NirLocal, NirUnaryOp};
@@ -22,7 +22,7 @@ use crate::tir::TypeId;
 use crate::token::Span;
 
 /// An operand position in the skeleton — an expression's value, after operand
-/// promotion (WEP: The Live `ValueGraph`). It is either a pure value living in the
+/// promotion. It is either a pure value living in the
 /// function's [`ValuePool`] (literals, `Binary`, pure `Unary`, `Cast`, and the
 /// `Local` / `FieldAccess` reads the graph resolves to a value), or an effectful
 /// / control subtree kept in the skeleton (`Call`, allocation literals,
@@ -81,7 +81,7 @@ pub struct PatId(u32);
 entity_impl!(PatId, "pat");
 
 /// A uniform handle to any arena node, used by the rewrite engine's worklist
-/// and parent map. See `docs/wep-2026-06-05-nir-rewrite-engine-design.md`.
+/// and parent map. See `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum NodeRef {
     Expr(ExprId),
@@ -487,14 +487,14 @@ pub struct Body {
     pub address_taken_locals: IndexSet<u32>,
     pub stores_aliased_locals: IndexSet<u32>,
     /// The function's pure-value graph — the source of truth for every
-    /// [`Operand::Value`] in the skeleton (WEP: The Live `ValueGraph`). Built once
+    /// [`Operand::Value`] in the skeleton. Built once
     /// by `lower::translate` and maintained in place by the optimizer's edits;
     /// never re-derived from the skeleton. Empty on a body built before operand
     /// promotion populates it.
     pub values: ValuePool,
     /// The per-function value graph (`value_of` + `loop_entry_values`), persisted
     /// here so it survives across optimizer passes instead of living as a
-    /// per-`Engine`-session cache (WEP: The Live `ValueGraph`, build-once). `None`
+    /// per-`Engine`-session cache (build-once). `None`
     /// until the first value query builds it.
     pub value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
 }
@@ -714,90 +714,6 @@ impl Body {
             type_id: node.type_id,
             span: node.span,
         })
-    }
-
-    /// Map every operand slot of a single expression node. A scoped rewrite
-    /// (e.g. a loop subtree) collects the node ids and calls this on each.
-    pub fn map_expr_operands(&mut self, id: ExprId, f: &mut impl FnMut(Operand) -> Operand) {
-        match &mut self.exprs[id].kind {
-            ExprKind::GlobalVarSet { value, .. } => *value = f(*value),
-            ExprKind::Binary { left, right, .. } => {
-                *left = f(*left);
-                *right = f(*right);
-            }
-            ExprKind::Unary { expr, .. }
-            | ExprKind::Cast { expr, .. }
-            | ExprKind::FieldAccess { expr, .. }
-            | ExprKind::VariantTag { expr }
-            | ExprKind::VariantTest { expr, .. }
-            | ExprKind::VariantPayload { expr, .. } => *expr = f(*expr),
-            ExprKind::Assign { value, .. } => *value = f(*value),
-            ExprKind::Index { expr, index } => {
-                *expr = f(*expr);
-                *index = f(*index);
-            }
-            ExprKind::Call { args, .. } => {
-                for a in args {
-                    a.expr = f(a.expr);
-                }
-            }
-            ExprKind::CmRawCall { args, .. } => {
-                for a in args {
-                    *a = f(*a);
-                }
-            }
-            ExprKind::If { condition, .. } => *condition = f(*condition),
-            ExprKind::Match { expr, arms } => {
-                *expr = f(*expr);
-                for arm in arms {
-                    if let Some(g) = arm.guard {
-                        arm.guard = Some(f(g));
-                    }
-                    arm.body = f(arm.body);
-                }
-            }
-            ExprKind::StructLiteral { fields, .. } => {
-                for fld in fields {
-                    fld.value = f(fld.value);
-                }
-            }
-            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-                for el in elements {
-                    *el = f(*el);
-                }
-            }
-            ExprKind::IndirectCall { callee, args } => {
-                *callee = f(*callee);
-                for a in args {
-                    *a = f(*a);
-                }
-            }
-            ExprKind::ClosureToCanonical { functor, .. } => *functor = f(*functor),
-            ExprKind::VariantConstruct { payload, .. } => {
-                if let Some(p) = payload {
-                    *payload = Some(f(*p));
-                }
-            }
-            ExprKind::Switch { scrutinee, .. } => *scrutinee = f(*scrutinee),
-            _ => {}
-        }
-    }
-
-    /// Map every operand slot of a single statement node, the statement
-    /// counterpart of [`Body::map_expr_operands`].
-    pub fn map_stmt_operands(&mut self, id: StmtId, f: &mut impl FnMut(Operand) -> Operand) {
-        match &mut self.stmts[id].kind {
-            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-                *value = f(*value);
-            }
-            StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-                if let Some(v) = value {
-                    *value = Some(f(*v));
-                }
-            }
-            StmtKind::If { condition, .. } => *condition = f(*condition),
-            _ => {}
-        }
     }
 
     /// Take a node's content, leaving the slot `Dead` so every id pointing at it
@@ -1158,6 +1074,107 @@ impl Body {
             }
             self.for_each_child(node, |c| stack.push(c));
         }
+    }
+
+    /// Invoke `f` on every node reachable from [`Body::root`], parents before
+    /// children. The arena never compacts, so this walk is what distinguishes
+    /// live from orphaned.
+    ///
+    /// A body still under construction has no root block; there every arena
+    /// slot counts as live, since nothing has been spliced into a tree yet.
+    pub fn for_each_reachable_node(&self, mut f: impl FnMut(NodeRef)) {
+        if self.blocks.is_empty() {
+            for (e, _) in &self.exprs {
+                f(NodeRef::Expr(e));
+            }
+            for (s, _) in &self.stmts {
+                f(NodeRef::Stmt(s));
+            }
+            for (p, _) in &self.pats {
+                f(NodeRef::Pat(p));
+            }
+            return;
+        }
+        let mut stack = vec![NodeRef::Block(self.root)];
+        while let Some(node) = stack.pop() {
+            f(node);
+            self.for_each_child(node, |c| stack.push(c));
+        }
+    }
+
+    /// The distinct promoted values the reachable skeleton carries, and how many
+    /// operand slots hold each. The one node walk behind both censuses below,
+    /// which differ only in how they accumulate over it.
+    ///
+    /// Scoped to *reachable* operands: the pool is append-only, so seeding from
+    /// it would keep alive the locals of reads that folded away long ago.
+    fn reachable_operand_values(&self) -> crate::hashmap::IndexMap<ValueId, usize> {
+        let mut slots: crate::hashmap::IndexMap<ValueId, usize> =
+            crate::hashmap::IndexMap::default();
+        self.for_each_reachable_node(|node| {
+            self.for_each_operand(node, |op| {
+                if let Some(v) = op.as_value() {
+                    *slots.entry(v).or_default() += 1;
+                }
+            });
+        });
+        slots
+    }
+
+    /// Whether *any* operand slot in the arena holds a value naming a local,
+    /// reachable or not — what the reachability-scoped censuses below cannot
+    /// see of a node allocated but not yet spliced in
+    /// (`Engine::census_note_structure`).
+    ///
+    /// Counts orphans too, which nothing can re-attach. Its only wrong answer
+    /// is "recompute the census", never a wrong census.
+    pub fn any_operand_names_a_local(&self) -> bool {
+        let mut found = false;
+        for node in (0..self.exprs.len())
+            .map(|i| NodeRef::Expr(ExprId::new(i)))
+            .chain((0..self.stmts.len()).map(|i| NodeRef::Stmt(StmtId::new(i))))
+            .chain((0..self.pats.len()).map(|i| NodeRef::Pat(PatId::new(i))))
+        {
+            if found {
+                break;
+            }
+            self.for_each_operand(node, |op| {
+                if let Some(v) = op.as_value() {
+                    found |= self.values.names_a_local(v);
+                }
+            });
+        }
+        found
+    }
+
+    /// Every local a reachable promoted operand reads, unioned into `out`.
+    /// A promoted read has no skeleton node, so a pass deciding a local is
+    /// unused must add this to its use census.
+    ///
+    /// One `seen` set spans every value, so the DAG is walked once however many
+    /// operands share a subtree.
+    pub fn promoted_local_reads(&self, out: &mut IndexSet<u32>) {
+        let mut seen = IndexSet::default();
+        for &v in self.reachable_operand_values().keys() {
+            self.values.collect_opaque_locals_seen(v, &mut seen, out);
+        }
+    }
+
+    /// [`Body::promoted_local_reads`] as a per-local tally, for a gate comparing
+    /// a whole-body count against a scoped one. Attribution is per value, so
+    /// unlike the union above a shared subtree is walked once per value that
+    /// reaches it.
+    pub fn promoted_read_counts(&self) -> crate::hashmap::IndexMap<u32, usize> {
+        let mut counts: crate::hashmap::IndexMap<u32, usize> = crate::hashmap::IndexMap::default();
+        let mut leaves = IndexSet::default();
+        for (&v, &slots) in &self.reachable_operand_values() {
+            leaves.clear();
+            self.values.collect_opaque_locals(v, &mut leaves);
+            for &idx in &leaves {
+                *counts.entry(idx).or_default() += slots;
+            }
+        }
+        counts
     }
 
     /// Invoke `f` on every operand slot of `node`, in source order — the

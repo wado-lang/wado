@@ -13,10 +13,13 @@
 //! After operand promotion a pure read lives in the value pool as an
 //! `Operand::Value`, not in the skeleton, so a census that walks nodes alone —
 //! [`collect_reads`], the engine's use index — cannot see it. The
-//! `promoted_*` queries below supply exactly what that walk misses, and every
+//! `promoted_*` queries here supply exactly what that walk misses, and every
 //! one of them is scoped to the *reachable* operands: the pool is append-only,
 //! so it still holds the values of reads that folded away long ago, and seeding
 //! from it would keep their locals alive forever.
+//!
+//! The walk itself lives on `Body`, since [`crate::nir_engine::Engine`]
+//! memoizes it per session and cannot reach into `optimize`.
 
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
@@ -43,15 +46,27 @@ pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
 /// Every local a reachable promoted operand reads — the `Opaque(Local)` leaves
 /// of the values the skeleton still carries. A pass deciding a local is unused
 /// unions this into its skeleton census.
+///
+/// A rule inside an engine session asks [`crate::nir_engine::Engine`], which
+/// memoizes it; this entry point is for the standalone passes.
 pub(super) fn promoted_local_reads(body: &Body, out: &mut IndexSet<u32>) {
-    let mut seen = IndexSet::default();
-    for node in reachable_nodes(body) {
-        body.for_each_operand(node, |op| {
-            if let Some(v) = op.as_value() {
-                body.values.collect_opaque_locals_seen(v, &mut seen, out);
-            }
-        });
+    body.promoted_local_reads(out);
+}
+
+/// The first of `locals` that still has a reachable read, in the skeleton or the
+/// value pool — the check a rewrite that deletes a binding runs against itself.
+///
+/// One census for the whole batch, since each half costs a body walk. Read off
+/// the arena, not the engine's use index and memo, which are what the rewrite
+/// decided on — so this can still catch them drifting.
+pub(super) fn surviving_read(body: &Body, locals: &[u32]) -> Option<u32> {
+    if locals.is_empty() {
+        return None;
     }
+    let mut reads = IndexSet::default();
+    collect_reads(body, &mut reads);
+    promoted_local_reads(body, &mut reads);
+    locals.iter().copied().find(|l| reads.contains(l))
 }
 
 /// How many of `node`'s operand slots read `idx` through a promoted value. A
@@ -70,27 +85,6 @@ pub(super) fn promoted_read_count_at(body: &Body, node: NodeRef, idx: u32) -> us
         }
     });
     count
-}
-
-/// The [`promoted_read_count_at`] totals over the whole body, for every local
-/// at once. A gate comparing a whole-function tally against a scoped one adds
-/// these to *both* sides, or the equality stops meaning "every mention is in
-/// scope".
-pub(super) fn promoted_read_counts(body: &Body) -> crate::hashmap::IndexMap<u32, usize> {
-    let mut counts = crate::hashmap::IndexMap::default();
-    for node in reachable_nodes(body) {
-        body.for_each_operand(node, |op| {
-            let Some(v) = op.as_value() else {
-                return;
-            };
-            let mut leaves = IndexSet::default();
-            body.values.collect_opaque_locals(v, &mut leaves);
-            for idx in leaves {
-                *counts.entry(idx).or_default() += 1;
-            }
-        });
-    }
-    counts
 }
 
 /// The values of the reachable operands that are exactly `Opaque(Local idx)`.
@@ -140,21 +134,8 @@ pub(super) fn buried_promoted_reads(body: &Body) -> IndexSet<u32> {
 /// still filling — so every node it holds counts. A census may over-count, which
 /// only keeps something alive; missing a read is what would miscompile.
 pub(super) fn reachable_nodes(body: &Body) -> Vec<NodeRef> {
-    if body.blocks.is_empty() {
-        return body
-            .exprs
-            .iter()
-            .map(|(e, _)| NodeRef::Expr(e))
-            .chain(body.stmts.iter().map(|(s, _)| NodeRef::Stmt(s)))
-            .chain(body.pats.iter().map(|(p, _)| NodeRef::Pat(p)))
-            .collect();
-    }
     let mut out = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        out.push(node);
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    body.for_each_reachable_node(|n| out.push(n));
     out
 }
 

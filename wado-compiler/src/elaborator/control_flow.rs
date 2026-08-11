@@ -1,5 +1,4 @@
-//! Control-flow analyses for missing-return diagnosis (Stage 5 of WEP
-//! 2026-05-26).
+//! Control-flow analyses for missing-return diagnosis (WEP 2026-05-26).
 //!
 //! These walks consume the parsed AST and look up types from
 //! [`crate::elaborator::sem::types::TypeAnnotations::expression_types`].
@@ -28,8 +27,8 @@ use crate::token::Span;
 /// Lookup context for AST control-flow walks. Holds the per-AstId
 /// type table; `expression_types` is keyed by globally-unique `AstId`,
 /// so no module qualifier is needed. `type_table` backs the
-/// `contains_unknown` filter the missing-return walk applies (since
-/// Stage 7-B `expression_types` records UNKNOWN-containing types).
+/// `contains_unknown` filter the missing-return walk applies, since
+/// `expression_types` records UNKNOWN-containing types.
 #[derive(Clone, Copy)]
 pub(super) struct CtrlFlowCtx<'a> {
     pub(super) expression_types: &'a IndexMap<crate::ast::AstId, TypeId>,

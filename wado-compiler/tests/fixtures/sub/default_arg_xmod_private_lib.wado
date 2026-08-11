@@ -6,17 +6,26 @@ struct Priv {
 
 trait Tagged {
     fn tag(&self) -> i32;
+    fn zero() -> i32;
 }
 
 impl Tagged for Priv {
     fn tag(&self) -> i32 {
         return self.n;
     }
+
+    fn zero() -> i32 {
+        return 100;
+    }
 }
 
 impl Tagged for i32 {
     fn tag(&self) -> i32 {
         return *self;
+    }
+
+    fn zero() -> i32 {
+        return 0;
     }
 }
 
@@ -28,4 +37,22 @@ pub fn plain(m: Priv = Priv {}) -> i32 {
 // Default type param whose default type is callee-private.
 pub fn generic<T: Tagged = Priv>(v: T = Priv {}) -> i32 {
     return v.tag();
+}
+
+pub struct Holder {
+    pub base: i32,
+}
+
+impl Holder {
+    // The same default type param, on a method rather than a free function.
+    pub fn scaled<T: Tagged = Priv>(&self, v: T = Priv {}) -> i32 {
+        return self.base + v.tag();
+    }
+
+    // `Priv` reaches this signature *only* as the type parameter's default —
+    // no value default mentions it — so the type-parameter path alone has to
+    // resolve it in this module.
+    pub fn offset<T: Tagged = Priv>(&self) -> i32 {
+        return self.base + T::zero();
+    }
 }

@@ -66,7 +66,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .take()
             .expect("assert_capture_ctx must survive resolution");
 
-        // Stage 5 (Gap 5 of WEP 2026-05-26): record the capture-slot table
+        // WEP 2026-05-26: record the capture-slot table
         // so reify can pick the same sub-expressions for `let __vK = …;`
         // materialisation. Invert `ast_id_to_slot` so the recorded `slots`
         // vector is indexed by slot (matching `__vK` naming).

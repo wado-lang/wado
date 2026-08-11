@@ -60,13 +60,11 @@ use super::tysys::TypeSystem;
 /// [`super::sem::ModuleSemantics`]. Each entry is owned by exactly one
 /// place at a time — the driver hands the entry to the body walk via
 /// `swap_remove` + `insert`, so no shared-mutability plumbing is needed
-/// (WEP 2026-05-26, Stage 3).
+/// (WEP 2026-05-26).
 ///
-/// Migration markers on each field below trace the WEP 2026-05-26
-/// elaborator re-architecture. `AnnotateState` itself disappears after
-/// Stage 7 — its contents redistribute into [`super::tysys::TypeSystem`]
-/// (pipeline-wide), per-module [`super::sem::ModuleSemantics`] instances,
-/// and cross-cutting driver state.
+/// `AnnotateState` is slated to dissolve: its contents redistribute into
+/// [`super::tysys::TypeSystem`] (pipeline-wide), per-module
+/// [`super::sem::ModuleSemantics`] instances, and driver locals.
 pub(crate) struct AnnotateState {
     /// Pipeline-wide type knowledge: the type arena, decl-interned type
     /// tables, registries, included-files map, and read-only caches
@@ -96,16 +94,14 @@ pub(crate) struct AnnotateState {
     /// (`references` / `local_symbols` / `local_types`) — each module's
     /// data now lives in its own owned [`super::sem::ModuleSemantics`], so
     /// the body walk's `&mut` access stays disjoint across modules and the
-    /// shared-mutability plumbing disappears (WEP 2026-05-26, Stage 3).
+    /// shared-mutability plumbing disappears (WEP 2026-05-26).
     pub(crate) module_semantics: IndexMap<ModuleSource, super::sem::ModuleSemantics>,
     /// Kiln invocation redirects consulted by `resolve_import` call sites
     /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].
-    // MIGRATION: cross-cutting input (loader-provided redirect map).
     pub(crate) invocations: Rc<crate::kiln::InvocationIndex>,
     /// `ModuleSource` interner shared across phases. `Rc<RefCell<>>` so
     /// `&self` elaborator methods can `borrow_mut()` it when constructing
     /// new module sources during name resolution.
-    // MIGRATION: cross-cutting input (shared interner).
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
     /// Source-level liveness computed between `annotate_bodies` and `reify`
     /// in [`Self::build_tir_from_state`]. Empty until that runs; consumed by
@@ -1293,7 +1289,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         state: &AnnotateState,
         sem: super::sem::ModuleSemantics,
         symbols: &'a SymbolTable,
-        modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
         entry_module_source: &ModuleSource,
     ) -> Elaborator<'a, H> {
@@ -1301,11 +1296,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             tysys: state.tysys.clone(),
             sem,
             symbols,
-            loaded_modules: modules,
             logger,
             current_module_source: ModuleSource::entry_point_uninitialized(),
             entry_module_source: entry_module_source.clone(),
-            current_module_items: &[],
             annotate_ctx: super::scope::Scope::default(),
             invocations: Rc::clone(&state.invocations),
             interner: Rc::clone(&state.interner),
@@ -1465,7 +1458,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             sem.decls.imported_functions = imported_functions;
 
             let mut elaborator =
-                Self::module_elaborator(state, sem, symbols, modules, logger, &entry_module_source);
+                Self::module_elaborator(state, sem, symbols, logger, &entry_module_source);
 
             let errors_before = logger.error_count();
             elaborator.annotate_module_decls(module, module_source.clone());
@@ -1520,6 +1513,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             state.tysys.signatures = Rc::new(signatures);
         }
 
+        // Imported globals: a `use`-brought global's type is the declaring
+        // module's declaration fact, so it is filled here — once every decl
+        // pass has run — rather than re-resolved from the declaring AST under
+        // a borrowed perspective.
+        for module_source in &sorted_sources {
+            if is_stdlib_snapshot_hit(module_source) {
+                continue;
+            }
+            let module = modules.get(module_source).expect("module should exist");
+            let imported = Self::collect_imported_globals(
+                state,
+                module,
+                module_source,
+                &entry_module_source,
+                symbols,
+            );
+            let sem = state
+                .module_semantics
+                .get_mut(module_source)
+                .expect("module_semantics is pre-populated by annotate_modules");
+            sem.decls.imported_globals = imported;
+        }
+
         // Phase 1b — `annotate_bodies`: run the body walk over every user
         // module to populate `ModuleSemantics`. The combined walk's own TIR is
         // discarded; reify (Phase 2, below) is the sole TIR source. Liveness
@@ -1535,7 +1551,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .swap_remove(module_source)
                 .expect("module_semantics is pre-populated by annotate_modules");
             let mut elaborator =
-                Self::module_elaborator(state, sem, symbols, modules, logger, &entry_module_source);
+                Self::module_elaborator(state, sem, symbols, logger, &entry_module_source);
 
             let errors_before = logger.error_count();
             elaborator.annotate_module_bodies(module, module_source.clone());
@@ -1734,6 +1750,72 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 tt.register_decl_type(key, type_id);
             }
         }
+    }
+
+    /// The globals `module`'s `use` declarations bring into scope, as
+    /// `local_name → (declaring module, declared name, type, is_mut)`.
+    ///
+    /// Every field is a declaration fact of the declaring module, read off
+    /// [`super::sig::Signatures`]: only that module's own decl pass may say
+    /// what `global RK_PROG: NodeKind` means, and it already has.
+    fn collect_imported_globals(
+        state: &AnnotateState,
+        module: &Module,
+        module_source: &ModuleSource,
+        entry_module_source: &ModuleSource,
+        symbols: &crate::symbol::SymbolTable,
+    ) -> IndexMap<String, (ModuleSource, String, TypeId, bool)> {
+        let mut imported = IndexMap::default();
+        for item in &module.items {
+            let Item::Use(use_decl) = item else {
+                continue;
+            };
+            let source = crate::name::resolve_import_with_invocations(
+                &mut state.interner.borrow_mut(),
+                module_source,
+                &use_decl.source,
+                Some(entry_module_source),
+                &state.invocations,
+            );
+            let Some(declared) = state.tysys.signatures.globals.get(&source) else {
+                continue;
+            };
+            // `Simple` names one global; `Namespace` brings in every reachable
+            // one under its `ns$global` alias. Reachability is the symbol
+            // table's answer, not a second reading of the declaration's
+            // `visibility` — the analyze phase's `import_reachable` asks it the
+            // same way.
+            let mut to_import: Vec<(String, String)> = Vec::new();
+            for use_item in &use_decl.items {
+                match use_item {
+                    ast::UseItem::Simple { name, alias, .. } => {
+                        if declared.contains_key(name) {
+                            to_import.push((alias.as_ref().unwrap_or(name).clone(), name.clone()));
+                        }
+                    }
+                    ast::UseItem::Namespace { name: ns } => {
+                        let same_package = source.same_package(module_source);
+                        for name in declared.keys() {
+                            if symbols
+                                .lookup_in_module(&source, name)
+                                .is_some_and(|s| s.visibility.reachable_from(same_package))
+                            {
+                                to_import.push((
+                                    crate::name::namespace_member_alias(ns, name),
+                                    name.clone(),
+                                ));
+                            }
+                        }
+                    }
+                    ast::UseItem::InterfaceFunctions { .. } | ast::UseItem::Wildcard => {}
+                }
+            }
+            for (local_name, source_name) in to_import {
+                let (ty, mutable) = declared[&source_name];
+                imported.insert(local_name, (source.clone(), source_name, ty, mutable));
+            }
+        }
+        imported
     }
 
     /// Build a map of imported names to their source modules from use declarations.

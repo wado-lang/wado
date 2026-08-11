@@ -5,7 +5,7 @@
 //! might be reducible, rather than the ~31 whole-tree passes the current
 //! optimizer runs in a global fixed point.
 //!
-//! See `docs/wep-2026-06-05-nir-rewrite-engine-design.md`.
+//! See `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 //!
 //! The module provides the full engine: the *session* (the parent map, the
 //! local use index, and the worklist, built once per function from a `Body`),
@@ -15,6 +15,7 @@
 //! (`select_lowering`, `match_to_switch`, `string_push`, `array_literal`,
 //! `elide_local`) run as rules over it.
 
+use std::cell::OnceCell;
 use std::collections::VecDeque;
 
 use cranelift_entity::EntityRef;
@@ -93,9 +94,14 @@ pub struct EngineBuffers {
     /// Indexed directly by local index (dense, `0..locals.len()` — same
     /// invariant `LocalSet` relies on elsewhere), not hashed: a local-keyed
     /// `IndexMap` here would pay a hash + probe for every read/def recorded by
-    /// `build_uses`, run on every one of the tens-of-thousands of sessions.
+    /// `build_indices`, run on every one of the tens-of-thousands of sessions.
     uses: Vec<LocalUses>,
     worklist: VecDeque<NodeRef>,
+    /// Traversal scratch for [`Engine::build_indices`], owned here for the same
+    /// reason as everything else in this struct: a session per pass per
+    /// function means the walk runs tens of thousands of times per compile.
+    walk_stack: Vec<(NodeRef, bool)>,
+    walk_children: Vec<NodeRef>,
     /// Dense in-worklist bit per node, one `Vec` per arena kind (mirrors the
     /// `*_parent` vecs above) — same dense-index rationale as `uses`:
     /// `enqueue`/`pop` run on nearly every rewrite edit, the engine's hottest
@@ -129,7 +135,7 @@ impl EngineBuffers {
         fill_bit(&mut self.stmt_queued, body.stmts.len());
         fill_bit(&mut self.block_queued, body.blocks.len());
         fill_bit(&mut self.pat_queued, body.pats.len());
-        // Pre-sized to `local_count` like the vecs above, so `build_uses`
+        // Pre-sized to `local_count` like the vecs above, so `build_indices`
         // (which visits locals in body order, not index order) doesn't grow
         // `uses` through several reallocations; `uses_entry` still grows it
         // further on demand for a local `alloc_local`d past this count.
@@ -229,14 +235,22 @@ pub struct Engine<'a> {
     /// `None` (the default) is conservative: every call is a heap write. Set via
     /// [`Engine::set_pure_builtin_callees`] before the first value query.
     pure_builtin_callees: Option<&'a IndexSet<crate::nir::FuncId>>,
+    /// Memoized promoted-read census ([`Body::promoted_read_counts`]) for the
+    /// session. See [`Engine::promoted_read_count`].
+    ///
+    /// [`Engine::run`]'s audit covers only a session that asked, and only its
+    /// final state.
+    promoted_reads: OnceCell<IndexMap<u32, usize>>,
+    /// Whether a local-naming operand sits in the arena unreached by the memo —
+    /// see [`Engine::census_note_structure`].
+    pending_local_naming: std::cell::Cell<bool>,
 }
 
 impl<'a> Engine<'a> {
     /// Build a session over `body`, reusing the caller-owned `buf`: one O(n)
-    /// pass populates the parent map and use index, then the worklist is seeded
-    /// with every node in post-order (children before parents) so leaf
-    /// reductions are seen before the contexts that might fold them. `locals` is
-    /// the owning function's local list (see [`Engine::alloc_local`]).
+    /// walk populates the parent map and use index and seeds the worklist in
+    /// post-order (see [`Engine::build_indices`]). `locals` is the owning
+    /// function's local list (see [`Engine::alloc_local`]).
     pub fn new(
         body: &'a mut Body,
         buf: &'a mut EngineBuffers,
@@ -256,14 +270,14 @@ impl<'a> Engine<'a> {
             vg_type_table: None,
             panic_callee_ids: None,
             pure_builtin_callees: None,
+            promoted_reads: OnceCell::new(),
+            pending_local_naming: std::cell::Cell::new(false),
         };
         // The value graph lives on `Body` and is built once, then maintained
-        // through every edit (`maintain_value_after_edit` / `redirect_expr`, plus
+        // through every edit (`replace_expr_with_value` / `redirect_expr`, plus
         // structural-pass coarsening). A new session reuses it as-is — there is
         // no session-start drop and no rebuild path (build-once is invariant).
-        engine.build_parents();
-        engine.build_uses();
-        engine.seed_post_order();
+        engine.build_indices();
         engine
     }
 
@@ -275,35 +289,51 @@ impl<'a> Engine<'a> {
     /// # Maintenance contract
     ///
     /// The graph is built once and maintained in place — there is no rebuild.
-    /// Edits via the engine API (`replace_expr_kind` / `redirect_expr`) keep it
-    /// current through `maintain_value_after_edit`; a structural pass that edits
-    /// the arena directly (`inline`) coarsens the touched region, then regrows
-    /// each splice point's *constants* ([`crate::nir_value_graph::builder::build_scoped`]).
-    /// A query reflects the maintained state.
+    /// Edits via the engine API (`replace_expr_kind` / `redirect_expr`) keep the
+    /// operands current, and a query re-derives through them
+    /// ([`Engine::maintain_pure_node`]); a structural pass that edits the arena
+    /// directly (`inline`) coarsens the touched region, and a caller that needs
+    /// the reaching values back regrows them into a scratch pool
+    /// ([`Engine::scoped_const_reads`]).
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
-        // `value_of` retirement: the skeleton-expr → value side-table read is
-        // removed. An expr's value now comes only from promoted operands
-        // (born-as-operands) and pure re-derivation over them; an unpromoted leaf
-        // (`Local` / `FieldAccess`) resolves to `None`. Sound — `None` is the
-        // finest partition, so consumers (cse / store_load_forward / freeze) skip
-        // the expr rather than over-merge. The remaining red is the honest measure
-        // of how much the optimizer still depends on the side-table.
+        // There is no skeleton-expr → value side-table. An expr's value comes
+        // only from promoted operands (born-as-operands) and pure re-derivation
+        // over them; an unpromoted leaf (`Local` / `FieldAccess`) resolves to
+        // `None`. Sound — `None` is the finest partition, so a consumer skips the
+        // expr rather than over-merging it with another.
         self.maintain_pure_node(expr)
     }
 
     /// Re-derive `expr`'s value from its operands (the sole value source now
     /// that `value_of` is retired). Operand-determined kinds only (`Binary`,
-    /// non-address `Unary`, `Cast`); every other kind — and any node with an
-    /// unresolved operand — yields `None`. Recurses through
-    /// [`Engine::operand_value`] so a pure subtree over promoted leaves resolves
-    /// whole. Does not cache (there is no side-table to cache into).
+    /// non-address `Unary`, `Cast`) plus a read of a stable parameter; every
+    /// other kind — and any node with an unresolved operand — yields `None`.
+    /// Recurses through [`Engine::operand_value`] so a pure subtree over promoted
+    /// leaves resolves whole. Does not cache (there is no side-table to cache
+    /// into).
+    ///
+    /// The parameter base case is load-bearing: without it every leaf of an
+    /// unpromoted tree is `None`, so only all-constant trees ever resolve and
+    /// no promoted value can name a local.
     fn maintain_pure_node(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
         let result_ty = self.body.exprs[expr].type_id;
         let tt = self.vg_type_table;
         let v = match kind {
+            // One version-free `ValueId` per local is correct only where the
+            // local has one version: a parameter is entry-defined, so its def
+            // dominates every use, and unreassigned it holds one value.
+            ExprKind::Local { index, .. } => {
+                if !self.param_locals.contains(&index) {
+                    return None;
+                }
+                if self.locals().get(index as usize).is_none_or(|l| l.is_mut) {
+                    return None;
+                }
+                self.body.values.canonical_local(index, result_ty)
+            }
             ExprKind::Binary { left, op, right } => {
                 let lhs = self.operand_value(left)?;
                 let rhs = self.operand_value(right)?;
@@ -580,60 +610,29 @@ impl<'a> Engine<'a> {
         index
     }
 
-    /// Set `parent[child] = node` for every id-bearing child reachable from
-    /// the root — a live-tree walk, mirroring [`Engine::build_uses`].
+    /// Build the session's three indices — the parent map, the local use
+    /// index, and the post-order worklist seed — in one walk of the live tree.
     ///
-    /// Not an arena scan: dead nodes left by earlier in-place passes (the
-    /// arena never compacts) must not claim parents. An orphan retaining an
-    /// operand reference to a live node would otherwise overwrite the live
-    /// edge (last-writer-wins) and misdirect every parent-map consumer — a
-    /// rule then edits the orphan while the live tree keeps the stale shape
-    /// (observed as `copy_prop` substituting a read through an orphaned
-    /// statement's claim, stranding the live read on a dropped binding).
+    /// Not an arena scan: the arena never compacts, and an orphan still holding
+    /// an operand reference to a live node would overwrite that node's parent
+    /// edge, so a rule would edit the orphan while the live tree kept the stale
+    /// shape (seen as `copy_prop` stranding a read on a dropped binding).
+    /// Within the live tree two parents is corruption — an edit shared an id
+    /// instead of moving the kind (`become_expr`) — hence the panic.
     ///
-    /// Within the live tree, a child with two parents is unconditionally a
-    /// corruption — an edit shared an id between two nodes instead of moving
-    /// the kind (`become_expr`) — so the walk panics on a double claim rather
-    /// than letting the error surface as wrong code passes later.
-    ///
-    /// Destructuring `self` lets the parent slices be written in place while
-    /// `body` is borrowed immutably by `for_each_child`, so no intermediate
-    /// edge buffer is materialized.
-    fn build_parents(&mut self) {
-        let body: &Body = &*self.body;
-        let EngineBuffers {
-            expr_parent,
-            stmt_parent,
-            block_parent,
-            pat_parent,
-            ..
-        } = &mut *self.buf;
-        let mut stack = vec![NodeRef::Block(body.root)];
-        while let Some(node) = stack.pop() {
-            body.for_each_child(node, |child| {
-                let slot =
-                    arena_slot_mut(child, expr_parent, stmt_parent, block_parent, pat_parent);
-                if let Some(prev) = *slot {
-                    panic!(
-                        "[NIR engine] {child:?} has two live parents ({prev:?} and {node:?}): \
-                         an edit shared a child id between two nodes — move the kind \
-                         (`become_expr`), do not share ids"
-                    );
-                }
-                *slot = Some(node);
-                stack.push(child);
-            });
-        }
-    }
-
-    /// Record, per local index, the defining statement and every reading
-    /// `Local` expression node. Walks the live tree from the root rather than
-    /// iterating every arena slot, so dead nodes left by an earlier in-place
-    /// pass (which never compacts `func.body`) are not counted — the use index
-    /// reflects only what is reachable, matching a tree walk.
-    fn build_uses(&mut self) {
-        let mut stack = vec![NodeRef::Block(self.body.root)];
-        while let Some(node) = stack.pop() {
+    /// Parents and uses are recorded on the way down, the worklist on the way
+    /// up, so leaf reductions are enqueued before the contexts that fold them.
+    fn build_indices(&mut self) {
+        let mut stack = std::mem::take(&mut self.buf.walk_stack);
+        let mut children = std::mem::take(&mut self.buf.walk_children);
+        stack.clear();
+        stack.push((NodeRef::Block(self.body.root), false));
+        while let Some((node, processed)) = stack.pop() {
+            if processed {
+                self.enqueue(node);
+                continue;
+            }
+            stack.push((node, true));
             match node {
                 NodeRef::Expr(id) => {
                     if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
@@ -644,40 +643,44 @@ impl<'a> Engine<'a> {
                 NodeRef::Stmt(id) => {
                     if let StmtKind::Let { local_index, .. } = &self.body.stmts[id].kind {
                         let index = *local_index;
-                        self.buf.uses_entry(index).def = Some(id);
+                        // First in source order, not last. A local should have
+                        // one `Let`, but cloning a block (`labeled_block_fusion`)
+                        // copies `local_index` with it, and `def` feeds
+                        // `extract`'s dominance gate — so pick explicitly rather
+                        // than let the traversal direction decide.
+                        let entry = self.buf.uses_entry(index);
+                        if entry.def.is_none() {
+                            entry.def = Some(id);
+                        }
                     }
                 }
                 NodeRef::Block(_) | NodeRef::Pat(_) => {}
             }
-            self.body.for_each_child(node, |c| stack.push(c));
-        }
-    }
-
-    /// Seed the worklist with every node, children before parents.
-    ///
-    /// Iterative post-order over an explicit stack. Each node is pushed twice:
-    /// once unprocessed (to expand its children) and once processed (to enqueue
-    /// it after its subtree). Children are pushed in reverse so they pop — and
-    /// thus enqueue — in source order, reproducing the recursive walk's exact
-    /// post-order sequence. A single reused `scratch` buffer collects each
-    /// node's children, avoiding a per-node allocation (the previous recursion
-    /// allocated a fresh `Vec` for every node and could overflow the native
-    /// stack on deep bodies).
-    fn seed_post_order(&mut self) {
-        let mut stack: Vec<(NodeRef, bool)> = vec![(NodeRef::Block(self.body.root), false)];
-        let mut scratch: Vec<NodeRef> = Vec::new();
-        while let Some((node, processed)) = stack.pop() {
-            if processed {
-                self.enqueue(node);
-                continue;
+            children.clear();
+            self.body.for_each_child(node, |c| children.push(c));
+            for &child in &children {
+                let slot = arena_slot_mut(
+                    child,
+                    &mut self.buf.expr_parent,
+                    &mut self.buf.stmt_parent,
+                    &mut self.buf.block_parent,
+                    &mut self.buf.pat_parent,
+                );
+                if let Some(prev) = *slot {
+                    panic!(
+                        "[NIR engine] {child:?} has two live parents ({prev:?} and {node:?}): \
+                         an edit shared a child id between two nodes — move the kind \
+                         (`become_expr`), do not share ids"
+                    );
+                }
+                *slot = Some(node);
             }
-            stack.push((node, true));
-            scratch.clear();
-            self.body.for_each_child(node, |c| scratch.push(c));
-            for &c in scratch.iter().rev() {
-                stack.push((c, false));
+            for &child in children.iter().rev() {
+                stack.push((child, false));
             }
         }
+        self.buf.walk_stack = stack;
+        self.buf.walk_children = children;
     }
 
     /// Push a node onto the worklist unless it is already queued.
@@ -728,6 +731,93 @@ impl<'a> Engine<'a> {
             .any(|&mention| !self.is_assign_target(mention))
     }
 
+    /// How many reachable promoted operands read `local` — the half of a use
+    /// census that lives in the value pool rather than the skeleton, so
+    /// [`Engine::local_reads`] cannot see it. A rule deciding a local is unused,
+    /// or comparing a whole-body tally against a scoped one, adds this in.
+    ///
+    /// Memoized for the session and filled on first ask, so a rule that never
+    /// gets past its cheaper gates never pays the walk. The census answers for
+    /// every local at once because the walk that produces it costs a whole body
+    /// either way.
+    pub fn promoted_read_count(&self, local: u32) -> usize {
+        self.promoted_read_counts()
+            .get(&local)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// Whether any reachable promoted operand reads `local`
+    /// ([`Engine::promoted_read_count`] as a predicate).
+    pub fn reads_promoted_local(&self, local: u32) -> bool {
+        self.promoted_read_count(local) > 0
+    }
+
+    fn promoted_read_counts(&self) -> &IndexMap<u32, usize> {
+        self.promoted_reads.get_or_init(|| {
+            // Sticky: a true answer only ever means "drop the memo", so holding
+            // it spares the probe on later fills. False on all 356 fills of a
+            // `benchmark/sqlite_parse` `-O2` compile.
+            if !self.pending_local_naming.get() {
+                self.pending_local_naming
+                    .set(self.body.any_operand_names_a_local());
+            }
+            self.body.promoted_read_counts()
+        })
+    }
+
+    /// Record an operand this edit writes into the skeleton, dropping the
+    /// memoized census if it can no longer be trusted.
+    fn census_note_operand(&mut self, op: Operand) {
+        if self.promoted_reads.get().is_none() {
+            return;
+        }
+        if matches!(op, Operand::Value(v) if self.body.values.names_a_local(v)) {
+            self.promoted_reads.take();
+            return;
+        }
+        // An `Operand::Expr` attaches a whole subtree, so ruling out this slot
+        // does not rule out the edit.
+        self.census_note_structure();
+    }
+
+    /// [`Engine::census_note_operand`] over every operand slot of `node` — for
+    /// an edit that installs a whole node kind rather than one slot.
+    fn census_note_node_operands(&mut self, node: NodeRef) {
+        if self.promoted_reads.get().is_none() {
+            return;
+        }
+        let mut writes_local = false;
+        self.body.for_each_operand(node, |op| {
+            if let Operand::Value(v) = op {
+                writes_local |= self.body.values.names_a_local(v);
+            }
+        });
+        if writes_local {
+            self.promoted_reads.take();
+            return;
+        }
+        self.census_note_structure();
+    }
+
+    /// Drop the memoized census unless this edit provably cannot have moved it.
+    ///
+    /// An interned value is immutable, so only a change to which operands are
+    /// reachable moves the answer. An empty census survives removal — nothing
+    /// can conjure a read — and survives an attach unless something local-naming
+    /// is waiting: a node allocated detached and spliced in later can be missed
+    /// by a fill in between, which is what `pending_local_naming` covers. A
+    /// non-empty census can shrink as well as grow, so any edit drops it.
+    ///
+    /// Why the empty case earns the special handling: WEP, standing invariants.
+    fn census_note_structure(&mut self) {
+        if self.pending_local_naming.get()
+            || self.promoted_reads.get().is_some_and(|c| !c.is_empty())
+        {
+            self.promoted_reads.take();
+        }
+    }
+
     /// Whether `mention` is the target slot (LHS place) of an `Assign`. Shared by
     /// the optimizer passes that must not treat a write place as a value read.
     pub(super) fn is_assign_target(&self, mention: ExprId) -> bool {
@@ -747,6 +837,28 @@ impl<'a> Engine<'a> {
         ) = parent;
     }
 
+    /// Edit API: rewrite every operand slot of `node` through `f`.
+    ///
+    /// For a pass rewriting a whole subtree's slots in one sweep (`licm`'s
+    /// pre-header hoist). A promoted value carries no skeleton node, so there is
+    /// no parent edge to move and nothing to enqueue — which is also why `f` may
+    /// only rewrite one promoted value to another.
+    pub fn map_operands(&mut self, node: NodeRef, f: &mut impl FnMut(Operand) -> Operand) {
+        let mut spliced = false;
+        self.body.for_each_operand_mut(node, |slot| {
+            let new = f(*slot);
+            spliced |= new != *slot && (new.as_expr().is_some() || slot.as_expr().is_some());
+            *slot = new;
+        });
+        assert!(
+            !spliced,
+            "[NIR engine] map_operands({node:?}) moved a skeleton operand: installing \
+             one is a splice and replacing one orphans its subtree, and either way \
+             the parent map goes stale. Use `redirect_expr` / `replace_expr_kind`."
+        );
+        self.census_note_node_operands(node);
+    }
+
     /// Edit API: redirect one operand slot of `node` holding the promoted value
     /// `from` to `new`, returning whether a slot changed. The `Operand::Value`
     /// twin of [`Engine::redirect_expr`], which keys on the `ExprId` a skeleton
@@ -763,6 +875,7 @@ impl<'a> Engine<'a> {
         if !self.body.replace_value_operand_once(node, from, new) {
             return false;
         }
+        self.census_note_operand(new);
         if let Operand::Expr(e) = new {
             self.set_parent(NodeRef::Expr(e), Some(node));
             self.enqueue(NodeRef::Expr(e));
@@ -785,6 +898,7 @@ impl<'a> Engine<'a> {
             }
         }
         self.body.exprs[id].kind = new_kind;
+        self.census_note_node_operands(NodeRef::Expr(id));
         // Register a new `Local` mention, if any.
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
             let index = *index;
@@ -805,7 +919,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Edit API: promote the folded constant subtree `id` to an `Operand::Value`
-    /// in its parent (WEP: The Live `ValueGraph`). Interns `value` width-preserving
+    /// in its parent. Interns `value` width-preserving
     /// (carrying `id`'s recorded type) and swaps the parent's `Operand::Expr(id)`
     /// slot to the promoted value. `id`'s node is left orphaned (later DCE'd); its
     /// own `Local` mention, if any, is dropped from the use index, matching
@@ -844,6 +958,7 @@ impl<'a> Engine<'a> {
         if !self.body.replace_operand_to(parent, id, new) {
             return false;
         }
+        self.census_note_operand(new);
         if let Operand::Expr(e) = new {
             self.set_parent(NodeRef::Expr(e), Some(parent));
             self.enqueue(NodeRef::Expr(e));
@@ -902,6 +1017,7 @@ impl<'a> Engine<'a> {
     /// tree). Use index entries for any `Let` in a dropped statement are left
     /// in place — they name a now-dead def and are simply never consulted.
     pub fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>) {
+        self.census_note_structure();
         self.body.blocks[block].stmts = stmts;
         let kids = self.body.blocks[block].stmts.clone();
         for s in &kids {
@@ -927,6 +1043,7 @@ impl<'a> Engine<'a> {
         });
         self.buf.expr_parent.push(None);
         self.buf.expr_queued.push(false);
+        self.census_note_node_operands(NodeRef::Expr(id));
         let mut children = Vec::new();
         self.body
             .for_each_child(NodeRef::Expr(id), |c| children.push(c));
@@ -942,7 +1059,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Edit API: intern a fresh constant value into the function's pool and
-    /// return it as an `Operand::Value` (WEP: The Live `ValueGraph`). For passes
+    /// return it as an `Operand::Value`. For passes
     /// that synthesize a constant in an operand position (a method arg, an
     /// assigned value) without a source node.
     pub fn const_operand(
@@ -958,6 +1075,7 @@ impl<'a> Engine<'a> {
         let id = self.body.stmts.push(StmtNode { kind, span });
         self.buf.stmt_parent.push(None);
         self.buf.stmt_queued.push(false);
+        self.census_note_node_operands(NodeRef::Stmt(id));
         let mut children = Vec::new();
         self.body
             .for_each_child(NodeRef::Stmt(id), |c| children.push(c));
@@ -977,6 +1095,7 @@ impl<'a> Engine<'a> {
         let id = self.body.blocks.push(BlockNode { stmts, span });
         self.buf.block_parent.push(None);
         self.buf.block_queued.push(false);
+        self.census_note_structure();
         let kids: Vec<StmtId> = self.body.blocks[id].stmts.clone();
         for s in kids {
             self.set_parent(NodeRef::Stmt(s), Some(NodeRef::Block(id)));
@@ -990,6 +1109,7 @@ impl<'a> Engine<'a> {
         let id = self.body.pats.push(PatNode { kind, span });
         self.buf.pat_parent.push(None);
         self.buf.pat_queued.push(false);
+        self.census_note_node_operands(NodeRef::Pat(id));
         let mut children = Vec::new();
         self.body
             .for_each_child(NodeRef::Pat(id), |c| children.push(c));
@@ -1354,6 +1474,16 @@ impl<'a> Engine<'a> {
                 }
             }
         }
+        debug_assert!(
+            self.promoted_reads
+                .get()
+                .is_none_or(|memo| *memo == self.body.promoted_read_counts()),
+            "[NIR engine] the promoted-read census disagrees with a fresh walk, so \
+             an edit changed which operands are reachable without reporting it. \
+             Every mutating edit calls `census_note_*`, and a rule writes operands \
+             through `Engine`, never `engine.body`. Unreported, `elide_local` \
+             deletes a binding the value pool still reads."
+        );
         any
     }
 }
@@ -1814,5 +1944,115 @@ mod tests {
         );
         assert_eq!(eng.local_reads(new_local), &[read]);
         assert_eq!(eng.local_def(new_local), None);
+    }
+
+    /// A stale "no promoted read" is what lets `elide_local` delete a binding
+    /// the value pool still reads, so an edit that plants one drops the memo.
+    #[test]
+    fn promoted_read_census_refreshes_after_an_edit() {
+        // `{ let x = 1; }` — the binding, and no read of it anywhere.
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let init = e(
+                b,
+                ExprKind::Cast {
+                    expr: one,
+                    target_type: TypeTable::I32,
+                },
+            );
+            vec![let_x(b, init, false)]
+        });
+        let root = body.root;
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        // Fills the memo: nothing in the pool reads `x` yet.
+        assert!(!eng.reads_promoted_local(0));
+        assert_eq!(eng.promoted_read_count(0), 0);
+
+        // Splice in `x;` as a promoted `Opaque(Local 0)` operand — a read with
+        // no skeleton node, invisible to the use index.
+        let read = eng.body.values.canonical_local(0, TypeTable::I32);
+        let stmt = eng.alloc_stmt(StmtKind::Expr(Operand::Value(read)), Span::default());
+        let stmts = eng.body.blocks[root].stmts.clone();
+        eng.set_block_stmts(root, [stmts, vec![stmt]].concat());
+
+        assert!(
+            eng.local_reads(0).is_empty(),
+            "the read is not in the skeleton"
+        );
+        assert!(eng.reads_promoted_local(0));
+        assert_eq!(eng.promoted_read_count(0), 1);
+    }
+
+    /// `def` is the first `Let` in source order. A local should have exactly
+    /// one, but a cloned block carries its `local_index` along, so the pick is
+    /// pinned here rather than left to the traversal direction.
+    #[test]
+    fn local_def_is_the_first_binding_in_source_order() {
+        let mut first = None;
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let a = e(
+                b,
+                ExprKind::Cast {
+                    expr: one,
+                    target_type: TypeTable::I32,
+                },
+            );
+            let two = lit(b, 2);
+            let c = e(
+                b,
+                ExprKind::Cast {
+                    expr: two,
+                    target_type: TypeTable::I32,
+                },
+            );
+            let s1 = let_x(b, a, false);
+            let s2 = let_x(b, c, false);
+            first = Some(s1);
+            vec![s1, s2]
+        });
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
+        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        assert_eq!(eng.local_def(0), first);
+    }
+
+    /// A fill between the allocation and the splice sees the operand
+    /// unreachable, and correctly leaves it out; the splice has to drop that
+    /// memo. `licm`'s pre-header hoist has this shape (`all_hoist_stmts`), and
+    /// never runs the worklist, so the end-of-`run` audit would not catch it.
+    #[test]
+    fn promoted_read_census_survives_an_allocate_then_attach() {
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let init = e(
+                b,
+                ExprKind::Cast {
+                    expr: one,
+                    target_type: TypeTable::I32,
+                },
+            );
+            vec![let_x(b, init, false)]
+        });
+        let root = body.root;
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+
+        // Allocated detached: the operand names `x`, but nothing reaches it.
+        let read = eng.body.values.canonical_local(0, TypeTable::I32);
+        let stmt = eng.alloc_stmt(StmtKind::Expr(Operand::Value(read)), Span::default());
+        // Fill the memo while it is still detached — correctly empty.
+        assert!(!eng.reads_promoted_local(0));
+
+        let stmts = eng.body.blocks[root].stmts.clone();
+        eng.set_block_stmts(root, [stmts, vec![stmt]].concat());
+
+        assert!(
+            eng.reads_promoted_local(0),
+            "attaching a detached local-naming operand must not leave the empty census standing"
+        );
     }
 }

@@ -1,24 +1,13 @@
 //! WIR optimization — structural and peephole passes on `WirPackage`.
 //! Runs after `wir_build`, before `codegen::emit`.
 //!
-//! ## Pass inventory
+//! Each pass lives in its own module below and documents itself there; the
+//! phase sequence in [`optimize_wir`] is the only statement of what runs and in
+//! what order. [`docs/optimizer.md`](../../../docs/optimizer.md) is the
+//! reader-facing inventory.
 //!
 //! `nullable_ref` is a mandatory representation lowering, not an optimization:
 //! it runs at every `-O`. The rest are optimizations, skipped at `-O0`.
-//!
-//! | Module            | Pass                                       |
-//! |-------------------|--------------------------------------------|
-//! | `nullable_ref`        | Null-niche variant representation (mandatory) |
-//! | `sroa_variant_return` | Nested result-slot flattening               |
-//! | `elide_struct`        | Box local elimination + seq-assign flattening |
-//! | `array`               | Data promotion / splitting / zero-fill elision |
-//! | `const_forward`       | Struct field constant forwarding            |
-//! | `peephole`            | Constant folding, copy elision              |
-//! | `elide_local`     | Write-only local elim for WIR-only locals  |
-//! | `cleanup`         | Nop/dead-code removal, normalization        |
-//! | `branch_hint`     | `br_if` selection + trap-based hint inference |
-//! | `prune_dead_data` | Unreferenced passive data segment removal   |
-//! | `dce`             | Dead code / type / global elimination       |
 //!
 //! Related passes live elsewhere: dead-arg/-return elim and single-field param
 //! SROA moved to NIR (`optimize::{dae,drve,sroa_param,elide_box_local}`) to join

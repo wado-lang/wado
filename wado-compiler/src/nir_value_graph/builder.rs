@@ -5,7 +5,7 @@
 //! literals, control flow, etc.) get no entry in `value_of`.
 //!
 //! Consumed lazily by [`crate::nir_engine::Engine::value`]; see the WEP at
-//! `docs/wep-2026-06-05-worklist-rewrite-engine.md`.
+//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
 //!
 //! # Flow handling
 //!

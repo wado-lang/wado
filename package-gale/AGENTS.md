@@ -52,6 +52,14 @@ ANTLR4 is BSD-3; copying or paraphrasing its implementation risks making Gale a 
 wado run package-gale dump path/to/Grammar.g4
 ```
 
+`gale dump --lexer` is the same for the lexer: per rule, the matcher covering its text (own `try_`, the keyword classifier and its carrier, the shared literal matcher, an inlined fragment, `latn_match`), then each emit decision inside it with the reason a cheaper strategy was not available — plain vs lookahead-aware repeat, first-match vs arm scoring, first-match vs maximal munch. A trailing summary tallies them, so "did my change flip a strategy" is a diff rather than a regenerate-and-grep loop.
+
+```sh
+wado run package-gale dump --lexer path/to/Grammar.g4
+```
+
+Each strategy is the value `lexer_gen` branches on, so it cannot drift from the emit. The traversal reaching it is mirrored, not shared — add a `lexer_dump_test.wado` case when you change tail propagation, suffix cutting, or fragment inlining.
+
 For a grammar outside the repo, `wado run --dir <dir> package-gale dump Grammar.g4` — see `--dir` in the root [`AGENTS.md`](../AGENTS.md).
 
 The `trace` generator option logs a runtime event stream to stderr (enter / ok / FAIL per rule, per-alt scan lengths, the committed `pick`); its `alt#N` indices match `gale dump`. Strictly opt-in — off is byte-identical output.
