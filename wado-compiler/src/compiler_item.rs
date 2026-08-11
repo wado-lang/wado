@@ -1184,6 +1184,11 @@ pub enum Resolved {
     Trait {
         module_source: ModuleSource,
         name: String,
+        /// The trait declaration's own node. A compiler item is a declaration
+        /// the compiler knows by construction, so a consumer asking "is this
+        /// that trait?" compares this rather than the spelling (WEP
+        /// 2026-08-10).
+        decl: crate::ast::AstId,
         /// Primary method name for **single-method** traits, captured
         /// automatically by the elaborator when registering the trait's
         /// `#[compiler_item("...")]` annotation. `None` for
@@ -1504,6 +1509,16 @@ impl CompilerItems {
         }
     }
 
+    /// The declaration this trait item names, as an identity. `None` when the
+    /// item is not registered.
+    #[must_use]
+    pub fn trait_decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
+        match self.get(item)? {
+            Resolved::Trait { decl, .. } => Some(*decl),
+            _ => None,
+        }
+    }
+
     /// Resolved method name of a **single-method** trait — `"fmt"` for
     /// `Display`, `"inspect"` for `Inspect`, and so on across the
     /// format-family traits. Panics for multi-method traits where
@@ -1819,6 +1834,7 @@ mod tests {
             .register(
                 CompilerItem::Option,
                 Resolved::Trait {
+                decl: crate::ast::AstId::fresh(),
                     module_source: ModuleSource::types(),
                     name: "Option".into(),
                     method_name: None,
@@ -1863,6 +1879,7 @@ mod tests {
         reg.register(
             CompilerItem::Default,
             Resolved::Trait {
+                decl: crate::ast::AstId::fresh(),
                 module_source: ModuleSource::traits(),
                 name: "Default".into(),
                 method_name: Some("default".into()),
@@ -1926,6 +1943,7 @@ mod tests {
         reg.register(
             CompilerItem::Serializer,
             Resolved::Trait {
+                decl: crate::ast::AstId::fresh(),
                 module_source: ModuleSource::serde(),
                 name: "Serializer".to_string(),
                 method_name: None,

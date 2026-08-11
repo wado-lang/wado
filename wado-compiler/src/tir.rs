@@ -1352,6 +1352,20 @@ impl TypeTable {
         self.compiler_items.trait_name(item)
     }
 
+    /// The declaration a compiler trait item names, as an identity. A compiler
+    /// item is a declaration the compiler knows by construction, so a consumer
+    /// asking "does this type implement *that* trait?" compares this instead of
+    /// a spelling two modules can share (WEP 2026-08-10).
+    #[must_use]
+    pub fn compiler_trait_ref(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> Option<crate::resolve::DeclRef> {
+        self.compiler_items
+            .trait_decl(item)
+            .map(crate::resolve::DeclRef::Decl)
+    }
+
     pub fn compiler_variant_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
         self.compiler_items.variant_name(item)
     }

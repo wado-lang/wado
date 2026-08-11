@@ -508,24 +508,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let trait_name = self.get_type_name(trait_type);
-        let supertraits: Vec<String> = self
+        // A supertrait is a bound written in the trait's own declaration, so
+        // which trait it names is the answer already recorded for that site.
+        let supertraits: Vec<(String, Option<DeclRef>)> = self
             .tysys
             .trait_env
             .supertrait_closure(&self.canonical_decl_key(&trait_name))
             .iter()
-            .map(|b| b.name.clone())
+            .map(|b| (b.name.clone(), self.tysys.resolutions.get(b.id)))
             .collect();
         if supertraits.is_empty() {
             return;
         }
         let self_type = self.resolve_type(&impl_block.ty);
-        for supertrait in supertraits {
+        for (supertrait, supertrait_ref) in supertraits {
             if self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 self_type,
                 &supertrait,
-                None,
+                supertrait_ref,
             ) {
                 continue;
             }
@@ -1063,7 +1065,7 @@ impl TypeSystem {
                 scope,
                 &Receiver::Type(FqTypeName::builtin(&type_name)),
                 trait_name,
-                None,
+                trait_ref,
             );
         }
 
@@ -1281,7 +1283,7 @@ impl TypeSystem {
                     scope,
                     &Receiver::Type(FqTypeName::of_head(module_source, name)),
                     trait_name,
-                    None,
+                    trait_ref,
                 ) {
                     return true;
                 }
@@ -1301,7 +1303,7 @@ impl TypeSystem {
                     scope,
                     &Receiver::Type(FqTypeName::of_head(module_source, name)),
                     trait_name,
-                    None,
+                    trait_ref,
                 ) {
                     return true;
                 }

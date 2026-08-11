@@ -251,6 +251,7 @@ pub(super) fn register_enum_compiler_item<H: CompilerHost>(
 pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
     name: &str,
     methods: &[crate::ast::Function],
     assoc_types: &[crate::ast::AssociatedTypeDecl],
@@ -287,6 +288,7 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     let resolved = Resolved::Trait {
         module_source: module_source.clone(),
         name: name.to_string(),
+        decl,
         method_name,
         assoc_types,
     };

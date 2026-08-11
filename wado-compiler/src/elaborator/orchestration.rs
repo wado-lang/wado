@@ -311,6 +311,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_trait_compiler_item(
                             &type_table,
                             &trait_decl.attrs,
+                            trait_decl.id,
                             &trait_decl.name,
                             &trait_decl.methods,
                             &trait_decl.associated_types,
