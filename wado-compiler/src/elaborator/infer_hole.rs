@@ -51,17 +51,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: String,
         bound_names: Vec<String>,
     ) -> TypeId {
-        // Variables are only appended, so the next id is the current count.
-        let var = InferVarId(self.infer_holes.solutions.len() as u32);
-        let hole = self.tysys.type_table.borrow_mut().make_infer_var(var);
-        self.infer_holes.solutions.insert(hole, None);
-        self.infer_holes.diags.insert(hole, (span, message));
+        let hole = self.mint_infer_var();
+        self.attach_infer_var_diag(hole, span, message);
         if !bound_names.is_empty() {
             self.infer_holes
                 .bounds
                 .insert(hole, (param_name, bound_names, span));
         }
         hole
+    }
+
+    /// Mint a fresh inference variable carrying no diagnostic yet.
+    ///
+    /// A use site that may discard its instantiation — inference runs twice
+    /// for a partial turbofish — mints bare and attaches the diagnostic only
+    /// to the variables it commits to. A variable nobody kept then reports
+    /// nothing.
+    pub(super) fn mint_infer_var(&mut self) -> TypeId {
+        // Variables are only appended, so the next id is the current count.
+        let var = InferVarId(self.infer_holes.solutions.len() as u32);
+        let hole = self.tysys.type_table.borrow_mut().make_infer_var(var);
+        self.infer_holes.solutions.insert(hole, None);
+        hole
+    }
+
+    /// Remember the trait bounds `var`'s slot declared, re-verified against
+    /// the solution in [`Self::finalize_infer_holes`].
+    pub(super) fn attach_infer_var_bounds(
+        &mut self,
+        var: TypeId,
+        param_name: String,
+        bound_names: Vec<String>,
+        span: Span,
+    ) {
+        if bound_names.is_empty() {
+            return;
+        }
+        self.infer_holes
+            .bounds
+            .entry(var)
+            .or_insert((param_name, bound_names, span));
+    }
+
+    /// Set the diagnostic `var` raises if it is never solved. The first one
+    /// wins, matching the solutions map's keep-the-first policy.
+    pub(super) fn attach_infer_var_diag(&mut self, var: TypeId, span: Span, message: String) {
+        self.infer_holes.diags.entry(var).or_insert((span, message));
     }
 
     /// Defer a variant constructor whose type arguments did not resolve here.

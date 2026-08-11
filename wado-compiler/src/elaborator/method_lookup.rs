@@ -1166,6 +1166,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // module-end sweep, so nothing needs classifying here: what an
         // enclosing generic happens to be named cannot be confused with it.
         self.record_instantiation(&inst, &inferred);
+        self.blame_unsolved(&inst, &inferred);
         InferredMethodTypeArgs {
             type_args: inferred,
             bound_check_params,

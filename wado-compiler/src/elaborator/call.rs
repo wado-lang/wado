@@ -11,6 +11,7 @@ use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TypeId, Type
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
+use super::instantiate::Instantiation;
 use super::scope::Scope;
 use super::sig::MethodSig;
 use super::types::{FunctionContext, TypeError};
@@ -637,6 +638,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &call.args,
                         &args,
                         expected_type,
+                        call.span,
                     );
                     impl_type_args_inferred = impl_args;
                     method_type_args = method_args;
@@ -649,6 +651,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &call.args,
                         &args,
                         expected_type,
+                        call.span,
                     );
                     if impl_type_args_inferred.is_empty() {
                         impl_type_args_inferred = impl_args;
@@ -1334,7 +1337,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // returns a full param-length vec, so no slot reaches codegen
         // unsubstituted.
         if type_args.is_empty() {
-            type_args = self.infer_fn_type_args(&callee, &call.args, &args, expected_type);
+            type_args =
+                self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
         } else {
             let type_param_count = self
                 .lookup_function_type_params(&callee)
@@ -1343,7 +1347,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .count();
             if turbofish_needs_inference(&call.type_args, type_param_count) {
                 let holes = turbofish_holes(&call.type_args);
-                let inferred = self.infer_fn_type_args(&callee, &call.args, &args, expected_type);
+                let inferred =
+                    self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
                 merge_turbofish_type_args(&mut type_args, &holes, &inferred);
             }
         }
@@ -1851,6 +1856,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         raw_args: &[Expr],
         args: &[TirExpr],
         expected_type: Option<TypeId>,
+        span: crate::token::Span,
     ) -> Vec<TypeId> {
         let func_name = callee.name.as_str();
         // Builtin functions: pull type-param / param / return info from the
@@ -1859,10 +1865,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // argument types or LHS annotations the same way ordinary generic
         // functions do.
         if let Some(info) = self.tysys.builtin_registry.get(func_name) {
-            let real_type_params: Vec<&String> = info.type_params.iter().collect();
-            if real_type_params.is_empty() {
+            if info.type_params.is_empty() {
                 return vec![];
             }
+            // Copy what the signature needs before instantiating: `info`
+            // borrows the registry, and minting variables takes `self`.
+            let real_type_params: Vec<String> = info.type_params.clone();
+            let decl_param_types: Vec<TypeId> = info.params.iter().map(|(_, t)| *t).collect();
+            let decl_return = info.return_type;
             let param_ids: Vec<TypeId> = real_type_params
                 .iter()
                 .enumerate()
@@ -1872,14 +1882,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .intern(ResolvedType::TypeParam {
                             index: i as u32,
-                            name: (*name).clone(),
+                            name: name.clone(),
                         })
                 })
                 .collect();
-            let resolved_param_types: Vec<TypeId> = info.params.iter().map(|(_, t)| *t).collect();
-            let decl_return_type = info.return_type;
 
-            let mut infer = InferCtx::new(&self.tysys.type_table, param_ids.clone());
+            let inst = self.instantiate(
+                &param_ids,
+                &[],
+                &Instantiation {
+                    kind: "builtin",
+                    name: func_name,
+                    span,
+                },
+            );
+            let resolved_param_types = self.instantiate_types(&decl_param_types, &inst);
+            let decl_return_type = self.instantiate_type(decl_return, &inst);
+
+            let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
             for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
                 if Self::is_literal_number_arg(raw_args.get(i)) {
                     infer.add_deferred(*param_type, arg.type_id);
@@ -1891,10 +1911,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 infer.add_expected_return(decl_return_type, expected);
             }
             let (inferred, bindings) = infer.solve_with_bindings();
-            let any_bound = param_ids.iter().any(|p| bindings.contains_key(p));
-            if !any_bound {
+            // A use site's variables are fresh, so "was anything inferred" is
+            // simply whether any of them got bound.
+            if !inst.vars.iter().any(|v| bindings.contains_key(v)) {
                 return vec![];
             }
+            self.record_instantiation(&inst, &inferred);
             return inferred;
         }
 
@@ -1937,7 +1959,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let param_ids: Vec<TypeId> = type_param_list.iter().map(|(_, id)| *id).collect();
-        let mut infer = InferCtx::new(&self.tysys.type_table, param_ids.clone());
+
+        // Instantiate the callee's slots first. Inside a generic scope a caller
+        // may forward its own type parameter (`outer<T>` calling `inner(g)`
+        // where `g: &mut T`), and the solver answers with the caller's id —
+        // which is what monomorphization needs. What it must not do is confuse
+        // the callee's own slot with that caller parameter; fresh variables
+        // make the two distinguishable rather than merely distinguishable-ish.
+        let inst = self.instantiate(
+            &param_ids,
+            &[],
+            &Instantiation {
+                kind: "function",
+                name: func_name,
+                span,
+            },
+        );
+        let resolved_param_types = self.instantiate_types(&resolved_param_types, &inst);
+        let decl_return_type = decl_return_type.map(|r| self.instantiate_type(r, &inst));
+
+        let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
         for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
                 infer.add_deferred(*param_type, arg.type_id);
@@ -1949,20 +1990,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             infer.add_expected_return(decl_ret, expected);
         }
 
-        // Use the permissive solver: inside a generic scope, a caller may
-        // forward its own type parameter (e.g. `outer<T>` calling `inner(g)`
-        // where `g: &mut T`) so the returned type args contain the caller's
-        // `TypeParam` ids, which then get substituted to concrete types
-        // during monomorphization. Fall back to the legacy empty result
-        // only when *no* param was ever touched by a unification
-        // constraint, since two TypeParams named `T` at index `0` intern
-        // to the same `TypeId` and the only reliable signal of "something
-        // was inferred" is the bindings map itself.
         let (inferred, bindings) = infer.solve_with_bindings();
-        let any_bound = param_ids.iter().any(|p| bindings.contains_key(p));
-        if !any_bound {
+        if !inst.vars.iter().any(|v| bindings.contains_key(v)) {
             return vec![];
         }
+        self.record_instantiation(&inst, &inferred);
         inferred
     }
 
@@ -2313,17 +2345,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut new_args: Vec<TypeId> = Vec::with_capacity(n);
         for (i, p) in space.iter().enumerate() {
-            if unresolved(self, i) {
-                let bounds: Vec<String> = p
-                    .bounds
-                    .iter()
-                    .filter(|b| b.fn_signature.is_none())
-                    .map(|b| b.name.clone())
-                    .collect();
-                new_args.push(self.mint_infer_hole(span, message.clone(), p.name.clone(), bounds));
-            } else {
+            if !unresolved(self, i) {
                 new_args.push(type_args[i]);
+                continue;
             }
+            let bounds: Vec<String> = p
+                .bounds
+                .iter()
+                .filter(|b| b.fn_signature.is_none())
+                .map(|b| b.name.clone())
+                .collect();
+            // `infer_fn_type_args` already instantiated this slot, so the
+            // variable standing in for it is the one to blame — minting a
+            // second would orphan the first, which the sweep would then pin to
+            // `error` behind a diagnostic nobody asked for.
+            let existing = type_args
+                .get(i)
+                .copied()
+                .filter(|&t| self.tysys.type_table.borrow().contains_infer_var(t));
+            new_args.push(match existing {
+                Some(var) => {
+                    self.attach_infer_var_diag(var, span, message.clone());
+                    self.attach_infer_var_bounds(var, p.name.clone(), bounds, span);
+                    var
+                }
+                None => self.mint_infer_hole(span, message.clone(), p.name.clone(), bounds),
+            });
         }
         *type_args = new_args;
     }
@@ -2483,9 +2530,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         raw_args: &[Expr],
         args: &[TirExpr],
         expected_type: Option<TypeId>,
+        span: crate::token::Span,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
         let probe = CalleeRef::local(&self.current_module_source, suffix.to_string());
-        let method_args = self.infer_fn_type_args(&probe, raw_args, args, expected_type);
+        let method_args = self.infer_fn_type_args(&probe, raw_args, args, expected_type, span);
         if !method_args.is_empty() {
             return (Vec::new(), method_args);
         }
