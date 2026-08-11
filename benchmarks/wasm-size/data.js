@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786413036433,
+  "lastUpdate": 1786443905591,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47181,6 +47181,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b6185860b552180db152d363b9852fd64ec93b36"
         },
         "date": 1786413035745,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267689,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "49945d3f4a33f15566f0e41d9444c2c8f93d8d7e",
+          "message": "Merge pull request #1790 from wado-lang/claude/nir-optimizer-architecture-wep-joeodh\n\nperf(optimize): scope the promoted-read census to the engine session",
+          "timestamp": "2026-08-11T19:12:45+09:00",
+          "tree_id": "e6e45959eef8b30f224dd06336dc6b9ee2be5faf",
+          "url": "https://github.com/wado-lang/wado/commit/49945d3f4a33f15566f0e41d9444c2c8f93d8d7e"
+        },
+        "date": 1786443905222,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
