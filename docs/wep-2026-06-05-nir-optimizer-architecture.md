@@ -221,15 +221,19 @@ repeats them where a contributor will hit them.
   `Engine::map_operands`. `Engine::run` audits the memo against a fresh walk
   under debug assertions — a backstop covering a session that asked, at its end
   only, not a proof.
+- No whole-body walk per rule application, in an assertion either. A rewrite
+  that deletes a binding reports the local through `Engine::note_elided_local`
+  and `Engine::run` audits the batch once; checking it at the rewrite put
+  `peephole` at 5.1 s of a 9.5 s loop, against 1.4 s of 6.2 s once
+  session-scoped. The audit reads the arena fresh rather than the use index and
+  census memo the rewrite decided on — substituting those would make it agree
+  with itself and catch nothing.
 
 ## Rejected and deferred
 
-### Not classical SSA
+### Not sea-of-nodes
 
-Wado emits structured Wasm, so SSA + relooper buys nothing the backend does not
-already need. The skeleton stays the effect-and-control schedule; local
-versioning is expressed by structural `Select` nodes at merges rather than
-explicit phis. Sea-of-nodes, and dropping the skeleton, stay rejected.
+Sea-of-nodes, and dropping the skeleton, stay rejected.
 
 ### Not equality saturation
 
@@ -263,28 +267,14 @@ section and in "Measured dead ends" is a debug-build number, so
 `wado-compiler`'s `debug_assert!`s are inside the measured cost, the
 promoted-read census audit at the end of `Engine::run` among them.
 
-The build-once redesign met its structural goals but not its 2× CPU target:
-`package-gale`'s optimize phase measured ~15.7 s against a ~7.5 s target. The
-premise was wrong — with build-once, the graph build is ~6 % of the phase (was
-~21 %); the cost is now the passes themselves.
+The graph build is ~6 % of the phase (was ~21 % before build-once), so what is
+left to cut is the passes and the assertions that guard them. At `-O2` the loop
+costs 6.2 s on `benchmark/sqlite_parse` and 6.0 s on
+`benchmark/syntax_highlight`, spread over `peephole` (23 %) and `copy_prop` /
+`const_fold` / `licm` (13 % each). No iteration dominates: under the gate,
+iterations 5 - 8 cost 0.2 - 0.4 s each, so the iteration count is not the
+lever it looks like.
 
-- [ ] Pass-level cost: the one-iteration `peephole` spike is `surviving_read`,
-      the debug assertion guarding `elide_local` and `labeled_block_fusion`. It
-      takes two whole-body walks (`collect_reads` + `promoted_local_reads`) per
-      rule application — the same per-application quadratic the promoted-read
-      census had, surviving in the assertions that guard those same two rules.
-      Skipping it alone takes `benchmark/sqlite_parse`'s loop from 9.5 s to
-      6.3 s and its `peephole` from 5.1 s to 1.4 s, and
-      `benchmark/syntax_highlight`'s loop from 11.2 s to 6.1 s; the spike
-      (4.9 s of a 9.5 s loop, against 0.2 - 0.4 s for every other iteration)
-      disappears and the per-iteration profile goes flat. Disabling every other
-      `wado-compiler` `debug_assert!` on top of that gains at most ~0.9 s more
-      (nothing at all on `syntax_highlight`), and
-      skipping the `Engine::run` census audit alone gains nothing — it is not
-      the cost. Session-scope the check the way the census was scoped rather
-      than dropping it. What is left after that spreads (`peephole` 23 %,
-      `copy_prop` / `const_fold` / `licm` 13 % each), and the iteration count is
-      not the problem: under the gate, iterations 5 - 8 cost 0.2 - 0.4 s each.
 - [ ] Build the engine session once per function and maintain it through the edit
       API, the way the graph already is. `Engine::new` costs one walk rather
       than three — `build_indices` records parents and uses on the way down and
@@ -292,8 +282,15 @@ premise was wrong — with build-once, the graph build is ~6 % of the phase (was
       function (~8 % of compile CPU when three walks were profiled).
 - [ ] Function-level parallelism. The per-function build and walk are
       independent.
-- [ ] Fold the graph build into `lower` (born-at-`lower`), retiring the lazy
-      first-query build and with it `Engine::ensure_value_graph`'s
+- [ ] Fold the graph build into `lower` (born-at-`lower`). What this buys is one
+      body walk per function, not earlier availability: the graph is already
+      built for every function before the loop, because
+      `extract::freeze_pure_arith`'s early run walks every expression of every
+      body with the alias sets supplied, and the first of those queries builds
+      it. So the lazy first-query path is eager in practice, and the value it
+      hands the precision items below is not timing — see them for what is
+      actually in their way.
+      This item also retires `Engine::ensure_value_graph`'s
       `VG_MAX_EXPRS` size gate. That gate skips the graph for a body over 5000
       expressions, citing the build plus `build_scoped`'s scratch clone OOMing
       under `wado test`'s parallel compilation. Measured, the memory it saves is
@@ -313,14 +310,19 @@ premise was wrong — with build-once, the graph build is ~6 % of the phase (was
 
 Precision.
 
-- [ ] Widen local promotion past parameters. A promoted value may now read a
-      local, but only a never-reassigned parameter qualifies, and only at the
-      post-loop freezes: 37 – 146 such operands per benchmark, against zero
-      before. The gate is the version question — one `ValueId` per local index
-      denotes one value only where the local has one version, which a parameter
-      has and an ordinary binding does not. Widening needs a def that provably
-      dominates the use and a binding that does not re-execute — the flow fact
-      the builder holds and a query-time resolver does not.
+- [ ] Widen local promotion past parameters. A promoted value may read a local
+      only at the post-loop freezes, and the value freeze takes it only when
+      every local leaf is a parameter (the `FieldAccess` materialiser is wider —
+      an owned, non-`mut`, non-address-taken, non-`&mut`-escaped local whose def
+      dominates the use also qualifies): 37 – 146 such operands per benchmark,
+      against zero before.
+      The gate is not value identity. The builder already mints a fresh
+      `Opaque` per assignment, so two versions of a local are two `ValueId`s.
+      What is per-index is the extraction: `OpaqueSource::Local(idx)` means
+      "emit `local.get idx`", which is only right at a point where the local
+      still holds that version. Widening therefore needs the read to survive
+      relocation — the thing `inline` and `sroa` take away when they renumber
+      locals and splice a callee body into a caller.
 
 - [ ] Reach the in-loop consumers. Both freezes that may plant a local-naming
       value run after the fixed-point loop, so the passes inside it still see
@@ -328,9 +330,13 @@ Precision.
       queries, and `loop_entry_values` still has no working consumer, which is
       why `inline` discarding a non-empty map 1,469 times costs nothing. An
       in-loop freeze cannot simply be added — the early one is bound by the
-      context-free rule under "Measured dead ends". This is the born-at-`lower`
-      item above: the builder can mint a versioned value as it walks, which is
-      what this and the widening both want.
+      context-free rule under "Measured dead ends". Moving the build to `lower`
+      does not lift that bound: it is the extraction that is point-dependent,
+      not the build. This and the widening above share one prerequisite — a
+      local-naming value that still reads correctly after `inline` / `sroa`
+      move the operand, whether by materialising the value at its def into a
+      slot the operand can name, or by re-materialising instead of relocating
+      such operands.
 
 - [ ] Copy propagation on `ValueId`. Source-stability is not subsumed by value
       equality — a write-once `x` whose source `y` is later reassigned can read
@@ -375,9 +381,10 @@ Each was built, verified, and reverted. Do not retry as-is.
   case. Deleted.
 - **Pooling the graph builder's output maps.** The build is compute-bound (walk +
   hash-cons + flow joins), not allocation-bound; measured no improvement.
-- **Promoting induction-variable `Local` reads to source-bearing opaques.** One
-  `ValueId` per local index spans every version of that local, and an induction
-  variable has one per iteration. Traps `closure_for_loop_mutation`.
+- **Promoting induction-variable `Local` reads to source-bearing opaques.** That
+  resolver keyed one `ValueId` per local index (the builder instead mints one
+  per assignment), so the id spanned every version of the local, and an
+  induction variable has one per iteration. Traps `closure_for_loop_mutation`.
 - **Freezing a local-naming value before the structural passes.** The early
   freeze is sound because a frozen value survives `inline` and `sroa` copying the
   operand around — true of a constant, which means the same thing wherever it
