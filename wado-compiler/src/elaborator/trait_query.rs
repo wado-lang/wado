@@ -1668,7 +1668,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &crate::tir::SlotProjections::from_iter([(0, answers)]),
         );
         let first_value_param = sig.first_value_param().min(instantiated.param_types.len());
-        let declaring_slots = (sig.declaring_slot_count as usize).min(sig.decl.type_params.len());
 
         Some((
             trait_name,
@@ -1682,10 +1681,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 owner: MethodOwner::Receiver,
                 cm_name: None,
                 is_ref_impl: false,
-                method_type_param_ids: sig.decl.type_params[declaring_slots..]
-                    .iter()
-                    .map(|(_, id)| *id)
-                    .collect(),
+                method_type_param_ids: sig.own_type_param_ids(),
                 impl_module: None,
                 from_concrete_impl: false,
                 param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),

@@ -904,7 +904,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             owner: MethodOwner::Receiver,
             cm_name: None,
             is_ref_impl: false,
-            method_type_param_ids: super::sig::method_own_params(&sig),
+            method_type_param_ids: sig.own_type_param_ids(),
             impl_module: Some(impl_ref.0.clone()),
             from_concrete_impl: self.impl_is_concrete_instantiation(
                 &header.ty,
@@ -945,7 +945,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decl
             .instantiate(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
-        let method_type_param_ids = super::sig::method_own_params(&sig);
+        let method_type_param_ids = sig.own_type_param_ids();
 
         Some(MethodInfo {
             impl_offset: None,
@@ -1020,11 +1020,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Infer method-level type arguments for an instance method call using
     /// the method's already-resolved parameter and return types.
     ///
-    /// `expected_param_types` and `decl_return_type` must come from a method
-    /// lookup (`lookup_method_info` / `find_trait_method_for_type`) so that
-    /// any `TypeParam` ids they contain already use the same indexing
-    /// convention as downstream substitution via
-    /// `SubstitutionContext::with_method_args(args, impl_offset)`.
+    /// `param_types` and `decl_return_type` must come from a method lookup
+    /// (`lookup_method_info` / `find_trait_method_for_type`), so the slots
+    /// they mention are the ones that lookup reported and the caller binds.
     ///
     /// This intentionally does **not** re-resolve the method's AST: doing so
     /// in a fresh scope would emit spurious errors for references like
@@ -2435,12 +2433,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the declaration whenever that count is wrong — a pack parameter
             // (`impl<T, ..F> Emit for T`) is the case that exposed it. What the
             // signature says is authoritative, so that is what is reported.
-            let declaring =
-                (method_sig.declaring_slot_count as usize).min(method_sig.decl.type_params.len());
-            let method_type_param_ids: Vec<TypeId> = method_sig.decl.type_params[declaring..]
-                .iter()
-                .map(|(_, id)| *id)
-                .collect();
+            let method_type_param_ids: Vec<TypeId> = method_sig.own_type_param_ids();
             for (i, type_param) in method_type_params.iter().enumerate() {
                 let index = impl_offset + i as u32;
                 let type_param_id =
@@ -2536,7 +2529,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     owner: MethodOwner::Receiver,
                     cm_name: None,
                     is_ref_impl: false,
-                    method_type_param_ids: method_type_param_ids.clone(),
+                    method_type_param_ids,
                     impl_module: Some(impl_module_source.clone()),
                     from_concrete_impl: impl_is_concrete,
                     param_defaults,
@@ -2590,12 +2583,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         owner: MethodOwner::Receiver,
                         cm_name: None,
                         is_ref_impl: false,
-                        method_type_param_ids: default_method.sig.decl.type_params
-                            [(default_method.sig.declaring_slot_count as usize)
-                                .min(default_method.sig.decl.type_params.len())..]
-                            .iter()
-                            .map(|(_, id)| *id)
-                            .collect(),
+                        method_type_param_ids: default_method.sig.own_type_param_ids(),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
                         param_defaults: default_method

@@ -196,24 +196,41 @@ impl Param {
     }
 }
 
-/// The method's own type parameters — the signature's slots past the ones its
-/// declaring block contributes.
-///
-/// A lookup reports these so a use site can bind them. Rebuilding them from a
-/// counted offset instead is what let `impl<T, ..F> Emit for T` number
-/// `emit<S>` at a slot its signature does not use.
-pub(super) fn method_own_params(sig: &MethodSig) -> Vec<crate::tir::TypeId> {
-    let split = (sig.declaring_slot_count as usize).min(sig.decl.type_params.len());
-    sig.decl.type_params[split..]
-        .iter()
-        .map(|(_, id)| *id)
-        .collect()
-}
-
 impl MethodSig {
     /// Index of the first non-receiver parameter in `decl.param_types`.
     pub(crate) fn first_value_param(&self) -> usize {
         usize::from(self.self_kind != crate::ast::SelfKind::None)
+    }
+
+    /// Where `decl.type_params` splits: the declaring block's slots before
+    /// this index, the method's own after it.
+    pub(crate) fn declaring_split(&self) -> usize {
+        let split = self.declaring_slot_count as usize;
+        assert!(
+            split <= self.decl.type_params.len(),
+            "declaring slots ({split}) outnumber the signature's ({})",
+            self.decl.type_params.len()
+        );
+        split
+    }
+
+    /// The slots the declaring block contributes.
+    pub(crate) fn declaring_type_params(&self) -> &[(String, TypeId)] {
+        &self.decl.type_params[..self.declaring_split()]
+    }
+
+    /// The method's own slots — what a use site binds.
+    ///
+    /// Rebuilding these from a counted offset instead is what let
+    /// `impl<T, ..F> Emit for T` number `emit<S>` at a slot its signature does
+    /// not use.
+    pub(crate) fn own_type_params(&self) -> &[(String, TypeId)] {
+        &self.decl.type_params[self.declaring_split()..]
+    }
+
+    /// [`Self::own_type_params`] as bare ids.
+    pub(crate) fn own_type_param_ids(&self) -> Vec<TypeId> {
+        self.own_type_params().iter().map(|(_, id)| *id).collect()
     }
 
     /// Fill the declaring block's slots from `declaring_args` and the
@@ -230,14 +247,14 @@ impl MethodSig {
         declaring_args: &[TypeId],
         method_args: &[TypeId],
     ) -> InstantiatedSig {
-        let split = (self.declaring_slot_count as usize).min(self.decl.type_params.len());
         let mut substitution = IndexMap::default();
         {
             let table = type_table.borrow();
-            let pairs = self.decl.type_params[..split]
+            let pairs = self
+                .declaring_type_params()
                 .iter()
                 .zip(declaring_args)
-                .chain(self.decl.type_params[split..].iter().zip(method_args));
+                .chain(self.own_type_params().iter().zip(method_args));
             for ((_, slot), &arg) in pairs {
                 if let crate::tir::ResolvedType::TypeParam { index, .. }
                 | crate::tir::ResolvedType::TypePack { index, .. } = table.get(*slot)

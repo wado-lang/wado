@@ -2390,12 +2390,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(sig) = self.static_method_sig(struct_name, method_name) else {
             return (vec![], vec![]);
         };
-        let split = (sig.declaring_slot_count as usize).min(sig.decl.type_params.len());
         let ids = |ps: &[(String, TypeId)]| ps.iter().map(|(_, id)| *id).collect();
-        (
-            ids(&sig.decl.type_params[..split]),
-            ids(&sig.decl.type_params[split..]),
-        )
+        (ids(sig.declaring_type_params()), ids(sig.own_type_params()))
     }
 
     /// Report an argument list the blanket template cannot accept, returning

@@ -68,10 +68,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// to the variables it commits to. A variable nobody kept then reports
     /// nothing.
     pub(super) fn mint_infer_var(&mut self) -> TypeId {
-        // Variables are only appended, so the next id is the current count.
         let var = InferVarId(self.infer_holes.solutions.len() as u32);
         let hole = self.tysys.type_table.borrow_mut().make_infer_var(var);
-        self.infer_holes.solutions.insert(hole, None);
+        assert!(
+            self.infer_holes.solutions.insert(hole, None).is_none(),
+            "inference variable {var} minted twice"
+        );
         hole
     }
 

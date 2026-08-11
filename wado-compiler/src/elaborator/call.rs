@@ -2128,8 +2128,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(sig) = self.static_method_sig(prefix, suffix) else {
             return;
         };
-        let split = (sig.declaring_slot_count as usize).min(sig.decl.type_params.len());
-        let (declaring_slots, method_slots) = sig.decl.type_params.split_at(split);
+        let (declaring_slots, method_slots) = (sig.declaring_type_params(), sig.own_type_params());
         if declaring_slots.is_empty() && method_slots.is_empty() {
             return;
         }
@@ -2591,7 +2590,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return (vec![], vec![]);
         }
 
-        let split = (sig.declaring_slot_count as usize).min(inferred.len());
+        let split = sig.declaring_split();
         (inferred[..split].to_vec(), inferred[split..].to_vec())
     }
 
