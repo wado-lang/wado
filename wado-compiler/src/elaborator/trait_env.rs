@@ -1482,6 +1482,19 @@ impl TraitEnv {
         hits.next().is_none().then(|| first.clone())
     }
 
+    /// The one effect or resource declaration named `name`, when exactly one
+    /// module declares it. Declines on ambiguity, like
+    /// [`Self::unique_trait_decl_key`].
+    pub(crate) fn unique_effect_or_resource_decl_key(&self, name: &str) -> Option<DeclKey> {
+        let mut hits = self
+            .effect_decl_index
+            .keys()
+            .chain(self.resource_decl_index.keys())
+            .filter(|(_, n)| n == name);
+        let first = hits.next()?;
+        hits.next().is_none().then(|| first.clone())
+    }
+
     /// Whether `key` names a trait declaration.
     pub(crate) fn declares_trait(&self, key: &DeclKey) -> bool {
         self.decl_index.contains_key(key)

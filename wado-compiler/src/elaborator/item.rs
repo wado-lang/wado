@@ -820,6 +820,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let name = super::trait_env::get_type_name_static(trait_type);
         let key = self.decl_key_or_local(&name);
         if self.trait_decl_header_in_frame(&name).is_some()
+            || self.tysys.trait_env.declares_trait(&key)
             || self.tysys.trait_env.declares_effect_or_resource(&key)
         {
             return;

@@ -859,11 +859,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .declaration_named(&self.current_module_source, name, self.symbols)
     }
 
-    /// [`Self::canonical_decl_key`] with the writing module standing in for an
-    /// unresolvable name — for the indexes that must produce *some* bucket and
-    /// whose entries were filed the same way.
+    /// [`Self::canonical_decl_key`], then the declaration indexes, then the
+    /// writing module — for the callers that must produce *some* bucket.
+    ///
+    /// A name the module never imported still has a declaration: a struct-like
+    /// type reached only through a return type, a stdlib trait a bodiless
+    /// derive names. The indexes answer for those, and decline when several
+    /// modules declare the name rather than picking one — guessing between
+    /// them is the mis-identification this design exists to prevent.
     pub(crate) fn decl_key_or_local(&self, name: &str) -> trait_env::DeclKey {
+        let env = &self.tysys.trait_env;
         self.canonical_decl_key(name)
+            .or_else(|| env.find_struct_like_decl_key(name))
+            .or_else(|| env.unique_trait_decl_key(name))
+            .or_else(|| env.unique_effect_or_resource_decl_key(name))
             .unwrap_or_else(|| (self.current_module_source.clone(), name.to_string()))
     }
 
