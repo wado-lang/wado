@@ -3500,20 +3500,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if coercion_deferred {
                     deferred_coercions.push((provided_idx, provided_idx));
                 }
-                // A field declared as a bare slot of the struct's own frame is
-                // unconstrained: `struct Context<T> { fields: T }` accepts
-                // whatever the literal puts there, and that value is what fixes
-                // `T`. There is nothing to check it against — comparing it with
-                // `T` itself only rejects every value that is not literally a
-                // `T`. Where the slot actually has to agree with something, the
-                // literal's own type carries it to that boundary.
-                let field_is_bare_slot = expected_field_type.is_some_and(|t| {
-                    matches!(
-                        self.tysys.type_table.borrow().get(t),
-                        ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                    )
-                });
-                let check_deferred = coercion_deferred || field_is_bare_slot;
+                // A field whose declared type names a slot of the struct's own
+                // frame is not a constraint on the value — the value is what
+                // fixes the slot. `struct Context<T> { fields: T }` accepts
+                // whatever the literal puts in `fields`, and `Holder<T> { items:
+                // List<T> }` accepts any `List`. Comparing against the slot
+                // itself only rejects every value that is not literally it.
+                //
+                // Nor is it checked once the slot is known: the pass that
+                // re-runs the held-back sequence coercion compares against
+                // whatever the *expected* type had already put in the slot,
+                // which is not this literal's answer (it turned `chain<J>`'s
+                // `IterChain { first: *self, second: other }` into `expected
+                // StrCharIter, found J` across the prelude's iterators). Where
+                // the slot has to agree with something, the literal's own
+                // inferred type carries it to that boundary.
+                let field_names_slot = expected_field_type
+                    .is_some_and(|t| self.tysys.type_table.borrow().contains_rigid_param(t));
+                let check_deferred = coercion_deferred || field_names_slot;
 
                 // Check field name exists in struct definition
                 if struct_fields_known && !struct_field_types.iter().any(|(n, _)| n == &field.name)
