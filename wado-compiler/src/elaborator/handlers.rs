@@ -411,7 +411,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `impl Foo for T` block we're walking; the decl index is
             // keyed by `(decl_module, name)` and two modules can declare
             // a same-named effect / resource.
-            let canonical_key = self.canonical_decl_key(&base_trait_name);
+            let canonical_key = self.decl_key_or_local(&base_trait_name);
             let decl_module = self
                 .tysys
                 .trait_env

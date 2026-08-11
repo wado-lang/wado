@@ -777,7 +777,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             let head = scope.get_type_name(trait_type);
             match crate::resolve::head_site(trait_type) {
                 Some(site) => scope.trait_decl_at(site, &head),
-                None => scope.canonical_decl_key(&head),
+                None => scope.decl_key_or_local(&head),
             }
         });
         let self_type = scope
@@ -818,7 +818,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// there is no reliable answer to build on.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
         let name = super::trait_env::get_type_name_static(trait_type);
-        let key = self.canonical_decl_key(&name);
+        let key = self.decl_key_or_local(&name);
         if self.trait_decl_header_in_frame(&name).is_some()
             || self.tysys.trait_env.declares_effect_or_resource(&key)
         {
@@ -2267,7 +2267,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // body just like `impl Counter for BaseCounter`.
         //
         if let Some(name) = base_trait_name.as_deref() {
-            let canonical_key = scope.canonical_decl_key(name);
+            let canonical_key = scope.decl_key_or_local(name);
             let effect_decl = scope
                 .tysys
                 .trait_env

@@ -1203,7 +1203,11 @@ pub(crate) fn receiver_satisfies_blanket_bounds(
     if bounds.is_empty() {
         return true;
     }
-    let kind = reflect_kind_of(type_id, tt);
+    // A value blanket's parameter is the value type, while the receiver of a
+    // `&self` method — every `Serialize::serialize` call — arrives as a
+    // reference. Asking the reference for its reflection kind answers `None`
+    // and rejects the blanket that should have served the call.
+    let kind = reflect_kind_of(tt.peel_refs(type_id), tt);
     let items = tt.compiler_items();
     let reflect_bounds = [
         CompilerItem::ReflectStruct,

@@ -1233,7 +1233,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (WEP 2026-07-31). A trait's *static* method is not included: it has no
     /// receiver argument to bind `Self` from.
     pub(super) fn is_trait_instance_method(&self, trait_name: &str, method_name: &str) -> bool {
-        let key = self.canonical_decl_key(trait_name);
+        let key = self.decl_key_or_local(trait_name);
         self.tysys.trait_env.declares_trait(&key)
             && self
                 .trait_sig_of(&key)
@@ -1255,7 +1255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let required = super::types::RequiredTrait {
             decl: head_site.map_or_else(
-                || self.canonical_decl_key(trait_name),
+                || self.decl_key_or_local(trait_name),
                 |site| self.trait_decl_at(site, trait_name),
             ),
             args: None,
@@ -1467,7 +1467,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self
                 .tysys
                 .trait_env
-                .declares_trait(&self.canonical_decl_key(&g.name))
+                .declares_trait(&self.decl_key_or_local(&g.name))
         {
             // `Take::<A>::take(recv, …)` — the trait-turbofish qualified call
             // (WEP 2026-07-31): the turbofish pins one argument list by the
@@ -1480,7 +1480,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // misuse), so that shape keeps its unknown-function error.
             if self.is_trait_instance_method(&g.name, &static_call.method)
                 && self
-                    .trait_decl_type_params_of(&self.canonical_decl_key(&g.name))
+                    .trait_decl_type_params_of(&self.decl_key_or_local(&g.name))
                     .is_some_and(|params| !params.is_empty() && params.len() == g.args.len())
             {
                 let declared_head = self.declared_trait_name(&g.name);
@@ -2711,7 +2711,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // though both alias the same bare name `"Counter"`).
         let static_key = static_key_hint
             .cloned()
-            .unwrap_or_else(|| self.canonical_decl_key(struct_name));
+            .unwrap_or_else(|| self.decl_key_or_local(struct_name));
         // Carry the impl's defining module out of the index alongside
         // the AST so the per-param elaborator can swap into its perspective —
         // a static method's signature references types the impl module
@@ -2787,7 +2787,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<(String, Option<ast::Expr>)> {
         let static_key = static_key_hint
             .cloned()
-            .unwrap_or_else(|| self.canonical_decl_key(struct_name));
+            .unwrap_or_else(|| self.decl_key_or_local(struct_name));
         // Names and defaults come out of the same record, so their order
         // matches the parameter types by construction.
         let indexed = self
@@ -3407,7 +3407,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // O(1) lookup via pre-built static method index (impl blocks).
         // Canonicalise so a same-named struct in another module doesn't
         // accidentally claim this name.
-        let static_key = self.canonical_decl_key(struct_name);
+        let static_key = self.decl_key_or_local(struct_name);
         if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key)
             && methods.iter().any(|e| e.name == method_name)
         {

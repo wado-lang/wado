@@ -358,7 +358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         trait_name: &str,
     ) -> Option<&super::trait_env::TraitDeclHeader> {
-        self.trait_decl_header_of(&self.canonical_decl_key(trait_name))
+        self.trait_decl_header_of(&self.decl_key_or_local(trait_name))
     }
 
     /// The declaration header of a trait already identified.
@@ -460,7 +460,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let supertraits: Vec<(String, Option<DeclRef>)> = self
             .tysys
             .trait_env
-            .supertrait_closure(&self.canonical_decl_key(&trait_name))
+            .supertrait_closure(&self.decl_key_or_local(&trait_name))
             .iter()
             .map(|b| (b.name.clone(), self.tysys.resolutions.get(b.id)))
             .collect();
@@ -515,7 +515,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<Vec<ast::GenericParam>> {
         // `canonical_decl_key` is local-first (issue #1298), so the type-param
         // list and the default-method bodies resolve to the same trait.
-        let canonical_key = self.canonical_decl_key(trait_name);
+        let canonical_key = self.decl_key_or_local(trait_name);
         if let Some(loc) = self.tysys.trait_env.decl_index.get(&canonical_key)
             && let Some(header) = self.tysys.trait_env.trait_decl_headers.get(loc)
         {
@@ -1503,7 +1503,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return key;
             }
         }
-        self.canonical_decl_key(written)
+        self.decl_key_or_local(written)
     }
 
 

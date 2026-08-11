@@ -498,7 +498,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // itself. Ask which declaration the name resolves to first, so an
         // alias answers with its target rather than with another module's
         // type that happens to be spelled the same.
-        let (canonical_module, canonical_name) = self.canonical_decl_key(struct_name);
+        let (canonical_module, canonical_name) = self.decl_key_or_local(struct_name);
         if canonical_name != struct_name
             && self
                 .tysys
@@ -1355,7 +1355,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         trait_name: &str,
     ) -> Option<&super::trait_env::TraitDeclHeader> {
-        let canonical_key = self.canonical_decl_key(trait_name);
+        let canonical_key = self.decl_key_or_local(trait_name);
         if let Some(loc) = self.tysys.trait_env.decl_index.get(&canonical_key)
             && let Some(header) = self.tysys.trait_env.trait_decl_headers.get(loc)
         {

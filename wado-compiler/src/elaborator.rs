@@ -502,7 +502,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         receiver_module: Option<&ModuleSource>,
         written_name: &str,
     ) -> Vec<trait_env::DeclKey> {
-        let mut keys = vec![self.canonical_decl_key(written_name)];
+        let mut keys = vec![self.decl_key_or_local(written_name)];
         if let Some(module) = receiver_module {
             // From the receiver's own vantage, not the call site's.
             let by_receiver = self
@@ -832,14 +832,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if crate::name::is_builtin_shape_name(written) {
             return crate::name::FqTypeName::builtin(written);
         }
-        let (module, name) = self.canonical_decl_key(written);
+        let (module, name) = self.decl_key_or_local(written);
         crate::name::FqTypeName::of_head(&module, &name)
     }
 
     /// The declared name of the trait `trait_name` refers to here — the same
     /// name past a `use … as` alias.
     pub(super) fn declared_trait_name(&self, trait_name: &str) -> String {
-        self.canonical_decl_key(trait_name).1
+        self.decl_key_or_local(trait_name).1
     }
 
     /// The declaration `name` means from this module's vantage, for the callers
@@ -847,12 +847,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// Runs the resolution table's own scope lookup rather than a second chain
     /// beside it, so a name-only caller and the site that wrote the same name
-    /// cannot disagree. A name reaching nothing stays with the writing module:
-    /// nothing else claims it.
-    pub(crate) fn canonical_decl_key(&self, name: &str) -> trait_env::DeclKey {
+    /// cannot disagree.
+    ///
+    /// `None` when the name reaches no declaration. Answering with the writing
+    /// module instead would hand back a key indistinguishable from a real
+    /// declaration's, which is the confusion this whole design exists to end —
+    /// so the caller decides what its own absence means.
+    pub(crate) fn canonical_decl_key(&self, name: &str) -> Option<trait_env::DeclKey> {
         self.tysys
             .resolutions
             .declaration_named(&self.current_module_source, name, self.symbols)
+    }
+
+    /// [`Self::canonical_decl_key`] with the writing module standing in for an
+    /// unresolvable name — for the indexes that must produce *some* bucket and
+    /// whose entries were filed the same way.
+    pub(crate) fn decl_key_or_local(&self, name: &str) -> trait_env::DeclKey {
+        self.canonical_decl_key(name)
             .unwrap_or_else(|| (self.current_module_source.clone(), name.to_string()))
     }
 
@@ -895,7 +906,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// derivation consults past its import layers. A genuinely unknown trait
     /// also lands here and is reported elsewhere.
     fn fq_trait_name_undeclared(&self, base: &str) -> crate::name::FqTraitName {
-        let (module, name) = self.canonical_decl_key(base);
+        let (module, name) = self
+            .canonical_decl_key(base)
+            .or_else(|| self.tysys.trait_env.unique_trait_decl_key(base))
+            .unwrap_or_else(|| (self.current_module_source.clone(), base.to_string()));
         crate::name::FqTraitName::declared(&module, &name)
     }
 
@@ -1387,7 +1401,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // which module declares it. Answering here from a second table is how
         // the two sides came to disagree.
         if let Some(name) = self.builtin_type_name(type_id) {
-            return Some(self.canonical_decl_key(&name));
+            return Some(self.decl_key_or_local(&name));
         }
         let tt = self.tysys.type_table.borrow();
         match tt.get(tt.peel_refs(type_id)) {
@@ -1646,7 +1660,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect();
         for (type_name, const_name, ty, value) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
-            let (type_module, canon_type_name) = self.canonical_decl_key(&type_name);
+            let (type_module, canon_type_name) = self.decl_key_or_local(&type_name);
             // An associated-constant key is `Type::CONST` with the module held
             // as the other half of the map key — not a mangled method name, so
             // it does not carry the module inside the string.
