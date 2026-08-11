@@ -169,7 +169,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .record_bound_driven_synth_request(
                 &self_name,
                 &module_source,
-                reflect_trait_name.base_name(),
+                &reflect_trait_name
+                    .canonical()
+                    .expect("a compiler trait item names a declaration"),
             );
 
         let return_type = if method == from_fields_method {
@@ -822,7 +824,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .record_bound_driven_synth_request(&self_name, &module_source, trait_name.base_name());
+            .record_bound_driven_synth_request(
+                &self_name,
+                &module_source,
+                &trait_name
+                    .canonical()
+                    .expect("a compiler trait item names a declaration"),
+            );
 
         let return_type = if is_discriminant {
             TypeTable::I32
@@ -1178,7 +1186,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .record_bound_driven_synth_request(&self_name, &module_source, trait_name.base_name());
+            .record_bound_driven_synth_request(
+                &self_name,
+                &module_source,
+                &trait_name
+                    .canonical()
+                    .expect("a compiler trait item names a declaration"),
+            );
 
         let param_is_mut = self.reflect_scalar_param_is_mut(spec, &method);
         let func_ref = FunctionRef {

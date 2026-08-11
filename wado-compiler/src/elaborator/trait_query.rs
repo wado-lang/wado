@@ -39,6 +39,28 @@ pub(super) enum OnBoundTrait {
 }
 
 impl OnBoundTrait {
+    /// The compiler item this classification came from. The traits that drive
+    /// synthesis are all registered items, so a request records the
+    /// declaration the registry holds rather than the spelling a bound wrote.
+    pub(super) fn compiler_item(self) -> CompilerItem {
+        match self {
+            Self::Eq => CompilerItem::Eq,
+            Self::Ord => CompilerItem::Ord,
+            Self::Serialize => CompilerItem::Serialize,
+            Self::Deserialize => CompilerItem::Deserialize,
+            Self::Default => CompilerItem::Default,
+            Self::ReflectStruct => CompilerItem::ReflectStruct,
+            Self::ReflectVariant => CompilerItem::ReflectVariant,
+            Self::ReflectEnum => CompilerItem::ReflectEnum,
+            Self::ReflectFlags => CompilerItem::ReflectFlags,
+            Self::Ref => CompilerItem::Ref,
+            Self::RefMut => CompilerItem::RefMut,
+            Self::Inspect => CompilerItem::Inspect,
+            Self::InspectAlt => CompilerItem::InspectAlt,
+            Self::DisplayAlt => CompilerItem::DisplayAlt,
+        }
+    }
+
     pub(super) fn is_serde(self) -> bool {
         matches!(self, Self::Serialize | Self::Deserialize)
     }
@@ -696,6 +718,16 @@ impl TypeSystem {
         self.type_table.borrow().is_reflect_eligible(type_id)
     }
 
+    /// The declaration a synthesis-driving trait names, from the compiler-item
+    /// registry rather than the spelling that classified it.
+    pub(super) fn synth_trait_key(&self, on_bound: OnBoundTrait) -> Option<crate::tir::TraitKey> {
+        self.type_table
+            .borrow()
+            .compiler_items()
+            .trait_fq_opt(on_bound.compiler_item())
+            .and_then(|t| t.canonical())
+    }
+
     pub(super) fn classify_on_bound_trait(
         &self,
         scope: &TypeLookup,
@@ -1107,9 +1139,11 @@ impl TypeSystem {
                     self.type_implements_trait(ctx, scope, member, trait_name, None)
                 }) == Some(true)
             {
-                self.type_table
-                    .borrow_mut()
-                    .record_bound_driven_synth_request(name, module_source, trait_name);
+                if let Some(key) = self.synth_trait_key(tr) {
+                    self.type_table
+                        .borrow_mut()
+                        .record_bound_driven_synth_request(name, module_source, &key);
+                }
                 return true;
             }
         }
@@ -1122,9 +1156,11 @@ impl TypeSystem {
             && on_bound == Some(OnBoundTrait::Default)
             && self.auto_derive_default_struct_type(scope, name).is_some()
         {
-            self.type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
+            if let Some(key) = on_bound.and_then(|t| self.synth_trait_key(t)) {
+                self.type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request(name, module_source, &key);
+            }
             return true;
         }
 
@@ -1187,9 +1223,11 @@ impl TypeSystem {
                 _ => false,
             }
         {
-            self.type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
+            if let Some(key) = on_bound.and_then(|t| self.synth_trait_key(t)) {
+                self.type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request(name, module_source, &key);
+            }
             return true;
         }
 
@@ -1492,9 +1530,12 @@ impl TypeSystem {
         let Some(module_source) = subject else {
             return false;
         };
+        let Some(key) = self.synth_trait_key(on_bound) else {
+            return false;
+        };
         self.type_table
             .borrow_mut()
-            .record_bound_driven_synth_request(type_name, &module_source, bound_name);
+            .record_bound_driven_synth_request(type_name, &module_source, &key);
         true
     }
 }

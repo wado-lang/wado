@@ -160,28 +160,25 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         return;
     };
 
-    let (serialize_name, deserialize_name) = {
+    let (serialize_key, deserialize_key) = {
         let tt = type_table.borrow();
         let items = tt.compiler_items();
         (
             items
-                .trait_name_opt(CompilerItem::Serialize)
-                .map(str::to_string),
+                .trait_fq_opt(CompilerItem::Serialize)
+                .and_then(|t| t.canonical()),
             items
-                .trait_name_opt(CompilerItem::Deserialize)
-                .map(str::to_string),
+                .trait_fq_opt(CompilerItem::Deserialize)
+                .and_then(|t| t.canonical()),
         )
     };
 
     // Fetch and filter to just ours (Eq/Ord entries belong to
     // `synthesize_traits`) before the scan below, so a program with no
     // bound-driven serde requests skips it entirely.
-    let requests = type_table
-        .borrow()
-        .bound_driven_synth_requests(|trait_name| {
-            Some(trait_name) == serialize_name.as_deref()
-                || Some(trait_name) == deserialize_name.as_deref()
-        });
+    let requests = type_table.borrow().bound_driven_synth_requests(|key| {
+        Some(key) == serialize_key.as_ref() || Some(key) == deserialize_key.as_ref()
+    });
     if requests.is_empty() {
         return;
     }
@@ -215,10 +212,10 @@ fn distribute_bound_driven_requests(project: &mut Package) {
             .collect()
     };
 
-    for (target_type_name, module_source, trait_name) in requests {
-        // `requests` is already filtered to serialize_name/deserialize_name,
-        // so the else branch below is always Deserialize.
-        let trait_ref = if Some(trait_name.as_str()) == serialize_name.as_deref() {
+    for (target_type_name, module_source, trait_key) in requests {
+        // `requests` is already filtered to the two serde traits, so the else
+        // branch below is always Deserialize.
+        let trait_ref = if Some(&trait_key) == serialize_key.as_ref() {
             SynthTrait::Serialize
         } else {
             SynthTrait::Deserialize

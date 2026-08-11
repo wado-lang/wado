@@ -90,6 +90,16 @@ impl Resolutions {
         Self { refs, decls }
     }
 
+    /// The declaration a [`DeclRef`] names, for a consumer that already holds
+    /// the answer rather than the site it came from.
+    #[must_use]
+    pub fn decl_named(&self, answer: DeclRef) -> Option<(&ModuleSource, &str)> {
+        match answer {
+            DeclRef::Decl(id) => self.decls.get(&id).map(|(m, n)| (m, n.as_str())),
+            DeclRef::Binder(_) | DeclRef::Builtin(_) | DeclRef::Unresolved => None,
+        }
+    }
+
     /// The declaration a reference site names: the module that declares it and
     /// the name that declaration writes. `None` for a binder, a builtin shape,
     /// an unresolved name, or a site the walk never reached.

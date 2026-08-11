@@ -243,6 +243,33 @@ Costs and risks:
            records the trait as a `String`; it declines when two declarations
            sharing the name disagree rather than letting registration order
            decide.
+         - The synthesis gate — `bound_driven_synth_requests` and
+           `SynthesisCtx`'s `pending` / `requested` — keys on `TraitKey`. The
+           traits that drive synthesis are all compiler items, so
+           `OnBoundTrait::compiler_item` reads the declaration off the registry
+           instead of the bound's spelling.
+
+### The measurements, as they stand
+
+The two counts the Context section opened with, plus the debt this migration
+has itself created:
+
+| | at the start | now |
+| ------------------------------------------ | ------------ | --- |
+| `trait_name: &str` parameters               | 114          | 67  |
+| `struct_name` / `type_name: &str`           | 93           | 94  |
+| `.base_name()` — an identity flattened back | 0            | 22  |
+
+The receiver half has not moved. Flipping a parameter's type is what makes the
+work enumerable, and that flip has not been run on the receiver side; until it
+is, the second row is the honest measure of how much of this design is
+unbuilt.
+
+`.base_name()` is the shape of the remaining compromise: a caller holds an
+identity and flattens it to a name because the API it calls has not been
+flipped yet. Each one is a place the class survives. `fq_trait_name_written`
+is the same debt in function form — it resolves a spelling in the consumer's
+frame, which is the defect generator this WEP names. Both should reach zero.
          - `locate_static_method_impl`, the conversion-impl survey, and the CM
            interface registry.
 -

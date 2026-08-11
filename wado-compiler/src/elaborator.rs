@@ -1005,10 +1005,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     "explicit derive marker validated for non-nominal type `{other:?}`"
                 ),
             };
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
+            // The marker's own site says which trait it names; the request is
+            // keyed by that declaration, not by the spelling.
+            if let Some(key) = self.fq_trait_name(trait_type).canonical() {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request(target_type_name, &module_source, &key);
+            }
             return;
         }
         let receiver = Receiver::Type(self.tysys.fq_receiver_head(target_type_id));

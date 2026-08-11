@@ -714,7 +714,7 @@ pub struct TypeTable {
     /// Read by both `synthesis::serde_synth::synthesize_serde` and
     /// `synthesis::traits::synthesize_traits`, each filtering for the trait
     /// names it owns.
-    bound_driven_synth_requests: IndexSet<(String, ModuleSource, String)>,
+    bound_driven_synth_requests: IndexSet<(String, ModuleSource, TraitKey)>,
     /// Variant case templates: `(variant name, module)` → `(case name, case
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
@@ -1305,17 +1305,17 @@ impl TypeTable {
         &mut self,
         type_name: &str,
         module_source: &ModuleSource,
-        trait_name: &str,
+        trait_key: &TraitKey,
     ) {
         let already_recorded = self
             .bound_driven_synth_requests
             .iter()
-            .any(|(n, m, t)| n == type_name && m == module_source && t == trait_name);
+            .any(|(n, m, t)| n == type_name && m == module_source && t == trait_key);
         if !already_recorded {
             self.bound_driven_synth_requests.insert((
                 type_name.to_string(),
                 module_source.clone(),
-                trait_name.to_string(),
+                trait_key.clone(),
             ));
         }
     }
@@ -1328,11 +1328,11 @@ impl TypeTable {
     /// means each caller only clones the entries it keeps.
     pub fn bound_driven_synth_requests(
         &self,
-        mut matches: impl FnMut(&str) -> bool,
-    ) -> Vec<(String, ModuleSource, String)> {
+        mut matches: impl FnMut(&TraitKey) -> bool,
+    ) -> Vec<(String, ModuleSource, TraitKey)> {
         self.bound_driven_synth_requests
             .iter()
-            .filter(|(_, _, trait_name)| matches(trait_name))
+            .filter(|(_, _, trait_key)| matches(trait_key))
             .cloned()
             .collect()
     }

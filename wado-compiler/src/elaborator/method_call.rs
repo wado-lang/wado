@@ -3350,7 +3350,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .record_bound_driven_synth_request(
                     struct_name,
                     &module_source,
-                    default_trait_name.base_name(),
+                    &default_trait_name
+                        .canonical()
+                        .expect("a compiler trait item names a declaration"),
                 );
             return Some(StaticMethodRef::new(
                 module_source,
