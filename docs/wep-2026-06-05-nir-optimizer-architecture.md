@@ -324,6 +324,17 @@ lever it looks like.
       has no consumer until the in-loop freeze lands, leaving only the
       slowdown. The parallel-`wado test` OOM the comment claims is still
       untested — that is this item's entry check, not a settled fact.
+- [ ] Retire the remaining pure `ExprKind` variants from the skeleton, so every
+      pure position is an `Operand::Value`. This is a compile-speed item, not
+      only the saturation prerequisite it also is: pure kinds are 52 % of the
+      arena on `benchmark/sqlite_parse` and `benchmark/syntax_highlight`, and
+      the `Local` nodes the engine's use index is made of are 34 %. Retiring
+      them halves what every session walk and every arena scan covers, and the
+      use index largely empties as reads move into the pool — the same saving
+      carrying a session index chased, taken structurally instead of behind a
+      new invariant (see "Not a session index carried across passes"). Measure
+      `Engine::new` (1.03 s, ~17 % of the loop) again afterwards: the remaining
+      compile-speed items are all sized against a skeleton this shrinks.
 - [ ] Arena compaction. In-place rewrites orphan nodes that are never freed
       mid-run (~1.66× bloat measured at end-of-optimize on `package-gale`).
 
@@ -376,8 +387,6 @@ Precision.
 
 Terminal ideal, gated behind measurement (see "Not equality saturation").
 
-- [ ] Retire the remaining pure `ExprKind` variants from the skeleton, so every
-      pure position is an `Operand::Value`.
 - [ ] Saturation driver plus cost-based extraction: run rules to a bounded
       saturation, then extract a cost-minimal form per operand, materialising a
       multi-use value only when sharing beats duplication. This subsumes the
