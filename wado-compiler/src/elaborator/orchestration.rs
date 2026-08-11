@@ -797,13 +797,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // interior-mutable table. Take a private copy before anything can
             // write, or one compilation's answers become every later one's.
             let _ = Arc::make_mut(&mut cm_interface_registry);
+            // Only the WIT importer knows a component reference's precise
+            // owning interface, so its answers are carried here rather than
+            // re-derived from the binding module's own interface FQ. They must
+            // land before the decls are registered: registration resolves a
+            // parameter's newtype through the interface its reference names.
+            cm_interface_registry.extend_source_interfaces(cm_source_interfaces.clone());
             // Resolve `Interface::method` calls into CM components during
             // annotate — the same role build_from_stdlib plays for WASI.
             fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set);
-            // Only the WIT importer knows a component reference's precise
-            // owning interface, so its answers are carried here rather than
-            // re-derived from the binding module's own interface FQ.
-            cm_interface_registry.extend_source_interfaces(cm_source_interfaces.clone());
             (cm_interface_registry, world_registry)
         };
         let builtin_registry = {
