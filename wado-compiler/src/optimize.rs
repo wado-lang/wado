@@ -321,6 +321,17 @@ pub fn optimize(
     // The born-resolved invariant is now enforced by the type system: a call
     // node's `func_id` is a non-optional `FuncId`, stamped at its synthesis site.
 
+    // TEMPORARY census — revert.
+    if crate::trace::filter().enabled("ref_arg_alias") {
+        use std::sync::atomic::Ordering::Relaxed;
+        let only = alias::REF_ARG_ONLY.load(Relaxed);
+        let total = alias::REF_ARG_TOTAL.load(Relaxed);
+        crate::compiler_trace!(
+            "ref_arg_alias",
+            "ref-arg alias marks={total}, of which the sole reason the local is aliased={only}"
+        );
+    }
+
     project
 }
 

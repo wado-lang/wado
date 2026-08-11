@@ -375,10 +375,21 @@ Precision.
 - [ ] Induction-variable recognition (`Opaque` tagged `{ base, step }`). Not
       needed yet — post-increment reads already appear as `Add(opaque_i, step)` —
       so it lands when a rule first wants it.
-- [ ] Plumb a callee's `stores` annotation into `alias::AliasCollector`, so a
-      `&` / `&mut` on a local flowing into a `stores`-free callee stops marking
-      the local aliased. The unconditional mark over-approximates the common
-      `(&self).field` patterns.
+- [ ] Stop a `&` / `&mut` on a local that flows only into `stores`-free callees
+      from marking the local aliased. Plumbing the callee's `stores` into
+      `alias::escape_ref_arg` is not the way: `build_alias_info` seeds `aliased`
+      from `address_taken_locals`, and the elaborator marks that for every
+      `&x` / `&mut x` on a local, so the `(&self).field` shape this was written
+      for is already aliased before the call site is looked at. Measured, 3.7 %
+      of ref-arg marks (2 099 of 56 269 on `benchmark/sqlite_parse`) are the
+      sole reason their local is aliased — refs to a projection (`f(&x.field)`),
+      which the elaborator does not record. Narrowing the rest means narrowing
+      the seed, which is a whole-function question (do _all_ uses of `&x` flow
+      into `stores`-free callees?) over an annotation `boxing`, `sroa`, and
+      `elide_local` also read. Also note `mut_escaped` is built by filtering
+      `aliased`, so dropping a local from `aliased` silently drops it from
+      `mut_escaped` too — a callee that cannot retain a reference can still
+      mutate through it during the call, so the two have to be decoupled first.
 - [ ] Directed gate propagation (callee-shrink → callers only). Deferred: it
       drops the edges `inline` adds to the build-once call graph, and a
       per-iteration rebuild does not recover them — the staleness is
