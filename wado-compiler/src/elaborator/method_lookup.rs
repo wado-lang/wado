@@ -962,7 +962,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-<<<<<<< HEAD
     /// The index the declaration gave the first of `slots`, or 0 when there
     /// are none. A slot carries its own index; nothing else knows it.
     fn slot_base(&self, slots: &[TypeId]) -> u32 {
@@ -978,32 +977,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or(0)
     }
 
-    /// Bind a still-unbound method type param to its declared default, resolving
-    /// the default with `Self` set to the concrete receiver.
-||||||| 85d9e6045
-    /// Bind a still-unbound method type param to its declared default, resolving
-    /// the default with `Self` set to the concrete receiver.
-=======
     /// Bind a still-unbound method type param to its declared default,
     /// resolving the default with `Self` set to the concrete receiver and
     /// `default_scope_module` pointed at the declaring module — a default may
     /// name a type private to that module (`<T = Priv>`), which the call site
     /// cannot resolve. The free-function path does the same
     /// ([`Self::fill_defaulted_fn_type_args`]).
->>>>>>> origin/main
     fn fill_defaulted_method_type_args(
         &mut self,
         method_type_params: &[ast::GenericParam],
         receiver_type: TypeId,
         trait_name: Option<&str>,
-<<<<<<< HEAD
         slots: &[TypeId],
-||||||| 85d9e6045
-        impl_offset: u32,
-=======
         declaring_module: Option<ModuleSource>,
-        impl_offset: u32,
->>>>>>> origin/main
         inferred: &mut [TypeId],
     ) {
         let receiver_type = self.tysys.get_base_type(receiver_type);
@@ -1026,33 +1012,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // arguments, which overshoots on a concrete or pack-bearing impl.
         let base = self.slot_base(slots);
         let defaults: Vec<Option<TypeId>> = self.with_self_type(receiver_type, |s| {
-<<<<<<< HEAD
-            let mut scope = s.enter_inherited_type_param_scope();
-            scope.annotate_ctx.trait_ctx.type_params.clear();
-            scope.register_generic_params(method_type_params, base);
-            method_type_params
-                .iter()
-                .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
-                .collect()
-||||||| 85d9e6045
-            let mut scope = s.enter_inherited_type_param_scope();
-            scope.annotate_ctx.trait_ctx.type_params.clear();
-            scope.register_generic_params(method_type_params, impl_offset);
-            method_type_params
-                .iter()
-                .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
-                .collect()
-=======
             s.with_default_scope_module(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.type_params.clear();
-                scope.register_generic_params(method_type_params, impl_offset);
+                scope.register_generic_params(method_type_params, base);
                 method_type_params
                     .iter()
                     .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
                     .collect()
             })
->>>>>>> origin/main
         });
         for i in 0..inferred.len() {
             if self.is_unbound_type_param(inferred[i])
@@ -1149,14 +1117,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method_type_params,
             receiver_type,
             trait_name,
-<<<<<<< HEAD
             slots,
-||||||| 85d9e6045
-            impl_offset,
-=======
             declaring_module,
-            impl_offset,
->>>>>>> origin/main
             &mut inferred,
         );
         // A slot the solver left as its own variable is unconstrained. The
@@ -2072,15 +2034,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let self_kind = method_sig.self_kind;
             let trait_name = scope.get_type_name_full(&trait_type_for_name);
 
-<<<<<<< HEAD
-            let impl_slots: IndexMap<u32, TypeId> = scope
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .values()
-                .copied()
-                .collect();
-
             // Bring the reported slots into scope, so the body resolves `T`
             // to the slot the call site binds. Effect and `fn`-bound params
             // occupy none, so they are not registered.
@@ -2104,41 +2057,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | ResolvedType::TypePack { index, .. } => *index,
                     other => panic!("method slot is not a type parameter: {other:?}"),
                 };
-||||||| 85d9e6045
-            let impl_slots: IndexMap<u32, TypeId> = scope
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .values()
-                .copied()
-                .collect();
-
-            let impl_offset = crate::tir::method_param_offset_of(impl_slots.keys().copied());
-            for (i, type_param) in method_type_params.iter().enumerate() {
-                let index = impl_offset + i as u32;
-                let type_param_id =
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::TypeParam {
-                            name: type_param.name.clone(),
-                            index,
-                        });
-=======
-            let impl_offset = crate::tir::method_param_offset_of(impl_slots.keys().copied());
-            for (i, type_param) in method_type_params.iter().enumerate() {
-                let index = impl_offset + i as u32;
-                let type_param_id =
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::TypeParam {
-                            name: type_param.name.clone(),
-                            index,
-                        });
->>>>>>> origin/main
                 scope
                     .annotate_ctx
                     .trait_ctx

@@ -770,31 +770,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-<<<<<<< HEAD
-        // Stage 5 (WEP 2026-05-26): record the resolved
-||||||| 85d9e6045
-        let mangled_builder_name = builder_base_name.clone().with_args(type_arg_names.clone());
-
-        let new_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
-        let push_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "push_literal");
-        let build_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "build");
-
-        // Stage 5 (WEP 2026-05-26): record the resolved
-=======
-        let mangled_builder_name = builder_base_name.clone().with_args(type_arg_names.clone());
-
-        let new_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
-        let push_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "push_literal");
-        let build_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "build");
-
         // WEP 2026-05-26: record the resolved
->>>>>>> origin/main
         // `SequenceLiteralBuilder` impl data so reify can rebuild the
         // same `__seq_lit:` desugar block deterministically — the
         // trait-impl lookup chain (newtype peel + sequence-trait
