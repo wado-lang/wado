@@ -313,14 +313,41 @@ Costs and risks:
            never the disease — they are two populations of caller, each
            served by the layer that happens to speak its namespace.
 
-           So the order is forced: **type the query parameter first**. Give
-           `impl_module_for` a `&name::Receiver` (or a `MangledName`) instead
-           of `&str` and the compiler enumerates every caller and makes each
-           one say which namespace it holds — the same flip that made the
-           trait side tractable. Only once every query speaks one namespace
-           can the storage be unified, or the index deleted in favour of
-           `by_receiver` filtered by `ImplHeader::fq_trait`. Re-keying the
-           storage before that step is what fails, and it will fail again.
+           Recording *both* spellings, so a query reaches the layer from
+           either namespace, was tried next and broke 31 serde and reflect
+           fixtures — the same set as the first attempt. Removing the delta
+           guard along with it changed nothing, which rules out the
+           "user-written impls get taken away from the monomorphizer" reading
+           above.
+
+           **The mechanism is `pick_module_union`'s precedence.** It answers
+           from the AST layer first and only falls through to the synthesised
+           one. For a type carrying both a user-written impl and a generated
+           one, those are different modules, and the monomorphizer needs the
+           generated one. Today a mangled query cannot reach the AST layer at
+           all, so it always gets the synthesised answer — the precedence is
+           only ever exercised for declared-name queries. Make the AST layer
+           reachable and the precedence starts firing where it never has, and
+           routes serde types to the user impl's module.
+
+           So the layer precedence is load-bearing and was tuned to the
+           namespace mismatch. That is a third defect entangled with the
+           other two, and it is why no amount of re-keying works: the index's
+           behaviour is defined by which layer a query happens to be able to
+           see. Fixing it means saying, per query, whether it wants "where is
+           the impl block" or "where is the code" — which the current
+           signature cannot express.
+
+           The order is therefore forced: **type the query parameter first**.
+           Give `impl_module_for` a `&name::Receiver` (or a `MangledName`)
+           instead of `&str` and the compiler enumerates every caller and
+           makes each say which namespace it holds — the same flip that made
+           the trait side tractable. With the callers enumerated, the two
+           questions can be split into two methods, and only then can the
+           storage be unified or the index deleted in favour of `by_receiver`
+           filtered by `ImplHeader::fq_trait`. Every attempt that starts at
+           the storage fails, and this WEP now has three measurements saying
+           so.
          - **An impl header's trait is the declaration its site resolved to.**
            Found by accident: a fixture declaring
            `trait Sub { fn sub(&self) -> i32; }` and implementing it was
