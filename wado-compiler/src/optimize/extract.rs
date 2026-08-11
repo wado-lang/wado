@@ -604,6 +604,44 @@ fn value_may_trap(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool 
     }
 }
 
+/// Whether one shared local beats re-emitting `v` at each use. Re-emission pays
+/// the tree's operations per use; the local pays one `local.set`, a `local.get`
+/// per use, and a slot. A single operation over leaves does not clear that —
+/// `0 - precision` is one `i32.sub`, cheaper to repeat than to store and reload
+/// — so materialising wants at least two.
+///
+/// A stand-in for the extraction cost model, on the conservative side: refusing
+/// leaves the value re-emitted, which is what every use did before it was a
+/// candidate.
+fn worth_materialising(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool {
+    fn count(pool: &crate::nir_value_graph::ValuePool, v: ValueId, n: &mut u32) {
+        if *n >= 2 {
+            return;
+        }
+        match pool.kind(v).clone() {
+            ValueKind::Binary { lhs, rhs, .. } => {
+                *n += 1;
+                count(pool, lhs, n);
+                count(pool, rhs, n);
+            }
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                *n += 1;
+                count(pool, operand, n);
+            }
+            ValueKind::Select { cond, then, else_ } => {
+                *n += 1;
+                count(pool, cond, n);
+                count(pool, then, n);
+                count(pool, else_, n);
+            }
+            _ => {}
+        }
+    }
+    let mut n = 0;
+    count(pool, v, &mut n);
+    n >= 2
+}
+
 /// Apply strategy for a non-`FieldAccess` (pure-arith / constant) representative.
 /// A value used by several slots whose leaves are all non-`mut` parameters is
 /// **materialised once** — a single `let _av = <value>` all uses read via
@@ -611,12 +649,13 @@ fn value_may_trap(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool 
 /// placement [`apply_field_materialise`] uses. Every other case redirects each
 /// use to the pooled representative inline.
 ///
-/// The leaves being parameters bounds neither hazard: availability says where
-/// the value *can* be computed, not that the program wanted it computed there.
-/// So a trapping value is refused (hoisting `a / b` out of `if b != 0` traps a
-/// program that never divides by zero), and the point is the nearest common
-/// dominator rather than function entry, keeping a branch-only value out of
-/// every call.
+/// The leaves being parameters bounds none of the hazards: availability says
+/// where the value *can* be computed, not that the program wanted it computed
+/// there, nor that computing it once is cheaper. So a trapping value is refused
+/// (hoisting `a / b` out of `if b != 0` traps a program that never divides by
+/// zero), the point is the nearest common dominator rather than function entry,
+/// keeping a branch-only value out of every call, and a value too cheap to share
+/// stays re-emitted ([`worth_materialising`]).
 fn apply_value_freeze(
     engine: &mut Engine,
     rep: ValueId,
@@ -629,7 +668,8 @@ fn apply_value_freeze(
     let materialize = ids.len() > 1
         && !leaves.is_empty()
         && leaves.iter().all(|l| param_set.contains(l))
-        && !value_may_trap(&engine.body.values, rep);
+        && !value_may_trap(&engine.body.values, rep)
+        && worth_materialising(&engine.body.values, rep);
     let mut changed = false;
     if materialize {
         let name = format!("_av_{}", engine.locals().len());
