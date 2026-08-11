@@ -146,6 +146,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Carry each slot's declared trait bounds onto the variable standing in
+    /// for it, so [`Self::finalize_infer_holes`] re-checks whatever solved it.
+    ///
+    /// A call site only ever meets the unconstrained variable, so this is the
+    /// single point at which `get<T: Producer>()` deferred to a later sink can
+    /// still be told that `String` is not a `Producer`. Nothing is attached to
+    /// a slot instantiation declined, which is rigid and never solved.
+    pub(super) fn record_slot_bounds(
+        &mut self,
+        inst: &Instantiated,
+        params: &[crate::ast::GenericParam],
+        span: Span,
+    ) {
+        for (&var, param) in inst.vars.iter().zip(params.iter()) {
+            let bounds: Vec<String> = param
+                .bounds
+                .iter()
+                .filter(|b| b.fn_signature.is_none())
+                .map(|b| b.name.clone())
+                .collect();
+            self.attach_infer_var_bounds(var, param.name.clone(), bounds, span);
+        }
+    }
+
     /// Attach each slot's "cannot infer" diagnostic to the variable still
     /// standing in for it, so an unsolved one is reported at finalize.
     pub(super) fn blame_unsolved(&mut self, inst: &Instantiated, solved: &[TypeId]) {

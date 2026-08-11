@@ -1146,6 +1146,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             },
         );
+        self.record_slot_bounds(&inst, &method_type_params, span);
         let param_types = self.instantiate_types(param_types, &inst);
         let decl_return_type = self.instantiate_type(decl_return_type, &inst);
 
