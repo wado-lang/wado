@@ -312,7 +312,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Handles numeric literals, null, string newtypes, and tuple-to-array coercion.
     /// Returns `None` if no coercion applies.
     ///
-    /// Stage 4 of WEP 2026-05-26: each successful branch records the
+    /// WEP 2026-05-26: each successful branch records the
     /// chosen [`super::sem::types::CoercionKind`] in
     /// [`super::sem::types::TypeAnnotations::coercions`] keyed by
     /// `expr.id()`. The variants that fan out into shared
@@ -622,7 +622,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None
         };
 
-        // Stage 5 (WEP 2026-05-26): record the resolved
+        // WEP 2026-05-26: record the resolved
         // `KeyValueLiteralBuilder` impl data so reify can rebuild the
         // same `__kv_lit:` desugar block deterministically.
         let key = expr.id();
@@ -774,7 +774,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let build_mangled_name =
             MethodName::format_local(&mangled_builder_name, Some(&trait_name), "build");
 
-        // Stage 5 (WEP 2026-05-26): record the resolved
+        // WEP 2026-05-26: record the resolved
         // `SequenceLiteralBuilder` impl data so reify can rebuild the
         // same `__seq_lit:` desugar block deterministically — the
         // trait-impl lookup chain (newtype peel + sequence-trait

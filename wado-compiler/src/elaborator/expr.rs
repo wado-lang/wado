@@ -175,8 +175,7 @@ enum ExhPattern {
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve an AST expression to its TIR form. Records the resolved
     /// [`TypeId`] in [`super::sem::TypeAnnotations::expression_types`]
-    /// before returning so the future `reify` pass (Stage 5 of the
-    /// elaborator re-architecture WEP) can read the type without re-running
+    /// before returning so reify can read the type without re-running
     /// inference. All sub-expression recursion routes back through this
     /// entry point, so every visited [`AstId`] leaves an annotation —
     /// including operands of binary ops, call arguments, and trailing
@@ -339,7 +338,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.check_branch_type(tail_type, result_type, lb.span);
                 }
 
-                // Stage 7-B: reify rebuilds the `LabeledBlock` from the AST,
+                // Reify rebuilds the `LabeledBlock` from the AST,
                 // re-running the same break-type unification. The combined walk
                 // resolved the body and ran break-type / null diagnostics for
                 // their side effects; project only the unified result type.
@@ -364,7 +363,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// primitive types and newtypes. For generic types, use `resolve_type` instead.
     /// Resolve a method call
     pub(super) fn resolve_literal(&mut self, lit: &ast::LiteralExpr) -> TypeId {
-        // Stage 7-B: reify rebuilds every literal node from the AST; the
+        // Reify rebuilds every literal node from the AST; the
         // combined walk only needs the literal's type and its parse / unescape
         // diagnostics. The returned value is a placeholder, so this projects
         // only the type while preserving the validation side effects.
@@ -531,7 +530,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     defining_ast_id,
                 } => {
                     self.record_reference_opt(ident.id, defining_ast_id);
-                    // Stage 7-B: reify rebuilds the `Local` (`reify_ident`);
+                    // Reify rebuilds the `Local` (`reify_ident`);
                     // record the place so `assign_to_target` can classify an
                     // ident l-value without the resolved `kind`.
                     self.record_assign_place(ident.id, super::sem::types::AssignPlace::Local);
@@ -543,7 +542,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     defining_ast_id,
                 } => {
                     self.record_reference_opt(ident.id, defining_ast_id);
-                    // Stage 7-B: reify rebuilds the `Capture`. A by-value
+                    // Reify rebuilds the `Capture`. A by-value
                     // capture is not an l-value, so no place is recorded.
                     return type_id;
                 }
@@ -555,7 +554,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } => {
                     self.record_reference_opt(ident.id, defining_ast_id);
                     // Deref capture: `*self.__capture_N` where the field holds
-                    // `&mut T` (mutable closure capture). Stage 7-B: reify
+                    // `&mut T` (mutable closure capture). Reify
                     // rebuilds the `*capture` shape; record the place so the
                     // assign path can validate it (assignable iff the captured
                     // reference is `&mut`, not a shared `&`).
@@ -599,7 +598,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check for global variables in current module
         if let Some(&(ty, mutable)) = self.sem.decls.current_module_globals.get(&ident.name) {
             self.record_item_reference_by_name(ident.id, &ident.name);
-            // Stage 7-B: reify rebuilds the `GlobalVarGet`; record the place so
+            // Reify rebuilds the `GlobalVarGet`; record the place so
             // `assign_to_target` validates global mutability + emits the
             // `GlobalVarSet` projection without the resolved `kind`.
             self.record_assign_place(
@@ -621,7 +620,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(_src, orig, ty, m)| (orig.clone(), *ty, *m))
         {
             self.record_item_reference_by_name(ident.id, &ident.name);
-            // Stage 7-B: reify rebuilds the imported `GlobalVarGet` (keyed by
+            // Reify rebuilds the imported `GlobalVarGet` (keyed by
             // the original name); record the place for the assign path. Keep
             // the original (source) name for the immutable-global diagnostic,
             // matching the pre-7-B message that read it off `GlobalVarGet`.
@@ -649,7 +648,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check if it's a prelude function (panic, unreachable)
         // These are defined in core:rt and re-exported by core:prelude
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
-            // Stage 7-B: reify rebuilds the prelude `FuncRef`.
             return TypeTable::UNKNOWN;
         }
 
@@ -843,7 +841,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 };
 
-                // Stage 5 (Gap 1): record generic type args for
+                // Record generic type args for
                 // payload-less variant references that compile to a
                 // `VariantConstruct` (e.g. `Option::<i32>::None`).
                 let type_args = match self.tysys.type_table.borrow().get(variant_type) {
@@ -852,7 +850,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 self.record_generic_instantiation(ident.id, type_args, variant_type);
 
-                // Stage 7-B: reify rebuilds the payload-less
+                // Reify rebuilds the payload-less
                 // `VariantConstruct` from the AST + recorded generic
                 // instantiation. Not an l-value.
                 return Some(variant_type);
@@ -872,7 +870,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .type_id_of_decl(enum_info.defined_at);
 
-            // Stage 7-B: reify rebuilds the `EnumConstruct`. Not an l-value.
+            // Reify rebuilds the `EnumConstruct`. Not an l-value.
             return Some(enum_type);
         }
 
@@ -888,7 +886,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             self.record_qualified_case(ident, prefix, member.ast_id);
             self.check_case_turbofish_arity(ident, prefix, 0);
-            // Stage 7-B: reify rebuilds the flags-member `IntLiteral`.
             return Some(flags_info.type_id);
         }
         None
@@ -942,7 +939,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             // Fallback: known function but its signature is unreachable
             // (shouldn't normally happen). Emit a stub FuncRef so downstream
-            // stays sane. Stage 7-B: reify rebuilds the stub `FuncRef`.
+            // stays sane.
             return TypeTable::UNKNOWN;
         };
 
@@ -970,7 +967,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .compute_func_ref_type_from_sig(&sig, &resolved_args)
                 .unwrap_or(TypeTable::UNKNOWN);
             self.record_func_ref_instantiation(ident.id, &resolved_args, type_id);
-            // Stage 7-B: reify rebuilds the turbofish `FuncRef` from the
+            // Reify rebuilds the turbofish `FuncRef` from the
             // recorded instantiation. Project the type only.
             return type_id;
         }
@@ -980,7 +977,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let type_id = self
                 .compute_func_ref_type_from_sig(&sig, &[])
                 .unwrap_or(TypeTable::UNKNOWN);
-            // Stage 7-B: reify rebuilds the non-generic `FuncRef`.
             return type_id;
         }
 
@@ -992,7 +988,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .compute_func_ref_type_from_sig(&sig, &inferred)
                         .unwrap_or(TypeTable::UNKNOWN);
                     self.record_func_ref_instantiation(ident.id, &inferred, type_id);
-                    // Stage 7-B: reify rebuilds the inferred-generic `FuncRef`
+                    // Reify rebuilds the inferred-generic `FuncRef`
                     // from the recorded instantiation. Project the type only.
                     return type_id;
                 }
@@ -1649,7 +1645,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )),
                 };
 
-                // Stage 5 (Gap 11 Index-side wiring): record the
+                // Record the
                 // operator dispatch keyed off the `IndexExpr`'s
                 // `AstId`. Reify reads `operator_dispatch[index.id]`
                 // to reproduce the `*<method-call>` shape — the
@@ -1698,7 +1694,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )),
                 };
 
-                // Stage 5 (Gap 11 Index-side wiring): record the
+                // Record the
                 // operator dispatch keyed off the `IndexExpr`'s
                 // `AstId`. The `return_type` (the `Output` directly,
                 // not wrapped in `Ref`) is reify's signal that no
@@ -1897,7 +1893,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                // Stage 7-B: reify rebuilds the if-let-chain (recorded via
+                // Reify rebuilds the if-let-chain (recorded via
                 // `DesugarKind::IfLetChain`) from the AST. The combined walk
                 // ran `resolve_let_chain_stmts` for its fact-recording side
                 // effects (pattern bindings, element resolution) and computed
@@ -2035,7 +2031,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                // Stage 7-B: reify rebuilds the `If` node from the AST; the
+                // Reify rebuilds the `If` node from the AST; the
                 // combined walk resolved the condition and both blocks for
                 // their fact-recording side effects and ran branch-agreement /
                 // null diagnostics off the AST (`ast_block_result_type`).
@@ -2339,7 +2335,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Stage 7-B: reify rebuilds the `Match` node from the AST
+        // Reify rebuilds the `Match` node from the AST
         // (`reify_match_expr`); the combined walk resolved the scrutinee and
         // arms above for their fact-recording side effects and ran
         // exhaustiveness / null / arm-agreement diagnostics. No analysis reads
@@ -3258,7 +3254,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // Stage 7-B: reify rebuilds the `Cast` from `cast.expr` + the target
+        // Reify rebuilds the `Cast` from `cast.expr` + the target
         // type recorded in `expression_types[cast.id]`; the char-cast
         // diagnostics above are the record-only work.
         target_type
@@ -3486,7 +3482,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // type had unresolved type parameters. After type inference, we'll
                 // re-coerce with the concrete type (the second pass below records
                 // the coercion via `try_coerce_tuple_to_sequence`; reify replays
-                // it). Stage 7-B: `resolve_tuple_literal` is now a placeholder, so
+                // it). `resolve_tuple_literal` is a placeholder, so
                 // the old `value.kind == TupleLiteral` test is read from the AST —
                 // a spread tuple used to resolve to a block (never deferred), so
                 // only spread-free tuple literals are deferred here.
@@ -3610,7 +3606,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check if this is a generic struct and infer type arguments.
-        // Stage 7-B: reify rebuilds the mangled name + fields; the combined
+        // Reify rebuilds the mangled name + fields; the combined
         // walk only needs the substitution / coercion side effects below and
         // the resulting struct type. `struct_name`/`struct_module_source`
         // were just reassigned (above) to the canonical storage identity —
@@ -3738,7 +3734,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|&t| self.tysys.type_table.borrow().type_name(t))
                 .collect();
             let mangled_name = mangle_generic_name(&struct_name, &arg_names);
-            // Stage 5 (Gap 1 of WEP 2026-05-26): record the inferred
+            // WEP 2026-05-26: record the inferred
             // type_args + the resulting `GenericInstance` + the mangled
             // name so reify can emit `TirExprKind::StructLiteral { struct_type,
             // struct_name, … }` without re-running `infer_struct_type_args`
@@ -3769,7 +3765,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.typecheck(base_ty, struct_type, spread.span);
         }
 
-        // Stage 7-B: reify rebuilds the `StructLiteral` (`reify_struct_literal`)
+        // Reify rebuilds the `StructLiteral` (`reify_struct_literal`)
         // from the AST + the recorded `generic_instantiations` mangled name /
         // instance type; the combined walk resolved the fields (and applied any
         // deferred tuple-to-sequence coercion) for their fact-recording side
@@ -4033,7 +4029,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(anon_name),
             );
             self.mark_generic_instantiation_union(struct_lit.id, compose_union);
-            // Stage 7-B: reify rebuilds the anonymous `StructLiteral`
+            // Reify rebuilds the anonymous `StructLiteral`
             // (`reify_anonymous_struct_literal`); project only the type.
             return existing_type;
         }
@@ -4104,7 +4100,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         self.mark_generic_instantiation_union(struct_lit.id, compose_union);
 
-        // Stage 7-B: reify rebuilds the anonymous `StructLiteral`; the combined
+        // Reify rebuilds the anonymous `StructLiteral`; the combined
         // walk registered the struct type, field info, and pending TirStruct
         // above for their side effects. Project only the type.
         struct_type
@@ -4384,8 +4380,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
 
         // Resolve each element for its side effects and collect the element
-        // types so the tuple `TypeId` matches what reify builds. Stage 7-B:
-        // reify's `reify_tuple_literal` owns the element / spread-expansion /
+        // types so the tuple `TypeId` matches what reify builds.
+        // Reify's `reify_tuple_literal` owns the element / spread-expansion /
         // single-evaluation-temporary construction (with its own `ctx`), so
         // this records only the types + the spread diagnostic.
         let mut elem_types: Vec<TypeId> = Vec::new();
@@ -4601,7 +4597,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _v_local = ctx.add_local("__qm_v".to_string(), some_type, false, None);
         ctx.exit_scope();
 
-        // Stage 7-B: reify rebuilds the `Option` `?` desugar
+        // Reify rebuilds the `Option` `?` desugar
         // (`reify_question_mark_option`) from the AST, allocating its own
         // `__qm_v` local. The combined walk keeps the scope/local allocation
         // (walk-order parity) and projects the unwrapped `Some` payload type.
@@ -4657,7 +4653,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         ctx.exit_scope();
 
-        // Stage 7-B: reify rebuilds the `Result` `?` desugar
+        // Reify rebuilds the `Result` `?` desugar
         // (`reify_question_mark_result`) from the AST + the recorded
         // `FromCallFacts`. The combined walk keeps the scope / local allocation
         // and the `resolve_from_call` fact-recording, and projects the

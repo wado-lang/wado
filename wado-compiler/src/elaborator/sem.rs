@@ -1,9 +1,8 @@
 //! [`ModuleSemantics`] — per-module semantic facts produced by the elaborator.
 //!
-//! Introduced by [`wep-2026-05-26-elaborator-rearchitecture.md`]. Stage 1
-//! placed the empty skeleton; Stage 3 populates the four sub-structs with
-//! the per-module state that previously lived as flat fields on
-//! [`super::Elaborator`] (and as `Rc<RefCell<…>>`-shared maps on
+//! Introduced by [`wep-2026-05-26-elaborator-rearchitecture.md`]. The four
+//! sub-structs hold the per-module state that previously lived as flat
+//! fields on [`super::Elaborator`] (and as `Rc<RefCell<…>>`-shared maps on
 //! [`super::orchestration::AnnotateState`]).
 //!
 //! # Ownership
