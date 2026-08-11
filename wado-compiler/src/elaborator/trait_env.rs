@@ -662,11 +662,19 @@ pub struct ImplModuleIndex {
 
 impl ImplModuleIndex {
     fn get(&self, receiver: ImplReceiver<'_>, trait_name: &str) -> Option<&Vec<ModuleSource>> {
-        let map = match receiver {
-            ImplReceiver::Mangled(_) => &self.by_mangled,
-            ImplReceiver::Declared(_) => &self.by_declared,
+        let key = (receiver.spelling().to_string(), trait_name.to_string());
+        let (named, other) = match receiver {
+            ImplReceiver::Mangled(_) => (&self.by_mangled, &self.by_declared),
+            ImplReceiver::Declared(_) => (&self.by_declared, &self.by_mangled),
         };
-        map.get(&(receiver.spelling().to_string(), trait_name.to_string()))
+        // The namespace the query named answers first. Falling through to the
+        // other is a bridge, not the design: a caller in mangled position can
+        // still hold a bare `Point` because its `LocalMethodName` was built
+        // from a receiver that never carried its declaring module. Flipping the
+        // receiver side is what removes the need for this — until then, missing
+        // the entry outright is worse than reaching it through the namespace
+        // the caller did not mean (WEP 2026-08-10).
+        named.get(&key).or_else(|| other.get(&key))
     }
 
     /// Record `module` under both spellings of one receiver identity, so the
