@@ -26,12 +26,39 @@ use super::types::TypeError;
 pub(crate) struct InferHoleTable {
     /// Hole `TypeId` → solution (`None` until solved).
     solutions: IndexMap<TypeId, Option<TypeId>>,
-    /// Hole `TypeId` → diagnostic raised if it is never solved.
-    diags: IndexMap<TypeId, (Span, String)>,
+    /// Hole `TypeId` → what it says if it is never solved.
+    diags: IndexMap<TypeId, Blame>,
     /// Hole `TypeId` → originating parameter's `(name, trait-bound names, span)`,
     /// re-verified against the solution in [`Self::finalize_infer_holes`] (the
     /// call-site check only saw the unconstrained hole).
     bounds: IndexMap<TypeId, (String, Vec<String>, Span)>,
+}
+
+/// What an unsolved variable reports.
+///
+/// `owner` is both the tail of the sentence and the coalescing key: the
+/// variables one use site minted share it, so several unsolved slots of one
+/// call name themselves in a single message rather than one apiece.
+struct Blame {
+    span: Span,
+    /// The parameter this variable stands for, when a declaration names it.
+    param: Option<String>,
+    owner: String,
+}
+
+impl Blame {
+    /// The sentence, with `params` in place of this blame's own parameter.
+    fn message(&self, params: &[&str]) -> String {
+        if params.is_empty() {
+            return self.owner.clone();
+        }
+        let named = params
+            .iter()
+            .map(|p| format!("`{p}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("cannot infer type parameter {named} {}", self.owner)
+    }
 }
 
 impl InferHoleTable {
@@ -98,7 +125,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Set the diagnostic `var` raises if it is never solved. The first one
     /// wins, matching the solutions map's keep-the-first policy.
     pub(super) fn attach_infer_var_diag(&mut self, var: TypeId, span: Span, message: String) {
-        self.infer_holes.diags.entry(var).or_insert((span, message));
+        self.infer_holes.diags.entry(var).or_insert(Blame {
+            span,
+            param: None,
+            owner: message,
+        });
+    }
+
+    /// [`Self::attach_infer_var_diag`] for a variable standing in for a named
+    /// parameter, so unsolved siblings of one use site coalesce.
+    pub(super) fn attach_infer_var_blame(
+        &mut self,
+        var: TypeId,
+        span: Span,
+        param: String,
+        owner: String,
+    ) {
+        self.infer_holes.diags.entry(var).or_insert(Blame {
+            span,
+            param: Some(param),
+            owner,
+        });
     }
 
     /// Defer a variant constructor whose type arguments did not resolve here.
@@ -254,19 +301,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let diags = std::mem::take(&mut self.infer_holes.diags);
-        let mut seen: IndexSet<(Span, String)> = IndexSet::default();
-        for (hole, (span, message)) in diags {
-            let unsolved = self
+        // Group by what the variables belong to, in mint order, so one use
+        // site's unsolved slots become one message naming them all.
+        let mut groups: IndexMap<(Span, String), Vec<Option<String>>> = IndexMap::default();
+        let mut owners: IndexMap<(Span, String), Blame> = IndexMap::default();
+        for (hole, blame) in diags {
+            if !self
                 .infer_holes
                 .solutions
                 .get(&hole)
-                .is_some_and(Option::is_none);
-            // Several holes minted for one call share a message; emit it once.
-            if unsolved && seen.insert((span, message.clone())) {
-                let _ = self
-                    .logger
-                    .error(TypeError::CannotInferType { message, span });
+                .is_some_and(Option::is_none)
+            {
+                continue;
             }
+            let key = (blame.span, blame.owner.clone());
+            groups
+                .entry(key.clone())
+                .or_default()
+                .push(blame.param.clone());
+            owners.entry(key).or_insert(blame);
+        }
+        for (key, params) in groups {
+            let named: Vec<&str> = params.iter().filter_map(Option::as_deref).collect();
+            let mut seen: IndexSet<&str> = IndexSet::default();
+            let unique: Vec<&str> = named.into_iter().filter(|p| seen.insert(p)).collect();
+            let blame = &owners[&key];
+            let _ = self.logger.error(TypeError::CannotInferType {
+                message: blame.message(&unique),
+                span: blame.span,
+            });
         }
         self.verify_solved_hole_bounds();
         let subst = self.solved_hole_subst(true);

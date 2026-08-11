@@ -53,7 +53,7 @@ pub(super) struct Instantiated {
     /// the use site commits. Held rather than attached at mint time because a
     /// site may instantiate speculatively — inference runs twice for a partial
     /// turbofish — and a discarded instantiation must report nothing.
-    diags: Vec<Option<(Span, String)>>,
+    diags: Vec<Option<(Span, String, String)>>,
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -86,11 +86,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let var = self.mint_infer_var();
             subst.insert(index, var);
             vars.push(var);
+            // The parameter and the rest of the sentence stay apart so
+            // `finalize_infer_holes` can name every unsolved slot of this use
+            // site in one message.
             diags.push(Some((
                 of.span,
+                name,
                 format!(
-                    "cannot infer type parameter `{name}` of {} `{}`; \
-                     add a turbofish (`{}::<...>()`) or a type annotation",
+                    "of {} `{}`; add a turbofish (`{}::<...>()`) or a type annotation",
                     of.kind, of.name, of.name
                 ),
             )));
@@ -166,8 +169,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if solved.get(i) != Some(&var) {
                 continue;
             }
-            if let Some((span, message)) = inst.diags[i].clone() {
-                self.attach_infer_var_diag(var, span, message);
+            if let Some((span, param, owner)) = inst.diags[i].clone() {
+                self.attach_infer_var_blame(var, span, param, owner);
             }
         }
     }
