@@ -211,19 +211,16 @@ repeats them where a contributor will hit them.
   (`arena_query`'s `promoted_*` queries) — scoped to the operands the skeleton
   still carries, since the pool is append-only and also holds reads that folded
   away.
-- That census is session-scoped, never per-application. It walks the whole body,
-  so a rule recomputing it per block is quadratic in the body — the single
-  largest cost in the optimizer when it was measured. `Engine` memoizes it and
-  keeps an *empty* memo across edits, which is the case that matters: inside the
-  fixed-point loop the early freeze plants context-free values only, so no
-  reachable operand names a local and the walk runs once per session. The memo
-  goes the moment the session writes a local-naming operand — a session-wide
-  flag, not a per-edit test, because a node is allocated detached and spliced in
-  after the memo was filled. All of it rests on the edit API seeing every
-  operand written, so a rule never reaches past it into `Body`; an operand-slot
-  sweep goes through `Engine::map_operands`. `Engine::run` compares the memo
-  against a fresh walk under debug assertions, for a session that asked and at
-  its end only: a backstop, not a proof.
+- That census is session-scoped, never per-application: it walks the whole body,
+  so recomputing it per rule application is quadratic. `Engine` memoizes it and
+  holds an *empty* memo across edits — the case that decides the cost, since
+  inside the loop the early freeze plants context-free values only and no
+  reachable operand names a local. Only a local-naming operand becoming
+  reachable drops it, which the edit API reports; a rule therefore never writes
+  an operand past it into `Body`, and an operand-slot sweep goes through
+  `Engine::map_operands`. `Engine::run` audits the memo against a fresh walk
+  under debug assertions — a backstop covering a session that asked, at its end
+  only, not a proof.
 
 ## Rejected and deferred
 
@@ -368,6 +365,10 @@ Each was built, verified, and reverted. Do not retry as-is.
   reference and aggregate fields change copy / alias semantics.
 - **Keeping caller values across a loop-free-but-impure inline.** Over-merges two
   reads of a `&mut` parameter.
+- **Dropping the promoted-read census memo on every edit.** The obvious
+  invalidation rule, and measurably worse than no memo: a whole-body walk per
+  rewrite where the per-block recomputation it replaced at least amortised over
+  a block. Only holding an empty memo across edits pays.
 
 The throughline: a value's identity is sound only when carried by an operand the
 edits maintain, never re-derived from a side-table at query time.

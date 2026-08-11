@@ -18,9 +18,8 @@
 //! so it still holds the values of reads that folded away long ago, and seeding
 //! from it would keep their locals alive forever.
 //!
-//! The whole-body census itself is [`Body::promoted_read_counts`], on `Body`
-//! rather than here because [`crate::nir_engine::Engine`] memoizes it per
-//! session and cannot reach into `optimize`.
+//! The walk itself lives on `Body`, since [`crate::nir_engine::Engine`]
+//! memoizes it per session and cannot reach into `optimize`.
 
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
@@ -48,21 +47,18 @@ pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
 /// of the values the skeleton still carries. A pass deciding a local is unused
 /// unions this into its skeleton census.
 ///
-/// A rule inside an engine session asks [`crate::nir_engine::Engine`] instead,
-/// which memoizes the census for the session; this is the entry point for the
-/// standalone passes, which run one census per pass.
+/// A rule inside an engine session asks [`crate::nir_engine::Engine`], which
+/// memoizes it; this entry point is for the standalone passes.
 pub(super) fn promoted_local_reads(body: &Body, out: &mut IndexSet<u32>) {
     body.promoted_local_reads(out);
 }
 
 /// The first of `locals` that still has a reachable read, in the skeleton or the
-/// value pool — `None` when none does. The check a rewrite that deletes a
-/// binding runs against itself.
+/// value pool — the check a rewrite that deletes a binding runs against itself.
 ///
-/// One census for the whole batch, since each half costs a body walk. Derived
-/// from the arena rather than from the engine's use index and census memo,
-/// which are what such a rewrite decided on, so it can still catch them
-/// drifting.
+/// One census for the whole batch, since each half costs a body walk. Read off
+/// the arena, not the engine's use index and memo, which are what the rewrite
+/// decided on — so this can still catch them drifting.
 pub(super) fn surviving_read(body: &Body, locals: &[u32]) -> Option<u32> {
     if locals.is_empty() {
         return None;

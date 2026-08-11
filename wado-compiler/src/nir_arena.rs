@@ -1077,9 +1077,8 @@ impl Body {
     }
 
     /// Invoke `f` on every node reachable from [`Body::root`], parents before
-    /// children (DFS pop order). Dead nodes an in-place rewrite orphaned are
-    /// not visited — the arena is never compacted mid-run, so "reachable" and
-    /// "live" are the same question and only this walk answers it.
+    /// children. The arena never compacts, so this walk is what distinguishes
+    /// live from orphaned.
     ///
     /// A body still under construction has no root block; there every arena
     /// slot counts as live, since nothing has been spliced into a tree yet.
@@ -1107,9 +1106,8 @@ impl Body {
     /// operand slots hold each. The one node walk behind both censuses below,
     /// which differ only in how they accumulate over it.
     ///
-    /// Scoped to *reachable* operands. The pool is append-only, so it still
-    /// holds the values of reads that folded away long ago; seeding from the
-    /// pool instead would keep their locals alive forever.
+    /// Scoped to *reachable* operands: the pool is append-only, so seeding from
+    /// it would keep alive the locals of reads that folded away long ago.
     fn reachable_operand_values(&self) -> crate::hashmap::IndexMap<ValueId, usize> {
         let mut slots: crate::hashmap::IndexMap<ValueId, usize> =
             crate::hashmap::IndexMap::default();
@@ -1124,18 +1122,12 @@ impl Body {
     }
 
     /// Whether *any* operand slot in the arena holds a value naming a local,
-    /// reachable or not.
+    /// reachable or not — what the reachability-scoped censuses below cannot
+    /// see of a node allocated but not yet spliced in
+    /// (`Engine::census_note_structure`).
     ///
-    /// The reachability-scoped censuses below cannot see a node that has been
-    /// allocated but not yet spliced in, and the engine's memo has to know one
-    /// is waiting (see `Engine::census_note_structure`). Short-circuits on the
-    /// first hit.
-    ///
-    /// Deliberately coarse: it counts orphans too, which nothing can re-attach,
-    /// so one of those costs the memo for the rest of the session. It answered
-    /// `false` on all 356 fills of a `benchmark/sqlite_parse` `-O2` compile, and
-    /// its only wrong answer is "recompute the census", never a wrong census —
-    /// so precision here buys nothing that measurement has found.
+    /// Counts orphans too, which nothing can re-attach. Its only wrong answer
+    /// is "recompute the census", never a wrong census.
     pub fn any_operand_names_a_local(&self) -> bool {
         let mut found = false;
         for node in (0..self.exprs.len())
@@ -1156,14 +1148,11 @@ impl Body {
     }
 
     /// Every local a reachable promoted operand reads, unioned into `out`.
+    /// A promoted read has no skeleton node, so a pass deciding a local is
+    /// unused must add this to its use census.
     ///
-    /// A read that operand promotion moved into the [`ValuePool`] has no
-    /// skeleton node, so a walk over nodes alone — the engine's use index
-    /// included — cannot see it, and a pass deciding a local is unused must add
-    /// this in.
-    ///
-    /// One `seen` set spans every value, so the value DAG is walked once no
-    /// matter how many operands share a subtree.
+    /// One `seen` set spans every value, so the DAG is walked once however many
+    /// operands share a subtree.
     pub fn promoted_local_reads(&self, out: &mut IndexSet<u32>) {
         let mut seen = IndexSet::default();
         for &v in self.reachable_operand_values().keys() {
@@ -1171,13 +1160,10 @@ impl Body {
         }
     }
 
-    /// [`Body::promoted_local_reads`] as a per-local tally of the operand slots
-    /// that read each — what a gate comparing a whole-body count against a
-    /// scoped one needs.
-    ///
-    /// Attribution is per value, so a subtree shared by two distinct values is
-    /// walked once for each; hash-consing keeps that to the distinct values the
-    /// skeleton actually carries, not the slots.
+    /// [`Body::promoted_local_reads`] as a per-local tally, for a gate comparing
+    /// a whole-body count against a scoped one. Attribution is per value, so
+    /// unlike the union above a shared subtree is walked once per value that
+    /// reaches it.
     pub fn promoted_read_counts(&self) -> crate::hashmap::IndexMap<u32, usize> {
         let mut counts: crate::hashmap::IndexMap<u32, usize> = crate::hashmap::IndexMap::default();
         let mut leaves = IndexSet::default();

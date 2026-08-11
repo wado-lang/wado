@@ -238,14 +238,11 @@ pub struct Engine<'a> {
     /// Memoized promoted-read census ([`Body::promoted_read_counts`]) for the
     /// session. See [`Engine::promoted_read_count`].
     ///
-    /// [`Engine::run`] compares it against a fresh walk under debug assertions.
-    /// That backstop is partial by construction: it sees only a session that
-    /// asked for the census, and only its final state, so a stale answer some
-    /// later invalidation happened to cover leaves no trace.
+    /// [`Engine::run`]'s audit covers only a session that asked, and only its
+    /// final state.
     promoted_reads: OnceCell<IndexMap<u32, usize>>,
-    /// Whether a local-naming operand is sitting in the arena unaccounted for by
-    /// the memo — see [`Engine::census_note_structure`]. A `Cell` because the
-    /// memo fills behind `&self`, and filling is where it is decided.
+    /// Whether a local-naming operand sits in the arena unreached by the memo —
+    /// see [`Engine::census_note_structure`].
     pending_local_naming: std::cell::Cell<bool>,
 }
 
@@ -616,28 +613,15 @@ impl<'a> Engine<'a> {
     /// Build the session's three indices — the parent map, the local use
     /// index, and the post-order worklist seed — in one walk of the live tree.
     ///
-    /// Not an arena scan: dead nodes left by earlier in-place passes (the arena
-    /// never compacts) must not claim parents or count as reads. An orphan
-    /// retaining an operand reference to a live node would otherwise overwrite
-    /// the live parent edge (last-writer-wins) and misdirect every consumer — a
-    /// rule then edits the orphan while the live tree keeps the stale shape
-    /// (observed as `copy_prop` substituting a read through an orphaned
-    /// statement's claim, stranding the live read on a dropped binding).
+    /// Not an arena scan: the arena never compacts, and an orphan still holding
+    /// an operand reference to a live node would overwrite that node's parent
+    /// edge, so a rule would edit the orphan while the live tree kept the stale
+    /// shape (seen as `copy_prop` stranding a read on a dropped binding).
+    /// Within the live tree two parents is corruption — an edit shared an id
+    /// instead of moving the kind (`become_expr`) — hence the panic.
     ///
-    /// Within the live tree, a child with two parents is unconditionally a
-    /// corruption — an edit shared an id between two nodes instead of moving
-    /// the kind (`become_expr`) — so the walk panics on a double claim rather
-    /// than letting the error surface as wrong code passes later.
-    ///
-    /// The traversal is an iterative post-order over an explicit stack: each
-    /// node is pushed unprocessed (to expand its children) and again processed
-    /// (to enqueue it after its subtree). Parents and uses are recorded on the
-    /// unprocessed visit, the worklist on the processed one, so leaf reductions
-    /// are seen before the contexts that might fold them. Children are pushed
-    /// in reverse so they pop — and thus enqueue — in source order. Both stacks
-    /// come from [`EngineBuffers`], since a session runs tens of thousands of
-    /// times per compile and a fresh `Vec` per walk lands on the allocator's
-    /// hot path.
+    /// Parents and uses are recorded on the way down, the worklist on the way
+    /// up, so leaf reductions are enqueued before the contexts that fold them.
     fn build_indices(&mut self) {
         let mut stack = std::mem::take(&mut self.buf.walk_stack);
         let mut children = std::mem::take(&mut self.buf.walk_children);
@@ -771,16 +755,9 @@ impl<'a> Engine<'a> {
 
     fn promoted_read_counts(&self) -> &IndexMap<u32, usize> {
         self.promoted_reads.get_or_init(|| {
-            // The census is reachability-scoped, so a node allocated and not yet
-            // spliced in is absent from it — correctly, but only until it is
-            // attached. Record that one is waiting; the attach then knows to
-            // drop the memo instead of trusting it.
-            //
-            // Sticky once set: a true answer only ever means "drop the memo",
-            // so keeping it spares the probe on every later fill and bounds a
-            // pathological session at one census per edit rather than two. It
-            // came back false on all 356 fills of a `benchmark/sqlite_parse`
-            // `-O2` compile.
+            // Sticky: a true answer only ever means "drop the memo", so holding
+            // it spares the probe on later fills. False on all 356 fills of a
+            // `benchmark/sqlite_parse` `-O2` compile.
             if !self.pending_local_naming.get() {
                 self.pending_local_naming
                     .set(self.body.any_operand_names_a_local());
@@ -791,10 +768,6 @@ impl<'a> Engine<'a> {
 
     /// Record an operand this edit writes into the skeleton, dropping the
     /// memoized census if it can no longer be trusted.
-    ///
-    /// Nothing to do when nothing is memoized: the next fill walks the body as
-    /// it stands. That short-circuit is what keeps the hook off the allocator's
-    /// hot path, so it is worth the arena probe at fill time that pays for it.
     fn census_note_operand(&mut self, op: Operand) {
         if self.promoted_reads.get().is_none() {
             return;
@@ -803,8 +776,8 @@ impl<'a> Engine<'a> {
             self.promoted_reads.take();
             return;
         }
-        // Not a local-naming value, but an `Operand::Expr` slot attaches a whole
-        // subtree, so the structural question still has to be asked.
+        // An `Operand::Expr` attaches a whole subtree, so ruling out this slot
+        // does not rule out the edit.
         self.census_note_structure();
     }
 
@@ -829,30 +802,14 @@ impl<'a> Engine<'a> {
 
     /// Drop the memoized census unless this edit provably cannot have moved it.
     ///
-    /// The census is a function of the reachable operand set and the values it
-    /// names. A `ValueId` is stable and its kind immutable once interned
-    /// (hash-consing, no e-class merges), so only a change to *which* operands
-    /// the skeleton carries can move the answer, and during a session the edit
-    /// API is the only path to that.
+    /// An interned value is immutable, so only a change to which operands are
+    /// reachable moves the answer. An empty census survives removal — nothing
+    /// can conjure a read — and survives an attach unless something local-naming
+    /// is waiting: a node allocated detached and spliced in later can be missed
+    /// by a fill in between, which is what `pending_local_naming` covers. A
+    /// non-empty census can shrink as well as grow, so any edit drops it.
     ///
-    /// An **empty** census survives removal — nothing can conjure a read — and
-    /// survives an attach as long as nothing local-naming is waiting to be
-    /// attached. That second half is the subtle one: a node is allocated
-    /// detached and spliced in later, so the memo can be filled between the two,
-    /// find the operand unreachable, and be stale the moment it lands.
-    /// `licm`'s pre-header hoist has exactly that shape, and it never runs the
-    /// worklist, so the audit in [`Engine::run`] would not catch it either.
-    /// `pending_local_naming`, decided by an arena-wide probe when the memo
-    /// fills, is what closes it.
-    ///
-    /// Keeping the empty case is what makes the memo worth having: inside the
-    /// fixed-point loop the early freeze plants context-free values only and
-    /// the local-naming freezes have not run, so the census is empty on
-    /// essentially every session (1228 of 1228, measured on the Gale-generated
-    /// `SQLite` parser). Dropping it on every edit costs a whole-body walk per
-    /// rewrite, which measured slower than having no memo at all.
-    ///
-    /// A non-empty census can shrink as well as grow, so any edit drops it.
+    /// Why the empty case earns the special handling: WEP, standing invariants.
     fn census_note_structure(&mut self) {
         if self.pending_local_naming.get()
             || self.promoted_reads.get().is_some_and(|c| !c.is_empty())
@@ -882,12 +839,10 @@ impl<'a> Engine<'a> {
 
     /// Edit API: rewrite every operand slot of `node` through `f`.
     ///
-    /// The one edit that installs operands without touching node structure, for
-    /// a pass rewriting a whole subtree's slots in one sweep (`licm`'s
+    /// For a pass rewriting a whole subtree's slots in one sweep (`licm`'s
     /// pre-header hoist). A promoted value carries no skeleton node, so there is
-    /// no parent edge to move and nothing new to enqueue — which is also why `f`
-    /// may only rewrite one promoted value to another. Either direction across
-    /// the `Operand::Expr` boundary is a structural splice.
+    /// no parent edge to move and nothing to enqueue — which is also why `f` may
+    /// only rewrite one promoted value to another.
     pub fn map_operands(&mut self, node: NodeRef, f: &mut impl FnMut(Operand) -> Operand) {
         let mut spliced = false;
         self.body.for_each_operand_mut(node, |slot| {
@@ -898,9 +853,8 @@ impl<'a> Engine<'a> {
         assert!(
             !spliced,
             "[NIR engine] map_operands({node:?}) moved a skeleton operand: installing \
-             one is a splice, and replacing one orphans its subtree while the parent \
-             map still claims it. Both need `redirect_expr` / `replace_expr_kind`, \
-             which maintain the edge; this rewrites promoted values only."
+             one is a splice and replacing one orphans its subtree, and either way \
+             the parent map goes stale. Use `redirect_expr` / `replace_expr_kind`."
         );
         self.census_note_node_operands(node);
     }
@@ -1524,13 +1478,11 @@ impl<'a> Engine<'a> {
             self.promoted_reads
                 .get()
                 .is_none_or(|memo| *memo == self.body.promoted_read_counts()),
-            "[NIR engine] the promoted-read census this session ends on disagrees \
-             with a fresh walk, so an edit changed which operands are reachable \
-             without reporting it — every mutating edit method must call \
-             `census_note_operand` / `census_note_node_operands` / \
-             `census_note_structure`, and a rule must write operands through \
-             `Engine`, never through `engine.body`. Left unreported, \
-             `elide_local` deletes a binding the value pool still reads."
+            "[NIR engine] the promoted-read census disagrees with a fresh walk, so \
+             an edit changed which operands are reachable without reporting it. \
+             Every mutating edit calls `census_note_*`, and a rule writes operands \
+             through `Engine`, never `engine.body`. Unreported, `elide_local` \
+             deletes a binding the value pool still reads."
         );
         any
     }
@@ -1994,10 +1946,8 @@ mod tests {
         assert_eq!(eng.local_def(new_local), None);
     }
 
-    /// The promoted-read census is memoized for the session, so an edit that
-    /// plants a promoted read has to drop it. A stale "no promoted read"
-    /// answer is what lets `elide_local` delete a binding the value pool is
-    /// still reading — the census is a liveness source, not a hint.
+    /// A stale "no promoted read" is what lets `elide_local` delete a binding
+    /// the value pool still reads, so an edit that plants one drops the memo.
     #[test]
     fn promoted_read_census_refreshes_after_an_edit() {
         // `{ let x = 1; }` — the binding, and no read of it anywhere.
@@ -2036,9 +1986,8 @@ mod tests {
     }
 
     /// `def` is the first `Let` in source order. A local should have exactly
-    /// one, but a cloned block carries its `local_index` along, and the pick
-    /// used to fall out of which way the use-index walk happened to visit
-    /// siblings — so it is pinned here rather than left to the traversal.
+    /// one, but a cloned block carries its `local_index` along, so the pick is
+    /// pinned here rather than left to the traversal direction.
     #[test]
     fn local_def_is_the_first_binding_in_source_order() {
         let mut first = None;
@@ -2070,10 +2019,9 @@ mod tests {
         assert_eq!(eng.local_def(0), first);
     }
 
-    /// A node is allocated detached and spliced in later, so the census can be
-    /// filled in between — while the local-naming operand is still unreachable
-    /// and correctly absent. The splice has to drop that memo. `licm`'s
-    /// pre-header hoist has exactly this shape (`all_hoist_stmts`), and it
+    /// A fill between the allocation and the splice sees the operand
+    /// unreachable, and correctly leaves it out; the splice has to drop that
+    /// memo. `licm`'s pre-header hoist has this shape (`all_hoist_stmts`), and
     /// never runs the worklist, so the end-of-`run` audit would not catch it.
     #[test]
     fn promoted_read_census_survives_an_allocate_then_attach() {
