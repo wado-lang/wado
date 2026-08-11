@@ -1,0 +1,14 @@
+// Two parameters of the same signature are two unrelated opaque types: a `U`
+// in hand is no more a `T` than an `i32` is.
+
+fn f<T, U>(t: T, u: U) -> i32 {
+    let x: T = u;
+    return 1;
+}
+
+export fn run() {
+    assert f("a", 1) == 1;
+}
+
+__DATA__
+{ "compile_error": "type mismatch" }

@@ -1,0 +1,19 @@
+// A tuple annotation naming the enclosing body's own type parameter is opaque
+// element-wise too: `[T, i32]` no more accepts `[5, 1]` than a bare `T`
+// accepts `5`.
+//
+// The tuple fast path in `resolve_let` checked elements before the annotation
+// check ran, and the annotation check then compared the target type with
+// itself, so this reached the WIR validator instead of a diagnostic.
+
+fn f<T>(v: T) -> i32 {
+    let t: [T, i32] = [5, 1];
+    return t[1];
+}
+
+export fn run() {
+    assert f("a") == 1;
+}
+
+__DATA__
+{ "compile_error": "type mismatch" }

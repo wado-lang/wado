@@ -2958,6 +2958,41 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` (recursively) mentions anything a type check cannot decide
+    /// yet: an inference variable awaiting its solver, a type pack awaiting
+    /// expansion, an associated-type projection awaiting its impl, or an
+    /// unresolved / error type.
+    ///
+    /// Deliberately *not* the same question as [`Self::contains_type_param`].
+    /// A rigid type parameter is decided — it is opaque, and stands only for
+    /// itself — so it does not belong here.
+    pub fn contains_undecided(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::InferVar(_)
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => true,
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.contains_undecided(*inner),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().any(|p| self.contains_undecided(*p))
+                    || self.contains_undecided(*return_type)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                type_args.iter().any(|t| self.contains_undecided(*t))
+            }
+            _ => false,
+        }
+    }
+
     /// Check if a type is or contains type parameters or unresolved types (Unknown/Error)
     pub fn contains_type_param(&self, id: TypeId) -> bool {
         match self.get(id) {

@@ -1,0 +1,18 @@
+// The mirror of `error_return_type_param_to_concrete`: a concrete value cannot
+// satisfy a declared `-> T` either, because `T` is bound by the same signature
+// and the body does not get to pick what it stands for.
+//
+// A closure body reaches the same check with the *callee's* parameter as its
+// expected return type — `fold(0, |acc, x| …)` — which stays inferable because
+// a use site instantiates that parameter into a variable first.
+
+fn f<T>(v: T) -> T {
+    return 5;
+}
+
+export fn run() {
+    assert f("a") == "a";
+}
+
+__DATA__
+{ "compile_error": "type mismatch" }

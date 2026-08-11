@@ -924,14 +924,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// target — the parser desugars `self` / `&self` / `&mut self` into
     /// `Self`-based annotations — and anything else from its annotation.
     fn resolve_method_param_type(&mut self, param: &ast::Param, impl_type: &Type) -> TypeId {
+        // The receiver takes the `Self` the impl frame already fixed, not a
+        // re-resolution of the written target. By the time a parameter is
+        // typed the method's own type parameters are in scope, and they are
+        // keyed by name: `fn map<U>` inside `impl<I, U> Iterator for
+        // IterMap<I, U>` shadows the impl's `U`, so re-resolving `IterMap<I,
+        // U>` here would answer with the method's slot and give the receiver a
+        // type no caller can produce.
+        let self_type = || {
+            self.annotate_ctx
+                .trait_ctx
+                .self_type
+                .expect("impl frame entered before typing a receiver")
+        };
         match param.self_kind {
-            ast::SelfKind::Value => self.resolve_type(impl_type),
+            ast::SelfKind::Value => self_type(),
             ast::SelfKind::Ref => {
-                let inner = self.resolve_type(impl_type);
+                let inner = self_type();
                 self.tysys.type_table.borrow_mut().make_ref(inner)
             }
             ast::SelfKind::MutRef => {
-                let inner = self.resolve_type(impl_type);
+                let inner = self_type();
                 self.tysys.type_table.borrow_mut().make_mut_ref(inner)
             }
             ast::SelfKind::None => self.resolve_type(&param.ty),

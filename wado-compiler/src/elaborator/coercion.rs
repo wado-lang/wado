@@ -816,15 +816,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the recorded `SequenceCoercionFacts` + the AST.
         for element in &tuple_lit.elements {
             let elem_expr = self.resolve_expr(element, ctx, Some(element_type));
-            if elem_expr != element_type
-                && elem_expr != TypeTable::UNKNOWN
-                && element_type != TypeTable::UNKNOWN
-                && !self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .contains_type_param(element_type)
-            {
+            // Route through the shared check rather than comparing ids: a
+            // rigid `T` element type rejects a concrete element (it is the
+            // enclosing body's own parameter), while a variable or a pack
+            // defers to its solver.
+            let incompatible = matches!(
+                super::typecheck::check_assignable(
+                    elem_expr,
+                    element_type,
+                    &self.tysys.type_table.borrow(),
+                ),
+                super::typecheck::TypeCheckResult::Incompatible
+            );
+            if incompatible {
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected: format!(
                         "homogeneous elements of type '{}'",

@@ -691,18 +691,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Check each argument against expected parameter type
-        for (i, (arg, &expected_type)) in
-            args.iter_mut().zip(expected_param_types.iter()).enumerate()
-        {
-            // Pin a deferred hole that rode a prior binding into this argument
-            // (`let v = gen()?; out.push(v)`) against the parameter type.
+        // Pin a deferred hole that rode a prior binding into an argument
+        // (`let v = gen()?; out.push(v)`) against the parameter type.
+        //
+        // The arguments are *not* type-checked here. A generic method's
+        // parameter types still name its own slots at this point — inference
+        // has not run, because it needs these argument types to run — and a
+        // slot is opaque, so checking against one would reject every argument
+        // that is not literally it. The check happens once below, against the
+        // parameter types with the inferred type arguments substituted in.
+        for (arg, &expected_type) in args.iter_mut().zip(expected_param_types.iter()) {
             if self.type_has_infer_hole(arg.type_id) && self.hole_pinnable_against(expected_type) {
                 self.solve_infer_holes_against(arg.type_id, expected_type);
                 arg.type_id = self.apply_infer_holes(arg.type_id);
             }
-            let arg_span = args_ast.get(i).map_or(span, super::ast::Expr::span);
-            self.typecheck(arg.type_id, expected_type, arg_span);
         }
 
         self.verify_arg_synthesis(&synthesized, args_ast, ctx, &args, span);
@@ -875,25 +877,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the monomorphizer rebuilds names from the receiver type, which the
         // module-end sweep concretises once the hole is solved further out.
 
-        // Re-coerce literal-number args and typecheck each arg against the substituted
-        // parameter type. This catches inference conflicts such as
-        // `h.two_method<T>(1 as i64, 2 as i32)` where `T` cannot be both `i64` and `i32`.
-        // The pre-inference typecheck at line ~380 only sees TypeParam (a wildcard),
-        // so the conflict must be caught after substitution.
-        if !method_type_args.is_empty() {
-            let substituted_param_types: Vec<TypeId> = expected_param_types
+        // The one place arguments are checked: against the parameter types with
+        // this call's type arguments substituted in. Doing it here rather than
+        // before inference is what lets `h.two_method<T>(1 as i64, 2 as i32)`
+        // report that `T` cannot be both — and what keeps a generic method's
+        // own slots, opaque until solved, out of the comparison.
+        let substituted_param_types: Vec<TypeId> = if method_type_args.is_empty() {
+            expected_param_types.clone()
+        } else {
+            expected_param_types
                 .iter()
                 .map(|&t| subst_ctx.substitute(t, &mut self.tysys.type_table.borrow_mut()))
-                .collect();
+                .collect()
+        };
+        if !method_type_args.is_empty() {
             self.recoerce_literal_args(args_ast, &mut args, &substituted_param_types);
-            for (i, arg) in args.iter().enumerate() {
-                if let Some(&expected) = substituted_param_types.get(i) {
-                    self.typecheck(
-                        arg.type_id,
-                        expected,
-                        args_ast.get(i).map_or(span, super::ast::Expr::span),
-                    );
-                }
+        }
+        for (i, arg) in args.iter().enumerate() {
+            if let Some(&expected) = substituted_param_types.get(i) {
+                self.typecheck(
+                    arg.type_id,
+                    expected,
+                    args_ast.get(i).map_or(span, super::ast::Expr::span),
+                );
             }
         }
 

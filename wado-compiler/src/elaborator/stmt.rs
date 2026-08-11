@@ -525,9 +525,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if let_stmt.ty.is_some() {
-            // The annotation was written in this scope, so a `T` in it is the
-            // enclosing body's own opaque parameter, not a hole a caller fills.
-            self.typecheck_opaque(value_type, type_id, ast_value.span());
+            self.typecheck(value_type, type_id, ast_value.span());
         }
 
         if let Some(else_block) = &let_stmt.else_block {

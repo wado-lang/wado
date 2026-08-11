@@ -19,9 +19,8 @@
 //!    and emit a [`TypeError::TypeMismatch`] diagnostic via `self.logger`
 //!    on rejection. This is the layer callers in the body walk use.
 //!
-//! Layers 2 and 3 each come in three flavours: the plain check, the
-//! `_return` one (`UNIT` expected always passes), and the `_opaque` one
-//! ([`ParamBinding`]).
+//! Layers 2 and 3 each come in two flavours: the plain check and the
+//! `_return` one (`UNIT` expected always passes).
 //!
 //! Keeping the `<H>` plumbing confined to layer 3 means future
 //! `TypeSystem` operations that report errors can mirror this split
@@ -34,23 +33,6 @@ use crate::token::Span;
 use super::Elaborator;
 use super::types::TypeError;
 use super::tysys::TypeSystem;
-
-/// Whether the type parameters inside `expected` can still be substituted.
-///
-/// The two questions "does a concrete type instantiate this parameter?" and
-/// "is this parameter opaque here?" are distinct, and one predicate over the
-/// type table cannot answer both — the caller knows which it is asking.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ParamBinding {
-    /// `expected` names the parameters of a signature being instantiated (a
-    /// callee's parameter list, a trait impl's self type). Substitution can
-    /// still make the comparison hold, so a concrete actual defers.
-    Instantiable,
-    /// `expected` was written in the scope that binds its parameters — a
-    /// `let` annotation inside the generic body, say. Nothing later
-    /// substitutes them, so they compare as opaque leaves.
-    Opaque,
-}
 
 /// Result of checking whether `actual` is assignable to `expected`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,7 +51,7 @@ pub(super) enum TypeCheckResult {
 /// Rules (in order):
 /// 1. Identity: same `TypeId` -> Compatible
 /// 2. Bottom/Top/Error: UNKNOWN, ERROR -> Deferred; NEVER -> Compatible
-/// 3. Type params: unresolved generics -> Deferred (see [`ParamBinding`])
+/// 3. Undecided: inference variables, packs, projections, unknown -> Deferred
 /// 4. References: &T->non-ref, &T->&mut T -> Incompatible; &mut T->&T -> Compatible
 /// 5. Newtype/flags: distinct from base type and each other
 /// 6. Option: T vs Option<T>, Option<X> vs Option<Y>
@@ -80,17 +62,6 @@ pub(super) fn check_assignable(
     actual: TypeId,
     expected: TypeId,
     type_table: &TypeTable,
-) -> TypeCheckResult {
-    check_assignable_with(actual, expected, type_table, ParamBinding::Instantiable)
-}
-
-/// [`check_assignable`] with the caller stating whether `expected`'s type
-/// parameters are still instantiable (see [`ParamBinding`]).
-pub(super) fn check_assignable_with(
-    actual: TypeId,
-    expected: TypeId,
-    type_table: &TypeTable,
-    binding: ParamBinding,
 ) -> TypeCheckResult {
     // Rule 1: Identity
     if actual == expected {
@@ -109,28 +80,19 @@ pub(super) fn check_assignable_with(
         return TypeCheckResult::Compatible;
     }
 
-    // Rule 3: Type params -- defer until monomorphization, except where
-    // substitution cannot rescue the comparison.
+    // Rule 3: defer only what is genuinely undecided.
     //
-    // A bare parameter is opaque inside the body that declares it: whatever a
-    // caller instantiates `T` to, a `T` in hand is not a `String`. Deferring
-    // that never revisits it, so a `-> String` body returning its `T` reached
-    // monomorphization and emitted a `u32` against the declared signature.
+    // A rigid `TypeParam` is not undecided: it is opaque, standing for whatever
+    // a caller instantiates the binding item with, so nothing but itself is
+    // assignable to it in either direction. It reaches a check only inside the
+    // item that binds it — a *use* of a polymorphic signature instantiates its
+    // slots into `InferVar`s first (`super::instantiate`) — so there is no
+    // "maybe this gets substituted later" case left to defer.
     //
-    // Only this direction is decidable from the types alone. The other one --
-    // concrete where a parameter is expected -- is instantiation when the
-    // parameter belongs to a signature being instantiated (`ListIter<T>` for
-    // `I` in the `Iterator` blanket impl), and a plain mismatch when it is
-    // opaque here (`let x: T = 5` in the body that declares `T`). Only the
-    // caller knows which, so `binding` decides it.
-    if matches!(type_table.get(actual), ResolvedType::TypeParam { .. })
-        && !type_table.contains_type_param(expected)
-    {
-        return TypeCheckResult::Incompatible;
-    }
-    let expected_is_open =
-        binding == ParamBinding::Instantiable && type_table.contains_type_param(expected);
-    if type_table.contains_type_param(actual) || expected_is_open {
+    // What is still undecided: an inference variable awaiting its solver, a
+    // type pack awaiting expansion (packs are not instantiated yet), an
+    // associated-type projection awaiting its impl, and `unknown` / `error`.
+    if type_table.contains_undecided(actual) || type_table.contains_undecided(expected) {
         return TypeCheckResult::Deferred;
     }
 
@@ -158,7 +120,7 @@ pub(super) fn check_assignable_with(
             return TypeCheckResult::Incompatible;
         }
         if actual_inner != expected_inner {
-            return check_assignable_with(actual_inner, expected_inner, type_table, binding);
+            return check_assignable(actual_inner, expected_inner, type_table);
         }
         return TypeCheckResult::Compatible;
     }
@@ -194,7 +156,7 @@ pub(super) fn check_assignable_with(
             if actual_t == TypeTable::UNKNOWN || expected_t == TypeTable::UNKNOWN {
                 return TypeCheckResult::Compatible;
             }
-            return check_assignable_with(actual_t, expected_t, type_table, binding);
+            return check_assignable(actual_t, expected_t, type_table);
         }
         (Some(_), None) | (None, Some(_)) => {
             return TypeCheckResult::Incompatible;
@@ -231,13 +193,13 @@ pub(super) fn check_assignable_with(
             return TypeCheckResult::Incompatible;
         }
         for (a, e) in actual_params.iter().zip(expected_params.iter()) {
-            match check_assignable_with(*a, *e, type_table, binding) {
+            match check_assignable(*a, *e, type_table) {
                 TypeCheckResult::Incompatible => return TypeCheckResult::Incompatible,
                 TypeCheckResult::Deferred => return TypeCheckResult::Deferred,
                 TypeCheckResult::Compatible => {}
             }
         }
-        return check_assignable_with(*actual_ret, *expected_ret, type_table, binding);
+        return check_assignable(*actual_ret, *expected_ret, type_table);
     }
     // One is function, the other isn't -> incompatible
     if matches!(type_table.get(actual_inner), ResolvedType::Function { .. })
@@ -268,7 +230,7 @@ pub(super) fn check_assignable_with(
             return TypeCheckResult::Incompatible;
         }
         for (a, e) in actual_args.iter().zip(expected_args.iter()) {
-            match check_assignable_with(*a, *e, type_table, binding) {
+            match check_assignable(*a, *e, type_table) {
                 TypeCheckResult::Incompatible => return TypeCheckResult::Incompatible,
                 TypeCheckResult::Deferred => return TypeCheckResult::Deferred,
                 TypeCheckResult::Compatible => {}
@@ -322,27 +284,8 @@ impl TypeSystem {
         actual: TypeId,
         expected: TypeId,
     ) -> Result<(), TypeMismatchPayload> {
-        self.typecheck_binding(actual, expected, ParamBinding::Instantiable)
-    }
-
-    /// [`Self::typecheck`] for an `expected` written in the scope that binds
-    /// its type parameters, so they are opaque here — see [`ParamBinding`].
-    pub(crate) fn typecheck_opaque(
-        &self,
-        actual: TypeId,
-        expected: TypeId,
-    ) -> Result<(), TypeMismatchPayload> {
-        self.typecheck_binding(actual, expected, ParamBinding::Opaque)
-    }
-
-    fn typecheck_binding(
-        &self,
-        actual: TypeId,
-        expected: TypeId,
-        binding: ParamBinding,
-    ) -> Result<(), TypeMismatchPayload> {
         let type_table = self.type_table.borrow();
-        match check_assignable_with(actual, expected, &type_table, binding) {
+        match check_assignable(actual, expected, &type_table) {
             TypeCheckResult::Incompatible => Err(TypeMismatchPayload {
                 expected: type_table.type_name(expected),
                 found: type_table.type_name(actual),
@@ -353,12 +296,6 @@ impl TypeSystem {
 
     /// Host-agnostic return-type check. `UNIT` expected always succeeds
     /// (void returns); otherwise delegates to [`TypeSystem::typecheck`].
-    ///
-    /// Not [`Self::typecheck_opaque`], even though a function's declared
-    /// return type is written by the item that binds its parameters: a
-    /// closure body shares this path, and there the expected return type is
-    /// the *callee's* parameter (`Acc` in `fold(0, |acc, x| …)`), which
-    /// inference still substitutes.
     pub(crate) fn typecheck_return(
         &self,
         actual: TypeId,
@@ -380,20 +317,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `TypeSystem` itself stays host-agnostic.
     pub(super) fn typecheck(&self, actual: TypeId, expected: TypeId, span: Span) {
         if let Err(payload) = self.tysys.typecheck(actual, expected) {
-            let _ = self.emit(TypeError::TypeMismatch {
-                expected: payload.expected,
-                found: payload.found,
-                span,
-            });
-        }
-    }
-
-    /// [`Self::typecheck`] for an expected type the current scope wrote
-    /// itself — a `let` annotation. Its type parameters are the enclosing
-    /// item's own, so a concrete value does not instantiate them
-    /// ([`ParamBinding::Opaque`]).
-    pub(super) fn typecheck_opaque(&self, actual: TypeId, expected: TypeId, span: Span) {
-        if let Err(payload) = self.tysys.typecheck_opaque(actual, expected) {
             let _ = self.emit(TypeError::TypeMismatch {
                 expected: payload.expected,
                 found: payload.found,
