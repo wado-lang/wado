@@ -762,20 +762,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ..
                 } if !receiver_type_args.is_empty() => {
                     impl_offset = receiver_type_args.len() as u32;
-                    subst_ctx = subst_ctx.with_impl_args(&receiver_type_args);
                 }
                 // The raw GC array `Array<T>` carries a single impl-level type
-                // arg (its element type), exactly like `Container<T>`. Without
-                // this, an inherent `impl Array<T>` method's return type keeps
-                // its `T` unsubstituted (e.g. `fn first(&self) -> T` or
-                // `fn slice(&self) -> Slice<T>`), so the caller sees a bare
-                // `T`. Stdlib impls dodge this only because they resolve via the
-                // loaded-module path in `lookup_method_info`, which substitutes
-                // during type resolution; a user-defined `impl Array<T>` is
-                // registered locally and needs the substitution here.
-                ResolvedType::BuiltinArray(elem) => {
+                // arg, exactly like `Container<T>`.
+                ResolvedType::BuiltinArray(_) => {
                     impl_offset = 1;
-                    subst_ctx = subst_ctx.with_impl_args(&[elem]);
                 }
                 _ => {}
             }
@@ -834,15 +825,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if !method_type_args.is_empty() {
-            subst_ctx = if method_type_param_ids.len() == method_type_args.len() {
-                subst_ctx.with_method_slots(
-                    &method_type_param_ids,
-                    &method_type_args,
-                    &self.tysys.type_table.borrow(),
-                )
-            } else {
-                subst_ctx.with_method_args(&method_type_args, impl_offset)
-            };
+            // The lookup already instantiated the declaring level, so only the
+            // method's own parameters remain — and it reports them.
+            subst_ctx = subst_ctx.bind(&method_type_param_ids, &method_type_args);
             // Enforce the method's type-arg bounds (shared rule); a violating
             // concrete arg would otherwise trap WIR build. Hole args are skipped
             // and re-checked in `finalize_infer_holes`. Reuse the params
@@ -2164,16 +2149,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Substitute type parameters in the return type using SubstitutionContext
+        // Substitute the declaring block's and the method's own parameters,
+        // taken from the signature rather than counted off the receiver.
         {
-            let mut subst_ctx = SubstitutionContext::new();
-            if !struct_type_args.is_empty() {
-                subst_ctx = subst_ctx.with_impl_args(&struct_type_args);
-            }
-            let impl_offset = struct_type_args.len() as u32;
-            if !method_type_args.is_empty() {
-                subst_ctx = subst_ctx.with_method_args(&method_type_args, impl_offset);
-            }
+            let (decl_params, method_params) =
+                self.static_method_slot_params(&struct_name, &static_call.method);
+            let subst_ctx = SubstitutionContext::new()
+                .bind(&decl_params, &struct_type_args)
+                .bind(&method_params, &method_type_args);
             if !subst_ctx.is_empty() {
                 return_type =
                     subst_ctx.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
@@ -2303,8 +2286,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // The template is written against the blanket param, so `-> Self` /
         // `-> T` lands on the receiver at the call site.
+        let blanket_slot = self.blanket_param_slot(&blanket_param);
         let return_type = SubstitutionContext::new()
-            .with_impl_args(&[receiver_type_id])
+            .bind(&[blanket_slot], &[receiver_type_id])
             .substitute(template_return, &mut self.tysys.type_table.borrow_mut());
 
         // Unchecked, a mis-arity or mis-typed call reaches codegen and surfaces
@@ -2374,15 +2358,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let key: super::trait_env::DeclKey = (blanket_module.clone(), blanket_param.to_string());
         let template =
             self.lookup_static_method_param_types_keyed(blanket_param, method, Some(&key));
+        let blanket_slot = self.blanket_param_slot(blanket_param);
         let mut tt = self.tysys.type_table.borrow_mut();
         template
             .iter()
             .map(|&pt| {
                 SubstitutionContext::new()
-                    .with_impl_args(&[receiver_type_id])
+                    .bind(&[blanket_slot], &[receiver_type_id])
                     .substitute(pt, &mut tt)
             })
             .collect()
+    }
+
+    /// The blanket impl's own parameter. `impl<T> Trait for T` declares
+    /// exactly one, and the `DeclKey` this path is built on *is* its name, so
+    /// the binder is the declaration rather than a reconstruction of it.
+    fn blanket_param_slot(&self, blanket_param: &str) -> TypeId {
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .make_type_param(blanket_param.to_string(), 0)
+    }
+
+    /// The declaring block's and the method's own type parameters for a
+    /// receiver-less method, split where its signature says they split.
+    fn static_method_slot_params(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> (Vec<TypeId>, Vec<TypeId>) {
+        let Some(sig) = self.static_method_sig(struct_name, method_name) else {
+            return (vec![], vec![]);
+        };
+        let split = (sig.declaring_slot_count as usize).min(sig.decl.type_params.len());
+        let ids = |ps: &[(String, TypeId)]| ps.iter().map(|(_, id)| *id).collect();
+        (
+            ids(&sig.decl.type_params[..split]),
+            ids(&sig.decl.type_params[split..]),
+        )
     }
 
     /// Report an argument list the blanket template cannot accept, returning

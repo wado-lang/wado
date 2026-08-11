@@ -93,21 +93,18 @@ impl TypeParamId {
     }
 }
 
-/// Unified substitution context for type parameter resolution
+/// What a use site chose for a declaration's type parameters.
 ///
-/// This handles the complexity of double generics (methods with both struct-level
-/// and method-level type parameters) by building a combined substitution map.
-///
-/// For a method call like `container.method::<U, V>(args)` where container is `Container<T>`:
-/// - Impl type args (T's concrete type) are added with `with_impl_args`
-/// - Method type args (U, V's concrete types) are added with `with_method_args`
-/// - The substitution correctly handles offset indices used for method type params
+/// Keyed by the parameter itself. A slot carries its own index, and only the
+/// declaration knows which index each of its parameters holds — a generic,
+/// `&`-target, blanket or variadic-tuple impl numbers its slots differently,
+/// and a partially concrete target leaves gaps no positional list can express.
+/// Keying by position asks the caller to reconstruct that, which it cannot;
+/// `impl<T, ..F> Emit for T` is enough to break the reconstruction.
+/// [`MethodSig::instantiate_call`] takes the same view.
 #[derive(Debug, Clone, Default)]
 pub struct SubstitutionContext {
-    /// Maps type param index to concrete type (index is as stored in `TypeParam`)
-    /// For impl params: indices 0, 1, 2, ...
-    /// For method params: indices offset, offset+1, ... (where offset = `impl_params.len()`)
-    substitutions: IndexMap<u32, TypeId>,
+    substitutions: IndexMap<TypeId, TypeId>,
 }
 
 impl SubstitutionContext {
@@ -117,44 +114,14 @@ impl SubstitutionContext {
         }
     }
 
-    /// Add impl-level type args (e.g., T=i32 for Container<i32>)
-    /// These are substituted at indices 0, 1, 2, ...
-    pub fn with_impl_args(mut self, args: &[TypeId]) -> Self {
-        for (i, &type_id) in args.iter().enumerate() {
-            self.substitutions.insert(i as u32, type_id);
-        }
-        self
-    }
-
-    /// Add method-level type args (e.g., U=i64 for `transform::`<i64>)
-    /// These are substituted at offset indices (offset, offset+1, ...)
-    /// where offset is the number of impl type params
-    pub fn with_method_args(mut self, args: &[TypeId], offset: u32) -> Self {
-        for (i, &type_id) in args.iter().enumerate() {
-            self.substitutions.insert(offset + i as u32, type_id);
-        }
-        self
-    }
-
-    /// [`Self::with_method_args`] keyed by the parameters' own slots.
+    /// Bind a declaration's type parameters to the arguments a use site chose.
     ///
-    /// The offset form guesses where a method's parameters start by counting
-    /// the receiver's arguments, which a blanket impl defeats: `impl<T, ..F>
-    /// Emit for T` puts `emit<S>` at slot 2 while the receiver `Point` carries
-    /// none. Reading each parameter's index off its declaration removes the
-    /// guess.
-    pub fn with_method_slots(
-        mut self,
-        slots: &[TypeId],
-        args: &[TypeId],
-        type_table: &TypeTable,
-    ) -> Self {
-        for (&slot, &type_id) in slots.iter().zip(args.iter()) {
-            if let ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } =
-                type_table.get(slot)
-            {
-                self.substitutions.insert(*index, type_id);
-            }
+    /// `params` are the parameters as the declaration holds them: a lookup
+    /// reports them, a declaration record carries them. Nothing recomputes
+    /// them. Parameters past the end of `args` stay unbound.
+    pub fn bind(mut self, params: &[TypeId], args: &[TypeId]) -> Self {
+        for (&param, &arg) in params.iter().zip(args.iter()) {
+            self.substitutions.insert(param, arg);
         }
         self
     }
@@ -162,9 +129,8 @@ impl SubstitutionContext {
     /// Substitute type parameters in a type
     pub fn substitute(&self, type_id: TypeId, type_table: &mut TypeTable) -> TypeId {
         match type_table.get(type_id).clone() {
-            ResolvedType::TypeParam { index, .. } => {
-                // Direct substitution: TypeParam at index -> concrete type
-                self.substitutions.get(&index).copied().unwrap_or(type_id)
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => {
+                self.substitutions.get(&type_id).copied().unwrap_or(type_id)
             }
             ResolvedType::AssocTypeProjection {
                 param_id,
