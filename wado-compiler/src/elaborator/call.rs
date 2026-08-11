@@ -2396,12 +2396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 new_args.push(type_args[i]);
                 continue;
             }
-            let bounds: Vec<String> = p
-                .bounds
-                .iter()
-                .filter(|b| b.fn_signature.is_none())
-                .map(|b| b.name.clone())
-                .collect();
+            let bounds = p.trait_bound_names();
             // `infer_fn_type_args` already instantiated this slot, so the
             // variable standing in for it is the one to blame — minting a
             // second would orphan the first, which the sweep would then pin to
@@ -2485,8 +2480,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether `ty` is still an unbound generic parameter / pack (as opposed to
-    /// a concrete type inferred from the call site).
     /// Whether `ty` is a type argument nothing has determined yet — either a
     /// slot the solver left as its own parameter, or an inference variable it
     /// never solved. Both mean "no answer", so a default may still fill it.
@@ -2819,7 +2812,7 @@ impl TypeSystem {
             }
         }
 
-        let (type_args, _) = infer.solve_with_phantoms();
+        let type_args = infer.solve();
 
         let module_source =
             canonical_module_source.unwrap_or_else(|| variant_info.module_source.clone());

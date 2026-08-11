@@ -4271,13 +4271,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let (mut inferred, _) = infer.solve_with_phantoms();
-        self.record_instantiation(&inst, &inferred);
+        let mut inferred = infer.solve();
         // A phantom parameter — one no field mentions — is not an inference
-        // failure: the declaration's own parameter is the answer, and
-        // monomorphization substitutes it. A slot a field *does* mention and
+        // failure: the declaration's own parameter *is* the answer, and
+        // monomorphization substitutes it. A slot a field does mention and
         // nothing solved is a failure, so its variable stays put to be blamed
         // and reported.
+        //
+        // Recorded before the answers are, so a phantom's variable is solved
+        // to that parameter rather than left unsolved and pinned to `error`
+        // at finalize behind no diagnostic.
         for (slot, answer) in inferred.iter_mut().enumerate() {
             let decl_param = struct_info.type_param_type_ids[slot];
             let is_phantom = {
@@ -4295,6 +4298,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 *answer = decl_param;
             }
         }
+        self.record_instantiation(&inst, &inferred);
         self.blame_unsolved(&inst, &inferred);
         inferred
     }

@@ -293,12 +293,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // Filter out `fn`/`fn mut` bounds before recording (they're already
             // realised in the bound type itself); only "real" trait bounds need
             // remembering for method lookup.
-            let real_bounds: Vec<ast::TraitBound> = tp
-                .bounds
-                .iter()
-                .filter(|b| b.fn_signature.is_none())
-                .cloned()
-                .collect();
+            let real_bounds = tp.real_bounds();
             if !real_bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx

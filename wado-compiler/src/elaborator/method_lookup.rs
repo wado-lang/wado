@@ -58,16 +58,14 @@ fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader 
 
 /// Inputs for [`Elaborator::infer_method_type_args`].
 ///
-/// Groups everything the caller has already resolved about the method
-/// (signature fields in `TypeParam`-based form, impl-level offset) with the
-/// call-site context (argument list in both typed and raw forms, expected
-/// return type) that the inference solver needs.
+/// Groups what the lookup already resolved about the method — its slots, in
+/// both their signature and declaration forms, and its parameter and return
+/// types — with the call-site context the solver needs.
 pub(super) struct MethodInferenceInput<'a> {
     /// Receiver's `TypeId` at the call site (any reference level; the
     /// helper strips references internally).
     pub receiver_type: TypeId,
-    /// Method name — used to look up the method's AST for the list of
-    /// method-level type parameter names.
+    /// Method name, for the "cannot infer" diagnostic.
     pub method_name: &'a str,
     /// The method's own slots, as the lookup that produced `param_types`
     /// reported them ([`MethodInfo::method_type_param_ids`]). The answers
@@ -1098,7 +1096,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             infer.add_expected_return(decl_return_type, expected);
         }
 
-        let (mut inferred, _) = infer.solve_with_phantoms();
+        let mut inferred = infer.solve();
         // Resolve method type params that appear only inside another method
         // param's associated-type-equality bound (e.g.
         // `fn m<T, I: Iterator<Item = T>>`), mirroring the free-function path.

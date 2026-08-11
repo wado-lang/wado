@@ -95,9 +95,9 @@ Two consequences worth knowing when adding a check:
 - A value is checked where its expected type is known. A callee's parameter types name its own slots until it is instantiated, so a call site instantiates first and checks the arguments once, against the substituted types. The same holds for a struct literal's fields and a parameter's default.
 - A bare slot is not a constraint. `struct Context<T> { fields: T }` accepts whatever the literal puts in `fields`; that value is what fixes `T`. Where several values fix one slot — two fields naming it, or a sequence literal's elements — they are checked against each other instead.
 
-Neither kind of variable survives elaboration, but only the _recorded facts_ are swept. The type table keeps every type ever considered, so a pass enumerating it selects with `TypeTable::is_concrete` rather than assuming the table holds only live types.
+A _flexible_ variable never survives elaboration: `finalize_infer_holes` substitutes solved ones away and pins unsolved ones to `error` after reporting them, and the backend passes panic on one rather than classifying it. A rigid parameter does survive — it is what a generic body is written in — and dies at monomorphization instead.
 
-Variables never survive elaboration: `finalize_infer_holes` substitutes solved ones away and pins unsolved ones to `error` after reporting them, and the backend passes panic on one rather than classifying it.
+Only the recorded facts are swept. The type table keeps every type ever considered, so a pass enumerating it selects with `TypeTable::is_concrete` rather than assuming the table holds only live types.
 
 ## Synthesis
 

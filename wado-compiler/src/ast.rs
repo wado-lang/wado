@@ -3237,6 +3237,27 @@ pub struct GenericParam {
 }
 
 impl GenericParam {
+    /// The trait bounds this param declares, by name. An `fn`-signature bound
+    /// is excluded: it is already realised in the parameter's own type, so
+    /// there is no trait to check a type argument against.
+    pub fn trait_bound_names(&self) -> Vec<String> {
+        self.bounds
+            .iter()
+            .filter(|b| b.fn_signature.is_none())
+            .map(|b| b.name.clone())
+            .collect()
+    }
+
+    /// The trait bounds worth remembering for method lookup — the same set
+    /// [`Self::trait_bound_names`] names, kept whole.
+    pub fn real_bounds(&self) -> Vec<TraitBound> {
+        self.bounds
+            .iter()
+            .filter(|b| b.fn_signature.is_none())
+            .cloned()
+            .collect()
+    }
+
     /// Whether this param carries an `fn`-signature bound (`<F: fn(...)>`).
     /// Such params are erased before codegen, so they occupy no positional
     /// monomorphization slot.

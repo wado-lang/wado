@@ -624,6 +624,31 @@ pub(crate) struct SequenceCoercionFacts {
     pub(crate) build_mangled_name: String,
 }
 
+impl SequenceCoercionFacts {
+    /// Recompute the type-argument names and the builder's per-method mangled
+    /// names from `type_arg_ids`. The names are a function of the arguments,
+    /// so anything that changes an argument — the module-end sweep, once an
+    /// inference variable is solved — calls this instead of rebuilding them
+    /// itself and risking one it forgot.
+    pub(crate) fn remangle(&mut self, tt: &crate::tir::TypeTable) {
+        self.type_arg_names = self
+            .type_arg_ids
+            .iter()
+            .map(|&t| tt.fq_type_name(t))
+            .collect();
+        let builder = self
+            .builder_base_name
+            .clone()
+            .with_args(self.type_arg_names.clone());
+        let name = |method: &str| {
+            crate::name::MethodName::format_local(&builder, Some(&self.trait_name), method)
+        };
+        self.new_mangled_name = name("new_literal");
+        self.push_mangled_name = name("push_literal");
+        self.build_mangled_name = name("build");
+    }
+}
+
 /// Resolved `KeyValueLiteralBuilder` impl data for an anonymous
 /// struct-literal → map coercion site. See
 /// [`TypeAnnotations::key_value_coercions`].
@@ -662,6 +687,28 @@ pub(crate) struct KeyValueCoercionFacts {
     /// `Builder::build` call's mangled name. `None` under the legacy API
     /// where the block breaks with `__b` directly.
     pub(crate) build_mangled_name: Option<String>,
+}
+
+impl KeyValueCoercionFacts {
+    /// [`SequenceCoercionFacts::remangle`] for the key-value builder.
+    pub(crate) fn remangle(&mut self, tt: &crate::tir::TypeTable) {
+        self.type_arg_names = self
+            .type_arg_ids
+            .iter()
+            .map(|&t| tt.fq_type_name(t))
+            .collect();
+        let builder = self
+            .builder_base_name
+            .clone()
+            .with_args(self.type_arg_names.clone());
+        let name = |method: &str| {
+            crate::name::MethodName::format_local(&builder, Some(&self.trait_name), method)
+        };
+        self.new_mangled_name = name("new_literal");
+        self.insert_mangled_name = name("insert_literal");
+        self.insert_all_mangled_name = name("insert_all");
+        self.build_mangled_name = self.build_mangled_name.as_ref().map(|_| name("build"));
+    }
 }
 
 /// Static-method call dispatch decision. See

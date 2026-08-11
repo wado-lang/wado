@@ -221,18 +221,18 @@ pub(super) fn unify(
 ///    in when nothing stronger pinned the parameter.
 ///
 /// Use [`solve`](Self::solve) to get the final type arguments in
-/// declaration order. Unbound parameters fall back to their original
-/// `TypeParam TypeId`. Helper [`solve_with_phantoms`](Self::solve_with_phantoms)
-/// additionally reports whether every parameter resolved to a concrete
-/// type, so callers can tell unresolved (phantom / forwarded) parameters
-/// from bound ones.
+/// declaration order. A slot nothing bound comes back as whatever was
+/// registered for it — a use site registers the inference variable it minted,
+/// so "unsolved" is `answer == var`, which is what `record_instantiation` and
+/// `blame_unsolved` test.
 pub(super) struct InferCtx<'a> {
     type_table: &'a RefCell<TypeTable>,
-    /// Declaration-order `TypeParam` / `TypePack` ids that this solve is
-    /// trying to bind. Empty entries mean "no type parameters" — the
-    /// caller generally short-circuits before constructing the context.
+    /// What this solve is trying to bind, in declaration order: a use site's
+    /// inference variables, or the declaration's own slots where instantiation
+    /// was declined. Empty means "no type parameters" — the caller generally
+    /// short-circuits before constructing the context.
     params: Vec<TypeId>,
-    /// Strong bindings accumulated so far (param `TypeId` -> concrete).
+    /// Strong bindings accumulated so far (variable / slot -> answer).
     bindings: IndexMap<TypeId, TypeId>,
     /// Queue of `(expected, actual)` constraints to apply after the
     /// strong pass. Used for literal numbers whose default type would
@@ -319,23 +319,5 @@ impl<'a> InferCtx<'a> {
         for (expected, actual) in std::mem::take(&mut self.deferred_args) {
             unify(self.type_table, expected, actual, &mut self.bindings);
         }
-    }
-
-    /// Run [`solve`](Self::solve) and return arguments paired with a flag
-    /// indicating whether every parameter resolved. Callers that can
-    /// tolerate unresolved parameters (e.g. generic struct fields with
-    /// phantom parameters, or a generic function forwarding one of its
-    /// own type parameters) can still use the partial result; callers
-    /// that require fully-concrete type args can check the flag.
-    pub(super) fn solve_with_phantoms(self) -> (Vec<TypeId>, bool) {
-        let type_table = self.type_table;
-        let inferred = self.solve();
-        let all_concrete = inferred.iter().all(|&id| {
-            !matches!(
-                type_table.borrow().get(id),
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-            )
-        });
-        (inferred, all_concrete)
     }
 }

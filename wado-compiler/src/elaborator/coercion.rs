@@ -8,7 +8,7 @@ use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -604,47 +604,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        let mangled_builder_name = builder_base_name.clone().with_args(type_arg_names.clone());
-
-        let new_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
-        let insert_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "insert_literal");
-        let insert_all_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "insert_all");
-        let build_mangled_name = if use_new_api {
-            Some(MethodName::format_local(
-                &mangled_builder_name,
-                Some(&trait_name),
-                "build",
-            ))
-        } else {
-            None
-        };
+        // Names come from `remangle` below, the one place that derives them
+        // from the type arguments — the sweep calls the same thing once a
+        // solved variable changes an argument.
+        let build_mangled_name = use_new_api.then(String::new);
 
         // Stage 5 (WEP 2026-05-26): record the resolved
         // `KeyValueLiteralBuilder` impl data so reify can rebuild the
         // same `__kv_lit:` desugar block deterministically.
         let key = expr.id();
-        self.sem.types.key_value_coercions.insert(
-            key,
-            super::sem::types::KeyValueCoercionFacts {
-                builder_type,
-                value_type,
-                insert_self_kind,
-                trait_name,
-                target_type,
-                impl_module_source,
-                builder_base_name,
-                type_arg_ids,
-                type_arg_names,
-                use_new_api,
-                new_mangled_name,
-                insert_mangled_name,
-                insert_all_mangled_name,
-                build_mangled_name,
-            },
-        );
+        let mut facts = super::sem::types::KeyValueCoercionFacts {
+            builder_type,
+            value_type,
+            insert_self_kind,
+            trait_name,
+            target_type,
+            impl_module_source,
+            builder_base_name,
+            type_arg_ids,
+            type_arg_names,
+            use_new_api,
+            new_mangled_name: String::new(),
+            insert_mangled_name: String::new(),
+            insert_all_mangled_name: String::new(),
+            build_mangled_name,
+        };
+        facts.remangle(&self.tysys.type_table.borrow());
+        self.sem.types.key_value_coercions.insert(key, facts);
 
         // Reserve the `__b` builder local on the surrounding scope so
         // subsequent local-index accounting in the enclosing function
@@ -682,13 +668,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ),
                 super::typecheck::TypeCheckResult::Incompatible
             );
-            if incompatible && value != TypeTable::UNKNOWN && value != TypeTable::NEVER {
+            if incompatible {
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected: self.tysys.type_table.borrow().type_name(value_type),
                     found: self.tysys.type_table.borrow().type_name(value),
                     span: field.value.span(),
                 });
-            } else if !incompatible {
+            } else {
                 // The values are what decide an open value type.
                 self.solve_infer_holes_against(value_type, value);
                 value_type = self.apply_infer_holes(value_type);
@@ -784,44 +770,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        let mangled_builder_name = builder_base_name.clone().with_args(type_arg_names.clone());
-
-        let new_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
-        let push_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "push_literal");
-        let build_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "build");
-
         // Stage 5 (WEP 2026-05-26): record the resolved
         // `SequenceLiteralBuilder` impl data so reify can rebuild the
         // same `__seq_lit:` desugar block deterministically — the
         // trait-impl lookup chain (newtype peel + sequence-trait
         // search), the type-arg mangling, and the per-method mangled
-        // names are not reproducible from the AST alone.
+        // names are not reproducible from the AST alone. The names come
+        // from `remangle`, the one place that derives them from the type
+        // arguments — the sweep calls the same thing once a solved variable
+        // changes an argument.
         let key = expr.id();
-        self.sem.types.sequence_coercions.insert(
-            key,
-            super::sem::types::SequenceCoercionFacts {
-                builder_type,
-                element_type,
-                push_self_kind,
-                trait_name,
-                output_type,
-                impl_module_source,
-                builder_base_name,
-                type_arg_ids,
-                type_arg_names,
-                newtype_cast_to: if needs_newtype_cast {
-                    Some(target_type)
-                } else {
-                    None
-                },
-                new_mangled_name,
-                push_mangled_name,
-                build_mangled_name,
+        let mut facts = super::sem::types::SequenceCoercionFacts {
+            builder_type,
+            element_type,
+            push_self_kind,
+            trait_name,
+            output_type,
+            impl_module_source,
+            builder_base_name,
+            type_arg_ids,
+            type_arg_names,
+            newtype_cast_to: if needs_newtype_cast {
+                Some(target_type)
+            } else {
+                None
             },
-        );
+            new_mangled_name: String::new(),
+            push_mangled_name: String::new(),
+            build_mangled_name: String::new(),
+        };
+        facts.remangle(&self.tysys.type_table.borrow());
+        self.sem.types.sequence_coercions.insert(key, facts);
 
         ctx.enter_scope();
 

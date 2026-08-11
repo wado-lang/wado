@@ -896,12 +896,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             }
             // Record only "real" trait bounds — `fn`/`fn mut` bounds are
             // already realised in the parameter's type itself.
-            let real_bounds: Vec<ast::TraitBound> = param
-                .bounds
-                .iter()
-                .filter(|b| b.fn_signature.is_none())
-                .cloned()
-                .collect();
+            let real_bounds = param.real_bounds();
             if !real_bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx

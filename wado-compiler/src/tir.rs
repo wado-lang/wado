@@ -3152,8 +3152,7 @@ impl TypeTable {
         }
     }
 
-    /// Whether `id` (recursively) contains an inference-hole `TypeParam` — one
-    /// whose `index >= base` (see `elaborator::infer_hole`).
+    /// Whether `id` (recursively) mentions an inference variable.
     pub fn contains_infer_var(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_) => true,

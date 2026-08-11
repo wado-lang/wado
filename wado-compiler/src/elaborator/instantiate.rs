@@ -140,14 +140,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         params: &[crate::ast::GenericParam],
         span: Span,
     ) {
-        for (&var, param) in inst.vars.iter().zip(params.iter()) {
-            let bounds: Vec<String> = param
-                .bounds
-                .iter()
-                .filter(|b| b.fn_signature.is_none())
-                .map(|b| b.name.clone())
-                .collect();
-            self.attach_infer_var_bounds(var, param.name.clone(), bounds, span);
+        for ((&var, param), diag) in inst.vars.iter().zip(params.iter()).zip(inst.diags.iter()) {
+            // `diags` is `None` exactly where instantiation was declined, and
+            // that slot is rigid: it is never solved, so a bound recorded
+            // against it could never be re-checked.
+            if diag.is_none() {
+                continue;
+            }
+            self.attach_infer_var_bounds(var, param.name.clone(), param.trait_bound_names(), span);
         }
     }
 
