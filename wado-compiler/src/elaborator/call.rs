@@ -125,7 +125,7 @@ enum CalleeIdentKind<'a> {
 }
 
 impl CalleeIdentKind<'_> {
-    /// The effective callee name used by `lookup_function_param_types`
+    /// The effective callee name used by `lookup_function_signature`
     /// and the dispatch match. Not callable on `AbstractTypeParam`
     /// because that variant takes its own dispatch path before any name
     /// lookup happens.
@@ -1331,7 +1331,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // mirror it here for the *call* case so `helper()` in a default
         // resolves in the defining module instead of erroring at the use
         // site. The `CalleeRef`'s module drives `lookup_function_return_type`
-        // / `lookup_function_param_types`, so the signature resolves in the
+        // / `lookup_function_signature`, so the signature resolves in the
         // defining module too.
         else if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
@@ -1622,7 +1622,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve an effect operation's `(param types, return type)` — the single
-    /// source of truth shared by `lookup_function_param_types` and
+    /// source of truth shared by `lookup_function_signature` and
     /// `lookup_function_return_type` (issue #1371). An operation is a method on
     /// an `interface` (WASI/user effect) or a `resource` (WASI handle); both
     /// store methods as `InterfaceMethod`s, and the decl pass recorded both

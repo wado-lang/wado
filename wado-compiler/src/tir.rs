@@ -427,20 +427,14 @@ pub enum ResolvedType {
         index: u32,
     },
     /// Inference variable — a *flexible* variable standing for a type the
-    /// solver has yet to determine.
+    /// solver has yet to determine. Minted when a use site instantiates a
+    /// polymorphic signature: where a rigid parameter rejects anything but
+    /// itself, a variable accepts and records.
     ///
-    /// Minted when a use site instantiates a polymorphic signature, and solved
-    /// by unification against the actual argument / expected types. Distinct
-    /// from [`ResolvedType::TypeParam`] precisely because the two answer
-    /// opposite questions at a type check: a rigid parameter rejects anything
-    /// but itself, a variable accepts and records.
-    ///
-    /// Reaches no recorded fact: `finalize_infer_holes` substitutes every
-    /// variable (solved → concrete, unsolved → `error`) before lowering. The
-    /// intermediate types built on one stay interned, as every type ever
-    /// considered does, so a pass enumerating [`TypeTable::all_types`] must
-    /// select with [`TypeTable::is_concrete`] rather than assume the table
-    /// holds only live types.
+    /// Reaches no recorded fact — `finalize_infer_holes` substitutes every
+    /// one away. The intermediate types built on one stay interned, as every
+    /// type ever considered does, so a pass enumerating
+    /// [`TypeTable::all_types`] must select with [`TypeTable::is_concrete`].
     InferVar(InferVarId),
     /// Type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
     /// Used inside tuples before monomorphization; expanded to concrete types during substitution.

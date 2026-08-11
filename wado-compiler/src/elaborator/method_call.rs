@@ -694,12 +694,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Pin a deferred hole that rode a prior binding into an argument
         // (`let v = gen()?; out.push(v)`) against the parameter type.
         //
-        // The arguments are *not* type-checked here. A generic method's
-        // parameter types still name its own slots at this point — inference
-        // has not run, because it needs these argument types to run — and a
-        // slot is opaque, so checking against one would reject every argument
-        // that is not literally it. The check happens once below, against the
-        // parameter types with the inferred type arguments substituted in.
+        // Arguments are not checked here: the parameter types still name the
+        // method's own slots, which are opaque until inference — which needs
+        // these argument types — has run. The check happens once below,
+        // against the substituted parameter types.
         for (arg, &expected_type) in args.iter_mut().zip(expected_param_types.iter()) {
             if self.type_has_infer_hole(arg.type_id) && self.hole_pinnable_against(expected_type) {
                 self.solve_infer_holes_against(arg.type_id, expected_type);
@@ -2556,8 +2554,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `impl Trait for Type` does not override a static method that the
         // trait provides a default for, concrete `Type::method()` calls
         // must still resolve — this mirrors how generic dispatch
-        // (`T::method()`) already reaches the trait default via
-        // `find_method_type_param_names`.
+        // (`T::method()`) already reaches the trait default.
         if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name)
             && let Some(default_method) = self
                 .trait_sig_by_name(&trait_name)
@@ -3231,8 +3228,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // method, the trait still provides the body, so `Type::method`
                 // (called concretely, not via a generic bound) must resolve to
                 // the trait's default. This mirrors how generic dispatch
-                // (`T::method()`) already finds default methods in
-                // `find_method_type_param_names`.
+                // (`T::method()`) already finds default methods.
                 let trait_name_base = Self::get_type_name_static(trait_type);
                 if let Some(method) = self
                     .trait_sig_by_name(&trait_name_base)

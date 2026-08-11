@@ -1,25 +1,14 @@
 //! Instantiating a polymorphic signature at a use site.
 //!
 //! A declaration is written in its own frame: `fn id<T>(x: T) -> T` names slot
-//! 0 as a rigid `T`. A *use* of that declaration does not mention `T` at all —
-//! it stands for whatever this call turns out to need. Instantiation is the
-//! step that says so: each slot gets a fresh [`ResolvedType::InferVar`], and
-//! the signature is rewritten into those variables before anything is checked
-//! against it.
+//! 0 as a rigid `T`. A use of it does not mention `T` — it stands for whatever
+//! this call needs. Instantiation says so: each slot gets a fresh
+//! [`ResolvedType::InferVar`], and the signature is rewritten into those
+//! variables before anything is checked against it.
 //!
-//! Without this step the two roles collapse. `TypeParam` is interned by
-//! `(name, index)`, so `fn f<T>`'s `T` and `fn g<T>`'s `T` are one `TypeId`,
-//! and a check that meets a bare `T` cannot tell "the body that declares it"
-//! (opaque, reject) from "a callee's slot about to be solved" (accept, record).
-//! Every workaround for that ambiguity — comparing against the enclosing
-//! scope's parameters, asking whether an argument could have pinned the slot,
-//! consulting the bindings map for whether anything was inferred at all —
-//! exists because the two share an id. Instantiating separates them at the
-//! source instead of asking each site to guess.
-//!
-//! The variables minted here join the lifecycle [`super::infer_hole`] owns:
-//! solved ones are substituted away, unsolved ones raise "cannot infer" and are
-//! pinned to `error`, and neither survives elaboration.
+//! The variables join the lifecycle [`super::infer_hole`] owns: solved ones
+//! are substituted away, unsolved ones raise "cannot infer" and are pinned to
+//! `error`, and neither reaches a recorded fact.
 
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;

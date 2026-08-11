@@ -2087,16 +2087,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .copied()
                 .collect();
 
-            // The method's slots as its declaration holds them. Numbering them
-            // here instead — from a count of the impl's slots — disagrees with
-            // the declaration whenever that count is wrong, which a pack
-            // parameter (`impl<T, ..F> Emit for T`) is enough to cause. Bring
-            // the same ids into scope as are reported, so the body resolves
-            // `T` to the slot the call site binds.
-            // Only the slot-consuming parameters are registered: an effect
-            // param and a `fn`-bound one occupy no slot, and the loop that
-            // numbered them positionally gave every parameter after them the
-            // wrong index.
+            // Bring the reported slots into scope, so the body resolves `T`
+            // to the slot the call site binds. Effect and `fn`-bound params
+            // occupy none, so they are not registered.
             let method_slot_params: Vec<&ast::GenericParam> = method_type_params
                 .iter()
                 .filter(|p| p.is_real_type_param())

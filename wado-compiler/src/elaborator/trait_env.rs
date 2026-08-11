@@ -1281,7 +1281,7 @@ impl TraitEnv {
         })
     }
 
-    /// Receiver-matched form of [`Self::has_inherent_method`].
+    /// Whether an inherent `impl` on `receiver` declares `method_name`.
     pub(crate) fn has_inherent_method_by_receiver(
         &self,
         receiver: &name::Receiver,
