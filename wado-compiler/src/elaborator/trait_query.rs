@@ -496,6 +496,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Find a trait declaration's type parameters (e.g., `<T, U>` in `trait Foo<T, U>`).
+    /// The declared type parameters of an already-identified trait.
+    pub(super) fn trait_decl_type_params_of(
+        &self,
+        key: &super::trait_env::DeclKey,
+    ) -> Option<Vec<ast::GenericParam>> {
+        let loc = self.tysys.trait_env.decl_index.get(key)?;
+        self.tysys
+            .trait_env
+            .trait_decl_headers
+            .get(loc)
+            .map(|header| header.type_params.clone())
+    }
+
     pub(super) fn find_trait_decl_type_params(
         &self,
         trait_name: &str,
@@ -1553,7 +1566,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The recorded declaration facts of an identified trait — the digest
     /// counterpart of [`Self::trait_decl_header_of`], answerable only once the
     /// decl pass has run.
-    fn trait_sig_of(&self, key: &super::trait_env::DeclKey) -> Option<&super::sig::TraitSig> {
+    /// The recorded signature of an already-identified trait.
+    ///
+    /// Every by-name form funnels through this one. Flattening a key back to
+    /// its declared name and resolving that again is what broke an aliased
+    /// head: the module imported `Alpha as Ay` and never `Alpha`, so the
+    /// second resolution found nothing.
+    pub(super) fn trait_sig_of(
+        &self,
+        key: &super::trait_env::DeclKey,
+    ) -> Option<&super::sig::TraitSig> {
         let (_, decl_id) = self.tysys.trait_env.decl_index.get(key)?;
         self.tysys.signatures.trait_sig(*decl_id)
     }

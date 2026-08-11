@@ -1234,10 +1234,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// receiver argument to bind `Self` from.
     pub(super) fn is_trait_instance_method(&self, trait_name: &str, method_name: &str) -> bool {
         let key = self.canonical_decl_key(trait_name);
-        let declared = key.1.clone();
         self.tysys.trait_env.declares_trait(&key)
             && self
-                .trait_sig_by_name(&declared)
+                .trait_sig_of(&key)
                 .and_then(|sig| sig.method(method_name))
                 .is_some_and(|m| m.sig.self_kind != ast::SelfKind::None)
     }
@@ -1481,7 +1480,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // misuse), so that shape keeps its unknown-function error.
             if self.is_trait_instance_method(&g.name, &static_call.method)
                 && self
-                    .find_trait_decl_type_params(&self.declared_trait_name(&g.name))
+                    .trait_decl_type_params_of(&self.canonical_decl_key(&g.name))
                     .is_some_and(|params| !params.is_empty() && params.len() == g.args.len())
             {
                 let declared_head = self.declared_trait_name(&g.name);
