@@ -454,8 +454,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         trait_name: &str,
     ) -> Option<&super::trait_env::TraitDeclHeader> {
-        let key = self.trait_decl_key_in_frame(trait_name);
-        let loc = self.tysys.trait_env.decl_index.get(&key)?;
+        self.trait_decl_header_of(&self.trait_decl_key_in_frame(trait_name))
+    }
+
+    /// The declaration header of a trait already identified.
+    ///
+    /// Every by-name form here funnels through this one, so a caller holding a
+    /// site answers about the declaration that site resolved to rather than
+    /// re-resolving the spelling in its own frame.
+    pub(super) fn trait_decl_header_of(
+        &self,
+        key: &super::trait_env::DeclKey,
+    ) -> Option<&super::trait_env::TraitDeclHeader> {
+        let loc = self.tysys.trait_env.decl_index.get(key)?;
         self.tysys.trait_env.trait_decl_headers.get(loc)
     }
 
@@ -1633,8 +1644,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether the trait named `trait_name` declares `method_name`. The cheap
     /// form of [`Self::find_trait_decl_method`], for counting candidates
     /// without cloning each one's declaration.
-    fn trait_declares_method(&self, trait_name: &str, method_name: &str) -> bool {
-        self.trait_decl_header_in_frame(trait_name)
+    fn trait_declares_method_of(
+        &self,
+        key: &super::trait_env::DeclKey,
+        method_name: &str,
+    ) -> bool {
+        self.trait_decl_header_of(key)
             .is_some_and(|header| header.methods.iter().any(|m| m.name == method_name))
     }
 
@@ -1644,18 +1659,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The header answers whether the method exists, the digest what it says.
     /// A method the header lists but the digest lacks is a decl-pass bug, so it
     /// panics rather than reading as "no such method".
-    fn trait_method_in_frame(
+    fn trait_method_of(
         &self,
-        trait_name: &str,
+        key: &super::trait_env::DeclKey,
         method_name: &str,
     ) -> Option<(super::sig::MethodSig, Vec<ast::AssociatedTypeDecl>)> {
-        let header = self.trait_decl_header_in_frame(trait_name)?;
+        let header = self.trait_decl_header_of(key)?;
         if !header.methods.iter().any(|m| m.name == method_name) {
             return None;
         }
         let assoc_types = header.assoc_types.clone();
         let sig = self
-            .trait_sig_in_frame(trait_name)
+            .trait_sig_of(key)
             .and_then(|sig| sig.method(method_name))
             .expect("the decl pass records every trait method's signature")
             .sig
@@ -1663,12 +1678,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((sig, assoc_types))
     }
 
-    /// The recorded declaration facts of the trait `trait_name` names in this
-    /// frame — the digest counterpart of [`Self::trait_decl_header_in_frame`],
-    /// answerable only once the decl pass has run.
-    fn trait_sig_in_frame(&self, trait_name: &str) -> Option<&super::sig::TraitSig> {
-        let key = self.trait_decl_key_in_frame(trait_name);
-        let (_, decl_id) = self.tysys.trait_env.decl_index.get(&key)?;
+    /// The recorded declaration facts of an identified trait — the digest
+    /// counterpart of [`Self::trait_decl_header_of`], answerable only once the
+    /// decl pass has run.
+    fn trait_sig_of(&self, key: &super::trait_env::DeclKey) -> Option<&super::sig::TraitSig> {
+        let (_, decl_id) = self.tysys.trait_env.decl_index.get(key)?;
         self.tysys.signatures.trait_sig(*decl_id)
     }
 
@@ -1751,27 +1765,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> Option<(crate::name::FqTraitName, MethodInfo)> {
         let bounds = self.elaborate_bounds(bounds);
+        // Which trait each bound means is settled once, here: a bound reached
+        // through a supertrait was written in the *declaring* module, so
+        // resolving its spelling in this frame would miss an aliased one.
+        let keyed: Vec<(ast::TraitBound, super::trait_env::DeclKey)> = bounds
+            .iter()
+            .map(|b| {
+                let key = known
+                    .get(&b.name)
+                    .and_then(crate::name::FqTraitName::canonical)
+                    .unwrap_or_else(|| self.trait_decl_at(b.id, &b.name));
+                (b.clone(), key)
+            })
+            .collect();
         // Stopping at the first hit would hide the ambiguity, so every bound is
         // scanned — by predicate, leaving only the winner to clone.
-        let candidates: Vec<ast::TraitBound> = bounds
-            .iter()
-            .filter(|b| self.trait_declares_method(&b.name, method_name))
-            .cloned()
+        let candidates: Vec<(ast::TraitBound, super::trait_env::DeclKey)> = keyed
+            .into_iter()
+            .filter(|(_, key)| self.trait_declares_method_of(key, method_name))
             .collect();
-        let resolved = candidates.first().and_then(|bound| {
-            self.trait_method_in_frame(&bound.name, method_name)
-                .map(|found| (bound.clone(), found))
+        let resolved = candidates.first().and_then(|(bound, key)| {
+            self.trait_method_of(key, method_name)
+                .map(|found| (bound.clone(), key.clone(), found))
         });
         if candidates.len() > 1 {
             // Keep going with the first candidate: `None` reads to the caller
             // as "no such method", which it would then report as well.
             let _ = self.emit(TypeError::AmbiguousTraitMethod {
                 method: method_name.to_string(),
-                traits: candidates.iter().map(|b| b.name.clone()).collect(),
+                traits: candidates.iter().map(|(b, _)| b.name.clone()).collect(),
                 span,
             });
         }
-        let (bound, (sig, trait_assoc_types)) = resolved?;
+        let (bound, decl, (sig, trait_assoc_types)) = resolved?;
         let trait_name = bound.name.clone();
         // The bound answers with the trait its own reference site resolves to,
         // not the spelling it wrote: an aliased bound (`T: G` for
@@ -1779,7 +1805,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let fq_trait_name = known
             .get(&trait_name)
             .cloned()
-            .unwrap_or_else(|| self.fq_trait_name_at(bound.id, &trait_name));
+            .unwrap_or_else(|| crate::name::FqTraitName::declared(&decl.0, &decl.1));
 
         let answers = self.trait_assoc_answers(&trait_name, &trait_assoc_types, self_type_id);
         let instantiated = sig.decl.instantiate_slots_with(

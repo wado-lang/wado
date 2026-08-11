@@ -308,6 +308,22 @@ Costs and risks:
            key it forms is right only when synthesis runs in the declaring
            module. Whoever takes this next starts from those two, not from the
            index.
+         - **A user trait sharing a prelude trait's name is still displaced in
+           the impl arity check.** Found by accident: a fixture declaring
+           `trait Sub { fn sub(&self) -> i32; }` and implementing it is
+           rejected with "method `sub` takes 0 parameter(s) but `Sub` declares
+           1" — the arity came from `core:prelude`'s arithmetic `Sub`, whose
+           `sub` takes a right-hand side. The resolution table answers this
+           correctly (a module's own declaration outranks the prelude), and
+           the arity check itself compares `ImplHeader::trait_key` — an
+           identity. What is wrong is where that key comes from:
+           `impl_target_key`, over `decl_identity_core`, whose
+           `is_defined_in_module` layer cannot see a trait because a trait has
+           no symbol-table entry, so it falls through to the prelude. The
+           header already carries `trait_ref`, the site's answer, beside it.
+           Deriving `trait_key` from `trait_ref` is the fix, and it needs its
+           own verification: it also changes the key for re-export chains,
+           which `declaring_side_decl_key` resolves and the table does not.
          - Stores that flatten a bound to its name and lose the site:
            `infer_holes`' recorded bounds, `type_param_bounds` on the struct and
            trait digests, and `BlanketImpl::bounds`.

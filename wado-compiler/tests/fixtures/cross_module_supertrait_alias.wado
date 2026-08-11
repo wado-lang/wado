@@ -1,15 +1,15 @@
 // A supertrait written under an alias must reach the trait it aliases.
 //
-// `trait Sub: B` is a reference to `Base`, but the resolution walk never
+// `trait Extra: B` is a reference to `Base`, but the resolution walk never
 // visited a trait declaration's supertraits, so the inherited bound carried no
 // site and resolved its spelling in whichever module asked. Here no other
 // module imports `B` at all, so the inherited bound has to answer from the
 // declaring module's vantage.
 
-use { Sub, make } from "./sub/cross_module_supertrait_alias_mid.wado";
+use { Extra, make } from "./sub/cross_module_supertrait_alias_mid.wado";
 
-fn both<T: Sub>(x: &T) -> i32 {
-    return x.base() + x.sub();
+fn both<T: Extra>(x: &T) -> i32 {
+    return x.base() + x.extra();
 }
 
 test "an inherited bound reaches the trait its declaration aliased" {
