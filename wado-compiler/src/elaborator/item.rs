@@ -920,6 +920,36 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     }
 }
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Substitute a signature's own defaulted type parameters into `ty`.
+    ///
+    /// A parameter without a default is left alone: it is opaque, and the
+    /// caller chooses it.
+    fn apply_type_param_defaults(
+        &mut self,
+        type_params: &[ast::GenericParam],
+        ty: TypeId,
+    ) -> TypeId {
+        let space: Vec<ast::GenericParam> = type_params
+            .iter()
+            .filter(|p| p.is_real_type_param())
+            .cloned()
+            .collect();
+        if !space.iter().any(|p| p.default.is_some()) {
+            return ty;
+        }
+        let mut subst = crate::hashmap::IndexMap::default();
+        for (i, p) in space.iter().enumerate() {
+            if let Some(default_ty) = &p.default {
+                let resolved = self.resolve_type(default_ty);
+                subst.insert(i as u32, resolved);
+            }
+        }
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(ty, &subst)
+    }
+
     /// Resolve one method parameter's type. A receiver comes from the impl
     /// target — the parser desugars `self` / `&self` / `&mut self` into
     /// `Self`-based annotations — and anything else from its annotation.
@@ -1939,8 +1969,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span: default_ast.span(),
                     });
                 }
-                let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
-                scope.typecheck(resolved, type_id, default_ast.span());
+                // A default is checked against the parameter type with the
+                // signature's own type-parameter defaults applied. `fn
+                // event<T = NoFields>(fields: T = NoFields {})` promises the
+                // value only for the `T` the caller gets by default; against a
+                // bare `T` — opaque, standing for whatever a caller picks —
+                // nothing concrete could ever satisfy it.
+                let expected = scope.apply_type_param_defaults(&func.type_params, type_id);
+                let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(expected));
+                scope.typecheck(resolved, expected, default_ast.span());
             }
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             scope.record_local_symbol(

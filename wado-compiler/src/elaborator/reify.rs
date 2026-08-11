@@ -6232,10 +6232,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // return type; otherwise use the expected fn type's return.
         let declared_return = closure.return_type.as_ref().map(|ty| self.resolve_type(ty));
         let body_expected = declared_return.or_else(|| {
-            expected_fn_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
-                ResolvedType::Function { return_type, .. } => Some(*return_type),
-                _ => None,
-            })
+            expected_fn_type
+                .and_then(|t| match self.tysys.type_table.borrow().get(t) {
+                    ResolvedType::Function { return_type, .. } => Some(*return_type),
+                    _ => None,
+                })
+                // A rigid parameter belongs to the signature this call is
+                // instantiating, and the closure's own body is what determines
+                // it — seeding the body with it would demand the body produce
+                // an opaque type it cannot construct. Mirrors `resolve_closure`.
+                .filter(|&rt| {
+                    !matches!(
+                        self.tysys.type_table.borrow().get(rt),
+                        ResolvedType::TypeParam { .. }
+                    )
+                })
         });
 
         // A block body with explicit `return X` has a NEVER/UNIT tail, so its

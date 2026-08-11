@@ -3496,7 +3496,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ast::Expr::TupleLiteral(t)
                         if !t.elements.iter().any(|e| matches!(e, Expr::Spread(..)))
                 );
-                if needs_deferred_coercion && tuple_is_spread_free {
+                // Defer this field's check when its declared type still names
+                // a slot of the struct's own frame: the literal's type
+                // arguments are not inferred yet, so the comparison would be
+                // against `T` rather than what this literal makes of it. The
+                // second pass runs it once the arguments are known — and
+                // likewise runs the sequence coercion that was held back.
+                let check_deferred = (needs_deferred_coercion && tuple_is_spread_free)
+                    || expected_field_type
+                        .is_some_and(|t| self.tysys.type_table.borrow().contains_rigid_param(t));
+                if check_deferred {
                     deferred_coercions.push((provided_idx, provided_idx));
                 }
 
@@ -3510,9 +3519,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 }
 
-                // Check field value type against declared struct field type
-                if let Some((_, expected_type_id)) =
-                    struct_field_types.iter().find(|(n, _)| n == &field.name)
+                // Check field value type against declared struct field type.
+                // A field whose coercion was deferred still holds its literal
+                // shape — the sequence coercion has not run — so checking it
+                // here would compare `[…]` against the sequence it is about to
+                // become. The second pass checks it once coerced.
+                if !check_deferred
+                    && let Some((_, expected_type_id)) =
+                        struct_field_types.iter().find(|(n, _)| n == &field.name)
                 {
                     self.typecheck(value.type_id, *expected_type_id, field.value.span());
                 }
@@ -3676,23 +3690,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // concrete type arguments are known. For example, [10, 20, 30] in
             // `Container<i32> { items: [10, 20, 30] }` needs List<i32> coercion,
             // but at first pass the field type was List<T> (type param).
-            if !deferred_coercions.is_empty() && !type_args.is_empty() {
-                for &(field_idx, ast_idx) in &deferred_coercions {
-                    let field_name = &fields[field_idx].name;
-                    let concrete_field_type = struct_field_types
-                        .iter()
-                        .find(|(name, _)| name == field_name)
-                        .map(|(_, type_id)| self.substitute_type_params(*type_id, &type_args));
-
-                    if let Some(concrete_type) = concrete_field_type {
-                        let ast_field = &struct_lit.fields[ast_idx];
-                        if let Some(coerced) =
-                            self.try_coerce_tuple_to_sequence(&ast_field.value, ctx, concrete_type)
-                        {
-                            fields[field_idx].value = coerced;
+            for &(field_idx, ast_idx) in &deferred_coercions {
+                let field_name = &fields[field_idx].name;
+                let Some(concrete_type) = struct_field_types
+                    .iter()
+                    .find(|(name, _)| name == field_name)
+                    .map(|(_, type_id)| {
+                        if type_args.is_empty() {
+                            *type_id
+                        } else {
+                            self.substitute_type_params(*type_id, &type_args)
                         }
-                    }
+                    })
+                else {
+                    continue;
+                };
+                let ast_field = &struct_lit.fields[ast_idx];
+                if let Some(coerced) =
+                    self.try_coerce_tuple_to_sequence(&ast_field.value, ctx, concrete_type)
+                {
+                    fields[field_idx].value = coerced;
                 }
+                // The check the first pass skipped, now that the field holds
+                // what the coercion made of it.
+                self.typecheck(
+                    fields[field_idx].value.type_id,
+                    concrete_type,
+                    ast_field.value.span(),
+                );
             }
 
             // Check trait bounds on inferred type arguments

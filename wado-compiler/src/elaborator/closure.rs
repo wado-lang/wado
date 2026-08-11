@@ -26,6 +26,20 @@ struct ExpectedFn {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Whether `ty` is a bare rigid type parameter.
+    ///
+    /// A closure is not constrained by an expected return type of that shape:
+    /// the parameter belongs to the signature the call is instantiating, and
+    /// the closure's own body is what determines it. Seeding the body with it
+    /// would demand that the body produce an opaque type it cannot construct
+    /// — `fold(0, |acc, x| acc + x)` asked the closure to return `Acc`.
+    pub(super) fn is_rigid_type_param(&self, ty: TypeId) -> bool {
+        matches!(
+            self.tysys.type_table.borrow().get(ty),
+            crate::tir::ResolvedType::TypeParam { .. }
+        )
+    }
+
     fn extract_expected_fn(&self, expected_type: Option<TypeId>) -> Option<ExpectedFn> {
         let tid = expected_type?;
         let tt = self.tysys.type_table.borrow();
@@ -149,8 +163,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // return type; otherwise fall back to the expected fn type from the
         // surrounding context (e.g. a `let f: fn(..) -> R = ..` binding).
         let declared_return = closure.return_type.as_ref().map(|ty| self.resolve_type(ty));
-        let body_expected =
-            declared_return.or_else(|| expected_fn.as_ref().map(|ef| ef.return_type));
+        let body_expected = declared_return.or_else(|| {
+            expected_fn
+                .as_ref()
+                .map(|ef| ef.return_type)
+                .filter(|&rt| !self.is_rigid_type_param(rt))
+        });
         // Seed the closure's return type before walking the body, so a `?`
         // operator in the body (which checks `ctx.return_type` for
         // Result/Option) resolves against the real return type instead of the

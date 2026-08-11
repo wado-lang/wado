@@ -2993,6 +2993,32 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` (recursively) mentions a *rigid* type parameter — a slot
+    /// of some declaration's own frame, as opposed to an inference variable a
+    /// solver still owns.
+    pub fn contains_rigid_param(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => true,
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.contains_rigid_param(*inner),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().any(|p| self.contains_rigid_param(*p))
+                    || self.contains_rigid_param(*return_type)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                type_args.iter().any(|t| self.contains_rigid_param(*t))
+            }
+            _ => false,
+        }
+    }
+
     /// Check if a type is or contains type parameters or unresolved types (Unknown/Error)
     pub fn contains_type_param(&self, id: TypeId) -> bool {
         match self.get(id) {
