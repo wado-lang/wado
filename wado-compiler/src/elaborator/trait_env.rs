@@ -684,24 +684,6 @@ pub struct TraitEnv {
     pub(super) static_method_index: StaticMethodIndex,
     /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for resource static methods.
     pub(super) resource_static_method_index: ResourceStaticMethodIndex,
-    /// `(type_name, trait_name)` → `ModuleSource` of the non-blanket impl.
-    /// Consumed by template synthesis to route trait-method calls to the
-    /// module that actually defines the impl, regardless of where the
-    /// receiver type is declared (e.g. `impl Display for String` lives in
-    /// `core:prelude/format`, not the module that declares `String`).
-    /// Includes both fully concrete impls (`impl Display for String`) and
-    /// generic impls (`impl<T: Inspect> Inspect for List<T>`).
-    pub(crate) trait_impl_modules: TraitImplModuleIndex,
-    /// Like [`trait_impl_modules`] but restricted to **fully concrete**
-    /// impls — `impl <Trait> for <Type> { … }` blocks whose `type_params`
-    /// are empty. This mirrors the pre-Step-4 monomorphizer index, which
-    /// only catalogued trait methods belonging to non-generic, non-blanket
-    /// impl blocks. Mono needs this distinction to decide which
-    /// `module_source` a substituted trait-method call should carry: a
-    /// generic impl's instantiation lives in the receiver type's module
-    /// (preserving the legacy convention), while a concrete impl's
-    /// function lives in the impl block's module.
-    pub(crate) concrete_trait_impl_modules: TraitImplModuleIndex,
     /// Layer added in the synthesis phase: auto-derived / generated impls
     /// (`Eq`, `Ord`, `Inspect`, `Display`, `From`, serde adapters, …) that
     /// were not present in the AST. `None` until `extend_with_synthesised`

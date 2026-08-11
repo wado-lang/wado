@@ -3110,27 +3110,14 @@ pub struct NamedType {
     pub id: AstId,
     pub name: String,
     pub span: Span,
-    /// The defining source interface for this name reference, populated
-    /// during stdlib bootstrap and user-code resolution so that registry
-    /// lookups are unambiguous. `None` means the reference has not been
-    /// resolved yet (e.g. freshly parsed user code before the elaborator
-    /// runs, or a bare primitive/generic parameter). Format matches the
-    /// `#[cm("...")]` prefix, e.g. `"wasi:filesystem/types@0.3.0-rc-..."`
-    /// or `"core:kiln/types@0.1.0"`.
-    pub source_interface: Option<String>,
 }
 
 impl NamedType {
-    /// Construct a `NamedType` with no resolved source interface. The source
-    /// is populated later during stdlib registration (for stdlib types) or by
-    /// the elaborator (for user-code references into imported symbols).
+    /// A name reference. Which declaration it means is answered once by
+    /// `crate::resolve::Resolutions`, keyed by [`Self::id`] — not stored here
+    /// as a spelling.
     pub fn new(id: AstId, name: String, span: Span) -> Self {
-        Self {
-            id,
-            name,
-            span,
-            source_interface: None,
-        }
+        Self { id, name, span }
     }
 }
 
