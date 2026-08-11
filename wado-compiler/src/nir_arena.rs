@@ -1169,13 +1169,13 @@ impl Body {
     /// slot counts as live, since nothing has been spliced into a tree yet.
     pub fn for_each_reachable_node(&self, f: &mut impl FnMut(NodeRef)) {
         if self.blocks.is_empty() {
-            for (e, _) in self.exprs.iter() {
+            for (e, _) in &self.exprs {
                 f(NodeRef::Expr(e));
             }
-            for (s, _) in self.stmts.iter() {
+            for (s, _) in &self.stmts {
                 f(NodeRef::Stmt(s));
             }
-            for (p, _) in self.pats.iter() {
+            for (p, _) in &self.pats {
                 f(NodeRef::Pat(p));
             }
             return;

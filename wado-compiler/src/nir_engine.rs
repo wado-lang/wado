@@ -770,7 +770,7 @@ impl<'a> Engine<'a> {
     /// That is the case worth special-casing: inside the fixed-point loop the
     /// early freeze plants context-free values only and the local-naming
     /// freezes have not run, so the census is empty on essentially every
-    /// session (1228 of 1228, measured on the Gale-generated SQLite parser).
+    /// session (1228 of 1228, measured on the Gale-generated `SQLite` parser).
     /// Dropping it on every edit instead costs a whole-body walk per rewrite.
     ///
     /// A non-empty census can shrink as well as grow, so any edit drops it.
@@ -839,6 +839,49 @@ impl<'a> Engine<'a> {
             &mut self.buf.block_parent,
             &mut self.buf.pat_parent,
         ) = parent;
+    }
+
+    /// Edit API: rewrite every operand slot of expression `id` through `f`.
+    ///
+    /// The one edit that installs operands without touching node structure, for
+    /// a pass rewriting a whole subtree's slots in one sweep (`licm`'s
+    /// pre-header hoist). A promoted value carries no skeleton node, so there is
+    /// no parent edge to move and nothing new to enqueue — which is also why
+    /// `f` may not hand back a *different* `Operand::Expr`: that is a structural
+    /// splice, and `redirect_expr` / `replace_expr_kind` are what maintain it.
+    pub fn map_expr_operands(&mut self, id: ExprId, f: &mut impl FnMut(Operand) -> Operand) {
+        let node = NodeRef::Expr(id);
+        let mut spliced = false;
+        self.body.map_expr_operands(id, &mut |op| {
+            let new = f(op);
+            spliced |= new != op && new.as_expr().is_some();
+            new
+        });
+        assert!(
+            !spliced,
+            "[NIR engine] map_expr_operands({id:?}) installed a skeleton operand: \
+             that is a structural splice, so the parent map and worklist need \
+             `redirect_expr` / `replace_expr_kind` instead"
+        );
+        self.census_note_node_operands(node);
+    }
+
+    /// [`Engine::map_expr_operands`] for a statement's operand slots.
+    pub fn map_stmt_operands(&mut self, id: StmtId, f: &mut impl FnMut(Operand) -> Operand) {
+        let node = NodeRef::Stmt(id);
+        let mut spliced = false;
+        self.body.map_stmt_operands(id, &mut |op| {
+            let new = f(op);
+            spliced |= new != op && new.as_expr().is_some();
+            new
+        });
+        assert!(
+            !spliced,
+            "[NIR engine] map_stmt_operands({id:?}) installed a skeleton operand: \
+             that is a structural splice, so the parent map and worklist need \
+             `redirect_expr` / `replace_expr_kind` instead"
+        );
+        self.census_note_node_operands(node);
     }
 
     /// Edit API: redirect one operand slot of `node` holding the promoted value
@@ -1456,14 +1499,18 @@ impl<'a> Engine<'a> {
             }
         }
         debug_assert!(
-            self.promoted_reads.get().is_none_or(|c| !c.is_empty())
-                || self.body.promoted_read_counts().is_empty(),
-            "[NIR engine] the promoted-read census went stale: the memo holds \
-             \"no reachable operand names a local\" but a fresh walk finds one, \
-             so an edit made it reachable without reporting it — every mutating \
-             edit method must call `census_note_operand` / \
-             `census_note_node_operands` / `census_note_structure`. Left \
-             unreported, `elide_local` deletes a binding the value pool reads."
+            self.promoted_reads
+                .get()
+                .is_none_or(|memo| *memo == self.body.promoted_read_counts()),
+            "[NIR engine] the promoted-read census the session ends on disagrees \
+             with a fresh walk, so some edit changed which operands are \
+             reachable without reporting it — every mutating edit method must \
+             call `census_note_operand` / `census_note_node_operands` / \
+             `census_note_structure`. Left unreported, `elide_local` deletes a \
+             binding the value pool still reads. Note the check only covers a \
+             session that asked for the census at all, and only its final \
+             state: a stale answer a later invalidation happened to cover is \
+             invisible here."
         );
         any
     }

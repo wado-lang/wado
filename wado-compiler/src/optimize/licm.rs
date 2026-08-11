@@ -2567,13 +2567,13 @@ fn hoist_invariant_value_operands(
     // Phase 1: snapshot every operand slot in the subtree, in a fixed order.
     let mut ops: Vec<Operand> = Vec::new();
     for &e in &expr_ids {
-        engine.body.map_expr_operands(e, &mut |op| {
+        engine.map_expr_operands(e, &mut |op| {
             ops.push(op);
             op
         });
     }
     for &s in &stmt_ids {
-        engine.body.map_stmt_operands(s, &mut |op| {
+        engine.map_stmt_operands(s, &mut |op| {
             ops.push(op);
             op
         });
@@ -2657,14 +2657,14 @@ fn hoist_invariant_value_operands(
         .collect();
     let mut i = 0;
     for &e in &expr_ids {
-        engine.body.map_expr_operands(e, &mut |_| {
+        engine.map_expr_operands(e, &mut |_| {
             let r = new_ops[i];
             i += 1;
             r
         });
     }
     for &s in &stmt_ids {
-        engine.body.map_stmt_operands(s, &mut |_| {
+        engine.map_stmt_operands(s, &mut |_| {
             let r = new_ops[i];
             i += 1;
             r

@@ -29,11 +29,14 @@ folded away long ago.
 Inside an engine session ask `Engine::reads_promoted_local` /
 `Engine::promoted_read_count`, never `arena_query` directly. That census costs a
 whole-body walk, so a rule recomputing it per application is quadratic; the
-engine memoizes it and the edit API drops the memo only when a rewrite makes a
-local-naming value reachable. A new mutating edit method must report what it
-writes (`census_note_operand` / `census_note_node_operands` /
-`census_note_structure`) — the `Engine::run` debug audit is what catches a
-method that forgets.
+engine memoizes it and drops the memo only when a rewrite makes a local-naming
+value reachable. That rests on the edit API seeing every operand written, so:
+a rule writes operands through `Engine` (including `map_expr_operands` /
+`map_stmt_operands`), never through `engine.body`, and a new mutating edit
+method reports what it writes (`census_note_operand` /
+`census_note_node_operands` / `census_note_structure`). `Engine::run` compares
+the memo against a fresh walk under debug assertions, but only for a session
+that asked for the census and only at its end — a backstop, not a proof.
 
 Never reintroduce, regardless of perf:
 

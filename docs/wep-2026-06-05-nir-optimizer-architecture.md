@@ -217,8 +217,12 @@ repeats them where a contributor will hit them.
   the edit API reports every operand it writes, so a rewrite drops the memo only
   when it makes a local-naming value reachable. Inside the fixed-point loop that
   never happens, because the early freeze plants context-free values only; the
-  memo therefore survives whole sessions and the walk runs once. `Engine::run`
-  audits the induction under debug assertions.
+  memo therefore survives whole sessions and the walk runs once. What holds it
+  up is that the edit API sees every operand written — a rule that reaches past
+  it into `Body` breaks the memo, so operand-slot rewrites go through
+  `Engine::map_expr_operands` / `map_stmt_operands` too. `Engine::run` compares
+  the memo against a fresh walk under debug assertions, for a session that asked
+  and at its end only: a backstop, not a proof.
 
 ## Rejected and deferred
 
