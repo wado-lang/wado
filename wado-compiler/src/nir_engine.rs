@@ -152,6 +152,9 @@ impl EngineBuffers {
     /// a live index.
     fn reseed_worklist(&mut self) {
         self.worklist.clear();
+        // A session that only queried (`extract`'s freeze walk) never drains the
+        // worklist, so bits survive it. A memset is cheap next to the walk this
+        // whole path exists to avoid.
         for b in [
             &mut self.expr_queued,
             &mut self.stmt_queued,
@@ -352,12 +355,20 @@ impl<'a> Engine<'a> {
         // structural-pass coarsening). A new session reuses it as-is — there is
         // no session-start drop and no rebuild path (build-once is invariant).
         if reuse {
-            // Parents, defs, and the post-order seed carry over; the read set
-            // does not. A rewrite can install a `Local` kind or re-attach a node
-            // without the edit API seeing it, and a missing read is the one
-            // direction that miscompiles — so re-derive it, which is a flat scan
-            // rather than the walk `build_indices` pays.
+            // Parents, defs, and the post-order seed carry over. The read set is
+            // re-derived: a rewrite can install a `Local` kind or attach a node
+            // through a slot that never calls `set_parent`, and a *missing*
+            // read is the one direction that miscompiles. The scan is flat —
+            // no traversal, no parent writes — against the walk `build_indices`
+            // pays, and `is_local_read` narrows the result by reachability so
+            // the extra mentions it records cost no elisions.
             engine.rescan_local_reads();
+            // TEMPORARY cost probe — revert. Skipping the reseed is semantically
+            // wrong (a pass must visit every node) and exists only to measure
+            // what share of a session build the seeding is.
+            if std::env::var_os("WADO_EXP_NO_RESEED").is_some() {
+                engine.buf.worklist.clear();
+            }
         } else {
             engine.build_indices();
             engine.buf.built_lens = Some(EngineBuffers::lens_of(engine.body));
@@ -901,7 +912,30 @@ impl<'a> Engine<'a> {
     pub fn is_local_read(&self, local: u32) -> bool {
         self.local_reads(local)
             .iter()
-            .any(|&mention| !self.is_assign_target(mention))
+            .any(|&mention| !self.is_assign_target(mention) && self.is_reachable(mention))
+    }
+
+    /// Whether `e` still hangs off the body root.
+    ///
+    /// The read set is deliberately an over-approximation — a mention is added
+    /// when a node is minted, given a `Local` kind, or attached, and dropping
+    /// one on every path that could detach it is what a carried index cannot
+    /// do. Reachability is recovered here instead, at query time, by walking the
+    /// parent chain: bounded by nesting depth, against the whole-body walk an
+    /// exact set would cost. Missing a reachable read deletes a live binding;
+    /// counting an unreachable one only costs an elision — so the set errs wide
+    /// and this narrows it.
+    fn is_reachable(&self, e: ExprId) -> bool {
+        let mut node = NodeRef::Expr(e);
+        loop {
+            if node == NodeRef::Block(self.body.root) {
+                return true;
+            }
+            match self.parent_of(node) {
+                Some(p) => node = p,
+                None => return false,
+            }
+        }
     }
 
     /// How many reachable promoted operands read `local` — the half of a use
