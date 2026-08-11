@@ -8,6 +8,7 @@ use std::sync::Arc;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::name::FqTraitName;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
@@ -223,24 +224,51 @@ fn blanket_receiver_satisfies(
         .is_some()
 }
 
+/// The receivers to probe for a trait impl's home module: the call's own
+/// receiver head, its instantiation, then the receiver type as the table names
+/// it. Every one is an identity, so a bare head another module also declares
+/// cannot answer for this one.
+pub(super) fn receiver_candidates(
+    info: Option<&LocalMethodName>,
+    receiver_type: Option<(TypeId, &TypeTable)>,
+) -> Vec<crate::name::Receiver> {
+    let mut out: Vec<crate::name::Receiver> = Vec::new();
+    if let Some(info) = info {
+        out.push(info.receiver().clone());
+        let instantiated = crate::name::Receiver::Type(info.fq_struct_name());
+        if !out.contains(&instantiated) {
+            out.push(instantiated);
+        }
+    }
+    if let Some((type_id, tt)) = receiver_type {
+        let from_type = crate::name::Receiver::Type(tt.fq_base_type_name(type_id));
+        if !out.contains(&from_type) {
+            out.push(from_type);
+        }
+    }
+    out
+}
+
 fn lookup_template_with_trait_fallback<'a, V>(
     generic_functions: &'a IndexMap<(ModuleSource, String), V>,
     trait_env: &TraitEnv,
     module_hint: &ModuleSource,
     name: &str,
     info: Option<&LocalMethodName>,
-    struct_candidates: &[&str],
+    receiver_candidates: &[crate::name::Receiver],
     type_module_hint: Option<&ModuleSource>,
     blanket_receiver: Option<(TypeId, &TypeTable)>,
 ) -> Option<&'a V> {
     if let Some(v) = generic_functions.get(&(module_hint.clone(), name.to_string())) {
         return Some(v);
     }
-    let trait_name = info.and_then(|i| i.base_trait_name());
-    if let Some(trait_name) = trait_name {
-        for candidate in struct_candidates {
+    let trait_key = info
+        .and_then(|i| i.trait_name.as_ref())
+        .and_then(FqTraitName::canonical);
+    if let Some(trait_key) = trait_key {
+        for candidate in receiver_candidates {
             if let Some(impl_module) =
-                trait_env.impl_module_for(candidate, trait_name, type_module_hint)
+                trait_env.impl_module_for(candidate, &trait_key, type_module_hint)
                 && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))
             {
                 return Some(v);
@@ -251,8 +279,8 @@ fn lookup_template_with_trait_fallback<'a, V>(
         // the blanket index by trait name so `bytes.into_iter()` resolves to
         // the `IntoIterator` blanket in `core:prelude/traits`.
         if let Some(impl_module) =
-            trait_env.blanket_impl_module_for_trait(trait_name, type_module_hint)
-            && blanket_receiver_satisfies(trait_env, trait_name, impl_module, blanket_receiver)
+            trait_env.blanket_impl_module_for_trait(&trait_key.1, type_module_hint)
+            && blanket_receiver_satisfies(trait_env, &trait_key.1, impl_module, blanket_receiver)
             && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))
         {
             return Some(v);
@@ -726,7 +754,7 @@ impl Monomorphizer {
                             &func.module_source,
                             &generic_method_name,
                             Some(info),
-                            &[&info.base_struct_name(), &info.struct_name()],
+                            &receiver_candidates(Some(info), None),
                             None,
                             None,
                         ) {
@@ -850,7 +878,7 @@ impl Monomorphizer {
                             &method_func.module_source,
                             &generic_method_name,
                             Some(info),
-                            &[&info.base_struct_name(), &info.struct_name()],
+                            &receiver_candidates(Some(info), None),
                             None,
                             Some((receiver.type_id, type_table)),
                         ) {
@@ -917,15 +945,14 @@ impl Monomorphizer {
                             let receiver_module =
                                 receiver_module_hint(type_table, receiver.type_id);
                             let info_ref = method_func.method_info.as_ref();
-                            let candidates_owned = self.newtype_aware_candidates(
-                                own_name.as_deref(),
+                            let mut candidates = Vec::new();
+                            if let Some(own) = own_name.clone() {
+                                candidates.push(crate::name::Receiver::Type(own));
+                            }
+                            candidates.extend(receiver_candidates(
                                 info_ref,
-                                &struct_name,
-                            );
-                            let candidates: Vec<&str> = candidates_owned
-                                .iter()
-                                .map(std::convert::AsRef::as_ref)
-                                .collect();
+                                Some((receiver.type_id, type_table)),
+                            ));
                             if let Some(gf) = lookup_template_with_trait_fallback(
                                 generic_functions,
                                 &self.functions.trait_env,
@@ -1017,17 +1044,10 @@ impl Monomorphizer {
                                     let receiver_module =
                                         receiver_module_hint(type_table, receiver.type_id);
                                     let info_ref = method_func.method_info.as_ref();
-                                    let info_base = info_ref
-                                        .map(LocalMethodName::base_struct_name)
-                                        .unwrap_or_default();
-                                    let info_inst = info_ref
-                                        .map(LocalMethodName::struct_name)
-                                        .unwrap_or_default();
-                                    let candidates: Vec<&str> = if info_ref.is_some() {
-                                        vec![&info_base, &info_inst, &base_struct]
-                                    } else {
-                                        vec![&base_struct]
-                                    };
+                                    let candidates = receiver_candidates(
+                                        info_ref,
+                                        Some((receiver.type_id, type_table)),
+                                    );
                                     if let Some(generic_func_rc) =
                                         lookup_template_with_trait_fallback(
                                             generic_functions,
@@ -1129,17 +1149,8 @@ impl Monomorphizer {
                     for generic_method_name in &names_to_try {
                         let receiver_module = receiver_module_hint(type_table, receiver.type_id);
                         let info_ref = method_func.method_info.as_ref();
-                        let info_base = info_ref
-                            .map(LocalMethodName::base_struct_name)
-                            .unwrap_or_default();
-                        let info_inst = info_ref
-                            .map(LocalMethodName::struct_name)
-                            .unwrap_or_default();
-                        let candidates: Vec<&str> = if info_ref.is_some() {
-                            vec![&info_base, &info_inst, &base_struct]
-                        } else {
-                            vec![&base_struct]
-                        };
+                        let candidates =
+                            receiver_candidates(info_ref, Some((receiver.type_id, type_table)));
                         if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
                             generic_functions,
                             &self.functions.trait_env,
@@ -1271,17 +1282,8 @@ impl Monomorphizer {
                     for generic_method_name in names_to_try {
                         let receiver_module = receiver_module_hint(type_table, receiver.type_id);
                         let info_ref = method_func.method_info.as_ref();
-                        let info_base = info_ref
-                            .map(LocalMethodName::base_struct_name)
-                            .unwrap_or_default();
-                        let info_inst = info_ref
-                            .map(LocalMethodName::struct_name)
-                            .unwrap_or_default();
-                        let candidates: Vec<&str> = if info_ref.is_some() {
-                            vec![&info_base, &info_inst, base_struct]
-                        } else {
-                            vec![base_struct]
-                        };
+                        let candidates =
+                            receiver_candidates(info_ref, Some((receiver.type_id, type_table)));
                         if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
                             generic_functions,
                             &self.functions.trait_env,
@@ -1329,17 +1331,8 @@ impl Monomorphizer {
                 {
                     let receiver_module = receiver_module_hint(type_table, receiver.type_id);
                     let info_ref = method_func.method_info.as_ref();
-                    let info_base = info_ref
-                        .map(LocalMethodName::base_struct_name)
-                        .unwrap_or_default();
-                    let info_inst = info_ref
-                        .map(LocalMethodName::struct_name)
-                        .unwrap_or_default();
-                    let candidates: Vec<&str> = if info_ref.is_some() {
-                        vec![&info_base, &info_inst]
-                    } else {
-                        Vec::new()
-                    };
+                    let candidates =
+                        receiver_candidates(info_ref, Some((receiver.type_id, type_table)));
                     lookup_template_with_trait_fallback(
                         generic_functions,
                         &self.functions.trait_env,
@@ -1482,17 +1475,8 @@ impl Monomorphizer {
                     {
                         let receiver_module = receiver_module_hint(type_table, receiver.type_id);
                         let info_ref = method_func.method_info.as_ref();
-                        let info_base = info_ref
-                            .map(LocalMethodName::base_struct_name)
-                            .unwrap_or_default();
-                        let info_inst = info_ref
-                            .map(LocalMethodName::struct_name)
-                            .unwrap_or_default();
-                        let candidates: Vec<&str> = if info_ref.is_some() {
-                            vec![&info_base, &info_inst]
-                        } else {
-                            vec![TypeTable::TUPLE_TYPE_NAME]
-                        };
+                        let candidates =
+                            receiver_candidates(info_ref, Some((receiver.type_id, type_table)));
                         if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
                             generic_functions,
                             &self.functions.trait_env,
@@ -2943,11 +2927,13 @@ impl Monomorphizer {
         } else {
             RefKind::Shared
         };
-        let Some(ref_module) =
-            self.functions
-                .trait_env
-                .impl_module_for(ref_kind.prefix(), trait_name, None)
-        else {
+        let Some(ref_module) = trait_fq.canonical().and_then(|key| {
+            self.functions.trait_env.impl_module_for(
+                &crate::name::Receiver::Ref(ref_kind),
+                &key,
+                None,
+            )
+        }) else {
             return false;
         };
         // Mirror the template ref arm (`method_call_info_for_type`): the call
@@ -4967,13 +4953,15 @@ fn try_lower_comparison(
         info.trait_name
             .as_ref()
             .and_then(|tn| {
-                trait_env
-                    .concrete_impl_module_for(
-                        &info.struct_name(),
-                        tn.base_name(),
-                        type_mod.as_ref(),
-                    )
-                    .cloned()
+                tn.canonical().and_then(|key| {
+                    trait_env
+                        .concrete_impl_module_for(
+                            &crate::name::Receiver::Type(info.fq_struct_name()),
+                            &key,
+                            type_mod.as_ref(),
+                        )
+                        .cloned()
+                })
             })
             .or(type_mod)
             .unwrap_or_else(|| {

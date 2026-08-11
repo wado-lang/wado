@@ -3056,7 +3056,7 @@ impl SynthesisCtx<'_, '_, '_> {
         // the AST layer.
         if self
             .trait_env
-            .impl_module_for(type_name, &trait_key.1, None)
+            .impl_module_for(&self.receiver(type_name), trait_key, None)
             .is_some()
         {
             return true;
@@ -5715,8 +5715,13 @@ fn resolve_impl_module_via_env(
     };
 
     if let Some(name) = candidate_name.as_deref()
-        && let Some(m) =
-            trait_env.impl_module_for(name, trait_name.base_name(), type_module.as_ref())
+        && let Some(module) = type_module.as_ref()
+        && let Some(trait_key) = trait_name.canonical()
+        && let Some(m) = trait_env.impl_module_for(
+            &Receiver::Type(FqTypeName::of_head(module, name)),
+            &trait_key,
+            type_module.as_ref(),
+        )
     {
         return m.clone();
     }

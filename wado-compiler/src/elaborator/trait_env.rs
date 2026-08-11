@@ -573,18 +573,18 @@ pub(super) type ResourceStaticMethodIndex =
 /// `(type_name, trait_name)` → modules whose `impl <trait_name> for <type_name>`
 /// block exists.
 ///
-/// Keyed by bare names (not [`DeclKey`]): the multi-value `Vec` plus the
-/// caller's `type_module` hint already lets two modules' same-named
-/// receivers each route to their own impl. Canonical disambiguation of
-/// the receiver type's *declaring* module would require build-time import
-/// resolution that the current `TraitEnv::build` doesn't have plumbed
-/// through; a follow-up could re-key by canonical pair when the
-/// inhabited-by-multiple-declarations case becomes user-visible.
+/// Both halves are identities: the receiver as [`ImplTargetKey::receiver`]
+/// builds it, the trait as its declaring module and declared name. The AST
+/// layer and the synthesised layer must agree on that namespace — they were
+/// once keyed on a bare written head and a mangled fq one respectively, so a
+/// lookup reached exactly one of them and the guard that keeps the
+/// synthesised layer a delta never fired (WEP 2026-08-10).
 ///
 /// Value blanket impls (`impl<T: Trait> Trait for T`) are represented by
 /// [`BlanketImpl`] (in `blanket_impls`); they are excluded from this map because
 /// they apply structurally and don't have a concrete receiver type name.
-pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), Vec<ModuleSource>>;
+pub(crate) type TraitImplModuleIndex =
+    IndexMap<(name::Receiver, crate::tir::TraitKey), Vec<ModuleSource>>;
 
 /// Immutable global knowledge base for trait resolution.
 ///
@@ -738,12 +738,12 @@ impl SynthesisedImpls {
     /// "first registered" fallback when no `type_module` hint is supplied.
     pub fn record_impl(
         &mut self,
-        type_name: String,
-        trait_name: String,
+        receiver: name::Receiver,
+        trait_key: crate::tir::TraitKey,
         module: ModuleSource,
         is_concrete: bool,
     ) {
-        let key = (type_name, trait_name);
+        let key = (receiver, trait_key);
         if is_concrete {
             // Concrete impls populate both views; clone once for the
             // duplicated entry. Generic impls only appear in the all-impls
@@ -762,12 +762,12 @@ impl SynthesisedImpls {
         }
     }
 
-    /// `true` if `impl <trait_name> for <type_name>` has already been
+    /// `true` if an impl of `trait_key` for `receiver` has already been
     /// recorded in this synthesis layer (regardless of concreteness).
     #[must_use]
-    pub fn has_impl(&self, type_name: &str, trait_name: &str) -> bool {
+    pub fn has_impl(&self, receiver: &name::Receiver, trait_key: &crate::tir::TraitKey) -> bool {
         self.trait_impl_modules
-            .contains_key(&(type_name.to_string(), trait_name.to_string()))
+            .contains_key(&(receiver.clone(), trait_key.clone()))
     }
 }
 
@@ -1099,7 +1099,7 @@ impl TraitEnv {
                     ImplHeader {
                         module: module_source.clone(),
                         target: type_key.clone(),
-                        trait_key,
+                        trait_key: trait_key.clone(),
                         trait_ref,
                         trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
                         trait_type: impl_block.trait_type.clone(),
@@ -1162,8 +1162,10 @@ impl TraitEnv {
                         classify_blanket_receiver(&impl_block.ty, &impl_block.type_params),
                         Some((BlanketReceiver::Value, _))
                     );
-                    if !is_value_blanket {
-                        let key = (type_name.clone(), trait_name.clone());
+                    if !is_value_blanket
+                        && let Some(ImplTargetKey::Decl(trait_decl)) = trait_key.as_ref()
+                    {
+                        let key = (type_key.receiver(), trait_decl.clone());
                         let modules = trait_impl_modules.entry(key.clone()).or_default();
                         if !modules.contains(module_source) {
                             modules.push(module_source.clone());
@@ -1421,11 +1423,11 @@ impl TraitEnv {
 
     pub(crate) fn impl_module_for(
         &self,
-        type_name: &str,
-        trait_name: &str,
+        receiver: &name::Receiver,
+        trait_key: &crate::tir::TraitKey,
         type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
-        let key = (type_name.to_string(), trait_name.to_string());
+        let key = (receiver.clone(), trait_key.clone());
         let ast = self.trait_impl_modules.get(&key);
         let syn = self
             .synthesised
@@ -1615,11 +1617,11 @@ impl TraitEnv {
     /// semantics that filtered on `impl_type_params.is_empty()`.
     pub(crate) fn concrete_impl_module_for(
         &self,
-        type_name: &str,
-        trait_name: &str,
+        receiver: &name::Receiver,
+        trait_key: &crate::tir::TraitKey,
         type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
-        let key = (type_name.to_string(), trait_name.to_string());
+        let key = (receiver.clone(), trait_key.clone());
         let ast = self.concrete_trait_impl_modules.get(&key);
         let syn = self
             .synthesised

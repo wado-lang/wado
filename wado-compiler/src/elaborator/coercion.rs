@@ -567,8 +567,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .impl_module_for(
-                &builder_name_for_lookup,
-                trait_name.base_name(),
+                &crate::name::Receiver::Type(self.tysys.fq_receiver_head(builder_type)),
+                &trait_name
+                    .canonical()
+                    .expect("a builder trait names a declaration"),
                 builder_type_module.as_ref(),
             )
             .cloned()
