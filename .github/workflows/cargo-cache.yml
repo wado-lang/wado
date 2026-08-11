@@ -1,8 +1,13 @@
-# Publishes shared cargo caches to GCS so non-GitHub environments (e.g. the
-# Claude Code web container) can restore them. Two objects are produced:
+# Publishes the shared cargo caches every other environment restores from.
 #
-#   cargo/registry/linux-x86_64.tar.gz  registry index, .crate files, unpacked sources
-#   cargo/sccache/linux-x86_64.tar.gz   sccache content-addressed compile cache
+#   cargo/registry/linux-x86_64.tar.gz  registry index, .crate files, unpacked sources (GCS)
+#   cargo/sccache/linux-x86_64.tar.gz   sccache content-addressed compile cache (GCS)
+#   v0-rust-ci-Linux-x64-*              ci.yml's target/ and registry (Actions cache)
+#
+# The GCS objects serve non-GitHub environments (e.g. the Claude Code web
+# container); the Actions cache serves ci.yml, which restores `shared-key: ci`
+# with `save-if: false`. It must be written from main: an Actions cache written
+# on a PR branch is invisible to main and to every other branch.
 #
 # The registry cache saves the download and the unpack; the sccache cache saves
 # compiling every dependency. See .claude/hooks/cargo-cache-restore.mts
@@ -50,24 +55,23 @@ permissions:
   contents: read
   id-token: write
 
-env:
-  # Mirror the container's absolute paths (see the parity note above).
-  CONTAINER_REPO: /home/user/wado
-  CARGO_HOME: /root/.cargo
-  SCCACHE_DIR: /root/.cargo/sccache
-  CARGO_TARGET_DIR: /home/user/wado/target
-  RUSTC_WRAPPER: sccache
-  CARGO_INCREMENTAL: "0"
-  # Keep a cache that outgrows sccache's 10 GiB default from being LRU-trimmed
-  # into one with holes.
-  SCCACHE_CACHE_SIZE: 30G
-  # RUSTFLAGS is a sccache cache-key input; keep it identical to the container's
-  # mise [env] (both unset).
-
 jobs:
   upload:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      # Mirror the container's absolute paths (see the parity note above).
+      CONTAINER_REPO: /home/user/wado
+      CARGO_HOME: /root/.cargo
+      SCCACHE_DIR: /root/.cargo/sccache
+      CARGO_TARGET_DIR: /home/user/wado/target
+      RUSTC_WRAPPER: sccache
+      CARGO_INCREMENTAL: "0"
+      # Keep a cache that outgrows sccache's 10 GiB default from being LRU-trimmed
+      # into one with holes.
+      SCCACHE_CACHE_SIZE: 30G
+      # RUSTFLAGS is a sccache cache-key input; keep it identical to the container's
+      # mise [env] (both unset).
     steps:
       - uses: actions/checkout@v7
         with:
@@ -135,3 +139,33 @@ jobs:
           path: out/sccache/linux-x86_64.tar.gz
           destination: ${{ vars.GCP_CACHE_BUCKET }}/cargo/sccache
           parent: false
+
+  # ENV PARITY IS LOAD-BEARING HERE TOO. rust-cache hashes the CARGO_*/RUST* env
+  # set into the cache key, so this job's env must be exactly ci.yml's, with none
+  # of the sccache vars above, or ci.yml computes a different key and never hits.
+  actions-cache:
+    name: Warm ci.yml's Actions cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+
+      # `--all-targets` also covers the dev-dependencies only ci.yml's test
+      # binaries pull in.
+      - run: cargo build --workspace --locked --all-targets
