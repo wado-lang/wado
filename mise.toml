@@ -277,8 +277,8 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # `wado test` walks the repo-root wado.toml and recurses into every
-# nested package. In CI, package-gale runs in its own per-optlevel jobs
-# (test-gale-o1/o2/o3), so we exclude it here to keep this job fast.
+# nested package. In CI, package-gale runs in its own job (test-gale),
+# so we exclude it here to keep this job fast.
 # Locally we include everything so a single `mise run test-wado` covers
 # it all. CI also switches to `--format tap` for its machine-readable
 # per-test output; the default `heartbeat` format is for local/agent use.
@@ -293,8 +293,8 @@ fi
 cargo run -p wado-cli -- test "${extra_args[@]}"
 """
 
-[tasks.test-gale-o1]
-description = "Run package-gale tests with -O1"
+[tasks.test-gale]
+description = "Run package-gale tests"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
@@ -302,31 +302,7 @@ extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--format tap)
 fi
-cargo run -p wado-cli -- test -O1 package-gale "${extra_args[@]}"
-"""
-
-[tasks.test-gale-o2]
-description = "Run package-gale tests with -O2"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
-extra_args=()
-if [ -n "${CI:-}" ]; then
-    extra_args+=(--format tap)
-fi
-cargo run -p wado-cli -- test -O2 package-gale "${extra_args[@]}"
-"""
-
-[tasks.test-gale-o3]
-description = "Run package-gale tests with -O3"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
-extra_args=()
-if [ -n "${CI:-}" ]; then
-    extra_args+=(--format tap)
-fi
-cargo run -p wado-cli -- test -O3 package-gale "${extra_args[@]}"
+cargo run -p wado-cli -- test package-gale "${extra_args[@]}"
 """
 
 [tasks.test-cov]
