@@ -1,8 +1,8 @@
-# Publishes shared cargo caches to GCS so non-GitHub environments (e.g. the
-# Claude Code web container) can restore them. Two objects are produced:
+# Publishes the shared cargo caches every other build restores from:
 #
-#   cargo/registry/linux-x86_64.tar.gz  registry index, .crate files, unpacked sources
-#   cargo/sccache/linux-x86_64.tar.gz   sccache content-addressed compile cache
+#   cargo/registry/linux-x86_64.tar.gz  registry index, .crate files, unpacked sources (GCS)
+#   cargo/sccache/linux-x86_64.tar.gz   sccache content-addressed compile cache (GCS)
+#   v0-rust-ci-Linux-x64-*              ci.yml's target/ and registry (Actions cache)
 #
 # The registry cache saves the download and the unpack; the sccache cache saves
 # compiling every dependency. See .claude/hooks/cargo-cache-restore.mts
@@ -18,7 +18,7 @@
 # (Ubuntu 24.04 `apt` sccache) so the on-disk cache format matches.
 #
 # CARGO_* ENV PARITY IS ALSO LOAD-BEARING. sccache hashes every CARGO_* env var
-# into the Rust cache key, so this job's CARGO_* set (CARGO_HOME,
+# into the Rust cache key, so the `upload` job's CARGO_* set (CARGO_HOME,
 # CARGO_TARGET_DIR, CARGO_INCREMENTAL) must match the container's warm-cache
 # build (mise.toml) exactly.
 #
@@ -26,12 +26,12 @@
 #   vars.GCP_WIF_PROVIDER    workload identity provider resource name
 #   vars.GCP_CACHE_WRITER_SA writer service-account email (roles/storage.objectAdmin on the bucket)
 #   vars.GCP_CACHE_BUCKET    GCS bucket name (e.g. wado-lang-cache)
-name: Cargo caches (registry + sccache)
+name: Cargo caches
 
 on:
   push:
     branches: [main]
-    # All of these feed the sccache cache key. Without a republish the
+    # All of these feed both cache keys. Without a republish the
     # container silently falls back to a cold build; `warm-cache` reports the
     # hit rate so that stays visible.
     paths:
@@ -40,6 +40,7 @@ on:
       - "*/Cargo.toml"
       - rust-toolchain.toml
       - .github/workflows/cargo-cache.yml
+      - .github/workflows/ci.yml
   workflow_dispatch:
 
 concurrency:
@@ -50,24 +51,23 @@ permissions:
   contents: read
   id-token: write
 
-env:
-  # Mirror the container's absolute paths (see the parity note above).
-  CONTAINER_REPO: /home/user/wado
-  CARGO_HOME: /root/.cargo
-  SCCACHE_DIR: /root/.cargo/sccache
-  CARGO_TARGET_DIR: /home/user/wado/target
-  RUSTC_WRAPPER: sccache
-  CARGO_INCREMENTAL: "0"
-  # Keep a cache that outgrows sccache's 10 GiB default from being LRU-trimmed
-  # into one with holes.
-  SCCACHE_CACHE_SIZE: 30G
-  # RUSTFLAGS is a sccache cache-key input; keep it identical to the container's
-  # mise [env] (both unset).
-
 jobs:
   upload:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      # Mirror the container's absolute paths (see the parity note above).
+      CONTAINER_REPO: /home/user/wado
+      CARGO_HOME: /root/.cargo
+      SCCACHE_DIR: /root/.cargo/sccache
+      CARGO_TARGET_DIR: /home/user/wado/target
+      RUSTC_WRAPPER: sccache
+      CARGO_INCREMENTAL: "0"
+      # Keep a cache that outgrows sccache's 10 GiB default from being LRU-trimmed
+      # into one with holes.
+      SCCACHE_CACHE_SIZE: 30G
+      # RUSTFLAGS is a sccache cache-key input; keep it identical to the container's
+      # mise [env] (both unset).
     steps:
       - uses: actions/checkout@v7
         with:
@@ -135,3 +135,28 @@ jobs:
           path: out/sccache/linux-x86_64.tar.gz
           destination: ${{ vars.GCP_CACHE_BUCKET }}/cargo/sccache
           parent: false
+
+  actions-cache:
+    name: Warm ci.yml's Actions cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+
+      - run: cargo build --workspace --locked --all-targets
