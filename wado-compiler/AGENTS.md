@@ -26,6 +26,15 @@ ones (`arena_query`'s `promoted_*` queries). Scope them to the reachable
 operands: the pool is append-only, so seeding from it pins locals whose reads
 folded away long ago.
 
+Inside an engine session ask `Engine::reads_promoted_local` /
+`Engine::promoted_read_count`, never `arena_query` directly. That census costs a
+whole-body walk, so a rule recomputing it per application is quadratic; the
+engine memoizes it and the edit API drops the memo only when a rewrite makes a
+local-naming value reachable. A new mutating edit method must report what it
+writes (`census_note_operand` / `census_note_node_operands` /
+`census_note_structure`) — the `Engine::run` debug audit is what catches a
+method that forgets.
+
 Never reintroduce, regardless of perf:
 
 - a rebuild of the value graph mid-pipeline. Build-once is structural: nothing

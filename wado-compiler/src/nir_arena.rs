@@ -1160,6 +1160,67 @@ impl Body {
         }
     }
 
+    /// Invoke `f` on every node reachable from [`Body::root`], parents before
+    /// children (DFS pop order). Dead nodes an in-place rewrite orphaned are
+    /// not visited — the arena is never compacted mid-run, so "reachable" and
+    /// "live" are the same question and only this walk answers it.
+    ///
+    /// A body still under construction has no root block; there every arena
+    /// slot counts as live, since nothing has been spliced into a tree yet.
+    pub fn for_each_reachable_node(&self, f: &mut impl FnMut(NodeRef)) {
+        if self.blocks.is_empty() {
+            for (e, _) in self.exprs.iter() {
+                f(NodeRef::Expr(e));
+            }
+            for (s, _) in self.stmts.iter() {
+                f(NodeRef::Stmt(s));
+            }
+            for (p, _) in self.pats.iter() {
+                f(NodeRef::Pat(p));
+            }
+            return;
+        }
+        let mut stack = vec![NodeRef::Block(self.root)];
+        while let Some(node) = stack.pop() {
+            f(node);
+            self.for_each_child(node, |c| stack.push(c));
+        }
+    }
+
+    /// The promoted-read census: for every local some reachable promoted
+    /// operand reads, how many operand slots read it. A read that operand
+    /// promotion moved into the [`ValuePool`] has no skeleton node, so a walk
+    /// over nodes alone — the engine's use index included — cannot see it, and
+    /// a pass deciding a local is unused must add this in.
+    ///
+    /// Scoped to *reachable* operands. The pool is append-only, so it still
+    /// holds the values of reads that folded away long ago; seeding from the
+    /// pool instead would keep their locals alive forever.
+    ///
+    /// Hash-consing makes one `ValueId` fill many operand slots, so each
+    /// distinct value's leaves are collected once and counted per occurrence.
+    pub fn promoted_read_counts(&self) -> crate::hashmap::IndexMap<u32, usize> {
+        let mut counts: crate::hashmap::IndexMap<u32, usize> = crate::hashmap::IndexMap::default();
+        let mut leaves_of: crate::hashmap::IndexMap<ValueId, Vec<u32>> =
+            crate::hashmap::IndexMap::default();
+        self.for_each_reachable_node(&mut |node| {
+            self.for_each_operand(node, |op| {
+                let Some(v) = op.as_value() else {
+                    return;
+                };
+                let leaves = leaves_of.entry(v).or_insert_with(|| {
+                    let mut out = IndexSet::default();
+                    self.values.collect_opaque_locals(v, &mut out);
+                    out.into_iter().collect()
+                });
+                for &idx in leaves.iter() {
+                    *counts.entry(idx).or_default() += 1;
+                }
+            });
+        });
+        counts
+    }
+
     /// Invoke `f` on every operand slot of `node`, in source order — the
     /// mutable twin of [`Body::for_each_operand`]. Non-operand `ExprId` slots
     /// (`Assign::target`) and structural children (blocks, patterns) are not

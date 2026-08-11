@@ -142,9 +142,10 @@ reducible, never by a whole-tree sweep.
   worklist in one O(n) pass.
 - Rules never touch the arena maps; every mutation goes through the edit API
   (`replace_expr_kind`, `become_expr`, `set_block_stmts`, `alloc_*`,
-  `clone_expr`), which keeps the parent map and use index coherent and
-  re-enqueues exactly the affected neighbourhood. In-place replacement keeps the
-  id stable, so a worklist entry survives the edit.
+  `clone_expr`), which keeps the parent map, the use index, and the
+  promoted-read census coherent and re-enqueues exactly the affected
+  neighbourhood. In-place replacement keeps the id stable, so a worklist entry
+  survives the edit.
 - At a popped node the engine tries the registered rules in order; the first that
   reports a change retries at the same node. Rules must be idempotent, and either
   confluent or priority-ordered — priority is rule order in the session.
@@ -210,6 +211,14 @@ repeats them where a contributor will hit them.
   (`arena_query`'s `promoted_*` queries) — scoped to the operands the skeleton
   still carries, since the pool is append-only and also holds reads that folded
   away.
+- That census is session-scoped, never per-application. It walks the whole body,
+  so a rule recomputing it per block is quadratic in the body — the single
+  largest cost in the optimizer when it was measured. `Engine` memoizes it, and
+  the edit API reports every operand it writes, so a rewrite drops the memo only
+  when it makes a local-naming value reachable. Inside the fixed-point loop that
+  never happens, because the early freeze plants context-free values only; the
+  memo therefore survives whole sessions and the walk runs once. `Engine::run`
+  audits the induction under debug assertions.
 
 ## Rejected and deferred
 
@@ -251,13 +260,22 @@ Compile speed. The build-once redesign met its structural goals but not its
 target. The premise was wrong — with build-once, the graph build is ~6 % of the
 phase (was ~21 %); the cost is now the passes themselves.
 
-- [ ] Pass-level cost: `peephole` (~4.6 s on package-gale) and the iteration
-      count dominate. This is a separate track from the value-graph
-      re-architecture, and the one with the remaining headroom.
+- [ ] Pass-level cost: `peephole` and the iteration count dominate. The cost
+      concentrates rather than spreads — on `benchmark/sqlite_parse` (the
+      Gale-generated SQLite parser) one fixed-point iteration's two `peephole`
+      runs took 4.4 s of a 9.9 s optimize while every other run took under
+      0.25 s. That spike was the promoted-read census, which `elide_local` and
+      `labeled_block_fusion` recomputed per block: 1228 whole-body walks,
+      38.5 M node visits, every one of them returning an empty map.
+      Session-scoping it and fusing the session build into one walk took
+      `optimize` to 8.2 s and `peephole` to 3.2 s. What remains is the iteration
+      count and the per-node rule dispatch; neither has been profiled since, so
+      measure before cutting.
 - [ ] Build the engine session once per function and maintain it through the edit
-      API, the way the graph already is. `Engine::new`'s parent map / use index /
-      post-order seed is still paid per pass per function (~8 % of compile CPU at
-      the time it was profiled).
+      API, the way the graph already is. `Engine::new` costs one walk rather
+      than three — `build_indices` records parents and uses on the way down and
+      seeds the worklist on the way up — but it is still paid per pass per
+      function (~8 % of compile CPU when three walks were profiled).
 - [ ] Function-level parallelism. The per-function build and walk are
       independent.
 - [ ] Fold the graph build into `lower` (born-at-`lower`), retiring the lazy

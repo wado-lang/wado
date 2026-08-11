@@ -10,8 +10,6 @@
 //! freshly dead expressions to the rest of the fixed-point loop
 //! (`copy_prop` / `const_fold` / `dce`), which the WIR-level pass cannot.
 
-use std::cell::OnceCell;
-
 use crate::hashmap::IndexSet;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
@@ -62,21 +60,13 @@ impl<'a> ElideRule<'a> {
 impl Rule for ElideRule<'_> {
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
-        let promoted_reads = PromotedReads::default();
         let mut new_stmts = Vec::with_capacity(stmts.len());
         let mut changed = false;
         let mut elided: Vec<u32> = Vec::new();
         let len = stmts.len();
         for (i, stmt) in stmts.into_iter().enumerate() {
             let is_tail = i + 1 == len;
-            match classify(
-                engine,
-                stmt,
-                is_tail,
-                self.stores_aliased,
-                self.effects,
-                &promoted_reads,
-            ) {
+            match classify(engine, stmt, is_tail, self.stores_aliased, self.effects) {
                 Action::Keep => new_stmts.push(stmt),
                 Action::Drop => {
                     elided.extend(bound_local(engine, stmt));
@@ -94,7 +84,7 @@ impl Rule for ElideRule<'_> {
             engine.set_block_stmts(id, new_stmts);
         }
         debug_assert!(
-            elided.iter().all(|&l| !is_read(engine.body, l)),
+            surviving_read(engine.body, &elided).is_none(),
             "[NIR] elide_local: a local was elided while a read of it survived"
         );
         changed
@@ -117,13 +107,21 @@ fn bound_local(engine: &Engine, stmt: StmtId) -> Option<u32> {
     }
 }
 
-/// Whether any reachable read of `local` survives, in the skeleton or the value
-/// pool.
-fn is_read(body: &Body, local: u32) -> bool {
+/// The first of `elided` that still has a reachable read, in the skeleton or
+/// the value pool — `None` when the elision was clean.
+///
+/// One census for the whole batch: each half costs a body walk, and a block
+/// that elided several locals would otherwise pay both walks per local. Kept
+/// independent of the engine's use index and census memo, which are what the
+/// elision decision itself read, so the check can still catch them drifting.
+fn surviving_read(body: &Body, elided: &[u32]) -> Option<u32> {
+    if elided.is_empty() {
+        return None;
+    }
     let mut reads = IndexSet::default();
     arena_query::collect_reads(body, &mut reads);
     arena_query::promoted_local_reads(body, &mut reads);
-    reads.contains(&local)
+    elided.iter().copied().find(|l| reads.contains(l))
 }
 
 /// Classify a statement for write-only-local elimination. Mirrors the former
@@ -136,14 +134,13 @@ fn classify(
     is_tail: bool,
     stores_aliased: &IndexSet<u32>,
     effects: &[super::mod_ref::FnEffect],
-    promoted_reads: &PromotedReads,
 ) -> Action {
     match &engine.body.stmts[stmt].kind {
         StmtKind::Let {
             local_index, value, ..
         } => {
             let (idx, value) = (*local_index, *value);
-            if is_kept(engine, idx, stores_aliased, promoted_reads) {
+            if is_kept(engine, idx, stores_aliased) {
                 Action::Keep
             } else if deletable(engine, value, effects) {
                 Action::Drop
@@ -191,7 +188,7 @@ fn classify(
                 && let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind
             {
                 let index = *index;
-                if !is_kept(engine, index, stores_aliased, promoted_reads) {
+                if !is_kept(engine, index, stores_aliased) {
                     return if deletable(engine, value, effects) {
                         Action::Drop
                     } else {
@@ -227,41 +224,10 @@ fn deletable(engine: &Engine, value: Operand, effects: &[super::mod_ref::FnEffec
 
 /// A local is kept (not elidable) when its reference escaped via a `stores`
 /// alias, or it is read anywhere in the body.
-fn is_kept(
-    engine: &Engine,
-    local: u32,
-    stores_aliased: &IndexSet<u32>,
-    promoted_reads: &PromotedReads,
-) -> bool {
+fn is_kept(engine: &Engine, local: u32, stores_aliased: &IndexSet<u32>) -> bool {
     stores_aliased.contains(&local)
         || engine.is_local_read(local)
-        || promoted_reads.contains(engine.body, local)
-}
-
-/// The locals a reachable promoted operand reads
-/// ([`arena_query::promoted_local_reads`]) — live, but invisible to the use
-/// index, so [`is_kept`] must see them.
-///
-/// Built on first query, which [`is_kept`] reaches only once the escape set and
-/// the use index have both come up empty: a block with nothing to elide never
-/// pays for the walk.
-///
-/// One per block application rather than per function: a rule that queries a
-/// value builds the graph for that body on the spot, minting `Opaque(Local)`
-/// operands mid-run, so a cached answer could predate the read it must see.
-#[derive(Default)]
-struct PromotedReads(OnceCell<IndexSet<u32>>);
-
-impl PromotedReads {
-    fn contains(&self, body: &Body, local: u32) -> bool {
-        self.0
-            .get_or_init(|| {
-                let mut out = IndexSet::default();
-                arena_query::promoted_local_reads(body, &mut out);
-                out
-            })
-            .contains(&local)
-    }
+        || engine.reads_promoted_local(local)
 }
 
 #[cfg(test)]

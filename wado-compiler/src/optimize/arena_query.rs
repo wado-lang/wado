@@ -43,15 +43,21 @@ pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
 /// Every local a reachable promoted operand reads — the `Opaque(Local)` leaves
 /// of the values the skeleton still carries. A pass deciding a local is unused
 /// unions this into its skeleton census.
+///
+/// A rule inside an engine session asks [`crate::nir_engine::Engine`] instead,
+/// which memoizes the census for the session; this entry point is for the
+/// standalone passes that run one census per pass. The two differ only in
+/// shape: one `seen` set spans the whole walk here, since the answer is a
+/// union, while a per-slot tally has to attribute leaves to each operand.
 pub(super) fn promoted_local_reads(body: &Body, out: &mut IndexSet<u32>) {
     let mut seen = IndexSet::default();
-    for node in reachable_nodes(body) {
+    body.for_each_reachable_node(&mut |node| {
         body.for_each_operand(node, |op| {
             if let Some(v) = op.as_value() {
                 body.values.collect_opaque_locals_seen(v, &mut seen, out);
             }
         });
-    }
+    });
 }
 
 /// How many of `node`'s operand slots read `idx` through a promoted value. A
@@ -70,27 +76,6 @@ pub(super) fn promoted_read_count_at(body: &Body, node: NodeRef, idx: u32) -> us
         }
     });
     count
-}
-
-/// The [`promoted_read_count_at`] totals over the whole body, for every local
-/// at once. A gate comparing a whole-function tally against a scoped one adds
-/// these to *both* sides, or the equality stops meaning "every mention is in
-/// scope".
-pub(super) fn promoted_read_counts(body: &Body) -> crate::hashmap::IndexMap<u32, usize> {
-    let mut counts = crate::hashmap::IndexMap::default();
-    for node in reachable_nodes(body) {
-        body.for_each_operand(node, |op| {
-            let Some(v) = op.as_value() else {
-                return;
-            };
-            let mut leaves = IndexSet::default();
-            body.values.collect_opaque_locals(v, &mut leaves);
-            for idx in leaves {
-                *counts.entry(idx).or_default() += 1;
-            }
-        });
-    }
-    counts
 }
 
 /// The values of the reachable operands that are exactly `Opaque(Local idx)`.
@@ -140,21 +125,8 @@ pub(super) fn buried_promoted_reads(body: &Body) -> IndexSet<u32> {
 /// still filling — so every node it holds counts. A census may over-count, which
 /// only keeps something alive; missing a read is what would miscompile.
 pub(super) fn reachable_nodes(body: &Body) -> Vec<NodeRef> {
-    if body.blocks.is_empty() {
-        return body
-            .exprs
-            .iter()
-            .map(|(e, _)| NodeRef::Expr(e))
-            .chain(body.stmts.iter().map(|(s, _)| NodeRef::Stmt(s)))
-            .chain(body.pats.iter().map(|(p, _)| NodeRef::Pat(p)))
-            .collect();
-    }
     let mut out = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        out.push(node);
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    body.for_each_reachable_node(&mut |n| out.push(n));
     out
 }
 
