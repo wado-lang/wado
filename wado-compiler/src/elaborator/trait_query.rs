@@ -1636,37 +1636,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// name is ambiguous — reported, then resolved to the first.
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
-        bounds: &[String],
+        bounds: &[ast::TraitBound],
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
     ) -> Option<(crate::name::FqTraitName, MethodInfo)> {
-        let bounds = self.elaborate_bound_names(bounds);
+        let bounds = self.elaborate_bounds(bounds);
         // Stopping at the first hit would hide the ambiguity, so every bound is
         // scanned — by predicate, leaving only the winner to clone.
-        let candidates: Vec<String> = bounds
+        let candidates: Vec<ast::TraitBound> = bounds
             .iter()
-            .filter(|t| self.trait_declares_method(t, method_name))
+            .filter(|b| self.trait_declares_method(&b.name, method_name))
             .cloned()
             .collect();
-        let resolved = candidates.first().and_then(|trait_name| {
-            self.trait_method_in_frame(trait_name, method_name)
-                .map(|found| (trait_name.clone(), found))
+        let resolved = candidates.first().and_then(|bound| {
+            self.trait_method_in_frame(&bound.name, method_name)
+                .map(|found| (bound.clone(), found))
         });
         if candidates.len() > 1 {
             // Keep going with the first candidate: `None` reads to the caller
             // as "no such method", which it would then report as well.
             let _ = self.emit(TypeError::AmbiguousTraitMethod {
                 method: method_name.to_string(),
-                traits: candidates,
+                traits: candidates.iter().map(|b| b.name.clone()).collect(),
                 span,
             });
         }
-        let (trait_name, (sig, trait_assoc_types)) = resolved?;
-        // The bound answers with the trait it *declares*, not the spelling the
-        // bound wrote: an aliased bound (`T: G` for `use { Greet as G }`) must
-        // reach the same methods as the impl that defines them.
-        let fq_trait_name = self.fq_trait_name_written(&trait_name);
+        let (bound, (sig, trait_assoc_types)) = resolved?;
+        let trait_name = bound.name.clone();
+        // The bound answers with the trait its own reference site resolves to,
+        // not the spelling it wrote: an aliased bound (`T: G` for
+        // `use { Greet as G }`) must reach the impl that defines the method.
+        let fq_trait_name = self.fq_trait_name_at(bound.id, &trait_name);
 
         let answers = self.trait_assoc_answers(&trait_name, &trait_assoc_types, self_type_id);
         let instantiated = sig.decl.instantiate_slots_with(

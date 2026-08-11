@@ -497,10 +497,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(&name)
                     .cloned()
             {
-                let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
                     && let Some((_trait_name, info)) =
-                        self.find_method_in_trait_bounds(&bound_names, "eq", left.type_id, span)
+                        self.find_method_in_trait_bounds(&bounds, "eq", left.type_id, span)
                 {
                     let eq_trait_name = self
                         .tysys
@@ -534,7 +533,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) && let Some((_trait_name, info)) =
-                    self.find_method_in_trait_bounds(&bound_names, "cmp", left.type_id, span)
+                    self.find_method_in_trait_bounds(&bounds, "cmp", left.type_id, span)
                 {
                     let ord_trait_name = self
                         .tysys
@@ -686,7 +685,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .cloned()
             {
                 let operand_type_id = left.type_id;
-                let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
                 let (_trait_name, method_name) = match op {
                     BinaryOp::Add => ("Add", "add"),
                     BinaryOp::Sub => ("Sub", "sub"),
@@ -699,7 +697,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => unreachable!(),
                 };
                 if let Some((found_trait, info)) =
-                    self.find_method_in_trait_bounds(&bound_names, method_name, left.type_id, span)
+                    self.find_method_in_trait_bounds(&bounds, method_name, left.type_id, span)
                 {
                     // For type-param arithmetic operators, Output == Self is the common
                     // case and TypeParam types get properly substituted by monomorphization.

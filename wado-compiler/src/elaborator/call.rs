@@ -2765,9 +2765,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let Some(bounds) = bounds
             && let Some((found_trait, method_info_result)) = {
-                let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
                 self.find_method_in_trait_bounds(
-                    &bound_names,
+                    &bounds,
                     method_name,
                     type_param_type_id,
                     call.span,

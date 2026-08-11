@@ -231,9 +231,11 @@ Costs and risks:
          - `blanket_impls` and `trait_impl_modules` are keyed by trait name.
          - Stores that flatten a bound to its name and lose the site:
            `infer_holes`' recorded bounds, `type_param_bounds` on the struct and
-           trait digests, `BlanketImpl::bounds`. `find_method_in_trait_bounds`
-           answers with the trait its winning bound *declares*, but derives it
-           from the spelling rather than the bound's site.
+           trait digests, `BlanketImpl::bounds`, and an
+           `AssocTypeProjection`'s. `find_method_in_trait_bounds` now takes the
+           bounds themselves and answers from the winning one's site, so only
+           the projection path — which has no sites to give it — still resolves
+           a spelling in the consumer's frame.
          - The associated-type registries key on the trait's written spelling.
          - `locate_static_method_impl`, the conversion-impl survey, and the CM
            interface registry.

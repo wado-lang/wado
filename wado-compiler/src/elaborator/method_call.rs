@@ -412,14 +412,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Bounds are compared as declarations, so a same-named
                     // trait from another module does not answer for the one
                     // the call named.
-                    let bound_names: Vec<String> = bounds
+                    let named: Vec<ast::TraitBound> = bounds
                         .iter()
-                        .map(|b| b.name.clone())
-                        .filter(|n| {
-                            required_trait.is_none_or(|w| self.trait_decl_key_in_frame(n) == w.decl)
+                        .filter(|b| {
+                            required_trait
+                                .is_none_or(|w| self.trait_decl_key_in_frame(&b.name) == w.decl)
                         })
+                        .cloned()
                         .collect();
-                    self.find_method_in_trait_bounds(&bound_names, method_name, base_type_id, span)
+                    self.find_method_in_trait_bounds(&named, method_name, base_type_id, span)
                 }
             {
                 trait_name = Some(found_trait);
@@ -444,10 +445,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if let Some(bounds) = assoc_bounds
                 && let Some((found_trait, info)) = {
-                    let bounds: Vec<String> = bounds
+                    // A projection records its bounds as names, so these
+                    // carry no reference site and the lookup falls back to
+                    // resolving the spelling in this frame.
+                    let bounds: Vec<ast::TraitBound> = bounds
                         .into_iter()
                         .filter(|n| {
                             required_trait.is_none_or(|w| self.trait_decl_key_in_frame(n) == w.decl)
+                        })
+                        .map(|name| ast::TraitBound {
+                            id: crate::ast::AstId::fresh(),
+                            name,
+                            assoc_types: Vec::new(),
+                            span,
+                            fn_signature: None,
                         })
                         .collect();
                     self.find_method_in_trait_bounds(&bounds, method_name, base_type_id, span)

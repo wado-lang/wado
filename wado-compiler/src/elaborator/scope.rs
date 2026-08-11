@@ -212,26 +212,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         elaborated
     }
 
-    /// [`Self::elaborate_bounds`] over bare trait names.
-    pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<String> {
-        let mut elaborated: Vec<String> = Vec::with_capacity(names.len());
-        for name in names {
-            if !elaborated.contains(name) {
-                elaborated.push(name.clone());
-            }
-            for inherited in self
-                .tysys
-                .supertraits_of(&self.type_lookup(), name)
-                .to_vec()
-            {
-                if !elaborated.contains(&inherited.name) {
-                    elaborated.push(inherited.name);
-                }
-            }
-        }
-        elaborated
-    }
-
     /// Register a list of generic parameters as `TypeParam` / `TypePack` ids
     /// in the current `trait_ctx`, starting from `offset`. Skips effect params.
     /// Returns the next free index (i.e. `offset + non_effect_count`).

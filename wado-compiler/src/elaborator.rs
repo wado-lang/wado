@@ -871,6 +871,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         crate::name::FqTraitName::declared(&module, &name).with_args(args)
     }
 
+    /// The trait a bound's reference site names. `written` supplies the type
+    /// arguments and the diagnostic spelling.
+    ///
+    /// A bound the table has no answer for — a synthesized one, or a position
+    /// the walk never reached — falls back to the frame's derivation.
+    pub(super) fn fq_trait_name_at(
+        &self,
+        site: crate::ast::AstId,
+        written: &str,
+    ) -> crate::name::FqTraitName {
+        let resolutions = &self.tysys.resolutions;
+        if let Some(crate::resolve::DeclRef::Binder(_)) = resolutions.get(site) {
+            return crate::name::FqTraitName::binder(written);
+        }
+        let (_, args) = crate::name::split_head_and_args(written);
+        resolutions.declared(site).map_or_else(
+            || self.fq_trait_name_written(written),
+            |(module, name)| crate::name::FqTraitName::declared(module, name).with_args(args),
+        )
+    }
+
     /// The trait a reference site names, in the form a mangled method name
     /// embeds it: the declaration the site resolves to, plus the type
     /// arguments the site wrote.
