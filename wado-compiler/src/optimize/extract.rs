@@ -127,6 +127,14 @@ fn block_path(e: &Engine, expr: ExprId) -> Option<Vec<(crate::nir_arena::BlockId
 /// `ValueId`, so no heap bump separates them — the field/value is constant
 /// across the span, and a load pinned at this point reproduces it for all.
 /// `None` if any use lacks a path.
+/// Whether `b` is the body of a `Loop`, i.e. re-entered per iteration.
+fn is_loop_body(e: &Engine, b: crate::nir_arena::BlockId) -> bool {
+    matches!(
+        e.parent_of(NodeRef::Block(b)),
+        Some(NodeRef::Stmt(s)) if matches!(&e.body.stmts[s].kind, StmtKind::Loop { body } if *body == b)
+    )
+}
+
 fn materialise_point(
     e: &Engine,
     ids: &[ExprId],
@@ -146,6 +154,16 @@ fn materialise_point(
         }
     }
     let common = depth.checked_sub(1)?;
+    // A use nested inside a loop the chosen point sits outside of would read,
+    // on every iteration, a value the `let` computed once. The value may name a
+    // local the loop reassigns, so there is no shared point — refuse rather
+    // than hoist. Uses all within the same loop keep their point inside it.
+    if paths
+        .iter()
+        .any(|p| p[common + 1..].iter().any(|&(b, _)| is_loop_body(e, b)))
+    {
+        return None;
+    }
     let block = paths[0][common].0;
     let pos = paths.iter().map(|p| p[common].1).min()?;
     let stmt = e.body.blocks[block].stmts[pos];
@@ -412,10 +430,6 @@ struct FreezeCtx<'a> {
     include_fields: bool,
 }
 
-/// Decide whether the value at `id` should be frozen, and to which
-/// representative. `None` leaves it in the skeleton. Two admission paths: an
-/// early constant-leaf promotion, and the pure-arith reemittability gate.
-
 // TEMPORARY census — revert. Why a pure value position was not promoted, which
 // is exactly the set retiring the pure `ExprKind`s has to move.
 thread_local! {
@@ -437,6 +451,9 @@ pub(super) fn note_reject(engine: &Engine, id: ExprId, reason: &str) {
     });
 }
 
+/// Decide whether the value at `id` should be frozen, and to which
+/// representative. `None` leaves it in the skeleton. Two admission paths: an
+/// early constant-leaf promotion, and the pure-arith reemittability gate.
 fn classify_candidate(
     engine: &mut Engine,
     ctx: &FreezeCtx,
@@ -988,6 +1005,51 @@ mod tests {
         let (s, b) = materialise_point(&eng, &[tu, outer_u]).unwrap();
         assert_eq!(b, eng.body.root);
         assert_eq!(s, outer_s);
+    }
+
+    /// A use inside a loop and one outside have no shared materialisation
+    /// point: the common dominator is outside the loop, and a `let` placed
+    /// there is evaluated once while the in-loop use reads it every iteration.
+    /// The value may name a local the loop reassigns, so refuse rather than
+    /// hoist. (`String::substr_bytes` under "Measured dead ends" is this shape
+    /// arriving via `inline`.)
+    #[test]
+    fn materialise_point_refuses_to_hoist_out_of_a_loop() {
+        let mut body = Body::empty();
+        let (in_s, in_u) = read_stmt(&mut body, "a");
+        let loop_body = block(&mut body, vec![in_s]);
+        let loop_s = body.stmts.push(StmtNode {
+            kind: StmtKind::Loop { body: loop_body },
+            span: Span::default(),
+        });
+        let (out_s, out_u) = read_stmt(&mut body, "a");
+        body.root = block(&mut body, vec![out_s, loop_s]);
+        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut buf = EngineBuffers::default();
+        let eng = Engine::new(&mut body, &mut buf, &mut locals);
+        assert_eq!(materialise_point(&eng, &[in_u, out_u]), None);
+    }
+
+    /// Uses all inside the same loop body still materialise, inside the loop —
+    /// re-evaluated per iteration, which is what makes them correct.
+    #[test]
+    fn materialise_point_stays_inside_a_loop() {
+        let mut body = Body::empty();
+        let (s0, u0) = read_stmt(&mut body, "a");
+        let (s1, _f) = read_stmt(&mut body, "f");
+        let (s2, u2) = read_stmt(&mut body, "a");
+        let loop_body = block(&mut body, vec![s0, s1, s2]);
+        let loop_s = body.stmts.push(StmtNode {
+            kind: StmtKind::Loop { body: loop_body },
+            span: Span::default(),
+        });
+        body.root = block(&mut body, vec![loop_s]);
+        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut buf = EngineBuffers::default();
+        let eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let (s, b) = materialise_point(&eng, &[u2, u0]).unwrap();
+        assert_eq!(b, loop_body);
+        assert_eq!(s, s0);
     }
 
     /// Two uses in the same nested branch materialise inside that branch (the
