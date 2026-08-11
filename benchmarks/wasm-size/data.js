@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786364947056,
+  "lastUpdate": 1786408007254,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47049,6 +47049,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/29a045c2cafe6e7e844d738f65b154530e435dde"
         },
         "date": 1786364946491,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267689,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d3e7a2a0395407b9a12b12b4fecec81e75201588",
+          "message": "Merge pull request #1787 from wado-lang/claude/elaborator-refactoring-wep-bt3uh5\n\nrefactor(elaborator): dispatch queries answer from declaration facts",
+          "timestamp": "2026-08-11T09:13:07+09:00",
+          "tree_id": "08af512b1e3a9a9816658359ba4260f50b1b5265",
+          "url": "https://github.com/wado-lang/wado/commit/d3e7a2a0395407b9a12b12b4fecec81e75201588"
+        },
+        "date": 1786408006597,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
