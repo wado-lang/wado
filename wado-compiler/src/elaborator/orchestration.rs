@@ -122,6 +122,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
         invocations: crate::kiln::InvocationIndex,
         interner: Rc<RefCell<ModuleSourceInterner>>,
+        cm_source_interfaces: &crate::component_model::SourceInterfaceBatch,
         snapshot: Option<&crate::semantics::Semantics>,
     ) -> Result<AnnotateState, Bail> {
         let invocations = Rc::new(invocations);
@@ -794,6 +795,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // Resolve `Interface::method` calls into CM components during
             // annotate — the same role build_from_stdlib plays for WASI.
             fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set);
+            // Only the WIT importer knows a component reference's precise
+            // owning interface, so its answers are carried here rather than
+            // re-derived from the binding module's own interface FQ.
+            cm_interface_registry.extend_source_interfaces(cm_source_interfaces.clone());
             (cm_interface_registry, world_registry)
         };
         let builtin_registry = {

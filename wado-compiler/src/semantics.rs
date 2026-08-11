@@ -1050,6 +1050,7 @@ pub async fn semantics_for_world<H: CompilerHost>(
                 target_world,
                 &loaded.entry_module_source,
                 &mut loaded.modules,
+                &mut loaded.cm_source_interfaces,
             );
             semantics_of(loaded, host, LogLevel::default(), true)
         }
@@ -1265,6 +1266,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             included_files,
             load_result.invocations.clone(),
             interner.clone(),
+            &load_result.cm_source_interfaces,
             snapshot.as_deref(),
         )
         .ok()

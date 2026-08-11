@@ -168,23 +168,23 @@ impl LiftContext<'_> {
                 if let Some(src) = self.cm_interface_registry.resolve_cm_source_for(n, None)
                     && self
                         .cm_interface_registry
-                        .cm_interface_module_source_of(src)
+                        .cm_interface_module_source_of(&src)
                         .is_some()
                 {
                     if self
                         .cm_interface_registry
-                        .get_struct_fields_by_source(src, &n.name)
+                        .get_struct_fields_by_source(&src, &n.name)
                         .is_some()
                     {
-                        let ms = self.module_source_for(src);
+                        let ms = self.module_source_for(&src);
                         return tt.make_struct(n.name.clone(), ms);
                     }
                     if self
                         .cm_interface_registry
-                        .get_variant_cases_by_source(src, &n.name)
+                        .get_variant_cases_by_source(&src, &n.name)
                         .is_some()
                     {
-                        let ms = self.module_source_for(src);
+                        let ms = self.module_source_for(&src);
                         return tt.make_variant(n.name.clone(), ms);
                     }
                 }
@@ -296,14 +296,15 @@ pub fn cm_type_to_type_id(
             // scoping by package alone returns whichever registered first. The
             // package lookups behind it cover a type with no recorded interface;
             // neither is ever a bare-name scan.
-            _ => cm_interface_registry.source_interface(named)
-                .and_then(|fq| registry.cm_interface_module_source_of(fq))
+            _ => registry.source_interface(named)
+                .and_then(|fq| registry.cm_interface_module_source_of(&fq))
                 .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
                 // A stdlib WASI interface has no recorded `ModuleSource`, so
                 // derive the module the FQ maps to and match it exactly.
                 .or_else(|| {
-                    cm_interface_registry.source_interface(named)
-                        .and_then(cm_interface_module_name)
+                    registry
+                        .source_interface(named)
+                        .and_then(|fq| cm_interface_module_name(&fq))
                         .and_then(|m| type_table.find_named_type_by_module_name(&named.name, &m))
                 })
                 .or_else(|| {
@@ -330,7 +331,7 @@ pub fn cm_type_to_type_id(
                         .resolve_cm_source_for(named, Some(wasi_package))
                         .is_some_and(|s| {
                             registry
-                                .get_resource_cm_name_by_source(s, &named.name)
+                                .get_resource_cm_name_by_source(&s, &named.name)
                                 .is_some()
                         });
                     if is_resource {
@@ -522,10 +523,10 @@ pub(super) fn is_gc_passthrough_param(
         Type::Named(n) if n.name == names.string => true,
         Type::Named(n) => cm_interface_registry.source_interface(n).is_some_and(|s| {
             cm_interface_registry
-                .get_variant_cases_by_source(s, &n.name)
+                .get_variant_cases_by_source(&s, &n.name)
                 .is_some()
                 || cm_interface_registry
-                    .get_struct_fields_by_source(s, &n.name)
+                    .get_struct_fields_by_source(&s, &n.name)
                     .is_some()
         }),
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => true,
@@ -872,8 +873,9 @@ pub(super) fn cm_param_store_plan(
         let source = cm_interface_registry.source_interface(named)
             .filter(|s| s.starts_with("wasi:"));
         // Check WASI flags types.
-        if let Some(members) =
-            source.and_then(|s| cm_interface_registry.get_flags_members_by_source(s, &named.name))
+        if let Some(members) = source
+            .as_deref()
+            .and_then(|s| cm_interface_registry.get_flags_members_by_source(s, &named.name))
         {
             let store = match cm_flags_byte_size(members.len()) {
                 0 => return vec![],
@@ -887,8 +889,9 @@ pub(super) fn cm_param_store_plan(
             return vec![(0, store)];
         }
         // Check WASI enum types.
-        if let Some(variants) =
-            source.and_then(|s| cm_interface_registry.get_enum_variants_by_source(s, &named.name))
+        if let Some(variants) = source
+            .as_deref()
+            .and_then(|s| cm_interface_registry.get_enum_variants_by_source(s, &named.name))
         {
             let store = disc_store_op(cm_enum_byte_size(variants.len()));
             return vec![(0, store)];
@@ -1356,7 +1359,7 @@ pub(super) fn type_id_to_ast_type(
     let named_no_source =
         |name: &str| Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span));
     let cm_named = |name: &str, ms: &ModuleSource| {
-        let mut nt = NamedType::new(AstId::fresh(), name.to_string(), span);
+        let nt = NamedType::new(AstId::fresh(), name.to_string(), span);
         // Derive the owning WASI package from the type's own `module_source`
         // so a name shared across packages (e.g. `ErrorCode` in `wasi:cli`,
         // `wasi:filesystem`, `wasi:http`, `wasi:sockets`) resolves to *this*
@@ -1374,7 +1377,7 @@ pub(super) fn type_id_to_ast_type(
         if cm_namespace
             && let Some(source) = cm_interface_registry.resolve_cm_source_for(&nt, pkg_hint)
         {
-            registry.set_source_interface(nt.id, source.to_string());
+            cm_interface_registry.set_source_interface(nt.id, source);
         }
         Type::Named(nt)
     };

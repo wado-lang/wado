@@ -474,23 +474,23 @@ impl<'a> Emitter<'a> {
             for info in infos.iter().filter(|i| i.path == fq) {
                 for func in &info.functions {
                     for (_, _, ty) in &func.params {
-                        collect_named_type_sources(ty, &mut work);
+                        collect_named_type_sources(ty, registry, &mut work);
                     }
                     if let Some(ret) = &func.return_type {
-                        collect_named_type_sources(ret, &mut work);
+                        collect_named_type_sources(ret, registry, &mut work);
                     }
                 }
             }
             // Interfaces referenced by the types this interface defines.
             for (_, _, fields) in registry.structs_for_interface(&fq) {
                 for (_, ty) in fields {
-                    collect_named_type_sources(ty, &mut work);
+                    collect_named_type_sources(ty, registry, &mut work);
                 }
             }
             for (_, _, cases) in registry.variants_for_interface(&fq) {
                 for case in cases {
                     if let Some(payload) = &case.payload {
-                        collect_named_type_sources(payload, &mut work);
+                        collect_named_type_sources(payload, registry, &mut work);
                     }
                 }
             }
@@ -723,9 +723,12 @@ impl<'a> Emitter<'a> {
         current_fq: &str,
         uses: &mut Vec<(String, String)>,
     ) -> String {
+        let source = self
+            .cm_interface_registry
+            .and_then(|reg| reg.source_interface(named));
         let cm_name = self
             .cm_interface_registry
-            .zip(registry.source_interface(named))
+            .zip(source.as_deref())
             .and_then(|(reg, src)| {
                 reg.get_struct_cm_name_by_source(src, &named.name)
                     .or_else(|| reg.get_variant_cm_name_by_source(src, &named.name))
@@ -735,10 +738,10 @@ impl<'a> Emitter<'a> {
             })
             .map(str::to_string)
             .unwrap_or_else(|| to_kebab(&named.name));
-        if let Some(src) = registry.source_interface(named)
+        if let Some(src) = source
             && src != current_fq
         {
-            uses.push((src.clone(), cm_name.clone()));
+            uses.push((src, cm_name.clone()));
         }
         cm_name
     }
@@ -1194,39 +1197,43 @@ fn is_ast_unit(ty: &crate::ast::Type) -> bool {
 /// Collect the source-interface FQs of every CM-defined named type referenced
 /// by `ty` (recursing through generics, tuples, references, and function
 /// types). Only `wasi:` / `core:` sources are CM interfaces worth importing.
-fn collect_named_type_sources(ty: &crate::ast::Type, out: &mut Vec<String>) {
+fn collect_named_type_sources(
+    ty: &crate::ast::Type,
+    registry: &CmInterfaceRegistry,
+    out: &mut Vec<String>,
+) {
     use crate::ast::Type;
     match ty {
         Type::Named(named) => {
             if let Some(src) = registry.source_interface(named)
                 && (src.starts_with("wasi:") || src.starts_with("core:"))
             {
-                out.push(src.clone());
+                out.push(src);
             }
         }
         Type::Generic(generic) => {
             for arg in &generic.args {
-                collect_named_type_sources(arg, out);
+                collect_named_type_sources(arg, registry, out);
             }
         }
         Type::NamespacedGeneric(generic) => {
             for arg in &generic.args {
-                collect_named_type_sources(arg, out);
+                collect_named_type_sources(arg, registry, out);
             }
         }
         Type::Function(func) => {
             for param in &func.params {
-                collect_named_type_sources(param, out);
+                collect_named_type_sources(param, registry, out);
             }
-            collect_named_type_sources(&func.return_type, out);
+            collect_named_type_sources(&func.return_type, registry, out);
         }
         Type::Tuple(elems) => {
             for elem in elems {
-                collect_named_type_sources(elem, out);
+                collect_named_type_sources(elem, registry, out);
             }
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
-            collect_named_type_sources(inner, out);
+            collect_named_type_sources(inner, registry, out);
         }
         Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
     }

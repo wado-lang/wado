@@ -162,7 +162,6 @@ fn synthesize_lift_inner(
                     if let Some(source) = ctx
                         .cm_interface_registry
                         .resolve_cm_source_for(named, Some(ctx.cm_package))
-                        .map(str::to_string)
                     {
                         let source = source.as_str();
                         if let Some(lifted) = try_lift_wasi_variant_or_enum(

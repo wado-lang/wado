@@ -880,7 +880,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         Type::Named(n)
             if ctx.cm_interface_registry.source_interface(n).is_some_and(|s| {
                 ctx.cm_interface_registry
-                    .get_enum_variants_by_source(s, &n.name)
+                    .get_enum_variants_by_source(&s, &n.name)
                     .is_some()
             }) =>
         {
@@ -890,7 +890,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         Type::Named(n)
             if ctx.cm_interface_registry.source_interface(n).is_some_and(|s| {
                 ctx.cm_interface_registry
-                    .get_variant_cases_by_source(s, &n.name)
+                    .get_variant_cases_by_source(&s, &n.name)
                     .is_some()
             }) =>
         {
@@ -910,7 +910,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             // Compute max flat payload count across all cases (the "join")
             let cases = ctx
                 .cm_interface_registry
-                .get_variant_cases_by_source(source, &n.name)
+                .get_variant_cases_by_source(&source, &n.name)
                 .unwrap_or(&[]);
             let max_flat_count: usize = cases
                 .iter()
@@ -1089,14 +1089,14 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         Type::Named(n)
             if ctx.cm_interface_registry.source_interface(n).is_some_and(|s| {
                 ctx.cm_interface_registry
-                    .get_struct_fields_with_wado_names_by_source(s, &n.name)
+                    .get_struct_fields_with_wado_names_by_source(&s, &n.name)
                     .is_some()
             }) =>
         {
             let source = ctx.cm_interface_registry.source_interface(n).expect("matched above");
             let fields = ctx
                 .cm_interface_registry
-                .get_struct_fields_with_wado_names_by_source(source, &n.name)
+                .get_struct_fields_with_wado_names_by_source(&source, &n.name)
                 .expect("matched above");
             let value_type_id = value.type_id;
             let val_local = alloc_local(next_local, locals, value_type_id);
@@ -1580,7 +1580,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             let source = ctx
                 .cm_interface_registry
                 .resolve_cm_source_for(n, Some(ctx.wasi_package));
-            if let Some(fields) = source.and_then(|s| {
+            if let Some(fields) = source.as_deref().and_then(|s| {
                 ctx.cm_interface_registry
                     .get_struct_fields_with_wado_names_by_source(s, &n.name)
             }) {
@@ -1634,15 +1634,15 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // case payload via the registry-backed variant helper, keyed on the
             // same resolved source. Lib-local variants register their cases
             // under the package's default-interface FQ, like WASI variants.
-            if let Some(src) = source
+            if let Some(src) = source.as_deref()
                 && ctx
                     .cm_interface_registry
-                    .get_variant_cases_by_source(src, &n.name)
+                    .get_variant_cases_by_source(&src, &n.name)
                     .is_some()
             {
                 let mut stmts = Vec::new();
                 synthesize_lower_wasi_variant_to_memory(
-                    n, src, value, addr, next_local, &mut stmts, locals, ctx,
+                    n, &src, value, addr, next_local, &mut stmts, locals, ctx,
                 );
                 return stmts;
             }

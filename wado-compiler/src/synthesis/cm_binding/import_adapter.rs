@@ -147,7 +147,7 @@ fn synthesize_lift_flat_result(
             {
                 try_lift_wasi_variant_or_enum(
                     n,
-                    source,
+                    &source,
                     disc_expr.clone(),
                     next_local,
                     stmts,
@@ -929,7 +929,7 @@ impl<'a> AdapterBuilder<'a> {
                     let wado_fields = self
                         .lower_ctx
                         .cm_interface_registry
-                        .get_struct_fields_with_wado_names_by_source(source, &named.name)
+                        .get_struct_fields_with_wado_names_by_source(&source, &named.name)
                         .expect("struct fields_with_wado_names present when fields are");
                     let param = &self.params[plan.first_param];
                     let (param_local, struct_type_id) = (param.local_index, param.type_id);
@@ -1349,7 +1349,7 @@ impl<'a> AdapterBuilder<'a> {
                     flat_idx += 1;
                     synthesize_lower_wasi_variant_to_memory(
                         named,
-                        source,
+                        &source,
                         variant_value,
                         params_buf_addr(params_buf_local, base_offset),
                         &mut self.next_local,
@@ -1617,7 +1617,7 @@ impl<'a> AdapterBuilder<'a> {
             if registry
                 .resolve_cm_source_for(n, Some(self.func_info.package.as_str()))
                 .is_some_and(|s| {
-                    registry.get_struct_fields_by_source(s, &n.name).is_some()
+                    registry.get_struct_fields_by_source(&s, &n.name).is_some()
                 }));
         if needs_flat_result_lifting(&resolved, &self.lower_ctx.names) {
             // Flat return with complex type (e.g., Result<(), ()>): the raw call returns
