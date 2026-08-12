@@ -2650,6 +2650,7 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
 /// source text or off a `ResolvedType`'s `name` field cannot become a mangled
 /// name by accident — it has to pass through one of the constructors below,
 /// each of which states why its input is already fq.
+///
 /// The mangled spelling is a *rendering* ([`Self::to_mangled`]), produced on
 /// demand and never parsed back. Every question a caller used to answer by
 /// splitting the string — the declaring module, the declaration name, the type

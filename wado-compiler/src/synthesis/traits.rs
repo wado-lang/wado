@@ -147,18 +147,11 @@ impl TraitPair {
     }
 }
 
-/// Shorthand for `LocalMethodName::new(struct.into(), Some(trait.into()), method.into())`.
+/// The mangled name of a synthesized trait method.
 ///
-/// Leaves `base_trait_module` as `None`: every synthesis caller is
-/// auto-deriving an impl for a project-globally-unique core trait
-/// (Inspect / Display / Eq / Ord / From / `serde` adapters, …) whose
-/// name dispatch synthesis recognises without needing the disambiguating
-/// module. The elaborator path that lifts user-written
-/// `impl <Trait> for <Type>` blocks populates the module via
-/// `Elaborator::canonical_decl_key` directly into the [`LocalMethodName`]
-/// struct literal.
 /// The receiver is named by the module that declares it, the same rule a
-/// resolved type follows when mangled into any other name.
+/// resolved type follows when mangled into any other name; the trait arrives
+/// already carrying its declaration.
 fn trait_method_info(
     module_source: &ModuleSource,
     struct_name: &str,

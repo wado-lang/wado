@@ -3200,23 +3200,6 @@ impl TypeTable {
         }
     }
 
-    /// Get a mangled name for a type suitable for use in struct/function names.
-    ///
-    /// Unlike `type_name` which returns human-readable names (e.g., `[i32, String]`),
-    /// this returns mangled names suitable for monomorphization (e.g., `Tuple<i32,String>`).
-    ///
-    /// The format is:
-    /// - Primitives: `i32`, `f64`, `bool`, etc.
-    /// - Unit: `unit`
-    /// - Struct: struct name
-    /// - Tuple: `Tuple<T1,T2,...>`
-    /// - Option: `Option<T>`
-    /// - Result: `Result<T,E>`
-    /// - List: `List<T>`
-    /// - Function: `Fn<paramCount,returnType>`
-    /// - `GenericInstance`: `Name<T1,T2,...>`
-    /// - Ref/MutRef: inner type (references are stripped for mangling)
-    ///
     /// Resolve through newtypes/flags to find the base type.
     /// Returns the original `TypeId` if not a newtype or flags.
     ///
@@ -3338,6 +3321,23 @@ impl TypeTable {
         }
     }
 
+    /// Get a mangled name for a type suitable for use in struct/function names.
+    ///
+    /// Unlike `type_name` which returns human-readable names (e.g., `[i32, String]`),
+    /// this returns mangled names suitable for monomorphization (e.g., `Tuple<i32,String>`).
+    ///
+    /// The format is:
+    /// - Primitives: `i32`, `f64`, `bool`, etc.
+    /// - Unit: `unit`
+    /// - Struct: struct name
+    /// - Tuple: `Tuple<T1,T2,...>`
+    /// - Option: `Option<T>`
+    /// - Result: `Result<T,E>`
+    /// - List: `List<T>`
+    /// - Function: `Fn<paramCount,returnType>`
+    /// - `GenericInstance`: `Name<T1,T2,...>`
+    /// - Ref/MutRef: inner type (references are stripped for mangling)
+    ///
     #[must_use]
     pub fn mangle_type_name(&self, id: TypeId) -> String {
         let info = self.get_type_name_info(id);

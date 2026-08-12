@@ -1331,45 +1331,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         sources
     }
 
-    /// Resolve a bare declaration name (effect / resource / trait / type)
-    /// referenced in the current module to its canonical
-    /// `(declaring module, name)` key. The decl indices on [`TraitEnv`] are
-    /// keyed by this canonical pair so two modules can host same-named
-    /// declarations without colliding; every lookup site must canonicalise
-    /// the name through this helper before consulting the index.
+    /// Canonical impl-target key for a type named at a use site, for the impl
+    /// indexes.
     ///
-    /// Resolution order, in priority:
-    /// 1. `imported_type_sources` — per-module `use { Foo as Bar } from "…"`
-    ///    declarations, with `import_original_names` so an aliased import
-    ///    canonicalises to the original declaration name rather than the
-    ///    local alias.
-    /// 2. `effect_sources` — local `interface` / `resource` definitions in
-    ///    the current module (and non-aliased imports). Consulted second so
-    ///    aliased effect/resource imports go through the alias-aware path
-    ///    above.
-    /// 3. The current module — a name *defined* here shadows the symbol-table
-    ///    and decl-index fallbacks below, so a local declaration always wins
-    ///    over an unrelated same-named item in another module (issue #1298).
-    /// 4. The symbol table, scoped to the current module's imports plus the
-    ///    implicit prelude — canonicalises explicitly imported names and
-    ///    prelude/stdlib names to their defining module.
-    /// 5. The global decl indices on [`TraitEnv`] — last-resort fallback
-    ///    for prelude traits referenced from stdlib code where neither
-    ///    the per-module import context nor the symbol table carries the
-    ///    binding (prelude is implicit, not threaded through `use`).
-    ///
-    /// When the canonicalised name had an alias (`use { Foo as Bar }`),
-    /// the returned key uses the *original* declaration name, so the index
-    /// (whose key is `(decl_module, decl_name)`) matches.
-    /// Canonical impl-target key for a type named at a use site, for the
-    /// impl indexes. Goes through [`Self::canonical_decl_key`], so an alias
-    /// and its original resolve to the same key.
+    /// Through [`Self::decl_key_or_local`], so an impl target and every other
+    /// name-only lookup answer from one chain. The table alone leaves out the
+    /// declaration indexes, and a receiver the module never imported — reached
+    /// only through a return type — would then key to the call site instead of
+    /// where it is declared.
     pub(crate) fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
-        // Through `decl_key_or_local`, so an impl target and every other
-        // name-only lookup answer from one chain. Asking the table alone
-        // leaves out the declaration indexes, and a receiver the module never
-        // imported — reached only through a return type — would key to the
-        // call site instead of where it is declared.
         let (module, name) = self.decl_key_or_local(type_name);
         trait_env::ImplTargetKey::of_decl(&module, &name)
     }

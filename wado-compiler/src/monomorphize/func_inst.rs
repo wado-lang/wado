@@ -138,31 +138,17 @@ struct SubstitutedCall {
     module_source: ModuleSource,
 }
 
-/// Look up a generic function template in the global map.
+/// The impl args a pack-projecting blanket dispatch instantiates under, or
+/// `None` when this is not one.
 ///
-/// `module_hint` is the most-specific guess for the template's home —
-/// usually the call site's `FunctionRef::module_source`. If the literal
-/// `(module_hint, name)` key misses, fall back to `TraitEnv::impl_module_for`
-/// over `struct_candidates` to find a user-written cross-module trait impl
-/// (e.g. `impl<T: Inspect> Inspect for List<T>` lives in
-/// `core:prelude/format`, not in `List<T>`'s own module). For inherent
-/// methods (no trait name on the call) also try `type_module_hint` directly
-/// — inherent impls live with their receiver type.
-///
-/// Returns just `&template` (not its module); the caller decides the
-/// `InstantiationKey::module_source`, since *where* the concrete copy
-/// lands is governed by the fixture-pinned contract that pre-substitution
-/// callers (`resolve_method_call_substitution`,
-/// `substitute_types_in_expr`) already encoded into the call's
-/// `FunctionRef::module_source`. Decoupling template location from
-/// instantiation location is what lets the variadic-tuple guard and the
-/// ref-blanket dispatch both keep working under the
-/// `(ModuleSource, String)` template keying.
-/// Append the type packs a blanket keys on to its impl args.
 /// `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` instantiates under
-/// `[T, T::Assoc, …]` while a call site supplies `[T]`, so without this the
-/// queueing and rewrite sides key the same instance differently. A blanket that
-/// projects nothing is returned unchanged.
+/// `[T, T::Assoc, …]` while a call site supplies `[T]`, so without the packs
+/// appended the queueing and rewrite sides key the same instance differently.
+///
+/// One question, asked once: can this receiver supply every pack this blanket
+/// projects? Splitting it — a guard asking the blanket whether it projects
+/// packs, a helper asking the receiver whether it can supply them — let the two
+/// answer differently and key the same instance two ways.
 ///
 /// The blanket is selected by the receiver, the same rule the emit side applies
 /// (`synthesis::template::blanket_dispatch_for`): a trait may carry several
@@ -170,13 +156,6 @@ struct SubstitutedCall {
 /// over their own `Reflect*` bound — and picking the first-registered one would
 /// ask a variant receiver for a struct's `FieldTypes` and key the instance
 /// under args the template never declared.
-/// The impl args a pack-projecting blanket dispatch instantiates under, or
-/// `None` when this is not one.
-///
-/// One question, asked once: can this receiver supply every pack this blanket
-/// projects? Splitting it — a guard asking the blanket whether it projects
-/// packs, a helper asking the receiver whether it can supply them — let the two
-/// answer differently and key the same instance two ways.
 pub(super) fn blanket_pack_dispatch_args(
     args: &[TypeId],
     trait_env: &TraitEnv,
@@ -249,6 +228,26 @@ fn blanket_receiver_satisfies(
         .is_some()
 }
 
+/// Look up a generic function template in the global map.
+///
+/// `module_hint` is the most-specific guess for the template's home —
+/// usually the call site's `FunctionRef::module_source`. If the literal
+/// `(module_hint, name)` key misses, fall back to `TraitEnv::impl_module_for`
+/// over `struct_candidates` to find a user-written cross-module trait impl
+/// (e.g. `impl<T: Inspect> Inspect for List<T>` lives in
+/// `core:prelude/format`, not in `List<T>`'s own module). For inherent
+/// methods (no trait name on the call) also try `type_module_hint` directly
+/// — inherent impls live with their receiver type.
+///
+/// Returns just `&template` (not its module); the caller decides the
+/// `InstantiationKey::module_source`, since *where* the concrete copy
+/// lands is governed by the fixture-pinned contract that pre-substitution
+/// callers (`resolve_method_call_substitution`,
+/// `substitute_types_in_expr`) already encoded into the call's
+/// `FunctionRef::module_source`. Decoupling template location from
+/// instantiation location is what lets the variadic-tuple guard and the
+/// ref-blanket dispatch both keep working under the
+/// `(ModuleSource, String)` template keying.
 fn lookup_template_with_trait_fallback<'a, V>(
     generic_functions: &'a IndexMap<(ModuleSource, String), V>,
     trait_env: &TraitEnv,

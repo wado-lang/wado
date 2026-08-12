@@ -104,11 +104,11 @@ impl StructuralMember<'_> {
     }
 }
 
-/// Canonical identity of an associated-constant key: canonicalize the
-/// `Type` prefix of a use-site `Type::CONST` spelling via
-/// [`canonical_decl_key_with`]. `None` for keys with no `::` (never a
-/// constant key). Shared by annotate and reify so both resolve a constant
-/// to the same identity.
+/// Canonical identity of an associated-constant key: canonicalize the `Type`
+/// prefix of a use-site `Type::CONST` spelling through
+/// [`declaration_named_or_local`]. `None` for keys with no `::` (never a
+/// constant key). Shared by annotate and reify so both resolve a constant to
+/// the same identity.
 pub(super) fn canonical_assoc_const_key(
     key: &str,
     current_module_source: &ModuleSource,
@@ -1526,9 +1526,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
-    /// Whether the trait named `trait_name` declares `method_name`. The cheap
-    /// form of [`Self::find_trait_decl_method`], for counting candidates
-    /// without cloning each one's declaration.
+    /// Whether the trait `key` names declares `method_name`. The cheap form of
+    /// [`Self::trait_method_of`], for counting candidates without cloning each
+    /// one's declaration.
     fn trait_declares_method_of(&self, key: &super::trait_env::DeclKey, method_name: &str) -> bool {
         self.trait_decl_header_of(key)
             .is_some_and(|header| header.methods.iter().any(|m| m.name == method_name))
@@ -2437,9 +2437,8 @@ impl TypeSystem {
     /// them. Comparing the spellings instead is what made an aliased bound
     /// unsatisfiable and a same-named foreign trait satisfied (#1785).
     ///
-    /// `trait_ref: None` is a caller not yet carrying an identity — the query
-    /// paths WEP 2026-08-10 stage C has still to convert. Those fall back to
-    /// the spelling, which two modules can share.
+    /// `trait_ref: None` is a caller not yet carrying an identity. Those fall
+    /// back to the spelling, which two modules can share.
     fn same_trait(
         &self,
         trait_name: &str,

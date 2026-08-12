@@ -1272,7 +1272,7 @@ fn walk_type(
             }
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
-            walk_type(sources, inner, local_names)
+            walk_type(sources, inner, local_names);
         }
         _ => {}
     }

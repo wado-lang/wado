@@ -153,29 +153,6 @@ impl Resolutions {
     pub fn is_empty(&self) -> bool {
         self.refs.is_empty()
     }
-
-    /// How many sites landed in each answer, for the shadow-stage census.
-    #[must_use]
-    pub fn census(&self) -> Census {
-        let mut c = Census::default();
-        for r in self.refs.values() {
-            match r {
-                DeclRef::Decl(_) => c.decl += 1,
-                DeclRef::Binder(_) => c.binder += 1,
-                DeclRef::Builtin(_) => c.builtin += 1,
-                DeclRef::Unresolved => c.unresolved += 1,
-            }
-        }
-        c
-    }
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct Census {
-    pub decl: usize,
-    pub binder: usize,
-    pub builtin: usize,
-    pub unresolved: usize,
 }
 
 /// The name `Self` binds to inside a `trait` or `impl` body.
@@ -437,48 +414,5 @@ pub fn head_site(ty: &Type) -> Option<AstId> {
         | Type::TypePackSpread(..)
         | Type::Infer(_)
         | Type::Error(_) => None,
-    }
-}
-
-/// One site where the table and a consumer's own derivation disagree.
-#[derive(Debug)]
-pub struct Disagreement {
-    pub module: ModuleSource,
-    pub written: String,
-    pub table: DeclRef,
-    /// What the consumer derived, rendered — it has no identity to compare.
-    pub consumer: String,
-}
-
-impl Resolutions {
-    /// The declaration a site resolves to, as the `(module, name)` pair the
-    /// consumers still key on. Shadow-stage only: it exists to compare the
-    /// table against a consumer's own derivation, and goes when the consumers
-    /// take a `DeclRef`.
-    #[must_use]
-    pub fn decl_key(&self, site: AstId, symbols: &SymbolTable) -> Option<(ModuleSource, String)> {
-        match self.get(site)? {
-            DeclRef::Decl(id) => symbols
-                .get(&id)
-                .map(|sym| (sym.module_source().clone(), sym.name.clone())),
-            DeclRef::Binder(_) | DeclRef::Builtin(_) | DeclRef::Unresolved => None,
-        }
-    }
-
-    /// Whether shadow reporting is on. The stage-B instrument: it measures how
-    /// far the table is from what the consumers derive today, before anything
-    /// depends on it.
-    #[must_use]
-    pub fn shadow_enabled() -> bool {
-        std::env::var("WADO_RESOLVE_SHADOW").is_ok()
-    }
-
-    /// Report a disagreement to stderr, prefixed so a whole-suite run can be
-    /// grepped for them.
-    pub fn report(d: &Disagreement) {
-        eprintln!(
-            "resolve-shadow: {} wrote `{}`: table={:?} consumer={}",
-            d.module, d.written, d.table, d.consumer
-        );
     }
 }

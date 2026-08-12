@@ -807,20 +807,12 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// keys off the written string, so an `impl` of a name nothing declares
     /// registers happily, matches no query, and reaches the back end unmentioned.
     ///
-    /// The check asks only whether *some* declaration bears the name, which is
-    /// the one question that survives shadowing. Asking *which* declaration —
-    /// to require its associated types, say — needs a resolution that
-    /// [`Elaborator::trait_decl_key_in_frame`] does not yet give: it prefers an
-    /// import over a local declaration, and the prelude reaches a module as an
-    /// import, so a module declaring its own `Add` resolves to the prelude's.
-    /// `trait_bound_add_generic.wado` binds `T: Add` to its own declaration
-    /// while that helper answers with the prelude's, and until the two agree
-    /// there is no reliable answer to build on.
+    /// The head resolves through the same chain the block's own facts use, so
+    /// the check and the facts cannot disagree about which declaration it
+    /// names. A head with a reference site answers from the site; a synthesized
+    /// one, which has none, falls back to the name-only chain.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
         let name = super::trait_env::get_type_name_static(trait_type);
-        // The same question the block's own facts ask, through the same
-        // helper, so the check and the facts cannot disagree about which
-        // declaration this head names.
         let key = match crate::resolve::head_site(trait_type) {
             Some(site) => self.trait_decl_at(site, &name),
             None => self.decl_key_or_local(&name),

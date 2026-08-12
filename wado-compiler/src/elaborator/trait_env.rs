@@ -208,7 +208,6 @@ fn pick_module_union<'a>(
         .or_else(|| syn.and_then(|l| l.first()))
 }
 
-
 /// Canonical key for a declaration that lives in some module. Used by every
 /// trait / effect / resource / type index in this file so that two modules
 /// can host declarations with the same bare name (`pub interface Logger`
@@ -293,9 +292,7 @@ impl ImplTargetKey {
                 name::Receiver::Type(name::FqTypeName::binder(name))
             }
             ImplTargetKey::Ref(kind) => name::Receiver::Ref(*kind),
-            ImplTargetKey::Builtin(name) => {
-                name::Receiver::Type(name::FqTypeName::builtin(name))
-            }
+            ImplTargetKey::Builtin(name) => name::Receiver::Type(name::FqTypeName::builtin(name)),
         }
     }
 
@@ -585,17 +582,6 @@ pub(super) type ResourceDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 
 /// Pre-built index of static methods (no `self` parameter) from impl blocks.
 /// Key: canonical receiver [`DeclKey`] → list of
-/// `(method_name, impl_module_source, item_ast_id, method_index)`.
-/// Enables O(1) lookup of static methods instead of scanning all modules.
-///
-/// Keyed by canonical declaration key (rather than bare type name) so that
-/// `impl Counter { fn make(...) }` declared in two different modules with
-/// same-named `struct Counter` produces two distinct buckets — the lookup
-/// at `CounterA::make(...)` resolves through the call-site's import context
-/// and dispatches to the right module's impl. `item_ast_id` identifies the
-/// impl block itself (an `AstId`); `method_index` stays a bare position
-/// into that block's own, TraitEnv-owned `ImplHeader::methods` — not a
-/// window into the mutable `module.items` a reload could reorder.
 /// A static (receiver-less) method reachable by name on a type.
 #[derive(Clone, Debug)]
 pub(super) struct StaticMethodEntry {
@@ -606,6 +592,13 @@ pub(super) struct StaticMethodEntry {
     pub(super) method_id: AstId,
 }
 
+/// Pre-built index of static methods, for O(1) lookup instead of a scan over
+/// every module.
+///
+/// Keyed by canonical declaration key rather than bare type name, so
+/// `impl Counter { fn make(...) }` in two modules with same-named
+/// `struct Counter` produces two buckets and `CounterA::make(...)` reaches the
+/// right one.
 pub(super) type StaticMethodIndex = IndexMap<DeclKey, Vec<StaticMethodEntry>>;
 
 /// Pre-built index of static methods from resource declarations.
@@ -697,7 +690,6 @@ impl ImplModuleIndex {
     ) {
         push_module(&mut self.by_mangled, mangled, trait_name, module);
     }
-
 
     #[must_use]
     pub fn contains_declared(&self, type_name: &str, trait_name: &str) -> bool {
@@ -799,9 +791,6 @@ pub struct TraitEnv {
     /// `effect_decl_index` to recognise handler-installable kinds in `with`
     /// clauses and `impl R for T` blocks.
     pub(super) resource_decl_index: ResourceDeclIndex,
-    /// Every type-shaped declaration's identity (struct / variant / enum /
-    /// flags / newtype). Kept so [`Self::declaring_side_key`] can offer the
-    /// same by-name fallbacks `build` did; nothing else reads it.
     /// Digested headers for every indexed impl block, keyed by
     /// `(ModuleSource, AstId)`. Trait/method queries read this instead of
     /// re-fetching the impl block AST from `loaded_modules`. See [`ImplHeader`].
@@ -932,7 +921,8 @@ impl SynthesisedImpls {
     /// recorded in this synthesis layer (regardless of concreteness).
     #[must_use]
     pub fn has_impl(&self, type_name: &str, trait_name: &str) -> bool {
-        self.trait_impl_modules.contains_declared(type_name, trait_name)
+        self.trait_impl_modules
+            .contains_declared(type_name, trait_name)
     }
 }
 
@@ -959,11 +949,6 @@ impl TraitEnv {
         invocations: &InvocationIndex,
         resolutions: &crate::resolve::Resolutions,
     ) -> (Arc<Self>, Vec<(ModuleSource, TypeError)>) {
-        // Stage B of WEP 2026-08-10: the table is built but nothing depends on
-        // it yet. Every impl header is resolved twice — once here, once by the
-        // table — and the disagreements are reported, so the blast radius of
-        // making the table authoritative is measured rather than discovered.
-        let shadow = crate::resolve::Resolutions::shadow_enabled();
         // Pre-compute every module's `use`-derived import scope so dispatch
         // queries read it instead of rebuilding from the module AST.
         let mut module_import_scopes: IndexMap<ModuleSource, ModuleImportScope> =
@@ -1188,16 +1173,8 @@ impl TraitEnv {
                     continue;
                 };
                 let type_name = get_type_name_static(&impl_block.ty);
-                let type_key = impl_target_key_at(&impl_block.ty, module_source, symbols, resolutions);
-                if shadow {
-                    shadow_compare(
-                        resolutions,
-                        symbols,
-                        module_source,
-                        &impl_block.ty,
-                        &type_key,
-                    );
-                }
+                let type_key =
+                    impl_target_key_at(&impl_block.ty, module_source, symbols, resolutions);
                 let trait_ref = impl_block
                     .trait_type
                     .as_ref()
@@ -1372,12 +1349,10 @@ impl TraitEnv {
         // supertrait (`use { Base as B }; trait Extra: B`) keys on `Base`'s
         // declaration without the import scope being consulted a second time.
         let resolve_trait = |module: &ModuleSource, bound: &ast::TraitBound| {
-            let key = resolutions
-                .declared(bound.id)
-                .map_or_else(
-                    || (module.clone(), bound.name.clone()),
-                    |(decl_module, name)| (decl_module.clone(), name.to_string()),
-                );
+            let key = resolutions.declared(bound.id).map_or_else(
+                || (module.clone(), bound.name.clone()),
+                |(decl_module, name)| (decl_module.clone(), name.to_string()),
+            );
             decl_index.get(&key).cloned()
         };
         let trait_impl_modules = index_impl_modules(&impl_headers, false);
@@ -1427,19 +1402,6 @@ impl TraitEnv {
         )
     }
 
-    /// Look up the module that defines `impl <trait_name> for <type_name>`.
-    /// Consults the AST layer first, then the synthesis layer (if populated).
-    /// Returns `None` for blanket impls and types not represented as a
-    /// concrete impl (e.g. anonymous function types whose `Inspect` is
-    /// auto-derived per-module by the synthesis phase).
-    ///
-    /// When the same simple type name is implemented in multiple modules
-    /// (e.g. two `struct Widget` blocks, each auto-derived to `Widget^Inspect`
-    /// in its own module), `type_module` disambiguates by preferring an
-    /// entry whose module matches the hint. This mirrors how the elaborator's
-    /// `find_trait_impl_for_type_with_args` iterates [`TraitImplIndex`] and
-    /// checks each candidate impl individually instead of collapsing on the
-    /// `(name, trait)` key.
     /// The pre-computed import scope for `module`, cloned for callers that
     /// install it via `with_module_perspective_for` (which takes the maps by
     /// value). Returns empty maps for a module with no recorded scope,
@@ -1469,7 +1431,6 @@ impl TraitEnv {
             .get(name)
             .map_or(&[], Vec::as_slice)
     }
-
 
     /// Keys of every impl block on `type_key`, in global build order —
     /// inherent and trait alike.
@@ -1550,7 +1511,15 @@ impl TraitEnv {
         }
     }
 
-
+    /// The module defining `impl <trait_name> for <receiver>`, or `None` for a
+    /// blanket impl and for a receiver no concrete impl represents (an
+    /// anonymous function type whose `Inspect` synthesis auto-derives
+    /// per-module).
+    ///
+    /// The AST layer answers first: it holds the impls a module wrote, and the
+    /// synthesis layer records both receiver namespaces, so preferring it would
+    /// return a different module. When several modules implement the trait for
+    /// same-named receivers, `type_module` picks the entry whose module matches.
     pub(crate) fn impl_module_for(
         &self,
         receiver: ImplReceiver<'_>,
@@ -1764,8 +1733,6 @@ impl TraitEnv {
         pick_module_union(ast, syn, type_module)
     }
 
-
-
     /// The stdlib's declaration of `name`, as the key an `impl` header
     /// resolves to. A compiler item (`Member`, `ReflectStruct`, …) is a
     /// stdlib trait, so this is its identity — and a user trait sharing the
@@ -1786,7 +1753,6 @@ impl TraitEnv {
         let loc = self.decl_index.get(decl_key)?;
         self.trait_decl_headers.get(loc)
     }
-
 
     /// Produce a new `TraitEnv` with the synthesis-layer impls populated.
     ///
@@ -1885,13 +1851,6 @@ fn static_receiver_key(type_key: &ImplTargetKey, otherwise: impl FnOnce() -> Dec
     }
 }
 
-/// The key an `impl` header's target resolves to, from the site the header
-/// wrote — the vantage the target name belongs to.
-///
-/// `None` where the site names no declaration: a builtin shape, a name the walk
-/// could not resolve, or a position with no head at all. Those keep
-/// [`impl_target_key`], which has by-bare-name fallbacks the table deliberately
-/// does not.
 /// The impl header's target, from the site the header wrote.
 ///
 /// A site behind no declaration — a tuple, a function type, a name that
@@ -1904,7 +1863,12 @@ fn impl_target_key_at(
     resolutions: &crate::resolve::Resolutions,
 ) -> ImplTargetKey {
     sited_impl_target_key(ty, module_source, resolutions).unwrap_or_else(|| {
-        ImplTargetKey::of_written(&get_type_name_static(ty), module_source, symbols, resolutions)
+        ImplTargetKey::of_written(
+            &get_type_name_static(ty),
+            module_source,
+            symbols,
+            resolutions,
+        )
     })
 }
 
@@ -1926,6 +1890,12 @@ fn unique_declared_trait<L, E, R>(
     hits.next().is_none().then(|| first.clone())
 }
 
+/// The key an `impl` header's target resolves to, from the site the header
+/// wrote — the vantage the target name belongs to.
+///
+/// `None` where the site names no declaration: a builtin shape, a name the walk
+/// could not resolve, or a position with no head at all. Those keep
+/// [`impl_target_key_at`], whose fallback keys them to the impl's own module.
 fn sited_impl_target_key(
     ty: &ast::Type,
     module_source: &ModuleSource,
@@ -1949,51 +1919,6 @@ fn sited_impl_target_key(
             .decl_named(answer)
             .map(|(module, name)| ImplTargetKey::of_decl(module, name)),
         crate::resolve::DeclRef::Builtin(_) | crate::resolve::DeclRef::Unresolved => None,
-    }
-}
-
-fn shadow_compare(
-    resolutions: &crate::resolve::Resolutions,
-    symbols: &SymbolTable,
-    module_source: &ModuleSource,
-    ty: &ast::Type,
-    derived: &ImplTargetKey,
-) {
-    if name::RefKind::from_ast(ty).is_some() {
-        // Not a disagreement: the table resolves `&List<T>` to `List`, because
-        // that is what the name refers to, while the impl index deliberately
-        // buckets every reference target by kind alone. Two questions, not two
-        // answers.
-        return;
-    }
-    let Some(site) = crate::resolve::head_site(ty) else {
-        return;
-    };
-    let Some(table) = resolutions.get(site) else {
-        crate::resolve::Resolutions::report(&crate::resolve::Disagreement {
-            module: module_source.clone(),
-            written: get_type_name_static(ty),
-            table: crate::resolve::DeclRef::Unresolved,
-            consumer: format!("{derived:?} (site never walked)"),
-        });
-        return;
-    };
-    let agrees = match (resolutions.decl_key(site, symbols), derived) {
-        (Some(key), ImplTargetKey::Decl(d)) => key == *d,
-        // A binder here is a blanket's parameter, which is what `TypeParam`
-        // means on the derived side.
-        (None, ImplTargetKey::TypeParam(..)) => {
-            matches!(table, crate::resolve::DeclRef::Binder(_))
-        }
-        _ => false,
-    };
-    if !agrees {
-        crate::resolve::Resolutions::report(&crate::resolve::Disagreement {
-            module: module_source.clone(),
-            written: get_type_name_static(ty),
-            table,
-            consumer: format!("{derived:?}"),
-        });
     }
 }
 
@@ -2071,9 +1996,7 @@ fn classify_position(
                 ImplTargetKey::Decl(_)
                 | ImplTargetKey::Ref(_)
                 | ImplTargetKey::TypeParam(..)
-                | ImplTargetKey::Builtin(_) => {
-                    PositionKind::ForeignType
-                }
+                | ImplTargetKey::Builtin(_) => PositionKind::ForeignType,
             }
         }
         // Tuples are local if the current crate owns them (via `pub type [..T];`)
@@ -2653,8 +2576,6 @@ fn check_all_orphan_rules(
 
     violations
 }
-
-
 
 /// The declaration name an `impl` header writes its target as.
 ///
