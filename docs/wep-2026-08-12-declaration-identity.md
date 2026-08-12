@@ -225,7 +225,11 @@ incidental fallbacks:
    between them is unobservable;
 4. the prelude — its re-exports, then its implementation modules, so an `internal`
    compiler item (`ReflectStruct`, `Member`, `Ref`) resolves for a module that
-   never `use`d it and can then be diagnosed as sealed;
+   never `use`d it and can then be diagnosed as sealed. A module carrying
+   `#![no_prelude]` skips this layer entirely: the prelude's own implementation
+   and the runtime import what they need, and an opt-out one layering honours
+   and another ignores is how one bare name came to mean a declaration to one
+   and nothing to the other;
 5. the case names of variant / enum / flags types in scope, which a type of the
    same name always shadows.
 
@@ -439,11 +443,6 @@ completion check.
 - [ ] `Scope` — one implementation of what a name means in a module. Done when
       `SymbolTable`'s name lookups, `module_import_scope`, `ModuleImports` and
       `TypeLookup`'s import branch are deleted.
-  - [ ] The prelude tier. `module_scope_lookup` ignores `#![no_prelude]` and
-        admits every kind; `module_import_scope` honours the attribute and admits
-        types and traits. The opt-out should hold — with the prelude's
-        implementation modules still reachable, since that is what lets a sealed
-        compiler item resolve for a module that never named it.
   - [ ] Function-local items (`Stmt::Item`). The symbol table collects only
         module-level declarations, so a local `struct` has no identity and no
         scope entry; `TypeLookup`'s function-local tier answers for it by name.
