@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786501465994,
+  "lastUpdate": 1786531009613,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47357,6 +47357,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fd45ecb98783f71d4f9c8ce1ddc294eca51b5d35"
         },
         "date": 1786501465426,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267689,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a5dbba0c09f1aa702c1c91f5dfc11a2cb694cdbf",
+          "message": "Merge pull request #1794 from wado-lang/claude/wasi-grpc-implementation-wok8rm\n\nfeat(cli): negotiate HTTP/2 via ALPN on outbound HTTPS",
+          "timestamp": "2026-08-12T19:24:35+09:00",
+          "tree_id": "b928f19bbb6a3bad9e6f8f5c29df097cd9340d07",
+          "url": "https://github.com/wado-lang/wado/commit/a5dbba0c09f1aa702c1c91f5dfc11a2cb694cdbf"
+        },
+        "date": 1786531008764,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
