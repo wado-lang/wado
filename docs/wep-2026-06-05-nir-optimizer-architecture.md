@@ -496,10 +496,14 @@ Three readings, in order of how much they cost:
       would be genuinely shared — one `(receiver, field, heap_ver)` triple per
       field, read at every use — so it is the first thing that could make
       `apply_value_freeze`'s materialisation count non-zero. The re-walk already
-      supplies the `heap_ver` a query cannot. Its two soundness gates
-      (scalar-field, receiver-availability) are written and unreachable, not
-      missing. Entry check: the pass and its `cond_impl_post_promote` follow-up
-      cost loop time today for nothing, so measure both before and after.
+      supplies the `heap_ver` a query cannot, and `build_scoped` already
+      re-interns a caller-rooted `FieldAccess` tree into the live pool
+      (`reintern_live_rooted`), so the values arrive with live ids. What drops
+      them is `scoped_const_reads`'s own `is_const_value` filter, written when
+      forwarding was the only caller. The two soundness gates (scalar-field,
+      receiver-availability) are written and unreachable, not missing. Entry
+      check: the pass and its `cond_impl_post_promote` follow-up cost loop time
+      today for nothing, so measure both before and after.
 
 - [ ] Reach the in-loop consumers. Both freezes that may plant a local-naming
       value run after the fixed-point loop, so the passes inside it still see
