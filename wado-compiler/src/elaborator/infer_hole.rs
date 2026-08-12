@@ -7,35 +7,57 @@
 //! solved holes into recorded facts; an unsolved hole raises "cannot infer" and
 //! is pinned to `error`.
 //!
-//! Holes are `TypeParam`s with `index >= HOLE_INDEX_BASE`, reusing the
-//! unification/substitution machinery without colliding with real parameters.
-//! Deferral fires only for hole-free receivers/args, so no recorded mangled
-//! name embeds a hole and a plain `TypeId` sweep suffices.
+//! A hole is a [`ResolvedType::InferVar`] — a *flexible* variable, distinct
+//! from the *rigid* `TypeParam` it stands in for. A name already mangled from
+//! one is rebuilt from the swept type arguments, not patched.
 
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{InferVarId, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
 use super::infer::unify;
 use super::types::TypeError;
 
-/// Reserved start of the inference-hole `TypeParam` index space, far above the
-/// dense-from-0 real type parameters so the two never overlap.
-pub(super) const HOLE_INDEX_BASE: u32 = 0x8000_0000;
-
 /// Per-module registry of inference holes and their (eventual) solutions.
 #[derive(Default)]
 pub(crate) struct InferHoleTable {
     /// Hole `TypeId` → solution (`None` until solved).
     solutions: IndexMap<TypeId, Option<TypeId>>,
-    /// Hole `TypeId` → diagnostic raised if it is never solved.
-    diags: IndexMap<TypeId, (Span, String)>,
+    /// Hole `TypeId` → what it says if it is never solved.
+    diags: IndexMap<TypeId, Blame>,
     /// Hole `TypeId` → originating parameter's `(name, trait-bound names, span)`,
     /// re-verified against the solution in [`Self::finalize_infer_holes`] (the
     /// call-site check only saw the unconstrained hole).
     bounds: IndexMap<TypeId, (String, Vec<String>, Span)>,
+}
+
+/// What an unsolved variable reports.
+///
+/// `owner` is both the tail of the sentence and the coalescing key: the
+/// variables one use site minted share it, so several unsolved slots of one
+/// call name themselves in a single message rather than one apiece.
+struct Blame {
+    span: Span,
+    /// The parameter this variable stands for, when a declaration names it.
+    param: Option<String>,
+    owner: String,
+}
+
+impl Blame {
+    /// The sentence, with `params` in place of this blame's own parameter.
+    fn message(&self, params: &[&str]) -> String {
+        if params.is_empty() {
+            return self.owner.clone();
+        }
+        let named = params
+            .iter()
+            .map(|p| format!("`{p}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("cannot infer type parameter {named} {}", self.owner)
+    }
 }
 
 impl InferHoleTable {
@@ -55,22 +77,74 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: String,
         bound_names: Vec<String>,
     ) -> TypeId {
-        // Holes are only appended, so the next dense index is the current count.
-        let index = HOLE_INDEX_BASE + self.infer_holes.solutions.len() as u32;
-        let name = format!("?{index}");
-        let hole = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_type_param(name, index);
-        self.infer_holes.solutions.insert(hole, None);
-        self.infer_holes.diags.insert(hole, (span, message));
+        let hole = self.mint_infer_var();
+        self.attach_infer_var_diag(hole, span, message);
         if !bound_names.is_empty() {
             self.infer_holes
                 .bounds
                 .insert(hole, (param_name, bound_names, span));
         }
         hole
+    }
+
+    /// Mint a fresh inference variable carrying no diagnostic yet.
+    ///
+    /// A use site that may discard its instantiation — inference runs twice
+    /// for a partial turbofish — mints bare and attaches the diagnostic only
+    /// to the variables it commits to. A variable nobody kept then reports
+    /// nothing.
+    pub(super) fn mint_infer_var(&mut self) -> TypeId {
+        let var = InferVarId(self.infer_holes.solutions.len() as u32);
+        let hole = self.tysys.type_table.borrow_mut().make_infer_var(var);
+        assert!(
+            self.infer_holes.solutions.insert(hole, None).is_none(),
+            "inference variable {var} minted twice"
+        );
+        hole
+    }
+
+    /// Remember the trait bounds `var`'s slot declared, re-verified against
+    /// the solution in [`Self::finalize_infer_holes`].
+    pub(super) fn attach_infer_var_bounds(
+        &mut self,
+        var: TypeId,
+        param_name: String,
+        bound_names: Vec<String>,
+        span: Span,
+    ) {
+        if bound_names.is_empty() {
+            return;
+        }
+        self.infer_holes
+            .bounds
+            .entry(var)
+            .or_insert((param_name, bound_names, span));
+    }
+
+    /// Set the diagnostic `var` raises if it is never solved. The first one
+    /// wins, matching the solutions map's keep-the-first policy.
+    pub(super) fn attach_infer_var_diag(&mut self, var: TypeId, span: Span, message: String) {
+        self.infer_holes.diags.entry(var).or_insert(Blame {
+            span,
+            param: None,
+            owner: message,
+        });
+    }
+
+    /// [`Self::attach_infer_var_diag`] for a variable standing in for a named
+    /// parameter, so unsolved siblings of one use site coalesce.
+    pub(super) fn attach_infer_var_blame(
+        &mut self,
+        var: TypeId,
+        span: Span,
+        param: String,
+        owner: String,
+    ) {
+        self.infer_holes.diags.entry(var).or_insert(Blame {
+            span,
+            param: Some(param),
+            owner,
+        });
     }
 
     /// Defer a variant constructor whose type arguments did not resolve here.
@@ -120,10 +194,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.infer_holes.is_empty() {
             return false;
         }
-        self.tysys
-            .type_table
-            .borrow()
-            .contains_infer_hole(ty, HOLE_INDEX_BASE)
+        self.tysys.type_table.borrow().contains_infer_var(ty)
     }
 
     /// Whether a deferred inference hole may be solved against `expected`.
@@ -149,6 +220,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_params_all_in(expected, &scope)
     }
 
+    /// Record `answer` as the solution of `var` — the direct form of
+    /// [`Self::solve_infer_holes_against`], for a use site whose own solver
+    /// already determined the type argument. Keeps the first answer, matching
+    /// the unifier's `or_insert` policy, and refuses an answer that is itself
+    /// still a variable.
+    pub(super) fn solve_infer_var(&mut self, var: TypeId, answer: TypeId) {
+        if !self.is_usable_answer(answer) {
+            return;
+        }
+        if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
+            *slot = Some(answer);
+        }
+    }
+
+    /// Whether `answer` can stand as a variable's solution.
+    ///
+    /// Another variable cannot: a variable resolves to a type, not to a
+    /// deferral. Neither can `never`, `unknown` or `error` — each is a type a
+    /// check accepts *anywhere*, so taking one as the answer would fix the
+    /// variable to it and measure every later candidate against it. The
+    /// element type of `[panic(), 1]` is not `!`.
+    fn is_usable_answer(&self, answer: TypeId) -> bool {
+        answer != TypeTable::NEVER
+            && answer != TypeTable::UNKNOWN
+            && answer != TypeTable::ERROR
+            && !self.tysys.type_table.borrow().contains_infer_var(answer)
+    }
+
     /// Solve holes in `holey` by unifying against `expected`. A binding is taken
     /// only when hole-free — a hole must resolve to a concrete type, not another.
     pub(super) fn solve_infer_holes_against(&mut self, holey: TypeId, expected: TypeId) {
@@ -160,11 +259,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if bindings.is_empty() {
             return;
         }
-        let tt = self.tysys.type_table.borrow();
-        for (hole, concrete) in bindings {
-            if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole)
-                && !tt.contains_infer_hole(concrete, HOLE_INDEX_BASE)
-            {
+        let usable: Vec<(TypeId, TypeId)> = bindings
+            .into_iter()
+            .filter(|&(_, concrete)| self.is_usable_answer(concrete))
+            .collect();
+        for (hole, concrete) in usable {
+            if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole) {
                 *slot = Some(concrete);
             }
         }
@@ -183,25 +283,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .substitute_type_params(ty, &subst)
+            .substitute_infer_vars(ty, &subst)
     }
 
-    /// Build the `hole-index → replacement` map. With `pin_unsolved`, unsolved
-    /// holes map to `error` (used at finalize so nothing leaks); otherwise only
-    /// solved holes are included.
-    fn solved_hole_subst(&self, pin_unsolved: bool) -> IndexMap<u32, TypeId> {
+    /// Build the `variable → replacement` map. With `pin_unsolved`, unsolved
+    /// variables map to `error` (used at finalize so nothing leaks); otherwise
+    /// only solved ones are included.
+    fn solved_hole_subst(&self, pin_unsolved: bool) -> IndexMap<InferVarId, TypeId> {
         let tt = self.tysys.type_table.borrow();
         self.infer_holes
             .solutions
             .iter()
             .filter_map(|(hole, sol)| {
-                let index = match tt.get(*hole) {
-                    ResolvedType::TypeParam { index, .. } => *index,
-                    _ => return None,
+                let ResolvedType::InferVar(var) = tt.get(*hole) else {
+                    panic!("infer-hole table holds a non-variable type");
                 };
                 match sol {
-                    Some(concrete) => Some((index, *concrete)),
-                    None if pin_unsolved => Some((index, TypeTable::ERROR)),
+                    Some(concrete) => Some((*var, *concrete)),
+                    None if pin_unsolved => Some((*var, TypeTable::ERROR)),
                     None => None,
                 }
             })
@@ -216,19 +315,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let diags = std::mem::take(&mut self.infer_holes.diags);
-        let mut seen: IndexSet<(Span, String)> = IndexSet::default();
-        for (hole, (span, message)) in diags {
-            let unsolved = self
+        // Group by what the variables belong to, in mint order, so one use
+        // site's unsolved slots become one message naming them all.
+        let mut groups: IndexMap<(Span, String), Vec<Option<String>>> = IndexMap::default();
+        let mut owners: IndexMap<(Span, String), Blame> = IndexMap::default();
+        for (hole, blame) in diags {
+            if !self
                 .infer_holes
                 .solutions
                 .get(&hole)
-                .is_some_and(Option::is_none);
-            // Several holes minted for one call share a message; emit it once.
-            if unsolved && seen.insert((span, message.clone())) {
-                let _ = self
-                    .logger
-                    .error(TypeError::CannotInferType { message, span });
+                .is_some_and(Option::is_none)
+            {
+                continue;
             }
+            let key = (blame.span, blame.owner.clone());
+            groups
+                .entry(key.clone())
+                .or_default()
+                .push(blame.param.clone());
+            owners.entry(key).or_insert(blame);
+        }
+        for (key, params) in groups {
+            let named: Vec<&str> = params.iter().filter_map(Option::as_deref).collect();
+            let mut seen: IndexSet<&str> = IndexSet::default();
+            let unique: Vec<&str> = named.into_iter().filter(|p| seen.insert(p)).collect();
+            let blame = &owners[&key];
+            let _ = self.logger.error(TypeError::CannotInferType {
+                message: blame.message(&unique),
+                span: blame.span,
+            });
         }
         self.verify_solved_hole_bounds();
         let subst = self.solved_hole_subst(true);
@@ -274,7 +389,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Trait default-method bodies record into a separate synthetic semantics
     /// stashed in `default_method_semantics`, not the main `types`; sweep those
     /// too, or a hole minted in a default-method body leaks past reify.
-    fn sweep_recorded_facts(&mut self, subst: &IndexMap<u32, TypeId>) {
+    fn sweep_recorded_facts(&mut self, subst: &IndexMap<InferVarId, TypeId>) {
         if subst.is_empty() {
             return;
         }
@@ -286,72 +401,258 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Substitute `subst` through one `TypeAnnotations` fact bundle.
+    ///
+    /// Every fact kind that can hold a `TypeId` has one substitution below, so
+    /// the per-iteration overlays — which hold the same kinds — sweep by
+    /// calling the same ones rather than by a second hand-kept list that
+    /// falls behind this one.
     fn sweep_type_annotations(
         tt: &mut TypeTable,
         types: &mut super::sem::TypeAnnotations,
-        subst: &IndexMap<u32, TypeId>,
+        subst: &IndexMap<InferVarId, TypeId>,
     ) {
-        let sub = |tt: &mut TypeTable, t: TypeId| tt.substitute_type_params(t, subst);
-        let sub_vec = |tt: &mut TypeTable, v: &mut Vec<TypeId>| {
-            for t in v.iter_mut() {
-                *t = tt.substitute_type_params(*t, subst);
-            }
-        };
-
-        for t in types.expression_types.values_mut() {
-            *t = sub(tt, *t);
-        }
-        for t in types.local_types.values_mut() {
-            *t = sub(tt, *t);
-        }
-        for t in types.let_annotated_types.values_mut() {
-            *t = sub(tt, *t);
-        }
-        for t in types.fn_return_types.values_mut() {
-            *t = sub(tt, *t);
-        }
-        for v in types.call_param_types.values_mut() {
-            sub_vec(tt, v);
-        }
-        for v in types.fn_param_types.values_mut() {
-            sub_vec(tt, v);
-        }
-        for v in types.struct_field_types.values_mut() {
-            sub_vec(tt, v);
-        }
+        sub_map(tt, &mut types.expression_types, subst);
+        sub_map(tt, &mut types.local_types, subst);
+        sub_map(tt, &mut types.let_annotated_types, subst);
+        sub_map(tt, &mut types.fn_return_types, subst);
+        sub_map(tt, &mut types.function_task_returns, subst);
+        sub_vec_map(tt, &mut types.call_param_types, subst);
+        sub_vec_map(tt, &mut types.fn_param_types, subst);
+        sub_vec_map(tt, &mut types.struct_field_types, subst);
         for gi in types.generic_instantiations.values_mut() {
-            sub_vec(tt, &mut gi.type_args);
-            gi.instance_type = sub(tt, gi.instance_type);
-            // A struct-literal mangled name (`Wrapper<?hole>`) is frozen onto the
-            // `GenericInstantiation` before the hole is solved, and reify emits
-            // it verbatim as the struct name. Rebuild it from the swept instance
-            // type so `Wrapper<?hole>` becomes `Wrapper<i32>` (a no-op once the
-            // type args are already concrete).
-            if let Some(name) = gi.mangled_name.as_mut()
-                && let ResolvedType::GenericInstance {
-                    name: base,
-                    type_args,
-                    ..
-                } = tt.get(gi.instance_type).clone()
-            {
-                let arg_names: Vec<String> = type_args.iter().map(|&t| tt.type_name(t)).collect();
-                *name = crate::name::mangle_generic_name(&base, &arg_names);
-            }
+            sub_generic_instantiation(tt, gi, subst);
         }
         for md in types.method_dispatch.values_mut() {
-            md.return_type = sub(tt, md.return_type);
-            sub_vec(tt, &mut md.method_type_args);
-            if let Some(mi) = md.function_ref.monomorph_info.as_mut() {
-                sub_vec(tt, &mut mi.impl_type_args);
-                sub_vec(tt, &mut mi.method_type_args);
-            }
+            sub_method_dispatch(tt, md, subst);
         }
         for sd in types.static_method_dispatch.values_mut() {
-            sub_vec(tt, &mut sd.type_args);
-            if let Some(mi) = sd.function_ref.monomorph_info.as_mut() {
-                sub_vec(tt, &mut mi.impl_type_args);
-                sub_vec(tt, &mut mi.method_type_args);
+            sub_static_dispatch(tt, sd, subst);
+        }
+        for c in types.coercions.values_mut() {
+            c.target_type = sub(tt, c.target_type, subst);
+        }
+        for od in types
+            .operator_dispatch
+            .values_mut()
+            .chain(types.index_assign_dispatch.values_mut())
+        {
+            sub_operator_dispatch(tt, od, subst);
+        }
+        for f in types.for_of_iterator.values_mut() {
+            sub_for_of(tt, f, subst);
+        }
+        for cc in types.closure_captures.values_mut() {
+            sub_closure_captures(tt, cc, subst);
+        }
+        for h in types.handler_bindings.values_mut() {
+            h.handler_type = sub(tt, h.handler_type, subst);
+            for e in &mut h.effects {
+                sub_vec(tt, &mut e.trait_type_args, subst);
+            }
+        }
+        for i in types.impl_facts.values_mut() {
+            sub_vec(tt, &mut i.trait_type_args, subst);
+        }
+        for sc in types.sequence_coercions.values_mut() {
+            sub_sequence_coercion(tt, sc, subst);
+        }
+        for kv in types.key_value_coercions.values_mut() {
+            sub_key_value_coercion(tt, kv, subst);
+        }
+        for overlays in types.tuple_overlays.values_mut() {
+            for overlay in overlays.iter_mut().flatten() {
+                Self::sweep_element_overlay(tt, overlay, subst);
             }
         }
     }
+
+    /// [`Self::sweep_type_annotations`] for a per-iteration overlay, which
+    /// holds the same fact kinds for the nodes one unrolled tuple `for-of`
+    /// iteration rebinds.
+    fn sweep_element_overlay(
+        tt: &mut TypeTable,
+        overlay: &mut super::sem::types::ElementOverlay,
+        subst: &IndexMap<InferVarId, TypeId>,
+    ) {
+        sub_map(tt, &mut overlay.expression_types, subst);
+        sub_map(tt, &mut overlay.local_types, subst);
+        sub_map(tt, &mut overlay.let_annotated_types, subst);
+        sub_vec_map(tt, &mut overlay.call_param_types, subst);
+        for gi in overlay.generic_instantiations.values_mut() {
+            sub_generic_instantiation(tt, gi, subst);
+        }
+        for md in overlay.method_dispatch.values_mut() {
+            sub_method_dispatch(tt, md, subst);
+        }
+        for sd in overlay.static_method_dispatch.values_mut() {
+            sub_static_dispatch(tt, sd, subst);
+        }
+        for c in overlay.coercions.values_mut() {
+            c.target_type = sub(tt, c.target_type, subst);
+        }
+        for od in overlay
+            .operator_dispatch
+            .values_mut()
+            .chain(overlay.index_assign_dispatch.values_mut())
+        {
+            sub_operator_dispatch(tt, od, subst);
+        }
+        for f in overlay.for_of_iterator.values_mut() {
+            sub_for_of(tt, f, subst);
+        }
+        for cc in overlay.closure_captures.values_mut() {
+            sub_closure_captures(tt, cc, subst);
+        }
+        for sc in overlay.sequence_coercions.values_mut() {
+            sub_sequence_coercion(tt, sc, subst);
+        }
+        for kv in overlay.key_value_coercions.values_mut() {
+            sub_key_value_coercion(tt, kv, subst);
+        }
+    }
+}
+
+/// One substitution per fact kind that can hold a `TypeId`, shared by the
+/// top-level sweep and the per-iteration overlay sweep so neither can hold a
+/// list the other has outgrown.
+fn sub(tt: &mut TypeTable, t: TypeId, subst: &IndexMap<InferVarId, TypeId>) -> TypeId {
+    tt.substitute_infer_vars(t, subst)
+}
+
+fn sub_vec(tt: &mut TypeTable, v: &mut [TypeId], subst: &IndexMap<InferVarId, TypeId>) {
+    for t in v.iter_mut() {
+        *t = sub(tt, *t, subst);
+    }
+}
+
+fn sub_map(
+    tt: &mut TypeTable,
+    m: &mut IndexMap<crate::ast::AstId, TypeId>,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    for t in m.values_mut() {
+        *t = sub(tt, *t, subst);
+    }
+}
+
+fn sub_vec_map(
+    tt: &mut TypeTable,
+    m: &mut IndexMap<crate::ast::AstId, Vec<TypeId>>,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    for v in m.values_mut() {
+        sub_vec(tt, v, subst);
+    }
+}
+
+fn sub_monomorph(
+    tt: &mut TypeTable,
+    f: &mut crate::tir::FunctionRef,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    if let Some(mi) = f.monomorph_info.as_mut() {
+        sub_vec(tt, &mut mi.impl_type_args, subst);
+        sub_vec(tt, &mut mi.method_type_args, subst);
+    }
+}
+
+/// A struct-literal mangled name (`Wrapper<?0>`) is frozen before the variable
+/// is solved, and reify emits it verbatim, so it is rebuilt from the swept
+/// instance type.
+fn sub_generic_instantiation(
+    tt: &mut TypeTable,
+    gi: &mut super::sem::types::GenericInstantiation,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    sub_vec(tt, &mut gi.type_args, subst);
+    gi.instance_type = sub(tt, gi.instance_type, subst);
+    if let Some(name) = gi.mangled_name.as_mut()
+        && let ResolvedType::GenericInstance {
+            name: base,
+            type_args,
+            ..
+        } = tt.get(gi.instance_type).clone()
+    {
+        let arg_names: Vec<String> = type_args.iter().map(|&t| tt.type_name(t)).collect();
+        *name = crate::name::mangle_generic_name(&base, &arg_names);
+    }
+}
+
+fn sub_method_dispatch(
+    tt: &mut TypeTable,
+    md: &mut super::sem::types::MethodDispatch,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    md.return_type = sub(tt, md.return_type, subst);
+    sub_vec(tt, &mut md.method_type_args, subst);
+    sub_monomorph(tt, &mut md.function_ref, subst);
+}
+
+fn sub_static_dispatch(
+    tt: &mut TypeTable,
+    sd: &mut super::sem::types::StaticMethodDispatch,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    sub_vec(tt, &mut sd.type_args, subst);
+    sub_vec(tt, &mut sd.param_types, subst);
+    sub_monomorph(tt, &mut sd.function_ref, subst);
+}
+
+fn sub_operator_dispatch(
+    tt: &mut TypeTable,
+    od: &mut super::sem::types::OperatorDispatch,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    od.return_type = sub(tt, od.return_type, subst);
+    sub_monomorph(tt, &mut od.function_ref, subst);
+}
+
+fn sub_for_of(
+    tt: &mut TypeTable,
+    f: &mut super::sem::types::ForOfIteratorInfo,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    f.item_type = sub(tt, f.item_type, subst);
+    f.iter_type = sub(tt, f.iter_type, subst);
+    sub_monomorph(tt, &mut f.into_iter, subst);
+    sub_monomorph(tt, &mut f.next, subst);
+}
+
+fn sub_closure_captures(
+    tt: &mut TypeTable,
+    cc: &mut super::sem::types::ClosureCaptureInfo,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    for c in &mut cc.captures {
+        c.type_id = sub(tt, c.type_id, subst);
+    }
+    for m in &mut cc.mut_captures {
+        m.inner_type = sub(tt, m.inner_type, subst);
+        m.ref_type = sub(tt, m.ref_type, subst);
+    }
+}
+
+fn sub_sequence_coercion(
+    tt: &mut TypeTable,
+    sc: &mut super::sem::types::SequenceCoercionFacts,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    sc.builder_type = sub(tt, sc.builder_type, subst);
+    sc.element_type = sub(tt, sc.element_type, subst);
+    sc.output_type = sub(tt, sc.output_type, subst);
+    sc.newtype_cast_to = sc.newtype_cast_to.map(|t| sub(tt, t, subst));
+    sub_vec(tt, &mut sc.type_arg_ids, subst);
+    sc.remangle(tt);
+}
+
+fn sub_key_value_coercion(
+    tt: &mut TypeTable,
+    kv: &mut super::sem::types::KeyValueCoercionFacts,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    kv.builder_type = sub(tt, kv.builder_type, subst);
+    kv.value_type = sub(tt, kv.value_type, subst);
+    kv.target_type = sub(tt, kv.target_type, subst);
+    sub_vec(tt, &mut kv.type_arg_ids, subst);
+    kv.remangle(tt);
 }

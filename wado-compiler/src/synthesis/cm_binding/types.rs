@@ -714,6 +714,7 @@ fn check_cm_boundary_representable_inner(
             | R::Reactive(_)
             | R::TypeParam { .. }
             | R::TypePack { .. }
+            | R::InferVar(_)
             | R::AssocTypeProjection { .. }
             | R::BuiltinArray(_)
             | R::Unknown

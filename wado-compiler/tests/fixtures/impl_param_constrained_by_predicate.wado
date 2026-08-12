@@ -1,0 +1,19 @@
+// The other side of `error_impl_unconstrained_type_param`: a predicate
+// determines a parameter the target does not name. `S` fixes `FieldTypes`,
+// which fixes `..F` — the shape the prelude's derived `Inspect` is written in.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: String,
+}
+
+export fn run() with Stdout {
+    println(`${Point { x: 1, y: "a" }:?}`);
+}
+
+__DATA__
+{
+    "stdout": "Point { x: 1, y: \"a\" }\n"
+}

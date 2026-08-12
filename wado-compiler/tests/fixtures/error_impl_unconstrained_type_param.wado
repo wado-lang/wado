@@ -1,0 +1,22 @@
+// An impl type parameter the target does not determine has no value at a call
+// site: nothing on the receiver says what `A` is. Substitution filled the
+// impl's slots positionally from the receiver alone, so `T` — declared after
+// `A` — was left behind and reached codegen unsubstituted. Rust rejects the
+// same shape (E0207).
+
+trait Dup {
+    fn dup(&self) -> Self;
+}
+
+impl<A: Eq, T: Eq> Dup for T {
+    fn dup(&self) -> Self {
+        return *self;
+    }
+}
+
+export fn run() {
+    assert 5.dup() == 5;
+}
+
+__DATA__
+{"compile_error": "the type parameter `A` is not constrained by the impl target or the trait reference"}

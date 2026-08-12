@@ -1,0 +1,15 @@
+// A struct slot that a field mentions but no field value pins is an inference
+// failure, not a phantom. Handing back the declaration's own parameter instead
+// built a rigid `Holder<T>` that reached WIR build and trapped it.
+
+struct Holder<T> {
+    items: List<T>,
+}
+
+export fn run() {
+    let h = Holder { items: 5 };
+    assert h.items.len() == 0;
+}
+
+__DATA__
+{"compile_error": "cannot infer type parameter `T` of struct `Holder`"}

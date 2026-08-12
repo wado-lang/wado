@@ -1,0 +1,24 @@
+// The qualified spelling of `container_literal_generic_param`. A static
+// method's parameter types come back in its declaration's own frame, so the
+// call site has the same reason to instantiate them: reporting no slots left
+// the literal measured against a rigid `T`.
+
+use { println, Stdout } from "core:cli";
+
+struct Maker {}
+
+impl Maker {
+    fn count<T>(xs: List<T>) -> i32 {
+        return xs.len();
+    }
+}
+
+export fn run() with Stdout {
+    println(`${Maker::count([1, 2, 3])}`);
+    println(`${Maker::count(["a", "b"])}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n2\n"
+}

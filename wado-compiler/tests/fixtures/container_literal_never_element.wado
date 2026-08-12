@@ -1,0 +1,18 @@
+// `!` is assignable anywhere, so taking it as a variable's answer would fix
+// the element type to it and measure every later element against `!`. A
+// diverging element decides nothing; the `1` does.
+
+use { println, Stdout } from "core:cli";
+
+fn count<T>(xs: List<T>) -> i32 {
+    return xs.len();
+}
+
+export fn run() with Stdout {
+    println(`${count([1, 2])}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n"
+}

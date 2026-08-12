@@ -1,0 +1,19 @@
+// Same as `error_let_type_param_from_concrete`, with the opaque parameter
+// nested inside the annotation: `Box<T>` is no more instantiable by a
+// `Box<i32>` than a bare `T` is by an `i32`.
+
+struct Box<T> {
+    value: T,
+}
+
+fn f<T: Eq>(v: T) -> bool {
+    let b: Box<T> = Box { value: 5 };
+    return b.value == v;
+}
+
+export fn run() {
+    assert f("a") == false;
+}
+
+__DATA__
+{ "compile_error": "type mismatch" }

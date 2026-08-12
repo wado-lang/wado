@@ -516,6 +516,7 @@ impl TypeSystem {
                 format!("fn({}) -> {}", param_strs.join(", "), ret_str)
             }
             ResolvedType::TypeParam { name, .. } => name,
+            ResolvedType::InferVar(var) => var.to_string(),
             ResolvedType::Enum { name, .. }
             | ResolvedType::Resource { name, .. }
             | ResolvedType::Variant { name, .. }

@@ -1161,6 +1161,7 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Flags { .. }
         | ResolvedType::Unknown
         | ResolvedType::Error => false,
+        ResolvedType::InferVar(var) => panic!("{var} reached alias analysis"),
     }
 }
 

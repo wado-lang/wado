@@ -1,0 +1,29 @@
+// A container literal passed to a generic parameter. The call site must
+// instantiate the callee's slots before an argument is resolved against one:
+// a rigid `T` is the callee's own and opaque here, so `List<T>` rejected every
+// element as heterogeneous, and `List<i32>` never matched `List<T>` afterwards.
+// The turbofish spelling reached WIR build with the slot unsubstituted.
+
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+fn count<T>(xs: List<T>) -> i32 {
+    return xs.len();
+}
+
+fn values<V>(m: TreeMap<String, V>) -> i32 {
+    return m.len();
+}
+
+export fn run() with Stdout {
+    println(`${count([1, 2, 3])}`);
+    println(`${count::<i32>([4, 5])}`);
+    println(`${count(["a", "b"])}`);
+    println(`${values({ a: 1, b: 2 })}`);
+    println(`${values({ x: "p", y: "q", z: "r" })}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n2\n2\n2\n3\n"
+}

@@ -1734,6 +1734,7 @@ impl TypeRefCtx {
             ResolvedType::Function { .. } => false,
             ResolvedType::TypeParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::InferVar(_)
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => true,

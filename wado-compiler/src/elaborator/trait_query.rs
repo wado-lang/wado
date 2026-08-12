@@ -964,6 +964,7 @@ impl TypeSystem {
             | ResolvedType::Error
             | ResolvedType::TypeParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::InferVar(_)
             | ResolvedType::AssocTypeProjection { .. } => false,
         }
     }
@@ -1710,18 +1711,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (trait_name, (sig, trait_assoc_types)) = resolved?;
 
         let answers = self.trait_assoc_answers(&trait_name, &trait_assoc_types, self_type_id);
+        // Slot 0 is `Self`. The trait's own parameters follow, and a bound
+        // names none of them positionally (`T: Add<Output = T>`), so they take
+        // their declared defaults — `trait Add<Rhs = Self>` makes `add`'s
+        // parameter `&Self`, not a rigid `&Rhs` no argument could satisfy.
+        let mut slots = IndexMap::from_iter([(0, self_type_id)]);
+        if let Some(trait_params) = self.find_trait_decl_type_params(&trait_name) {
+            let defaults: Vec<(u32, ast::Type)> = trait_params
+                .iter()
+                .filter(|p| p.is_real_type_param())
+                .enumerate()
+                .filter_map(|(i, p)| p.default.clone().map(|d| (1 + i as u32, d)))
+                .collect();
+            for (slot, default_ty) in defaults {
+                let resolved = self.with_self_type(self_type_id, |s| s.resolve_type(&default_ty));
+                slots.insert(slot, resolved);
+            }
+        }
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
-            &IndexMap::from_iter([(0, self_type_id)]),
+            &slots,
             &crate::tir::SlotProjections::from_iter([(0, answers)]),
         );
         let first_value_param = sig.first_value_param().min(instantiated.param_types.len());
-        let declaring_slots = (sig.declaring_slot_count as usize).min(sig.decl.type_params.len());
 
         Some((
             trait_name,
             MethodInfo {
-                impl_offset: Some(sig.declaring_slot_count),
                 method_ast_id: Some(sig.ast_id),
                 return_type: instantiated.return_type,
                 self_kind: sig.self_kind,
@@ -1730,10 +1746,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 owner: MethodOwner::Receiver,
                 cm_name: None,
                 is_ref_impl: false,
-                method_type_param_ids: sig.decl.type_params[declaring_slots..]
-                    .iter()
-                    .map(|(_, id)| *id)
-                    .collect(),
+                method_type_param_ids: sig.own_type_param_ids(),
+                method_own_params: sig.own_params.clone(),
                 impl_module: None,
                 from_concrete_impl: false,
                 param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
@@ -2369,7 +2383,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .intern(ResolvedType::Ref(base_type_id));
         let method_info = MethodInfo {
-            impl_offset: None,
             method_ast_id: None,
             return_type,
             self_kind: ast::SelfKind::Ref,
@@ -2381,6 +2394,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             cm_name: None,
             is_ref_impl: false,
             method_type_param_ids: vec![],
+            method_own_params: vec![],
             impl_module: None,
             from_concrete_impl: false,
             consumes_self: false,

@@ -576,59 +576,64 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         saved: &super::scope::TraitContext,
         impl_declared_params: &[ast::GenericParam],
     ) -> Vec<crate::tir::TirTypeParam> {
-        let Some(&(index, _)) = saved.type_params.get(&named.name) else {
+        let Some(&(target_index, _)) = saved.type_params.get(&named.name) else {
             return Vec::new();
         };
-        let bounds = self.saved_param_bounds(&named.name);
-        let mut params = vec![self.bind_target_param(&named.name, index, false, bounds, None)];
-        params.extend(self.bind_projected_packs(&named.name, index, saved, impl_declared_params));
+        // Declaration order, not "receiver then projections": the impl's type
+        // arguments are consumed by position, so a parameter written before
+        // the receiver must be bound before it.
+        let projected = self.blanket_projections(&named.name, impl_declared_params);
+        let mut params = Vec::new();
+        for declared in impl_declared_params {
+            if !declared.is_real_type_param() {
+                continue;
+            }
+            let Some(&(index, _)) = saved.type_params.get(&declared.name) else {
+                continue;
+            };
+            let bounds = self.saved_param_bounds(&declared.name);
+            if declared.name == named.name {
+                params.push(self.bind_target_param(&declared.name, index, false, bounds, None));
+                continue;
+            }
+            // A parameter the receiver's bound determines. One neither the
+            // target nor a bound names is rejected at the impl, so anything
+            // left here is projectable.
+            if let Some(assoc_name) = projected.get(&declared.name) {
+                params.push(self.bind_target_param(
+                    &declared.name,
+                    index,
+                    declared.is_pack,
+                    bounds,
+                    Some((target_index, assoc_name.clone())),
+                ));
+            }
+        }
         params
     }
 
-    /// A pack `F` bound only through `T`'s associated type
-    /// (`impl<T: Trait<Assoc = [..F]>, ..F: …>`) is not caller-supplied;
-    /// monomorphization projects it from `T::Assoc`.
-    fn bind_projected_packs(
-        &mut self,
+    /// Which associated type of the receiver's bound determines each of the
+    /// impl's other parameters — `..F` from `Assoc = [..F]`, `A` from
+    /// `Assoc = A`. Monomorphization projects them from the concrete receiver.
+    fn blanket_projections(
+        &self,
         target_name: &str,
-        target_index: u32,
-        saved: &super::scope::TraitContext,
         impl_declared_params: &[ast::GenericParam],
-    ) -> Vec<crate::tir::TirTypeParam> {
-        let projections: Vec<(String, String)> = impl_declared_params
+    ) -> crate::hashmap::IndexMap<String, String> {
+        let mut out = crate::hashmap::IndexMap::default();
+        for assoc in impl_declared_params
             .iter()
-            .find(|p| p.name == target_name)
-            .into_iter()
-            .flat_map(|t_param| &t_param.bounds)
+            .filter(|p| p.name == target_name)
+            .flat_map(|p| &p.bounds)
             .flat_map(|bound| &bound.assoc_types)
-            .filter_map(|assoc| match &assoc.ty {
-                ast::Type::Tuple(elems) => Some((elems, assoc.name.clone())),
-                _ => None,
-            })
-            .flat_map(|(elems, assoc_name)| {
-                elems.iter().filter_map(move |elem| match elem {
-                    ast::Type::TypePackSpread(f_name, _) => {
-                        Some((f_name.clone(), assoc_name.clone()))
-                    }
-                    _ => None,
-                })
-            })
-            .collect();
-        let mut params = Vec::new();
-        for (pack_name, assoc_name) in projections {
-            let Some(&(index, _)) = saved.type_params.get(&pack_name) else {
-                continue;
-            };
-            let bounds = self.saved_param_bounds(&pack_name);
-            params.push(self.bind_target_param(
-                &pack_name,
-                index,
-                true,
-                bounds,
-                Some((target_index, assoc_name)),
-            ));
+        {
+            let mut named = Vec::new();
+            assoc.ty.mentioned_names(&mut named);
+            for n in named {
+                out.entry(n).or_insert_with(|| assoc.name.clone());
+            }
         }
-        params
+        out
     }
 
     /// `impl<T: Bound> Trait for &T` / `&mut T` — the inner type is a
@@ -756,6 +761,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         if let Some(trait_type) = &impl_block.trait_type {
             scope.check_impl_trait_resolves(impl_block, trait_type);
         }
+        scope.check_impl_params_constrained(impl_block);
 
         let mut associated_types = crate::hashmap::IndexMap::default();
         for binding in &impl_block.associated_types {
@@ -792,6 +798,59 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 trait_decl,
             },
         );
+    }
+
+    /// Require that the impl's target and trait reference between them name
+    /// every type parameter it declares.
+    ///
+    /// A use site determines them from the receiver and the trait arguments
+    /// and from nothing else, so one the two do not mention has no value to be
+    /// given. Rust rejects the same shape (E0207).
+    ///
+    /// A *predicate* determines one too: `impl<S: ReflectStruct<FieldTypes =
+    /// [..F]>, ..F> Inspect for S` fixes `F` once `S` is known, so the
+    /// arguments a bound writes count as mentions. Its subject does not — `A`
+    /// in `A: Eq` is what the bound constrains, not what constrains `A`.
+    ///
+    /// A parameter whose name is really a concrete type (`impl<i32, T>`) is not
+    /// one, and an effect parameter is bound by the handler rather than the
+    /// target.
+    fn check_impl_params_constrained(&mut self, impl_block: &ast::ImplBlock) {
+        let mut named: Vec<String> = Vec::new();
+        impl_block.ty.mentioned_names(&mut named);
+        if let Some(trait_type) = &impl_block.trait_type {
+            trait_type.mentioned_names(&mut named);
+        }
+        for binding in &impl_block.associated_types {
+            binding.ty.mentioned_names(&mut named);
+        }
+        for param in &impl_block.type_params {
+            for bound in &param.bounds {
+                for assoc in &bound.assoc_types {
+                    assoc.ty.mentioned_names(&mut named);
+                }
+                if let Some(sig) = &bound.fn_signature {
+                    for p in &sig.params {
+                        p.mentioned_names(&mut named);
+                    }
+                    sig.return_type.mentioned_names(&mut named);
+                }
+            }
+        }
+        for param in &impl_block.type_params {
+            if param.is_effect
+                || named.iter().any(|n| n == &param.name)
+                || self
+                    .tysys
+                    .is_known_type_name_in(&self.current_module_source, &param.name)
+            {
+                continue;
+            }
+            let _ = self.emit(TypeError::UnconstrainedImplTypeParam {
+                param_name: param.name.clone(),
+                span: impl_block.span,
+            });
+        }
     }
 
     /// Require that the name an `impl` implements is declared.
@@ -912,12 +971,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             }
             // Record only "real" trait bounds — `fn`/`fn mut` bounds are
             // already realised in the parameter's type itself.
-            let real_bounds: Vec<ast::TraitBound> = param
-                .bounds
-                .iter()
-                .filter(|b| b.fn_signature.is_none())
-                .cloned()
-                .collect();
+            let real_bounds = param.real_bounds();
             if !real_bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx
@@ -936,18 +990,67 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     }
 }
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Substitute a signature's own defaulted type parameters into `ty`.
+    ///
+    /// A parameter without a default is left alone: it is opaque, and the
+    /// caller chooses it.
+    fn apply_type_param_defaults(
+        &mut self,
+        type_params: &[ast::GenericParam],
+        ty: TypeId,
+    ) -> TypeId {
+        let defaulted: Vec<(String, ast::Type)> = type_params
+            .iter()
+            .filter(|p| p.is_real_type_param())
+            .filter_map(|p| p.default.as_ref().map(|d| (p.name.clone(), d.clone())))
+            .collect();
+        if defaulted.is_empty() {
+            return ty;
+        }
+        let mut subst = crate::hashmap::IndexMap::default();
+        for (name, default_ty) in defaulted {
+            // The index the declaration gave the parameter, not its position
+            // among the signature's own: a method's slots follow the impl's.
+            let &(index, _) = self
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .get(&name)
+                .expect("a signature's own type parameters are in scope for its defaults");
+            let resolved = self.resolve_type(&default_ty);
+            subst.insert(index, resolved);
+        }
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(ty, &subst)
+    }
+
     /// Resolve one method parameter's type. A receiver comes from the impl
     /// target — the parser desugars `self` / `&self` / `&mut self` into
     /// `Self`-based annotations — and anything else from its annotation.
-    fn resolve_method_param_type(&mut self, param: &ast::Param, impl_type: &Type) -> TypeId {
+    fn resolve_method_param_type(&mut self, param: &ast::Param) -> TypeId {
+        // The receiver takes the `Self` the impl frame already fixed, not a
+        // re-resolution of the written target. By the time a parameter is
+        // typed the method's own type parameters are in scope, and they are
+        // keyed by name: `fn map<U>` inside `impl<I, U> Iterator for
+        // IterMap<I, U>` shadows the impl's `U`, so re-resolving `IterMap<I,
+        // U>` here would answer with the method's slot and give the receiver a
+        // type no caller can produce.
+        let self_type = || {
+            self.annotate_ctx
+                .trait_ctx
+                .self_type
+                .expect("impl frame entered before typing a receiver")
+        };
         match param.self_kind {
-            ast::SelfKind::Value => self.resolve_type(impl_type),
+            ast::SelfKind::Value => self_type(),
             ast::SelfKind::Ref => {
-                let inner = self.resolve_type(impl_type);
+                let inner = self_type();
                 self.tysys.type_table.borrow_mut().make_ref(inner)
             }
             ast::SelfKind::MutRef => {
-                let inner = self.resolve_type(impl_type);
+                let inner = self_type();
                 self.tysys.type_table.borrow_mut().make_mut_ref(inner)
             }
             ast::SelfKind::None => self.resolve_type(&param.ty),
@@ -1083,6 +1186,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                         .collect(),
                     declaring_slot_count,
+                    own_params: super::sig::own_params_of(&method.type_params),
                     cm_name: method
                         .attrs
                         .iter()
@@ -1319,10 +1423,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .trait_ctx
                 .install_effect_params(&method.type_params);
             method_scope.register_generic_params(&method.type_params, next_slot);
+            // Only slot-consuming parameters. A `fn`-bound one registers as
+            // its bound's function type, so admitting it here put a
+            // `Function` where a slot belongs — and made a trait's signature
+            // count its parameters differently from an impl's, which counts
+            // them by the same rule below.
             let method_slots: Vec<(String, TypeId)> = method
                 .type_params
                 .iter()
-                .filter(|p| !p.is_effect)
+                .filter(|p| p.is_real_type_param())
                 .filter_map(|tp| {
                     method_scope
                         .annotate_ctx
@@ -1372,6 +1481,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             })
                             .collect(),
                         declaring_slot_count: decl_slots.len() as u32,
+                        own_params: super::sig::own_params_of(&method.type_params),
                         cm_name: method
                             .attrs
                             .iter()
@@ -1563,6 +1673,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self_kind,
                     params: sig_params,
                     declaring_slot_count: decl_slots.len() as u32,
+                    // An `interface` / `resource` operation declares no type
+                    // parameters of its own.
+                    own_params: Vec::new(),
                     cm_name: cm_name.clone(),
                     is_async: method.is_async,
                 },
@@ -1942,8 +2055,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span: default_ast.span(),
                     });
                 }
-                let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
-                scope.typecheck(resolved, type_id, default_ast.span());
+                // A default is checked against the parameter type with the
+                // signature's own type-parameter defaults applied. `fn
+                // event<T = NoFields>(fields: T = NoFields {})` promises the
+                // value only for the `T` the caller gets by default; against a
+                // bare `T` — opaque, standing for whatever a caller picks —
+                // nothing concrete could ever satisfy it.
+                let expected = scope.apply_type_param_defaults(&func.type_params, type_id);
+                let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(expected));
+                scope.typecheck(resolved, expected, default_ast.span());
             }
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             scope.record_local_symbol(
@@ -2313,7 +2433,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => func
                 .params
                 .iter()
-                .map(|param| scope.resolve_method_param_type(param, impl_type))
+                .map(|param| scope.resolve_method_param_type(param))
                 .collect(),
         };
 
@@ -2337,9 +2457,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Walk the default for its side-effect fact recording; the
             // resolved TIR is discarded (reify re-emits it from the AST).
+            // Checked against the parameter type with the method's own
+            // type-parameter defaults applied, as the free-function path does.
             if let Some(default_ast) = &param.default {
-                let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
-                scope.typecheck(resolved, type_id, default_ast.span());
+                let expected = scope.apply_type_param_defaults(&func.type_params, type_id);
+                let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(expected));
+                scope.typecheck(resolved, expected, default_ast.span());
             }
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             scope.record_local_symbol(

@@ -1,0 +1,37 @@
+// A blanket impl may declare a determined parameter before its receiver. The
+// impl's type arguments were built as "[receiver] ++ projections", which is
+// only in declaration order when the receiver is written first, so `T` — the
+// target, at slot 1 — was left unsubstituted and reached codegen.
+
+use { println, Stdout } from "core:cli";
+
+trait Holder {
+    type Item;
+}
+
+trait Dup {
+    fn dup(&self) -> Self;
+}
+
+impl<A, T: Holder<Item = A>> Dup for T {
+    fn dup(&self) -> Self {
+        return *self;
+    }
+}
+
+struct Cell {}
+
+impl Holder for Cell {
+    type Item = i32;
+}
+
+export fn run() with Stdout {
+    let c = Cell {};
+    let d = c.dup();
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}
