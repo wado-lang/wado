@@ -430,15 +430,15 @@ Counted end to end on `benchmark/sqlite_parse` at `-O2`, per phase, before
 deciding anything else about the gates. The material is what is scarce; no gate
 is the binding constraint.
 
-| | Early | InLoop | Terminal |
-| --- | ---: | ---: | ---: |
-| exprs seen | 81 067 | 2 126 679 | 549 525 |
-| pure-arith candidates | 10 393 | 96 205 | 34 642 |
-| … with a value at all | 698 | 9 582 | 2 633 |
-| admitted (reemittable, non-duplicating) | 24 | 8 570 | 2 417 |
-| distinct representatives | 17 | 8 399 | 2 375 |
-| **materialised into an `_av`** | **0** | **0** | **0** |
-| redirected inline | 17 | 375 | 682 |
+|                                         |  Early |    InLoop | Terminal |
+| --------------------------------------- | -----: | --------: | -------: |
+| exprs seen                              | 81 067 | 2 126 679 |  549 525 |
+| pure-arith candidates                   | 10 393 |    96 205 |   34 642 |
+| … with a value at all                   |    698 |     9 582 |    2 633 |
+| admitted (reemittable, non-duplicating) |     24 |     8 570 |    2 417 |
+| distinct representatives                |     17 |     8 399 |    2 375 |
+| **materialised into an `_av`**          |  **0** |     **0** |    **0** |
+| redirected inline                       |     17 |       375 |      682 |
 
 Three readings, in order of how much they cost:
 
