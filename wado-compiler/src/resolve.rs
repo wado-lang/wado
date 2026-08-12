@@ -479,6 +479,19 @@ mod tests {
     /// Resolve two modules together and hand back the table, so a test can ask
     /// what a name means from either vantage.
     fn resolve(entry: &str, other: &str) -> (Resolutions, ModuleSource, ModuleSource) {
+        let (r, e, o, _) = resolve_with_ast(entry, other);
+        (r, e, o)
+    }
+
+    fn resolve_with_ast(
+        entry: &str,
+        other: &str,
+    ) -> (
+        Resolutions,
+        ModuleSource,
+        ModuleSource,
+        IndexMap<ModuleSource, Module>,
+    ) {
         // One interner: `ModuleSource` equality is pointer identity, so two
         // interners would mint values that never compare equal and every import
         // would resolve to a module the map does not hold.
@@ -513,7 +526,41 @@ mod tests {
             Resolutions::build(&modules, &symbols, defs),
             entry_source,
             other_source,
+            modules,
         )
+    }
+
+    /// Every shape a reference can take, so a walk that stops short of one is
+    /// visible here rather than as a consumer falling back to a spelling.
+    fn reference_sites(ty: &Type, out: &mut Vec<AstId>) {
+        match ty {
+            Type::Named(n) => out.push(n.id),
+            Type::Generic(g) => {
+                out.push(g.id);
+                for a in &g.args {
+                    reference_sites(a, out);
+                }
+            }
+            Type::NamespacedGeneric(ns) => {
+                out.push(ns.id);
+                for a in &ns.args {
+                    reference_sites(a, out);
+                }
+            }
+            Type::Reference(inner) | Type::MutReference(inner) => reference_sites(inner, out),
+            Type::Tuple(elems) => {
+                for e in elems {
+                    reference_sites(e, out);
+                }
+            }
+            Type::Function(f) => {
+                for pty in &f.params {
+                    reference_sites(pty, out);
+                }
+                reference_sites(&f.return_type, out);
+            }
+            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => {}
+        }
     }
 
     /// The whole class this design exists to end: one spelling, two modules,
@@ -543,6 +590,83 @@ mod tests {
         assert_eq!(r.defs().name(aliased), "Widget");
         // The alias is the only spelling in scope; the original is not.
         assert!(r.declaration_named(&entry, "Widget").is_none());
+    }
+
+    /// The table answers only for the sites the walk records, so its coverage
+    /// is part of the design: a site the walk misses reads as "no answer", and
+    /// every consumer of that site falls back to what it can derive from a
+    /// spelling. Each shape a reference can take is exercised here.
+    #[test]
+    fn the_walk_reaches_every_reference_site() {
+        let source = r#"
+            pub trait Greet { fn hello(&self) -> i32; }
+            pub trait Louder: Greet { fn shout(&self) -> i32; }
+            pub struct Widget { a: i32 }
+            pub struct Pair<A, B> { a: A, b: B }
+
+            pub struct Holder<T: Greet> {
+                plain: i32,
+                generic: Pair<i32, T>,
+                by_ref: &Widget,
+                nested: Pair<Widget, Pair<i32, Widget>>,
+                tuple: [Widget, i32],
+                func: fn(Widget) -> i32,
+            }
+
+            pub fn takes<U: Louder>(u: U) -> Widget {
+                return Widget { a: 1 };
+            }
+
+            impl Greet for Widget {
+                fn hello(&self) -> i32 { return 1; }
+            }
+        "#;
+        let (r, entry, _, modules) = resolve_with_ast(source, "pub struct Other { b: i32 }");
+        let module = modules.get(&entry).expect("the entry module was walked");
+
+        let mut sites: Vec<AstId> = Vec::new();
+        let mut bounds: Vec<AstId> = Vec::new();
+        let walk_params = |params: &[GenericParam], bounds: &mut Vec<AstId>| {
+            for p in params {
+                bounds.extend(p.bounds.iter().map(|b| b.id));
+            }
+        };
+        for item in &module.items {
+            match item {
+                Item::Struct(s) => {
+                    walk_params(&s.type_params, &mut bounds);
+                    for f in &s.fields {
+                        reference_sites(&f.ty, &mut sites);
+                    }
+                }
+                Item::Trait(t) => bounds.extend(t.supertraits.iter().map(|b| b.id)),
+                Item::Function(f) => {
+                    walk_params(&f.type_params, &mut bounds);
+                    for prm in &f.params {
+                        reference_sites(&prm.ty, &mut sites);
+                    }
+                    if let Some(ret) = &f.return_type {
+                        reference_sites(ret, &mut sites);
+                    }
+                }
+                Item::Impl(i) => {
+                    reference_sites(&i.ty, &mut sites);
+                    if let Some(tr) = &i.trait_type {
+                        reference_sites(tr, &mut sites);
+                    }
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            sites.len() > 12 && bounds.len() >= 3,
+            "expected a rich site set, got {} types and {} bounds",
+            sites.len(),
+            bounds.len()
+        );
+        for site in sites.into_iter().chain(bounds) {
+            assert!(r.get(site).is_some(), "the walk missed the site {site:?}");
+        }
     }
 
     /// A name reaching no declaration is its own answer, never a key made up
