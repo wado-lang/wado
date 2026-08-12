@@ -721,15 +721,6 @@ fn run_optimization_passes(
                 }
             }
         }
-        // No in-loop freeze. One was built and measured: it cost 11.3 % of the
-        // loop and promoted nothing, because materialising needs a value used by
-        // two slots and in-loop values are single-use 98 % of the time. What
-        // would justify one — `licm` hoisting a loop-invariant field load — is
-        // capped at 40 - 109 loads per benchmark today, and the reason is not
-        // here: `collect_loop_heap_effects` invalidates a call's receiver
-        // whether or not the callee can mutate it. See "The anchor rule" in the
-        // WEP. `FreezePhase::InLoop` stays, since that is the rule a revived one
-        // has to obey.
         gated!("nir/licm", apply_licm);
         gated!("nir/tmpl_hoist", hoist_template_buffers);
         profiler.span_end(&format!("nir/iteration {}", i + 1));

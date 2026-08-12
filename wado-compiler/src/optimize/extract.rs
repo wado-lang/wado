@@ -154,10 +154,8 @@ fn materialise_point(
         }
     }
     let common = depth.checked_sub(1)?;
-    // A use nested inside a loop the chosen point sits outside of would read,
-    // on every iteration, a value the `let` computed once. The value may name a
-    // local the loop reassigns, so there is no shared point — refuse rather
-    // than hoist. Uses all within the same loop keep their point inside it.
+    // A point outside a loop enclosing a use is evaluated once for reads that
+    // happen per iteration.
     if paths
         .iter()
         .any(|p| p[common + 1..].iter().any(|&(b, _)| is_loop_body(e, b)))
@@ -452,22 +450,15 @@ struct FreezeCtx<'a> {
     include_fields: bool,
 }
 
-/// Where a freeze sits relative to the passes that relocate operands.
-///
-/// The anchor rule (WEP: NIR Optimizer Architecture) turns on this: a frozen
-/// operand may name a local only when that local's defining statement travels
-/// with the operand. A `let _av = …` does; a parameter's entry def does not. So
-/// a freeze with relocation still to come anchors a local-naming value in an
-/// `_av`, while the terminal freezes may name a source local directly — nothing
-/// moves them afterwards.
+/// Where a freeze sits relative to the passes that relocate operands, which is
+/// what the anchor rule turns on (WEP: NIR Optimizer Architecture).
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum FreezePhase {
-    /// Before the fixed-point loop, on each function's clean graph. Plants
-    /// context-free values only.
+    /// Before the loop. Plants context-free values only.
     Early,
-    /// Inside the fixed-point loop, so `inline` and `sroa` still follow.
+    /// Inside the loop, so `inline` and `sroa` still follow.
     InLoop,
-    /// After the loop. No pass relocates an operand from here on.
+    /// After the loop. Nothing relocates an operand from here on.
     Terminal,
 }
 
@@ -577,10 +568,9 @@ fn classify_candidate(
     Some((id, rep))
 }
 
-/// Pin a shared `FieldAccess` in a `let _av` dominating its uses and rewrite
-/// each use to a skeleton `Local _av` read. A `FieldAccess` is never
-/// inline-reemittable, so this is its only promotion path, and only sharing
-/// pays for it — one use would trade a `struct.get` for a store and a read.
+/// Pin a shared `FieldAccess` in a `let _av` dominating its uses. A
+/// `FieldAccess` is never inline-reemittable, so this is its only promotion
+/// path, and one use would trade a `struct.get` for a store and a read.
 fn apply_field_materialise(
     engine: &mut Engine,
     rep: ValueId,
@@ -713,13 +703,9 @@ fn worth_materialising(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> 
 /// [`apply_field_materialise`] uses. Every other case redirects each use to the
 /// pooled representative inline.
 ///
-/// Leaf availability bounds none of the other hazards: it says where the value
-/// *can* be computed, not that the program wanted it computed there, nor that
-/// computing it once is cheaper. So a trapping value is refused (hoisting
-/// `a / b` out of `if b != 0` traps a program that never divides by zero), the
-/// point is the nearest common dominator rather than function entry, keeping a
-/// branch-only value out of every call, and a value too cheap to share stays
-/// re-emitted ([`worth_materialising`]).
+/// Availability says where the value *can* be computed, not that it should be:
+/// a trapping value is refused, the point is the nearest common dominator
+/// rather than entry, and a value too cheap to share stays re-emitted.
 fn apply_value_freeze(
     engine: &mut Engine,
     rep: ValueId,
@@ -740,19 +726,9 @@ fn apply_value_freeze(
                 .iter()
                 .all(|&l| leaf_available_at(engine, l, s, param_set))
         });
-    // The anchor rule. With relocation still to come, a value naming a source
-    // local may not be planted as-is: `inline` lands the operand where the same
-    // index is assigned per call, and `canonical_local`'s one id per index then
-    // has two different values sharing it. Anchoring it in an `_av` — a
-    // single-assignment `let` in this body, which travels with any copy of the
-    // operand — is the only sound form, so refuse when that is not available.
-    // The terminal freezes need none of this: nothing moves an operand after
-    // them, which is what makes naming a source local safe there.
+    // The anchor rule: with relocation still to come, a value naming a source
+    // local is only sound anchored in an `_av`.
     let must_anchor = phase == FreezePhase::InLoop && !leaves.is_empty();
-    // Anchoring is how such a value is frozen, not a reason to freeze one:
-    // materialising a single-use value trades its computation for a `local.set`
-    // plus a `local.get` of the same thing. So the sharing gate still decides,
-    // and a value that must be anchored but does not clear it stays put.
     let materialize = shareable && anchorable;
     if must_anchor && !materialize {
         return false;
@@ -1031,12 +1007,8 @@ mod tests {
         assert_eq!(s, outer_s);
     }
 
-    /// A use inside a loop and one outside have no shared materialisation
-    /// point: the common dominator is outside the loop, and a `let` placed
-    /// there is evaluated once while the in-loop use reads it every iteration.
-    /// The value may name a local the loop reassigns, so refuse rather than
-    /// hoist. (`String::substr_bytes` under "Measured dead ends" is this shape
-    /// arriving via `inline`.)
+    /// A use inside a loop and one outside have no shared point: a `let` at
+    /// the common dominator runs once for a read that happens per iteration.
     #[test]
     fn materialise_point_refuses_to_hoist_out_of_a_loop() {
         let mut body = Body::empty();
@@ -1054,8 +1026,7 @@ mod tests {
         assert_eq!(materialise_point(&eng, &[in_u, out_u]), None);
     }
 
-    /// Uses all inside the same loop body still materialise, inside the loop —
-    /// re-evaluated per iteration, which is what makes them correct.
+    /// Uses all inside one loop body materialise inside it.
     #[test]
     fn materialise_point_stays_inside_a_loop() {
         let mut body = Body::empty();

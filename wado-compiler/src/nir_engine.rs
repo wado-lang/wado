@@ -500,16 +500,12 @@ impl<'a> Engine<'a> {
     }
 
     /// A live-pool `FieldAccess` per field read, shared between exactly the
-    /// reads a scratch re-walk proves see one load. `maintain_pure_node` has no
-    /// `FieldAccess` arm — a field value is keyed on the heap version at its
-    /// point — so this is where `promote_fields` gets its representatives.
+    /// reads a scratch re-walk proves see one load.
     ///
-    /// The walk is an equivalence oracle, not a value source: its ids mean
-    /// nothing in the live pool, an unseeded walk giving every receiver a
-    /// walk-local `Opaque` and every version a fresh-heap number. So each class
-    /// is re-minted over `canonical_local(i)`, sound only where `i` holds one
-    /// value, at a version above `max_heap_version` so it cannot collide with a
-    /// triple the build-once graph holds.
+    /// The walk is an equivalence oracle, not a value source — its ids mean
+    /// nothing in the live pool — so each class is re-minted over
+    /// `canonical_local(i)`, sound only where `i` holds one value, at a version
+    /// above `max_heap_version` so it cannot collide with an existing triple.
     pub fn scoped_field_values(&mut self) -> FieldValues {
         use crate::nir_value_graph::{OpaqueSource, ValueKind, builder};
         self.ensure_value_graph();
@@ -533,8 +529,8 @@ impl<'a> Engine<'a> {
             &mut scratch,
             None,
         );
-        // (scratch class, receiver local, field) for each field read, before any
-        // live-pool mutation: `local_has_one_version` borrows the engine.
+        // Collected before any live-pool mutation: `local_has_one_version`
+        // borrows the engine.
         let mut classes: Vec<(ExprId, crate::nir_value_graph::ValueId, u32, u32)> = Vec::new();
         for (e, sv) in scoped.values {
             if !matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. }) {
