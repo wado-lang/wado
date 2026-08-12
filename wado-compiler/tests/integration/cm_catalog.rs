@@ -1139,6 +1139,17 @@ fn run_future_identity_round_trips(opt_level: OptLevel) {
         "id-future-tuple",
         (5u32, "x".to_string()),
     );
+    // A unit Ok arm is the shape of the WASI transmission future
+    // (`future<result<_, error-code>>`), but only with a WASI error-code on the
+    // Err side. With a plain `string` it is an ordinary `result<_, string>`
+    // payload, and classifying it as a transmission would lower it against a
+    // WASI error-code type this program never imports.
+    run_future_identity(
+        opt_level,
+        "Result<(), String>",
+        "id-future-result-err",
+        Err::<(), String>("boom".to_string()),
+    );
 }
 
 #[test]

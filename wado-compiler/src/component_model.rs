@@ -23,7 +23,14 @@ use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType};
 ///
 /// - Primitive scalar → `Scalar(s)`
 /// - `Result<(), E>` (unit Ok type) → `Transmission(error-code package)`
-/// - Anything else → `Trailers` (the HTTP trailers pattern)
+/// - A general CM value type → `Value(t)`
+/// - `Result<Option<resource>, E>` → `Trailers` (the HTTP trailers pattern)
+///
+/// # Panics
+/// A payload matching none of these has no component-level `future<T>` to
+/// lower against. Returning one of the shapes above anyway would compile it as
+/// a different CM type — which is how an unclassified payload used to come back
+/// as the HTTP trailers future.
 pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFuturePayload {
     match type_table.get(type_arg) {
         ResolvedType::Primitive(prim) => {
@@ -34,26 +41,62 @@ pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFu
         ResolvedType::GenericInstance {
             name, type_args, ..
         } if name == "Result" && type_args.len() >= 2 => {
-            if matches!(type_table.get(type_args[0]), ResolvedType::Unit) {
-                return CmFuturePayload::Transmission(error_code_source(type_table, type_args[1]));
+            // A unit Ok arm alone does not make a transmission future: the Err
+            // arm has to be a WASI error-code, or this is an ordinary
+            // `result<_, E>` value payload.
+            if matches!(type_table.get(type_args[0]), ResolvedType::Unit)
+                && let Some(source) = wasi_error_code_source(type_table, type_args[1])
+            {
+                return CmFuturePayload::Transmission(source);
             }
         }
         _ => {}
     }
-    // A general value payload (`future<string>`, `future<list<u32>>`, …). Named
-    // types (records / variants / enums / resources) currently return `None`,
-    // so the WASI trailers / transmission shapes fall through to the legacy
-    // `Trailers` classification unchanged.
+    // A general value payload (`future<string>`, `future<list<u32>>`, …).
     if let Some(payload) = cm_payload_type_from_type_id(type_table, type_arg) {
         return CmFuturePayload::Value(payload);
     }
-    CmFuturePayload::Trailers
+    if is_trailers_payload(type_table, type_arg) {
+        return CmFuturePayload::Trailers;
+    }
+    panic!(
+        "`Future<{}>` has no Component Model payload type",
+        type_table.base_type_name(type_arg)
+    );
+}
+
+/// The WASI HTTP trailers future's payload: `result<option<trailers>,
+/// error-code>`, where `trailers` aliases the `fields` resource.
+///
+/// It is recognized by shape rather than reached by falling through, because a
+/// resource has no general payload type: codegen builds this one `future<T>`
+/// from the HTTP types interface instead of from a [`CmPayloadType`].
+fn is_trailers_payload(type_table: &TypeTable, type_arg: TypeId) -> bool {
+    let ResolvedType::GenericInstance {
+        name, type_args, ..
+    } = type_table.get(type_arg)
+    else {
+        return false;
+    };
+    if name != "Result" || type_args.len() < 2 {
+        return false;
+    }
+    let Some(inner) = type_table.as_option(type_args[0]) else {
+        return false;
+    };
+    matches!(
+        type_table.get(type_table.get_ultimate_base_type(inner)),
+        ResolvedType::Resource { .. }
+    )
 }
 
 /// Classify a `stream<T>` element type into its CM stream payload. `u8` keeps
-/// the default `U8` stream; scalar / structural elements use `Value`; anything
-/// else (named records / unsupported) falls back to `U8` so existing behaviour
-/// is unchanged.
+/// the default `U8` stream; scalar / structural elements use `Value`.
+///
+/// # Panics
+/// An element with no CM payload type has no `stream<T>` to lower against.
+/// `U8` used to stand in, which silently retyped the stream rather than
+/// reporting that its element cannot cross the boundary.
 pub fn classify_stream_payload(
     type_table: &TypeTable,
     element: TypeId,
@@ -67,7 +110,10 @@ pub fn classify_stream_payload(
     }
     match cm_payload_type_from_type_id(type_table, element) {
         Some(payload) => CmStreamPayload::Value(payload),
-        None => CmStreamPayload::U8,
+        None => panic!(
+            "`Stream<{}>` has no Component Model element type",
+            type_table.base_type_name(element)
+        ),
     }
 }
 
@@ -257,12 +303,15 @@ pub fn classify_stream_payload_from_ast(
     }
     match cm_payload_type_from_ast(ty, registry) {
         Some(payload) => CmStreamPayload::Value(payload),
-        None => CmStreamPayload::U8,
+        None => panic!("`Stream<{ty:?}>` has no Component Model element type"),
     }
 }
 
 /// Classify an AST-`Type` future payload (codegen's `task.return` resolver),
-/// mirroring [`classify_future_payload`] on resolved types.
+/// mirroring [`classify_future_payload`] on resolved types. The two must agree:
+/// one classifies the future the guest operates on and the other the future the
+/// export's signature declares, and a disagreement builds a component whose
+/// declared type is not the one the body reads.
 pub fn classify_future_payload_from_ast(
     ty: &crate::ast::Type,
     registry: &CmInterfaceRegistry,
@@ -274,10 +323,75 @@ pub fn classify_future_payload_from_ast(
     {
         return CmFuturePayload::Scalar(scalar);
     }
+    if let Type::Generic(g) = &resolved
+        && g.name == "Result"
+        && g.args.len() == 2
+        && is_unit_ast(&g.args[0])
+        && let Some(source) = wasi_error_code_source_from_ast(&g.args[1], registry)
+    {
+        return CmFuturePayload::Transmission(source);
+    }
     if let Some(payload) = cm_payload_type_from_ast(ty, registry) {
         return CmFuturePayload::Value(payload);
     }
-    CmFuturePayload::Trailers
+    if is_trailers_payload_from_ast(&resolved, registry) {
+        return CmFuturePayload::Trailers;
+    }
+    panic!("`Future<{resolved:?}>` has no Component Model payload type");
+}
+
+/// AST mirror of [`wasi_error_code_source`].
+fn wasi_error_code_source_from_ast(
+    ty: &crate::ast::Type,
+    registry: &CmInterfaceRegistry,
+) -> Option<String> {
+    let crate::ast::Type::Named(n) = &registry.resolve_type(ty) else {
+        return None;
+    };
+    let source = registry.resolve_cm_source_for(n, None)?;
+    let wasi = source.strip_prefix("wasi:")?;
+    let package = wasi.split(['/', '@']).next()?;
+    (registry.get_enum_cm_name_by_source(&source, &n.name).is_some()
+        || registry
+            .get_variant_cm_name_by_source(&source, &n.name)
+            .is_some())
+    .then(|| package.to_string())
+}
+
+/// AST mirror of [`is_trailers_payload`]: `result<option<resource>, _>`.
+fn is_trailers_payload_from_ast(
+    resolved: &crate::ast::Type,
+    registry: &CmInterfaceRegistry,
+) -> bool {
+    use crate::ast::Type;
+    let Type::Generic(g) = resolved else {
+        return false;
+    };
+    if g.name != "Result" || g.args.len() != 2 {
+        return false;
+    }
+    let Type::Generic(ok) = &registry.resolve_type(&g.args[0]) else {
+        return false;
+    };
+    if ok.name != "Option" || ok.args.len() != 1 {
+        return false;
+    }
+    let Type::Named(inner) = &registry.resolve_type(&ok.args[0]) else {
+        return false;
+    };
+    registry
+        .resolve_cm_source_for(inner, None)
+        .and_then(|source| {
+            registry
+                .get_resource_cm_name_by_source(&source, &inner.name)
+                .map(str::to_string)
+        })
+        .is_some()
+}
+
+/// Whether an AST type is the unit type `()`.
+fn is_unit_ast(ty: &crate::ast::Type) -> bool {
+    matches!(ty, crate::ast::Type::Tuple(elems) if elems.is_empty())
 }
 
 /// Map a primitive type to its CM scalar type, or `None` for non-CM-scalars.
@@ -299,21 +413,23 @@ pub fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
     })
 }
 
-/// WASI package owning an `ErrorCode` type (e.g. `"http/types.wado"` → `"http"`).
-/// Each package's error-code is a distinct CM type, so the transmission future
-/// is parameterized by it. Falls back to `"cli"` for a non-WASI error type.
-pub fn error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> String {
-    let module_source = match type_table.get(error_type_id) {
-        ResolvedType::Enum { module_source, .. } | ResolvedType::Variant { module_source, .. } => {
-            module_source
-        }
-        _ => return "cli".to_string(),
+/// WASI package owning an `ErrorCode` type (e.g. `"http/types.wado"` → `"http"`),
+/// or `None` if the type is not a WASI error-code. Each package's error-code is
+/// a distinct CM type, so the transmission future is parameterized by it.
+///
+/// A non-WASI Err arm answers `None` rather than defaulting to `"cli"`: it makes
+/// an ordinary `result<_, E>` payload, and naming a package it never imports
+/// would lower it against that package's error-code type.
+fn wasi_error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> Option<String> {
+    let (ResolvedType::Enum { module_source, .. } | ResolvedType::Variant { module_source, .. }) =
+        type_table.get(error_type_id)
+    else {
+        return None;
     };
-    if let ModuleSource::Wasi { interface } = module_source {
-        interface.split('/').next().unwrap_or("cli").to_string()
-    } else {
-        "cli".to_string()
-    }
+    let ModuleSource::Wasi { interface } = module_source else {
+        return None;
+    };
+    Some(interface.split('/').next().unwrap_or("cli").to_string())
 }
 
 /// A variant case with both CM and Wado names.
