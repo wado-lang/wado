@@ -588,6 +588,13 @@ fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
 /// one evaluated *after* a read, since the rewrite does not walk in evaluation
 /// order. That only forgoes folding in a statement that both calls with a
 /// reference argument and reads a field of it.
+///
+/// Stops at a nested body, exactly as `InvalidationScope::Statement` does. A
+/// `Block` / `Seq` / `Loop` / `If` branch is walked statement by statement by
+/// the recursive `forward_fields_in_body`, which pre-invalidates each of *its*
+/// statements in turn; descending here instead would apply a call buried in a
+/// loop body to the statements before the loop. That is what dropped the
+/// hoisted `cref.threshold` fold in `opt_licm_in_match_arm`.
 fn invalidate_call_effects_before_rewrite(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
     match instr {
         WirInstr::Call { args, .. } => {
@@ -610,6 +617,11 @@ fn invalidate_call_effects_before_rewrite(instr: &WirInstr, known: &mut FieldKno
             if let WirInstr::LocalGet { name, .. } = inner.as_ref() {
                 known.invalidate_mutated_local(name);
             }
+        }
+        WirInstr::Block { .. } | WirInstr::Seq(_) | WirInstr::Loop { .. } => return,
+        WirInstr::If { condition, .. } => {
+            invalidate_call_effects_before_rewrite(condition, known);
+            return;
         }
         _ => {}
     }
