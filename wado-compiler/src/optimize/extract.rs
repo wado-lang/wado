@@ -555,13 +555,21 @@ fn classify_candidate(
             let scalar_field = ctx
                 .type_table
                 .is_primitive_like(engine.body.exprs[id].type_id);
-            // (2) Receiver-stability gate. A **param** is entry-defined (dominates
-            // every point) and by-value (no alias). A **non-param local** must be
-            // owned (non-reference), non-`mut` (single assignment), not
-            // address-taken, not `&mut`-escaped — *and* its def must dominate the
-            // materialisation point, checked in the apply phase (`def_dominates`),
-            // since the value's receiver `Opaque(Local i)` can differ from a use's
-            // syntactic local.
+            // (2) Receiver-stability gate. The receiver must hold one value
+            // (`multi_version_locals`) and be free of aliases the heap model does
+            // not see (`address_taken`). A non-parameter must additionally own its
+            // object: a local holding a reference has no `let` the anchor can
+            // travel with. Its def must dominate the materialisation point too,
+            // checked in the apply phase (`def_dominates`), since the value's
+            // receiver `Opaque(Local i)` can differ from a use's syntactic local.
+            //
+            // What this deliberately does *not* ask is whether a callee can mutate
+            // the receiver — being `&mut`, or `mut_escaped`. That is the same
+            // question `FieldValues::pinnable_before` answers exactly, from the
+            // versions the builder bumps at each `mut_borrowed` call, and asking it
+            // here as a type-shaped proxy refuses 96 % of the candidates on
+            // `benchmark/sqlite_parse` (1675 of 1747, essentially every
+            // `&mut self` method) to catch what the placement already catches.
             let recv_src = match engine.body.values.kind(recv) {
                 ValueKind::Opaque(o) => Some(*o),
                 _ => None,
@@ -569,15 +577,14 @@ fn classify_candidate(
             .and_then(|o| engine.body.values.opaque_source(o));
             let recv_stable = match recv_src {
                 Some(crate::nir_value_graph::OpaqueSource::Local(i)) => {
-                    ctx.param_set.contains(&i)
-                        || (!ctx.multi_version_locals.contains(&i)
-                            && !ctx.address_taken.contains(&i)
-                            && !ctx.mut_escaped_leaf.contains(&i)
-                            && !matches!(
-                                ctx.type_table.get(engine.locals()[i as usize].type_id),
-                                crate::tir::ResolvedType::Ref(_)
-                                    | crate::tir::ResolvedType::MutRef(_)
-                            ))
+                    let owned_enough = ctx.param_set.contains(&i)
+                        || !matches!(
+                            ctx.type_table.get(engine.locals()[i as usize].type_id),
+                            crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+                        );
+                    owned_enough
+                        && !ctx.multi_version_locals.contains(&i)
+                        && !ctx.address_taken.contains(&i)
                 }
                 _ => false,
             };

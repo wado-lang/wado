@@ -754,14 +754,22 @@ impl<'a> Engine<'a> {
         let _ = local;
     }
 
-    /// Whether `local` provably holds one value for the whole body, which is
-    /// what makes [`ValuePool::canonical_local`]'s one id per index denote one
-    /// value.
+    /// Whether `local` is **single-assignment**: bound once and never written
+    /// again, which is what makes [`ValuePool::canonical_local`]'s one id per
+    /// index denote one value.
     ///
     /// A non-`mut` parameter qualifies by being entry-defined and unreassigned.
     /// So does an ordinary binding that is never written again — and it is the
     /// safer of the two under the anchor rule, since its `let` travels with any
     /// copy of an operand naming it while a parameter's entry def does not.
+    ///
+    /// Single-assignment is *per execution of the binding's scope*, not per
+    /// program run: a `let` in a loop body is written once in the text and once
+    /// per iteration at runtime. So this licenses naming the local at a point in
+    /// the same iteration, and a consumer that relocates a value across an
+    /// iteration boundary needs its own check — which is why `materialise_point`
+    /// refuses a placement outside a loop enclosing any use, and why that refusal
+    /// is load-bearing rather than a nicety.
     ///
     /// Read off the use index rather than `NirLocal::is_mut`: a pass that mints
     /// a temp sets that flag by hand, while the index is maintained by the edit
@@ -890,7 +898,17 @@ impl<'a> Engine<'a> {
                         }
                     }
                 }
-                NodeRef::Block(_) | NodeRef::Pat(_) => {}
+                // A pattern binding is a definition too. It gets no `def` — the
+                // dominance gate wants a statement — but it must be *counted*,
+                // or a local bound by both a `let` and a pattern reads as
+                // single-version when it holds two.
+                NodeRef::Pat(id) => {
+                    if let PatKind::Binding { local_index, .. } = &self.body.pats[id].kind {
+                        let index = *local_index;
+                        self.buf.uses_entry(index).defs += 1;
+                    }
+                }
+                NodeRef::Block(_) => {}
             }
             children.clear();
             self.body.for_each_child(node, |c| children.push(c));
