@@ -313,13 +313,16 @@ pub(super) fn synthesize_stream_writes(project: &mut Package) {
     );
 }
 
-/// Whether `elem` has a general CM payload type, which is what separates the
-/// value-payload stream path from the WASI-record one.
+/// Whether `elem` takes the value-payload stream path: it has a general CM
+/// payload type, and is not the `u8` default that has a path of its own.
 ///
 /// Asked directly rather than through `classify_stream_payload`: these are
 /// predicates, and a classifier has to name some type to answer at all.
 fn has_value_payload(tt: &TypeTable, elem: TypeId) -> bool {
-    crate::component_model::cm_payload_type_from_type_id(tt, elem).is_some()
+    !matches!(
+        tt.get(elem),
+        ResolvedType::Primitive(crate::tir::PrimitiveType::U8)
+    ) && crate::component_model::cm_payload_type_from_type_id(tt, elem).is_some()
 }
 
 /// The stream-write element type for a scalar / structural `stream-write`, or
