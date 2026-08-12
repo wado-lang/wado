@@ -933,6 +933,47 @@ fn embed_imported_wasm_modules(
 ///
 /// Different WASI interfaces (cli, filesystem, http, sockets) have different
 /// error-code types, so each needs its own transmission future type.
+/// Alias at outer component scope every resource in `needed_resources` that
+/// `interface_info` declares itself, so `resource.drop` — which resolves
+/// against outer scope — can name it. A no-op for one already exposed and for
+/// resources defined elsewhere, which are aliased from their own interface.
+fn expose_self_owned_resources(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    project: &NirPackage,
+    interface_info: &crate::component_model::CmInterfaceInfo,
+    needed_resources: &[String],
+) {
+    for resource_name in needed_resources {
+        let registry = &project.cm_interface_registry;
+        if registry.get_resource_source_interface(resource_name).as_deref()
+            != Some(interface_info.path.as_str())
+        {
+            continue;
+        }
+        let Some(cm_name) = registry
+            .find_wasi_resource_source(resource_name)
+            .and_then(|source| registry.get_resource_cm_name_by_source(source, resource_name))
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        let resource_type_name = format!("resource:{cm_name}");
+        if ctx.has_type(&resource_type_name) {
+            continue;
+        }
+        ctx.register_type(&resource_type_name);
+        builder.alias_export(
+            ctx.instance_idx(&format!(
+                "{}-{}",
+                interface_info.package, interface_info.interface
+            )),
+            &cm_name,
+            ComponentExportKind::Type,
+        );
+    }
+}
+
 fn build_transmission_future_type_for(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -3982,6 +4023,15 @@ fn import_resource_using_interfaces(
             &interface_info.path,
             wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
         );
+
+        // Expose the resources this interface defines itself at outer component
+        // scope, as the resource-defining phase does. They were declared inline
+        // in the instance type above because the CM spec puts `[constructor]X` /
+        // `[method]X.foo` in the instance exporting `X`, but that leaves them
+        // unreachable from outer scope — and `resource.drop` resolves there, so
+        // without this an interface that both defines a resource and uses one
+        // from elsewhere could not drop its own.
+        expose_self_owned_resources(builder, ctx, project, &interface_info, &needed_resources);
 
         for func in &supported_functions {
             let local_name = project
