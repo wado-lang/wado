@@ -1015,7 +1015,7 @@ fn collect_mut_escaped_node(
 /// when they're connected by a chain of `let dst = src` Local→Local
 /// copies of a reference-typed value (`Box<T>`, `List<T>`, `&T`,
 /// `&mut T`). For value-semantic types (plain structs, variants),
-/// `let dst = src` will later be wrapped in `$value_copy{T}(src)` by
+/// `let dst = src` will later be wrapped in `$value_copy$T(src)` by
 /// the value-copy synthesis pass — `dst` is then a fresh allocation
 /// and does not share storage with `src`, so we don't connect them.
 ///
@@ -1121,7 +1121,7 @@ fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> IndexMap<u32, IndexSet<u32
 /// produces aliasing — both names refer to the same heap object. This
 /// is the case for reference types (`Box<T>`, `List<T>`, `&T`,
 /// `&mut T`). Value-semantic types (plain structs, variants) are
-/// turned into a `$value_copy{T}(src)` wrapper post-loop, so during
+/// turned into a `$value_copy$T(src)` wrapper post-loop, so during
 /// the loop a `let dst = src` edge between two value-typed locals
 /// would over-merge groups that should stay separate.
 ///

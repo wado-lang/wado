@@ -473,7 +473,7 @@ pub fn make_synthetic_method(
 
 /// Like [`make_synthetic_method`] but for a free synthetic function that is not
 /// a trait/impl method, so `method_info` is `None`. Used for the reflect bridge
-/// helpers (`$field_get{…}`, `$case_extract{…}`, `$case_construct{…}`) whose
+/// helpers (`$field_get$…`, `$case_extract$…`, `$case_construct$…`) whose
 /// mangled names carry type args (`&Array<u8>`, `List<u8>`, …) and so must not
 /// be forced through the method-name machinery, which rejects `<` in a base
 /// struct name.

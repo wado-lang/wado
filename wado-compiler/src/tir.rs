@@ -3594,7 +3594,7 @@ impl TypeTable {
             // Delegating to `mangle_type_name` (the `_` arm) mangles the
             // element unqualified, so `Array<Foo>` built from two modules'
             // same-named structs collapses to one mangle — merging their
-            // otherwise-distinct `$value_copy{…}` helpers into a single helper
+            // otherwise-distinct `$value_copy$` helpers into a single helper
             // whose one concrete signature then mismatches the other array's
             // ref type (invalid Wasm). Structs / variants / generic instances
             // are already module-qualified above; arrays must match.

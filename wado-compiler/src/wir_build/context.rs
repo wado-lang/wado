@@ -95,11 +95,6 @@ pub struct WirContext<'a> {
     pub functions: Vec<WirFunction>,
     /// Map from fully-qualified function name to `WirFuncId`.
     pub func_map: IndexMap<crate::name::MangledName, WirFuncId>,
-    /// Which NIR function claimed each `func_map` key. A mangled name is an
-    /// identity, so a second claim by a different [`crate::nir::FuncId`] is a
-    /// collision; `register_single_function` asserts on it rather than letting
-    /// the loser's calls resolve to the winner's body.
-    pub func_map_origin: IndexMap<crate::name::MangledName, crate::nir::FuncId>,
     /// Map from a defined function's canonical [`crate::nir::FuncId`] to its
     /// `WirFuncId`. Lets a stamped call resolve its target by id, skipping the
     /// name reconstruction in `resolve_function_ref` (the name path stays for
@@ -326,7 +321,6 @@ impl<'a> WirContext<'a> {
             variant_case_info: IndexMap::default(),
             functions: Vec::new(),
             func_map: IndexMap::default(),
-            func_map_origin: IndexMap::default(),
             funcid_map: IndexMap::default(),
             func_type_ids: Vec::new(),
             imports: Vec::new(),

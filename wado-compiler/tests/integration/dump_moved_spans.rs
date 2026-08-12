@@ -1,7 +1,7 @@
 //! `wado dump` must lower with the same last-use move analysis as
 //! `compile`. Regression: the dump pipeline never set
 //! `Package::moved_local_spans`, so every last use lowered as a
-//! defensive `$value_copy{…}` the real compilation never emits.
+//! defensive `$value_copy$` the real compilation never emits.
 
 use crate::common::InMemoryHost;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
@@ -55,10 +55,9 @@ fn dump_applies_last_use_moves() {
         run_body.contains("consume"),
         "run body should call consume, got:\n{run_body}"
     );
-    let value_copy = wado_compiler::name::value_copy_helper_marker();
     assert!(
-        !run_body.contains(&value_copy),
+        !run_body.contains("$value_copy$"),
         "`consume(a)` is `a`'s last use and must lower as a move, \
-         not a `{value_copy}…}}` wrap:\n{run_body}"
+         not a `$value_copy$` wrap:\n{run_body}"
     );
 }

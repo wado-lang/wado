@@ -1,7 +1,7 @@
-// Precision test: SROA's soft-escape walk peels `$value_copy{T}` wrappers.
+// Precision test: SROA's soft-escape walk peels `$value_copy$T` wrappers.
 //
 // `s` is field-mutated (`s.x = ...`) and then consumed BY VALUE by a mutating
-// callee, which forces a defensive `$value_copy{P}(s)` at the call site; `s.y` is
+// callee, which forces a defensive `$value_copy$P(s)` at the call site; `s.y` is
 // read afterward, so this is a *non-move* consumption. The old soft-escape walk
 // stopped at the value-copy wrapper and hard-escaped `s`, blocking SROA entirely
 // (the struct stayed on the heap with struct.set / struct.get). Peeling the
@@ -23,7 +23,7 @@ fn consume(mut p: P) -> i32 {
 fn f(n: i32) -> i32 {
     let mut s = P { x: n, y: 7 };
     s.x = s.x + 1;
-    let a = consume(s);   // by-value + mutating callee -> $value_copy{P}(s)
+    let a = consume(s);   // by-value + mutating callee -> $value_copy$P(s)
     return a + s.y;       // non-move: s.y read after consume
 }
 

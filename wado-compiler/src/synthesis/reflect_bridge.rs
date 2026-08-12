@@ -27,7 +27,7 @@ pub fn synthesize_monomorphized_reflect_bridges(flat: &mut FlatPackage) {
     flat.functions.extend(generated);
 }
 
-/// `$field_get{S}{F}` for each monomorphized struct instantiated from a
+/// `$field_get$S$F` for each monomorphized struct instantiated from a
 /// `ReflectStruct`-derived generic base.
 fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
     let targets: Vec<(usize, String, Vec<TypeId>)> = {
@@ -101,7 +101,7 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
     }
 }
 
-/// `$case_extract{V}{P}` / `$case_construct{V}{P}` for each instantiation of a
+/// `$case_extract$V$P` / `$case_construct$V$P` for each instantiation of a
 /// `ReflectVariant`-derived generic variant. A generic variant keeps a single
 /// declaration, so the instantiations are the `GenericInstance` types naming it.
 fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {

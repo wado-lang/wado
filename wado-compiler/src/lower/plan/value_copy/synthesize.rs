@@ -1,4 +1,4 @@
-//! Generate `$value_copy{…}` helper functions for every type that the
+//! Generate `$value_copy$` helper functions for every type that the
 //! fold needs at a wrap site, plus the transitive closure of nested
 //! value-typed fields. The seed comes from [`super::analyze::collect_seed_types`];
 //! the loop in [`synthesize_helpers`] iterates until no new types appear
@@ -55,7 +55,7 @@ pub fn synthesize_helpers(
     let mut new_funcs: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
 
     // Worklist over the transitive closure of types that need a
-    // `$value_copy{T}` helper. `make_field_copy` emits
+    // `$value_copy$T` helper. `make_field_copy` emits
     // `copy_value::<FieldT>(...)` for nested value-semantic fields, so
     // generating one helper can surface new types whose own helpers we
     // also need. Iterate until no new types appear.
@@ -96,7 +96,7 @@ pub fn synthesize_helpers(
 /// Walk a newly-generated helper body and collect every `TypeId` that
 /// appears as a nested `copy_value::<NestedT>` marker (so the worklist
 /// closes the transitive set of helpers) and every `array_clone::<T>`
-/// element type (so codegen's per-element `$value_copy{T}` call finds a
+/// element type (so codegen's per-element `$value_copy$T` call finds a
 /// registered helper at lower time).
 struct Collector<'a> {
     out: IndexSet<TypeId>,
@@ -110,7 +110,7 @@ impl TirRefVisitor for Collector<'_> {
         }
         // `array_clone::<T>(arr)` lowers to a `WirInstr::ArrayClone`.
         // When `T` is a value-typed struct, codegen emits a per-element
-        // `$value_copy{…}` call inside the clone loop so each
+        // `$value_copy$` call inside the clone loop so each
         // destination element is a fresh struct rather than an aliased
         // ref. The helper has to actually exist by then, so collect
         // such element types into the worklist alongside direct
@@ -300,7 +300,7 @@ fn variant_cases_concrete(
 }
 
 /// Match each case and re-construct it, routing value-typed payloads
-/// through their own `$value_copy{T}` helpers. A payload-free case is
+/// through their own `$value_copy$T` helpers. A payload-free case is
 /// immutable, so its arm returns the input unchanged.
 fn build_variant_copy_body(
     type_id: TypeId,
@@ -744,7 +744,7 @@ fn build_struct_copy(
 }
 
 /// Wrap `expr` in `builtin::copy_value::<type_id>(expr)`. The wrapper
-/// gets resolved to the `$value_copy{…}` helper by
+/// gets resolved to the `$value_copy$` helper by
 /// [`crate::lower::translate`] when the TIR is folded into NIR.
 fn wrap_copy_value(expr: TirExpr, type_id: TypeId, span: Span) -> TirExpr {
     let func = FunctionRef {
@@ -775,7 +775,7 @@ fn wrap_copy_value(expr: TirExpr, type_id: TypeId, span: Span) -> TirExpr {
 /// deep-copies a raw GC array. `array_ty` is the `Array<elem_type>` type of
 /// `arr`; the call returns a fresh array of the same type, sized to `len` when
 /// given (the WIR side mirrors this as one `ArrayClone { len: Option }`).
-/// Codegen gives the clone a per-element `$value_copy{T}` pass when `elem_type`
+/// Codegen gives the clone a per-element `$value_copy$T` pass when `elem_type`
 /// is itself value-semantic (see `wir_build::calls::array_element_copy_func`).
 fn build_array_clone(
     arr: TirExpr,
@@ -850,7 +850,7 @@ fn make_field_copy(
 
 /// Route an already-projected value through the deep-copy machinery: a
 /// raw `Array<T>` via `array_clone`, a value-semantic type via its
-/// `$value_copy{T}` helper (a `builtin::copy_value::<T>(...)` marker the
+/// `$value_copy$T` helper (a `builtin::copy_value::<T>(...)` marker the
 /// TIR → NIR translator resolves), everything else as-is.
 fn make_value_copy(
     expr: TirExpr,

@@ -10,11 +10,11 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(1)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(2)
 
-type "functype//{hfs_match_arm_local_hoisted_out_of_loop.wado}build" = fn() -> i32;  // TypeId(3)
+type "functype//hfs_match_arm_local_hoisted_out_of_loop.wado/build" = fn() -> i32;  // TypeId(3)
 
-type "functype//{hfs_match_arm_local_hoisted_out_of_loop.wado}__cm_export__run" = fn();  // TypeId(4)
+type "functype//hfs_match_arm_local_hoisted_out_of_loop.wado/__cm_export__run" = fn();  // TypeId(4)
 
-type "functype//{core:prelude/fpfmt.wado}__initialize_module" = fn();  // TypeId(5)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(5)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -22,7 +22,7 @@ import memory (1) from "mem/memory";
 
 global mut global:hfs_match_arm_local_hoisted_out_of_loop.wado::__modules_initialized: bool = 0;
 
-fn {hfs_match_arm_local_hoisted_out_of_loop.wado}build() {
+fn "hfs_match_arm_local_hoisted_out_of_loop.wado/build"() {
     let result: ref "hfs_match_arm_local_hoisted_out_of_loop.wado//S";
     let i: i32;
     let s: ref "hfs_match_arm_local_hoisted_out_of_loop.wado//S";
@@ -44,24 +44,24 @@ fn {hfs_match_arm_local_hoisted_out_of_loop.wado}build() {
     return result.a;
 }
 
-fn {hfs_match_arm_local_hoisted_out_of_loop.wado}__cm_export__run() {
+fn "hfs_match_arm_local_hoisted_out_of_loop.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:hfs_match_arm_local_hoisted_out_of_loop.wado::__modules_initialized);
         cold_path;
-        "{core:prelude/fpfmt.wado}__initialize_module"();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:hfs_match_arm_local_hoisted_out_of_loop.wado::__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
         break_if __inline___initialize_modules_2 @likely(global:hfs_match_arm_local_hoisted_out_of_loop.wado::__modules_initialized);
         cold_path;
-        "{core:prelude/fpfmt.wado}__initialize_module"();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:hfs_match_arm_local_hoisted_out_of_loop.wado::__modules_initialized = 1;
     };
-    drop({hfs_match_arm_local_hoisted_out_of_loop.wado}build());
+    drop("hfs_match_arm_local_hoisted_out_of_loop.wado/build"());
     "wasi/task-return"(0);
 }
 
-fn "{core:prelude/fpfmt.wado}__initialize_module"() {
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn {hfs_match_arm_local_hoisted_out_of_loop.wado}__cm_export__run as "run"
+export fn "hfs_match_arm_local_hoisted_out_of_loop.wado/__cm_export__run" as "run"

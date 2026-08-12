@@ -1,6 +1,6 @@
 //! Read-only seed walker for the fold's value-copy decision.
 //!
-//! The fold (`lower::translate`) emits a `$value_copy{T}(...)` wrap
+//! The fold (`lower::translate`) emits a `$value_copy$T(...)` wrap
 //! directly at each wrap site, using the shared predicates exported
 //! here ([`should_wrap`], [`is_fresh_value`], [`is_source_immutable`]).
 //! [`collect_seed_types`] walks every function with the same
@@ -16,7 +16,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// Every `TypeId` the fold will wrap in `$value_copy{T}(...)`, plus
+/// Every `TypeId` the fold will wrap in `$value_copy$T(...)`, plus
 /// element types of `array_clone::<T>(...)` calls that codegen
 /// routes through the same helper.
 ///

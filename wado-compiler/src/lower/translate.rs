@@ -1013,7 +1013,7 @@ impl FunctionTranslator<'_, '_> {
         ))
     }
 
-    /// Emit a call to the `$value_copy{T}(...)` helper. Returns the
+    /// Emit a call to the `$value_copy$T(...)` helper. Returns the
     /// value unchanged when the helper is not registered — this
     /// mirrors the pre-Phase-A silent fall-through, where
     /// `value_copy::insert` only wrapped at sites it walked
@@ -2177,7 +2177,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Convert a method call's receiver. It occupies `args[0]` like any other
-    /// argument but is a *place*: wrapping it in `$value_copy{T}` would hand the
+    /// argument but is a *place*: wrapping it in `$value_copy$T` would hand the
     /// callee a throwaway copy and discard the mutation the call exists to
     /// perform (a `String` builder's `push_str` would append to the copy). Nor
     /// may it be re-wrapped as a canonical closure the way a specialized
@@ -2190,7 +2190,7 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Convert one call argument, wrapping it in `$value_copy{T}` unless
+    /// Convert one call argument, wrapping it in `$value_copy$T` unless
     /// `should_wrap_value_copy` says no or the callee parameter is confined.
     /// `param_index` indexes the callee's full parameter list.
     fn convert_call_arg_at(

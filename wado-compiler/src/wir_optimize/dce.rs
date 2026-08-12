@@ -28,7 +28,7 @@ fn collect_func_refs_from_body(body: &[WirInstr], out: &mut IndexSet<u32>) {
 }
 
 /// Walk `body` and, for every `WirInstr::ArrayClone` carrying an
-/// `element_copy_type`, resolve the type to its synthesized `$value_copy{…}`
+/// `element_copy_type`, resolve the type to its synthesized `$value_copy$`
 /// helper's array-index through `resolve` and insert it into `out`. Used by
 /// [`mark_unreachable_defined_functions`] to root the per-element helper,
 /// whose edge is a type reference rather than a `Call` the generic walker

@@ -6,7 +6,7 @@
 //! of them are removed; the ones that remain are invisible while coding. After
 //! the NIR optimization pipeline, a surviving copy appears as one of:
 //!
-//! - a call to a synthesized `$value_copy{T}` deep-copy helper,
+//! - a call to a synthesized `$value_copy$T` deep-copy helper,
 //! - a `builtin::array_clone` / `array_clone_shallow` call — the lowered (and
 //!   possibly `value_copy_demote`-shallowed) spine copy of a `List<T>` or
 //!   `String`, or
@@ -109,7 +109,7 @@ impl Collector<'_> {
             return None;
         };
         let func = self.callees.get(func_id.index())?;
-        // Deep `$value_copy{T}` helper call.
+        // Deep `$value_copy$T` helper call.
         if args.len() == 1
             && let Some(&type_id) = self
                 .value_copy_set

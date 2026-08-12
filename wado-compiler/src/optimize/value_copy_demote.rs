@@ -1,8 +1,8 @@
-//! `value_copy_demote` — demote a deep `$value_copy{T}` of an `List<E>` to a
+//! `value_copy_demote` — demote a deep `$value_copy$T` of an `List<E>` to a
 //! shallow spine copy when the binding's elements are provably never mutated
 //! through it (nor through the source the copy reads from).
 //!
-//! A `$value_copy{T}` reaching the optimizer is one the lower-phase ownership
+//! A `$value_copy$T` reaching the optimizer is one the lower-phase ownership
 //! analysis could not prove unnecessary — its binding is not fully read-only, so
 //! it cannot be dropped. But when the binding is only *spine*-mutated (`sort`,
 //! `push`, …) and never mutates an element, a shallow copy is still safe: the
@@ -78,7 +78,7 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     // (Phase 2a) appends shallow twins, but no recognizer reads those by id.
     let descriptors = super::dce::build_callee_descriptors(project);
 
-    // Identify `$value_copy{T}` helpers whose body is an `List<E>` wrapper
+    // Identify `$value_copy$T` helpers whose body is an `List<E>` wrapper
     // copy: `return StructLiteral { repr: array_clone(v.repr), used: ... }`,
     // excluding helpers that reach a variant deep-copy.
     let mut list_wrapper_copies: IndexSet<FuncKey> = IndexSet::default();
@@ -217,7 +217,7 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     project.functions.extend(new_funcs);
     // Report the retargeted callers; the appended shallow specializations get a
     // fresh dirty gate slot via the gate's auto-grow on first access. Retarget
-    // shifts a caller's call edges (a `$value_copy{…}` call → its shallow twin),
+    // shifts a caller's call edges (a `$value_copy$` call → its shallow twin),
     // which only costs propagation precision, not correctness.
     for fi in touched {
         gate.mark_changed(FuncId::new(fi));
@@ -365,7 +365,7 @@ fn rewrite_array_clone_to_shallow(
 // ---------------------------------------------------------------------------
 
 /// If the expression at `value` is a one-argument call to an array-wrapper
-/// `$value_copy{T}` helper, return that helper's key.
+/// `$value_copy$T` helper, return that helper's key.
 fn wrapper_call_key(body: &Body, value: ExprId, wrappers: &IndexSet<FuncKey>) -> Option<FuncKey> {
     if let ExprKind::Call { func_id, args, .. } = &body.exprs[value].kind
         && args.len() == 1
@@ -379,7 +379,7 @@ fn wrapper_call_key(body: &Body, value: ExprId, wrappers: &IndexSet<FuncKey>) ->
 /// The `(value, target-local)` binding a statement establishes, when it is a
 /// The `(value, target-local)` a `let x = …` establishes.
 ///
-/// Only the `let` form participates: a whole-handle rebind `x = $value_copy{T}(…)`
+/// Only the `let` form participates: a whole-handle rebind `x = $value_copy$T(…)`
 /// is never eligible — `handle_is_element_clean` sees the reassignment of `x` as
 /// a mutation, so `demote_candidate` always rejects it — so collecting the
 /// `Assign` form would only add a dead, always-false site.
@@ -392,7 +392,7 @@ fn stmt_binding(body: &Body, s: StmtId) -> Option<(ExprId, u32)> {
     }
 }
 
-/// For every `let x = $value_copy{T}(arg)` binding to a value-copy-wrapper
+/// For every `let x = $value_copy$T(arg)` binding to a value-copy-wrapper
 /// helper, AND-combine its eligibility into `site_elig[(fi, x)]`. The
 /// per-`(fi, x)` key and the AND-combine are both order-independent (a local's
 /// value-copy wrapper is fixed by its type), so a flat sweep over every

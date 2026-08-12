@@ -1272,7 +1272,7 @@ pub struct WirFunction {
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
     /// The copied type's canonical mangle when this is a synthesized
-    /// `$value_copy{…}` deep-copy helper (`FunctionKind::ValueCopy`). Lets
+    /// `$value_copy$` deep-copy helper (`FunctionKind::ValueCopy`). Lets
     /// codegen and DCE resolve an `ArrayClone`'s element-copy edge by
     /// structural type identity instead of parsing the helper's name — and,
     /// because it is the mangle (not an intern-order `TypeId`), identical
@@ -1838,7 +1838,7 @@ pub enum WirInstr {
     /// GC stores the *same* element ref into both arrays — fine for
     /// primitives, but unsound for struct elements (every clone would
     /// share the underlying struct with the source). When set, the
-    /// loop calls that type's `$value_copy{…}` helper between
+    /// loop calls that type's `$value_copy$` helper between
     /// `array.get` and `array.set` so each destination element is a
     /// fresh struct.
     ArrayClone {
@@ -1846,7 +1846,7 @@ pub enum WirInstr {
         src: Box<WirInstr>,
         /// The canonical mangle of the element type needing a per-element deep
         /// copy, or `None` when a plain `array.set` already copies (primitive
-        /// elements). Codegen and DCE resolve this to the `$value_copy{…}` helper
+        /// elements). Codegen and DCE resolve this to the `$value_copy$` helper
         /// by matching each helper's `value_copy_mangle` metadata — no name
         /// lookup, and robust to the same type being interned more than once.
         element_copy_mangle: Option<String>,

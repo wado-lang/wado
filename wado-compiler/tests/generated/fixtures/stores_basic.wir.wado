@@ -29,11 +29,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//{stores_basic.wado}run" = fn();  // TypeId(11)
+type "functype//stores_basic.wado/run" = fn();  // TypeId(11)
 
-type "functype//{stores_basic.wado}__cm_export__run" = fn();  // TypeId(12)
+type "functype//stores_basic.wado/__cm_export__run" = fn();  // TypeId(12)
 
-type "functype//{core:prelude/fpfmt.wado}__initialize_module" = fn();  // TypeId(13)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(13)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(14)
 
@@ -56,11 +56,11 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 global mut global:stores_basic.wado::__modules_initialized: bool = 0;
 
-fn {stores_basic.wado}run() {
+fn "stores_basic.wado/run"() {
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stores_basic.wado::__modules_initialized);
         cold_path;
-        "{core:prelude/fpfmt.wado}__initialize_module"();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:stores_basic.wado::__modules_initialized = 1;
     };
     block {
@@ -69,18 +69,18 @@ fn {stores_basic.wado}run() {
     };
 }
 
-fn {stores_basic.wado}__cm_export__run() {
+fn "stores_basic.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stores_basic.wado::__modules_initialized);
         cold_path;
-        "{core:prelude/fpfmt.wado}__initialize_module"();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:stores_basic.wado::__modules_initialized = 1;
     };
-    {stores_basic.wado}run();
+    "stores_basic.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "{core:prelude/fpfmt.wado}__initialize_module"() {
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-export fn {stores_basic.wado}__cm_export__run as "run"
+export fn "stores_basic.wado/__cm_export__run" as "run"

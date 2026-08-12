@@ -29,19 +29,19 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(7)
 
 type "functype//wasi/wasi:clocks/MonotonicClock::wait_for" = fn(i64) -> i32;  // TypeId(8)
 
-type "functype//{wasi_newtype_literal.wado}__cm_binding__MonotonicClock_wait_for" = fn(i64) -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(9)
+type "functype//wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for" = fn(i64) -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(9)
 
-type "functype//{wasi_newtype_literal.wado}__cm_lift__MonotonicClock_wait_for" = fn(i32);  // TypeId(10)
+type "functype//wasi_newtype_literal.wado/__cm_lift__MonotonicClock_wait_for" = fn(i32);  // TypeId(10)
 
-type "functype//{wasi_newtype_literal.wado}__cm_export____test_0_literal_coercion_to_duration_via_effect_fn" = fn();  // TypeId(11)
+type "functype//wasi_newtype_literal.wado/__cm_export____test_0_literal_coercion_to_duration_via_effect_fn" = fn();  // TypeId(11)
 
-type "functype//{core:rt}cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(12)
+type "functype//core:rt/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(12)
 
-type "functype//{core:prelude/fpfmt.wado}__initialize_module" = fn();  // TypeId(13)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(13)
 
-type "functype//{core:prelude/types.wado}core:prelude/types.wado/AsyncCall<()>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<()>");  // TypeId(14)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<()>");  // TypeId(14)
 
-type "functype//{wasi_newtype_literal.wado}wasi_newtype_literal.wado/__Closure_2::__call" = fn(i32);  // TypeId(15)
+type "functype//wasi_newtype_literal.wado/wasi_newtype_literal.wado/__Closure_2::__call" = fn(i32);  // TypeId(15)
 
 type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
@@ -61,27 +61,27 @@ import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 
 global mut global:wasi_newtype_literal.wado::__modules_initialized: bool = 0;
 
-fn {wasi_newtype_literal.wado}__cm_binding__MonotonicClock_wait_for(how_long) with MonotonicClock {
+fn "wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for"(how_long) with MonotonicClock {
     let __subtask_packed: i32;
     return struct.new "core:prelude/types.wado//AsyncCall<()>" { __cm_packed: local.tee __subtask_packed("wasi/wasi:clocks/MonotonicClock::wait_for"(how_long)), __cm_outptr: 0, __cm_size: 0, __cm_align: 0, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wasi_newtype_literal.wado//__Closure_2" {  }, func: ref.func "closure/wasi_newtype_literal.wado/__closure_wrapper_0" } };
 }
 
-fn {wasi_newtype_literal.wado}__cm_lift__MonotonicClock_wait_for(__outptr) {
+fn "wasi_newtype_literal.wado/__cm_lift__MonotonicClock_wait_for"(__outptr) {
     return nop;
 }
 
-fn {wasi_newtype_literal.wado}__cm_export____test_0_literal_coercion_to_duration_via_effect_fn() {
+fn "wasi_newtype_literal.wado/__cm_export____test_0_literal_coercion_to_duration_via_effect_fn"() {
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:wasi_newtype_literal.wado::__modules_initialized);
         cold_path;
-        "{core:prelude/fpfmt.wado}__initialize_module"();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:wasi_newtype_literal.wado::__modules_initialized = 1;
     };
-    "{core:prelude/types.wado}core:prelude/types.wado/AsyncCall<()>::wait"({wasi_newtype_literal.wado}__cm_binding__MonotonicClock_wait_for(0_i64));
+    "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait"("wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for"(0_i64));
     "wasi/task-return"(0);
 }
 
-fn {core:rt}cm_waitable_set_wait(ws) {
+fn "core:rt/cm_waitable_set_wait"(ws) {
     let out_ptr: i32;
     let code: i32;
     let evt_handle: i32;
@@ -94,10 +94,10 @@ fn {core:rt}cm_waitable_set_wait(ws) {
     return code, evt_handle, payload;
 }
 
-fn "{core:prelude/fpfmt.wado}__initialize_module"() {
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "{core:prelude/types.wado}core:prelude/types.wado/AsyncCall<()>::wait"(self) {
+fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait"(self) {
     let handle_1: i32;
     let ws_3: i32;
     handle_1 = self.__cm_packed >> 4;
@@ -109,7 +109,7 @@ fn "{core:prelude/types.wado}core:prelude/types.wado/AsyncCall<()>::wait"(self) 
                 let event_mv_code: i32;
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
-                multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = {core:rt}cm_waitable_set_wait(ws_3);
+                multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:rt/cm_waitable_set_wait"(ws_3);
                 break_if b1 event_mv_payload == 2;
                 continue l2;
             };
@@ -124,12 +124,12 @@ fn "{core:prelude/types.wado}core:prelude/types.wado/AsyncCall<()>::wait"(self) 
     return nop;
 }
 
-fn "{wasi_newtype_literal.wado}wasi_newtype_literal.wado/__Closure_2::__call"(__outptr) {
-    {wasi_newtype_literal.wado}__cm_lift__MonotonicClock_wait_for(__outptr);
+fn "wasi_newtype_literal.wado/wasi_newtype_literal.wado/__Closure_2::__call"(__outptr) {
+    "wasi_newtype_literal.wado/__cm_lift__MonotonicClock_wait_for"(__outptr);
 }
 
 fn "closure/wasi_newtype_literal.wado/__closure_wrapper_0"(__env, __p0) {
-    "{wasi_newtype_literal.wado}wasi_newtype_literal.wado/__Closure_2::__call"(__p0);
+    "wasi_newtype_literal.wado/wasi_newtype_literal.wado/__Closure_2::__call"(__p0);
 }
 
-export fn {wasi_newtype_literal.wado}__cm_export____test_0_literal_coercion_to_duration_via_effect_fn as "__test_0_literal_coercion_to_duration_via_effect_fn"
+export fn "wasi_newtype_literal.wado/__cm_export____test_0_literal_coercion_to_duration_via_effect_fn" as "__test_0_literal_coercion_to_duration_via_effect_fn"

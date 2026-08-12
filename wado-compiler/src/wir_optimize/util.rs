@@ -284,7 +284,7 @@ pub(super) fn count_local_gets(instr: &WirInstr, counts: &mut IndexMap<String, u
     });
 }
 
-/// Map each synthesized `$value_copy{…}` helper's copied-type mangle
+/// Map each synthesized `$value_copy$` helper's copied-type mangle
 /// (`value_copy_mangle` metadata) to its absolute `WirFuncId` index
 /// (array index + [`WirPackage::defined_func_base`]). Built once — a
 /// linear scan per `ArrayClone` site would be O(N²).

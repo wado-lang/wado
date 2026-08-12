@@ -608,9 +608,9 @@ fn run_optimization_passes(
         // `MatchToSwitchRule` (`include_match = true`), lowering every `Match` to
         // `Switch` before `inline`.
         gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, true));
-        // Demote deep `$value_copy{T}` copies of `List<E>` to shallow spine
+        // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
         // copies when the binding's elements are provably never mutated through
-        // it. Runs before `nir/inline`, where the `$value_copy{T}(arg)` shape it
+        // it. Runs before `nir/inline`, where the `$value_copy$T(arg)` shape it
         // matches disappears. (Copies are inserted precisely at the lower phase,
         // so there is no elision pass to sequence against.)
         gate_only!("nir/value_copy_demote", demote_value_copies);
@@ -686,7 +686,7 @@ fn run_optimization_passes(
         // parsers, leaving the optimizer non-convergent at `-O3`
         // (issue #1009). The merged const-fold walk feeds the
         // interpreter's `field_env` from `Let` / `Assign` /
-        // `$value_copy{T}(arg)` shapes and forks per branch, so a
+        // `$value_copy$T(arg)` shapes and forks per branch, so a
         // chain of pushes folds in a single iteration. The alias and
         // value-copy-helper analyses migrated to
         // `optimize::alias`.
