@@ -1,0 +1,22 @@
+// An `if` whose body dies observes nothing — empty branches over a pure
+// condition — and goes with the loads its condition reads.
+
+#[inline(never)]
+fn seed(n: i32) -> i32 {
+    return n;
+}
+
+export fn run() {
+    let x = seed(3);
+    let mut count = 0;
+    if x & 1024 != 0 {
+        count = 1;
+    }
+    assert seed(1) == 1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["& 1024"]
+}
