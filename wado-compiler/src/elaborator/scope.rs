@@ -14,19 +14,8 @@ use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
 use super::Elaborator;
-use super::trait_env::{DeclKey, InheritedBound, push_unique_bound};
+use super::trait_env::{InheritedBound, push_unique_bound};
 
-/// A bound name paired with the declaration it resolves to.
-pub(super) struct ElaboratedBound {
-    pub(super) name: String,
-    pub(super) decl: DeclKey,
-}
-
-fn push_unique_elaborated(bounds: &mut Vec<ElaboratedBound>, bound: ElaboratedBound) {
-    if !bounds.iter().any(|b| b.decl == bound.decl) {
-        bounds.push(bound);
-    }
-}
 
 /// Mutable trait resolution context scoped to the current resolution site.
 ///
@@ -221,62 +210,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         elaborated
     }
 
-<<<<<<< HEAD
-||||||| 4741f0604
-    /// [`Self::elaborate_bounds`] over bare trait names.
-    pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<String> {
-        let mut elaborated: Vec<String> = Vec::with_capacity(names.len());
-        for name in names {
-            if !elaborated.contains(name) {
-                elaborated.push(name.clone());
-            }
-            for inherited in self
-                .tysys
-                .supertraits_of(&self.type_lookup(), name)
-                .to_vec()
-            {
-                if !elaborated.contains(&inherited.name) {
-                    elaborated.push(inherited.name);
-                }
-            }
-        }
-        elaborated
-    }
-
-=======
+    /// The transitive supertraits of the trait `name` means here, as bounds.
+    ///
+    /// The name has no reference site of its own — a caller holding one asks
+    /// the site instead — so it goes through the one name-only chain.
     fn supertraits_of_bound(&self, name: &str) -> Vec<InheritedBound> {
         self.tysys
             .trait_env
-            .supertrait_closure(&self.trait_decl_key_in_frame(name))
+            .supertrait_closure(&self.decl_key_or_local(name))
             .to_vec()
     }
 
-    /// [`Self::elaborate_bounds`] over bare trait names.
-    ///
-    /// Each name keeps its writing frame's spelling — it reaches method
-    /// mangling, where rewriting it hides the impl in the trait's own module.
-    pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<ElaboratedBound> {
-        let mut elaborated: Vec<ElaboratedBound> = Vec::with_capacity(names.len());
-        for name in names {
-            let written = ElaboratedBound {
-                name: name.clone(),
-                decl: self.trait_decl_key_in_frame(name),
-            };
-            push_unique_elaborated(&mut elaborated, written);
-            for inherited in self.supertraits_of_bound(name) {
-                push_unique_elaborated(
-                    &mut elaborated,
-                    ElaboratedBound {
-                        name: inherited.bound.name,
-                        decl: inherited.decl,
-                    },
-                );
-            }
-        }
-        elaborated
-    }
-
->>>>>>> origin/main
     /// Register a list of generic parameters as `TypeParam` / `TypePack` ids
     /// in the current `trait_ctx`, starting from `offset`. Skips effect params.
     /// Returns the next free index (i.e. `offset + non_effect_count`).

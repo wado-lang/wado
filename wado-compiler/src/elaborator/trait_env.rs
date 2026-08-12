@@ -441,6 +441,59 @@ fn blanket_pack_assocs(
     out
 }
 
+/// What determines each blanket impl's parameters, in declaration order, keyed
+/// by the blanket's `(module, ast_id)`.
+///
+/// `None` is the receiver, which the call site's receiver type fills;
+/// `Some((trait, associated type))` is a parameter a predicate fixes — `..F` in
+/// `impl<S: ReflectStruct<FieldTypes = [..F]>, ..F>`. Declaration order is the
+/// point: the impl's type arguments are consumed positionally, and a receiver
+/// written after another parameter sits at a slot that "receiver first,
+/// projections after" never fills.
+///
+/// The bound is keyed by its own reference site, like [`blanket_pack_assocs`],
+/// so the trait it names is the declaration rather than the spelling.
+fn blanket_param_sources(
+    impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
+    blanket_impls: &IndexMap<String, Vec<BlanketImpl>>,
+    resolutions: &crate::resolve::Resolutions,
+) -> IndexMap<(ModuleSource, AstId), Vec<Option<(DeclKey, String)>>> {
+    let mut out: IndexMap<(ModuleSource, AstId), Vec<Option<(DeclKey, String)>>> =
+        IndexMap::default();
+    for blanket in blanket_impls.values().flatten() {
+        let key = (blanket.module.clone(), blanket.ast_id);
+        let Some(header) = impl_headers.get(&key) else {
+            continue;
+        };
+        let sources: Vec<Option<(DeclKey, String)>> = header
+            .type_params
+            .iter()
+            .filter(|tp| tp.is_real_type_param())
+            .map(|tp| {
+                if tp.name == blanket.param {
+                    return None;
+                }
+                header
+                    .type_params
+                    .iter()
+                    .flat_map(|other| &other.bounds)
+                    .flat_map(|bound| bound.assoc_types.iter().map(move |a| (bound, a)))
+                    .find(|(_, assoc)| {
+                        let mut named = Vec::new();
+                        assoc.ty.mentioned_names(&mut named);
+                        named.iter().any(|n| n == &tp.name)
+                    })
+                    .and_then(|(bound, assoc)| {
+                        let (module, name) = resolutions.declared(bound.id)?;
+                        Some(((module.clone(), name.to_string()), assoc.name.clone()))
+                    })
+            })
+            .collect();
+        out.insert(key, sources);
+    }
+    out
+}
+
 /// Digested signature of a single method inside an [`ImplHeader`]. Holds the
 /// name and type parameters method-lookup queries need without the method
 /// body; grows field-by-field as consumers migrate off the impl-block AST.
@@ -451,11 +504,6 @@ pub(super) struct ImplMethodHeader {
     /// digest, so a header lookup reaches the signature without the AST.
     pub(super) ast_id: AstId,
     pub(super) type_params: Vec<ast::GenericParam>,
-<<<<<<< HEAD
-    /// Whether the method has a body. Always true for impl methods; for trait
-    /// declarations it distinguishes default methods from bare signatures,
-    /// which method-lookup's fallback ordering depends on.
-    pub(super) has_body: bool,
     /// Where the method is written, so a whole-program check reporting on it
     /// needs no second walk of the module AST to find the span.
     pub(super) span: Span,
@@ -465,13 +513,6 @@ pub(super) struct ImplMethodHeader {
     /// Parameter count excluding `self`, so an arity check reads the digest
     /// instead of the method AST.
     pub(super) param_count: usize,
-||||||| 4741f0604
-    /// Whether the method has a body. Always true for impl methods; for trait
-    /// declarations it distinguishes default methods from bare signatures,
-    /// which method-lookup's fallback ordering depends on.
-    pub(super) has_body: bool,
-=======
->>>>>>> origin/main
 }
 
 /// The receiver shape of a blanket impl.
@@ -816,6 +857,11 @@ pub struct TraitEnv {
     /// own reference site, so the trait is a declaration rather than the
     /// spelling the blanket wrote (WEP 2026-08-10).
     pub(super) blanket_pack_assocs: IndexMap<(ModuleSource, AstId), Vec<(DeclKey, String)>>,
+    /// Per blanket impl, what determines each of its parameters, in
+    /// declaration order. Resolved once at build time from each bound's own
+    /// reference site.
+    pub(super) blanket_param_sources:
+        IndexMap<(ModuleSource, AstId), Vec<Option<(DeclKey, String)>>>,
     /// Digested headers for every `trait` declaration, keyed by
     /// `(ModuleSource, AstId)`. Lets method-lookup queries read trait
     /// method signatures without re-fetching the trait AST. See
@@ -1169,8 +1215,6 @@ impl TraitEnv {
                                     name: m.name.clone(),
                                     ast_id: m.id,
                                     type_params: m.type_params.clone(),
-<<<<<<< HEAD
-                                    has_body: m.body.is_some(),
                                     span: m.span,
                                     name_span: m.name_span,
                                     param_count: m
@@ -1178,10 +1222,6 @@ impl TraitEnv {
                                         .iter()
                                         .filter(|p| p.self_kind == ast::SelfKind::None)
                                         .count(),
-||||||| 4741f0604
-                                    has_body: m.body.is_some(),
-=======
->>>>>>> origin/main
                                 })
                                 .collect(),
                             assoc_types: trait_decl.associated_types.clone(),
@@ -1256,8 +1296,6 @@ impl TraitEnv {
                                 name: m.name.clone(),
                                 ast_id: m.id,
                                 type_params: m.type_params.clone(),
-<<<<<<< HEAD
-                                has_body: m.body.is_some(),
                                 span: m.span,
                                 name_span: m.name_span,
                                 param_count: m
@@ -1265,10 +1303,6 @@ impl TraitEnv {
                                     .iter()
                                     .filter(|p| p.self_kind == ast::SelfKind::None)
                                     .count(),
-||||||| 4741f0604
-                                has_body: m.body.is_some(),
-=======
->>>>>>> origin/main
                             })
                             .collect(),
                         associated_types: impl_block.associated_types.clone(),
@@ -1405,6 +1439,11 @@ impl TraitEnv {
                     &blanket_impls,
                     resolutions,
                 ),
+                blanket_param_sources: blanket_param_sources(
+                    &impl_headers,
+                    &blanket_impls,
+                    resolutions,
+                ),
                 impl_headers,
                 supertrait_closures_by_name: index_closures_by_name(
                     &trait_decl_headers,
@@ -1437,26 +1476,6 @@ impl TraitEnv {
             .get(module)
             .cloned()
             .unwrap_or_default()
-    }
-
-    /// The trait declaration `name` refers to as written inside `module` — the
-    /// query-time twin of the `resolve_trait` closure `build` uses.
-    pub(super) fn trait_decl_key_in(&self, module: &ModuleSource, name: &str) -> Option<DeclKey> {
-        let scope = self.module_import_scopes.get(module);
-        let declared = scope
-            .and_then(|s| s.original_names.get(name))
-            .map_or(name, String::as_str);
-        if let Some(source) = scope.and_then(|s| s.sources.get(name)) {
-            let imported = (source.clone(), declared.to_string());
-            if self.decl_index.contains_key(&imported) {
-                return Some(imported);
-            }
-        }
-        let local = (module.clone(), declared.to_string());
-        if self.decl_index.contains_key(&local) {
-            return Some(local);
-        }
-        self.find_trait_decl_key(declared)
     }
 
     /// The transitive supertraits of the trait `key` names, deduplicated by
@@ -1744,65 +1763,26 @@ impl TraitEnv {
         })
     }
 
-    /// The `(declaring trait, associated type)` pairs a value blanket projects
-    /// into type packs, in the order the impl declares them —
-    /// `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` yields
-    /// `[("Bound", "Assoc")]`. The trait is carried because a bare assoc name
-    /// is ambiguous: the reflection kinds all spell their member channel
-    /// `Members`.
-<<<<<<< HEAD
-    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(DeclKey, String)> {
-        self.blanket_pack_assocs
-||||||| 4741f0604
-    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(String, String)> {
-        let Some(header) = self
-            .impl_headers
-=======
     /// What determines each of a blanket impl's parameters, in declaration
-    /// order: `None` for the receiver, which the call site's receiver type
-    /// fills, and `Some((bound trait, associated type))` for one a predicate
-    /// fixes — `..F` in `impl<S: ReflectStruct<FieldTypes = [..F]>, ..F>`.
-    ///
-    /// Declaration order is the point: the impl's type arguments are consumed
-    /// positionally, and a receiver written after another parameter sits at a
-    /// slot that "receiver first, projections after" never fills.
+    /// order — see [`blanket_param_sources`].
     pub(crate) fn blanket_param_sources(
         &self,
         blanket: &BlanketImpl,
-    ) -> Vec<Option<(String, String)>> {
-        let Some(header) = self
-            .impl_headers
+    ) -> Vec<Option<(DeclKey, String)>> {
+        self.blanket_param_sources
             .get(&(blanket.module.clone(), blanket.ast_id))
-        else {
-            return Vec::new();
-        };
-        header
-            .type_params
-            .iter()
-            .filter(|tp| tp.is_real_type_param())
-            .map(|tp| {
-                if tp.name == blanket.param {
-                    return None;
-                }
-                header
-                    .type_params
-                    .iter()
-                    .flat_map(|other| &other.bounds)
-                    .flat_map(|bound| bound.assoc_types.iter().map(move |a| (&bound.name, a)))
-                    .find(|(_, assoc)| {
-                        let mut named = Vec::new();
-                        assoc.ty.mentioned_names(&mut named);
-                        named.iter().any(|n| n == &tp.name)
-                    })
-                    .map(|(bound_name, assoc)| (bound_name.clone(), assoc.name.clone()))
-            })
-            .collect()
+            .cloned()
+            .unwrap_or_default()
     }
 
-    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(String, String)> {
-        let Some(header) = self
-            .impl_headers
->>>>>>> origin/main
+    /// The `(declaring trait, associated type)` pairs a value blanket projects
+    /// into type packs, in the order the impl declares them —
+    /// `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` yields
+    /// one pair, keyed by `Bound`'s declaration. The trait is carried because a bare assoc name
+    /// is ambiguous: the reflection kinds all spell their member channel
+    /// `Members`.
+    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(DeclKey, String)> {
+        self.blanket_pack_assocs
             .get(&(blanket.module.clone(), blanket.ast_id))
             .cloned()
             .unwrap_or_default()

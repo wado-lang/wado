@@ -714,13 +714,13 @@ impl Monomorphizer {
     ) {
         let mut names_to_try = vec![MethodName::format_local(
             &info.fq_base_struct_name(),
-            info.trait_name.as_deref(),
+            info.trait_name.as_ref(),
             &info.method_name,
         )];
         if info.struct_name() != info.base_struct_name() {
             names_to_try.push(MethodName::format_local(
                 &info.fq_struct_name(),
-                info.trait_name.as_deref(),
+                info.trait_name.as_ref(),
                 &info.method_name,
             ));
         }
@@ -736,7 +736,7 @@ impl Monomorphizer {
                 module_source,
                 &generic_method_name,
                 Some(info),
-                &[&info.base_struct_name(), &info.struct_name()],
+                &receiver_candidates(Some(info), &[]),
                 None,
                 blanket_receiver.map(|id| (id, &*type_table)),
             ) else {
@@ -748,9 +748,7 @@ impl Monomorphizer {
             // re-keyed this way: a concrete impl whose single argument happens
             // to satisfy some blanket's bounds is not that blanket.
             let impl_type_args = info
-                .base_trait_name
-                .as_deref()
-                .or(info.trait_name.as_deref())
+                .base_trait_name()
                 .filter(|_| monomorph.is_blanket)
                 .and_then(|tn| {
                     blanket_pack_dispatch_args(
@@ -823,174 +821,6 @@ impl Monomorphizer {
                     && (!monomorph.impl_type_args.is_empty()
                         || !monomorph.method_type_args.is_empty())
                 {
-<<<<<<< HEAD
-                    let mut names_to_try = vec![MethodName::format_local(
-                        &info.fq_base_struct_name(),
-                        info.trait_name.as_ref(),
-                        &info.method_name,
-                    )];
-                    if info.struct_name() != info.base_struct_name() {
-                        names_to_try.push(MethodName::format_local(
-                            &info.fq_struct_name(),
-                            info.trait_name.as_ref(),
-                            &info.method_name,
-                        ));
-                    }
-                    // A blanket static's template is keyed by the blanket param
-                    // (`T^CaseName::by_name`), not the receiver — it lives in
-                    // `generic_name`.
-                    if monomorph.is_blanket {
-                        names_to_try.insert(0, monomorph.generic_name.clone());
-                    }
-                    for generic_method_name in names_to_try {
-                        if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
-                            generic_functions,
-                            &self.functions.trait_env,
-                            &func.module_source,
-                            &generic_method_name,
-                            Some(info),
-                            &receiver_candidates(Some(info), &[]),
-                            None,
-                            None,
-                        ) {
-                            let generic_func = generic_func_rc.borrow();
-                            // impl_type_args and method_type_args are now separate.
-                            // For variadic impls, impl_type_args may be empty — extract
-                            // from the struct name if needed.
-                            let impl_type_args = if monomorph.impl_type_args.is_empty()
-                                && !generic_func.impl_type_params.is_empty()
-                                && info.struct_name() != info.base_struct_name()
-                            {
-                                type_table
-                                    .find_type_args_by_mangled_name(&info.struct_name())
-                                    .unwrap_or_default()
-                            } else {
-                                monomorph.impl_type_args.clone()
-                            };
-                            let blanket_trait = info.base_trait_name();
-                            let impl_type_args = blanket_trait
-                                .filter(|_| monomorph.is_blanket)
-                                .and_then(|tn| {
-                                    blanket_pack_dispatch_args(
-                                        &impl_type_args,
-                                        &self.functions.trait_env,
-                                        tn,
-                                        &func.module_source,
-                                        type_table,
-                                    )
-                                })
-                                .unwrap_or(impl_type_args);
-                            let method_type_args = monomorph.method_type_args.clone();
-                            let total = impl_type_args.len() + method_type_args.len();
-                            if total >= generic_func.impl_type_params.len() {
-                                let method_info = generic_func.method_info.clone();
-                                let template_module = generic_func.module_source.clone();
-                                let key = InstantiationKey {
-                                    name: generic_method_name,
-                                    module_source: template_module,
-                                    impl_type_args,
-                                    method_type_args,
-                                    method_info,
-                                };
-                                // Pass the template's impl params so the blanket
-                                // key mangles to `Color^Trait::method`, not
-                                // `T<Color>^Trait::method`.
-                                let mangled = self.method_instantiation_name_inner(
-                                    &key,
-                                    type_table,
-                                    &generic_func.impl_type_params,
-                                );
-                                self.try_queue_function(key, mangled, type_table);
-                            }
-                            break;
-                        }
-                    }
-||||||| 4741f0604
-                    let mut names_to_try = vec![MethodName::format_local(
-                        &info.fq_base_struct_name(),
-                        info.trait_name.as_deref(),
-                        &info.method_name,
-                    )];
-                    if info.struct_name() != info.base_struct_name() {
-                        names_to_try.push(MethodName::format_local(
-                            &info.fq_struct_name(),
-                            info.trait_name.as_deref(),
-                            &info.method_name,
-                        ));
-                    }
-                    // A blanket static's template is keyed by the blanket param
-                    // (`T^CaseName::by_name`), not the receiver — it lives in
-                    // `generic_name`.
-                    if monomorph.is_blanket {
-                        names_to_try.insert(0, monomorph.generic_name.clone());
-                    }
-                    for generic_method_name in names_to_try {
-                        if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
-                            generic_functions,
-                            &self.functions.trait_env,
-                            &func.module_source,
-                            &generic_method_name,
-                            Some(info),
-                            &[&info.base_struct_name(), &info.struct_name()],
-                            None,
-                            None,
-                        ) {
-                            let generic_func = generic_func_rc.borrow();
-                            // impl_type_args and method_type_args are now separate.
-                            // For variadic impls, impl_type_args may be empty — extract
-                            // from the struct name if needed.
-                            let impl_type_args = if monomorph.impl_type_args.is_empty()
-                                && !generic_func.impl_type_params.is_empty()
-                                && info.struct_name() != info.base_struct_name()
-                            {
-                                type_table
-                                    .find_type_args_by_mangled_name(&info.struct_name())
-                                    .unwrap_or_default()
-                            } else {
-                                monomorph.impl_type_args.clone()
-                            };
-                            let blanket_trait = info
-                                .base_trait_name
-                                .as_deref()
-                                .or(info.trait_name.as_deref());
-                            let impl_type_args = blanket_trait
-                                .filter(|_| monomorph.is_blanket)
-                                .and_then(|tn| {
-                                    blanket_pack_dispatch_args(
-                                        &impl_type_args,
-                                        &self.functions.trait_env,
-                                        tn,
-                                        &func.module_source,
-                                        type_table,
-                                    )
-                                })
-                                .unwrap_or(impl_type_args);
-                            let method_type_args = monomorph.method_type_args.clone();
-                            let total = impl_type_args.len() + method_type_args.len();
-                            if total >= generic_func.impl_type_params.len() {
-                                let method_info = generic_func.method_info.clone();
-                                let template_module = generic_func.module_source.clone();
-                                let key = InstantiationKey {
-                                    name: generic_method_name,
-                                    module_source: template_module,
-                                    impl_type_args,
-                                    method_type_args,
-                                    method_info,
-                                };
-                                // Pass the template's impl params so the blanket
-                                // key mangles to `Color^Trait::method`, not
-                                // `T<Color>^Trait::method`.
-                                let mangled = self.method_instantiation_name_inner(
-                                    &key,
-                                    type_table,
-                                    &generic_func.impl_type_params,
-                                );
-                                self.try_queue_function(key, mangled, type_table);
-                            }
-                            break;
-                        }
-                    }
-=======
                     self.queue_monomorph_instantiation(
                         generic_functions,
                         &func.module_source,
@@ -999,7 +829,6 @@ impl Monomorphizer {
                         None,
                         type_table,
                     );
->>>>>>> origin/main
                 }
                 for arg in args {
                     self.collect_func_instantiation_sites_in_expr(
@@ -1045,136 +874,6 @@ impl Monomorphizer {
                             .is_some()
                     }
                 {
-<<<<<<< HEAD
-                    let mut names_to_try = vec![MethodName::format_local(
-                        &info.fq_base_struct_name(),
-                        info.trait_name.as_ref(),
-                        &info.method_name,
-                    )];
-                    if info.struct_name() != info.base_struct_name() {
-                        names_to_try.push(MethodName::format_local(
-                            &info.fq_struct_name(),
-                            info.trait_name.as_ref(),
-                            &info.method_name,
-                        ));
-                    }
-                    if monomorph.is_blanket {
-                        names_to_try.insert(0, monomorph.generic_name.clone());
-                    }
-                    for generic_method_name in names_to_try {
-                        if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
-                            generic_functions,
-                            &self.functions.trait_env,
-                            &method_func.module_source,
-                            &generic_method_name,
-                            Some(info),
-                            &receiver_candidates(Some(info), &[]),
-                            None,
-                            Some((receiver.type_id, type_table)),
-                        ) {
-                            let generic_func = generic_func_rc.borrow();
-                            // A pack-bound blanket declares one impl param per pack,
-                            // so the receiver alone underfills the key.
-                            let blanket_trait = info.base_trait_name();
-                            let impl_type_args = blanket_trait
-                                .and_then(|tn| {
-                                    blanket_pack_dispatch_args(
-                                        &monomorph.impl_type_args,
-                                        &self.functions.trait_env,
-                                        tn,
-                                        &method_func.module_source,
-                                        type_table,
-                                    )
-                                })
-                                .unwrap_or_else(|| monomorph.impl_type_args.clone());
-                            let method_type_args = monomorph.method_type_args.clone();
-                            if impl_type_args.len() + method_type_args.len()
-                                >= generic_func.impl_type_params.len()
-                            {
-                                let key = InstantiationKey {
-                                    name: generic_method_name,
-                                    module_source: generic_func.module_source.clone(),
-                                    impl_type_args,
-                                    method_type_args,
-                                    method_info: generic_func.method_info.clone(),
-                                };
-                                let mangled = self.method_instantiation_name_inner(
-                                    &key,
-                                    type_table,
-                                    &generic_func.impl_type_params,
-                                );
-                                self.try_queue_function(key, mangled, type_table);
-                            }
-                            break;
-                        }
-                    }
-||||||| 4741f0604
-                    let mut names_to_try = vec![MethodName::format_local(
-                        &info.fq_base_struct_name(),
-                        info.trait_name.as_deref(),
-                        &info.method_name,
-                    )];
-                    if info.struct_name() != info.base_struct_name() {
-                        names_to_try.push(MethodName::format_local(
-                            &info.fq_struct_name(),
-                            info.trait_name.as_deref(),
-                            &info.method_name,
-                        ));
-                    }
-                    if monomorph.is_blanket {
-                        names_to_try.insert(0, monomorph.generic_name.clone());
-                    }
-                    for generic_method_name in names_to_try {
-                        if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
-                            generic_functions,
-                            &self.functions.trait_env,
-                            &method_func.module_source,
-                            &generic_method_name,
-                            Some(info),
-                            &[&info.base_struct_name(), &info.struct_name()],
-                            None,
-                            Some((receiver.type_id, type_table)),
-                        ) {
-                            let generic_func = generic_func_rc.borrow();
-                            // A pack-bound blanket declares one impl param per pack,
-                            // so the receiver alone underfills the key.
-                            let blanket_trait = info
-                                .base_trait_name
-                                .as_deref()
-                                .or(info.trait_name.as_deref());
-                            let impl_type_args = blanket_trait
-                                .and_then(|tn| {
-                                    blanket_pack_dispatch_args(
-                                        &monomorph.impl_type_args,
-                                        &self.functions.trait_env,
-                                        tn,
-                                        &method_func.module_source,
-                                        type_table,
-                                    )
-                                })
-                                .unwrap_or_else(|| monomorph.impl_type_args.clone());
-                            let method_type_args = monomorph.method_type_args.clone();
-                            if impl_type_args.len() + method_type_args.len()
-                                >= generic_func.impl_type_params.len()
-                            {
-                                let key = InstantiationKey {
-                                    name: generic_method_name,
-                                    module_source: generic_func.module_source.clone(),
-                                    impl_type_args,
-                                    method_type_args,
-                                    method_info: generic_func.method_info.clone(),
-                                };
-                                let mangled = self.method_instantiation_name_inner(
-                                    &key,
-                                    type_table,
-                                    &generic_func.impl_type_params,
-                                );
-                                self.try_queue_function(key, mangled, type_table);
-                            }
-                            break;
-                        }
-                    }
-=======
                     self.queue_monomorph_instantiation(
                         generic_functions,
                         &method_func.module_source,
@@ -1183,7 +882,6 @@ impl Monomorphizer {
                         Some(receiver.type_id),
                         type_table,
                     );
->>>>>>> origin/main
                 }
                 // Check if this is a method call with explicit type args
                 if !type_args.is_empty() {

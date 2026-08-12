@@ -405,7 +405,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(&name)
                     .cloned()
                 && let Some((found_trait, info)) = {
-<<<<<<< HEAD
                     // A qualified call names one bound, so the others are not
                     // competitors — without this filter the collision it exists
                     // to resolve is still reported inside a generic body, and
@@ -422,32 +421,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .cloned()
                         .collect();
                     self.find_method_in_trait_bounds(&named, method_name, base_type_id, span)
-||||||| 4741f0604
-                    // A qualified call names one bound, so the others are not
-                    // competitors — without this filter the collision it exists
-                    // to resolve is still reported inside a generic body, and
-                    // the first bound answers regardless of which was named.
-                    // Bounds are compared as declarations, so a same-named
-                    // trait from another module does not answer for the one
-                    // the call named.
-                    let bound_names: Vec<String> = bounds
-                        .iter()
-                        .map(|b| b.name.clone())
-                        .filter(|n| {
-                            required_trait.is_none_or(|w| self.trait_decl_key_in_frame(n) == w.decl)
-                        })
-                        .collect();
-                    self.find_method_in_trait_bounds(&bound_names, method_name, base_type_id, span)
-=======
-                    let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
-                    self.find_method_in_trait_bounds(
-                        &bound_names,
-                        method_name,
-                        base_type_id,
-                        span,
-                        required_trait,
-                    )
->>>>>>> origin/main
                 }
             {
                 trait_name = Some(found_trait);
@@ -471,7 +444,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             };
             if let Some(bounds) = assoc_bounds
-<<<<<<< HEAD
                 && let Some((found_trait, info)) = {
                     // A projection carries its bounds as identities, answered
                     // where the trait declaration wrote them. The `ast` bounds
@@ -514,25 +486,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span,
                     )
                 }
-||||||| 4741f0604
-                && let Some((found_trait, info)) = {
-                    let bounds: Vec<String> = bounds
-                        .into_iter()
-                        .filter(|n| {
-                            required_trait.is_none_or(|w| self.trait_decl_key_in_frame(n) == w.decl)
-                        })
-                        .collect();
-                    self.find_method_in_trait_bounds(&bounds, method_name, base_type_id, span)
-                }
-=======
-                && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
-                    &bounds,
-                    method_name,
-                    base_type_id,
-                    span,
-                    required_trait,
-                )
->>>>>>> origin/main
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);
@@ -856,45 +809,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // method's own parameters remain — and it reports them.
             subst_ctx = subst_ctx.bind(&method_type_param_ids, &method_type_args);
             // Enforce the method's type-arg bounds (shared rule); a violating
-<<<<<<< HEAD
-            // concrete arg would otherwise trap WIR build. Hole args are skipped
-            // and re-checked in `finalize_infer_holes`. Reuse the params
-            // `infer_method_type_args` already looked up; the explicit-turbofish
-            // path (no inference) falls back to a fresh lookup.
-            match reuse_params {
-                Some(params) => self.enforce_type_arg_bounds(&params, &method_type_args, span),
-                None => self.check_method_type_arg_bounds(
-                    &struct_name,
-                    &struct_module,
-                    method_name,
-                    trait_name.as_ref().map(crate::name::FqTraitName::base_name),
-                    &method_type_args,
-                    span,
-                ),
-            }
-||||||| 4741f0604
-            // concrete arg would otherwise trap WIR build. Hole args are skipped
-            // and re-checked in `finalize_infer_holes`. Reuse the params
-            // `infer_method_type_args` already looked up; the explicit-turbofish
-            // path (no inference) falls back to a fresh lookup.
-            match reuse_params {
-                Some(params) => self.enforce_type_arg_bounds(&params, &method_type_args, span),
-                None => self.check_method_type_arg_bounds(
-                    &struct_name,
-                    &struct_module,
-                    method_name,
-                    trait_name.as_deref(),
-                    &method_type_args,
-                    span,
-                ),
-            }
-=======
             // concrete arg would otherwise trap WIR build. Hole args are
             // skipped and re-checked in `finalize_infer_holes`. The parameters
             // come from the signature dispatch chose, so the explicit-turbofish
             // path checks against the same declaration inference would have.
             self.enforce_type_arg_bounds(&method_own_params, &method_type_args, span);
->>>>>>> origin/main
         }
 
         // Apply unified substitution
@@ -3361,18 +3280,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // method, the trait still provides the body, so `Type::method`
             // (called concretely, not via a generic bound) must resolve to
             // the trait's default. This mirrors how generic dispatch
-<<<<<<< HEAD
-            // (`T::method()`) already finds default methods in
-            // `find_method_type_param_names`.
-            let trait_name_base = super::trait_env::get_type_name_static(trait_type);
-||||||| 4741f0604
-            // (`T::method()`) already finds default methods in
-            // `find_method_type_param_names`.
-            let trait_name_base = Self::get_type_name_static(trait_type);
-=======
             // (`T::method()`) already finds default methods.
-            let trait_name_base = Self::get_type_name_static(trait_type);
->>>>>>> origin/main
+            let trait_name_base = super::trait_env::get_type_name_static(trait_type);
             if let Some(method) = self
                 .trait_sig_by_name(&trait_name_base)
                 .and_then(|sig| sig.method(method_name))
