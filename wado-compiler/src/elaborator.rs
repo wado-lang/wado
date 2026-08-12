@@ -233,6 +233,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
         TypeLookup {
             current_module_source: &self.current_module_source,
+            resolutions: &self.tysys.resolutions,
             imported_type_sources: &self.sem.imports.imported_type_sources,
             import_original_names: &self.sem.imports.import_original_names,
             namespace_imports: &self.sem.imports.namespace_imports,

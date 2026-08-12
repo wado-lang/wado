@@ -464,11 +464,16 @@ Each mechanism states what it makes impossible, not what it discourages.
 
 ## Migration
 
-What is left, in the order it has to happen: the scope before anything reads it,
-synthesis before the table can be total, the name-keyed storage before the
-mangling. Each step compiles, passes the suite, and ends with a mechanical
-completion check.
+What is left, in the order it has to happen: the storage before the scope,
+synthesis before the table can be total, both before the mangling. Each step
+compiles, passes the suite, and ends with a mechanical completion check.
 
+- [ ] Declaration data keyed by `DefId`. Done when no
+      `IndexMap<ModuleSource, IndexMap<String, _>>` remains. `all_newtypes` goes
+      first and is a deletion rather than a rekey: every site that writes it
+      already calls `TypeTable::register_decl_type` on the same declaration one
+      line away, so the registry is a name-keyed duplicate of an index that is
+      already keyed by the declaring node.
 - [ ] `Scope` — one implementation of what a name means in a module. Done when
       `SymbolTable`'s name lookups, `module_import_scope`, `ModuleImports` and
       `TypeLookup`'s import branch are deleted.
@@ -495,13 +500,24 @@ completion check.
       `Struct | Enum | Variant | Newtype | Flags | Resource | GenericInstance`;
       each such group needs its arms split, which is the point — those patterns
       are what let an instantiated spelling be read as a declaration name.
-- [ ] Declaration data moved onto `DefTable`; `TypeLookup`'s scope walk deleted.
-      Done when no `IndexMap<ModuleSource, IndexMap<String, _>>` remains.
+- [ ] `RequiredTrait` carries a `Resolution`. A qualified call's trait prefix can
+      name a type-parameter binder or reach no declaration at all, so a bare
+      `DefId` cannot stand for it — the answer the site already has can. Waits on
+      the trait bounds it is compared against carrying one too.
 - [ ] `SymbolPath`; the mangled-name parsers deleted; DCE retention keys the
       struct's identity rather than re-deriving a name that must match one built
       elsewhere. Done when `name.rs` exports no function taking a mangled string.
 
-The `Scope` step is the one with a real risk of behaviour change, because the
+The storage comes before the scope because it is what the scope is for.
+`TypeLookup::lookup_ref` walks fn-local, module-local, current module and imports
+to turn a spelling into the `(module, name)` pair its registry is keyed by; there
+is nothing else it does. Each registry that moves to `DefId` deletes one caller
+of that walk, and the walk goes when the last one does. Attempting it the other
+way round means keeping a flat name scope that has to serve seven kind-partitioned
+registries at once, which it cannot: a type and a same-named case belong to
+different registries today and a single flat answer must pick one of them.
+
+Unifying the scope is the step with a real risk of behaviour change, because the
 remaining scopes disagree and unifying them picks a winner. Each disagreement is
 a decision made deliberately, with a fixture, rather than one absorbed.
 

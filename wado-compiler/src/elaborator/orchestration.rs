@@ -145,7 +145,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .as_ref()
                 .expect("stdlib snapshot must have a populated annotate state")
         });
-        let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> = snapshot_state
+
+        // Resolve every reference site once, from the module that wrote it,
+        // before anything asks what a name means — the type-collection passes
+        // below are the first to ask.
+        let resolutions = {
+            let _span = logger.span("elaborate/resolutions");
+            // Continue the snapshot's table: a stdlib `ImplSig` cached there
+            // carries `DefId`s, and they only read back as the same
+            // declarations if the identities are the same ones.
+            let seed = snapshot_state.map(|s| s.tysys.resolutions.defs().as_ref());
+            let defs =
+                std::sync::Arc::new(crate::defs::DefTable::build_seeded(seed, modules, symbols));
+            Rc::new(crate::resolve::Resolutions::build(modules, symbols, defs))
+        };
+
+        // Keyed by the declaration, not by a spelling a module has to be
+        // standing in to resolve. `TypeLookup` reaches an entry through
+        // `Resolutions`, which is the only thing that turns a name into one.
+        let mut all_newtypes: IndexMap<crate::defs::DefId, TypeId> = snapshot_state
             .map(|s| (*s.tysys.all_newtypes).clone())
             .unwrap_or_default();
         let mut all_generic_newtypes: IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>> =
@@ -394,14 +412,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     };
                     if newtype_decl.type_params.is_empty() {
                         // Skip if already resolved (fixpoint convergence).
-                        if all_newtypes
-                            .get(module_source)
-                            .is_some_and(|m| m.contains_key(&newtype_decl.name))
+                        if resolutions
+                            .defs()
+                            .of_ast_id(newtype_decl.id)
+                            .is_some_and(|def| all_newtypes.contains_key(&def))
                         {
                             continue;
                         }
                         let lookup = TypeLookup {
                             current_module_source: module_source,
+                            resolutions: &resolutions,
                             imported_type_sources: &imported_type_sources,
                             import_original_names: &import_original_names,
                             namespace_imports: &namespace_imports,
@@ -437,10 +457,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         type_table
                             .borrow_mut()
                             .register_decl_type(newtype_decl.id, newtype_id);
-                        all_newtypes
-                            .entry(module_source.clone())
-                            .or_default()
-                            .insert(newtype_decl.name.clone(), newtype_id);
+                        if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
+                            all_newtypes.insert(def, newtype_id);
+                        }
                         newly_resolved = true;
                     } else if !all_generic_newtypes
                         .get(module_source)
@@ -505,6 +524,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for item in &module.items {
                 let lookup = TypeLookup {
                     current_module_source: module_source,
+                    resolutions: &resolutions,
                     imported_type_sources: &imported_type_sources,
                     import_original_names: &import_original_names,
                     namespace_imports: &namespace_imports,
@@ -627,10 +647,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             type_table
                                 .borrow_mut()
                                 .register_decl_type(newtype_decl.id, newtype_id);
-                            all_newtypes
-                                .entry(module_source.clone())
-                                .or_default()
-                                .insert(newtype_decl.name.clone(), newtype_id);
+                            if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
+                                all_newtypes.insert(def, newtype_id);
+                            }
                         } else {
                             // Generic newtype: store definition for lazy instantiation
                             let type_params = newtype_decl
@@ -751,10 +770,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .borrow_mut()
                             .register_decl_type(flags_decl.id, flags_type);
                         // Add to newtypes so it can be used as a type name in signatures
-                        all_newtypes
-                            .entry(module_source.clone())
-                            .or_default()
-                            .insert(flags_decl.name.clone(), flags_type);
+                        if let Some(def) = resolutions.defs().of_ast_id(flags_decl.id) {
+                            all_newtypes.insert(def, flags_type);
+                        }
                         // Store member info with bitmask values (1 << index)
                         let members: Vec<FlagsMemberData> = flags_decl
                             .flags
@@ -836,19 +854,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // This allows find_trait_method_for_type and find_indexing_trait_impl to do O(1)
         // lookups by type name instead of scanning all items in all modules per method call.
         // Also runs orphan rule checking; violations are emitted as errors.
-        // Resolve every reference site once, from the module that wrote it,
-        // before anything asks what a name means.
-        let resolutions = {
-            let _span = logger.span("elaborate/resolutions");
-            // Continue the snapshot's table: a stdlib `ImplSig` cached there
-            // carries `DefId`s, and they only read back as the same
-            // declarations if the identities are the same ones.
-            let seed = snapshot_state.map(|s| s.tysys.resolutions.defs().as_ref());
-            let defs =
-                std::sync::Arc::new(crate::defs::DefTable::build_seeded(seed, modules, symbols));
-            Rc::new(crate::resolve::Resolutions::build(modules, symbols, defs))
-        };
-
         let (trait_env, orphan_violations) = {
             let _span = logger.span("elaborate/trait_env");
             super::trait_env::TraitEnv::build(
@@ -974,10 +979,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     cache.insert(name.clone());
                 }
             }
-            for m in all_newtypes.values() {
-                for name in m.keys() {
-                    cache.insert(name.clone());
-                }
+            for def in all_newtypes.keys() {
+                cache.insert(resolutions.defs().name(*def).to_string());
             }
             for m in all_generic_newtypes.values() {
                 for name in m.keys() {
@@ -1017,7 +1020,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             collect(&all_variant_cases, &mut local);
             collect(&all_enum_cases, &mut local);
             collect(&all_flags_cases, &mut local);
-            collect(&all_newtypes, &mut local);
+            for def in all_newtypes.keys() {
+                let defs = resolutions.defs();
+                local
+                    .entry(defs.module(*def).clone())
+                    .or_default()
+                    .insert(defs.name(*def).to_string());
+            }
             collect(&all_generic_newtypes, &mut local);
 
             // The prelude is auto-imported into every module, so its types are

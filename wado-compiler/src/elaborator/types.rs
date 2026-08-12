@@ -2112,6 +2112,10 @@ pub(super) struct TraitMethodMatch {
 /// fields are borrowed; no heap allocation.
 pub(crate) struct TypeLookup<'a> {
     pub(crate) current_module_source: &'a ModuleSource,
+    /// What every name in the program resolves to, answered once by the resolve
+    /// pass. The registries this view reads are keyed by declaration, so this is
+    /// how a written name reaches one.
+    pub(crate) resolutions: &'a crate::resolve::Resolutions,
     pub(crate) imported_type_sources: &'a IndexMap<String, ModuleSource>,
     pub(crate) import_original_names: &'a IndexMap<String, String>,
     /// Namespace-import aliases (`use ns from "..."`). A `ns::Type` reference
@@ -2120,7 +2124,7 @@ pub(crate) struct TypeLookup<'a> {
     /// import context pass an empty map (ns-qualified type references only
     /// appear in resolved bodies).
     pub(crate) namespace_imports: &'a IndexMap<String, ModuleSource>,
-    pub(crate) all_newtypes: &'a IndexMap<ModuleSource, IndexMap<String, TypeId>>,
+    pub(crate) all_newtypes: &'a IndexMap<crate::defs::DefId, TypeId>,
     pub(crate) all_struct_fields: &'a IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
     pub(crate) all_variant_cases: &'a IndexMap<ModuleSource, IndexMap<String, VariantInfo>>,
     pub(crate) all_enum_cases: &'a IndexMap<ModuleSource, IndexMap<String, EnumInfo>>,
@@ -2377,14 +2381,31 @@ impl<'a> TypeLookup<'a> {
         )
     }
 
+    /// The newtype (or `flags` type) `name` names here.
+    ///
+    /// Function-local items have no identity yet, so they keep their two
+    /// name-keyed tiers; a module-level one is reached through
+    /// [`Self::declaration`], which is the resolve pass's answer rather than a
+    /// second scope walk.
     pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
-        self.fn_local_first(
-            name,
-            self.fn_local_newtypes,
-            Some(self.local_newtypes),
-            self.all_newtypes,
-        )
-        .copied()
+        if let Some(id) = self.fn_local_newtypes.get(name) {
+            return Some(*id);
+        }
+        if let Some(id) = self.local_newtypes.get(name) {
+            return Some(*id);
+        }
+        self.all_newtypes.get(&self.declaration(name)?).copied()
+    }
+
+    /// Which declaration `name` reaches from the module this view stands in.
+    ///
+    /// The one place a `TypeLookup` turns a spelling into an identity, and it
+    /// does not do the turning: [`crate::resolve::Resolutions`] answered it
+    /// once, in the module that wrote the name.
+    fn declaration(&self, name: &str) -> Option<crate::defs::DefId> {
+        let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
+        self.resolutions
+            .declaration_named(self.current_module_source, canon.as_deref().unwrap_or(name))
     }
 }
 

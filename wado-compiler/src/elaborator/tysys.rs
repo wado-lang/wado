@@ -55,7 +55,7 @@ pub(crate) struct TypeSystem {
     /// the annotate-decls pass; read-only afterwards. [`super::types::TypeLookup`]
     /// resolves type names against these without cloning into per-module
     /// flat maps.
-    pub(crate) all_newtypes: Rc<IndexMap<ModuleSource, IndexMap<String, TypeId>>>,
+    pub(crate) all_newtypes: Rc<IndexMap<crate::defs::DefId, TypeId>>,
     pub(crate) all_generic_newtypes:
         Rc<IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>>>,
     pub(crate) all_struct_fields: Rc<IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>>,

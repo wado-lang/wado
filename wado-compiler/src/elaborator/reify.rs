@@ -478,6 +478,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn type_lookup(&self) -> TypeLookup<'_> {
         TypeLookup {
             current_module_source: &self.current_module_source,
+            resolutions: &self.tysys.resolutions,
             imported_type_sources: &self.sem.imports.imported_type_sources,
             import_original_names: &self.sem.imports.import_original_names,
             namespace_imports: &self.sem.imports.namespace_imports,
@@ -848,11 +849,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // module level; they materialise per-instantiation.
             return None;
         }
-        let type_id = *self
-            .tysys
-            .all_newtypes
-            .get(&self.current_module_source)?
-            .get(&newtype_decl.name)?;
+        let def = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id)?;
+        let type_id = *self.tysys.all_newtypes.get(&def)?;
         Some(TirNewtype {
             name: newtype_decl.name.clone(),
             module_source: self.current_module_source.clone(),
