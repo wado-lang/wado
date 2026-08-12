@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use crate::ast::{self, AstId, AstVisitor, GenericParam, Item, Module, Type};
 use crate::defs::{DefId, DefTable};
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::symbol::SymbolTable;
 
@@ -62,16 +62,10 @@ struct Scopes {
     /// re-exports reach.
     own: IndexMap<ModuleSource, IndexMap<String, DefId>>,
     /// The prelude's public surface, then its implementation modules' own
-    /// declarations. In scope without a `use`, which is what makes `i32` and
-    /// `List` universal and lets a sealed compiler item (`ReflectStruct`,
-    /// `Member`) resolve for a module that never named it.
+    /// declarations. In scope in every module without a `use`, which is what
+    /// makes `i32` and `List` universal and lets a sealed compiler item
+    /// (`ReflectStruct`, `Member`) resolve for a module that never named it.
     prelude: IndexMap<String, DefId>,
-    /// The modules that opted out of the prelude with `#![no_prelude]` — the
-    /// prelude's own implementation, the runtime and the allocator, which
-    /// import what they need. The opt-out has to hold here or it does not hold
-    /// at all: the type lookup honours it and this layer did not, so the same
-    /// bare name meant one thing to one and nothing to the other.
-    no_prelude: IndexSet<ModuleSource>,
 }
 
 impl Scopes {
@@ -86,9 +80,6 @@ impl Scopes {
         }
         if let Some(def) = self.own.get(module).and_then(|m| m.get(name)) {
             return Some(*def);
-        }
-        if self.no_prelude.contains(module) {
-            return None;
         }
         self.prelude.get(name).copied()
     }
@@ -122,10 +113,7 @@ impl Scopes {
         }
         out.prelude = surface;
 
-        for (module, ast) in modules {
-            if ast.has_no_prelude() {
-                out.no_prelude.insert(module.clone());
-            }
+        for module in modules.keys() {
             let imports: IndexMap<String, DefId> = symbols
                 .imports_in(module)
                 .filter_map(|(name, sym)| Some((name.to_string(), defs.of_ast_id(sym.defined_at)?)))
