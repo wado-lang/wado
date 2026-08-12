@@ -11,10 +11,10 @@ use crate::hashmap::{IndexMap, IndexSet};
 use wasm_encoder::ValType;
 
 use crate::ast::{Attribute, CmImport, GenericType, Type};
+use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType};
 use crate::module_source::ModuleSource;
 use crate::name::to_kebab;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
-use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType};
 
 /// Classify a future's type argument into the CM future payload category.
 /// The single source of truth shared by the future-read synthesis path and the
@@ -356,7 +356,9 @@ fn wasi_error_code_source_from_ast(
     let source = registry.resolve_cm_source_for(n, None)?;
     let wasi = source.strip_prefix("wasi:")?;
     let package = wasi.split(['/', '@']).next()?;
-    (registry.get_enum_cm_name_by_source(&source, &n.name).is_some()
+    (registry
+        .get_enum_cm_name_by_source(&source, &n.name)
+        .is_some()
         || registry
             .get_variant_cm_name_by_source(&source, &n.name)
             .is_some())

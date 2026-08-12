@@ -26,13 +26,13 @@ use std::rc::Rc;
 use crate::cm_abi::CmValType;
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::DeclPath;
 use crate::package::Package;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
-use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
 use crate::world_registry::{WorldExportInfo, WorldInfo};
 
 pub use export_adapter::export_binding_func_name;
@@ -1795,9 +1795,7 @@ mod tests {
     /// carried, not recovered from the rendered import name.
     #[test]
     fn helpers_cm_canonical_call_carries_the_payload() {
-        use crate::canonical::{
-            CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType,
-        };
+        use crate::canonical::{CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType};
         let intrinsic = CanonicalIntrinsic::FutureRead(CmFuturePayload::Value(
             CmPayloadType::Option(Box::new(CmPayloadType::Scalar(CmScalarType::U32))),
         ));

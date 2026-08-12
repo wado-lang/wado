@@ -38,10 +38,10 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call, expr_stmt,
-    generic_method_call, i32_const, if_stmt, index_value_trait, internal_call, let_mut_stmt,
-    let_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, param_local, return_stmt,
-    split_packed_ptr_len, synth_span,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
+    expr_stmt, generic_method_call, i32_const, if_stmt, index_value_trait, internal_call,
+    let_mut_stmt, let_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, param_local,
+    return_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::cm_free::{

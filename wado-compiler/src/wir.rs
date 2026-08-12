@@ -319,7 +319,6 @@ impl WirPackage {
     }
 }
 
-
 /// A globally-scoped name in WIR.
 ///
 /// Carries both forms needed by different consumers:

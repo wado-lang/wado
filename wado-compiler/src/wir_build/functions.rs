@@ -1,6 +1,7 @@
 //! Function collection — gathers all reachable functions from the `NirPackage`,
 //! registers their types and creates `WirFunction` stubs (bodies filled later).
 
+use crate::canonical::CanonicalIntrinsic;
 use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -10,7 +11,6 @@ use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
 use crate::nir_value_graph::ValueKind;
 use crate::tir::{PrimitiveType, TypeTable};
-use crate::canonical::CanonicalIntrinsic;
 use crate::wir::{WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType};
 
 use super::context::{PendingFunctionBody, WirContext};

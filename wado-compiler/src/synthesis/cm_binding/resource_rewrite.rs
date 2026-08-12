@@ -26,12 +26,12 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
-use crate::synthesis::common::{
-    alloc_named_local, assign, binary, break_stmt, builtin_call, cast, cm_canonical_call, entry_call,
-    expr_stmt, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt,
-    option_none, option_some, return_stmt, synth_span,
-};
 use crate::canonical::{CanonicalIntrinsic, CmFuturePayload, CmStreamPayload};
+use crate::synthesis::common::{
+    alloc_named_local, assign, binary, break_stmt, builtin_call, cast, cm_canonical_call,
+    entry_call, expr_stmt, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref,
+    loop_stmt, option_none, option_some, return_stmt, synth_span,
+};
 
 use super::synthesize_lift;
 use super::types::{CmStdlibNames, LiftContext, LowerContext, binary_add, type_id_to_ast_type};
@@ -1796,16 +1796,10 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
     };
     let (canonical, helper) = if is_future {
         let payload = crate::component_model::classify_future_payload(tt, payload_tid);
-        (
-            CanonicalIntrinsic::FutureNew(payload),
-            "cm_future_pair",
-        )
+        (CanonicalIntrinsic::FutureNew(payload), "cm_future_pair")
     } else {
         let payload = crate::component_model::classify_stream_payload(tt, payload_tid);
-        (
-            CanonicalIntrinsic::StreamNew(payload),
-            "cm_stream_pair",
-        )
+        (CanonicalIntrinsic::StreamNew(payload), "cm_stream_pair")
     };
     let result_type = expr.type_id;
     let packed = cm_canonical_call(canonical, vec![], TypeTable::I64);

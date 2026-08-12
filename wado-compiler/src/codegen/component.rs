@@ -13,10 +13,12 @@
 use super::component_context::{CmTypeKey, ComponentModelContext};
 use super::postprocess;
 use crate::ast::Type;
+use crate::canonical::{
+    CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload,
+};
 use crate::component_model::{CmFunctionInfo, CmTypeGen, CmVariantCase};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_package::NirPackage;
-use crate::canonical::{CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
 use crate::wir::WirPackage;
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
