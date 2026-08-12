@@ -32,6 +32,11 @@ use crate::token::Span;
 /// Per-local use information: where the local is defined and every node that
 /// reads it. Used by the engine to re-enqueue a local's uses when its
 /// definition is rewritten (copy propagation, const-fold through a `Let`, …).
+// TEMPORARY census — revert.
+pub static ONEVER_OK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static ONEVER_REASSIGNED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static ONEVER_ADDR: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 #[derive(Default, Debug)]
 pub struct LocalUses {
     /// The `Let` / `LetDestructure` statement that binds the local, if any.
@@ -331,10 +336,7 @@ impl<'a> Engine<'a> {
             // local has one version: a parameter is entry-defined, so its def
             // dominates every use, and unreassigned it holds one value.
             ExprKind::Local { index, .. } => {
-                if !self.param_locals.contains(&index) {
-                    return None;
-                }
-                if self.locals().get(index as usize).is_none_or(|l| l.is_mut) {
+                if !self.local_has_one_version(index) {
                     return None;
                 }
                 self.body.values.canonical_local(index, result_ty)
@@ -606,6 +608,43 @@ impl<'a> Engine<'a> {
         self.buf.elided_locals.push(local);
         #[cfg(not(debug_assertions))]
         let _ = local;
+    }
+
+    /// Whether `local` provably holds one value for the whole body, which is
+    /// what makes [`ValuePool::canonical_local`]'s one id per index denote one
+    /// value.
+    ///
+    /// A non-`mut` parameter qualifies by being entry-defined and unreassigned.
+    /// So does an ordinary binding that is never written again — and it is the
+    /// safer of the two under the anchor rule, since its `let` travels with any
+    /// copy of an operand naming it while a parameter's entry def does not.
+    ///
+    /// Read off the use index rather than `NirLocal::is_mut`: a pass that mints
+    /// a temp sets that flag by hand, while the index is maintained by the edit
+    /// API. Both halves fail safe — `reads` over-approximates (it holds every
+    /// `Local` node in the arena, reachable or not), so an assign that folded
+    /// away still refuses, and refusing costs a promotion, never correctness.
+    fn local_has_one_version(&mut self, local: u32) -> bool {
+        if self.local_def(local).is_none() {
+            // No binding statement: a parameter, which qualifies only when the
+            // signature never reassigns it.
+            return self.param_locals.contains(&local)
+                && self.locals().get(local as usize).is_some_and(|l| !l.is_mut);
+        }
+        let mentions = self.local_reads(local).to_vec();
+        if mentions.iter().any(|&m| self.is_assign_target(m)) {
+            ONEVER_REASSIGNED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            return false;
+        }
+        // A write through a reference leaves no assign target to see, so a local
+        // whose address was taken is out regardless of how it reads.
+        let ok = !self.body_address_taken().contains(&local);
+        if ok {
+            ONEVER_OK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        } else {
+            ONEVER_ADDR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        ok
     }
 
     /// Read-only view of the owning function's local list. Some rules

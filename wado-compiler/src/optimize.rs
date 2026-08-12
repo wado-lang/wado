@@ -323,6 +323,18 @@ pub fn optimize(
     // The born-resolved invariant is now enforced by the type system: a call
     // node's `func_id` is a non-optional `FuncId`, stamped at its synthesis site.
 
+    // TEMPORARY census — revert.
+    if crate::trace::filter().enabled("onever") {
+        use std::sync::atomic::Ordering::Relaxed;
+        crate::compiler_trace!(
+            "onever",
+            "ordinary-binding resolves: ok={} reassigned={} address-taken={}",
+            crate::nir_engine::ONEVER_OK.load(Relaxed),
+            crate::nir_engine::ONEVER_REASSIGNED.load(Relaxed),
+            crate::nir_engine::ONEVER_ADDR.load(Relaxed)
+        );
+    }
+
     project
 }
 
