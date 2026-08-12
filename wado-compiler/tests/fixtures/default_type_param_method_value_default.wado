@@ -1,0 +1,72 @@
+// A parameter default is checked against the parameter type with the
+// signature's own type-parameter defaults applied — on a method as much as on a
+// free function. `Priv {}` satisfies `v: T` only for the `T` a caller gets by
+// default, and against a bare `T` nothing concrete could.
+//
+// `Boxed<A>::scaled` puts the method's `T` at slot 1, so the substitution has
+// to key on the index the declaration gave the parameter rather than on its
+// position among the method's own.
+
+struct Priv {
+    n: i32 = 5,
+}
+
+trait Tagged {
+    fn tag(&self) -> i32;
+}
+
+impl Tagged for Priv {
+    fn tag(&self) -> i32 {
+        return self.n;
+    }
+}
+
+impl Tagged for i32 {
+    fn tag(&self) -> i32 {
+        return *self;
+    }
+}
+
+pub fn free<T: Tagged = Priv>(v: T = Priv {}) -> i32 {
+    return v.tag();
+}
+
+struct Holder {
+    base: i32,
+}
+
+impl Holder {
+    fn scaled<T: Tagged = Priv>(&self, v: T = Priv {}) -> i32 {
+        return self.base + v.tag();
+    }
+}
+
+struct Boxed<A> {
+    item: A,
+}
+
+impl<A: Tagged> Boxed<A> {
+    fn scaled<T: Tagged = Priv>(&self, v: T = Priv {}) -> i32 {
+        return self.item.tag() + v.tag();
+    }
+}
+
+test "a free function's value default takes its type parameter's default" {
+    assert free() == 5;
+    assert free(9) == 9;
+}
+
+test "a method's value default takes its type parameter's default" {
+    let h = Holder { base: 1 };
+    assert h.scaled() == 6;
+    assert h.scaled(9) == 10;
+}
+
+test "a method on a generic impl numbers its own slots after the impl's" {
+    let b = Boxed { item: 2 };
+    assert b.scaled() == 7;
+    assert b.scaled(9) == 11;
+}
+
+__DATA__
+{"test": {}}

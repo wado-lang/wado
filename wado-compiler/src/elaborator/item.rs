@@ -999,20 +999,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_params: &[ast::GenericParam],
         ty: TypeId,
     ) -> TypeId {
-        let space: Vec<ast::GenericParam> = type_params
+        let defaulted: Vec<(String, ast::Type)> = type_params
             .iter()
             .filter(|p| p.is_real_type_param())
-            .cloned()
+            .filter_map(|p| p.default.as_ref().map(|d| (p.name.clone(), d.clone())))
             .collect();
-        if !space.iter().any(|p| p.default.is_some()) {
+        if defaulted.is_empty() {
             return ty;
         }
         let mut subst = crate::hashmap::IndexMap::default();
-        for (i, p) in space.iter().enumerate() {
-            if let Some(default_ty) = &p.default {
-                let resolved = self.resolve_type(default_ty);
-                subst.insert(i as u32, resolved);
-            }
+        for (name, default_ty) in defaulted {
+            // The index the declaration gave the parameter, not its position
+            // among the signature's own: a method's slots follow the impl's.
+            let &(index, _) = self
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .get(&name)
+                .expect("a signature's own type parameters are in scope for its defaults");
+            let resolved = self.resolve_type(&default_ty);
+            subst.insert(index, resolved);
         }
         self.tysys
             .type_table
@@ -2451,9 +2457,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Walk the default for its side-effect fact recording; the
             // resolved TIR is discarded (reify re-emits it from the AST).
+            // Checked against the parameter type with the method's own
+            // type-parameter defaults applied, as the free-function path does.
             if let Some(default_ast) = &param.default {
-                let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
-                scope.typecheck(resolved, type_id, default_ast.span());
+                let expected = scope.apply_type_param_defaults(&func.type_params, type_id);
+                let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(expected));
+                scope.typecheck(resolved, expected, default_ast.span());
             }
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             scope.record_local_symbol(
