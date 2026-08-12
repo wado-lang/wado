@@ -201,12 +201,17 @@ One type answers "what does this name mean in module M", and it is the only plac
 a name becomes a `DefId`.
 
 ```rust
-pub struct Scope<'a> { /* module, binders, DefTable, imports */ }
+struct Scopes { /* per-module imports, per-module own declarations, the prelude */ }
 
-impl Scope<'_> {
-    fn resolve(&self, name: &str) -> Resolution;
+impl Scopes {
+    fn resolve(&self, module: &ModuleSource, name: &str) -> Option<DefId>;
 }
 ```
+
+The layers are stored rather than flattened per module: the prelude is in scope
+everywhere, and copying it into each module's map would cost the prelude's size
+times the module count for no added answer. The binders are the walk's, since they
+are scoped to the item being walked rather than to the module.
 
 The layers are ordered, and the order is the specification rather than a lookup's
 incidental fallbacks:
@@ -238,7 +243,10 @@ differently depending on which walk a pass happened to reach.
 ```rust
 pub enum Resolution {
     Def(DefId),
-    Binder(BinderId),
+    /// The type parameter's own node. A binder is not a declaration — it is
+    /// scoped to the item that wrote it and named only from inside — so it gets
+    /// no `DefId`.
+    Binder(AstId),
     Unresolved,
 }
 
@@ -421,9 +429,10 @@ Each mechanism states what it makes impossible, not what it discourages.
 
 ## Migration
 
-What is left, in the order it has to happen: identity before consumers, consumers
-before the name-keyed storage, storage before the mangling. Each step compiles,
-passes the suite, and ends with a mechanical completion check.
+What is left, in the order it has to happen: the scope before anything reads it,
+synthesis before the table can be total, the name-keyed storage before the
+mangling. Each step compiles, passes the suite, and ends with a mechanical
+completion check.
 
 - [ ] `Scope` — one implementation of what a name means in a module. Done when
       `SymbolTable`'s name lookups, `module_import_scope`, `ModuleImports` and
@@ -440,23 +449,27 @@ passes the suite, and ends with a mechanical completion check.
         module-level declarations, so a local `struct` has no identity and no
         scope entry; `TypeLookup`'s function-local tier answers for it by name.
         It needs a `DefId` scoped to its declaring function.
-- [ ] `Resolutions::at` made total; the walk extended until no fixture panics.
-      Done when the `Option` is gone from the signature.
+- [ ] `ast::Type::Resolved(DefId)`; synthesis stops spelling names. Done when no
+      synthesis site builds a `NamedType` from a `&str`. This has to come before
+      the table can be total: a synthesised reference carries an `AstId::fresh`
+      the walk never saw, so every consumer must keep tolerating a missing answer
+      while those 59 sites exist.
+- [ ] `Resolutions::at` made total, once nothing mints an unwalked site. Done
+      when the `Option` is gone from the signature — five call sites read it
+      today.
 - [ ] The impl header's own trait reference. A header whose trait position names
       no declaration — a bodiless derive naming a stdlib trait its module never
       `use`d — still leaves `same_trait` comparing spellings. It is the last
       spelling comparison in trait dispatch, and it closes when the scope answers
       for that position.
-- [ ] Identity-deciding queries flipped to `DefId`-only, starting with
-      `type_implements_trait`, `find_trait_impl_for_type_with_args`,
-      `locate_static_method_impl` and the indexes they read. Done when no query
-      takes both a name and an identity.
 - [ ] `ResolvedType` nominal variants carry `DefId`. Done when `ResolvedType`
-      holds no `(name, module_source)` pair.
+      holds no `(name, module_source)` pair. The nominal variants are matched at
+      ~790 sites, 188 of them in or-patterns that bind one `name` across
+      `Struct | Enum | Variant | Newtype | Flags | Resource | GenericInstance`;
+      each such group needs its arms split, which is the point — those patterns
+      are what let an instantiated spelling be read as a declaration name.
 - [ ] Declaration data moved onto `DefTable`; `TypeLookup`'s scope walk deleted.
       Done when no `IndexMap<ModuleSource, IndexMap<String, _>>` remains.
-- [ ] `ast::Type::Resolved(DefId)`; synthesis stops spelling names. Done when no
-      synthesis site builds a `NamedType` from a `&str`.
 - [ ] `SymbolPath`; the mangled-name parsers deleted; DCE retention keys the
       struct's identity rather than re-deriving a name that must match one built
       elsewhere. Done when `name.rs` exports no function taking a mangled string.
@@ -487,16 +500,11 @@ Costs and risks:
 - `DefTable` is a whole-program table built before elaboration. It must be
   populated on the stdlib snapshot path too, or a snapshot restore resolves
   nothing.
-- Stage 5 touches `ResolvedType`'s nominal variants, matched in ~160 places, often
-  in or-patterns binding one `name` across
-  `Struct | Enum | Variant | Newtype | Flags | Resource | GenericInstance`. Each
-  such group needs its arms split. That is the point: those or-patterns are what
-  let an instantiated spelling be read as a declaration name.
-- Stage 6 moves the elaborator's hottest lookups. `DefId` indexing is a `Vec`
-  access where the current path is two hash lookups and a scope walk, so the
-  expectation is a speed-up; it is measured, not assumed.
-- Stage 2 changes answers where the five scopes disagree today. Each change is a
-  fixture.
+- Moving the declaration data relocates the elaborator's hottest lookups. `DefId`
+  indexing is a `Vec` access where the current path is two hash lookups and a
+  scope walk, so the expectation is a speed-up; it is measured, not assumed.
+- Unifying the scope changes answers where the implementations disagree today.
+  Each change is a fixture.
 
 ### Measurements
 

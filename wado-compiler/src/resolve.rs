@@ -34,18 +34,6 @@ pub enum Resolution {
     Unresolved,
 }
 
-impl Resolution {
-    /// The declaration this answer names, or `None` for a binder and for a name
-    /// that reaches nothing.
-    #[must_use]
-    pub fn def(self) -> Option<DefId> {
-        match self {
-            Self::Def(def) => Some(def),
-            Self::Binder(_) | Self::Unresolved => None,
-        }
-    }
-}
-
 /// Every reference site's answer, keyed by the site's own [`AstId`].
 #[derive(Debug)]
 pub struct Resolutions {
@@ -469,5 +457,118 @@ pub fn head_site(ty: &Type) -> Option<AstId> {
         | Type::TypePackSpread(..)
         | Type::Infer(_)
         | Type::Error(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compiler_host::{InMemoryCompilerHost, LogLevel};
+    use crate::module_source::ModuleSourceInterner;
+
+    /// Resolve two modules together and hand back the table, so a test can ask
+    /// what a name means from either vantage.
+    fn resolve(entry: &str, other: &str) -> (Resolutions, ModuleSource, ModuleSource) {
+        // One interner: `ModuleSource` equality is pointer identity, so two
+        // interners would mint values that never compare equal and every import
+        // would resolve to a module the map does not hold.
+        let interner = std::rc::Rc::new(std::cell::RefCell::new(ModuleSourceInterner::new()));
+        let entry_source = interner.borrow_mut().local("./main.wado");
+        let other_source = interner.borrow_mut().local("./other.wado");
+        let mut modules: IndexMap<ModuleSource, Module> = IndexMap::default();
+        for (source, text) in [(&entry_source, entry), (&other_source, other)] {
+            let lexed = crate::lexer::lex(text);
+            assert!(lexed.errors.is_empty(), "lex error: {:?}", lexed.errors);
+            let ast = crate::parser::Parser::new(lexed.tokens)
+                .parse_strict()
+                .expect("parse error");
+            modules.insert(source.clone(), ast);
+        }
+        let host = InMemoryCompilerHost::new();
+        let logger = crate::logger::Logger::new(&host, LogLevel::Error);
+        let mut analyzer = crate::analyze::Analyzer::new(&logger).with_interner(interner);
+        let _ = analyzer.analyze_loaded_modules(
+            &modules,
+            &entry_source,
+            crate::hashmap::IndexSet::default(),
+        );
+        assert!(
+            host.diagnostics().is_empty(),
+            "analyze reported: {:?}",
+            host.diagnostics()
+        );
+        let symbols = analyzer.into_symbols();
+        let defs = Arc::new(DefTable::build(&modules, &symbols));
+        (
+            Resolutions::build(&modules, &symbols, defs),
+            entry_source,
+            other_source,
+        )
+    }
+
+    /// The whole class this design exists to end: one spelling, two modules,
+    /// two declarations. Each vantage answers with its own.
+    #[test]
+    fn one_spelling_in_two_modules_is_two_declarations() {
+        let (r, entry, other) = resolve(
+            "pub struct Widget { a: i32 }",
+            "pub struct Widget { b: i32 }",
+        );
+        let here = r.declaration_named(&entry, "Widget").unwrap();
+        let there = r.declaration_named(&other, "Widget").unwrap();
+        assert_ne!(here, there);
+        assert_eq!(r.defs().module(here), &entry);
+        assert_eq!(r.defs().module(there), &other);
+    }
+
+    /// An alias names what it aliases, not itself.
+    #[test]
+    fn an_alias_resolves_to_the_declaration_it_aliases() {
+        let (r, entry, other) = resolve(
+            r#"use { Widget as W } from "./other.wado";"#,
+            "pub struct Widget { b: i32 }",
+        );
+        let aliased = r.declaration_named(&entry, "W").unwrap();
+        assert_eq!(r.defs().module(aliased), &other);
+        assert_eq!(r.defs().name(aliased), "Widget");
+        // The alias is the only spelling in scope; the original is not.
+        assert!(r.declaration_named(&entry, "Widget").is_none());
+    }
+
+    /// A name reaching no declaration is its own answer, never a key made up
+    /// from the writing module.
+    #[test]
+    fn a_name_reaching_nothing_is_unresolved() {
+        let (r, entry, _) = resolve(
+            "pub struct Widget { a: i32 }",
+            "pub struct Other { b: i32 }",
+        );
+        assert!(r.declaration_named(&entry, "Absent").is_none());
+    }
+
+    /// A reference site answers from the module that wrote it, so the same
+    /// spelling written in two modules resolves to two declarations.
+    #[test]
+    fn a_reference_site_answers_from_the_module_that_wrote_it() {
+        let (r, entry, other) = resolve(
+            "pub struct Widget { a: i32 }\npub fn here(w: Widget) {}",
+            "pub struct Widget { b: i32 }\npub fn there(w: Widget) {}",
+        );
+        let mut seen: Vec<(ModuleSource, DefId)> = Vec::new();
+        for (site, answer) in &r.refs {
+            if let Resolution::Def(def) = answer
+                && r.defs().name(*def) == "Widget"
+            {
+                seen.push((r.defs().module(*def).clone(), *def));
+                let _ = site;
+            }
+        }
+        assert!(seen.iter().any(|(m, _)| m == &entry));
+        assert!(seen.iter().any(|(m, _)| m == &other));
+        let first = seen[0].1;
+        assert!(
+            seen.iter().any(|(_, d)| *d != first),
+            "the two modules' `Widget` references must not share one identity"
+        );
     }
 }
