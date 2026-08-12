@@ -14,8 +14,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
 use super::Elaborator;
-use super::trait_env::{InheritedBound, push_unique_bound};
-
+use super::trait_env::InheritedBound;
 
 /// Mutable trait resolution context scoped to the current resolution site.
 ///
@@ -202,38 +201,97 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// and keeping both would report the alias and the original as competitors
     /// for a method only one of them can own.
     pub(super) fn elaborate_bounds(&self, bounds: &[ast::TraitBound]) -> Vec<ast::TraitBound> {
-        let mut elaborated: Vec<ast::TraitBound> = Vec::with_capacity(bounds.len());
-        let mut seen: Vec<super::trait_env::DeclKey> = Vec::with_capacity(bounds.len());
-        let mut push = |scope: &Self, elaborated: &mut Vec<ast::TraitBound>, bound: &ast::TraitBound| {
-            if bound.fn_signature.is_none() {
-                let decl = scope.trait_decl_at(bound.id, &bound.name);
-                if seen.contains(&decl) {
-                    return;
-                }
-                seen.push(decl);
-            }
-            push_unique_bound(elaborated, bound);
-        };
+        self.elaborate_bounds_with(bounds, &IndexMap::default())
+    }
+
+    /// [`Self::elaborate_bounds`] for bounds that carry no reference site of
+    /// their own.
+    ///
+    /// `known` maps a bound's id to the declaration it means, answered where
+    /// the bound was first read. A projection's bounds are rebuilt here with
+    /// fresh ids that the table cannot answer for, so without `known` the
+    /// dedup would fall back to the spelling and collapse two same-named
+    /// traits into one.
+    pub(super) fn elaborate_bounds_with(
+        &self,
+        bounds: &[ast::TraitBound],
+        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+    ) -> Vec<ast::TraitBound> {
+        // One list, each entry carrying the declaration it was merged on: two
+        // parallel lists lose their alignment the moment an entry belongs to
+        // only one of them, and a `fn(..)` bound is exactly that entry.
+        let mut out: Vec<(ast::TraitBound, Option<super::trait_env::DeclKey>)> =
+            Vec::with_capacity(bounds.len());
         for bound in bounds {
-            push(self, &mut elaborated, bound);
+            self.merge_bound(&mut out, bound, known);
             if bound.fn_signature.is_some() {
                 continue;
             }
-            for inherited in self.supertraits_of_bound(&bound.name) {
-                push(self, &mut elaborated, &inherited.bound);
+            for inherited in self.supertraits_of_bound(bound, known) {
+                self.merge_bound(&mut out, &inherited.bound, known);
             }
         }
-        elaborated
+        out.into_iter().map(|(bound, _)| bound).collect()
     }
 
-    /// The transitive supertraits of the trait `name` means here, as bounds.
+    /// Add `bound` unless the list already holds its declaration, in which case
+    /// the constrained spelling wins — `T: Iterator + Iterator<Item = i32>` is
+    /// one bound, and it is the one carrying the associated type.
     ///
-    /// The name has no reference site of its own — a caller holding one asks
-    /// the site instead — so it goes through the one name-only chain.
-    fn supertraits_of_bound(&self, name: &str) -> Vec<InheritedBound> {
+    /// A `fn(..)` bound names no trait, so it has no declaration to merge on
+    /// and falls back to merging on its own site: two bounds written at two
+    /// sites stay two bounds, and only a bound repeated at one site merges.
+    fn merge_bound(
+        &self,
+        out: &mut Vec<(ast::TraitBound, Option<super::trait_env::DeclKey>)>,
+        bound: &ast::TraitBound,
+        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+    ) {
+        if bound.fn_signature.is_some() {
+            if !out
+                .iter()
+                .any(|(b, _)| b.name == bound.name && b.id == bound.id)
+            {
+                out.push((bound.clone(), None));
+            }
+            return;
+        }
+        let decl = self.bound_decl(bound, known);
+        if let Some((existing, _)) = out.iter_mut().find(|(_, d)| d.as_ref() == Some(&decl)) {
+            if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
+                *existing = bound.clone();
+            }
+            return;
+        }
+        out.push((bound.clone(), Some(decl)));
+    }
+
+    /// The declaration a bound names: `known` first, then the bound's own site.
+    fn bound_decl(
+        &self,
+        bound: &ast::TraitBound,
+        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+    ) -> super::trait_env::DeclKey {
+        known
+            .get(&bound.id)
+            .and_then(crate::name::FqTraitName::canonical)
+            .unwrap_or_else(|| self.trait_decl_at(bound.id, &bound.name))
+    }
+
+    /// The transitive supertraits of the trait `bound` names, as bounds.
+    ///
+    /// Answered from the bound's own reference site: two modules may declare
+    /// the same name, and expanding by spelling picks whichever the by-name
+    /// index holds — for the loser, an empty closure, so a supertrait's methods
+    /// silently vanish.
+    fn supertraits_of_bound(
+        &self,
+        bound: &ast::TraitBound,
+        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+    ) -> Vec<InheritedBound> {
         self.tysys
             .trait_env
-            .supertrait_closure(&self.decl_key_or_local(name))
+            .supertrait_closure(&self.bound_decl(bound, known))
             .to_vec()
     }
 

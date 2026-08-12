@@ -1,0 +1,43 @@
+// A `fn(..)` bound must not shift the bounds elaborated after it.
+//
+// Bound elaboration tracks each bound's declaration alongside the bound list to
+// collapse two spellings of one trait. A `fn(..)` bound names no trait, so it
+// joined the bound list without joining the declaration list — and every bound
+// after it then merged against the wrong entry: `Tagged` was dropped and
+// `Container` kept twice.
+
+trait Container {
+    fn item(&self) -> i32;
+}
+
+trait Tagged: Container {
+    fn tag(&self) -> i32;
+}
+
+struct Boxed {
+    v: i32,
+}
+
+impl Container for Boxed {
+    fn item(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Tagged for Boxed {
+    fn tag(&self) -> i32 {
+        return self.v * 10;
+    }
+}
+
+fn apply<T: fn(i32) -> i32, U: Tagged>(f: T, u: &U) -> i32 {
+    return f(u.item()) + u.tag();
+}
+
+test "a fn bound leaves the following bounds intact" {
+    let b = Boxed { v: 3 };
+    assert apply(|x| x + 1, &b) == 34;
+}
+
+__DATA__
+{"test": {}}

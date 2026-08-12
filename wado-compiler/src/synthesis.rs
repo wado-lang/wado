@@ -174,7 +174,6 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
             }
         }
     }
-    drop(record);
     for (mangled, trait_name, module) in instantiations {
         impls.record_instantiation(mangled, &trait_name, &module);
     }

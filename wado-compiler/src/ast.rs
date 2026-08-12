@@ -3614,9 +3614,6 @@ mod ast_id_tests {
         parser.parse_strict().expect("parse")
     }
 
-    /// Collect every `(AstId, Span)` emitted while walking `items` using the
-    /// default [`AstVisitor`] traversal.
-
     /// Nodes that name something and deliberately carry no [`AstId`], with the
     /// reason each needs none. Every other name-bearing node is a *reference
     /// site* — it names a declaration whose identity depends on the module that

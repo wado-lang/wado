@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::elaborator::trait_env::ReceiverCandidate;
-use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
+use crate::elaborator::trait_env::{BlanketParamSource, ImplReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
@@ -185,10 +185,14 @@ pub(super) fn blanket_pack_dispatch_args(
     let mut out = Vec::with_capacity(sources.len());
     for source in sources {
         match source {
-            None => out.push(receiver),
-            Some((bound_trait, assoc)) => {
+            BlanketParamSource::Receiver => out.push(receiver),
+            BlanketParamSource::Projection(bound_trait, assoc) => {
                 out.push(type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc)?);
             }
+            // A parameter whose predicate named no declaration is not the
+            // receiver: filling it from the receiver type would key the
+            // instance under an argument the template never declared.
+            BlanketParamSource::Unresolved => return None,
         }
     }
     Some(out)

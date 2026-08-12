@@ -13,24 +13,6 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::symbol::SymbolTable;
 
-/// A shape written without naming a declaration, so no module's scope decides
-/// what it means. The named shapes are not here: `i32`, `()` and `!` are
-/// `internal type` declarations in `core:prelude/primitive.wado` and resolve
-/// like any other name.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum BuiltinShape {
-    /// `[a, b]`
-    Tuple,
-    /// `&T` / `&mut T`
-    Reference,
-    /// `fn(..) -> ..`
-    Function,
-    /// `..T` in a variadic position.
-    TypePack,
-    /// `_`, or a node the parser already reported an error for.
-    Placeholder,
-}
-
 /// What a reference site refers to.
 ///
 /// Identity is the declaring node's [`AstId`] — the key [`SymbolTable`] is
@@ -43,8 +25,6 @@ pub enum DeclRef {
     /// A type parameter of an enclosing item, named by the parameter's own
     /// node. `Self` binds to the `impl` or `trait` that introduces it.
     Binder(AstId),
-    /// A shape no module declares.
-    Builtin(BuiltinShape),
     /// Reaches no declaration. Distinct from [`Self::Binder`] on purpose: a
     /// name that names nothing is not a type parameter, and reading it as one
     /// loses the diagnostic it deserves.
@@ -122,7 +102,7 @@ impl Resolutions {
     pub fn decl_named(&self, answer: DeclRef) -> Option<(&ModuleSource, &str)> {
         match answer {
             DeclRef::Decl(id) => self.decls.get(&id).map(|(m, n)| (m, n.as_str())),
-            DeclRef::Binder(_) | DeclRef::Builtin(_) | DeclRef::Unresolved => None,
+            DeclRef::Binder(_) | DeclRef::Unresolved => None,
         }
     }
 
@@ -133,7 +113,7 @@ impl Resolutions {
     pub fn declared(&self, site: AstId) -> Option<(&ModuleSource, &str)> {
         match self.get(site)? {
             DeclRef::Decl(id) => self.decls.get(&id).map(|(m, n)| (m, n.as_str())),
-            DeclRef::Binder(_) | DeclRef::Builtin(_) | DeclRef::Unresolved => None,
+            DeclRef::Binder(_) | DeclRef::Unresolved => None,
         }
     }
 

@@ -91,8 +91,6 @@ pub enum DeclRef {
     Decl(AstId),
     /// A type parameter of an enclosing item.
     Binder(BinderId),
-    /// A shape no module declares: a tuple, `&`, `fn`, a pack, a placeholder.
-    Builtin(BuiltinShape),
     /// Names nothing. Diagnosed here, once.
     Unresolved,
 }
@@ -102,23 +100,25 @@ A declaration's identity is the `AstId` of its declaration site, so there is no
 new id space to intern, no `(ModuleSource, String)` pair, and nothing to render
 or parse. Equality is `AstId == AstId`.
 
-`BuiltinShape` covers only the shapes written without naming anything — a tuple,
-a reference, a function type, a pack, a placeholder. The named ones are not
-special: `i32`, `()` and `!` are `internal type` declarations in
-`core:prelude/primitive.wado`, so they resolve through the same layers as
-`List`. One rule, rather than a primitive short-circuit beside it.
+A shape written without naming anything — a tuple, a reference, a function
+type, a pack, a placeholder — has no reference site to resolve: `head_site`
+answers `None` for it, and a consumer reads that directly rather than a fourth
+`DeclRef`. The named shapes are not special: `i32`, `()` and `!` are
+`internal type` declarations in `core:prelude/primitive.wado`, so they resolve
+through the same layers as `List`. One rule, rather than a primitive
+short-circuit beside it.
 
 The pass runs after module loading and before elaboration, walking each module
 with that module's scope. It is the only place a name becomes an identity, and
 it holds the site's module by construction.
 
 The scope is layered and ordered, and the order is the design rather than a
-lookup's incidental fallbacks: the enclosing item's binders, then the builtin
-shapes, then the module's explicit imports, then its own declarations, then the
-prelude — including the prelude's implementation modules, so a compiler item
-declared `internal` there (`ReflectStruct`, `Member`, `Ref`) still resolves for
-the module that writes its name and can be diagnosed as sealed. A name reaching
-none of the layers is `Unresolved`.
+lookup's incidental fallbacks: the enclosing item's binders, then the module's
+explicit imports, then its own declarations, then the prelude — including the
+prelude's implementation modules, so a compiler item declared `internal` there
+(`ReflectStruct`, `Member`, `Ref`) still resolves for the module that writes its
+name and can be diagnosed as sealed. A name reaching none of the layers is
+`Unresolved`.
 
 A synthesized reference — the `Self: <this trait>` bound the elaborator mints
 for a trait's own body — knows its referent, so it is recorded directly rather

@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::compiler_item::{CompilerItem, CompilerItems};
-use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
+use crate::elaborator::trait_env::{BlanketBound, BlanketParamSource, ImplReceiver, TraitEnv};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind};
 use crate::tir::{
@@ -1197,7 +1197,7 @@ pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
 /// (e.g. `IntoIterator`).
 pub(crate) fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
-    bounds: Vec<String>,
+    bounds: Vec<BlanketBound>,
     tt: &TypeTable,
 ) -> bool {
     if bounds.is_empty() {
@@ -1218,7 +1218,7 @@ pub(crate) fn receiver_satisfies_blanket_bounds(
     bounds.iter().all(|bound| {
         match reflect_bounds
             .into_iter()
-            .find(|item| bound == items.trait_name(*item))
+            .find(|item| bound.name == items.trait_name(*item))
         {
             Some(required) => kind == Some(required),
             None => true,
@@ -1281,8 +1281,11 @@ pub(crate) fn blanket_dispatch_for(
     let mut impl_type_args = Vec::new();
     for source in trait_env.blanket_param_sources(blanket) {
         match source {
-            None => impl_type_args.push(type_id),
-            Some((bound_trait, assoc)) => {
+            BlanketParamSource::Receiver => impl_type_args.push(type_id),
+            // Not the receiver: a predicate names this parameter but reaches no
+            // declaration, so the blanket cannot be instantiated here.
+            BlanketParamSource::Unresolved => return None,
+            BlanketParamSource::Projection(bound_trait, assoc) => {
                 let projected =
                     tt.resolve_trait_assoc_type_of_instance(type_id, &bound_trait, &assoc)?;
                 // Substituting a pack needs interning, so a mutable table.

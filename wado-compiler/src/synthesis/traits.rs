@@ -3041,6 +3041,7 @@ impl SynthesisCtx<'_, '_, '_> {
     ///   module A and module B) each still get their own auto-derived
     ///   impl. Without the module component the second derivation would
     ///   be silently skipped.
+    ///
     /// `receiver` names the namespace it is spelled in: the in-pass `pending`
     /// set is keyed by the same string the caller holds, while the AST-layer
     /// query must ask the map that namespace lives in — a mangled receiver

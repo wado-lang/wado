@@ -441,6 +441,20 @@ fn blanket_pack_assocs(
     out
 }
 
+/// What fixes one of a blanket impl's type parameters.
+#[derive(Clone, Debug)]
+pub(crate) enum BlanketParamSource {
+    /// The impl's receiver, which the call site's receiver type fills.
+    Receiver,
+    /// A predicate on another parameter: `..F` in
+    /// `impl<S: ReflectStruct<FieldTypes = [..F]>, ..F>`.
+    Projection(DeclKey, String),
+    /// A predicate names it, but the bound's site reaches no declaration.
+    /// Its own answer: reading it as [`Self::Receiver`] would fill a pack from
+    /// the call site's receiver type.
+    Unresolved,
+}
+
 /// What determines each blanket impl's parameters, in declaration order, keyed
 /// by the blanket's `(module, ast_id)`.
 ///
@@ -457,23 +471,22 @@ fn blanket_param_sources(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
     blanket_impls: &IndexMap<String, Vec<BlanketImpl>>,
     resolutions: &crate::resolve::Resolutions,
-) -> IndexMap<(ModuleSource, AstId), Vec<Option<(DeclKey, String)>>> {
-    let mut out: IndexMap<(ModuleSource, AstId), Vec<Option<(DeclKey, String)>>> =
-        IndexMap::default();
+) -> IndexMap<(ModuleSource, AstId), Vec<BlanketParamSource>> {
+    let mut out: IndexMap<(ModuleSource, AstId), Vec<BlanketParamSource>> = IndexMap::default();
     for blanket in blanket_impls.values().flatten() {
         let key = (blanket.module.clone(), blanket.ast_id);
         let Some(header) = impl_headers.get(&key) else {
             continue;
         };
-        let sources: Vec<Option<(DeclKey, String)>> = header
+        let sources: Vec<BlanketParamSource> = header
             .type_params
             .iter()
             .filter(|tp| tp.is_real_type_param())
             .map(|tp| {
                 if tp.name == blanket.param {
-                    return None;
+                    return BlanketParamSource::Receiver;
                 }
-                header
+                let Some((bound, assoc)) = header
                     .type_params
                     .iter()
                     .flat_map(|other| &other.bounds)
@@ -483,10 +496,16 @@ fn blanket_param_sources(
                         assoc.ty.mentioned_names(&mut named);
                         named.iter().any(|n| n == &tp.name)
                     })
-                    .and_then(|(bound, assoc)| {
-                        let (module, name) = resolutions.declared(bound.id)?;
-                        Some(((module.clone(), name.to_string()), assoc.name.clone()))
-                    })
+                else {
+                    return BlanketParamSource::Unresolved;
+                };
+                let Some((module, name)) = resolutions.declared(bound.id) else {
+                    return BlanketParamSource::Unresolved;
+                };
+                BlanketParamSource::Projection(
+                    (module.clone(), name.to_string()),
+                    assoc.name.clone(),
+                )
             })
             .collect();
         out.insert(key, sources);
@@ -525,6 +544,15 @@ pub(crate) enum BlanketReceiver {
     Ref { is_mut: bool },
 }
 
+/// A bound written on a blanket impl's receiver parameter.
+#[derive(Clone, Debug)]
+pub(crate) struct BlanketBound {
+    pub(crate) name: String,
+    /// What the bound's reference site resolves to, `None` where it reaches no
+    /// declaration.
+    pub(crate) decl_ref: Option<crate::resolve::DeclRef>,
+}
+
 /// A reified blanket impl `impl<Param: Bounds, ..> Trait for <receiver>`.
 ///
 /// The single source of truth for "what kind of blanket is this": the queries
@@ -539,8 +567,11 @@ pub(crate) struct BlanketImpl {
     pub(crate) receiver: BlanketReceiver,
     /// Receiver param name (`T` in `impl<T: Bound> Trait for T`).
     pub(crate) param: String,
-    /// Bound trait names on the receiver param.
-    pub(crate) bounds: Vec<String>,
+    /// Bound trait names on the receiver param, each with the declaration its
+    /// own reference site resolves to. The spelling stays for the by-name
+    /// queries that have not been flipped; the answer is what a bound check
+    /// compares, so an aliased bound reaches the trait it aliases.
+    pub(crate) bounds: Vec<BlanketBound>,
 }
 
 /// Classify a blanket impl's receiver, or `None` for a concrete/shape impl
@@ -747,12 +778,6 @@ impl ImplModuleIndex {
     ) {
         push_module(&mut self.by_mangled, mangled, trait_name, module);
     }
-
-    #[must_use]
-    pub fn contains_declared(&self, type_name: &str, trait_name: &str) -> bool {
-        self.by_declared
-            .contains_key(&(type_name.to_string(), trait_name.to_string()))
-    }
 }
 
 fn push_module(
@@ -860,8 +885,7 @@ pub struct TraitEnv {
     /// Per blanket impl, what determines each of its parameters, in
     /// declaration order. Resolved once at build time from each bound's own
     /// reference site.
-    pub(super) blanket_param_sources:
-        IndexMap<(ModuleSource, AstId), Vec<Option<(DeclKey, String)>>>,
+    pub(super) blanket_param_sources: IndexMap<(ModuleSource, AstId), Vec<BlanketParamSource>>,
     /// Digested headers for every `trait` declaration, keyed by
     /// `(ModuleSource, AstId)`. Lets method-lookup queries read trait
     /// method signatures without re-fetching the trait AST. See
@@ -977,14 +1001,6 @@ impl SynthesisedImpls {
             .record_instantiated(mangled.clone(), trait_name, module);
         self.trait_impl_modules
             .record_instantiated(mangled, trait_name, module);
-    }
-
-    /// `true` if `impl <trait_name> for <type_name>` has already been
-    /// recorded in this synthesis layer (regardless of concreteness).
-    #[must_use]
-    pub fn has_impl(&self, type_name: &str, trait_name: &str) -> bool {
-        self.trait_impl_modules
-            .contains_declared(type_name, trait_name)
     }
 }
 
@@ -1321,11 +1337,19 @@ impl TraitEnv {
                     if let Some((receiver, param)) =
                         classify_blanket_receiver(&impl_block.ty, &impl_block.type_params)
                     {
-                        let bounds = impl_block
+                        let bounds: Vec<BlanketBound> = impl_block
                             .type_params
                             .iter()
                             .find(|p| p.name == param)
-                            .map(|p| p.bounds.iter().map(|b| b.name.clone()).collect())
+                            .map(|p| {
+                                p.bounds
+                                    .iter()
+                                    .map(|b| BlanketBound {
+                                        name: b.name.clone(),
+                                        decl_ref: resolutions.get(b.id),
+                                    })
+                                    .collect()
+                            })
                             .unwrap_or_default();
                         blanket_impls
                             .entry(trait_name.clone())
@@ -1528,10 +1552,6 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
-    /// Declaring module of a struct-like type (struct / resource / variant /
-    /// enum / builtin) by name, when the name picks out exactly one. Several
-    /// modules declaring the name leaves it unresolved rather than guessing:
-    /// a wrong module is worse than the caller's existing fallback.
     /// The one trait declaration named `name`, when exactly one module
     /// declares it.
     ///
@@ -1568,6 +1588,10 @@ impl TraitEnv {
         self.effect_decl_index.contains_key(key) || self.resource_decl_index.contains_key(key)
     }
 
+    /// Declaring module of a struct-like type (struct / resource / variant /
+    /// enum / builtin) by name, when the name picks out exactly one. Several
+    /// modules declaring the name leaves it unresolved rather than guessing:
+    /// a wrong module is worse than the caller's existing fallback.
     pub(crate) fn find_struct_like_decl_key(&self, name: &str) -> Option<DeclKey> {
         let modules = self.struct_like_decl_modules.get(name)?;
         match modules.as_slice() {
@@ -1713,7 +1737,7 @@ impl TraitEnv {
         &self,
         trait_name: &str,
         type_module: Option<&ModuleSource>,
-        satisfies: &dyn Fn(&[String]) -> bool,
+        satisfies: &dyn Fn(&[BlanketBound]) -> bool,
     ) -> Option<&BlanketImpl> {
         let impls = self.blanket_impls.get(trait_name)?;
         let mut values = impls
@@ -1765,10 +1789,7 @@ impl TraitEnv {
 
     /// What determines each of a blanket impl's parameters, in declaration
     /// order — see [`blanket_param_sources`].
-    pub(crate) fn blanket_param_sources(
-        &self,
-        blanket: &BlanketImpl,
-    ) -> Vec<Option<(DeclKey, String)>> {
+    pub(crate) fn blanket_param_sources(&self, blanket: &BlanketImpl) -> Vec<BlanketParamSource> {
         self.blanket_param_sources
             .get(&(blanket.module.clone(), blanket.ast_id))
             .cloned()
@@ -1853,19 +1874,17 @@ impl TraitEnv {
     }
 }
 
-/// Compare the table's answer for an `impl` header against the one this file
-/// derives, and report a difference. Stage-B instrument; it goes when the
-/// consumers take a `DeclRef` and there is only one answer to compare.
 /// Which namespace an impl-module query spells its receiver in.
 ///
-/// The index is reachable from two, and they are not interchangeable: a
-/// mangled fq receiver picks out one declaration, a declared name picks out
-/// any declaration spelling itself that way. Today both read the same key and
-/// the storage holds only declared spellings, so a mangled query reaches only
-/// the synthesised layer, and `pick_module_union`'s AST-first precedence is
-/// never exercised for one — see WEP 2026-08-10. Naming the namespace at each
-/// call site is the step that makes those fixable without guessing which
-/// callers meant which.
+/// The index answers in two, and they are not interchangeable: a mangled fq
+/// receiver picks out one declaration, a declared name picks out any
+/// declaration spelling itself that way. Each namespace has its own storage,
+/// written from one receiver identity, so a query cannot land in the wrong one
+/// — see WEP 2026-08-10.
+///
+/// [`Self::Of`] carries the identity and lets the index derive both spellings;
+/// the other two are for callers that hold only one. A bare `&str` cannot claim
+/// to be mangled.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ImplReceiver<'a> {
     /// The receiver itself. Both spellings are derived from it here, so the
@@ -1949,22 +1968,41 @@ fn impl_target_key_at(
     })
 }
 
-/// The one trait, effect or resource declaration named `name`, when exactly
-/// one module declares it. Declines on ambiguity: guessing between two
-/// same-named declarations is the mis-identification this design prevents.
+/// The one trait declaration named `name`, else the one effect or resource —
+/// the order and the per-family uniqueness of
+/// [`TraitEnv::unique_trait_decl_key`] and
+/// [`TraitEnv::unique_effect_or_resource_decl_key`], which is what
+/// `Elaborator::decl_key_or_local` runs. Asking the three families at once
+/// instead would decline where the elaborator answers: a `trait Encode` beside
+/// another module's `interface Encode` is one trait, not an ambiguity.
+///
+/// Declines when a family holds two, since guessing between two same-named
+/// declarations is the mis-identification this design prevents.
+///
+/// One divergence remains: `decl_key_or_local` consults its struct-like index
+/// *before* the trait one, so a name declared as a struct in one module and a
+/// trait in another keys to the trait here and to the struct there. This is a
+/// trait position and the struct is the wrong answer for it, but the two
+/// should agree — the fix is to give the elaborator a trait-position entry
+/// point rather than to copy the struct-first order into a trait lookup.
 fn unique_declared_trait<L, E, R>(
     name: &str,
     decls: &IndexMap<DeclKey, L>,
     effects: &IndexMap<DeclKey, E>,
     resources: &IndexMap<DeclKey, R>,
 ) -> Option<DeclKey> {
-    let mut hits = decls
-        .keys()
-        .chain(effects.keys())
-        .chain(resources.keys())
-        .filter(|(_, n)| n == name);
-    let first = hits.next()?;
-    hits.next().is_none().then(|| first.clone())
+    let unique = |mut hits: Box<dyn Iterator<Item = &DeclKey> + '_>| {
+        let first = hits.next()?;
+        hits.next().is_none().then(|| first.clone())
+    };
+    unique(Box::new(decls.keys().filter(|(_, n)| n == name))).or_else(|| {
+        unique(Box::new(
+            effects
+                .keys()
+                .chain(resources.keys())
+                .filter(|(_, n)| n == name),
+        ))
+    })
 }
 
 /// The key an `impl` header's target resolves to, from the site the header
@@ -1995,7 +2033,7 @@ fn sited_impl_target_key(
         answer @ crate::resolve::DeclRef::Decl(_) => resolutions
             .decl_named(answer)
             .map(|(module, name)| ImplTargetKey::of_decl(module, name)),
-        crate::resolve::DeclRef::Builtin(_) | crate::resolve::DeclRef::Unresolved => None,
+        crate::resolve::DeclRef::Unresolved => None,
     }
 }
 
@@ -2141,28 +2179,8 @@ type ResolveTrait<'a> = &'a dyn Fn(&ModuleSource, &ast::TraitBound) -> Option<Tr
 type ResolveWritten<'a> =
     &'a dyn Fn(&ModuleSource, &ast::Type, &[ast::GenericParam]) -> ImplTargetKey;
 
-/// Append `bound` unless a bound of that name is already present. Bound lists
-/// are name-keyed everywhere downstream, so a name is the identity here too.
-pub(super) fn push_unique_bound(bounds: &mut Vec<ast::TraitBound>, bound: &ast::TraitBound) {
-    // Same *bound*, not same spelling: `T: Show + A` where `A: b::Show`
-    // inherits a second `Show` naming another module's declaration, and
-    // collapsing the two on their written name drops it. Two bounds written at
-    // two sites stay two bounds; only a bound repeated at one site merges.
-    let Some(existing) = bounds
-        .iter_mut()
-        .find(|b| b.name == bound.name && b.id == bound.id)
-    else {
-        bounds.push(bound.clone());
-        return;
-    };
-    // Same trait twice: the constrained one wins, whichever arrived first.
-    if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
-        *existing = bound.clone();
-    }
-}
-
-/// [`push_unique_bound`] keyed by declaration, so two spellings of one
-/// supertrait collapse.
+/// Add an inherited bound unless the list already holds its declaration, so
+/// two spellings of one supertrait collapse.
 fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBound) {
     let Some(existing) = bounds.iter_mut().find(|b| b.decl == bound.decl) else {
         bounds.push(bound.clone());
@@ -2696,7 +2714,10 @@ pub(super) fn get_type_name_full_static(ty: &ast::Type) -> String {
     match ty {
         ast::Type::Generic(generic) => {
             let args: Vec<String> = generic.args.iter().map(get_type_name_full_static).collect();
-            format!("{}<{}>", generic.name, args.join(","))
+            // `, `, matching `Elaborator::get_type_name_full`: both render the
+            // written trait type into one mangled segment, and a separator only
+            // one of them uses splits a nested `Pair<i32, i32>` into two names.
+            format!("{}<{}>", generic.name, args.join(", "))
         }
         ast::Type::Reference(inner) => format!("&{}", get_type_name_full_static(inner)),
         ast::Type::MutReference(inner) => format!("&mut {}", get_type_name_full_static(inner)),

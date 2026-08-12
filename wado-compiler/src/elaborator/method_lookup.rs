@@ -1455,7 +1455,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // any concrete type that implements Iterator. Snapshot the value blankets
         // (module, ast id, bound names) so the per-bound checks below borrow `self`
         // without holding a `trait_env` borrow.
-        let value_blankets: Vec<(ModuleSource, AstId, Vec<String>)> = self
+        let value_blankets: Vec<(ModuleSource, AstId, Vec<super::trait_env::BlanketBound>)> = self
             .tysys
             .trait_env
             .blanket_impls
@@ -1470,14 +1470,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // it recognises synthesized bounds (`ReflectStruct`, `Default`) with no
             // explicit `impl`, which the name-based lookup misses. A viable
             // blanket must survive to the authoritative `candidate_matches_receiver`.
-            let bounds_satisfied = bounds.iter().all(|bound_trait_name| {
+            let bounds_satisfied = bounds.iter().all(|bound| {
                 if let Some(rt) = receiver_type_id
                     && self.tysys.type_implements_trait(
                         &self.annotate_ctx,
                         &type_lookup,
                         rt,
-                        bound_trait_name,
-                        None,
+                        &bound.name,
+                        bound.decl_ref,
                     )
                 {
                     return true;
@@ -1487,8 +1487,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.annotate_ctx,
                         &type_lookup,
                         &target.receiver(),
-                        bound_trait_name,
-                        None,
+                        &bound.name,
+                        bound.decl_ref,
                     )
                 })
             });

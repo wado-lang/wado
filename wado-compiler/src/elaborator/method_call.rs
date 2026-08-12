@@ -2392,7 +2392,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_id: TypeId,
         method_name: &str,
     ) -> Option<(crate::name::FqTraitName, String, ModuleSource)> {
-        let candidates: Vec<(crate::name::FqTraitName, String, ModuleSource, Vec<String>)> = self
+        let candidates: Vec<(
+            crate::name::FqTraitName,
+            String,
+            ModuleSource,
+            Vec<super::trait_env::BlanketBound>,
+        )> = self
             .tysys
             .trait_env
             .blanket_impls
@@ -2449,8 +2454,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.annotate_ctx,
                         &self.type_lookup(),
                         receiver_type_id,
-                        bound,
-                        None,
+                        &bound.name,
+                        bound.decl_ref,
                     )
                 })
             })
