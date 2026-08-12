@@ -1364,7 +1364,7 @@ fn payload_type_to_cm_key(payload: &CmPayloadType, ctx: &ComponentModelContext) 
     }
 }
 
-/// Collect the CM (kebab) names of every `Named` record nested in a payload.
+/// Collect the CM (kebab) names of every `Named` type nested in a payload.
 fn collect_named_payload_names(payload: &CmPayloadType, out: &mut Vec<String>) {
     match payload {
         CmPayloadType::Named(name) => {
@@ -1392,12 +1392,12 @@ fn collect_named_payload_names(payload: &CmPayloadType, out: &mut Vec<String>) {
     }
 }
 
-/// Define the named record types referenced by `Value(Named)` future/stream
-/// payloads, before the `future<T>` / `stream<T>` types that wrap them are
-/// built. Each record is defined top-level through the shared `lib_type_gen`
-/// (so the export-signature record and the canonical record are one type) and
-/// bound by its CM name in `ctx`, so `payload_type_to_cm_key`'s `type_idx`
-/// lookup resolves it.
+/// Define the named types (record / variant / enum / flags) referenced by
+/// `Value(Named)` future/stream payloads, before the `future<T>` / `stream<T>`
+/// types that wrap them are built. Each is defined top-level through the shared
+/// `lib_type_gen` (so the export-signature type and the canonical type are one
+/// type) and bound by its CM name in `ctx`, so `payload_type_to_cm_key`'s
+/// `type_idx` lookup resolves it.
 fn prebuild_value_named_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1424,7 +1424,7 @@ fn prebuild_value_named_types(
         }
         let Some(wado_name) = project
             .cm_interface_registry
-            .find_struct_wado_name_by_cm(&cm_name)
+            .find_named_type_wado_name_by_cm(&cm_name)
             .map(str::to_string)
         else {
             continue;

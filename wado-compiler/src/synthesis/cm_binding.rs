@@ -300,30 +300,27 @@ fn unresolvable_future_stream_payload(
     unresolvable_record_in_payload(tt, registry, payload)
 }
 
-/// The Wado name of the first user record nested anywhere in a CM payload type
-/// (`Future<Point>`, `Future<List<Point>>`, `Future<[Point, u32]>`, …) that is
-/// not registered under its own module source — i.e. has no CM type to lower
-/// against. `None` if every named record in the payload resolves.
+/// The Wado name of the first user-named type (record / variant / enum /
+/// flags) nested anywhere in a CM payload type (`Future<Point>`,
+/// `Future<List<Point>>`, `Future<[Point, u32]>`, …) that is not registered
+/// under its own module source — i.e. has no CM type to lower against. `None`
+/// if every named type in the payload resolves.
 ///
-/// Resolvability is keyed on the record's own `module_source`, never its bare
-/// name: a user record that happens to share a name with an imported WASI/
-/// dependency struct must still be rejected, since the homonym lives under a
-/// different source and carries different fields.
+/// Resolvability is keyed on the declaration's own `module_source`, never its
+/// bare name: a user type that happens to share a name with an imported WASI/
+/// dependency declaration must still be rejected, since the homonym lives under
+/// a different source and carries a different shape.
 fn unresolvable_record_in_payload(
     tt: &TypeTable,
     registry: &crate::component_model::CmInterfaceRegistry,
     type_id: TypeId,
 ) -> Option<String> {
-    if let ResolvedType::Struct {
-        decl_name: name,
-        module_source,
-        ..
-    } = tt.get(type_id)
+    if let Some((name, module_source)) = named_decl_of(tt.get(type_id))
         && matches!(
             crate::component_model::cm_payload_type_from_type_id(tt, type_id),
             Some(CmPayloadType::Named(_))
         )
-        && !registry.is_struct_registered_from(module_source, name)
+        && !registry.is_named_type_registered_from(module_source, name)
     {
         return Some(name.clone());
     }
@@ -346,6 +343,31 @@ fn unresolvable_record_in_payload(
             .find_map(|&a| unresolvable_record_in_payload(tt, registry, a));
     }
     None
+}
+
+/// The declaration name and module source of a nominal type that can lower to a
+/// `CmPayloadType::Named` — a record, variant, enum, or flags.
+fn named_decl_of(ty: &ResolvedType) -> Option<(&String, &ModuleSource)> {
+    match ty {
+        ResolvedType::Struct {
+            decl_name,
+            module_source,
+            ..
+        } => Some((decl_name, module_source)),
+        ResolvedType::Enum {
+            name,
+            module_source,
+        }
+        | ResolvedType::Variant {
+            name,
+            module_source,
+        }
+        | ResolvedType::Flags {
+            name,
+            module_source,
+        } => Some((name, module_source)),
+        _ => None,
+    }
 }
 
 /// Phase entry point: generate CM binding functions and rewrite call sites.

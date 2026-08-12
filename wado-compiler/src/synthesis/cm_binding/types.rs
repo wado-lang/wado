@@ -1401,6 +1401,12 @@ pub(super) fn type_id_to_ast_type(
             name,
             module_source,
         } => cm_named(name, module_source),
+        // Flags keep their declaration identity: a CM `flags` is 1 byte at ≤8
+        // labels, so an `i32` stand-in would size and store it four bytes wide.
+        ResolvedType::Flags {
+            name,
+            module_source,
+        } => cm_named(name, module_source),
         ResolvedType::Resource { name, .. } => named_no_source(name),
         ResolvedType::GenericInstance {
             name, type_args, ..
@@ -1452,7 +1458,21 @@ pub(super) fn type_id_to_ast_type(
             type_table,
             cm_interface_registry,
         ))),
-        _ => named_no_source("i32"),
+        // No CM surface. Standing one of these in as `i32` is silent
+        // corruption, not a fallback: it sized `flags` four bytes wide until
+        // `Flags` got its own arm above.
+        ResolvedType::Never
+        | ResolvedType::Function { .. }
+        | ResolvedType::Reactive(_)
+        | ResolvedType::BuiltinArray(_)
+        | ResolvedType::TypeParam { .. }
+        | ResolvedType::InferVar(_)
+        | ResolvedType::TypePack { .. }
+        | ResolvedType::AssocTypeProjection { .. }
+        | ResolvedType::Unknown
+        | ResolvedType::Error => {
+            panic!("type has no Component Model surface: {resolved:?}")
+        }
     }
 }
 

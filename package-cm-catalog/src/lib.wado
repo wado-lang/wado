@@ -227,6 +227,21 @@ export fn id_list_tuple_record(v: List<[Point, u32]>) -> List<[Point, u32]> {
     return v;
 }
 
+// --- Flags nested in aggregates ---
+// `flags` is the one named shape whose CM memory width is narrower than the
+// u32 the guest holds it in (three labels → one byte), so only a composite —
+// where the ABI reads a stride or an offset rather than a flat i32 slot — can
+// catch a lowering that sizes it four bytes wide.
+export fn id_option_flags(v: Option<Perms>) -> Option<Perms> {
+    return v;
+}
+export fn id_list_flags(v: List<Perms>) -> List<Perms> {
+    return v;
+}
+export fn id_tuple_flags(v: [Perms, u32]) -> [Perms, u32] {
+    return v;
+}
+
 // --- Async handle types (CM `future` / `stream`) ---
 export fn id_future_bool(v: Future<bool>) -> Future<bool> {
     let value = v.read();
@@ -396,6 +411,33 @@ export async fn id_future_record(v: Future<Point>) -> Future<Point> {
         tx.write(x);
     }
 }
+export async fn id_future_enum(v: Future<Color>) -> Future<Color> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Color>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+export async fn id_future_variant(v: Future<Shape>) -> Future<Shape> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Shape>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+export async fn id_future_flags(v: Future<Perms>) -> Future<Perms> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Perms>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
 
 // `stream<u8>` pass-through: the readable end crosses the boundary unchanged.
 export fn id_stream_u8(v: Stream<u8>) -> Stream<u8> {
@@ -436,6 +478,47 @@ export async fn id_stream_string(v: Stream<String>) -> Stream<String> {
 }
 export async fn id_stream_record(v: Stream<Point>) -> Stream<Point> {
     let [rx, tx] = Stream::<Point>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
+}
+export async fn id_stream_enum(v: Stream<Color>) -> Stream<Color> {
+    let [rx, tx] = Stream::<Color>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
+}
+export async fn id_stream_variant(v: Stream<Shape>) -> Stream<Shape> {
+    let [rx, tx] = Stream::<Shape>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
+}
+// `flags` is the payload whose CM width differs most from its Wado one: three
+// labels lower to a single byte, not the u32 the guest holds it in.
+export async fn id_stream_flags(v: Stream<Perms>) -> Stream<Perms> {
+    let [rx, tx] = Stream::<Perms>::new();
     task return rx;
     loop {
         let chunk = v.read(16);

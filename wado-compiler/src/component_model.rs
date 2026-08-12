@@ -73,8 +73,8 @@ pub fn classify_stream_payload(
 
 /// Build a self-contained [`CmPayloadType`] from a resolved type, for use as a
 /// `future<T>` / `stream<T>` payload identity. Returns `None` for types not yet
-/// supported as general payloads (named records / variants / enums / resources,
-/// 128-bit and SIMD primitives), so callers fall back to legacy handling.
+/// supported as general payloads (resources, 128-bit and SIMD primitives), so
+/// callers fall back to legacy handling.
 pub fn cm_payload_type_from_type_id(
     type_table: &TypeTable,
     type_id: TypeId,
@@ -118,13 +118,25 @@ pub fn cm_payload_type_from_type_id(
                 arm(type_args[1])?,
             ))
         }
-        // A user/dependency record: lower/lift it as a named CM record. WASI and
-        // kiln records keep their own (registry-driven) paths, so they stay
+        // A user/dependency named type: lower/lift it as that CM type. WASI and
+        // kiln declarations keep their own (registry-driven) paths, so they stay
         // `None` here and fall through to the legacy classification.
         ResolvedType::Struct {
             decl_name: name,
             module_source,
             ..
+        } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),
+        ResolvedType::Enum {
+            name,
+            module_source,
+        }
+        | ResolvedType::Variant {
+            name,
+            module_source,
+        }
+        | ResolvedType::Flags {
+            name,
+            module_source,
         } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),
         _ => None,
     }
@@ -170,8 +182,8 @@ fn cm_scalar_from_ast_name(name: &str) -> Option<CmScalarType> {
 }
 
 /// AST-`Type` analogue of [`cm_payload_type_from_type_id`], for codegen (which
-/// works off the export's raw Wado return type). Returns `None` for named
-/// records / variants / enums and other unsupported shapes.
+/// works off the export's raw Wado return type). Returns `None` for resources
+/// and other unsupported shapes.
 pub fn cm_payload_type_from_ast(
     ty: &crate::ast::Type,
     registry: &CmInterfaceRegistry,
@@ -185,15 +197,20 @@ pub fn cm_payload_type_from_ast(
             if let Some(scalar) = cm_scalar_from_ast_name(&n.name) {
                 return Some(CmPayloadType::Scalar(scalar));
             }
-            // A user/dependency record: a registered struct whose source is not
-            // a CM-owned (`wasi:*` / `core:kiln/*`) interface. Mirrors the
-            // `Named` arm of `cm_payload_type_from_type_id`.
+            // A user/dependency named type: a registered record / variant /
+            // enum / flags whose source is not a CM-owned (`wasi:*` /
+            // `core:kiln/*`) interface. Mirrors the `Named` arms of
+            // `cm_payload_type_from_type_id`.
             // Mirror of `is_cm_owned_source` on the resolved source string.
             let src = registry.resolve_cm_source_for(n, None)?;
             if src.starts_with("wasi:") || src.starts_with("core:kiln/") {
                 return None;
             }
-            let cm = registry.get_struct_cm_name_by_source(&src, &n.name)?;
+            let cm = registry
+                .get_struct_cm_name_by_source(&src, &n.name)
+                .or_else(|| registry.get_variant_cm_name_by_source(&src, &n.name))
+                .or_else(|| registry.get_enum_cm_name_by_source(&src, &n.name))
+                .or_else(|| registry.get_flags_cm_name_by_source(&src, &n.name))?;
             Some(CmPayloadType::Named(cm.to_string()))
         }
         Type::Tuple(elems) => elems
@@ -2187,20 +2204,22 @@ impl CmInterfaceRegistry {
             .map(|(cm_name, _, _)| cm_name.as_str())
     }
 
-    /// Reverse-lookup a struct's Wado name from its CM (kebab) name, when
-    /// unambiguous across interfaces. Used by codegen to reconstruct the
-    /// declaring `Type::Named` for a `CmPayloadType::Named(<cm-name>)` payload.
-    pub fn find_struct_wado_name_by_cm(&self, cm_name: &str) -> Option<&str> {
-        let mut hit = None;
-        for ((_, wado_name), (cm, _, _)) in &self.structs {
-            if cm == cm_name {
-                if hit.is_some() {
-                    return None;
-                }
-                hit = Some(wado_name.as_str());
-            }
-        }
-        hit
+    /// Reverse-lookup a record / variant / enum / flags declaration's Wado name
+    /// from its CM (kebab) name, when unambiguous across interfaces and kinds.
+    /// Used by codegen to reconstruct the declaring `Type::Named` for a
+    /// `CmPayloadType::Named(<cm-name>)` payload.
+    pub fn find_named_type_wado_name_by_cm(&self, cm_name: &str) -> Option<&str> {
+        let mut hits = self
+            .structs
+            .iter()
+            .map(|((_, wado), (cm, ..))| (wado, cm))
+            .chain(self.variants.iter().map(|((_, wado), (cm, _))| (wado, cm)))
+            .chain(self.enums.iter().map(|((_, wado), (cm, _))| (wado, cm)))
+            .chain(self.flags.iter().map(|((_, wado), (cm, _))| (wado, cm)))
+            .filter(|(_, cm)| cm.as_str() == cm_name)
+            .map(|(wado, _)| wado.as_str());
+        let first = hits.next()?;
+        hits.next().is_none().then_some(first)
     }
 
     /// Struct registered at `(interface, name)`; returns CM-kebab field
@@ -2602,18 +2621,23 @@ impl CmInterfaceRegistry {
             .map(|(cm_name, _)| cm_name.as_str())
     }
 
-    /// Whether a struct named `name` is registered under an interface whose CM
-    /// source is exactly `source`. Unlike [`Self::get_struct_fields_by_source`],
-    /// this keys on the struct's own module source, so a user record is never
-    /// confused with a same-named WASI/dependency struct (which lives under a
-    /// different source). A `--lib` entry record is registered under the package default
-    /// interface, whose source [`register_lib_local_decls`] maps to the entry
-    /// module; outside `--lib` the user record is registered nowhere, so this is
+    /// Whether a record / variant / enum / flags named `name` is registered
+    /// under an interface whose CM source is exactly `source`. Unlike
+    /// [`Self::get_struct_fields_by_source`], this keys on the declaration's own
+    /// module source, so a user type is never confused with a same-named WASI/
+    /// dependency declaration (which lives under a different source). A `--lib`
+    /// entry declaration is registered under the package default interface,
+    /// whose source [`register_lib_local_decls`] maps to the entry module;
+    /// outside `--lib` the user declaration is registered nowhere, so this is
     /// `false` and the payload has no CM type to lower against.
-    pub fn is_struct_registered_from(&self, source: &ModuleSource, name: &str) -> bool {
-        self.structs.keys().any(|(fq, struct_name)| {
-            struct_name == name && self.cm_interface_module_sources.get(fq) == Some(source)
-        })
+    pub fn is_named_type_registered_from(&self, source: &ModuleSource, name: &str) -> bool {
+        let declared_here = |fq: &String, decl_name: &String| {
+            decl_name == name && self.cm_interface_module_sources.get(fq) == Some(source)
+        };
+        self.structs.keys().any(|(fq, n)| declared_here(fq, n))
+            || self.variants.keys().any(|(fq, n)| declared_here(fq, n))
+            || self.enums.keys().any(|(fq, n)| declared_here(fq, n))
+            || self.flags.keys().any(|(fq, n)| declared_here(fq, n))
     }
 
     /// Find the interface name (e.g., `"types"`) for a WASI struct given its
