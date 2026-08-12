@@ -7,13 +7,13 @@
 //! WEP and rewrites the program to route every effect-operation call
 //! through it:
 //!
-//! 1. A per-effect Wasm GC struct `__Dispatch_<E>` with a recursive
-//!    `outer: Option<&__Dispatch_<E>>` field plus one
+//! 1. A per-effect Wasm GC struct `__Dispatch{<E>}` with a recursive
+//!    `outer: Option<&__Dispatch{<E>}>` field plus one
 //!    `fn(<op_params>) -> <op_ret>` closure field per declared
 //!    operation.
 //! 2. A per-effect mutable global
-//!    `__effect_<E>: Option<&__Dispatch_<E>>` initialised to `null`.
-//! 3. One `__effect_dispatch__<E>__<op>` wrapper function per
+//!    `__effect{<E>}: Option<&__Dispatch{<E>}>` initialised to `null`.
+//! 3. One `__effect_dispatch{<E>}{<op>}` wrapper function per
 //!    operation. Body: read the global, restore `outer` (so handler
 //!    bodies see the outer scope and can self-delegate), call the
 //!    closure, re-install the saved value, and return the result. If
@@ -23,13 +23,13 @@
 //!    that, for each binding (in source order), saves the global,
 //!    binds the handler value to a fresh local, builds closures
 //!    capturing that local and forwarding to the bound `impl E for T`
-//!    methods, populates a fresh `__Dispatch_<E>` struct, installs
+//!    methods, populates a fresh `__Dispatch{<E>}` struct, installs
 //!    the global, runs the body, and restores the saved value on
 //!    exit (in reverse install order).
 //! 5. Every `<E>::<op>` call site is rewritten to call the wrapper —
 //!    both the WASI-binding shape (`__cm_binding__<E>_<op>`) and the
 //!    user-effect namespaced shape (`<op>` in `Local{path: "<E>"}`).
-//!    Calls inside `__effect_dispatch__*` wrappers and
+//!    Calls inside `__effect_dispatch{…}` wrappers and
 //!    `__cm_binding__*` adapters are skipped to keep the WASI
 //!    fallback path reachable.
 //! 6. `Resume { value }` inside `impl E for T` method bodies is
@@ -71,7 +71,7 @@ type EffectKey = (ModuleSource, String);
 ///
 /// For non-generic effects / resources the `type_args` slot is empty and
 /// the key is essentially the `EffectKey` widened with `[]`; the dispatch
-/// infrastructure (`__Dispatch_<E>`, `__effect_<E>`, per-op wrappers)
+/// infrastructure (`__Dispatch{<E>}`, `__effect{<E>}`, per-op wrappers)
 /// continues to live one-set-per-declaration. For generic resources, each
 /// distinct argument tuple gets its own dispatch struct / global / wrapper
 /// triple, with the resource declaration's operation types substituted at
@@ -170,7 +170,7 @@ fn identify_uncovered_effects(
     // whole interface either way.
     //
     // One bare name, one owner: the triple is named after the name alone, so
-    // activating a second declaration under it emits `__Dispatch_<E>` twice.
+    // activating a second declaration under it emits `__Dispatch{<E>}` twice.
     // A name an active instantiation owns is left to it — the call lands on
     // that dispatch and traps there when no handler is installed.
     let owned: IndexSet<&String> = active
@@ -240,24 +240,24 @@ impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
 /// the same `(struct_type_id, global_name, …)` triple.
 #[derive(Debug, Clone)]
 pub struct DispatchPlan {
-    /// `TypeId` of the synthesised `__Dispatch_<E>` struct.
+    /// `TypeId` of the synthesised `__Dispatch{<E>}` struct.
     pub struct_type_id: TypeId,
-    /// `TypeId` of `Option<&__Dispatch_<E>>` — the global's runtime type
+    /// `TypeId` of `Option<&__Dispatch{<E>}>` — the global's runtime type
     /// and the type of `outer` / dispatch wrapper-saved values.
     pub nullable_ref_type_id: TypeId,
-    /// `TypeId` of `&__Dispatch_<E>` — handed to `Option::Some` when
+    /// `TypeId` of `&__Dispatch{<E>}` — handed to `Option::Some` when
     /// installing a fresh dispatch record.
     pub inner_ref_type_id: TypeId,
-    /// Name of the synthesised `__effect_<E>` mutable global.
+    /// Name of the synthesised `__effect{<E>}` mutable global.
     pub global_name: String,
     /// Operation name → dispatch wrapper function name
-    /// (`__effect_dispatch__<E>__<op>`).
+    /// (`__effect_dispatch{<E>}{<op>}`).
     pub wrapper_names: IndexMap<String, String>,
     /// Operation name → dispatch struct field name (`op_<op>`).
     pub field_names: IndexMap<String, String>,
     /// Operation name → field type (`fn(<op_params>) -> <op_ret>`).
     pub field_types: IndexMap<String, TypeId>,
-    /// Operation name → 0-based field index in `__Dispatch_<E>`. The
+    /// Operation name → 0-based field index in `__Dispatch{<E>}`. The
     /// `outer` field always sits at index 0; ops start at 1.
     pub field_indices: IndexMap<String, u32>,
     /// Cached operation declarations (cloned from `EffectMeta`) so the
@@ -349,10 +349,10 @@ fn substitute_operations(
         .collect()
 }
 
-/// Synthesise the `__Dispatch_<E>` Wasm GC struct for one effect.
+/// Synthesise the `__Dispatch{<E>}` Wasm GC struct for one effect.
 ///
 /// Two-phase construction handles the recursive
-/// `outer: Option<&__Dispatch_<E>>` field:
+/// `outer: Option<&__Dispatch{<E>}>` field:
 ///
 /// 1. `make_struct` interns an empty / forward-declared struct type id
 ///    in the shared `TypeTable`.
@@ -364,8 +364,8 @@ fn substitute_operations(
 /// `structs` list. Layout:
 ///
 /// ```text
-/// struct __Dispatch_<E> {
-///     outer: Option<&__Dispatch_<E>>,
+/// struct __Dispatch{<E>} {
+///     outer: Option<&__Dispatch{<E>}>,
 ///     op_<n>: fn(<op_n_params>) -> <op_n_ret>,
 ///     ...
 /// }
@@ -482,9 +482,9 @@ fn synthesize_dispatch_struct(
     }
 }
 
-/// Synthesise the `__effect_<E>` mutable global for one effect.
+/// Synthesise the `__effect{<E>}` mutable global for one effect.
 ///
-/// The slot stores `Option<&__Dispatch_<E>>` and starts at `null`
+/// The slot stores `Option<&__Dispatch{<E>}>` and starts at `null`
 /// (meaning: no handler installed). `is_nullable: true` makes the
 /// Wasm validator accept the `ref.null` initializer for the `(mut
 /// (ref null $Dispatch))` slot; `lazy_init: false` keeps codegen from
@@ -518,7 +518,7 @@ fn synthesize_dispatch_global(
     entry_module.globals.push(global);
 }
 
-/// Synthesise the per-(effect, op) `__effect_dispatch__<E>__<op>` wrapper
+/// Synthesise the per-(effect, op) `__effect_dispatch{<E>}{<op>}` wrapper
 /// function for one effect.
 ///
 /// Each wrapper has the same signature as the operation itself
@@ -527,12 +527,12 @@ fn synthesize_dispatch_global(
 /// Body shape:
 ///
 /// ```text
-/// fn __effect_dispatch__<E>__<op>(<args>) -> <ret> {
-///     let __saved = global.get __effect_<E>;
+/// fn __effect_dispatch{<E>}{<op>}(<args>) -> <ret> {
+///     let __saved = global.get __effect{<E>};
 ///     if let Some(d) = __saved {
-///         global.set __effect_<E> = d.outer;     // expose outer scope
+///         global.set __effect{<E>} = d.outer;     // expose outer scope
 ///         let __result = (d.op_<op>)(args);      // call the closure
-///         global.set __effect_<E> = __saved;     // restore
+///         global.set __effect{<E>} = __saved;     // restore
 ///         return __result;
 ///     }
 ///     // Fallback path: no handler installed.
@@ -670,7 +670,7 @@ fn build_dispatch_wrapper_function(
 
     let mut stmts: Vec<TirStmt> = Vec::new();
 
-    // let __saved = global.get __effect_<E>;
+    // let __saved = global.get __effect{<E>};
     let global_get_expr = TirExpr::new(
         TirExprKind::GlobalVarGet {
             module_source: entry_source.clone(),
@@ -705,7 +705,7 @@ fn build_dispatch_wrapper_function(
         )
     };
 
-    // global.set __effect_<E> = d.outer;
+    // global.set __effect{<E>} = d.outer;
     let outer_field_access = TirExpr::new(
         TirExprKind::FieldAccess {
             expr: Box::new(d_local_expr()),
@@ -771,7 +771,7 @@ fn build_dispatch_wrapper_function(
         then_stmts.push(TirStmt::new(TirStmtKind::Expr(indirect_call), span));
     }
 
-    // global.set __effect_<E> = __saved;
+    // global.set __effect{<E>} = __saved;
     let saved_expr = TirExpr::new(
         TirExprKind::Local {
             index: saved_local,
@@ -1610,19 +1610,19 @@ impl crate::tir_visitor::TirRefVisitor for MaxLocalIndex {
 ///
 /// ```text
 /// let __h_<E>    = handler_expr;
-/// let __save_<E> = global.get __effect_<E>;
-/// let __d_<E>    = __Dispatch_<E> {
+/// let __save_<E> = global.get __effect{<E>};
+/// let __d_<E>    = __Dispatch{<E>} {
 ///     outer:       __save_<E>,
 ///     op_<n>:      |args| __h_<E>.<E>::<op_n>(args),
 ///     ...
 /// };
-/// global.set __effect_<E> = Some(&__d_<E>);
+/// global.set __effect{<E>} = Some(&__d_<E>);
 /// ```
 ///
 /// After the body, in reverse install order:
 ///
 /// ```text
-/// global.set __effect_<E> = __save_<E>;
+/// global.set __effect{<E>} = __save_<E>;
 /// ```
 ///
 /// Bindings whose effect is unresolved (`EffectRef::Param`) or whose
@@ -1780,7 +1780,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             (local, name)
         };
 
-        // 2. let __save_<E> = global.get __effect_<E>;
+        // 2. let __save_<E> = global.get __effect{<E>};
         let save_local = ctx.alloc_local(plan.nullable_ref_type_id);
         let save_name = format!("__save_{label}");
         let global_get = TirExpr::new(
@@ -1804,7 +1804,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             span,
         ));
 
-        // 3. let __d_<E> = __Dispatch_<E> { outer: __save_<E>, op_n: ..., ... };
+        // 3. let __d_<E> = __Dispatch{<E>} { outer: __save_<E>, op_n: ..., ... };
         let mut struct_fields: Vec<TirStructField> = Vec::new();
         struct_fields.push(TirStructField {
             name: "outer".to_string(),
@@ -1869,7 +1869,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             span,
         ));
 
-        // 4. global.set __effect_<E> = Some(&__d_<E>);
+        // 4. global.set __effect{<E>} = Some(&__d_<E>);
         let d_local_expr = TirExpr::new(
             TirExprKind::Local {
                 index: d_local,
@@ -2302,7 +2302,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
 }
 
 /// Repackage a handler method's resolved `T` as the `AsyncCall<T>` its call
-/// site reads, through the interface's `__cm_wrap_async__<E>__<op>` adapter.
+/// site reads, through the interface's `__cm_wrap_async{<E>}{<op>}` adapter.
 /// The adapter takes no argument when `T` is unit, so the method call becomes a
 /// statement and the wrap is the block's trailing expression.
 fn wrap_async_result(
@@ -2316,7 +2316,7 @@ fn wrap_async_result(
     assert!(
         op.cm_name.is_some(),
         "handled async op `{}` without a CM import binding — no \
-         `__cm_wrap_async__` adapter exists to repackage the handler's result \
+         `__cm_wrap_async{{…}}` adapter exists to repackage the handler's result \
          (the elaborator rejects handler impls for user-defined async effects)",
         op.name
     );
@@ -2374,7 +2374,7 @@ fn wrap_async_result(
 /// wraps the method result:
 ///
 /// ```text
-/// |<op_params>| __cm_wrap_async__<E>__<op>(__h_<E>.<E>::<op>(<op_params>))
+/// |<op_params>| __cm_wrap_async{<E>}{<op>}(__h_<E>.<E>::<op>(<op_params>))
 /// ```
 fn build_handler_op_closure(
     op: &TirEffectOp,
@@ -2616,7 +2616,7 @@ fn build_forward_closure(
 ///    Produced by the elaborator for `R::op(args)` /
 ///    `receiver.op(args)` on a resource declaration.
 ///
-/// Calls inside `__effect_dispatch__*` wrappers are left alone — they
+/// Calls inside `__effect_dispatch{…}` wrappers are left alone — they
 /// belong to the synthesised infrastructure and rewriting them would
 /// short-circuit the wrapper's fallback. (`cm_binding` adapters
 /// (`__cm_binding__*`) don't exist yet at this phase, so they need

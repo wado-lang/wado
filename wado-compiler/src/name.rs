@@ -123,6 +123,71 @@ pub fn replace_type_name_in_mangled(mangled: &str, old: &str, new: &str) -> Stri
     out
 }
 
+/// Delimiters bracketing one operand of a synthesized helper's name.
+///
+/// A helper's operands are already-rendered names, so they carry every
+/// character the mangled grammar uses — `$` from a namespace member, `_` from
+/// any identifier, `<>[]` from type arguments. No separator drawn from that
+/// alphabet can separate two of them: `$a$b$c` reads as `(a$b, c)` and as
+/// `(a, b$c)` alike, and the two helpers are then one symbol. These two
+/// characters are outside that alphabet, which is what makes the operand
+/// boundary unambiguous.
+const SYNTH_OPEN: char = '{';
+const SYNTH_CLOSE: char = '}';
+
+/// Writer for a synthesized helper's name: a family tag, then its operands,
+/// each bracketed by [`SYNTH_OPEN`] / [`SYNTH_CLOSE`].
+///
+/// The single way such a name is built, so no family can reintroduce a join
+/// whose operands merge. A family taking one operand is injective on its tag
+/// alone; one taking two needs the brackets.
+struct SynthName(String);
+
+impl SynthName {
+    fn family(tag: &str) -> Self {
+        Self(format!("${tag}"))
+    }
+
+    fn operand(mut self, rendered: &str) -> Self {
+        debug_assert!(
+            synth_brackets_balanced(rendered),
+            "a synthesized helper's operand carries `{SYNTH_OPEN}` / `{SYNTH_CLOSE}` \
+             unbalanced, so its closing bracket is no longer the one at depth zero \
+             and the operand boundary stops being readable: `{rendered}`"
+        );
+        self.0.push(SYNTH_OPEN);
+        self.0.push_str(rendered);
+        self.0.push(SYNTH_CLOSE);
+        self
+    }
+
+    fn finish(self) -> String {
+        self.0
+    }
+}
+
+/// Whether an operand's own [`SYNTH_OPEN`] / [`SYNTH_CLOSE`] brackets nest
+/// properly — true for a name that carries none, and for one built by
+/// [`SynthName`] out of operands that do. Nesting is what keeps the boundary
+/// scan unambiguous once a helper takes another helper as an operand
+/// ([`shallow_copy_helper_name`]).
+fn synth_brackets_balanced(rendered: &str) -> bool {
+    let mut depth = 0i32;
+    for c in rendered.chars() {
+        match c {
+            SYNTH_OPEN => depth += 1,
+            SYNTH_CLOSE => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    depth == 0
+}
+
 /// The name of the synthesized deep-copy helper for a value type, identified
 /// by its module-qualified structural mangle
 /// (`TypeTable::mangle_type_arg_for_generic`). The mangle is a stable,
@@ -131,18 +196,40 @@ pub fn replace_type_name_in_mangled(mangled: &str, old: &str, new: &str) -> Stri
 /// the wasm name section, and identical types that were interned more than
 /// once collapse onto one helper.
 pub fn value_copy_helper_name(mangled_type: &str) -> String {
-    format!("$value_copy${mangled_type}")
+    SynthName::family(VALUE_COPY_FAMILY)
+        .operand(mangled_type)
+        .finish()
+}
+
+/// Family tag of the deep value-copy helper.
+const VALUE_COPY_FAMILY: &str = "value_copy";
+
+/// The leading `$value_copy{` every [`value_copy_helper_name`] carries — for a
+/// consumer scanning rendered output (a NIR dump) instead of holding a name.
+/// Name formats live here, so a scanner reads the spelling from this function
+/// rather than repeating it.
+#[must_use]
+pub fn value_copy_helper_marker() -> String {
+    format!("${VALUE_COPY_FAMILY}{SYNTH_OPEN}")
 }
 
 /// The name of the shallow-copy sibling `value_copy_demote` synthesizes for a
-/// deep value-copy helper: the deep helper's name with a `$shallow` suffix.
+/// deep value-copy helper.
+///
+/// Its own family wrapping the deep helper's name, not that name plus a
+/// `$shallow` suffix: a suffix is indistinguishable from a deep copy of a type
+/// whose own mangle ends the same way.
 pub fn shallow_copy_helper_name(deep_name: &str) -> String {
-    format!("{deep_name}$shallow")
+    SynthName::family("shallow").operand(deep_name).finish()
 }
 
 /// The name of a `param_spec` clone: the original's name plus the clone's
 /// ordinal among that callee's specializations. Unique package-wide, since the
 /// original's name already is.
+///
+/// A suffix rather than a [`SynthName`] family, and injective as one because
+/// the ordinal is decimal digits with nothing after it: a second specialization
+/// appends again (`f$spec0$spec1`), and no single application can spell that.
 pub fn param_spec_name(original: &str, ordinal: usize) -> String {
     format!("{original}$spec{ordinal}")
 }
@@ -152,19 +239,27 @@ pub fn param_spec_name(original: &str, ordinal: usize) -> String {
 /// (same identity discipline as [`value_copy_helper_name`]). Lowering rewrites
 /// `builtin::variant_case_extract::<V, P>` calls to it (WEP 2026-06-13 §3e).
 pub fn case_extract_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
-    format!("$case_extract${mangled_variant}${mangled_payload}")
+    SynthName::family("case_extract")
+        .operand(mangled_variant)
+        .operand(mangled_payload)
+        .finish()
 }
 
 /// The `Case::<V, P>::construct` sibling of [`case_extract_helper_name`].
 pub fn case_construct_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
-    format!("$case_construct${mangled_variant}${mangled_payload}")
+    SynthName::family("case_construct")
+        .operand(mangled_variant)
+        .operand(mangled_payload)
+        .finish()
 }
 
 /// The `discriminant` of one instantiated generic variant, identified by the
 /// instance's structural mangle. A free helper like the value bridges: the
 /// method-name form cannot spell an instance.
 pub fn variant_tag_helper_name(mangled_variant: &str) -> String {
-    format!("$variant_tag${mangled_variant}")
+    SynthName::family("variant_tag")
+        .operand(mangled_variant)
+        .finish()
 }
 
 /// The name of the synthesized `StructField::<S, F>::get` helper for a struct and one
@@ -172,7 +267,10 @@ pub fn variant_tag_helper_name(mangled_variant: &str) -> String {
 /// identity discipline as [`case_extract_helper_name`]). Lowering rewrites
 /// `builtin::struct_field_get::<S, F>` calls to it (WEP 2026-06-13 §2).
 pub fn field_get_helper_name(mangled_struct: &str, mangled_field: &str) -> String {
-    format!("$field_get${mangled_struct}${mangled_field}")
+    SynthName::family("field_get")
+        .operand(mangled_struct)
+        .operand(mangled_field)
+        .finish()
 }
 
 /// Field name of the discriminant slot on a variant's base struct (the tag
@@ -557,7 +655,7 @@ pub struct LocalMethodName {
     /// recorded outside of impl-block method context. The dispatch
     /// synthesis consumes this to produce **per-monomorphisation**
     /// dispatch infrastructure: each unique `(base_trait, trait_type_args)`
-    /// pair gets its own `__Dispatch_<R>__<args>` struct + global +
+    /// pair gets its own `__Dispatch{<R>}` struct (one per trait instantiation) + global +
     /// per-op wrappers, with the resource's operation types substituted
     /// for that combination.
     pub trait_type_args: Vec<crate::tir::TypeId>,
@@ -1838,9 +1936,26 @@ impl MangledName {
     /// A function's project-wide key: the module it is emitted in and the name
     /// it is emitted under. The one way `func_map` keys are built, so a caller
     /// cannot assemble the pair in a namespace the map does not store.
+    ///
+    /// The module is bracketed rather than joined to the local name by `/`,
+    /// because a module rendering may be another's prefix at a `/` boundary and
+    /// a local name is itself module-qualified. `core:prelude` +
+    /// `list.wado/Point::x` and `core:prelude/list.wado` + `Point::x` join to
+    /// one string, and the two functions then share a `func_map` slot — the
+    /// loser's calls resolve to the winner's body. Both stdlib modules exist,
+    /// and an entry point named `list.wado` renders as that receiver prefix.
+    ///
+    /// The bracket also keeps this namespace disjoint from
+    /// [`Self::builtin_alias`] and [`Self::wasi_import`], which share the map.
     #[must_use]
     pub fn in_module(module: &crate::module_source::ModuleSource, local_name: &str) -> Self {
-        Self(format!("{module}/{local_name}"))
+        let module = module.to_string();
+        debug_assert!(
+            synth_brackets_balanced(&module),
+            "a module rendering with unbalanced `{SYNTH_OPEN}` / `{SYNTH_CLOSE}` \
+             leaves no readable end to the bracket: `{module}`"
+        );
+        Self(format!("{SYNTH_OPEN}{module}{SYNTH_CLOSE}{local_name}"))
     }
 
     /// The `builtin/<name>` alias an imported builtin is registered under.
@@ -2060,29 +2175,48 @@ pub fn mangle_local_trait_method(struct_name: &str, trait_name: &str, method_nam
 /// effect-dispatch synthesis (`Counter`, `Stream<u8>`, …).
 ///
 /// Examples:
-/// - `dispatch_struct_name("Counter")` → `"__Dispatch_Counter"`
-/// - `dispatch_struct_name("Stream<u8>")` → `"__Dispatch_Stream<u8>"`
+/// - `dispatch_struct_name("Counter")` → `"__Dispatch{Counter}"`
+/// - `dispatch_struct_name("Stream<u8>")` → `"__Dispatch{Stream<u8>}"`
 pub fn dispatch_struct_name(label: &str) -> String {
-    format!("__Dispatch_{label}")
+    SynthName("__Dispatch".to_string()).operand(label).finish()
 }
 
 /// Build the per-instantiation effect-dispatch global name.
 ///
 /// Examples:
-/// - `dispatch_global_name("Counter")` → `"__effect_Counter"`
-/// - `dispatch_global_name("Stream<u8>")` → `"__effect_Stream<u8>"`
+/// The label is bracketed, which is also what keeps this family out of
+/// [`dispatch_wrapper_name`]'s: `__effect_<label>` and `__effect_dispatch…`
+/// share a prefix, so a label spelled `dispatch…` would otherwise name a
+/// wrapper.
+///
+/// Examples:
+/// - `dispatch_global_name("Counter")` → `"__effect{Counter}"`
+/// - `dispatch_global_name("Stream<u8>")` → `"__effect{Stream<u8>}"`
 pub fn dispatch_global_name(label: &str) -> String {
-    format!("__effect_{label}")
+    SynthName("__effect".to_string()).operand(label).finish()
 }
 
 /// Build the per-operation effect-dispatch wrapper function name.
 ///
+/// The label and the operation are bracketed rather than joined by `__`: both
+/// are free to contain `__` (a synthesised receiver is spelled `__Dispatch{…}` /
+/// `__Closure_…`, and any identifier may carry it), so a `__` join reads two
+/// ways.
+///
 /// Examples:
-/// - `dispatch_wrapper_name("Counter", "next")` → `"__effect_dispatch__Counter__next"`
-/// - `dispatch_wrapper_name("Stream<u8>", "read")` → `"__effect_dispatch__Stream<u8>__read"`
+/// - `dispatch_wrapper_name("Counter", "next")` → `"__effect_dispatch{Counter}{next}"`
+/// - `dispatch_wrapper_name("Stream<u8>", "read")` → `"__effect_dispatch{Stream<u8>}{read}"`
 pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
-    format!("__effect_dispatch__{label}__{op_name}")
+    SynthName(EFFECT_DISPATCH_PREFIX.to_string())
+        .operand(label)
+        .operand(op_name)
+        .finish()
 }
+
+/// Prefix of every [`dispatch_wrapper_name`]. The effect-dispatch synthesis
+/// recognises its own wrappers by it, so producer and consumer share one
+/// definition.
+pub const EFFECT_DISPATCH_PREFIX: &str = "__effect_dispatch";
 
 /// Build the dispatch struct's per-operation field name.
 ///
@@ -2093,8 +2227,16 @@ pub fn dispatch_field_name(op_name: &str) -> String {
     format!("op_{op_name}")
 }
 
+/// The adapter that repackages an async CM handler's result for the call site.
+///
+/// Both halves are snake_case identifiers, so a `_` join reads two ways
+/// (`outgoing_body` + `write` against `outgoing` + `body_write`); they are
+/// bracketed instead.
 pub fn cm_wrap_async_func_name(interface_name: &str, method_name: &str) -> String {
-    format!("__cm_wrap_async__{interface_name}_{method_name}")
+    SynthName("__cm_wrap_async".to_string())
+        .operand(interface_name)
+        .operand(method_name)
+        .finish()
 }
 
 /// Convert a user-facing `test "name"` string into the snake-case segment used
@@ -2147,6 +2289,117 @@ pub fn test_function_name(
     match name {
         Some(name) => format!("{prefix}_{test_index}_{}", test_name_to_snake(name)),
         None => format!("{prefix}_{test_index}"),
+    }
+}
+
+#[cfg(test)]
+mod injectivity {
+    //! A mangled name is an identity, so the function that builds one must be
+    //! injective: distinct operands must produce distinct names. A helper that
+    //! joins two variable-length operands with a separator the operands may
+    //! themselves contain is not, and the two names then denote one symbol —
+    //! the loser's calls resolve to the winner's body.
+    //!
+    //! Each test below states one join and the two operand pairs it merges.
+
+    use super::*;
+
+    #[test]
+    fn cm_wrap_async_separates_interface_from_method() {
+        // `_` joins two snake_case identifiers, both of which contain `_`.
+        assert_ne!(
+            cm_wrap_async_func_name("outgoing_body", "write"),
+            cm_wrap_async_func_name("outgoing", "body_write"),
+        );
+    }
+
+    #[test]
+    fn dispatch_wrapper_separates_label_from_operation() {
+        // `__` joins a receiver label to an operation name; a synthesised
+        // receiver (`__Dispatch{…}`, `__Closure_…`) carries `__` of its own.
+        assert_ne!(
+            dispatch_wrapper_name("Handler__Inner", "run"),
+            dispatch_wrapper_name("Handler", "Inner__run"),
+        );
+    }
+
+    #[test]
+    fn case_helpers_separate_variant_from_payload() {
+        // `$` joins two mangled types; a namespace-imported member is spelled
+        // with `$` (`namespace_member_alias`), so an operand can carry one.
+        let ns = namespace_member_alias("m", "Payload");
+        assert_ne!(
+            case_extract_helper_name(&format!("Shape${ns}"), "u8"),
+            case_extract_helper_name("Shape", &format!("{ns}$u8")),
+        );
+        assert_ne!(
+            case_construct_helper_name(&format!("Shape${ns}"), "u8"),
+            case_construct_helper_name("Shape", &format!("{ns}$u8")),
+        );
+        assert_ne!(
+            field_get_helper_name(&format!("Shape${ns}"), "u8"),
+            field_get_helper_name("Shape", &format!("{ns}$u8")),
+        );
+    }
+
+    #[test]
+    fn shallow_copy_is_distinct_from_a_deep_copy_of_a_shallow_named_type() {
+        // A `$shallow` suffix on the deep helper's name is indistinguishable
+        // from a deep copy of a type whose own mangle ends the same way.
+        assert_ne!(
+            shallow_copy_helper_name(&value_copy_helper_name("Wrapper")),
+            value_copy_helper_name(&namespace_member_alias("Wrapper", "shallow")),
+        );
+    }
+
+    #[test]
+    fn a_function_key_separates_its_module_from_its_local_name() {
+        // `core:prelude` is `core:prelude/list.wado`'s prefix at a `/`
+        // boundary, and a local name is module-qualified in turn — so a `/`
+        // join between the two makes one `func_map` slot out of two functions.
+        let mut interner = ModuleSourceInterner::new();
+        let prelude = interner.core("prelude");
+        let list = interner.core("prelude/list.wado");
+        assert_ne!(
+            MangledName::in_module(&prelude, "list.wado/Point::x"),
+            MangledName::in_module(&list, "Point::x"),
+        );
+    }
+
+    #[test]
+    fn a_function_key_cannot_spell_a_builtin_or_wasi_alias() {
+        let mut interner = ModuleSourceInterner::new();
+        let builtin = interner.core("builtin");
+        assert_ne!(
+            MangledName::in_module(&builtin, "realloc"),
+            MangledName::builtin_alias("realloc"),
+        );
+        assert_ne!(
+            MangledName::in_module(&builtin, "poll"),
+            MangledName::wasi_import("poll"),
+        );
+    }
+
+    #[test]
+    fn the_dispatch_global_cannot_spell_a_dispatch_wrapper() {
+        // `__effect_<label>` and `__effect_dispatch…` share a prefix, so the
+        // wrapper's bracket is what keeps a global named after a `dispatch…`
+        // receiver out of the wrapper's namespace.
+        assert_ne!(
+            dispatch_global_name("dispatch{Counter}{next}"),
+            dispatch_wrapper_name("Counter", "next"),
+        );
+    }
+
+    #[test]
+    fn a_helper_taking_a_helper_keeps_its_brackets_nested() {
+        // The boundary scan reads the closing bracket at depth zero, so a
+        // derived family's operand must nest rather than escape.
+        assert!(synth_brackets_balanced(&value_copy_helper_name("Wrapper")));
+        assert!(synth_brackets_balanced(&shallow_copy_helper_name(
+            &value_copy_helper_name("Wrapper")
+        )));
+        assert!(!synth_brackets_balanced("Wrapper}"));
     }
 }
 

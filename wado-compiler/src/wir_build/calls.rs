@@ -205,7 +205,7 @@ impl FunctionTranslator<'_, '_> {
     /// For `builtin::array_clone::<T>(arr)` whose `arr` is typed as
     /// `BuiltinArray(elem)`, return the helper-name suffix to invoke on
     /// every element when `elem` is itself a value-typed struct (i.e.
-    /// has a `$value_copy$` synthesized for it). Returns `None`
+    /// has a `$value_copy{…}` synthesized for it). Returns `None`
     /// for primitive elements where Wasm GC's plain `array.set` is
     /// already a deep copy.
     fn array_element_copy_mangle(&self, src_type_id: TypeId) -> Option<String> {

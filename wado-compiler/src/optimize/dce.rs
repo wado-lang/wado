@@ -299,7 +299,7 @@ fn extend_reachable_for_optimizer_passes(
     // `push_char` there keeps it and its callees alive as pure output bloat.
     // Gating on a surviving candidate makes the virtual edge self-limiting:
     // present at the pre-loop DCE (and at -O0, where the rule never runs), gone
-    // at the final DCE. The `$value_copy$` half below is *not* gated this way —
+    // at the final DCE. The `$value_copy{…}` half below is *not* gated this way —
     // its helpers are referenced by name at WIR build (after the final DCE), so
     // both invocations must seed them.
     if let (Some((str_id, str_func_id)), Some(char_id)) = (push_str, push_char_id)
@@ -310,7 +310,7 @@ fn extend_reachable_for_optimizer_passes(
         reachable.extend(compute_reachable(call_graph, &char_id));
     }
 
-    // `$value_copy$` helpers synthesized by `lower::plan::value_copy`
+    // `$value_copy{…}` helpers synthesized by `lower::plan::value_copy`
     // can be reached via `array_clone::<T>(arr)` for value-typed `T`: that
     // lowers to `WirInstr::ArrayClone { element_copy_type: Some(T) }`
     // where the helper is referenced by the element *type* at WIR codegen
@@ -476,7 +476,7 @@ fn body_has_short_push_str(body: &Body, push_str_id: crate::nir::FuncId) -> bool
 
 /// Walk `block`'s expression tree and collect every `T` such that
 /// `builtin::array_clone::<T>(...)` appears as a NIR call. The
-/// corresponding `$value_copy$` helper has to survive DCE because
+/// corresponding `$value_copy{…}` helper has to survive DCE because
 /// codegen will reach it by *name* at WIR time.
 fn collect_array_clone_element_types(
     body: &Body,
@@ -1133,7 +1133,7 @@ impl<'a> DceWalker<'a> {
             // Free function call. `method_info` is the discriminator — a name
             // is not one: a synthesized helper embeds a type mangle, which
             // carries `::` for an associated-type projection
-            // (`$value_copy$S::MapSerializer`).
+            // (`$value_copy{…}S::MapSerializer`).
             let callee_module = original_callee_module.clone();
             let callee_id = FunctionId::Free(FreeFunctionName::from_module_source(
                 &callee_module,

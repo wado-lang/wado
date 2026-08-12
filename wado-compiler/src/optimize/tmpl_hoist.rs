@@ -317,7 +317,7 @@ fn template_buf_escapes(body: &Body, tmpl_block: BlockId, buf_local_index: u32) 
 /// block tails, `if` branch tails, `match` arm bodies, `switch` arm tails, and
 /// labeled-block break values. A call result or a fresh aggregate literal is a
 /// new value, so the chain stops there: a value that leaves only through a
-/// `$value_copy$…` helper stays hoistable.
+/// `$value_copy{…}…` helper stays hoistable.
 ///
 /// `let t = <chain containing s>` records an alias edge `t → s` instead of
 /// marking; [`Self::finish`] propagates escapes across edges to a fixpoint.
@@ -1935,7 +1935,7 @@ mod tests {
 
     /// The value chain follows `if` branch tails (the shape
     /// `out.push(if c { s } else { t })` escapes through) but stops at a call
-    /// result — a `$value_copy$…` wrapper severs the alias, keeping copied
+    /// result — a `$value_copy{…}…` wrapper severs the alias, keeping copied
     /// escapes hoistable.
     #[test]
     fn chain_follows_if_tails_and_stops_at_calls() {

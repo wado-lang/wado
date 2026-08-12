@@ -10,13 +10,13 @@
 //    A struct field whose type is itself value-semantic used to get a
 //    one-level shallow copy — the synthesized helper emitted
 //    `return Holder { items: v.items };` and the inner `List<i32>`'s
-//    own deep-copy via `$value_copy$List$i32` never fired. Fix: in
+//    own deep-copy via `$value_copy{List<i32>}` never fired. Fix: in
 //    `lower::plan::value_copy::synthesize::make_field_copy`, fields
 //    whose type is value-semantic are wrapped in
 //    `builtin::copy_value::<FieldT>(...)`; the TIR → NIR translator's
 //    `Call` arm then resolves the marker against
 //    `ValueCopyPlan::name_for_type` and emits a direct call to the
-//    `$value_copy$T<id>` helper, and `collect_copy_value_types`
+//    `$value_copy{T<id>}` helper, and `collect_copy_value_types`
 //    computes the transitive closure so every reachable nested type
 //    gets its own helper.
 //

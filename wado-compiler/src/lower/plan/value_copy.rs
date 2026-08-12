@@ -1,7 +1,7 @@
 //! Plan Wado's value-copy semantics.
 //!
 //! [`analyze::collect_seed_types`] returns the set of `TypeId`s the
-//! fold will wrap in `$value_copy$T(...)`;
+//! fold will wrap in `$value_copy{T}(...)`;
 //! [`synthesize::synthesize_helpers`] generates a per-type helper for
 //! the seed plus its transitive closure of nested value-typed fields.
 //! The fold (`lower::translate`) emits wrap calls directly using
@@ -46,7 +46,7 @@ fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
         .and_then(|mi| mi.impl_type_args.first().copied())
 }
 
-/// `TypeId` → `(ModuleSource, $value_copy$)` for every helper
+/// `TypeId` → `(ModuleSource, $value_copy{…})` for every helper
 /// `synthesize_helpers` registered in [`FlatPackage::functions`], plus the
 /// interprocedural return-convention set the fold consults to decide whether a
 /// call result is owned (a move) or borrowed (a copy).

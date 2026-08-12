@@ -937,7 +937,7 @@ fn rewrite_arg(
 /// `relax_closure_call = false` keeps closure `__call` functors pinned (their
 /// function-table wrapper snapshots the signature); unlike DAE there is no
 /// relaxation here. `sroa_param` adds one pin the shared predicate does not
-/// carry — a `$value_copy$T` helper is never a rewrite target.
+/// carry — a `$value_copy{T}` helper is never a rewrite target.
 ///
 /// Concrete trait-impl methods are eligible: after monomorphization every call
 /// site carries a resolved `func_id` and `rewrite_call_sites` rewrites them all,

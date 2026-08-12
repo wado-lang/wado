@@ -128,8 +128,8 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
 /// function SROA at the body root.
 pub(super) struct SroaRule<'a> {
     stores_lookup: &'a StoresLookup,
-    /// The `$value_copy$T` helper ids. A candidate consumed inside a value copy
-    /// (`g($value_copy$S(s))`, `return $value_copy$S(s)`) is reconstructible: the
+    /// The `$value_copy{T}` helper ids. A candidate consumed inside a value copy
+    /// (`g($value_copy{…}S(s))`, `return $value_copy{…}S(s)`) is reconstructible: the
     /// soft-escape walk peels the wrapper and treats the inner bare local as a
     /// soft position.
     value_copy_ids: &'a IndexSet<crate::nir::FuncId>,
@@ -619,10 +619,10 @@ impl SoftCtx<'_> {
     }
 
     fn expr(&self, body: &Body, id: ExprId, soft: bool, hard_escaped: &mut IndexSet<u32>) {
-        // See through a `$value_copy$T(inner)` wrapper: the copy reconstructs a
+        // See through a `$value_copy{T}(inner)` wrapper: the copy reconstructs a
         // fresh value, so its wrapped candidate use is a soft (reconstructible)
-        // position regardless of the enclosing context (`g($value_copy$S(s))`,
-        // `return $value_copy$S(s)`). The rewrite reconstructs the literal inside
+        // position regardless of the enclosing context (`g($value_copy{…}S(s))`,
+        // `return $value_copy{…}S(s)`). The rewrite reconstructs the literal inside
         // the copy, which then copies a fresh literal (a redundant, sound no-op).
         if let Some(inner) = strip_one_value_copy(body, id, self.value_copy_ids) {
             self.expr(body, inner, true, hard_escaped);

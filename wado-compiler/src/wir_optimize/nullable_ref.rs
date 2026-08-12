@@ -439,7 +439,7 @@ fn transform_instr(
                 return;
             }
             // A discriminant read that is not part of an `== N` comparison —
-            // the reflection helpers (`$variant_tag$`, `$case_extract$`'s
+            // the reflection helpers (`$variant_tag{…}`, `$case_extract{…}`'s
             // guard) materialise the tag itself and compare it later, against
             // a local. There is no discriminant field to read, so compute the
             // tag from the null check.

@@ -244,7 +244,7 @@ struct Candidate {
     /// for structs: the struct field types in declaration order).
     element_types: Vec<TypeId>,
     /// Whether every field is a scalar (carries no identity, needs no value
-    /// copy). Only then may a slot copy `v[i] = $value_copy$T(v[j])` be seen
+    /// copy). Only then may a slot copy `v[i] = $value_copy{T}(v[j])` be seen
     /// through: the decomposition becomes per-field scalar copies. With an
     /// identity-carrying field the wrapper is load-bearing and must block SROA.
     all_scalar: bool,
@@ -352,7 +352,7 @@ pub(super) struct ContainerSroaRule<'a> {
     /// during the local-allocation step. Borrowed through the `Rc` to avoid
     /// holding a long mutable borrow across the rewrite.
     type_table_rc: std::rc::Rc<std::cell::RefCell<TypeTable>>,
-    /// The `$value_copy$T` helper ids. A slot copy `v[i] = $value_copy$T(v[j])`
+    /// The `$value_copy{T}` helper ids. A slot copy `v[i] = $value_copy{T}(v[j])`
     /// of an all-scalar element decomposes to per-field scalar copies, so the
     /// wrapper is seen through during decomposition.
     value_copy_ids: &'a IndexSet<crate::nir::FuncId>,
@@ -735,7 +735,7 @@ fn recognize_init_operand(
         .and_then(|e| recognize_init(body, e, sig, value_copy_ids))
 }
 
-/// Peel `$value_copy$T(inner)` wrappers, returning the innermost expression. A
+/// Peel `$value_copy{T}(inner)` wrappers, returning the innermost expression. A
 /// value copy of a fresh value (a constructor result) is a no-op.
 fn peel_value_copy(
     body: &Body,
@@ -770,7 +770,7 @@ fn recognize_init(
     sig: &MethodSig,
     value_copy_ids: &IndexSet<crate::nir::FuncId>,
 ) -> Option<CandidateInit> {
-    // The constructor result is fresh, so a `$value_copy$T` wrapping the whole
+    // The constructor result is fresh, so a `$value_copy{T}` wrapping the whole
     // initializer (inserted for the by-value binding) is a no-op — see through
     // it to reach the `Constructor` call.
     let value = peel_value_copy(body, value, value_copy_ids);
@@ -933,7 +933,7 @@ struct CandidateShape {
     /// Number of parallel lists the candidate decomposes to.
     arity: usize,
     layout: ElementLayout,
-    /// Whether every field is a scalar; gates the `$value_copy$T` see-through
+    /// Whether every field is a scalar; gates the `$value_copy{T}` see-through
     /// in [`WhitelistChecker::check_source`].
     all_scalar: bool,
 }
@@ -1010,7 +1010,7 @@ impl WhitelistChecker<'_> {
 
     /// Check an expression used as a value-source for `push`/`index_assign`.
     /// `src_all_scalar` says the destination element is all-scalar, which is the
-    /// precondition for seeing through a `$value_copy$T` wrapper.
+    /// precondition for seeing through a `$value_copy{T}` wrapper.
     fn check_source(
         &mut self,
         body: &Body,
@@ -1019,7 +1019,7 @@ impl WhitelistChecker<'_> {
         expected_layout: &ElementLayout,
         src_all_scalar: bool,
     ) -> bool {
-        // See through a defensive slot copy `v[i] = $value_copy$T(src)` when the
+        // See through a defensive slot copy `v[i] = $value_copy{T}(src)` when the
         // element is all-scalar: after decomposition each field is copied by
         // value, so the struct-level clone is redundant. For an identity-carrying
         // field the copy is load-bearing, so leave it (this arm doesn't fire) and
@@ -1471,7 +1471,7 @@ impl Rewriter<'_, '_> {
 
     /// Decompose a source expression into N per-field value operands.
     /// `src_all_scalar` mirrors the analysis-side gate: only then is a
-    /// `$value_copy$T` wrapper seen through (the per-field scalar assignments
+    /// `$value_copy{T}` wrapper seen through (the per-field scalar assignments
     /// realize the value copy).
     fn decompose_source(
         &self,
@@ -1482,7 +1482,7 @@ impl Rewriter<'_, '_> {
         src_all_scalar: bool,
     ) -> Option<Vec<Operand>> {
         let ctx = self.ctx;
-        // See through a defensive slot copy `$value_copy$T(src)` — matches
+        // See through a defensive slot copy `$value_copy{T}(src)` — matches
         // `check_source`. The wrapped element read is decomposed instead.
         if src_all_scalar
             && let Some(inner) = strip_one_value_copy(engine.body, expr, ctx.value_copy_ids)

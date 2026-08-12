@@ -273,7 +273,7 @@ pub(super) fn strip_refs(body: &Body, id: ExprId) -> ExprId {
     }
 }
 
-/// Strip a single `$value_copy$T(inner)` wrapper, returning its inner
+/// Strip a single `$value_copy{T}(inner)` wrapper, returning its inner
 /// expression, or `None` when `e` is not a one-argument value-copy call.
 pub(super) fn strip_one_value_copy(
     body: &Body,

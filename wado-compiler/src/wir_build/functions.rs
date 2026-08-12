@@ -352,7 +352,7 @@ fn register_loaded_functions(ctx: &mut WirContext<'_>) {
         // The entry module is handled by `register_entry_functions`. A wasi
         // module contributes only bodyless CM imports from source, filtered by
         // the `body.is_none()` check below — but the reflect derivation
-        // synthesizes body-carrying free-function helpers (`$field_get$…`) homed
+        // synthesizes body-carrying free-function helpers (`$field_get{…}`) homed
         // in a wasi CM record's own module (e.g. `wasi:clocks#Instant`). Those
         // must register here, mirroring how `register_methods` (no wasi filter)
         // already emits a wasi CM record's synthesized `Eq`/`Ord` methods.
@@ -446,7 +446,11 @@ fn register_single_function(
     // Skip if already registered
     let fq = MangledName::in_module(module_source, &mangled_name);
     if ctx.func_map.contains_key(&fq) {
+        assert_registration_is_reentry(ctx, &fq, tir_func);
         return;
+    }
+    if let Some(id) = tir_func.id {
+        ctx.func_map_origin.insert(fq.clone(), id);
     }
 
     // Build param types, filtering out unit-type params (unit has no Wasm representation).
@@ -901,6 +905,29 @@ fn translate_global_init(
         }
         _ => WirInstr::I32Const(bits as i32),
     }
+}
+
+/// A second registration under an already-claimed `func_map` key must be the
+/// same function reaching `register_single_function` twice — the free-function
+/// and method walks overlap on a few shapes. A *different* function arriving at
+/// the same key is a mangled-name collision, and the early return would drop it
+/// silently: every call to the loser would resolve to the winner's body, which
+/// surfaces phases later as a Wasm validation type mismatch, or not at all.
+fn assert_registration_is_reentry(
+    ctx: &WirContext<'_>,
+    fq: &MangledName,
+    tir_func: &NirFunction,
+) {
+    let (Some(claimed), Some(id)) = (ctx.func_map_origin.get(fq), tir_func.id) else {
+        return;
+    };
+    assert_eq!(
+        *claimed, id,
+        "mangled-name collision: `{fq}` is claimed by two distinct functions \
+         ({claimed:?} and {id:?}, the latter `{}` in `{}`). A mangled name is \
+         an identity, so two functions sharing one is a miscompile.",
+        tir_func.name, tir_func.module_source
+    );
 }
 
 /// Build a mangled function name from TIR function and module source.

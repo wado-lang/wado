@@ -1,5 +1,5 @@
 // Regression for wado-lang/wado#1522: at -O1 and above the value-copy elision
-// stripped `let text = $value_copy$(*buf)` because it judged the copy read-only
+// stripped `let text = $value_copy{…}(*buf)` because it judged the copy read-only
 // by inspecting the reference local `buf`, missing that `*buf = ...` mutates the
 // pointee that `text` would then alias. The copy is now never elided when its
 // source reads through a reference deref, so `text` keeps its pre-reset value.

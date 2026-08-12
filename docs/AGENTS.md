@@ -156,3 +156,4 @@ history is the SSoT for how the design got here.
 - [Variant Return Scalarization at NIR](./wep-2026-08-03-variant-return-abi.md)
 - [`core:icu` — Internationalization as One Facade](./wep-2026-08-09-core-icu.md)
 - [Reference Resolution — One Answer per Reference Site](./wep-2026-08-10-reference-resolution.md)
+- [Symbol Identity — a Structured Symbol, an Injective Encoding](./wep-2026-08-12-symbol-identity.md)

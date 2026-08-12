@@ -565,7 +565,7 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
 
 /// Synthesize one struct's `type_name()` and `members()` methods, register
 /// its `FieldTypes` / `Members` associated tuple types, and emit the
-/// per-field-type `$field_get$S$F` bridge helpers.
+/// per-field-type `$field_get{S}{F}` bridge helpers.
 fn generate_struct_reflect_methods(
     type_table: &RefCell<TypeTable>,
     env: &ReflectSynthEnv,
@@ -1257,7 +1257,7 @@ fn generate_wire_name_policy_fn(
     )
 }
 
-/// Synthesize the `$field_get$S$F` helpers for every distinct field type of a
+/// Synthesize the `$field_get{S}{F}` helpers for every distinct field type of a
 /// struct. `StructField::<S, F>::get`'s body carries a `builtin::struct_field_get`
 /// marker; lowering rewrites each monomorphized marker to its helper
 /// (WEP 2026-06-13 §2). Extract-only and guard-free — every struct field is
@@ -1301,7 +1301,7 @@ pub(super) fn generate_field_bridge_helpers(
     helpers
 }
 
-/// Build `$field_get$S$F(v: &S, index: i32) -> F`:
+/// Build `$field_get{S}{F}(v: &S, index: i32) -> F`:
 /// `return match index { field_index => v.<field_name>, … _ => unreachable() };`.
 fn generate_field_get_helper(
     helper_name: String,
@@ -1759,7 +1759,7 @@ fn generate_variant_cases_fn(
     )
 }
 
-/// Synthesize the `$case_extract$V$P` / `$case_construct$V$P` helpers for
+/// Synthesize the `$case_extract{V}{P}` / `$case_construct{V}{P}` helpers for
 /// every distinct payload type of `target`. `Case::<V, P>::extract` and
 /// `::construct` bodies carry `builtin::variant_case_*` markers; lowering
 /// rewrites each monomorphized marker to its helper (WEP 2026-06-13 §3e).
@@ -1876,7 +1876,7 @@ fn case_index_dispatch(
     )
 }
 
-/// Build `$case_extract$V$P(v: &V, index: i32) -> P`:
+/// Build `$case_extract{V}{P}(v: &V, index: i32) -> P`:
 /// trap unless `v`'s tag is `index`, then read the case's payload.
 fn generate_case_extract_helper(
     helper_name: String,
@@ -1983,7 +1983,7 @@ fn generate_case_extract_helper(
     )
 }
 
-/// Build `$case_construct$V$P(payload: P, index: i32) -> V`:
+/// Build `$case_construct{V}{P}(payload: P, index: i32) -> V`:
 /// construct case `index` around `payload`.
 fn generate_case_construct_helper(
     helper_name: String,
@@ -2102,7 +2102,7 @@ fn variant_tag_body(ref_variant_type: TypeId, variant_type: TypeId, span: Span) 
 
 /// The `discriminant` of one instantiated generic variant, as a free function
 /// under the tag-helper name lowering builds from the instance
-/// (`$variant_tag$<mangle>`). Not a method: the method-name machinery rejects
+/// (`$variant_tag{…}<mangle>`). Not a method: the method-name machinery rejects
 /// type arguments in a base struct name.
 pub(super) fn generate_variant_instance_discriminant_fn(
     qualified_name: String,
