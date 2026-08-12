@@ -144,6 +144,20 @@ RP : ')' ;
     assert index_of(&out, "\"punctuation.bracket\",  // TK_LP") >= 0, out;
 }
 
+test "default on an action-bearing named token the parser also writes inline" {
+    // The action does not block the alias, so `(LP)` still resolves to the
+    // kind the lexer emits for `'('`.
+    let out = highlight_output_q("grammar T;
+options { language = Wado; }
+r : '(' B ')' ;
+B : 'b' ;
+LP : '(' { lx.count += 1 } ;
+RP : ')' ;
+", "(LP) @punctuation.bracket");
+    assert index_of(&out, "\"punctuation.bracket\",  // TK_LP") >= 0, out;
+    assert index_of(&out, "TK_LIT_LP") < 0, out;
+}
+
 test "later override for the same rule and token wins (last-wins)" {
     let out = highlight_output_q("grammar T;
 r : B ;

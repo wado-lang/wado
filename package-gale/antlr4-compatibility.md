@@ -157,12 +157,19 @@ setting. Fixture `tests/grammars/lit_alias_ref.g4`.
 The rule body must be exactly one string literal. `K : 'k' 'w' ;` and
 `K : ('kw') ;` do **not** alias `'kw'` (both checked against the 4.13.2
 jar): the literal mints its own token and `K` goes unreachable, which is
-what ANTLR4 does too. Those still route through `lexer_gen`'s
-`is_literal_duplicate` dedup, which drops the rule's matcher in favour of
-the shared literal one. A fragment, a `tokens { }` entry, and a rule
-outside the default mode never alias — an inline literal is only matched
-in the default mode, so a same-text rule in another mode keeps its own
-matcher (`tests/grammars/mode_lit_shadow.g4`).
+what ANTLR4 does too. Those two route through `lexer_gen`'s
+`is_literal_duplicate` dedup instead, which drops the rule's matcher in
+favour of the shared literal one.
+
+An action does not block the alias: `K : 'kw' {act();} ;` aliases and the
+action fires (also checked against the jar). It has to — `is_literal_duplicate`
+reads only the alt's elements, so refusing the alias would dedup the rule
+away and drop the action with it (`tests/grammars/lit_alias_action.g4`).
+
+A fragment, a `tokens { }` entry, and a rule outside the default mode
+never alias — an inline literal is only matched in the default mode, so a
+same-text rule in another mode keeps its own matcher
+(`tests/grammars/mode_lit_shadow.g4`).
 
 Highlight queries key off the same table: `"(" @punctuation.bracket`
 resolves through the aliasing rule's kind when the text mints no literal

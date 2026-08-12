@@ -566,7 +566,7 @@ fn group_is_lenient_scan(g: &GroupElement) -> bool {
         return false;
     }
     for let alt of &g.alternatives {
-        if alt.elements.len() != 1 {
+        if alt.elements.len() != 1 || !alt.actions.is_empty() {
             return true;
         }
         if !alt.elements[0] matches { TokenRef(_) | Literal(_) } {
@@ -1172,14 +1172,6 @@ pub fn canonicalize_empty_alt_groups(grammar: &mut Grammar) {
     }
 }
 
-/// Strip the syntactic `( … )` wrappers off a labelled element: `x=(ID)` binds
-/// what `x=ID` binds, `x+=(ID)+` repeats what `x+=ID+` repeats. The wrapper
-/// has no binding slot, so keeping it either drops the binding or leaves the
-/// lowered op and the surface element disagreeing about the shape.
-///
-/// A wrapper carrying anything of its own — group `options`, an alt label,
-/// alt actions — stays. Runs before `assign_atn_call_sites`, whose numbering
-/// must see the final shape.
 /// The fixed text a lexer rule aliases, or `null` when it aliases nothing.
 ///
 /// ANTLR4 aliases a parser string literal to a lexer rule only when the rule's
@@ -1188,12 +1180,17 @@ pub fn canonicalize_empty_alt_groups(grammar: &mut Grammar) {
 /// check is `one alt, one Literal element` — not `try_extract_fixed_text`'s
 /// concatenation. A fragment, a `tokens { }` virtual entry, and a rule outside
 /// the default mode never alias.
+///
+/// An action does not block the alias (`K : 'kw' {act();} ;` aliases and the
+/// action fires — also oracle-checked). It must not: `try_extract_fixed_text`
+/// ignores actions, so refusing here would leave the rule deduped onto the
+/// shared literal matcher with its action dropped and its token unreachable.
 pub fn lexer_alias_text(rule: &LexerRule) -> Option<String> {
     if rule.is_fragment || rule.is_virtual || rule.mode != DEFAULT_MODE || rule.body.len() != 1 {
         return null;
     }
     let alt = &rule.body[0];
-    if alt.elements.len() != 1 || !alt.actions.is_empty() {
+    if alt.elements.len() != 1 {
         return null;
     }
     if let Literal(text) = &alt.elements[0] {
@@ -1282,6 +1279,14 @@ fn alias_element(elem: &Element, texts: &List<String>, names: &List<String>) -> 
     };
 }
 
+/// Strip the syntactic `( … )` wrappers off a labelled element: `x=(ID)` binds
+/// what `x=ID` binds, `x+=(ID)+` repeats what `x+=ID+` repeats. The wrapper
+/// has no binding slot, so keeping it either drops the binding or leaves the
+/// lowered op and the surface element disagreeing about the shape.
+///
+/// A wrapper carrying anything of its own — group `options`, an alt label,
+/// alt actions — stays. Runs before `assign_atn_call_sites`, whose numbering
+/// must see the final shape.
 pub fn unwrap_labeled_transparent_groups(grammar: &mut Grammar) {
     for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
         let unwrapped = unwrap_label_alternatives(&grammar.parser_rules[ri].alternatives);
