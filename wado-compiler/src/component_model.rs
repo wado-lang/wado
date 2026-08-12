@@ -237,6 +237,10 @@ pub fn cm_payload_type_from_type_id(
         ResolvedType::Newtype { base_type, .. } => {
             cm_payload_type_from_type_id(type_table, *base_type)
         }
+        // A resource travels as an owned handle. Unlike the value types above,
+        // a WASI-owned one is included: its component type is aliased from the
+        // interface that defines it, so there is one to point `own<…>` at.
+        ResolvedType::Resource { name, .. } => Some(CmPayloadType::Resource(to_kebab(name))),
         _ => None,
     }
 }

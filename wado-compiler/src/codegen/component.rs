@@ -946,7 +946,7 @@ fn expose_self_owned_resources(
 ) {
     for resource_name in needed_resources {
         let registry = &project.cm_interface_registry;
-        if registry.get_resource_source_interface(resource_name).as_deref()
+        if registry.get_resource_source_interface(resource_name)
             != Some(interface_info.path.as_str())
         {
             continue;
@@ -1403,6 +1403,11 @@ fn payload_type_to_cm_key(payload: &CmPayloadType, ctx: &ComponentModelContext) 
                 .collect(),
         ),
         CmPayloadType::Named(name) => CmTypeKey::Leaf(ctx.type_idx(name)),
+        // A resource travels as an owned handle. Its component type is aliased
+        // at outer scope by the interface that defines it, under `resource:<cm>`.
+        CmPayloadType::Resource(cm_name) => CmTypeKey::Own(Box::new(CmTypeKey::Leaf(
+            ctx.type_idx(&format!("resource:{cm_name}")),
+        ))),
     }
 }
 
@@ -1430,7 +1435,8 @@ fn collect_named_payload_names(payload: &CmPayloadType, out: &mut Vec<String>) {
                 collect_named_payload_names(e, out);
             }
         }
-        CmPayloadType::Scalar(_) | CmPayloadType::String => {}
+        // A resource is aliased from its defining interface, not defined here.
+        CmPayloadType::Scalar(_) | CmPayloadType::String | CmPayloadType::Resource(_) => {}
     }
 }
 

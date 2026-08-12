@@ -89,8 +89,12 @@ pub enum CmPayloadType {
     /// `result<ok?, err?>` — either arm absent (`None`) for the unit case.
     Result(Option<Box<CmPayloadType>>, Option<Box<CmPayloadType>>),
     Tuple(Vec<CmPayloadType>),
-    /// A named CM type by kebab name (record / variant / enum / flags / resource).
+    /// A named CM type by kebab name (record / variant / enum / flags).
     Named(String),
+    /// An owned resource handle (`own<r>`), by the resource's CM kebab name.
+    /// Distinct from [`Self::Named`]: a resource's component type is registered
+    /// under its own key and is wrapped in `own` at the use site.
+    Resource(String),
 }
 
 impl CmPayloadType {
@@ -117,6 +121,7 @@ impl CmPayloadType {
                     .join(","),
             ),
             Self::Named(name) => name.clone(),
+            Self::Resource(name) => format!("own<{name}>"),
         }
     }
 
@@ -149,6 +154,9 @@ impl CmPayloadType {
                 .map(|p| Self::parse_suffix(p))
                 .collect::<Option<Vec<_>>>()?;
             return Some(Self::Tuple(elems));
+        }
+        if let Some(inner) = s.strip_prefix("own<").and_then(|r| r.strip_suffix('>')) {
+            return Some(Self::Resource(inner.to_string()));
         }
         if s == "string" {
             return Some(Self::String);
