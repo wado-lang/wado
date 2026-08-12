@@ -197,9 +197,10 @@ fn format_usage() -> String {
         buf,
         "The listener serves HTTP/1.1 and cleartext HTTP/2 (h2c) on the same port,\n\
          choosing per connection from the client's opening bytes — there is no flag\n\
-         and no upgrade handshake. Response trailers reach an h2c client always, but\n\
-         an HTTP/1.1 client only if it sent `TE: trailers`. TLS is not terminated\n\
-         here; put a reverse proxy in front for HTTPS."
+         and no upgrade handshake. An h2c client always receives response trailers;\n\
+         an HTTP/1.1 client receives only the fields the response names in its\n\
+         `Trailer` header, and only when the request sent `TE: trailers`. TLS is\n\
+         not terminated here; put a reverse proxy in front for HTTPS."
     )
     .unwrap();
     writeln!(buf).unwrap();

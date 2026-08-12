@@ -365,7 +365,7 @@ fn serve_help_explains_http_versions() {
     };
     // The listener negotiates the HTTP version itself, so there is no flag
     // to discover it from — the help text is the only place that says so.
-    for fragment in ["HTTP/1.1", "h2c", "trailers"] {
+    for fragment in ["HTTP/1.1", "h2c", "`Trailer` header", "`TE: trailers`"] {
         assert!(
             err.message.contains(fragment),
             "expected help to contain {fragment:?}, got {:?}",
