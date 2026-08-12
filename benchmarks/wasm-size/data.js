@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786461066776,
+  "lastUpdate": 1786501465994,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47313,6 +47313,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/01e193b251c499ab546d71778cbb32269dc71a2d"
         },
         "date": 1786461065893,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267689,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fd45ecb98783f71d4f9c8ce1ddc294eca51b5d35",
+          "message": "Merge pull request #1793 from wado-lang/claude/wir-validator-generic-let-ice-vvx1sz\n\nfix(elaborator): separate rigid type parameters from inference variables",
+          "timestamp": "2026-08-12T11:11:54+09:00",
+          "tree_id": "b999adba08f9c6507a7a1b1dada01c06e33ff290",
+          "url": "https://github.com/wado-lang/wado/commit/fd45ecb98783f71d4f9c8ce1ddc294eca51b5d35"
+        },
+        "date": 1786501465426,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
