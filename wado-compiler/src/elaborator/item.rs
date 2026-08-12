@@ -818,7 +818,14 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// there is no reliable answer to build on.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
         let name = super::trait_env::get_type_name_static(trait_type);
-        let key = self.decl_key_or_local(&name);
+        // The same question the block's own facts ask, through the same
+        // helper: which declaration does this head name? Asking it a second
+        // way here is how the two came to disagree — a namespace-qualified
+        // head was rejected for a trait the namespace plainly exports.
+        let key = match crate::resolve::head_site(trait_type) {
+            Some(site) => self.trait_decl_at(site, &name),
+            None => self.decl_key_or_local(&name),
+        };
         if self.trait_decl_header_in_frame(&name).is_some()
             || self.tysys.trait_env.declares_trait(&key)
             || self.tysys.trait_env.declares_effect_or_resource(&key)

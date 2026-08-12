@@ -1896,6 +1896,17 @@ fn static_receiver_key(type_key: &ImplTargetKey, otherwise: impl FnOnce() -> Dec
 /// A site behind no declaration — a tuple, a function type, a name that
 /// reaches nothing — is keyed to the impl's own module. Nothing else claims
 /// it, and coherence for exactly those is decided per module.
+fn impl_target_key_at(
+    ty: &ast::Type,
+    module_source: &ModuleSource,
+    symbols: &SymbolTable,
+    resolutions: &crate::resolve::Resolutions,
+) -> ImplTargetKey {
+    sited_impl_target_key(ty, module_source, resolutions).unwrap_or_else(|| {
+        ImplTargetKey::of_written(&get_type_name_static(ty), module_source, symbols, resolutions)
+    })
+}
+
 /// The one trait, effect or resource declaration named `name`, when exactly
 /// one module declares it. Declines on ambiguity: guessing between two
 /// same-named declarations is the mis-identification this design prevents.
@@ -1912,17 +1923,6 @@ fn unique_declared_trait<L, E, R>(
         .filter(|(_, n)| n == name);
     let first = hits.next()?;
     hits.next().is_none().then(|| first.clone())
-}
-
-fn impl_target_key_at(
-    ty: &ast::Type,
-    module_source: &ModuleSource,
-    symbols: &SymbolTable,
-    resolutions: &crate::resolve::Resolutions,
-) -> ImplTargetKey {
-    sited_impl_target_key(ty, module_source, resolutions).unwrap_or_else(|| {
-        ImplTargetKey::of_written(&get_type_name_static(ty), module_source, symbols, resolutions)
-    })
 }
 
 fn sited_impl_target_key(
@@ -2064,7 +2064,7 @@ fn classify_position(
         // Everything else is an identity question: the package owns this
         // position only when the name resolves to a declaration it owns. A name
         // resolving to nothing is foreign, not uncovered.
-        Type::Named(_) | Type::Generic(_) => {
+        Type::Named(_) | Type::Generic(_) | Type::NamespacedGeneric(_) => {
             match resolve(&header.module, ty, &header.type_params) {
                 ImplTargetKey::Decl(key) if local.types.contains(&key) => PositionKind::LocalType,
                 ImplTargetKey::Decl(_)
@@ -2079,7 +2079,6 @@ fn classify_position(
         Type::Tuple(_) if local.tuple => PositionKind::LocalType,
         Type::Tuple(_)
         | Type::Function(_)
-        | Type::NamespacedGeneric(_)
         | Type::TypePackSpread(..)
         | Type::Infer(_)
         | Type::Error(_) => PositionKind::ForeignType,
@@ -2144,7 +2143,14 @@ type ResolveWritten<'a> =
 /// Append `bound` unless a bound of that name is already present. Bound lists
 /// are name-keyed everywhere downstream, so a name is the identity here too.
 pub(super) fn push_unique_bound(bounds: &mut Vec<ast::TraitBound>, bound: &ast::TraitBound) {
-    let Some(existing) = bounds.iter_mut().find(|b| b.name == bound.name) else {
+    // Same *bound*, not same spelling: `T: Show + A` where `A: b::Show`
+    // inherits a second `Show` naming another module's declaration, and
+    // collapsing the two on their written name drops it. Two bounds written at
+    // two sites stay two bounds; only a bound repeated at one site merges.
+    let Some(existing) = bounds
+        .iter_mut()
+        .find(|b| b.name == bound.name && b.id == bound.id)
+    else {
         bounds.push(bound.clone());
         return;
     };
@@ -2691,6 +2697,11 @@ pub(super) fn get_type_name_static(ty: &ast::Type) -> String {
                 TypeTable::TUPLE_TYPE_NAME.to_string()
             }
         }
+        // `geo::Tag` writes the declaration name `Tag`; the namespace says
+        // which module declares it, which is a question for the reference
+        // site, not for a spelling. Rendering these as `Unknown` filed them
+        // under a name no lookup asks for and put `Unknown` in diagnostics.
+        ast::Type::NamespacedGeneric(ns) => ns.name.clone(),
         _ => "Unknown".to_string(),
     }
 }

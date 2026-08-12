@@ -1,0 +1,38 @@
+// A namespace-qualified trait head names the declaration the namespace
+// exports, not a same-named one in the writing module. Were `geo::Show`
+// resolved as a bare `Show`, the impl below would be checked against this
+// module's own trait — which declares `label`, not `show` — and rejected.
+use geo from "./sub/ns_qualified_trait_head_lib.wado";
+
+trait Show {
+    fn label(&self) -> String;
+}
+
+struct Local {
+    v: i32,
+}
+
+impl Show for Local {
+    fn label(&self) -> String {
+        return `local ${self.v}`;
+    }
+}
+
+impl geo::Show for Local {
+    fn show(&self, prefix: String) -> String {
+        return `${prefix}${self.v}`;
+    }
+}
+
+test "the namespace's trait supplies the impl's contract" {
+    let l = Local { v: 7 };
+    assert l.show("tag ") == "tag 7";
+}
+
+test "the module's own same-named trait is untouched" {
+    let l = Local { v: 3 };
+    assert l.label() == "local 3";
+}
+
+__DATA__
+{"test": {}}

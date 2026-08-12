@@ -1,0 +1,20 @@
+// Orphan rule violation reached through a namespace-qualified head:
+// `serde::Serialize` is foreign and so is `String`. Were the head resolved as
+// a bare `Serialize` in this module, it would name the local trait, the impl
+// would look local-trait, and the violation would be dropped without a word.
+use serde from "core:serde";
+
+trait Serialize {
+    fn other(&self) -> String;
+}
+
+impl serde::Serialize for String {
+    fn serialize(&self) -> String {
+        return "x";
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "orphan rule"}
