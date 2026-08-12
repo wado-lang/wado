@@ -189,9 +189,6 @@ pub(super) fn blanket_pack_dispatch_args(
             BlanketParamSource::Projection(bound_trait, assoc) => {
                 out.push(type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc)?);
             }
-            // A parameter whose predicate named no declaration is not the
-            // receiver: filling it from the receiver type would key the
-            // instance under an argument the template never declared.
             BlanketParamSource::Unresolved => return None,
         }
     }

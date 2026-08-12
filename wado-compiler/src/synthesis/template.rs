@@ -1282,8 +1282,6 @@ pub(crate) fn blanket_dispatch_for(
     for source in trait_env.blanket_param_sources(blanket) {
         match source {
             BlanketParamSource::Receiver => impl_type_args.push(type_id),
-            // Not the receiver: a predicate names this parameter but reaches no
-            // declaration, so the blanket cannot be instantiated here.
             BlanketParamSource::Unresolved => return None,
             BlanketParamSource::Projection(bound_trait, assoc) => {
                 let projected =

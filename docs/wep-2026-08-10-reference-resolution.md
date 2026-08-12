@@ -212,8 +212,9 @@ the winning one's site.
 
 ### 7. The impl-module index answers in two namespaces
 
-They are different questions. A mangled head (`mod/Widget`) picks out one declaration; a declared
-name (`Widget`) picks out any declaration spelling itself that way. The index
+They are different questions. A mangled head (`mod/Widget`) picks out one
+declaration; a declared name (`Widget`) picks out any declaration spelling
+itself that way. The index
 held one map and one lookup, while its two producers wrote different
 namespaces: the AST layer stored the heads impl blocks wrote, the synthesis
 layer stored `base_struct_name()`. A query reached exactly one layer, decided by
@@ -226,7 +227,9 @@ the impl headers' resolved targets rather than the heads they wrote. AST-first
 precedence is load-bearing: with both namespaces recorded, preferring the
 synthesised layer returns a different module.
 
-**The query takes a receiver, not a spelling.** `ImplReceiver` used to be
+#### The query takes a receiver, not a spelling
+
+`ImplReceiver` used to be
 `Mangled(&str) | Declared(&str)`, and every caller chose its own label — the
 same defect one level up: nine callers said `Mangled` while three of them held a
 bare declaration name. It carries `Of(&Receiver)` (the index derives both
@@ -252,7 +255,9 @@ Three rules fell out, each of which the single-namespace index had hidden:
 
 ### 8. The impl header's two ends
 
-**An impl header's trait is the declaration its site resolved to.** A fixture
+#### An impl header's trait is the declaration its site resolved to
+
+A fixture
 declaring `trait Sub { fn sub(&self) -> i32; }` and implementing it was rejected
 with "method `sub` takes 0 parameter(s) but `Sub` declares 1": the arity came
 from `core:prelude`'s arithmetic `Sub`. Renaming the trait made the same program
@@ -269,7 +274,9 @@ lookup reached through a resolved type land on the same key. The tuple family is
 the case that needs it: `internal type [..T]` gets no symbol, so no vantage can
 name it and only a module-free key agrees.
 
-**A namespace-qualified head writes its member's declaration name.** `geo::Tag`
+#### A namespace-qualified head writes its member's declaration name
+
+`geo::Tag`
 writes `Tag`; which module declares it is the reference site's answer, read from
 the `ns$member` alias the namespace import registers. Rendering these heads as
 `Unknown` filed an impl under a name no lookup asks for — its methods went

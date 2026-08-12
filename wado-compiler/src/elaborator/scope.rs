@@ -217,9 +217,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         bounds: &[ast::TraitBound],
         known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
     ) -> Vec<ast::TraitBound> {
-        // One list, each entry carrying the declaration it was merged on: two
-        // parallel lists lose their alignment the moment an entry belongs to
-        // only one of them, and a `fn(..)` bound is exactly that entry.
+        // Each entry carries the declaration it merged on, so a bound that has
+        // none — a `fn(..)` bound — cannot shift the ones after it.
         let mut out: Vec<(ast::TraitBound, Option<super::trait_env::DeclKey>)> =
             Vec::with_capacity(bounds.len());
         for bound in bounds {

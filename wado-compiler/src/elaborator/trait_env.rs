@@ -1968,23 +1968,17 @@ fn impl_target_key_at(
     })
 }
 
-/// The one trait declaration named `name`, else the one effect or resource —
-/// the order and the per-family uniqueness of
-/// [`TraitEnv::unique_trait_decl_key`] and
-/// [`TraitEnv::unique_effect_or_resource_decl_key`], which is what
-/// `Elaborator::decl_key_or_local` runs. Asking the three families at once
-/// instead would decline where the elaborator answers: a `trait Encode` beside
-/// another module's `interface Encode` is one trait, not an ambiguity.
+/// The one trait declaration named `name`, else the one effect or resource.
 ///
-/// Declines when a family holds two, since guessing between two same-named
-/// declarations is the mis-identification this design prevents.
+/// Per-family, in that order, matching `Elaborator::decl_key_or_local`: asking
+/// the three at once would decline where it answers, since a `trait Encode`
+/// beside another module's `interface Encode` is one trait, not an ambiguity.
+/// Declines when a family holds two.
 ///
-/// One divergence remains: `decl_key_or_local` consults its struct-like index
-/// *before* the trait one, so a name declared as a struct in one module and a
-/// trait in another keys to the trait here and to the struct there. This is a
-/// trait position and the struct is the wrong answer for it, but the two
-/// should agree — the fix is to give the elaborator a trait-position entry
-/// point rather than to copy the struct-first order into a trait lookup.
+/// Not yet identical: `decl_key_or_local` consults its struct-like index before
+/// the trait one, so a name declared as a struct in one module and a trait in
+/// another keys differently on the two sides. The fix is a trait-position entry
+/// point on the elaborator, not a struct-first order in a trait lookup.
 fn unique_declared_trait<L, E, R>(
     name: &str,
     decls: &IndexMap<DeclKey, L>,
@@ -2090,13 +2084,10 @@ fn classify_position(
         Type::Reference(inner) | Type::MutReference(inner) => {
             classify_position(inner, header, local, resolve)
         }
-        // "Is this position an uncovered parameter?" is a question about the
-        // impl's own binders, answered without resolving anything — and it must
-        // be asked separately. `ImplTargetKey::TypeParam` covers both a binder
-        // and a name that reaches no declaration at all, and reading the second
-        // as uncovered loses the coherence error an `impl Undeclared { … }`
-        // deserves while inventing an orphan violation for
-        // `impl From<Local> for Undeclared`.
+        // Asked of the impl's own binders, not of `ImplTargetKey::TypeParam`,
+        // which also covers a name reaching no declaration: reading that as
+        // uncovered loses the coherence error `impl Undeclared { … }` deserves
+        // and invents an orphan violation for `impl From<Local> for Undeclared`.
         Type::Named(_) | Type::Generic(_)
             if super::written::binder_of(ty, &header.type_params).is_some() =>
         {

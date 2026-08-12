@@ -213,11 +213,14 @@ fn distribute_bound_driven_requests(project: &mut Package) {
     };
 
     for (target_type_name, module_source, trait_key) in requests {
-        // `requests` is already filtered to the two serde traits, so the else
-        // branch below is always Deserialize.
         let trait_ref = if Some(&trait_key) == serialize_key.as_ref() {
             SynthTrait::Serialize
         } else {
+            assert_eq!(
+                Some(&trait_key),
+                deserialize_key.as_ref(),
+                "`requests` is filtered to the two serde traits"
+            );
             SynthTrait::Deserialize
         };
         let Some(&target_type_id) = by_name.get(&(target_type_name.clone(), module_source.clone()))
