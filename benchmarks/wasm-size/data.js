@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786531009613,
+  "lastUpdate": 1786532617896,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47401,6 +47401,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a5dbba0c09f1aa702c1c91f5dfc11a2cb694cdbf"
         },
         "date": 1786531008764,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 267689,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bad542cd7132c2520e94e1ae618566e5de369d08",
+          "message": "Merge pull request #1795 from wado-lang/claude/inherent-impl-collision-design-laq147\n\nrefactor(elaborator): resolve each reference site once, where it is written",
+          "timestamp": "2026-08-12T19:51:38+09:00",
+          "tree_id": "9aa25de2132bcca8669913fa2925eaa7e1b7cd7a",
+          "url": "https://github.com/wado-lang/wado/commit/bad542cd7132c2520e94e1ae618566e5de369d08"
+        },
+        "date": 1786532617354,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
