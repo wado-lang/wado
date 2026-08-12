@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786540538558,
+  "lastUpdate": 1786545865271,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47509,6 +47509,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 265549,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "842f4ecbddad6be2037700ac1704903d431f9a87",
+          "message": "Merge pull request #1796 from wado-lang/claude/nir-optimize-architecture-wep-gjv4c9\n\nperf(optimizer): materialise shared field loads, and drop the per-application read census",
+          "timestamp": "2026-08-12T23:34:35+09:00",
+          "tree_id": "047e45d3c1e7e675e13cd8d8f86b9dd02ffbbe83",
+          "url": "https://github.com/wado-lang/wado/commit/842f4ecbddad6be2037700ac1704903d431f9a87"
+        },
+        "date": 1786545864772,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265490,
             "unit": "bytes"
           }
         ]
