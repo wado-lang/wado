@@ -8,6 +8,7 @@ use {
     normalize_caches,
     canonicalize_empty_alt_groups,
     unwrap_labeled_transparent_groups,
+    alias_parser_literals,
     assign_atn_call_sites,
     assign_atn_decisions,
     assign_action_ids,
@@ -113,6 +114,8 @@ global GEN_BASE_CAPACITY: i32 = 4096;
 global GEN_PER_RULE_CAPACITY: i32 = 4096;
 
 pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOutput {
+    // Before `collect_literal_tokens` below, which must not see an aliased text.
+    alias_parser_literals(grammar);
     // Fill in `snake_name` / `field_name` caches on every name-bearing IR
     // node before any codegen pass touches the grammar. Production IR built
     // through `RuleRefElement::with_options` etc. already has these set —

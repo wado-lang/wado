@@ -1,0 +1,14 @@
+//! A lexer rule the parser also writes as an inline literal keeps its own
+//! matcher, so its action still runs — issue #1752.
+
+use la from "./grammars/lit_alias_action.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lit_alias" },
+    };
+
+test "the aliased rule's action runs" {
+    // Both `kw`s reach `K`'s action; the second one retypes to `X`.
+    let r = la::parse(&"kw kw");
+    assert r.ok(), "clean parse of 'kw kw'";
+    assert r.output == "KWX", `output: '${r.output}'`;
+}
