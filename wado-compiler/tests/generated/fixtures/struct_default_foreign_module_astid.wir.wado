@@ -1489,6 +1489,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -1498,10 +1499,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
@@ -1593,13 +1595,15 @@ fn "struct_default_foreign_module_astid.wado/core:benchmark/Benchmark::run<i32>$
     let i_16: i32;
     let next: i32;
     let _licm_iterations_26: i32;
+    let _av_27: i32;
     "core:benchmark/core:benchmark/Benchmark::ensure_header$spec0"(self);
     let __pattern_temp_0_mv_0: f64;
     let __pattern_temp_0_mv_1: ref "core:prelude/string.wado//String";
     multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:benchmark/core:benchmark/Benchmark::resolve_work"(self);
-    if self.iterations > 0 {
+    _av_27 = self.iterations;
+    if _av_27 > 0 {
         warmup_n = __inline_core_benchmark_Benchmark__effective_warmup_0: block -> i32 {
-            if self.iterations >= 2 {
+            if _av_27 >= 2 {
                 break __inline_core_benchmark_Benchmark__effective_warmup_0: 1;
             }
             break __inline_core_benchmark_Benchmark__effective_warmup_0: 0;

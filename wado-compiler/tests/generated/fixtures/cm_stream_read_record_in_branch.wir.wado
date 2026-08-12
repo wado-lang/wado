@@ -814,6 +814,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -823,10 +824,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
@@ -912,10 +914,12 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<wasi:filesystem/ty
     let __vc_payload_7: ref null "core:prelude/string.wado//String";
     let v_5: ref "core:prelude/string.wado//String";
     let __vc_payload_0: ref "core:prelude/string.wado//String";
-    if self.index >= self.end {
+    let _av_9: i32;
+    _av_9 = self.index;
+    if _av_9 >= self.end {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "wasi:filesystem/types.wado//DirectoryEntry">(self.repr, self.index);
+    v_2 = builtin::array_get<ref "wasi:filesystem/types.wado//DirectoryEntry">(self.repr, _av_9);
     item = struct.new "wasi:filesystem/types.wado//DirectoryEntry" { type: ref.as_non_null(v_3 = v_2.type; (if v_3.discriminant == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
         v_3;
     } else if v_3.discriminant == 1 -> ref "wasi:filesystem/types.wado//DescriptorType" {
@@ -939,7 +943,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<wasi:filesystem/ty
             __vc_payload_7;
         }) };
     })), name: ref.as_non_null(v_5 = v_2.name; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_5.repr; let __array_clone_len_3: i32; __array_clone_len_3 = v_5.used; let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_5.used }) };
-    self.index = self.index + 1;
+    self.index = _av_9 + 1;
     return item;
 }
 

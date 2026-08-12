@@ -221,15 +221,19 @@ repeats them where a contributor will hit them.
   `Engine::map_operands`. `Engine::run` audits the memo against a fresh walk
   under debug assertions — a backstop covering a session that asked, at its end
   only, not a proof.
+- No whole-body walk per rule application, in an assertion either. A rewrite
+  that deletes a binding reports the local through `Engine::note_elided_local`
+  and `Engine::run` audits the batch once; checking it at the rewrite put
+  `peephole` at 5.1 s of a 9.5 s loop, against 1.4 s of 6.2 s once
+  session-scoped. The audit reads the arena fresh rather than the use index and
+  census memo the rewrite decided on — substituting those would make it agree
+  with itself and catch nothing.
 
 ## Rejected and deferred
 
-### Not classical SSA
+### Not sea-of-nodes
 
-Wado emits structured Wasm, so SSA + relooper buys nothing the backend does not
-already need. The skeleton stays the effect-and-control schedule; local
-versioning is expressed by structural `Select` nodes at merges rather than
-explicit phis. Sea-of-nodes, and dropping the skeleton, stay rejected.
+Sea-of-nodes, and dropping the skeleton, stay rejected.
 
 ### Not equality saturation
 
@@ -249,6 +253,22 @@ JIT cannot do). Its prerequisites are visualisation tooling
 a budget hit must degrade gracefully to the partially saturated graph, never
 panic and never produce worse output than the input.
 
+### Not a session index carried across passes
+
+`Engine::new` rebuilds the parent maps and use index per function — 1.03 s of a
+~5.8 s loop over 36 000 sessions. Carrying it across passes was built and
+measured: 91 % of sessions reuse it and the derivation drops 68 %, but the loop
+total does not move, and four things argue against it.
+
+- It optimizes the structure the terminal ideal retires (see the `ExprKind`
+  item), and does nothing for the census the precision items load.
+- Reuse changes the output (+3.3 KB), so the carried state is not equivalent.
+- Soundness would rest on 36 `invalidate_engine_index` calls staying correct by
+  hand, each omission a silent miscompile.
+
+Closing the arena's mutation surface (226 sites over 57 files) so the type
+system carries the invariant is the prerequisite that would change this verdict.
+
 ### Not incremental rebuild, and not a richer cache
 
 Both were prototyped and measured, and both are the wrong shape: they make
@@ -257,54 +277,118 @@ because it is derived. See "Measured dead ends".
 
 ## Remaining work
 
-Compile speed. The build-once redesign met its structural goals but not its
-2× CPU target: `package-gale`'s optimize phase measured ~15.7 s against a ~7.5 s
-target. The premise was wrong — with build-once, the graph build is ~6 % of the
-phase (was ~21 %); the cost is now the passes themselves.
+Compile speed here means the debug build — the compiler-developer inner loop —
+so every timing in this WEP includes `debug_assert!`s.
 
-- [ ] Pass-level cost: `peephole` and the iteration count dominate. The cost
-      concentrates rather than spreads — on `benchmark/sqlite_parse` (the
-      Gale-generated SQLite parser) one fixed-point iteration's two `peephole`
-      runs took 4.4 s of a 9.9 s optimize while every other run took under
-      0.25 s. That spike was the promoted-read census, which `elide_local` and
-      `labeled_block_fusion` recomputed per block: 1228 whole-body walks,
-      38.5 M node visits, every one of them returning an empty map.
-      Session-scoping it and fusing the session build into one walk took
-      `optimize` to 8.2 s and `peephole` to 3.2 s. What remains is the iteration
-      count and the per-node rule dispatch; neither has been profiled since, so
-      measure before cutting.
-- [ ] Build the engine session once per function and maintain it through the edit
-      API, the way the graph already is. `Engine::new` costs one walk rather
-      than three — `build_indices` records parents and uses on the way down and
-      seeds the worklist on the way up — but it is still paid per pass per
-      function (~8 % of compile CPU when three walks were profiled).
+The graph build is ~6 % of the phase (was ~21 % before build-once); what is left
+to cut is the passes and their assertions. At `-O2` the loop costs ~6 s on each
+benchmark, spread over `peephole` (23 %) and `copy_prop` / `const_fold` / `licm`
+(13 % each), with no dominant iteration.
+
 - [ ] Function-level parallelism. The per-function build and walk are
       independent.
-- [ ] Fold the graph build into `lower` (born-at-`lower`), retiring the lazy
-      first-query build.
+- [ ] Fold the graph build into `lower` (born-at-`lower`). Buys one body walk
+      per function, not earlier availability: the early freeze already walks
+      every body before the loop, so the lazy first-query path is eager in
+      practice.
+      It also retires `Engine::ensure_value_graph`'s `VG_MAX_EXPRS` gate, which
+      skips the graph for a body over 5000 expressions. Measured, the memory it
+      saves is not there — covering the one over-threshold body of
+      `driver_cst_sqlite_oracle_test` costs +3 MB peak RSS and 6 - 10 % compile
+      time for a byte-identical module. Retire it with this item and not before:
+      alone it is a pure regression, the graph it would build having no consumer.
+
+- [ ] Retire the remaining pure `ExprKind` variants, so every pure position is
+      an `Operand::Value`. A compile-speed item as much as a saturation
+      prerequisite: pure kinds are 52 % of the arena on the two benchmarks and
+      the `Local` nodes the use index is made of are 34 %, so retiring them
+      halves what every session walk covers. Re-measure `Engine::new` (1.03 s,
+      ~17 % of the loop) afterwards — the other compile-speed items are sized
+      against a skeleton this shrinks.
+      Almost none of it is independently reachable. `Engine::value` recurses
+      through operands, so arithmetic left in the skeleton has no value at all,
+      bottoming out on a field load or a call result rather than being gated.
+      The one independent piece is the 19 % of unresolved arithmetic sitting in
+      a body `VG_MAX_EXPRS` skipped entirely; the rest waits on Precision below.
+
 - [ ] Arena compaction. In-place rewrites orphan nodes that are never freed
       mid-run (~1.66× bloat measured at end-of-optimize on `package-gale`).
 
-Precision.
+Precision. All of it waits on one rule.
 
-- [ ] Widen local promotion past parameters. A promoted value may now read a
-      local, but only a never-reassigned parameter qualifies, and only at the
-      post-loop freezes: 37 – 146 such operands per benchmark, against zero
-      before. The gate is the version question — one `ValueId` per local index
-      denotes one value only where the local has one version, which a parameter
-      has and an ordinary binding does not. Widening needs a def that provably
-      dominates the use and a binding that does not re-execute — the flow fact
-      the builder holds and a query-time resolver does not.
+### The anchor rule
 
-- [ ] Reach the in-loop consumers. Both freezes that may plant a local-naming
-      value run after the fixed-point loop, so the passes inside it still see
+A frozen operand may name a local only when that local's defining statement
+travels with the operand.
+
+A source local fails that. A parameter's def is the function entry, which is not
+a statement, so `inline` splices the operand into a caller where the same index
+is assigned once per call — and because `ValuePool::canonical_local` hands out
+one `ValueId` per local index, two reads that now denote different values share
+an id. That is the over-merge behind `String::substr_bytes` under
+"Measured dead ends". The guard used to be "every leaf is a parameter", a proxy
+for "this local has one version" that inlining invalidates, since
+parameter-ness does not survive being inlined; it is now the predicate itself
+(`Engine::local_has_one_version`) plus a dominance check at the placement.
+
+A freeze-minted temp satisfies it by construction. `let _av = <value>` is a
+statement in the same body, non-`mut`, and assigned once, so any pass that
+copies the operand copies the def with it, and one `ValueId` per `_av` stays
+true in every context it lands in. So: never freeze a value naming a source
+local — materialise it into an `_av` and name that.
+`apply_value_freeze` already mints `_av` this way for the multi-use case; the
+rule makes it the only way a local may be named, and drops the parameter
+restriction, which the anchor replaces.
+
+The rule is necessary and not sufficient. There is no in-loop freeze: one was
+built under it and promoted nothing on either benchmark, at 11.3 % of the loop,
+so it was removed. Two things have to hold and neither did.
+
+The material has to exist. Resolving every provably single-version local, not
+just parameters, changes no output on its own, because the leaves that matter
+are field loads and call results — and a `FieldAccess` is keyed on the
+`heap_ver` at its point, which no query-time re-derivation supplies. The builder
+is the only source, through the graph build or a scratch re-walk.
+
+A consumer has to want it. The candidate is `licm` hoisting a loop-invariant
+field load, which nothing does: its structural path is deliberately
+value-graph-free and its value path excludes `FieldAccess`. Surveyed, in-loop
+field reads that are provably invariant are 2.7 % and 7.1 % on the two
+benchmarks — too few to pay for maintaining promoted operands across `inline`
+and `sroa`, which dropping `must_anchor` would need.
+
+Two notes for whoever revives this. The invariance test is free:
+`apply_loop_heap_effects` bumps every slot the loop may write before the body
+walk and versions are monotonic, so a read below the loop-entry watermark is
+invariant. And what holds that 2.7 % down is upstream —
+`collect_loop_heap_effects` marks a call's receiver `mut_borrowed` whether or
+not the callee can mutate it, so one `self.helper()` kills every `self.field`
+invariance in a loop.
+
+- [ ] Give `collect_loop_heap_effects` the callee immutability the optimizer
+      already computes. It marks a call's receiver `mut_borrowed` whether or not
+      the callee can mutate it, while `alias.rs`'s `CallImmutability` and
+      `mod_ref::FnEffect` know the answer and the builder is handed only
+      `pure_builtin_callees`. Raises the precision of `store_load_forward`,
+      `promote_fields`, and `condition_implication` at once, and touches no part
+      of the anchor rule — measure it before anything else here.
+      One caveat: the `Call` arm records `mut_borrowed` only for a bare `Local`
+      argument, other shapes being covered only because every non-builtin call
+      sets `has_external_writes`. That fallback has to stay.
+
+- [ ] Reach the in-loop consumers. Every freeze that may plant a local-naming
+      value runs after the fixed-point loop, so the passes inside it still see
       none: LICM's value hoist collected zero loop-entry locals in 10,900
       queries, and `loop_entry_values` still has no working consumer, which is
       why `inline` discarding a non-empty map 1,469 times costs nothing. An
-      in-loop freeze cannot simply be added — the early one is bound by the
-      context-free rule under "Measured dead ends". This is the born-at-`lower`
-      item above: the builder can mint a versioned value as it walks, which is
-      what this and the widening both want.
+      in-loop freeze cannot simply be added — one was, and is recorded under
+      "The anchor rule"; the early freeze is separately bound by the
+      context-free rule under "Measured dead ends". Moving the build to `lower`
+      does not lift that bound: it is the extraction that is point-dependent,
+      not the build. This and the widening above share one prerequisite, the
+      anchor rule below, which also gates nearly all of retiring the pure
+      `ExprKind`s — not only its `Local` half, since the arithmetic above a
+      local read resolves to no value either.
 
 - [ ] Copy propagation on `ValueId`. Source-stability is not subsumed by value
       equality — a write-once `x` whose source `y` is later reassigned can read
@@ -313,10 +397,21 @@ Precision.
 - [ ] Induction-variable recognition (`Opaque` tagged `{ base, step }`). Not
       needed yet — post-increment reads already appear as `Add(opaque_i, step)` —
       so it lands when a rule first wants it.
-- [ ] Plumb a callee's `stores` annotation into `alias::AliasCollector`, so a
-      `&` / `&mut` on a local flowing into a `stores`-free callee stops marking
-      the local aliased. The unconditional mark over-approximates the common
-      `(&self).field` patterns.
+- [ ] Stop a `&` / `&mut` on a local that flows only into `stores`-free callees
+      from marking the local aliased. Plumbing the callee's `stores` into
+      `alias::escape_ref_arg` is not the way: `build_alias_info` seeds `aliased`
+      from `address_taken_locals`, and the elaborator marks that for every
+      `&x` / `&mut x` on a local, so the `(&self).field` shape this was written
+      for is already aliased before the call site is looked at. Measured, 3.7 %
+      of ref-arg marks (2 099 of 56 269 on `benchmark/sqlite_parse`) are the
+      sole reason their local is aliased — refs to a projection (`f(&x.field)`),
+      which the elaborator does not record. Narrowing the rest means narrowing
+      the seed, which is a whole-function question (do _all_ uses of `&x` flow
+      into `stores`-free callees?) over an annotation `boxing`, `sroa`, and
+      `elide_local` also read. Also note `mut_escaped` is built by filtering
+      `aliased`, so dropping a local from `aliased` silently drops it from
+      `mut_escaped` too — a callee that cannot retain a reference can still
+      mutate through it during the call, so the two have to be decoupled first.
 - [ ] Directed gate propagation (callee-shrink → callers only). Deferred: it
       drops the edges `inline` adds to the build-once call graph, and a
       per-iteration rebuild does not recover them — the staleness is
@@ -325,8 +420,6 @@ Precision.
 
 Terminal ideal, gated behind measurement (see "Not equality saturation").
 
-- [ ] Retire the remaining pure `ExprKind` variants from the skeleton, so every
-      pure position is an `Operand::Value`.
 - [ ] Saturation driver plus cost-based extraction: run rules to a bounded
       saturation, then extract a cost-minimal form per operand, materialising a
       multi-use value only when sharing beats duplication. This subsumes the
@@ -349,9 +442,10 @@ Each was built, verified, and reverted. Do not retry as-is.
   case. Deleted.
 - **Pooling the graph builder's output maps.** The build is compute-bound (walk +
   hash-cons + flow joins), not allocation-bound; measured no improvement.
-- **Promoting induction-variable `Local` reads to source-bearing opaques.** One
-  `ValueId` per local index spans every version of that local, and an induction
-  variable has one per iteration. Traps `closure_for_loop_mutation`.
+- **Promoting induction-variable `Local` reads to source-bearing opaques.** That
+  resolver keyed one `ValueId` per local index (the builder instead mints one
+  per assignment), so the id spanned every version of the local, and an
+  induction variable has one per iteration. Traps `closure_for_loop_mutation`.
 - **Freezing a local-naming value before the structural passes.** The early
   freeze is sound because a frozen value survives `inline` and `sroa` copying the
   operand around — true of a constant, which means the same thing wherever it

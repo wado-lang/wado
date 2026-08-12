@@ -29,14 +29,43 @@ use crate::nir_arena::{
 use crate::tir::TypeId;
 use crate::token::Span;
 
+/// A live-pool representative per field read, plus the versions a placement
+/// needs: a representative's `heap_ver` proves its *uses* see one load, not
+/// that an insertion point does. Both versions are in the scratch walk's
+/// numbering, the only one they compare in.
+#[derive(Default)]
+pub struct FieldValues {
+    pub reads: Vec<(ExprId, crate::nir_value_graph::ValueId)>,
+    walk_version: IndexMap<crate::nir_value_graph::ValueId, crate::nir_value_graph::HeapVersion>,
+    stmt_entry_version: IndexMap<StmtId, crate::nir_value_graph::HeapVersion>,
+}
+
+impl FieldValues {
+    /// Whether pinning `rep`'s load before `stmt` still reads what its uses
+    /// read — false when a mutation earlier in that statement wrote the slot.
+    /// Unknown is refused.
+    pub fn pinnable_before(&self, rep: crate::nir_value_graph::ValueId, stmt: StmtId) -> bool {
+        match (
+            self.walk_version.get(&rep),
+            self.stmt_entry_version.get(&stmt),
+        ) {
+            (Some(v), Some(mark)) => v < mark,
+            _ => false,
+        }
+    }
+}
+
 /// Per-local use information: where the local is defined and every node that
 /// reads it. Used by the engine to re-enqueue a local's uses when its
 /// definition is rewritten (copy propagation, const-fold through a `Let`, …).
 #[derive(Default, Debug)]
 pub struct LocalUses {
-    /// The `Let` / `LetDestructure` statement that binds the local, if any.
-    /// Parameters have no defining statement.
+    /// The first `Let` statement binding the local, if any. Parameters have
+    /// none, and neither does a `LetDestructure` binding (it binds through a
+    /// pattern, which this index does not walk).
     pub def: Option<StmtId>,
+    /// How many `Let` statements bind the local; a second is a second version.
+    pub defs: u32,
     /// Every `Local { index }` expression node that names this local. (The
     /// place-form distinction — read vs write — is refined when a rule needs
     /// it; for re-enqueue purposes every mention is a use.)
@@ -111,6 +140,10 @@ pub struct EngineBuffers {
     stmt_queued: Vec<bool>,
     block_queued: Vec<bool>,
     pat_queued: Vec<bool>,
+    /// Locals whose defining binding a rule deleted this session, audited once
+    /// at [`Engine::run`]'s end. Only written under debug assertions — the
+    /// audit is the sole reader. See [`Engine::note_elided_local`].
+    elided_locals: Vec<u32>,
 }
 
 impl EngineBuffers {
@@ -142,6 +175,7 @@ impl EngineBuffers {
         self.uses.clear();
         self.uses.resize_with(local_count, LocalUses::default);
         self.worklist.clear();
+        self.elided_locals.clear();
     }
 
     /// Mutable access to local `index`'s use record, growing `uses` on demand
@@ -326,10 +360,7 @@ impl<'a> Engine<'a> {
             // local has one version: a parameter is entry-defined, so its def
             // dominates every use, and unreassigned it holds one value.
             ExprKind::Local { index, .. } => {
-                if !self.param_locals.contains(&index) {
-                    return None;
-                }
-                if self.locals().get(index as usize).is_none_or(|l| l.is_mut) {
+                if !self.local_has_one_version(index) {
                     return None;
                 }
                 self.body.values.canonical_local(index, result_ty)
@@ -468,6 +499,97 @@ impl<'a> Engine<'a> {
         out
     }
 
+    /// A live-pool `FieldAccess` per field read, shared between exactly the
+    /// reads a scratch re-walk proves see one load.
+    ///
+    /// The walk is an equivalence oracle, not a value source — its ids mean
+    /// nothing in the live pool — so each class is re-minted over
+    /// `canonical_local(i)`, sound only where `i` holds one value, at a version
+    /// above `max_heap_version` so it cannot collide with an existing triple.
+    pub fn scoped_field_values(&mut self) -> FieldValues {
+        use crate::nir_value_graph::{OpaqueSource, ValueKind, builder};
+        self.ensure_value_graph();
+        if self.body.value_graph.is_none() {
+            return FieldValues::default();
+        }
+        let root = self.body.root;
+        let mut scratch = self.body.values.clone();
+        let empty = IndexMap::default();
+        let empty_builtins = IndexSet::default();
+        let scoped = builder::walk_scoped(
+            self.body,
+            root,
+            0,
+            &empty,
+            &self.aliased_locals,
+            &self.untrackable_locals,
+            &self.mut_escaped_locals,
+            self.vg_type_table,
+            self.pure_builtin_callees.unwrap_or(&empty_builtins),
+            &mut scratch,
+            None,
+        );
+        // Collected before any live-pool mutation: `local_has_one_version`
+        // borrows the engine.
+        let mut classes: Vec<(ExprId, crate::nir_value_graph::ValueId, u32, u32)> = Vec::new();
+        for (e, sv) in scoped.values {
+            if !matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. }) {
+                continue;
+            }
+            // The extractor re-emits a `StructGet` keyed by field index, which
+            // a tuple receiver — where the index means an element — has no
+            // re-emission for. Asked nowhere else.
+            let ValueKind::FieldAccess {
+                receiver,
+                field_index,
+                ..
+            } = *scratch.kind(sv)
+            else {
+                continue;
+            };
+            let source = match scratch.kind(receiver) {
+                ValueKind::Opaque(o) => scratch.opaque_source(*o),
+                _ => None,
+            };
+            let Some(OpaqueSource::Local(i)) = source else {
+                continue;
+            };
+            if !self.local_is_struct_typed(i) {
+                continue;
+            }
+            classes.push((e, sv, i, field_index));
+        }
+        let mut found = FieldValues {
+            stmt_entry_version: scoped.stmt_entry_version,
+            ..FieldValues::default()
+        };
+        let mut minted: IndexMap<crate::nir_value_graph::ValueId, crate::nir_value_graph::ValueId> =
+            IndexMap::default();
+        let mut next_ver = self.body.values.max_heap_version().bump();
+        for (e, sv, local, field_index) in classes {
+            if !self.local_has_one_version(local) {
+                continue;
+            }
+            let recv_ty = self.locals()[local as usize].type_id;
+            let live = if let Some(&v) = minted.get(&sv) {
+                v
+            } else {
+                let recv = self.body.values.canonical_local(local, recv_ty);
+                let v = self.body.values.field_access(recv, field_index, next_ver);
+                next_ver = next_ver.bump();
+                minted.insert(sv, v);
+                let walk_ver = match scratch.kind(sv) {
+                    ValueKind::FieldAccess { heap_ver, .. } => *heap_ver,
+                    _ => unreachable!("classes only holds FieldAccess values"),
+                };
+                found.walk_version.insert(v, walk_ver);
+                v
+            };
+            found.reads.push((e, live));
+        }
+        found
+    }
+
     /// Drop the session's `&local` address-taken scan so the next
     /// [`Engine::body_address_taken`] recomputes it. The value graph is
     /// **never** dropped — it is built once and maintained in place (build-once
@@ -588,6 +710,93 @@ impl<'a> Engine<'a> {
         self.body.value_graph = Some(build);
     }
 
+    /// Report that this rewrite deleted the binding that defined `local`, so
+    /// the session end can check no read of it survived.
+    ///
+    /// A rule must not run that check itself: `Body::surviving_read` walks the
+    /// whole body, and per rule application that is quadratic — the cost that
+    /// made one fixed-point iteration's `peephole` runs 4.9 s of a 9.5 s loop.
+    /// Reporting here pays one walk per session instead, and keeps the audit
+    /// independent of the use index and census memo the rewrite decided on.
+    pub fn note_elided_local(&mut self, local: u32) {
+        #[cfg(debug_assertions)]
+        self.buf.elided_locals.push(local);
+        #[cfg(not(debug_assertions))]
+        let _ = local;
+    }
+
+    /// Whether `local` is **single-assignment**: bound once and never written
+    /// again, which is what makes [`ValuePool::canonical_local`]'s one id per
+    /// index denote one value.
+    ///
+    /// A non-`mut` parameter qualifies by being entry-defined and unreassigned.
+    /// So does an ordinary binding that is never written again — and it is the
+    /// safer of the two under the anchor rule, since its `let` travels with any
+    /// copy of an operand naming it while a parameter's entry def does not.
+    ///
+    /// Single-assignment is *per execution of the binding's scope*: a `let` in a
+    /// loop body is written once in the text and once per iteration. So this
+    /// licenses naming the local within one iteration, and a consumer relocating
+    /// a value across an iteration boundary needs its own check — which is what
+    /// `materialise_point`'s refusal to place outside an enclosing loop is for.
+    ///
+    /// Read off the use index rather than `NirLocal::is_mut`, which a pass minting
+    /// a temp sets by hand while the index is maintained by the edit API. Every
+    /// half fails safe: `reads` holds every `Local` node in the arena, reachable
+    /// or not, so an assign that folded away still refuses, and refusing costs a
+    /// promotion rather than correctness.
+    ///
+    /// `extract`'s `multi_version_locals` is this predicate, so the value query
+    /// and the freeze agree by construction.
+    pub fn local_has_one_version(&mut self, local: u32) -> bool {
+        match self.local_bindings(local) {
+            // No `Let`: a parameter, or a `LetDestructure` binding the use index
+            // does not record — which then fails the membership test.
+            0 => {
+                return self.param_locals.contains(&local)
+                    && self.locals().get(local as usize).is_some_and(|l| !l.is_mut);
+            }
+            1 => {}
+            // `labeled_block_fusion` clones a block, `local_index` and all.
+            _ => return false,
+        }
+        // A write through a reference leaves no assign target to see, so a local
+        // whose address was taken is out regardless of how it reads.
+        if self.body_address_taken().contains(&local) {
+            return false;
+        }
+        !self
+            .local_reads(local)
+            .iter()
+            .any(|&m| self.is_assign_target(m))
+    }
+
+    /// How many `Let` statements bind `local`.
+    fn local_bindings(&self, local: u32) -> u32 {
+        self.buf.uses.get(local as usize).map_or(0, |u| u.defs)
+    }
+
+    /// Whether `local` holds a struct, looking through a reference. `false`
+    /// without a type table, and for every other shape a `FieldAccess` can name
+    /// — a tuple above all, whose field index means something else entirely.
+    fn local_is_struct_typed(&self, local: u32) -> bool {
+        use crate::tir::ResolvedType;
+        let Some(types) = self.vg_type_table else {
+            return false;
+        };
+        let Some(l) = self.locals.get(local as usize) else {
+            return false;
+        };
+        let mut ty = l.type_id;
+        loop {
+            match types.get(ty) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => ty = *inner,
+                ResolvedType::Struct { .. } => return true,
+                _ => return false,
+            }
+        }
+    }
+
     /// Read-only view of the owning function's local list. Some rules
     /// (`labeled_block_fusion`) need to inspect existing locals' declared types
     /// (e.g. to confirm a pattern's payload binding slot matches the
@@ -649,12 +858,21 @@ impl<'a> Engine<'a> {
                         // `extract`'s dominance gate — so pick explicitly rather
                         // than let the traversal direction decide.
                         let entry = self.buf.uses_entry(index);
+                        entry.defs += 1;
                         if entry.def.is_none() {
                             entry.def = Some(id);
                         }
                     }
                 }
-                NodeRef::Block(_) | NodeRef::Pat(_) => {}
+                // A pattern binding gets no `def` (the dominance gate wants a
+                // statement) but still counts as a version.
+                NodeRef::Pat(id) => {
+                    if let PatKind::Binding { local_index, .. } = &self.body.pats[id].kind {
+                        let index = *local_index;
+                        self.buf.uses_entry(index).defs += 1;
+                    }
+                }
+                NodeRef::Block(_) => {}
             }
             children.clear();
             self.body.for_each_child(node, |c| children.push(c));
@@ -1084,7 +1302,9 @@ impl<'a> Engine<'a> {
         }
         if let StmtKind::Let { local_index, .. } = &self.body.stmts[id].kind {
             let index = *local_index;
-            self.buf.uses_entry(index).def = Some(id);
+            let entry = self.buf.uses_entry(index);
+            entry.defs += 1;
+            entry.def = Some(id);
         }
         self.enqueue(NodeRef::Stmt(id));
         id
@@ -1474,6 +1694,15 @@ impl<'a> Engine<'a> {
                 }
             }
         }
+        #[cfg(debug_assertions)]
+        if let Some(local) = self.body.surviving_read(&self.buf.elided_locals) {
+            panic!(
+                "[NIR engine] a rule reported eliding local {local}, but a reachable \
+                 read of it survived this session — the binding it named is gone and \
+                 that read now has no definition. The reporting rules are \
+                 `elide_local` and `labeled_block_fusion`."
+            );
+        }
         debug_assert!(
             self.promoted_reads
                 .get()
@@ -1614,6 +1843,34 @@ mod tests {
         // local 0 is read once (the `return x`) and defined once (the `let`).
         assert_eq!(eng.local_reads(0).len(), 1);
         assert!(eng.local_def(0).is_some());
+    }
+
+    /// A rule that reports eliding a local whose read is still reachable is a
+    /// rewrite that deleted a binding out from under a live read. The session
+    /// end catches it, so no rule has to walk the body per application.
+    #[test]
+    #[should_panic(expected = "reported eliding local 0")]
+    #[cfg(debug_assertions)]
+    fn elided_local_with_a_surviving_read_trips_the_session_audit() {
+        let mut body = sample_body();
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        // `sample_body` still contains `return x`, so claiming local 0 was
+        // elided is exactly the bug the audit exists to catch.
+        eng.note_elided_local(0);
+        eng.run(&[]);
+    }
+
+    /// The audit is scoped to what a rule actually reported, so an untouched
+    /// local — read or not — never trips it.
+    #[test]
+    fn an_unreported_local_never_trips_the_session_audit() {
+        let mut body = sample_body();
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        eng.run(&[]);
     }
 
     #[test]
@@ -2017,6 +2274,56 @@ mod tests {
         let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
         let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         assert_eq!(eng.local_def(0), first);
+    }
+
+    /// A `let mut` the body never reassigns holds one value: the flag records
+    /// what the source wrote, the use index what the body does.
+    #[test]
+    fn an_unreassigned_mut_binding_has_one_version() {
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let init = e(
+                b,
+                ExprKind::Cast {
+                    expr: one,
+                    target_type: TypeTable::I32,
+                },
+            );
+            vec![let_x(b, init, /* is_mut */ true), ret_x(b)]
+        });
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, true)];
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        assert!(eng.local_has_one_version(0));
+    }
+
+    /// Two `Let`s binding one index are two versions, whatever the flag says.
+    /// `labeled_block_fusion` clones a block, `local_index` and all.
+    #[test]
+    fn a_twice_bound_local_has_no_single_version() {
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let a = e(
+                b,
+                ExprKind::Cast {
+                    expr: one,
+                    target_type: TypeTable::I32,
+                },
+            );
+            let two = lit(b, 2);
+            let c = e(
+                b,
+                ExprKind::Cast {
+                    expr: two,
+                    target_type: TypeTable::I32,
+                },
+            );
+            vec![let_x(b, a, false), let_x(b, c, false), ret_x(b)]
+        });
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        assert!(!eng.local_has_one_version(0));
     }
 
     /// A fill between the allocation and the splice sees the operand

@@ -83,13 +83,10 @@ impl Rule for ElideRule<'_> {
         if changed {
             engine.set_block_stmts(id, new_stmts);
         }
-        #[cfg(debug_assertions)]
-        if let Some(local) = arena_query::surviving_read(engine.body, &elided) {
-            panic!(
-                "[NIR] elide_local: local {local} was elided from block {id:?} while a \
-                 reachable read of it survived — the binding it named is gone and \
-                 that read now has no definition"
-            );
+        // The session end audits these; checking here would walk the whole body
+        // per block. See `Engine::note_elided_local`.
+        for local in elided {
+            engine.note_elided_local(local);
         }
         changed
     }

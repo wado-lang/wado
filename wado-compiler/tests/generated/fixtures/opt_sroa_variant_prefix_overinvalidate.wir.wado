@@ -143,14 +143,16 @@ fn "opt_sroa_variant_prefix_overinvalidate.wado/h"(c, x) {
 }
 
 fn "opt_sroa_variant_prefix_overinvalidate.wado/caller"(c, x) {
+    let _av_7: i32;
     let y_mv_0: i32;
     let y_mv_1: i32;
     let y_mv_2: ref null "core:prelude/string.wado//String";
     multivalue_bind [y_mv_0, y_mv_1, y_mv_2] = "opt_sroa_variant_prefix_overinvalidate.wado/g"(c, x);
+    _av_7 = c.n;
     if y_mv_0 == 0 {
-        c.n = c.n + 100;
+        c.n = _av_7 + 100;
     } else {
-        c.n = c.n + 1000;
+        c.n = _av_7 + 1000;
     }
     let r_mv_0: i32;
     let r_mv_1: i32;
@@ -501,6 +503,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -510,10 +513,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);

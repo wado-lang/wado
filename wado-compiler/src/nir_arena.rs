@@ -1160,6 +1160,60 @@ impl Body {
         }
     }
 
+    /// Every local index that is *read* — every `Local` mention except the
+    /// bare-`Local` target of an `Assign` (a write). `&local` / `&mut local`,
+    /// `local.field = …`, and every value-position `Local` count as reads.
+    pub fn collect_local_reads(&self, out: &mut IndexSet<u32>) {
+        self.collect_local_reads_node(NodeRef::Block(self.root), out);
+    }
+
+    fn collect_local_reads_node(&self, node: NodeRef, out: &mut IndexSet<u32>) {
+        if let NodeRef::Expr(id) = node {
+            match &self.exprs[id].kind {
+                ExprKind::Local { index, .. } => {
+                    out.insert(*index);
+                    return;
+                }
+                ExprKind::Assign { target, value } => {
+                    let (target, value) = (*target, *value);
+                    // The bare-`Local` target is a write, not a read; nested
+                    // write places (`a.field`, `a[i]`) and the assigned value
+                    // are reads.
+                    if !matches!(&self.exprs[target].kind, ExprKind::Local { .. }) {
+                        self.collect_local_reads_node(NodeRef::Expr(target), out);
+                    }
+                    if let Some(ve) = value.as_expr() {
+                        self.collect_local_reads_node(NodeRef::Expr(ve), out);
+                    }
+                    return;
+                }
+                _ => {}
+            }
+        }
+        let mut kids = Vec::new();
+        self.for_each_child(node, |c| kids.push(c));
+        for c in kids {
+            self.collect_local_reads_node(c, out);
+        }
+    }
+
+    /// The first of `locals` that still has a reachable read, in the skeleton or
+    /// the value pool — the check a rewrite that deletes a binding runs against
+    /// itself.
+    ///
+    /// One census for the whole batch, since each half costs a body walk. Read
+    /// off the arena, not the engine's use index and memo, which are what the
+    /// rewrite decided on — so this can still catch them drifting.
+    pub fn surviving_read(&self, locals: &[u32]) -> Option<u32> {
+        if locals.is_empty() {
+            return None;
+        }
+        let mut reads = IndexSet::default();
+        self.collect_local_reads(&mut reads);
+        self.promoted_local_reads(&mut reads);
+        locals.iter().copied().find(|l| reads.contains(l))
+    }
+
     /// [`Body::promoted_local_reads`] as a per-local tally, for a gate comparing
     /// a whole-body count against a scoped one. Attribution is per value, so
     /// unlike the union above a shared subtree is walked once per value that

@@ -53,22 +53,6 @@ pub(super) fn promoted_local_reads(body: &Body, out: &mut IndexSet<u32>) {
     body.promoted_local_reads(out);
 }
 
-/// The first of `locals` that still has a reachable read, in the skeleton or the
-/// value pool — the check a rewrite that deletes a binding runs against itself.
-///
-/// One census for the whole batch, since each half costs a body walk. Read off
-/// the arena, not the engine's use index and memo, which are what the rewrite
-/// decided on — so this can still catch them drifting.
-pub(super) fn surviving_read(body: &Body, locals: &[u32]) -> Option<u32> {
-    if locals.is_empty() {
-        return None;
-    }
-    let mut reads = IndexSet::default();
-    collect_reads(body, &mut reads);
-    promoted_local_reads(body, &mut reads);
-    locals.iter().copied().find(|l| reads.contains(l))
-}
-
 /// How many of `node`'s operand slots read `idx` through a promoted value. A
 /// skeleton use census adds this at each node it visits.
 ///
@@ -290,42 +274,9 @@ pub(super) fn strip_one_value_copy(
     }
 }
 
-/// Collect every local index that is *read* — every `Local` mention except the
-/// bare-`Local` target of an `Assign` (a write). `&local` / `&mut local`,
-/// `local.field = …`, and every value-position `Local` count as reads. The
-/// arena counterpart of `elide_local`'s tree `ReadCollector` /
-/// `collect_reads_in_block`.
+/// See [`Body::collect_local_reads`].
 pub(super) fn collect_reads(body: &Body, out: &mut IndexSet<u32>) {
-    collect_reads_node(body, NodeRef::Block(body.root), out);
-}
-
-fn collect_reads_node(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
-    if let NodeRef::Expr(id) = node {
-        match &body.exprs[id].kind {
-            ExprKind::Local { index, .. } => {
-                out.insert(*index);
-                return;
-            }
-            ExprKind::Assign { target, value } => {
-                let (target, value) = (*target, *value);
-                // The bare-`Local` target is a write, not a read; nested write
-                // places (`a.field`, `a[i]`) and the assigned value are reads.
-                if !matches!(&body.exprs[target].kind, ExprKind::Local { .. }) {
-                    collect_reads_node(body, NodeRef::Expr(target), out);
-                }
-                if let Some(ve) = value.as_expr() {
-                    collect_reads_node(body, NodeRef::Expr(ve), out);
-                }
-                return;
-            }
-            _ => {}
-        }
-    }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_reads_node(body, c, out);
-    }
+    body.collect_local_reads(out);
 }
 
 /// Whether `id` is a bare `Local(idx)` reference.

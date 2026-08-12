@@ -888,12 +888,14 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(s
 fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(self) {
     let code: u32;
     let __pattern_temp_0: ref "tuple//[u32, i32]";
-    if self.byte_index >= self.used {
+    let _av_5: i32;
+    _av_5 = self.byte_index;
+    if _av_5 >= self.used {
         return 1, 0;
     }
-    __pattern_temp_0 = "core:prelude/string.wado/decode_char_at"(self.repr, self.byte_index);
+    __pattern_temp_0 = "core:prelude/string.wado/decode_char_at"(self.repr, _av_5);
     code = __pattern_temp_0.0;
-    self.byte_index = self.byte_index + __pattern_temp_0.1;
+    self.byte_index = _av_5 + __pattern_temp_0.1;
     return 0, code;
 }
 
@@ -913,6 +915,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrLinesIter^core:prelude/
     let _licm_repr_22: ref Array<u8>;
     let __hfs_pos_23: i32;
     let __hfs_call_24: ref null "core:prelude/string.wado//String";
+    let _av_25: i32;
     if self.finished {
         return ref.null none;
     }
@@ -961,8 +964,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrLinesIter^core:prelude/
         };
     };
     self.finished = 1;
-    if self.pos > start_1 {
-        return ref.as_non_null(repr_17 = self.repr; part_20 = builtin::array_new<u8>(local.tee len_19(self.pos - start_1)); builtin::array_copy<u8>(part_20, 0, repr_17, start_1, len_19); struct.new "core:prelude/string.wado//String" { repr: part_20, used: len_19 });
+    _av_25 = self.pos;
+    if _av_25 > start_1 {
+        return ref.as_non_null(repr_17 = self.repr; part_20 = builtin::array_new<u8>(local.tee len_19(_av_25 - start_1)); builtin::array_copy<u8>(part_20, 0, repr_17, start_1, len_19); struct.new "core:prelude/string.wado//String" { repr: part_20, used: len_19 });
     }
     return ref.null none;
 }
@@ -1048,17 +1052,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_uncheck
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::is_char_boundary"(self, byte_index) {
     let b: u8;
+    let _av_5: i32;
+    _av_5 = self.used;
     if (if byte_index == 0 -> i32 {
         1;
     } else {
-        byte_index == self.used;
+        byte_index == _av_5;
     }) {
         return 1;
     }
     if (if byte_index < 0 -> i32 {
         1;
     } else {
-        byte_index > self.used;
+        byte_index > _av_5;
     }) {
         return 0;
     }
@@ -1073,7 +1079,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::is_char_boundary"(
 fn "core:prelude/string.wado/core:prelude/string.wado/String::trim_start"(self) {
     let iter: ref "core:prelude/string.wado//StrCharIter";
     let start: i32;
-    iter = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
+    let _av_6: i32;
+    _av_6 = self.used;
+    iter = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: _av_6, byte_index: 0 };
     start = 0;
     b113: block {
         l114: loop {
@@ -1089,7 +1097,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::trim_start"(self) 
             continue l114;
         };
     };
-    return "core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes"(self, start, self.used);
+    return "core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes"(self, start, _av_6);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::trim_end"(self) {
@@ -1204,16 +1212,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::find"(self, pat) {
     let limit: i32;
     let i: i32;
     let j: i32;
+    let _av_17: i32;
     pat_len = pat.used;
     if pat_len == 0 {
         return 0, 0;
     }
-    if pat_len > self.used {
+    _av_17 = self.used;
+    if pat_len > _av_17 {
         return 1, 0;
     }
     self_repr = self.repr;
     pat_repr = pat.repr;
-    limit = self.used - pat_len;
+    limit = _av_17 - pat_len;
     i = 0;
     b131: block {
         l132: loop {
@@ -1360,11 +1370,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
     let align: "core:prelude/format.wado//enum:Alignment";
     let left_pad: i32;
     let right_pad: i32;
+    let _av_8: i32;
     content_len = content.used;
-    if (if self.width <= 0 -> i32 {
+    _av_8 = self.width;
+    if (if _av_8 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_8;
     }) {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, content);
         return;
@@ -1397,6 +1409,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -1406,10 +1419,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
@@ -1482,12 +1496,14 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<parser_synth_id_co
     let v_2: ref "parser_synth_id_collision_test.wado//DescriptorPair";
     let v_3: ref "core:prelude/string.wado//String";
     let v_4: ref "core:prelude/string.wado//String";
-    if self.index >= self.end {
+    let _av_5: i32;
+    _av_5 = self.index;
+    if _av_5 >= self.end {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "parser_synth_id_collision_test.wado//DescriptorPair">(self.repr, self.index);
+    v_2 = builtin::array_get<ref "parser_synth_id_collision_test.wado//DescriptorPair">(self.repr, _av_5);
     item = struct.new "parser_synth_id_collision_test.wado//DescriptorPair" { name: ref.as_non_null(v_3 = v_2.name; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = v_3.repr; let __array_clone_len_7: i32; __array_clone_len_7 = v_3.used; let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: v_3.used }), value: ref.as_non_null(v_4 = v_2.value; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = v_4.repr; let __array_clone_len_7: i32; __array_clone_len_7 = v_4.used; let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: v_4.used }) };
-    self.index = self.index + 1;
+    self.index = _av_5 + 1;
     return item;
 }
 

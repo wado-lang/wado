@@ -378,11 +378,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let ref_val: ref "core:prelude/types.wado//Box<i32>";
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return ref.null none;
     }
-    ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(self.repr, self.index) };
-    self.index = self.index + 1;
+    ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(self.repr, _av_2) };
+    self.index = _av_2 + 1;
     return ref_val;
 }
 
