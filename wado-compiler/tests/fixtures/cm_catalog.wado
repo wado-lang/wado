@@ -423,6 +423,16 @@ export async fn id_future_record(v: Future<Point>) -> Future<Point> {
         tx.write(x);
     }
 }
+// A newtype is a WIT type alias, so the payload is its base's (`f64`).
+export fn id_future_newtype(v: Future<Meters>) -> Future<Meters> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Meters>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
 export async fn id_future_enum(v: Future<Color>) -> Future<Color> {
     let value = v.read();
     v.drop();

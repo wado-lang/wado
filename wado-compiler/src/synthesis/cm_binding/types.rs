@@ -626,11 +626,29 @@ fn check_cm_boundary_representable_inner(
             }
             // Stream/Future handles are themselves i32, but their payload is
             // lifted/lowered by value on read/write, so it must be
-            // representable (and non-recursive) too.
-            R::GenericResource { type_args, .. } => {
+            // representable (and non-recursive) too — and, for a future or a
+            // stream, classifiable into a component-level `future<T>` /
+            // `stream<T>`. Being representable is not enough: a resource is a
+            // fine boundary value but has no payload type, and the classifier
+            // would panic on it.
+            R::GenericResource { name, type_args, .. } => {
+                let name = name.clone();
                 let args = type_args.clone();
-                for a in args {
+                for &a in &args {
                     recurse(a, visited)?;
+                }
+                if let Some(&payload) = args.first()
+                    && let Some(reason) = match name.as_str() {
+                        "Future" | "FutureWritable" => {
+                            crate::component_model::future_payload_rejection(type_table, payload)
+                        }
+                        "Stream" | "StreamWritable" => {
+                            crate::component_model::stream_payload_rejection(type_table, payload)
+                        }
+                        _ => None,
+                    }
+                {
+                    return Err(reason);
                 }
                 Ok(())
             }

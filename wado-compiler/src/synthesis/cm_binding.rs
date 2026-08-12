@@ -157,11 +157,8 @@ mod record_payload_validation {
                     found: None,
                 };
                 finder.visit_block(body);
-                if let Some(name) = finder.found {
-                    return Err(format!(
-                        "record type `{name}` is used as a `future` / `stream` payload, \
-                         which is only supported in library (`--lib`) components"
-                    ));
+                if let Some(reason) = finder.found {
+                    return Err(reason);
                 }
             }
         }
@@ -271,11 +268,15 @@ impl TirRefVisitor for NamedPayloadFinder<'_> {
     }
 }
 
-/// For a `Future::<T>::new()` / `Stream::<T>::new()` static call whose payload
-/// `T` contains a named record with no CM type to lower against, return that
-/// record's Wado name. `new` is the only way to obtain a `Future<T>` /
-/// `Stream<T>` outside `--lib` (non-lib world exports have fixed signatures), so
-/// checking it covers the creation sites.
+/// Why a `Future::<T>::new()` / `Stream::<T>::new()` static call's payload `T`
+/// cannot be lowered, or `None` if it can. `new` is the only way to obtain a
+/// `Future<T>` / `Stream<T>` outside `--lib` (non-lib world exports have fixed
+/// signatures), so checking it covers the creation sites.
+///
+/// Two ways to fail: a named record with no CM type to lower against, and a
+/// payload the classifier cannot name a `future<T>` / `stream<T>` for at all
+/// (a resource, `()`, a 128-bit scalar). Both would otherwise reach codegen,
+/// where the second panics.
 fn unresolvable_future_stream_payload(
     tt: &TypeTable,
     registry: &crate::component_model::CmInterfaceRegistry,
@@ -288,16 +289,28 @@ fn unresolvable_future_stream_payload(
         .method_info
         .as_ref()
         .and_then(|m| m.cm_name.as_deref())?;
-    if cm != "future-new" && cm != "stream-new" {
-        return None;
-    }
+    let is_future = match cm {
+        "future-new" => true,
+        "stream-new" => false,
+        _ => return None,
+    };
     let payload = func
         .monomorph_info
         .as_ref()?
         .impl_type_args
         .first()
         .copied()?;
-    unresolvable_record_in_payload(tt, registry, payload)
+    if let Some(name) = unresolvable_record_in_payload(tt, registry, payload) {
+        return Some(format!(
+            "record type `{name}` is used as a `future` / `stream` payload, \
+             which is only supported in library (`--lib`) components"
+        ));
+    }
+    if is_future {
+        crate::component_model::future_payload_rejection(tt, payload)
+    } else {
+        crate::component_model::stream_payload_rejection(tt, payload)
+    }
 }
 
 /// The Wado name of the first user-named type (record / variant / enum /

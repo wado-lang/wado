@@ -313,6 +313,27 @@ pub(super) fn synthesize_stream_writes(project: &mut Package) {
     );
 }
 
+/// The AST type a `future<T>` / `stream<T>` payload lays out as.
+///
+/// A newtype is a WIT type alias with no representation of its own, so the
+/// payload's size, alignment, and load / store ops are its base's. Keeping the
+/// alias here types the buffer access by a name the CM never sees, which the
+/// core module then fails to validate.
+///
+/// Newtypes only — `TypeTable::resolve_newtype_base` also collapses `flags` to
+/// `u32`, and a CM `flags` is its own type, one byte wide at ≤8 labels.
+fn payload_ast_type(
+    payload: TypeId,
+    tt: &TypeTable,
+    registry: &CmInterfaceRegistry,
+) -> crate::ast::Type {
+    let mut id = payload;
+    while let ResolvedType::Newtype { base_type, .. } = tt.get(id) {
+        id = *base_type;
+    }
+    type_id_to_ast_type(id, tt, registry)
+}
+
 /// Whether `elem` takes the value-payload stream path: it has a general CM
 /// payload type, and is not the `u8` default that has a path of its own.
 ///
@@ -397,7 +418,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         let func_name = stream_write_func_name(&tt, elem_type_id);
         let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
         let write_name = CanonicalIntrinsic::StreamWrite(payload);
-        let elem_ast = type_id_to_ast_type(elem_type_id, &tt, cm_interface_registry);
+        let elem_ast = payload_ast_type(elem_type_id, &tt, cm_interface_registry);
         // Match the package the element buffer is packed with below
         // (`synthesize_lower_list_to_buffer`, wasi_package "cli"), so the retry
         // pointer stride can't disagree with the buffer's element size.
@@ -714,7 +735,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         let payload = crate::component_model::classify_future_payload(&tt, payload_type_id);
         let write_name = CanonicalIntrinsic::FutureWrite(payload.clone());
         let cm_package = future_payload_package(&payload);
-        let payload_ast = type_id_to_ast_type(payload_type_id, &tt, cm_interface_registry);
+        let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
         let size = crate::component_model::cm_size_with_registry_scoped(
             &payload_ast,
             cm_interface_registry,
@@ -939,7 +960,7 @@ fn synthesize_future_read_func(
         let payload = crate::component_model::classify_future_payload(&tt, payload_type_id);
         let read_name = CanonicalIntrinsic::FutureRead(payload.clone());
         let cm_package = future_payload_package(&payload);
-        let payload_ast = type_id_to_ast_type(payload_type_id, &tt, cm_interface_registry);
+        let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
         let size = crate::component_model::cm_size_with_registry_scoped(
             &payload_ast,
             cm_interface_registry,
@@ -1513,7 +1534,7 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ti
         let func_name = stream_read_value_func_name(&tt, elem_type_id);
         let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
         let read_name = CanonicalIntrinsic::StreamRead(payload);
-        let payload_ast = type_id_to_ast_type(elem_type_id, &tt, cm_interface_registry);
+        let payload_ast = payload_ast_type(elem_type_id, &tt, cm_interface_registry);
         let size = crate::component_model::cm_size_with_registry_scoped(
             &payload_ast,
             cm_interface_registry,

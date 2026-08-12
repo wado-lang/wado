@@ -662,6 +662,7 @@ fn run_round_trips(opt_level: OptLevel) {
         check!(future_round_trip(&mut store, &instance, i, "id-future-list", vec![1u32, 2, 3]));
         check!(future_round_trip(&mut store, &instance, i, "id-future-tuple", (5u32, "x".to_string())));
         check!(future_round_trip(&mut store, &instance, i, "id-future-record", Point { x: 1.5, y: -2.5 }));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-newtype", 100.5f64));
         check!(future_round_trip(&mut store, &instance, i, "id-future-enum", Color::Green));
         check!(future_round_trip(&mut store, &instance, i, "id-future-variant", Shape::Rect((1.5, -2.5))));
         check!(future_round_trip(&mut store, &instance, i, "id-future-flags", Perms::READ | Perms::EXECUTE));
@@ -1725,6 +1726,41 @@ fn try_compile_lib(source: &str) -> Result<(), String> {
     crate::common::compile_source_with_compiler_options(Path::new("lib.wado"), source, options)
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+/// A payload the classifier cannot name a `future<T>` / `stream<T>` for is
+/// reported, not panicked on. Being a representable boundary *value* is not
+/// enough — `()` is, and has no payload type — so the boundary check asks the
+/// classifier the same question codegen will.
+#[test]
+fn cm_lib_rejects_an_unclassifiable_future_payload() {
+    let err = try_compile_lib(
+        "export fn id_unit(v: Future<()>) -> Future<()> {\n    return v;\n}\n",
+    )
+    .expect_err("`future<()>` export should fail to compile");
+    assert!(
+        err.contains("future") && err.contains("Component Model"),
+        "expected a future-payload diagnostic, got: {err}"
+    );
+}
+
+/// The same, reached through `Future::<T>::new()` in a body rather than through
+/// an export signature — the other way a payload gets picked.
+#[test]
+fn cm_lib_rejects_an_unclassifiable_future_new() {
+    // The `Future<u32>` parameter is what brings the `Future` resource into the
+    // world; the rejected payload is the one `new` picks.
+    let err = try_compile_lib(
+        "export fn make(v: Future<u32>) -> u32 {\n    \
+         v.drop();\n    \
+         let [rx, tx] = Future::<()>::new();\n    \
+         rx.drop();\n    tx.drop();\n    return 1;\n}\n",
+    )
+    .expect_err("`Future::<()>::new()` should fail to compile");
+    assert!(
+        err.contains("future") && err.contains("Component Model"),
+        "expected a future-payload diagnostic, got: {err}"
+    );
 }
 
 /// A library export whose signature carries a type with no Component Model value

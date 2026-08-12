@@ -30,12 +30,60 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 /// A payload matching none of these has no component-level `future<T>` to
 /// lower against. Returning one of the shapes above anyway would compile it as
 /// a different CM type — which is how an unclassified payload used to come back
-/// as the HTTP trailers future.
+/// as the HTTP trailers future. Reach such a payload through
+/// [`future_payload_rejection`] first, so the user gets a diagnostic rather
+/// than this panic.
 pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFuturePayload {
+    try_classify_future_payload(type_table, type_arg).unwrap_or_else(|| {
+        panic!(
+            "`Future<{}>` has no Component Model payload type",
+            type_table.base_type_name(type_arg)
+        )
+    })
+}
+
+/// Why `payload` cannot be a `future<T>` payload, or `None` if it can.
+///
+/// Asked ahead of [`classify_future_payload`] by the boundary and
+/// `Future::new` validators, so an unsupported payload reaches the user as a
+/// compile error. Shares [`try_classify_future_payload`] with the classifier
+/// rather than restating its conditions — a second copy of the rule is how the
+/// TIR and AST classifiers came to disagree.
+pub fn future_payload_rejection(type_table: &TypeTable, payload: TypeId) -> Option<String> {
+    try_classify_future_payload(type_table, payload).is_none().then(|| {
+        format!(
+            "`{}` has no Component Model representation as a `future` payload",
+            type_table.type_name(payload)
+        )
+    })
+}
+
+/// Why `element` cannot be a `stream<T>` element, or `None` if it can.
+pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Option<String> {
+    if matches!(
+        type_table.get(element),
+        ResolvedType::Primitive(PrimitiveType::U8)
+    ) {
+        return None;
+    }
+    cm_payload_type_from_type_id(type_table, element)
+        .is_none()
+        .then(|| {
+            format!(
+                "`{}` has no Component Model representation as a `stream` element",
+                type_table.type_name(element)
+            )
+        })
+}
+
+fn try_classify_future_payload(
+    type_table: &TypeTable,
+    type_arg: TypeId,
+) -> Option<CmFuturePayload> {
     match type_table.get(type_arg) {
         ResolvedType::Primitive(prim) => {
             if let Some(scalar) = primitive_to_cm_scalar(prim) {
-                return CmFuturePayload::Scalar(scalar);
+                return Some(CmFuturePayload::Scalar(scalar));
             }
         }
         ResolvedType::GenericInstance {
@@ -47,22 +95,16 @@ pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFu
             if matches!(type_table.get(type_args[0]), ResolvedType::Unit)
                 && let Some(source) = wasi_error_code_source(type_table, type_args[1])
             {
-                return CmFuturePayload::Transmission(source);
+                return Some(CmFuturePayload::Transmission(source));
             }
         }
         _ => {}
     }
     // A general value payload (`future<string>`, `future<list<u32>>`, …).
     if let Some(payload) = cm_payload_type_from_type_id(type_table, type_arg) {
-        return CmFuturePayload::Value(payload);
+        return Some(CmFuturePayload::Value(payload));
     }
-    if is_trailers_payload(type_table, type_arg) {
-        return CmFuturePayload::Trailers;
-    }
-    panic!(
-        "`Future<{}>` has no Component Model payload type",
-        type_table.base_type_name(type_arg)
-    );
+    is_trailers_payload(type_table, type_arg).then_some(CmFuturePayload::Trailers)
 }
 
 /// The WASI HTTP trailers future's payload: `result<option<trailers>,
@@ -189,6 +231,12 @@ pub fn cm_payload_type_from_type_id(
             name,
             module_source,
         } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),
+        // A newtype is a WIT type alias, so its payload is its base's. The
+        // alias itself never reaches the component: `erase_newtypes_and_flags`
+        // collapses it before codegen.
+        ResolvedType::Newtype { base_type, .. } => {
+            cm_payload_type_from_type_id(type_table, *base_type)
+        }
         _ => None,
     }
 }
@@ -257,6 +305,12 @@ pub fn cm_payload_type_from_ast(
             if src.starts_with("wasi:") || src.starts_with("core:kiln/") {
                 return None;
             }
+            // A newtype is a WIT type alias: its payload is its base's.
+            if let Some(base) =
+                registry.get_newtype_by_source(&src, &crate::name::DeclName::new(&n.name))
+            {
+                return cm_payload_type_from_ast(&base.clone(), registry);
+            }
             let cm = registry
                 .get_struct_cm_name_by_source(&src, &n.name)
                 .or_else(|| registry.get_variant_cm_name_by_source(&src, &n.name))
@@ -308,7 +362,10 @@ pub fn classify_stream_payload_from_ast(
     }
     match cm_payload_type_from_ast(ty, registry) {
         Some(payload) => CmStreamPayload::Value(payload),
-        None => panic!("`Stream<{ty:?}>` has no Component Model element type"),
+        None => panic!(
+            "`Stream<{}>` has no Component Model element type",
+            render_ast_type(ty)
+        ),
     }
 }
 
@@ -331,7 +388,7 @@ pub fn classify_future_payload_from_ast(
     if let Type::Generic(g) = &resolved
         && g.name == "Result"
         && g.args.len() == 2
-        && is_unit_ast(&g.args[0])
+        && is_unit_type(&g.args[0])
         && let Some(source) = wasi_error_code_source_from_ast(&g.args[1], registry)
     {
         return CmFuturePayload::Transmission(source);
@@ -342,7 +399,10 @@ pub fn classify_future_payload_from_ast(
     if is_trailers_payload_from_ast(&resolved, registry) {
         return CmFuturePayload::Trailers;
     }
-    panic!("`Future<{resolved:?}>` has no Component Model payload type");
+    panic!(
+        "`Future<{}>` has no Component Model payload type",
+        render_ast_type(&resolved)
+    );
 }
 
 /// AST mirror of [`wasi_error_code_source`].
@@ -396,9 +456,12 @@ fn is_trailers_payload_from_ast(
         .is_some()
 }
 
-/// Whether an AST type is the unit type `()`.
-fn is_unit_ast(ty: &crate::ast::Type) -> bool {
-    matches!(ty, crate::ast::Type::Tuple(elems) if elems.is_empty())
+/// An AST type as source spells it, for a diagnostic or a panic message. The
+/// `Debug` form dumps spans and ids, which says nothing to whoever reads it.
+fn render_ast_type(ty: &crate::ast::Type) -> String {
+    let mut out = String::new();
+    crate::unparse::unparse_type_into(ty, &mut out);
+    out
 }
 
 /// Map a primitive type to its CM scalar type, or `None` for non-CM-scalars.
