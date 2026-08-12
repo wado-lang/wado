@@ -29,7 +29,6 @@ macro_rules! warn_log {
 const ALPN_H2: &[u8] = b"h2";
 const ALPN_HTTP11: &[u8] = b"http/1.1";
 
-/// The HTTP version an outbound connection ended up speaking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WireProtocol {
     Http1,
@@ -37,10 +36,6 @@ enum WireProtocol {
 }
 
 impl WireProtocol {
-    /// TLS decides the version through ALPN. A cleartext connection runs no
-    /// ALPN and therefore stays on HTTP/1.1: h2c requires the client to know
-    /// out of band that the server speaks it, and `wasi:http@0.3.0` gives the
-    /// guest no way to say so.
     fn from_alpn(alpn: Option<&[u8]>) -> Self {
         match alpn {
             Some(ALPN_H2) => Self::Http2,
@@ -67,10 +62,6 @@ fn shared_client_config() -> Arc<rustls::ClientConfig> {
         let mut config = rustls::ClientConfig::builder()
             .with_root_certificates(build_root_cert_store())
             .with_no_client_auth();
-        // HTTP/2 first: it is the only version that carries trailers to every
-        // peer, which protocols layered on `wasi:http` — gRPC puts its
-        // `grpc-status` there — depend on. Servers that lack it fall back to
-        // `http/1.1` through ALPN.
         config.alpn_protocols = vec![ALPN_H2.to_vec(), ALPN_HTTP11.to_vec()];
         Arc::new(config)
     });
@@ -213,10 +204,6 @@ async fn send_request(
     Ok((res, conn_driver))
 }
 
-/// HTTP/1 addresses an origin server with just the path and query; scheme and
-/// authority belong in the request line only when addressing a proxy. HTTP/2
-/// is the opposite — it derives the `:scheme` and `:authority` pseudo-headers
-/// from the URI, so that path keeps the URI whole.
 fn origin_form(uri: &http::Uri) -> http::Uri {
     http::Uri::builder()
         .path_and_query(
@@ -331,43 +318,6 @@ fn dns_error(rcode: String, info_code: u16) -> ErrorCode {
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn client_config_offers_h2_before_http11() {
-        let config = shared_client_config();
-        assert_eq!(
-            config.alpn_protocols,
-            vec![ALPN_H2.to_vec(), ALPN_HTTP11.to_vec()]
-        );
-    }
-
-    #[test]
-    fn only_negotiated_h2_selects_http2() {
-        assert_eq!(WireProtocol::from_alpn(Some(ALPN_H2)), WireProtocol::Http2);
-        assert_eq!(
-            WireProtocol::from_alpn(Some(ALPN_HTTP11)),
-            WireProtocol::Http1
-        );
-        // Cleartext: no ALPN ran, so no h2c.
-        assert_eq!(WireProtocol::from_alpn(None), WireProtocol::Http1);
-    }
-
-    #[test]
-    fn origin_form_drops_scheme_and_authority() {
-        let uri = "https://example.com/v1/greeter?a=1".parse().unwrap();
-        assert_eq!(origin_form(&uri), "/v1/greeter?a=1");
-    }
-
-    #[test]
-    fn origin_form_of_empty_path_is_root() {
-        let uri = "https://example.com".parse().unwrap();
-        assert_eq!(origin_form(&uri), "/");
-    }
-}
-
 struct IncomingResponseBody {
     incoming: hyper::body::Incoming,
     timeout: tokio::time::Interval,
@@ -402,5 +352,41 @@ impl http_body::Body for IncomingResponseBody {
 
     fn size_hint(&self) -> http_body::SizeHint {
         self.incoming.size_hint()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn client_config_offers_h2_before_http11() {
+        let config = shared_client_config();
+        assert_eq!(
+            config.alpn_protocols,
+            vec![ALPN_H2.to_vec(), ALPN_HTTP11.to_vec()]
+        );
+    }
+
+    #[test]
+    fn only_negotiated_h2_selects_http2() {
+        assert_eq!(WireProtocol::from_alpn(Some(ALPN_H2)), WireProtocol::Http2);
+        assert_eq!(
+            WireProtocol::from_alpn(Some(ALPN_HTTP11)),
+            WireProtocol::Http1
+        );
+        assert_eq!(WireProtocol::from_alpn(None), WireProtocol::Http1);
+    }
+
+    #[test]
+    fn origin_form_drops_scheme_and_authority() {
+        let uri = "https://example.com/v1/greeter?a=1".parse().unwrap();
+        assert_eq!(origin_form(&uri), "/v1/greeter?a=1");
+    }
+
+    #[test]
+    fn origin_form_of_empty_path_is_root() {
+        let uri = "https://example.com".parse().unwrap();
+        assert_eq!(origin_form(&uri), "/");
     }
 }
