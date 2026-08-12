@@ -715,14 +715,16 @@ fn classify_param<'t>(
             ParamLowering::ListBuffer { elem: &g.args[0] }
         }
         Type::Named(n)
-            if registry.source_interface(n)
+            if registry
+                .source_interface(n)
                 .as_deref()
                 .is_some_and(|s| registry.get_struct_fields_by_source(s, &n.name).is_some()) =>
         {
             ParamLowering::RecordFlatten { named: n }
         }
         Type::Named(n)
-            if registry.source_interface(n)
+            if registry
+                .source_interface(n)
                 .as_deref()
                 .is_some_and(|s| registry.get_variant_cases_by_source(s, &n.name).is_some()) =>
         {

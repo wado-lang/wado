@@ -1,12 +1,12 @@
 //! Numeric literal coercion and type coercion.
 
-use crate::elaborator::trait_env::ImplReceiver;
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
 use super::util::placeholder;
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
+use crate::elaborator::trait_env::ImplReceiver;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};

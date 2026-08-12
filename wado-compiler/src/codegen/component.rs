@@ -3159,12 +3159,15 @@ fn component_type_idx_for_signature_type(
             // variant) resolves to the `{pkg}-{cm}` component type the
             // resource-defining pass aliased to the outer scope. `type_idx`
             // fails loudly if the type was not exposed there.
-            let source = project.cm_interface_registry.source_interface(named).unwrap_or_else(|| {
-                panic!(
-                    "composite signature type `{}` has no source interface",
-                    named.name
-                )
-            });
+            let source = project
+                .cm_interface_registry
+                .source_interface(named)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "composite signature type `{}` has no source interface",
+                        named.name
+                    )
+                });
             let pkg = crate::world_registry::fq_name_package(&source);
             let cm = registry
                 .get_variant_cm_name_by_source(&source, &named.name)

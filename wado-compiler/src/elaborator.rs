@@ -1365,12 +1365,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// impl indexes. Goes through [`Self::canonical_decl_key`], so an alias
     /// and its original resolve to the same key.
     pub(crate) fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
-        trait_env::ImplTargetKey::of_written(
-            type_name,
-            &self.current_module_source,
-            self.symbols,
-            &self.tysys.resolutions,
-        )
+        // Through `decl_key_or_local`, so an impl target and every other
+        // name-only lookup answer from one chain. Asking the table alone
+        // leaves out the declaration indexes, and a receiver the module never
+        // imported — reached only through a return type — would key to the
+        // call site instead of where it is declared.
+        let (module, name) = self.decl_key_or_local(type_name);
+        trait_env::ImplTargetKey::of_decl(&module, &name)
     }
 
     /// Impl-target key for a receiver whose `TypeId` is known. The type
@@ -1402,7 +1403,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             _ => None,
         }
     }
-
 
     /// Canonical decl identity `(module, name)` of the declared type behind
     /// `type_id` (refs peeled), or `None` for a type parameter, an associated

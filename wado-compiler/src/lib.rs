@@ -1159,17 +1159,20 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    let mut lib_world_info = synth_world_fq.as_ref().zip(cm_registry).map(|(fq, registry)| {
-        let entry = sem.modules.get(&sem.entry_module_source);
-        synthesize_lib_world_info(
-            registry,
-            fq,
-            entry,
-            &lib_surface.submodule_exports,
-            &lib_type_names,
-            options.lib_interface_export,
-        )
-    });
+    let mut lib_world_info = synth_world_fq
+        .as_ref()
+        .zip(cm_registry)
+        .map(|(fq, registry)| {
+            let entry = sem.modules.get(&sem.entry_module_source);
+            synthesize_lib_world_info(
+                registry,
+                fq,
+                entry,
+                &lib_surface.submodule_exports,
+                &lib_type_names,
+                options.lib_interface_export,
+            )
+        });
 
     if options.lib_world.is_some()
         && let Some(world) = lib_world_info.as_ref()

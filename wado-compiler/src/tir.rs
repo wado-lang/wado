@@ -2270,13 +2270,11 @@ impl TypeTable {
         trait_name: &str,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        *self
-            .assoc_type_resolutions_by_trait_name
-            .get(&(
-                concrete_id,
-                trait_name.to_string(),
-                assoc_name.to_string(),
-            ))?
+        *self.assoc_type_resolutions_by_trait_name.get(&(
+            concrete_id,
+            trait_name.to_string(),
+            assoc_name.to_string(),
+        ))?
     }
 
     /// Resolve an associated type named `assoc_name` on `concrete_id`

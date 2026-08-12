@@ -3069,11 +3069,8 @@ impl SynthesisCtx<'_, '_, '_> {
         {
             return true;
         }
-        self.pending.contains(&(
-            receiver.spelling(),
-            self.module.clone(),
-            trait_key.clone(),
-        ))
+        self.pending
+            .contains(&(receiver.spelling(), self.module.clone(), trait_key.clone()))
     }
 
     /// Note that this synthesis pass added `impl <trait_name> for <type_name>`
@@ -5497,17 +5494,16 @@ fn generate_fallback_impls(
         if ctx.has_methodful_impl_anywhere(&mangled, &pair.target_trait.canonical().expect(KEYED)) {
             continue;
         }
-        let delegate_present =
-            ctx.has_impl(
-                ImplReceiver::Instantiated(&crate::name::MangledName::new(mangled.clone())),
-                &pair.delegate_trait.canonical().expect(KEYED),
-            ) || {
-                let delegate_key = format!(
-                    "{mangled}^{}::{}",
-                    pair.delegate_trait, pair.delegate_method
-                );
-                all_fn_names.contains(&delegate_key)
-            };
+        let delegate_present = ctx.has_impl(
+            ImplReceiver::Instantiated(&crate::name::MangledName::new(mangled.clone())),
+            &pair.delegate_trait.canonical().expect(KEYED),
+        ) || {
+            let delegate_key = format!(
+                "{mangled}^{}::{}",
+                pair.delegate_trait, pair.delegate_method
+            );
+            all_fn_names.contains(&delegate_key)
+        };
         if !delegate_present {
             continue;
         }
@@ -5547,17 +5543,16 @@ fn generate_fallback_impls(
         if ctx.has_methodful_impl_anywhere(&mangled, &pair.target_trait.canonical().expect(KEYED)) {
             continue;
         }
-        let delegate_present =
-            ctx.has_impl(
-                ImplReceiver::Instantiated(&crate::name::MangledName::new(mangled.clone())),
-                &pair.delegate_trait.canonical().expect(KEYED),
-            ) || {
-                let delegate_key = format!(
-                    "{mangled}^{}::{}",
-                    pair.delegate_trait, pair.delegate_method
-                );
-                all_fn_names.contains(&delegate_key)
-            };
+        let delegate_present = ctx.has_impl(
+            ImplReceiver::Instantiated(&crate::name::MangledName::new(mangled.clone())),
+            &pair.delegate_trait.canonical().expect(KEYED),
+        ) || {
+            let delegate_key = format!(
+                "{mangled}^{}::{}",
+                pair.delegate_trait, pair.delegate_method
+            );
+            all_fn_names.contains(&delegate_key)
+        };
         if !delegate_present {
             continue;
         }
@@ -5735,12 +5730,11 @@ fn resolve_impl_module_via_env(
     };
 
     if let Some(name) = candidate_name.as_deref()
-        && let Some(m) =
-            trait_env.impl_module_for(
-                ImplReceiver::Declared(&crate::name::DeclName::new(name)),
-                trait_name.base_name(),
-                type_module.as_ref(),
-            )
+        && let Some(m) = trait_env.impl_module_for(
+            ImplReceiver::Declared(&crate::name::DeclName::new(name)),
+            trait_name.base_name(),
+            type_module.as_ref(),
+        )
     {
         return m.clone();
     }

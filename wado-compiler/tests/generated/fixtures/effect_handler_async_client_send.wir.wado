@@ -419,9 +419,9 @@ type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(106)
 
-type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(107)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(107)
 
-type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(108)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(108)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(109)
 
@@ -437,9 +437,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(115)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(116)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(116)
 
-type "functype//effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/MockClient^Client::send" = fn(ref "effect_handler_async_client_send.wado//MockClient", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(117)
+type "functype//effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/MockClient^wasi:http/client.wado/Client::send" = fn(ref "effect_handler_async_client_send.wado//MockClient", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(117)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(118)
 
@@ -453,7 +453,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = 
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(123)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(124)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(124)
 
 type "functype//effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/__Closure_2::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(125)
 
@@ -721,7 +721,7 @@ fn "effect_handler_async_client_send.wado/handle"(request) {
     __v0 = mock.calls;
     if @unlikely(__v0 != 1) {
         cold_path;
-        "core:rt/panic"(__local_12 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(130); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_12, global:effect_handler_async_client_send.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 104); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 110); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 100); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 108); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 101); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_12, global:effect_handler_async_client_send.wado::__const_obj_3); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 58); __local_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Display::fmt"(global:effect_handler_async_client_send.wado::__const_obj_9, __local_13); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_12, global:effect_handler_async_client_send.wado::__const_obj_8); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_12, global:effect_handler_async_client_send.wado::__const_obj_7); __local_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0 }, __local_13); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 10); __local_12);
+        "core:rt/panic"(__local_12 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(130); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_12, global:effect_handler_async_client_send.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 104); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 110); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 100); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 108); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 101); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_12, global:effect_handler_async_client_send.wado::__const_obj_3); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 58); __local_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:effect_handler_async_client_send.wado::__const_obj_9, __local_13); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_12, global:effect_handler_async_client_send.wado::__const_obj_8); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_12, global:effect_handler_async_client_send.wado::__const_obj_7); __local_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0 }, __local_13); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_12, 10); __local_12);
         unreachable;
     }
     status = "effect_handler_async_client_send.wado/__cm_binding__Response_get_status_code"(__local_188);
@@ -1105,7 +1105,7 @@ fn "effect_handler_async_client_send.wado/handle"(request) {
             }
         }
     }
-    "core:rt/cm_stream_write_u8"(tx_197, __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_14, global:effect_handler_async_client_send.wado::__const_obj_6); __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_14 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(status, __local_15); self_208 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_14.repr, used: __local_14.used, index: 0 }; "core:prelude/list.wado/core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_208));
+    "core:rt/cm_stream_write_u8"(tx_197, __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_14, global:effect_handler_async_client_send.wado::__const_obj_6); __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_14 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(status, __local_15); self_208 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_14.repr, used: __local_14.used, index: 0 }; "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_208));
     "wasi/stream-drop-writable"(tx_197);
     "effect_handler_async_client_send.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_194, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
     "wasi/resource-drop:response"(__local_188);
@@ -2567,11 +2567,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
-fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
-fn "core:prelude/primitive.wado/i32^Inspect::inspect"(self, f) {
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
@@ -2643,7 +2643,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_uncheck
     builtin::array_set_u8(self.repr, start, byte);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(self, other) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(self, other) {
     let len: i32;
     let haystack: ref Array<u8>;
     let needle: ref Array<u8>;
@@ -2670,7 +2670,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(self, other
     };
 }
 
-fn "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/MockClient^Client::send"(self, request) {
+fn "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/MockClient^wasi:http/client.wado/Client::send"(self, request) {
     let __cond: bool;
     let resp: i32;
     let __local_7: ref "core:prelude/string.wado//String";
@@ -2685,13 +2685,13 @@ fn "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/
     __match_scrut_0 = "effect_handler_async_client_send.wado/__cm_binding__Request_get_path_with_query"(request);
     __cond = (if ref.is_null(__match_scrut_0) == 0 -> i32 {
         __local_10 = ref.as_non_null(__match_scrut_0);
-        "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/upstream"), used: 9 });
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/upstream"), used: 9 });
     } else {
         0;
     });
     if @unlikely(__cond == 0) {
         cold_path;
-        "core:rt/panic"(__local_7 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(145); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:effect_handler_async_client_send.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:effect_handler_async_client_send.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:effect_handler_async_client_send.wado::__const_obj_3); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 58); __local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(global:effect_handler_async_client_send.wado::__const_obj_2, __local_8); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, if ref.is_null(global:effect_handler_async_client_send.wado::__const_obj_1) {
+        "core:rt/panic"(__local_7 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(145); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:effect_handler_async_client_send.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:effect_handler_async_client_send.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:effect_handler_async_client_send.wado::__const_obj_3); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 58); __local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:effect_handler_async_client_send.wado::__const_obj_2, __local_8); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, if ref.is_null(global:effect_handler_async_client_send.wado::__const_obj_1) {
             global:effect_handler_async_client_send.wado::__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: request.get_path_with_query() matches { Some(\"/upstream\") }
 "), used: 72 };
@@ -2857,7 +2857,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(iter) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(iter) {
     let result: ref "core:prelude//List<u8>";
     let byte: u8;
     let _licm_used_13: i32;
@@ -2883,7 +2883,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^FromIterator::from_it
 }
 
 fn "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/__Closure_2::__call"(self, request) {
-    return "effect_handler_async_client_send.wado/__cm_wrap_async__Client_send"("effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/MockClient^Client::send"(self.__capture_0, request));
+    return "effect_handler_async_client_send.wado/__cm_wrap_async__Client_send"("effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/MockClient^wasi:http/client.wado/Client::send"(self.__capture_0, request));
 }
 
 fn "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/__Closure_3::__call"(__outptr) {

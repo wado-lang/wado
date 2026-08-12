@@ -126,7 +126,6 @@ pub(super) fn canonical_assoc_const_key(
     Some((type_module, canon_key))
 }
 
-
 /// The declaration `name` means from `module`'s vantage, for the free-standing
 /// callers that hold the inputs rather than an `Elaborator`. Mirrors
 /// [`crate::elaborator::Elaborator::canonical_decl_key`], through the same
@@ -173,7 +172,6 @@ fn mentions_self(ty: &ast::Type) -> bool {
         _ => false,
     }
 }
-
 
 /// The recorded declaration facts of the trait named `trait_name`, for a
 /// caller holding the inputs rather than an `Elaborator` — reify's
@@ -1479,7 +1477,6 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-
     /// The trait declaration a reference site names.
     ///
     /// The answer comes from [`crate::resolve::Resolutions`] — resolved in the
@@ -1505,7 +1502,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.decl_key_or_local(written)
     }
-
 
     /// Whether the trait declaration `decl` is in scope in the current frame:
     /// declared by the current module, or imported into it under any local

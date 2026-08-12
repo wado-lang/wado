@@ -287,15 +287,11 @@ fn needs_canonical_cli_error_code(
         interface.functions.iter().any(|func| {
             let key = format!("{}::{}", func.interface_name, func.method_name);
             project.used_wasi_functions.contains(&key)
-                && (func
-                    .return_type
-                    .as_ref()
-                    .is_some_and(|ty| {
-                        references_cli_error_code(ty, &project.cm_interface_registry)
-                    })
-                    || func.params.iter().any(|(_, _, ty)| {
-                        references_cli_error_code(ty, &project.cm_interface_registry)
-                    }))
+                && (func.return_type.as_ref().is_some_and(|ty| {
+                    references_cli_error_code(ty, &project.cm_interface_registry)
+                }) || func.params.iter().any(|(_, _, ty)| {
+                    references_cli_error_code(ty, &project.cm_interface_registry)
+                }))
         })
     });
     if import_side {

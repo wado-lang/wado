@@ -140,13 +140,12 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
     // layer answers "where is the code", and reify flattens a user impl's
     // methods into `module.functions` exactly like a generated one — so
     // excluding them would leave a mangled query with nothing to find.
-    let mut record =
-        |receiver: &crate::name::Receiver,
-         trait_name: &str,
-         module: &ModuleSource,
-         is_concrete: bool| {
-            impls.record_impl(receiver, trait_name, module, is_concrete);
-        };
+    let mut record = |receiver: &crate::name::Receiver,
+                      trait_name: &str,
+                      module: &ModuleSource,
+                      is_concrete: bool| {
+        impls.record_impl(receiver, trait_name, module, is_concrete);
+    };
     for tir_module in project.tir_modules.values() {
         let module_source = &tir_module.module_source;
         let type_table = tir_module.type_table.borrow();
@@ -170,11 +169,7 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
                 let trait_base = trait_name.base_name().to_string();
                 record(info.receiver(), &trait_base, module_source, is_concrete);
                 if info.struct_name() != info.base_struct_name() {
-                    instantiations.push((
-                        info.struct_name(),
-                        trait_base,
-                        module_source.clone(),
-                    ));
+                    instantiations.push((info.struct_name(), trait_base, module_source.clone()));
                 }
             }
         }

@@ -296,7 +296,8 @@ pub fn cm_type_to_type_id(
             // scoping by package alone returns whichever registered first. The
             // package lookups behind it cover a type with no recorded interface;
             // neither is ever a bare-name scan.
-            _ => registry.source_interface(named)
+            _ => registry
+                .source_interface(named)
                 .and_then(|fq| registry.cm_interface_module_source_of(&fq))
                 .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
                 // A stdlib WASI interface has no recorded `ModuleSource`, so
@@ -870,7 +871,8 @@ pub(super) fn cm_param_store_plan(
         if named.name == names.string {
             return vec![(0, "i32_store"), (4, "i32_store")];
         }
-        let source = cm_interface_registry.source_interface(named)
+        let source = cm_interface_registry
+            .source_interface(named)
             .filter(|s| s.starts_with("wasi:"));
         // Check WASI flags types.
         if let Some(members) = source

@@ -193,13 +193,16 @@ Costs and risks:
 
 ## Migration
 
-- 1. [x] A — `AstId` on `TraitBound` and `AssocTypeBound`; the grammar test that
+-
+  1. [x] A — `AstId` on `TraitBound` and `AssocTypeBound`; the grammar test that
          keeps the invariant, and `walk_generic_params` so the new sites are
          reachable.
-- 2. [x] B — the resolution pass and `Resolutions`, in shadow mode: every site
+-
+  2. [x] B — the resolution pass and `Resolutions`, in shadow mode: every site
          resolved, every impl-header answer compared against what `TraitEnv`
          derives, every difference logged. Nothing reads the table yet.
-- 3. [x] C — flip consumers to `DeclRef`, subsystem by subsystem. Done:
+-
+  3. [x] C — flip consumers to `DeclRef`, subsystem by subsystem. Done:
 
      - `find_trait_impl_for_type_with_args` compares identities when both
        sides have one, and the bound-enforcement choke point
@@ -360,7 +363,8 @@ Costs and risks:
        `OnBoundTrait::compiler_item` reads the declaration off the registry
        instead of the bound's spelling.
 
-- 4. [x] D — delete what the table replaces. Done: `declaring_side_decl_key`,
+-
+  4. [x] D — delete what the table replaces. Done: `declaring_side_decl_key`,
          `canonical_decl_key_with`, `decl_identity_core`,
          `trait_decl_key_in_frame`, `declared_trait_name`,
          `find_trait_decl_key`, `find_effect_or_resource_decl_key`,

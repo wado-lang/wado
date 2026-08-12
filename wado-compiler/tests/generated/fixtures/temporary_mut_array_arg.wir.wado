@@ -84,7 +84,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(32)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(32)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,i32]>::push" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,i32]>", ref "tuple//[core:prelude/string.wado/String, i32]");  // TypeId(33)
 
@@ -132,7 +132,7 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
     b0: block {
         l1: loop {
             break_if b0 i >= _licm_used_53;
-            if "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_54, i).0, name) {
+            if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_54, i).0, name) {
                 prev = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_54, i).1;
                 value_44 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = name.repr; let __array_clone_len_3: i32; __array_clone_len_3 = name.used; let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: name.used }), 1: prev + 1 };
                 builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_54, i, value_44);
@@ -359,7 +359,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, other_len);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(self, other) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(self, other) {
     let len: i32;
     let haystack: ref Array<u8>;
     let needle: ref Array<u8>;

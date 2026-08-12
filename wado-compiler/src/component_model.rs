@@ -472,13 +472,11 @@ impl CmFunctionInfo {
     /// populated), otherwise falls back to the unique `wasi:*` source.
     fn named_type_payload_requires_memory(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
         if let Type::Named(named) = ty {
-            let source = registry
-                .source_interface(named)
-                .or_else(|| {
-                    registry
-                        .find_wasi_variant_source(&named.name)
-                        .map(str::to_string)
-                });
+            let source = registry.source_interface(named).or_else(|| {
+                registry
+                    .find_wasi_variant_source(&named.name)
+                    .map(str::to_string)
+            });
             if let Some(src) = &source {
                 if let Some(cases) = registry.get_variant_cases_by_source(src, &named.name) {
                     return cases.iter().any(|case| {
@@ -1273,7 +1271,9 @@ fn walk_type(
                 walk_type(sources, e, local_names);
             }
         }
-        Type::Reference(inner) | Type::MutReference(inner) => walk_type(sources, inner, local_names),
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            walk_type(sources, inner, local_names)
+        }
         _ => {}
     }
 }
@@ -1656,7 +1656,11 @@ impl CmInterfaceRegistry {
                                         )
                                     })
                                     .clone();
-                                (p.name.clone(), cm_name, resolve_type(&p.ty, &self.newtypes, &self.source_interfaces))
+                                (
+                                    p.name.clone(),
+                                    cm_name,
+                                    resolve_type(&p.ty, &self.newtypes, &self.source_interfaces),
+                                )
                             })
                             .collect();
 
@@ -1710,7 +1714,11 @@ impl CmInterfaceRegistry {
                                 )
                             })
                             .clone();
-                        (p.name.clone(), cm_name, resolve_type(&p.ty, &self.newtypes, &self.source_interfaces))
+                        (
+                            p.name.clone(),
+                            cm_name,
+                            resolve_type(&p.ty, &self.newtypes, &self.source_interfaces),
+                        )
                     })
                     .collect();
                 self.register_world_import(
@@ -1750,7 +1758,11 @@ impl CmInterfaceRegistry {
                                     &resource.name,
                                     &resource_source,
                                 );
-                                (p.name.clone(), cm_name, resolve_type(&ty, &self.newtypes, &self.source_interfaces))
+                                (
+                                    p.name.clone(),
+                                    cm_name,
+                                    resolve_type(&ty, &self.newtypes, &self.source_interfaces),
+                                )
                             })
                             .collect();
 
@@ -2061,11 +2073,7 @@ impl CmInterfaceRegistry {
                 world_registry.register(
                     world,
                     |name| {
-                        interface_decls.export_lookup(
-                            name,
-                            &self.newtypes,
-                            &self.source_interfaces,
-                        )
+                        interface_decls.export_lookup(name, &self.newtypes, &self.source_interfaces)
                     },
                     |name| interface_decls.import_cm_fq(name),
                 );
@@ -4963,10 +4971,9 @@ mod tests {
             ("wasi:clocks/types@0.3.0".into(), "Temp".into()),
             named("u64"),
         );
-        registry.newtypes.insert(
-            ("pkg:app/app@1".into(), "Celsius".into()),
-            named("Temp"),
-        );
+        registry
+            .newtypes
+            .insert(("pkg:app/app@1".into(), "Celsius".into()), named("Temp"));
 
         let celsius = named_in(&mut registry, "Celsius", "pkg:app/app@1");
         assert!(matches!(
@@ -4987,30 +4994,19 @@ mod tests {
         let iface = "pkg:app/app@1";
         registry.structs.insert(
             (iface.into(), "Single".into()),
-            (
-                "single".into(),
-                vec![("n".into(), named("u64"))],
-                vec![],
-            ),
+            ("single".into(), vec![("n".into(), named("u64"))], vec![]),
         );
         registry.structs.insert(
             (iface.into(), "Point".into()),
             (
                 "point".into(),
-                vec![
-                    ("x".into(), named("f64")),
-                    ("y".into(), named("f64")),
-                ],
+                vec![("x".into(), named("f64")), ("y".into(), named("f64"))],
                 vec![],
             ),
         );
         registry.structs.insert(
             (iface.into(), "Wrap".into()),
-            (
-                "wrap".into(),
-                vec![("s".into(), named("String"))],
-                vec![],
-            ),
+            ("wrap".into(), vec![("s".into(), named("String"))], vec![]),
         );
 
         assert!(

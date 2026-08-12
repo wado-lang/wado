@@ -2920,15 +2920,11 @@ impl Monomorphizer {
         } else {
             RefKind::Shared
         };
-        let Some(ref_module) =
-            self.functions
-                .trait_env
-                .impl_module_for(
-                    ImplReceiver::Of(&crate::name::Receiver::Ref(ref_kind)),
-                    trait_name,
-                    None,
-                )
-        else {
+        let Some(ref_module) = self.functions.trait_env.impl_module_for(
+            ImplReceiver::Of(&crate::name::Receiver::Ref(ref_kind)),
+            trait_name,
+            None,
+        ) else {
             return false;
         };
         // Mirror the template ref arm (`method_call_info_for_type`): the call
