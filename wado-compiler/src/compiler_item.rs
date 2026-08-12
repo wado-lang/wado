@@ -1184,6 +1184,11 @@ pub enum Resolved {
     Trait {
         module_source: ModuleSource,
         name: String,
+        /// The trait declaration's own node. A compiler item is a declaration
+        /// the compiler knows by construction, so a consumer asking "is this
+        /// that trait?" compares this rather than the spelling (WEP
+        /// 2026-08-10).
+        decl: crate::ast::AstId,
         /// Primary method name for **single-method** traits, captured
         /// automatically by the elaborator when registering the trait's
         /// `#[compiler_item("...")]` annotation. `None` for
@@ -1493,6 +1498,30 @@ impl CompilerItems {
         self.require_trait(item).1
     }
 
+    /// The trait as a mangled name's trait segment names it — by the module
+    /// that declares it. This is what a synthesised `LocalMethodName` takes:
+    /// the registry holds the declaration, so no synthesis site has to spell
+    /// the trait and none can spell the wrong one.
+    #[must_use]
+    pub fn trait_fq(&self, item: CompilerItem) -> crate::name::FqTraitName {
+        let (module, name) = self.require_trait(item);
+        crate::name::FqTraitName::declared(module, name)
+    }
+
+    /// Non-panicking [`Self::trait_fq`]: `None` when the item is not
+    /// registered.
+    #[must_use]
+    pub fn trait_fq_opt(&self, item: CompilerItem) -> Option<crate::name::FqTraitName> {
+        match self.get(item)? {
+            Resolved::Trait {
+                module_source,
+                name,
+                ..
+            } => Some(crate::name::FqTraitName::declared(module_source, name)),
+            _ => None,
+        }
+    }
+
     /// Non-panicking [`Self::trait_name`]: `None` when the item is not
     /// registered. Used to classify a trait reference against optional
     /// anchors (e.g. serde traits, absent unless the program imports serde)
@@ -1500,6 +1529,16 @@ impl CompilerItems {
     pub fn trait_name_opt(&self, item: CompilerItem) -> Option<&str> {
         match self.get(item)? {
             Resolved::Trait { name, .. } => Some(name.as_str()),
+            _ => None,
+        }
+    }
+
+    /// The declaration this trait item names, as an identity. `None` when the
+    /// item is not registered.
+    #[must_use]
+    pub fn trait_decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
+        match self.get(item)? {
+            Resolved::Trait { decl, .. } => Some(*decl),
             _ => None,
         }
     }
@@ -1819,6 +1858,7 @@ mod tests {
             .register(
                 CompilerItem::Option,
                 Resolved::Trait {
+                    decl: crate::ast::AstId::fresh(),
                     module_source: ModuleSource::types(),
                     name: "Option".into(),
                     method_name: None,
@@ -1863,6 +1903,7 @@ mod tests {
         reg.register(
             CompilerItem::Default,
             Resolved::Trait {
+                decl: crate::ast::AstId::fresh(),
                 module_source: ModuleSource::traits(),
                 name: "Default".into(),
                 method_name: Some("default".into()),
@@ -1926,6 +1967,7 @@ mod tests {
         reg.register(
             CompilerItem::Serializer,
             Resolved::Trait {
+                decl: crate::ast::AstId::fresh(),
                 module_source: ModuleSource::serde(),
                 name: "Serializer".to_string(),
                 method_name: None,

@@ -159,7 +159,7 @@ fn named_shape(named: &NamedType, ctx: &CmShapeContext<'_>) -> CmShape {
     };
     if let Some(fields) = ctx
         .cm_interface_registry
-        .get_struct_fields_with_wado_names_by_source(source, &named.name)
+        .get_struct_fields_with_wado_names_by_source(&source, &named.name)
     {
         let field_types: Vec<Type> = fields
             .iter()
@@ -169,7 +169,7 @@ fn named_shape(named: &NamedType, ctx: &CmShapeContext<'_>) -> CmShape {
     }
     if let Some(cases) = ctx
         .cm_interface_registry
-        .get_variant_cases_by_source(source, &named.name)
+        .get_variant_cases_by_source(&source, &named.name)
     {
         let payloads: Vec<Option<Type>> = cases.iter().map(|c| c.payload.clone()).collect();
         let payload_offset = cm_abi::variant_payload_offset_with_registry_scoped(

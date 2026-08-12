@@ -238,6 +238,18 @@ and `{decl}` repeat whenever a type is implemented in the module declaring it �
 the common case. A receiver with no declaring module (a builtin, a tuple) has no
 `{decl}` segment. See WEP 2026-07-29 for why neither segment is removable alone.
 
+The same rule binds names still in their written form. A type name in source is
+relative to the module that wrote it, so a **reference site** — not a consumer —
+is where an identity is derived, once: `crate::resolve::Resolutions` answers
+every site before elaboration begins, keyed by the site's own `AstId`. An `impl`
+block's digest (`ImplHeader`) carries its module, its target's `ImplTargetKey`
+and its trait's, and the whole-program checks (coherence, orphan rules, sealed
+traits, trait-method arity) read the digest instead of re-walking
+`loaded_modules`, because a second walk knows no module and can only compare
+spellings. A consumer holding a bare name with no site goes through the table's
+own scope lookup, so it cannot answer differently from the site. See WEP
+2026-08-10.
+
 ## Component Model Registries
 
 Three registries collect declarative information from the standard library and feed both the elaborator and codegen:

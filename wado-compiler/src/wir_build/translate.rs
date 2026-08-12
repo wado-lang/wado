@@ -312,11 +312,18 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // stays populated so the canonical struct schema is consistent.
         let (inspect_wrapper_id, inspect_alt_wrapper_id) = if is_inspectable {
             let callback_fn_type_id = ctx.get_or_create_canonical_callback_fn_type();
+            let (inspect_trait, inspect_alt_trait) = {
+                let tt = ctx.package.type_table.borrow();
+                (
+                    tt.compiler_trait_fq(crate::compiler_item::CompilerItem::Inspect),
+                    tt.compiler_trait_fq(crate::compiler_item::CompilerItem::InspectAlt),
+                )
+            };
             let inspect = register_inspect_wrapper(
                 ctx,
                 module_source,
                 functor_name,
-                "Inspect",
+                &inspect_trait,
                 "inspect",
                 global_id,
                 callback_fn_type_id.clone(),
@@ -326,7 +333,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 ctx,
                 module_source,
                 functor_name,
-                "InspectAlt",
+                &inspect_alt_trait,
                 "inspect_alt",
                 global_id,
                 callback_fn_type_id,
@@ -479,7 +486,7 @@ fn register_inspect_wrapper(
     ctx: &mut WirContext<'_>,
     module_source: &ModuleSource,
     functor_name: &str,
-    trait_name: &str,
+    trait_name: &crate::name::FqTraitName,
     method_name: &str,
     global_id: usize,
     callback_fn_type_id: crate::wir::WirTypeId,

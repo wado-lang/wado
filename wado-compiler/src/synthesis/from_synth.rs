@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::compiler_item::CompilerItem;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::synthesis::common::{
     block, local_ref, make_synthetic_method, param_local, return_stmt, synth_span,
 };
@@ -26,8 +26,7 @@ pub fn synthesize_from(module: &mut TirModule) {
     let from_trait_name = module
         .type_table
         .borrow()
-        .compiler_trait_name(CompilerItem::From)
-        .to_string();
+        .compiler_trait_fq(CompilerItem::From);
     let requests: Vec<SynthesisRequest> = module
         .synthesis_requests
         .extract_if(.., |r| matches!(r.trait_ref, SynthTrait::From { .. }))
@@ -47,7 +46,7 @@ pub fn synthesize_from(module: &mut TirModule) {
         // type table — the canonical naming authority — rather than echoing a
         // pre-mangled request string.
         let source_name = module.type_table.borrow().type_name(source);
-        let from_trait = mangle_generic_name(&from_trait_name, &[source_name]);
+        let from_trait = from_trait_name.clone().with_args(vec![source_name]);
         let key = MethodName::format_local(
             &FqTypeName::declared(&module.module_source, &req.target_type_name),
             Some(&from_trait),
@@ -66,9 +65,8 @@ pub fn synthesize_from(module: &mut TirModule) {
 
 fn collect_existing_from_methods(
     module: &TirModule,
-    from_trait_name: &str,
+    from_trait_name: &crate::name::FqTraitName,
 ) -> crate::hashmap::IndexSet<String> {
-    let from_prefix = format!("{from_trait_name}<");
     module
         .functions
         .iter()
@@ -76,8 +74,7 @@ fn collect_existing_from_methods(
             let func = f.borrow();
             func.method_info.as_ref().and_then(|info| {
                 info.trait_name.as_ref().and_then(|trait_name| {
-                    if trait_name == from_trait_name || trait_name.starts_with(from_prefix.as_str())
-                    {
+                    if trait_name.head_only() == *from_trait_name {
                         Some(MethodName::format_local(
                             &info.fq_base_struct_name(),
                             Some(trait_name),
@@ -96,7 +93,7 @@ fn generate_variant_from(
     module: &TirModule,
     req: &SynthesisRequest,
     source: TypeId,
-    from_trait: &str,
+    from_trait: &crate::name::FqTraitName,
 ) -> Option<TirFunction> {
     let variant_def = module
         .variants
@@ -132,11 +129,8 @@ fn generate_variant_from(
     let locals = vec![param_local("value", from_type, false)];
 
     let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
-    let method_info = LocalMethodName::new(
-        target.clone(),
-        Some(from_trait.to_string()),
-        "from".to_string(),
-    );
+    let method_info =
+        LocalMethodName::new(target.clone(), Some(from_trait.clone()), "from".to_string());
     let qualified_name = MethodName::format_local(&target, Some(from_trait), "from");
 
     Some(make_synthetic_method(

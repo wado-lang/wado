@@ -207,7 +207,6 @@ fn synthesize_record_stream_read_func(
         id: AstId::fresh(),
         name: elem_name.clone(),
         span: synth_span(),
-        source_interface: Some(source.clone()),
     });
     // Scope element layout to the record's own package (from `source`) so
     // nested field names resolve the same way the scoped lift reads them.

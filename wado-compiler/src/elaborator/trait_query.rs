@@ -8,17 +8,17 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, RefKind};
+use crate::resolve::DeclRef;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::CalleeRef;
-use super::scope::{ElaboratedBound, Scope};
-use super::sig::{MethodSig, TraitSig};
-use super::trait_env::{DeclKey, InheritedBound, TraitDeclHeader};
+use super::scope::Scope;
+use super::sig::TraitSig;
+use super::trait_env::{DeclKey, InheritedBound};
 use super::types::{
-    MethodInfo, MethodOwner, RequiredTrait, ResolvedTraitMethod, TraitMethodMatch, TypeError,
-    TypeLookup,
+    MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
 
@@ -41,6 +41,28 @@ pub(super) enum OnBoundTrait {
 }
 
 impl OnBoundTrait {
+    /// The compiler item this classification came from. The traits that drive
+    /// synthesis are all registered items, so a request records the
+    /// declaration the registry holds rather than the spelling a bound wrote.
+    pub(super) fn compiler_item(self) -> CompilerItem {
+        match self {
+            Self::Eq => CompilerItem::Eq,
+            Self::Ord => CompilerItem::Ord,
+            Self::Serialize => CompilerItem::Serialize,
+            Self::Deserialize => CompilerItem::Deserialize,
+            Self::Default => CompilerItem::Default,
+            Self::ReflectStruct => CompilerItem::ReflectStruct,
+            Self::ReflectVariant => CompilerItem::ReflectVariant,
+            Self::ReflectEnum => CompilerItem::ReflectEnum,
+            Self::ReflectFlags => CompilerItem::ReflectFlags,
+            Self::Ref => CompilerItem::Ref,
+            Self::RefMut => CompilerItem::RefMut,
+            Self::Inspect => CompilerItem::Inspect,
+            Self::InspectAlt => CompilerItem::InspectAlt,
+            Self::DisplayAlt => CompilerItem::DisplayAlt,
+        }
+    }
+
     pub(super) fn is_serde(self) -> bool {
         matches!(self, Self::Serialize | Self::Deserialize)
     }
@@ -84,21 +106,20 @@ impl StructuralMember<'_> {
     }
 }
 
-/// Canonical identity of an associated-constant key: canonicalize the
-/// `Type` prefix of a use-site `Type::CONST` spelling via
-/// [`canonical_decl_key_with`]. `None` for keys with no `::` (never a
-/// constant key). Shared by annotate and reify so both resolve a constant
-/// to the same identity.
+/// Canonical identity of an associated-constant key: canonicalize the `Type`
+/// prefix of a use-site `Type::CONST` spelling through
+/// [`declaration_named_or_local`]. `None` for keys with no `::` (never a
+/// constant key). Shared by annotate and reify so both resolve a constant to
+/// the same identity.
 pub(super) fn canonical_assoc_const_key(
     key: &str,
     current_module_source: &ModuleSource,
-    imports: &super::sem::ModuleImports,
     symbols: &crate::symbol::SymbolTable,
-    trait_env: &super::trait_env::TraitEnv,
+    resolutions: &crate::resolve::Resolutions,
 ) -> Option<(ModuleSource, String)> {
     let (prefix, _) = key.split_once("::")?;
     let (type_module, canon_name) =
-        canonical_decl_key_with(prefix, current_module_source, imports, symbols, trait_env);
+        declaration_named_or_local(prefix, current_module_source, symbols, resolutions);
     let canon_key = if canon_name == prefix {
         key.to_string()
     } else {
@@ -107,76 +128,19 @@ pub(super) fn canonical_assoc_const_key(
     Some((type_module, canon_key))
 }
 
-/// Free-function form of [`Elaborator::canonical_decl_key`], callable from
-/// any module that has the inputs in hand. Reify uses this for trait
-/// default-method synthesis (it has no `Elaborator` instance but does carry
-/// the same `imports` / `symbols` / `trait_env` / `current_module_source`
-/// references).
-/// The part of [`canonical_decl_key_with`] that needs nothing but a name, a
-/// vantage module, that module's imported type sources, and the symbol table.
-///
-/// Split out so `TraitEnv::build` can key its impl indexes by the same
-/// identity the elaborator will later look them up with. Two implementations
-/// of "which type is this name?" is how the indexes came to disagree with
-/// their callers — a primitive keyed to whichever module wrote the `impl`,
-/// while lookups asked for `primitive()`.
-///
-/// Returns `None` when the name resolves through none of these; the caller
-/// decides what a still-unresolved name means.
-pub(crate) fn decl_identity_core(
+/// The declaration `name` means from `module`'s vantage, for the free-standing
+/// callers that hold the inputs rather than an `Elaborator`. Mirrors
+/// [`crate::elaborator::Elaborator::canonical_decl_key`], through the same
+/// resolution-table lookup.
+fn declaration_named_or_local(
     name: &str,
-    vantage: &ModuleSource,
-    imported_sources: &IndexMap<String, ModuleSource>,
-    imported_effect_sources: &IndexMap<String, ModuleSource>,
-    import_original_names: &IndexMap<String, String>,
+    module: &ModuleSource,
     symbols: &crate::symbol::SymbolTable,
-) -> Option<(ModuleSource, String)> {
-    // Types with one instance per name, so the name determines the type and
-    // both sides agree without resolving anything. The module is where each
-    // is declared: `[..T]` and `Array<T>` are real `internal type`
-    // declarations, and answering `primitive()` for them contradicts the
-    // declaration index, which knows better. Primitives and `()` have no
-    // declaration to point at yet.
-    if super::is_primitive_type_name(name) {
-        return Some((ModuleSource::primitive(), name.to_string()));
-    }
-    if name == crate::tir::TypeTable::TUPLE_TYPE_NAME {
-        return Some((ModuleSource::types(), name.to_string()));
-    }
-    if name == crate::tir::TypeTable::ARRAY_TYPE_NAME {
-        return Some((ModuleSource::array(), name.to_string()));
-    }
-    if let Some(src) = imported_sources.get(name) {
-        let original = import_original_names
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| name.to_string());
-        let canonical = symbols
-            .lookup_in_module(src, &original)
-            .map(|sym| sym.module_source().clone())
-            .unwrap_or_else(|| src.clone());
-        return Some((canonical, original));
-    }
-    // An effect import ranks with the type imports above, not below the
-    // lookups: `symbols.lookup` falls back to the prelude, so a demoted
-    // effect import loses its own declaring module to any prelude symbol
-    // that happens to share the name.
-    if let Some(src) = imported_effect_sources.get(name) {
-        let canonical = symbols
-            .lookup_in_module(src, name)
-            .map(|sym| sym.module_source().clone())
-            .unwrap_or_else(|| src.clone());
-        return Some((canonical, name.to_string()));
-    }
-    // A name defined in the vantage module resolves to it, ahead of any
-    // by-name fallback that could pick a same-named declaration elsewhere.
-    if symbols.is_defined_in_module(vantage, name) {
-        return Some((vantage.clone(), name.to_string()));
-    }
-    if let Some(sym) = symbols.lookup(vantage, name) {
-        return Some((sym.module_source().clone(), name.to_string()));
-    }
-    None
+    resolutions: &crate::resolve::Resolutions,
+) -> (ModuleSource, String) {
+    resolutions
+        .declaration_named(module, name, symbols)
+        .unwrap_or_else(|| (module.clone(), name.to_string()))
 }
 
 /// Whether `ty` spells one of the declaration's own type packs
@@ -211,41 +175,6 @@ fn mentions_self(ty: &ast::Type) -> bool {
     }
 }
 
-pub(crate) fn canonical_decl_key_with(
-    name: &str,
-    current_module_source: &ModuleSource,
-    imports: &super::sem::ModuleImports,
-    symbols: &crate::symbol::SymbolTable,
-    trait_env: &super::trait_env::TraitEnv,
-) -> (ModuleSource, String) {
-    if let Some(key) = decl_identity_core(
-        name,
-        current_module_source,
-        &imports.imported_type_sources,
-        &imports.effect_sources,
-        &imports.import_original_names,
-        symbols,
-    ) {
-        return key;
-    }
-    if let Some(key) = trait_env.find_trait_decl_key(name) {
-        return key;
-    }
-    if let Some(key) = trait_env.find_effect_or_resource_decl_key(name) {
-        return key;
-    }
-    if let Some(key) = trait_env.find_static_method_decl_key(name) {
-        return key;
-    }
-    // A struct-like type the caller never imported — e.g. an iterator handed
-    // back by a method, named nowhere in this module's `use` declarations.
-    // Without this the fallback below would claim it for the current module.
-    if let Some(key) = trait_env.find_struct_like_decl_key(name) {
-        return key;
-    }
-    (current_module_source.clone(), name.to_string())
-}
-
 /// The recorded declaration facts of the trait named `trait_name`, for a
 /// caller holding the inputs rather than an `Elaborator` — reify's
 /// default-method pass. Resolves the name through the declaration index and
@@ -253,18 +182,13 @@ pub(crate) fn canonical_decl_key_with(
 pub(crate) fn trait_sig_by_name_with<'a>(
     trait_name: &str,
     current_module_source: &ModuleSource,
-    imports: &super::sem::ModuleImports,
     symbols: &crate::symbol::SymbolTable,
+    resolutions: &crate::resolve::Resolutions,
     trait_env: &super::trait_env::TraitEnv,
     signatures: &'a super::sig::Signatures,
 ) -> Option<&'a super::sig::TraitSig> {
-    let canonical_key = canonical_decl_key_with(
-        trait_name,
-        current_module_source,
-        imports,
-        symbols,
-        trait_env,
-    );
+    let canonical_key =
+        declaration_named_or_local(trait_name, current_module_source, symbols, resolutions);
     let (_, decl_id) = trait_env.decl_index.get(&canonical_key)?;
     signatures.trait_sig(*decl_id)
 }
@@ -295,7 +219,10 @@ impl TypeSystem {
     /// Resolve the auto-derived trait that declares `method_name`, returning its
     /// trait name and fixed return type, or `None` when no auto-derived trait
     /// declares that method.
-    pub(super) fn auto_derive_by_method(&self, method_name: &str) -> Option<(String, TypeId)> {
+    pub(super) fn auto_derive_by_method(
+        &self,
+        method_name: &str,
+    ) -> Option<(crate::compiler_item::CompilerItem, String, TypeId)> {
         let item = Self::AUTO_DERIVED_METHODS
             .iter()
             .find(|(_, m)| *m == method_name)
@@ -305,13 +232,20 @@ impl TypeSystem {
             .borrow()
             .compiler_trait_name(item)
             .to_string();
-        Some((trait_name, self.auto_derive_return_type(item)))
+        Some((item, trait_name, self.auto_derive_return_type(item)))
     }
 
     /// Mirror of [`Self::auto_derive_by_method`] keyed by trait name, for
-    /// operator dispatch which already knows the trait. Returns the fixed
-    /// return type, or `None` when `trait_name` is not an auto-derived trait.
-    pub(super) fn auto_derive_by_trait(&self, trait_name: &str) -> Option<TypeId> {
+    /// operator dispatch which already knows the trait. Returns the compiler
+    /// item the name matched and its fixed return type, or `None` when
+    /// `trait_name` is not an auto-derived trait.
+    ///
+    /// Returning the item, not just the type, is what lets the caller name the
+    /// trait by its declaration rather than re-deriving one from the spelling.
+    pub(super) fn auto_derive_by_trait(
+        &self,
+        trait_name: &str,
+    ) -> Option<(crate::compiler_item::CompilerItem, TypeId)> {
         let item = Self::AUTO_DERIVED_METHODS.iter().find_map(|(item, _)| {
             let name = self
                 .type_table
@@ -320,7 +254,7 @@ impl TypeSystem {
                 .to_string();
             (name == trait_name).then_some(*item)
         })?;
-        Some(self.auto_derive_return_type(item))
+        Some((item, self.auto_derive_return_type(item)))
     }
 
     /// Check that concrete type args at non-type-parameter positions match the impl type.
@@ -412,22 +346,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_sig_by_name_with(
             trait_name,
             &self.current_module_source,
-            &self.sem.imports,
             self.symbols,
+            &self.tysys.resolutions,
             &self.tysys.trait_env,
             &self.tysys.signatures,
         )
     }
 
     /// The declaration header of the trait `trait_name` names in this frame.
-    pub(super) fn trait_decl_header_in_frame(&self, trait_name: &str) -> Option<&TraitDeclHeader> {
-        self.trait_decl_header_of(&self.trait_decl_key_in_frame(trait_name))
+    pub(super) fn trait_decl_header_in_frame(
+        &self,
+        trait_name: &str,
+    ) -> Option<&super::trait_env::TraitDeclHeader> {
+        self.trait_decl_header_of(&self.decl_key_or_local(trait_name))
     }
 
-    /// [`Self::trait_decl_header_in_frame`] for a caller that already holds the
-    /// declaration, so no name is resolved against the current frame.
-    pub(super) fn trait_decl_header_of(&self, decl: &DeclKey) -> Option<&TraitDeclHeader> {
-        let loc = self.tysys.trait_env.decl_index.get(decl)?;
+    /// The declaration header of a trait already identified.
+    ///
+    /// Every by-name form here funnels through this one, so a caller holding a
+    /// site answers about the declaration that site resolved to rather than
+    /// re-resolving the spelling in its own frame.
+    pub(super) fn trait_decl_header_of(
+        &self,
+        key: &super::trait_env::DeclKey,
+    ) -> Option<&super::trait_env::TraitDeclHeader> {
+        let loc = self.tysys.trait_env.decl_index.get(key)?;
         self.tysys.trait_env.trait_decl_headers.get(loc)
     }
 
@@ -454,14 +397,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let trait_name = self.get_type_name(trait_type);
         for binding in &impl_block.associated_types {
-            let bound_names: Vec<String> = self
+            // The bound carries its own reference site, so which `Ord` it
+            // means is the answer the table already recorded for it — not the
+            // spelling, which two modules can share.
+            let bounds: Vec<(String, Option<DeclRef>)> = self
                 .trait_assoc_type_decl(&trait_name, &binding.name)
                 .into_iter()
                 .flat_map(|decl| &decl.bounds)
                 .filter(|bound| bound.fn_signature.is_none())
-                .map(|bound| bound.name.clone())
+                .map(|bound| (bound.name.clone(), self.tysys.resolutions.get(bound.id)))
                 .collect();
-            if bound_names.is_empty() {
+            if bounds.is_empty() {
                 continue;
             }
             let type_id = self
@@ -474,12 +420,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.tysys.type_table.borrow().contains_type_param(type_id) {
                 continue;
             }
-            for bound_name in &bound_names {
+            for (bound_name, bound_ref) in &bounds {
                 if !self.tysys.type_implements_trait(
                     &self.annotate_ctx,
                     &self.type_lookup(),
                     type_id,
                     bound_name,
+                    *bound_ref,
                 ) {
                     let type_name = self.tysys.type_id_to_string(type_id);
                     let reason = self.tysys.trait_unimpl_reason_chain(
@@ -508,23 +455,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let trait_name = self.get_type_name(trait_type);
-        let supertraits: Vec<String> = self
+        // A supertrait is a bound written in the trait's own declaration, so
+        // which trait it names is the answer already recorded for that site.
+        let supertraits: Vec<(String, Option<DeclRef>)> = self
             .tysys
             .trait_env
-            .supertrait_closure(&self.trait_decl_key_in_frame(&trait_name))
+            .supertrait_closure(&self.decl_key_or_local(&trait_name))
             .iter()
-            .map(|b| b.bound.name.clone())
+            .map(|b| (b.bound.name.clone(), self.tysys.resolutions.get(b.bound.id)))
             .collect();
         if supertraits.is_empty() {
             return;
         }
         let self_type = self.resolve_type(&impl_block.ty);
-        for supertrait in supertraits {
+        for (supertrait, supertrait_ref) in supertraits {
             if self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 self_type,
                 &supertrait,
+                supertrait_ref,
             ) {
                 continue;
             }
@@ -546,27 +496,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Find a trait declaration's type parameters (e.g., `<T, U>` in `trait Foo<T, U>`).
+    /// The declared type parameters of an already-identified trait.
+    pub(super) fn trait_decl_type_params_of(
+        &self,
+        key: &super::trait_env::DeclKey,
+    ) -> Option<Vec<ast::GenericParam>> {
+        let loc = self.tysys.trait_env.decl_index.get(key)?;
+        self.tysys
+            .trait_env
+            .trait_decl_headers
+            .get(loc)
+            .map(|header| header.type_params.clone())
+    }
+
     pub(super) fn find_trait_decl_type_params(
         &self,
         trait_name: &str,
     ) -> Option<Vec<ast::GenericParam>> {
         // `canonical_decl_key` is local-first (issue #1298), so the type-param
         // list and the default-method bodies resolve to the same trait.
-        let canonical_key = self.canonical_decl_key(trait_name);
-        if let Some(loc) = self.tysys.trait_env.decl_index.get(&canonical_key)
-            && let Some(header) = self.tysys.trait_env.trait_decl_headers.get(loc)
-        {
-            return Some(header.type_params.clone());
+        let canonical_key = self.decl_key_or_local(trait_name);
+        if let Some(params) = self.trait_decl_type_params_of(&canonical_key) {
+            return Some(params);
         }
-        // Fallback: a trait declared in the current module whose canonical key
-        // missed the decl index. (`trait_decl_headers` covers every loaded
-        // module, so the current module is included.)
-        for (key, header) in &self.tysys.trait_env.trait_decl_headers {
-            if key.0 == self.current_module_source && header.name == trait_name {
-                return Some(header.type_params.clone());
-            }
-        }
-        None
+        // Only the current-module scan can add anything the key lookup did not:
+        // a trait declared here whose canonical key missed the decl index.
+        // (`trait_decl_headers` covers every loaded module, this one included.)
+        self.tysys
+            .trait_env
+            .trait_decl_headers
+            .iter()
+            .find(|(key, header)| key.0 == self.current_module_source && header.name == trait_name)
+            .map(|(_, header)| header.type_params.clone())
     }
 }
 
@@ -578,6 +539,7 @@ impl TypeSystem {
         scope: &TypeLookup,
         type_id: TypeId,
         trait_name: &str,
+        trait_ref: Option<DeclRef>,
     ) -> bool {
         let resolved = self.type_table.borrow().get(type_id).clone();
 
@@ -597,7 +559,8 @@ impl TypeSystem {
             .borrow_mut()
             .push((type_id, trait_name.to_string()));
 
-        let result = self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_name);
+        let result =
+            self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_name, trait_ref);
 
         ctx.trait_check_stack.borrow_mut().pop();
 
@@ -648,7 +611,7 @@ impl TypeSystem {
 
         let mut failing: Option<(String, TypeId)> = None;
         self.walk_structural_derive_members(scope, &resolved, tr, &mut |member, member_tid| {
-            if self.type_implements_trait(ctx, scope, member_tid, trait_name) {
+            if self.type_implements_trait(ctx, scope, member_tid, trait_name, None) {
                 true
             } else {
                 failing = Some((member.describe(), member_tid));
@@ -689,6 +652,16 @@ impl TypeSystem {
     /// predicate reflect synthesis reads.
     fn is_reflect_eligible(&self, type_id: TypeId) -> bool {
         self.type_table.borrow().is_reflect_eligible(type_id)
+    }
+
+    /// The declaration a synthesis-driving trait names, from the compiler-item
+    /// registry rather than the spelling that classified it.
+    pub(super) fn synth_trait_key(&self, on_bound: OnBoundTrait) -> Option<crate::tir::TraitKey> {
+        self.type_table
+            .borrow()
+            .compiler_items()
+            .trait_fq_opt(on_bound.compiler_item())
+            .and_then(|t| t.canonical())
     }
 
     pub(super) fn classify_on_bound_trait(
@@ -760,6 +733,29 @@ impl TypeSystem {
             Some(module) => *module == compiler_module,
             None => true,
         }
+    }
+
+    /// The trait declaration `name` binds to in `scope`, following an alias to
+    /// the name the declaration calls itself.
+    ///
+    /// For the `TypeSystem` queries that hold a scope and a spelling rather
+    /// than a reference site; a caller with a site asks the site instead.
+    fn scoped_trait_decl_key(&self, scope: &TypeLookup, name: &str) -> Option<DeclKey> {
+        let declared = scope
+            .import_original_names
+            .get(name)
+            .map_or(name, String::as_str);
+        if let Some(source) = scope.imported_type_sources.get(name) {
+            let imported = (source.clone(), declared.to_string());
+            if self.trait_env.decl_index.contains_key(&imported) {
+                return Some(imported);
+            }
+        }
+        let local = (scope.current_module_source.clone(), declared.to_string());
+        if self.trait_env.decl_index.contains_key(&local) {
+            return Some(local);
+        }
+        None
     }
 
     /// Whether holding `bound_name` also gives `trait_name` — the same trait,
@@ -908,17 +904,17 @@ impl TypeSystem {
         let resolved = self.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Newtype { base_type, .. } => {
-                self.type_implements_trait(ctx, scope, *base_type, trait_name)
+                self.type_implements_trait(ctx, scope, *base_type, trait_name, None)
             }
             ResolvedType::Flags { .. } => {
-                self.type_implements_trait(ctx, scope, TypeTable::U32, trait_name)
+                self.type_implements_trait(ctx, scope, TypeTable::U32, trait_name, None)
             }
             nominal => {
                 self.walk_structural_derive_members(scope, nominal, tr, &mut |_, member| {
                     matches!(
                         self.type_table.borrow().get(member),
                         ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                    ) || self.type_implements_trait(ctx, scope, member, trait_name)
+                    ) || self.type_implements_trait(ctx, scope, member, trait_name, None)
                 }) == Some(true)
             }
         }
@@ -1002,6 +998,7 @@ impl TypeSystem {
         type_id: TypeId,
         resolved: &ResolvedType,
         trait_name: &str,
+        trait_ref: Option<DeclRef>,
     ) -> bool {
         let on_bound = self.classify_on_bound_trait(scope, trait_name);
 
@@ -1058,6 +1055,7 @@ impl TypeSystem {
                 scope,
                 &Receiver::Type(FqTypeName::builtin(&type_name)),
                 trait_name,
+                trait_ref,
             );
         }
 
@@ -1092,15 +1090,18 @@ impl TypeSystem {
                     scope,
                     &Receiver::Type(FqTypeName::of_head(module_source, name)),
                     trait_name,
+                    trait_ref,
                 );
             if !serde_blocked
                 && self.walk_structural_derive_members(scope, resolved, tr, &mut |_, member| {
-                    self.type_implements_trait(ctx, scope, member, trait_name)
+                    self.type_implements_trait(ctx, scope, member, trait_name, trait_ref)
                 }) == Some(true)
             {
-                self.type_table
-                    .borrow_mut()
-                    .record_bound_driven_synth_request(name, module_source, trait_name);
+                if let Some(key) = self.synth_trait_key(tr) {
+                    self.type_table
+                        .borrow_mut()
+                        .record_bound_driven_synth_request(name, module_source, &key);
+                }
                 return true;
             }
         }
@@ -1113,9 +1114,11 @@ impl TypeSystem {
             && on_bound == Some(OnBoundTrait::Default)
             && self.auto_derive_default_struct_type(scope, name).is_some()
         {
-            self.type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
+            if let Some(key) = on_bound.and_then(|t| self.synth_trait_key(t)) {
+                self.type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request(name, module_source, &key);
+            }
             return true;
         }
 
@@ -1178,9 +1181,11 @@ impl TypeSystem {
                 _ => false,
             }
         {
-            self.type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(name, module_source, trait_name);
+            if let Some(key) = on_bound.and_then(|t| self.synth_trait_key(t)) {
+                self.type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request(name, module_source, &key);
+            }
             return true;
         }
 
@@ -1232,11 +1237,12 @@ impl TypeSystem {
                     scope,
                     &Receiver::Ref(RefKind::Shared),
                     trait_name,
+                    trait_ref,
                     Some(&[inner_id]),
                 ) {
                     return true;
                 }
-                return self.type_implements_trait(ctx, scope, inner_id, trait_name);
+                return self.type_implements_trait(ctx, scope, inner_id, trait_name, trait_ref);
             }
             ResolvedType::MutRef(inner) => {
                 // Mutable references always implement Eq via ref.eq (identity comparison)
@@ -1249,17 +1255,18 @@ impl TypeSystem {
                     scope,
                     &Receiver::Ref(RefKind::Mut),
                     trait_name,
+                    trait_ref,
                     Some(&[inner_id]),
                 ) {
                     return true;
                 }
-                return self.type_implements_trait(ctx, scope, inner_id, trait_name);
+                return self.type_implements_trait(ctx, scope, inner_id, trait_name, trait_ref);
             }
             ResolvedType::AssocTypeProjection { bounds, .. } => {
                 // An associated type projection T::Assoc implements a trait if
                 // the trait declaration for Assoc declares that bound.
                 // e.g., I::Iter: Iterator when IntoIterator::Iter: Iterator
-                return bounds.iter().any(|b| b == trait_name);
+                return bounds.iter().any(|b| b.base_name() == trait_name);
             }
             ResolvedType::Newtype {
                 name,
@@ -1273,12 +1280,13 @@ impl TypeSystem {
                     scope,
                     &Receiver::Type(FqTypeName::of_head(module_source, name)),
                     trait_name,
+                    trait_ref,
                 ) {
                     return true;
                 }
                 // Fall back to base type's trait implementation
                 let base_id = *base_type;
-                return self.type_implements_trait(ctx, scope, base_id, trait_name);
+                return self.type_implements_trait(ctx, scope, base_id, trait_name, trait_ref);
             }
             // `()` names no declaring module, so an `impl Trait for ()` is
             // indexed under the builtin spelling the unit type mangles as.
@@ -1292,10 +1300,17 @@ impl TypeSystem {
                     scope,
                     &Receiver::Type(FqTypeName::of_head(module_source, name)),
                     trait_name,
+                    trait_ref,
                 ) {
                     return true;
                 }
-                return self.type_implements_trait(ctx, scope, TypeTable::U32, trait_name);
+                return self.type_implements_trait(
+                    ctx,
+                    scope,
+                    TypeTable::U32,
+                    trait_name,
+                    trait_ref,
+                );
             }
             _ => return false,
         };
@@ -1305,6 +1320,7 @@ impl TypeSystem {
             scope,
             &Receiver::Type(type_name),
             trait_name,
+            trait_ref,
             type_args.as_deref(),
         )
     }
@@ -1316,8 +1332,9 @@ impl TypeSystem {
         scope: &TypeLookup,
         type_key: &Receiver,
         trait_name: &str,
+        trait_ref: Option<DeclRef>,
     ) -> bool {
-        self.find_trait_impl_for_type_with_args(ctx, scope, type_key, trait_name, None)
+        self.find_trait_impl_for_type_with_args(ctx, scope, type_key, trait_name, trait_ref, None)
     }
 
     pub(super) fn has_real_trait_impl_for_type(
@@ -1326,49 +1343,11 @@ impl TypeSystem {
         scope: &TypeLookup,
         type_key: &Receiver,
         trait_name: &str,
+        trait_ref: Option<DeclRef>,
     ) -> bool {
         self.trait_env
-            .has_any_methodful_impl_by_receiver(type_key, trait_name)
+            .has_any_methodful_impl_by_receiver(type_key, trait_name, trait_ref)
             || self.blanket_trait_impl_applies(ctx, scope, type_key, trait_name)
-    }
-
-    /// Whether `impl_trait_name`, written in `impl_module`, and `trait_name`,
-    /// written in `scope`, name one declaration. Falls back to comparing the
-    /// spellings for a name that reaches no declaration.
-    fn same_trait_decl(
-        &self,
-        scope: &TypeLookup,
-        trait_name: &str,
-        impl_module: &ModuleSource,
-        impl_trait_name: &str,
-    ) -> bool {
-        match (
-            self.scoped_trait_decl_key(scope, trait_name),
-            self.trait_env
-                .trait_decl_key_in(impl_module, impl_trait_name),
-        ) {
-            (Some(want), Some(found)) => want == found,
-            _ => impl_trait_name == trait_name,
-        }
-    }
-
-    /// [`TraitEnv::trait_decl_key_in`] for a name written in `scope`'s frame.
-    fn scoped_trait_decl_key(&self, scope: &TypeLookup, name: &str) -> Option<DeclKey> {
-        let declared = scope
-            .import_original_names
-            .get(name)
-            .map_or(name, String::as_str);
-        if let Some(source) = scope.imported_type_sources.get(name) {
-            let imported = (source.clone(), declared.to_string());
-            if self.trait_env.decl_index.contains_key(&imported) {
-                return Some(imported);
-            }
-        }
-        let local = (scope.current_module_source.clone(), declared.to_string());
-        if self.trait_env.decl_index.contains_key(&local) {
-            return Some(local);
-        }
-        self.trait_env.find_trait_decl_key(declared)
     }
 
     /// Check if there's a trait impl for a type, with optional type args for bounds checking.
@@ -1379,6 +1358,7 @@ impl TypeSystem {
         scope: &TypeLookup,
         type_key: &Receiver,
         trait_name: &str,
+        trait_ref: Option<DeclRef>,
         type_args: Option<&[TypeId]>,
     ) -> bool {
         let trait_env = self.trait_env.clone();
@@ -1391,7 +1371,7 @@ impl TypeSystem {
                 let Some(impl_trait_name) = &header.trait_name else {
                     continue;
                 };
-                if self.same_trait_decl(scope, trait_name, module_src, impl_trait_name)
+                if self.same_trait(trait_name, trait_ref, header, impl_trait_name)
                     && self.inherent_impl_type_args_match(
                         &header.ty,
                         &header.type_params,
@@ -1446,8 +1426,14 @@ impl TypeSystem {
             .filter(|b| !(structural && self.is_reflect_bounded(scope, b)))
         {
             let bounds_satisfied = blanket.bounds.iter().all(|bound| {
-                self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), bound)
-                    || self.find_trait_impl_for_type(ctx, scope, type_key, bound)
+                self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), &bound.name)
+                    || self.find_trait_impl_for_type(
+                        ctx,
+                        scope,
+                        type_key,
+                        &bound.name,
+                        bound.decl_ref,
+                    )
             });
             if bounds_satisfied {
                 return true;
@@ -1465,7 +1451,7 @@ impl TypeSystem {
         blanket: &super::trait_env::BlanketImpl,
     ) -> bool {
         blanket.bounds.iter().any(|bound| {
-            self.classify_on_bound_trait(scope, bound)
+            self.classify_on_bound_trait(scope, &bound.name)
                 .is_some_and(OnBoundTrait::is_reflect)
         })
     }
@@ -1514,37 +1500,41 @@ impl TypeSystem {
         let Some(module_source) = subject else {
             return false;
         };
+        let Some(key) = self.synth_trait_key(on_bound) else {
+            return false;
+        };
         self.type_table
             .borrow_mut()
-            .record_bound_driven_synth_request(type_name, &module_source, bound_name);
+            .record_bound_driven_synth_request(type_name, &module_source, &key);
         true
     }
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The name a trait was declared under, undoing a `use ... as` alias — a
-    /// declaration only ever carries its own name.
-    pub(super) fn declared_trait_name(&self, trait_name: &str) -> String {
-        self.canonical_decl_key(trait_name).1
-    }
-
-    /// The declaration key of the trait `name` names in the current frame.
+    /// The trait declaration a reference site names.
     ///
-    /// Only trait declarations are candidates. Traits have no symbol-table
-    /// entry, so [`Elaborator::canonical_decl_key`] answers `Left` with
-    /// `core:prelude/format`'s enum case and would displace a module's own
-    /// `trait Left`. A local trait wins unless an import names a trait too.
-    pub(super) fn trait_decl_key_in_frame(&self, name: &str) -> DeclKey {
-        let canonical = self.canonical_decl_key(name);
-        let names_a_trait = |key: &DeclKey| self.tysys.trait_env.decl_index.contains_key(key);
-        if self.sem.imports.imported_type_sources.contains_key(name) && names_a_trait(&canonical) {
-            return canonical;
+    /// The answer comes from [`crate::resolve::Resolutions`] — resolved in the
+    /// module that wrote the reference — so an alias and a second module's
+    /// same-named trait cannot displace it. `written` feeds the fallback only:
+    /// the table is position-agnostic, so a site answering with something that
+    /// is no trait at all (a same-named enum case in the prelude) is the frame
+    /// derivation's to settle.
+    pub(super) fn trait_decl_at(
+        &self,
+        site: crate::ast::AstId,
+        written: &str,
+    ) -> super::trait_env::DeclKey {
+        debug_assert!(
+            self.tysys.resolutions.get(site).is_some() || site.is_synthetic(),
+            "every reference site is resolved before elaboration, `{written}` was not"
+        );
+        if let Some((module, name)) = self.tysys.resolutions.declared(site) {
+            let key = (module.clone(), name.to_string());
+            if self.tysys.trait_env.decl_index.contains_key(&key) {
+                return key;
+            }
         }
-        let local = (self.current_module_source.clone(), name.to_string());
-        if names_a_trait(&local) {
-            return local;
-        }
-        canonical
+        self.decl_key_or_local(written)
     }
 
     /// Whether the trait declaration `decl` is in scope in the current frame:
@@ -1570,11 +1560,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
-    /// Whether the trait named `trait_name` declares `method_name`. The cheap
-    /// form of [`Self::find_trait_decl_method`], for counting candidates
-    /// without cloning each one's declaration.
-    fn trait_declares_method(&self, decl: &DeclKey, method_name: &str) -> bool {
-        self.trait_decl_header_of(decl)
+    /// Whether the trait `key` names declares `method_name`. The cheap form of
+    /// [`Self::trait_method_of`], for counting candidates without cloning each
+    /// one's declaration.
+    fn trait_declares_method_of(&self, key: &super::trait_env::DeclKey, method_name: &str) -> bool {
+        self.trait_decl_header_of(key)
             .is_some_and(|header| header.methods.iter().any(|m| m.name == method_name))
     }
 
@@ -1586,16 +1576,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// panics rather than reading as "no such method".
     fn trait_method_of(
         &self,
-        decl: &DeclKey,
+        key: &super::trait_env::DeclKey,
         method_name: &str,
-    ) -> Option<(MethodSig, Vec<ast::AssociatedTypeDecl>)> {
-        let header = self.trait_decl_header_of(decl)?;
+    ) -> Option<(super::sig::MethodSig, Vec<ast::AssociatedTypeDecl>)> {
+        let header = self.trait_decl_header_of(key)?;
         if !header.methods.iter().any(|m| m.name == method_name) {
             return None;
         }
         let assoc_types = header.assoc_types.clone();
         let sig = self
-            .trait_sig_of(decl)
+            .trait_sig_of(key)
             .and_then(|sig| sig.method(method_name))
             .expect("the decl pass records every trait method's signature")
             .sig
@@ -1603,11 +1593,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((sig, assoc_types))
     }
 
-    /// The recorded declaration facts of the trait `decl` names — the digest
+    /// The recorded declaration facts of an identified trait — the digest
     /// counterpart of [`Self::trait_decl_header_of`], answerable only once the
     /// decl pass has run.
-    fn trait_sig_of(&self, decl: &DeclKey) -> Option<&TraitSig> {
-        let (_, decl_id) = self.tysys.trait_env.decl_index.get(decl)?;
+    /// The recorded signature of an already-identified trait.
+    ///
+    /// Every by-name form funnels through this one. Flattening a key back to
+    /// its declared name and resolving that again is what broke an aliased
+    /// head: the module imported `Alpha as Ay` and never `Alpha`, so the
+    /// second resolution found nothing.
+    pub(super) fn trait_sig_of(
+        &self,
+        key: &super::trait_env::DeclKey,
+    ) -> Option<&super::sig::TraitSig> {
+        let (_, decl_id) = self.tysys.trait_env.decl_index.get(key)?;
         self.tysys.signatures.trait_sig(*decl_id)
     }
 
@@ -1620,7 +1619,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// one would not.
     fn trait_assoc_answers(
         &mut self,
-        trait_name: &str,
+        trait_decl: &super::trait_env::DeclKey,
         assoc_types: &[ast::AssociatedTypeDecl],
         self_type_id: TypeId,
     ) -> Vec<(String, TypeId)> {
@@ -1632,14 +1631,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for decl in assoc_types {
             let known = self.frame_projection(self_type_id, &self_name, &decl.name);
             let answer = known.unwrap_or_else(|| {
-                let bound_names: Vec<String> = decl.bounds.iter().map(|b| b.name.clone()).collect();
+                let bound_names: Vec<crate::name::FqTraitName> = decl
+                    .bounds
+                    .iter()
+                    .map(|b| self.fq_trait_name_at(b.id, &b.name))
+                    .collect();
                 let bindings = self.frame_assoc_bindings(self_type_id, &self_name, &decl.bounds);
                 self.tysys
                     .type_table
                     .borrow_mut()
                     .make_assoc_type_projection_of_trait(
                         self_type_id,
-                        Some(trait_name.to_string()),
+                        Some(trait_decl.1.clone()),
                         decl.name.clone(),
                         bound_names,
                         bindings,
@@ -1660,43 +1663,86 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// written bound qualifies.
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
-        bounds: &[String],
+        bounds: &[ast::TraitBound],
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
-        required_trait: Option<&RequiredTrait>,
-    ) -> Option<(String, MethodInfo)> {
-        let bounds = self.elaborate_bound_names(bounds);
-        // Stopping at the first hit would hide the ambiguity, so every bound is
-        // scanned — by predicate, leaving only the winner to clone.
-        let candidates: Vec<&ElaboratedBound> = bounds
+        required_trait: Option<&super::types::RequiredTrait>,
+    ) -> Option<(crate::name::FqTraitName, MethodInfo)> {
+        self.find_method_in_trait_bounds_with(
+            bounds,
+            &IndexMap::default(),
+            method_name,
+            self_type_id,
+            span,
+            required_trait,
+        )
+    }
+
+    /// [`Self::find_method_in_trait_bounds`] for bounds that carry no reference
+    /// site of their own.
+    ///
+    /// `known` maps a bound's own id to the declaration it means, answered
+    /// where the bound was first read. An associated-type projection is the
+    /// case: it outlives the trait declaration's frame, so it records the
+    /// identities and hands them back here. Keyed by id rather than by name so
+    /// two same-named traits stay two bounds.
+    pub(super) fn find_method_in_trait_bounds_with(
+        &mut self,
+        bounds: &[ast::TraitBound],
+        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+        method_name: &str,
+        self_type_id: TypeId,
+        span: Span,
+        required_trait: Option<&super::types::RequiredTrait>,
+    ) -> Option<(crate::name::FqTraitName, MethodInfo)> {
+        let bounds = self.elaborate_bounds_with(bounds, known);
+        // Which trait each bound means is settled once, here: a bound reached
+        // through a supertrait was written in the *declaring* module, so
+        // resolving its spelling in this frame would miss an aliased one.
+        let keyed: Vec<(ast::TraitBound, super::trait_env::DeclKey)> = bounds
             .iter()
-            .filter(|b| {
-                required_trait.is_none_or(|w| b.decl == w.decl)
-                    && self.trait_declares_method(&b.decl, method_name)
+            .map(|b| {
+                let key = known
+                    .get(&b.id)
+                    .and_then(crate::name::FqTraitName::canonical)
+                    .unwrap_or_else(|| self.trait_decl_at(b.id, &b.name));
+                (b.clone(), key)
             })
             .collect();
-        let resolved = candidates.first().map(|bound| {
-            let found = self
-                .trait_method_of(&bound.decl, method_name)
-                .expect("a candidate was filtered on its declaration declaring the method");
-            (bound.name.clone(), found)
+        // Stopping at the first hit would hide the ambiguity, so every bound is
+        // scanned — by predicate, leaving only the winner to clone.
+        // A qualified call names one bound, so the others are not competitors.
+        // The filter runs *after* elaboration: `T: Derived` carries `Base`, so
+        // `Base::tag(x)` names a supertrait the frame never wrote. Comparing
+        // declarations, not spellings, keeps another module's same-named trait
+        // from answering for the one the call named.
+        let candidates: Vec<(ast::TraitBound, super::trait_env::DeclKey)> = keyed
+            .into_iter()
+            .filter(|(_, key)| {
+                required_trait.is_none_or(|w| *key == w.decl)
+                    && self.trait_declares_method_of(key, method_name)
+            })
+            .collect();
+        let resolved = candidates.first().and_then(|(bound, key)| {
+            self.trait_method_of(key, method_name)
+                .map(|found| (bound.clone(), key.clone(), found))
         });
         if candidates.len() > 1 {
             // Two candidates can share a spelling; reporting both as "Base"
             // names no escape from the collision.
-            let ambiguous_spelling = |b: &ElaboratedBound| {
+            let ambiguous_spelling = |bound: &ast::TraitBound, key: &super::trait_env::DeclKey| {
                 candidates
                     .iter()
-                    .any(|other| other.name == b.name && other.decl != b.decl)
+                    .any(|(other, other_key)| other.name == bound.name && other_key != key)
             };
             let traits = candidates
                 .iter()
-                .map(|b| {
-                    if ambiguous_spelling(b) {
-                        format!("{}::{}", b.decl.0, b.name)
+                .map(|(bound, key)| {
+                    if ambiguous_spelling(bound, key) {
+                        format!("{}::{}", key.0, bound.name)
                     } else {
-                        b.name.clone()
+                        bound.name.clone()
                     }
                 })
                 .collect();
@@ -1708,15 +1754,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
-        let (trait_name, (sig, trait_assoc_types)) = resolved?;
+        let (bound, decl, (sig, trait_assoc_types)) = resolved?;
+        // The bound answers with the trait its own reference site resolves to,
+        // not the spelling it wrote: an aliased bound (`T: G` for
+        // `use { Greet as G }`) must reach the impl that defines the method.
+        let fq_trait_name = known
+            .get(&bound.id)
+            .cloned()
+            .unwrap_or_else(|| crate::name::FqTraitName::declared(&decl.0, &decl.1));
 
-        let answers = self.trait_assoc_answers(&trait_name, &trait_assoc_types, self_type_id);
+        let answers = self.trait_assoc_answers(&decl, &trait_assoc_types, self_type_id);
         // Slot 0 is `Self`. The trait's own parameters follow, and a bound
         // names none of them positionally (`T: Add<Output = T>`), so they take
         // their declared defaults — `trait Add<Rhs = Self>` makes `add`'s
         // parameter `&Self`, not a rigid `&Rhs` no argument could satisfy.
         let mut slots = IndexMap::from_iter([(0, self_type_id)]);
-        if let Some(trait_params) = self.find_trait_decl_type_params(&trait_name) {
+        if let Some(trait_params) = self.trait_decl_type_params_of(&decl) {
             let defaults: Vec<(u32, ast::Type)> = trait_params
                 .iter()
                 .filter(|p| p.is_real_type_param())
@@ -1736,7 +1789,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let first_value_param = sig.first_value_param().min(instantiated.param_types.len());
 
         Some((
-            trait_name,
+            fq_trait_name,
             MethodInfo {
                 method_ast_id: Some(sig.ast_id),
                 return_type: instantiated.return_type,
@@ -1822,7 +1875,7 @@ impl TypeSystem {
                     && let Some(&type_arg) = type_args.get(i)
                 {
                     for bound in bounds {
-                        if !self.type_implements_trait(ctx, scope, type_arg, bound) {
+                        if !self.type_implements_trait(ctx, scope, type_arg, bound, None) {
                             return false;
                         }
                     }
@@ -1839,7 +1892,7 @@ impl TypeSystem {
                 )
             {
                 for bound in bounds {
-                    if !self.type_implements_trait(ctx, scope, type_arg, bound) {
+                    if !self.type_implements_trait(ctx, scope, type_arg, bound, None) {
                         return false;
                     }
                 }
@@ -1864,7 +1917,7 @@ impl TypeSystem {
                         continue;
                     }
                     for bound in bounds {
-                        if !self.type_implements_trait(ctx, scope, type_arg, bound) {
+                        if !self.type_implements_trait(ctx, scope, type_arg, bound, None) {
                             return false;
                         }
                     }
@@ -1922,7 +1975,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 for &subject in &subjects {
-                    self.enforce_single_bound(subject, &bound.name, &param.name, span);
+                    let bound_ref = self.tysys.resolutions.get(bound.id);
+                    self.enforce_single_bound(subject, &bound.name, bound_ref, &param.name, span);
                     self.enforce_assoc_type_bounds(subject, bound, span);
                 }
             }
@@ -1935,7 +1989,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 for &subject in &subjects {
-                    self.check_and_register_bound(subject, &bound.name);
+                    let bound_ref = self.tysys.resolutions.get(bound.id);
+                    self.check_and_register_bound(subject, &bound.name, bound_ref);
                     self.enforce_assoc_type_bounds(subject, &bound, span);
                 }
             }
@@ -1949,10 +2004,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         type_arg: TypeId,
         trait_name: &str,
+        trait_ref: Option<DeclRef>,
         param_name: &str,
         span: Span,
     ) {
-        if !self.check_and_register_bound(type_arg, trait_name) {
+        if !self.check_and_register_bound(type_arg, trait_name, trait_ref) {
             let type_name = self.tysys.type_id_to_string(type_arg);
             let reason = self.tysys.trait_unimpl_reason_chain(
                 &self.annotate_ctx,
@@ -1980,11 +2036,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if mentions_self(&constraint.ty) || mentions_type_pack(&constraint.ty) {
                 continue;
             }
-            let Some(actual) = self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
-                type_arg,
-                &bound.name,
-                &constraint.name,
-            ) else {
+            // The bound's own site says which trait declares the constraint.
+            let trait_key = self.fq_trait_name_at(bound.id, &bound.name).canonical();
+            let Some(actual) = trait_key.and_then(|key| {
+                self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
+                    type_arg,
+                    &key,
+                    &constraint.name,
+                )
+            }) else {
                 continue;
             };
             let expected = self.resolve_type(&constraint.ty);
@@ -2015,12 +2075,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `type_arg` satisfies `trait_name`, registering its associated
     /// types when it does. Asking is what records an on-demand derivation
     /// request, so callers that do not report the answer still ask.
-    pub(super) fn check_and_register_bound(&mut self, type_arg: TypeId, trait_name: &str) -> bool {
+    pub(super) fn check_and_register_bound(
+        &mut self,
+        type_arg: TypeId,
+        trait_name: &str,
+        trait_ref: Option<DeclRef>,
+    ) -> bool {
         if !self.tysys.type_implements_trait(
             &self.annotate_ctx,
             &self.type_lookup(),
             type_arg,
             trait_name,
+            trait_ref,
         ) {
             return false;
         }
@@ -2069,6 +2135,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_params: Vec<ast::GenericParam>,
             impl_ty_param_names: Vec<String>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
+            /// The trait this block implements, as its own header names it —
+            /// the key the registration must use.
+            trait_key: crate::tir::TraitKey,
         }
         let trait_env = self.tysys.trait_env.clone();
         let impl_infos: Vec<ImplInfo> = {
@@ -2096,10 +2165,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .collect(),
                             _ => vec![],
                         };
+                        let Some(trait_key) = header.fq_trait().and_then(|t| t.canonical()) else {
+                            continue;
+                        };
                         result.push(ImplInfo {
                             type_params: header.type_params.clone(),
                             impl_ty_param_names,
                             assoc_types: header.associated_types.clone(),
+                            trait_key,
                         });
                     }
                 }
@@ -2137,6 +2210,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Resolve and register each associated type in this substituted context
+            let trait_key = info.trait_key.clone();
             for binding in &info.assoc_types {
                 let resolved_id = scope.resolve_type(&binding.ty);
                 if !scope
@@ -2151,7 +2225,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
-                            trait_name.to_string(),
+                            trait_key.clone(),
                             binding.name.clone(),
                             resolved_id,
                         );
@@ -2167,6 +2241,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_param_name: String,
             blanket_param_bounds: Vec<ast::TraitBound>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
+            /// The trait this blanket implements, as its own header names it.
+            trait_key: crate::tir::TraitKey,
         }
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
@@ -2185,7 +2261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if header.associated_types.is_empty() {
                     continue;
                 }
-                let impl_type_name = Self::get_type_name_static(&header.ty);
+                let impl_type_name = super::trait_env::get_type_name_static(&header.ty);
                 let Some(blanket_param) = header
                     .type_params
                     .iter()
@@ -2200,13 +2276,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.type_lookup(),
                         concrete_type_id,
                         &bound.name,
+                        self.tysys.resolutions.get(bound.id),
                     )
                 });
                 if bounds_ok {
+                    let Some(trait_key) = header.fq_trait().and_then(|t| t.canonical()) else {
+                        continue;
+                    };
                     result.push(BlanketImplInfo {
                         blanket_param_name: blanket_param.name.clone(),
                         blanket_param_bounds: blanket_param.bounds.clone(),
                         assoc_types: header.associated_types.clone(),
+                        trait_key,
                     });
                 }
             }
@@ -2231,6 +2312,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .insert(info.blanket_param_name.clone(), info.blanket_param_bounds);
 
             // Resolve and register each associated type
+            let trait_key = info.trait_key.clone();
             for binding in &info.assoc_types {
                 let resolved_id = scope.resolve_type(&binding.ty);
                 if !scope
@@ -2245,7 +2327,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
-                            trait_name.to_string(),
+                            trait_key.clone(),
                             binding.name.clone(),
                             resolved_id,
                         );
@@ -2296,15 +2378,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) = self
             .find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_name, method_name, None)
         {
-            let return_type = auto_derive.unwrap_or(info.output_type);
+            let return_type = auto_derive.map_or(info.output_type, |(_, ty)| ty);
             let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
             (info.trait_name, info.self_kind, param_types, return_type)
-        } else if let Some(return_type) = auto_derive
+        } else if let Some((item, return_type)) = auto_derive
             && self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 lookup_type_id,
                 trait_name,
+                None,
             )
         {
             let ref_self_ty = self
@@ -2313,7 +2396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .intern(ResolvedType::Ref(lookup_type_id));
             (
-                trait_name.to_string(),
+                self.tysys.type_table.borrow().compiler_trait_fq(item),
                 ast::SelfKind::Ref,
                 vec![ref_self_ty],
                 return_type,
@@ -2364,7 +2447,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_id: TypeId,
     ) -> Option<TraitMethodMatch> {
-        let (trait_name, return_type) = self.tysys.auto_derive_by_method(method_name)?;
+        let (item, trait_name, return_type) = self.tysys.auto_derive_by_method(method_name)?;
         let base_type_id = self.tysys.get_base_type(receiver_type_id);
         if !self.tysys.auto_derive_eligible_kind(base_type_id) {
             return None;
@@ -2374,6 +2457,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.type_lookup(),
             base_type_id,
             &trait_name,
+            None,
         ) {
             return None;
         }
@@ -2400,11 +2484,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             consumes_self: false,
         };
         let impl_module_source = self.find_struct_module_source(struct_name);
+        // The auto-derived trait is a compiler item, so it is named by the
+        // declaration the registry holds, not by a spelling resolved here.
+        let trait_fq = self.tysys.type_table.borrow().compiler_trait_fq(item);
+        let trait_decl = trait_fq
+            .canonical()
+            .expect("a compiler trait item names a declaration");
         Some(TraitMethodMatch {
             // Auto-derived `Eq` / `Ord` take no type arguments.
-            trait_decl: self.trait_decl_key_in_frame(&trait_name),
+            trait_name: trait_fq,
+            trait_decl,
             trait_args: vec![],
-            trait_name,
             method_info,
             impl_module_source,
             blanket_type_param: None,
@@ -2413,5 +2503,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             is_blanket_ref_impl: false,
             is_variadic_impl: false,
         })
+    }
+}
+
+impl TypeSystem {
+    /// Whether an `impl` block implements the trait a query is asking about.
+    ///
+    /// Identity when both sides have one: the query's comes from the reference
+    /// site that asked (a bound, a `T::method()` prefix), the impl's from the
+    /// site its header writes, and both were resolved by the module that wrote
+    /// them. Comparing the spellings instead is what made an aliased bound
+    /// unsatisfiable and a same-named foreign trait satisfied (#1785).
+    ///
+    /// `trait_ref: None` is a caller not yet carrying an identity. Those fall
+    /// back to the spelling, which two modules can share.
+    fn same_trait(
+        &self,
+        trait_name: &str,
+        trait_ref: Option<DeclRef>,
+        header: &super::trait_env::ImplHeader,
+        impl_trait_name: &str,
+    ) -> bool {
+        // The header already carries the table's answer for the site it wrote,
+        // computed from this very expression at build time. Re-deriving it here
+        // is the second derivation this design exists to remove.
+        match (trait_ref, header.trait_ref) {
+            (Some(DeclRef::Decl(query)), Some(DeclRef::Decl(decl))) => query == decl,
+            _ => impl_trait_name == trait_name,
+        }
     }
 }

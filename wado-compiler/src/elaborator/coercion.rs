@@ -6,6 +6,7 @@ use super::util;
 use super::util::placeholder;
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
+use crate::elaborator::trait_env::ImplReceiver;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
@@ -537,7 +538,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let insert_self_kind = from_literal_info.self_kind;
         let trait_name = from_literal_info.trait_name.clone();
         let builder_type = from_literal_info.builder_type;
-        let use_new_api = trait_name == "KeyValueLiteralBuilder";
+        let use_new_api = trait_name.base_name() == "KeyValueLiteralBuilder";
         // Resolve the builder impl's home module — that is where
         // `Builder^Trait::new_literal` is registered, and (post-fix #1110)
         // where the monomorphizer expects to find the template. Fall back to
@@ -567,8 +568,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .impl_module_for(
-                &builder_name_for_lookup,
-                &trait_name,
+                ImplReceiver::Declared(&crate::name::DeclName::new(&builder_name_for_lookup)),
+                trait_name.base_name(),
                 builder_type_module.as_ref(),
             )
             .cloned()

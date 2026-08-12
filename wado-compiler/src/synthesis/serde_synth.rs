@@ -32,15 +32,15 @@ use crate::token::Span;
 /// implement.
 #[derive(Clone, Debug)]
 pub(super) struct SerdeStdlibNames {
-    pub deserialize: String,
-    pub field_schema: String,
+    pub deserialize: crate::name::FqTraitName,
+    pub field_schema: crate::name::FqTraitName,
 }
 
 impl SerdeStdlibNames {
     pub fn from_compiler_items(items: &CompilerItems) -> Self {
         Self {
-            deserialize: items.trait_name(CompilerItem::Deserialize).to_string(),
-            field_schema: items.trait_name(CompilerItem::FieldSchema).to_string(),
+            deserialize: items.trait_fq(CompilerItem::Deserialize),
+            field_schema: items.trait_fq(CompilerItem::FieldSchema),
         }
     }
 }
@@ -160,28 +160,25 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         return;
     };
 
-    let (serialize_name, deserialize_name) = {
+    let (serialize_key, deserialize_key) = {
         let tt = type_table.borrow();
         let items = tt.compiler_items();
         (
             items
-                .trait_name_opt(CompilerItem::Serialize)
-                .map(str::to_string),
+                .trait_fq_opt(CompilerItem::Serialize)
+                .and_then(|t| t.canonical()),
             items
-                .trait_name_opt(CompilerItem::Deserialize)
-                .map(str::to_string),
+                .trait_fq_opt(CompilerItem::Deserialize)
+                .and_then(|t| t.canonical()),
         )
     };
 
     // Fetch and filter to just ours (Eq/Ord entries belong to
     // `synthesize_traits`) before the scan below, so a program with no
     // bound-driven serde requests skips it entirely.
-    let requests = type_table
-        .borrow()
-        .bound_driven_synth_requests(|trait_name| {
-            Some(trait_name) == serialize_name.as_deref()
-                || Some(trait_name) == deserialize_name.as_deref()
-        });
+    let requests = type_table.borrow().bound_driven_synth_requests(|key| {
+        Some(key) == serialize_key.as_ref() || Some(key) == deserialize_key.as_ref()
+    });
     if requests.is_empty() {
         return;
     }
@@ -215,12 +212,15 @@ fn distribute_bound_driven_requests(project: &mut Package) {
             .collect()
     };
 
-    for (target_type_name, module_source, trait_name) in requests {
-        // `requests` is already filtered to serialize_name/deserialize_name,
-        // so the else branch below is always Deserialize.
-        let trait_ref = if Some(trait_name.as_str()) == serialize_name.as_deref() {
+    for (target_type_name, module_source, trait_key) in requests {
+        let trait_ref = if Some(&trait_key) == serialize_key.as_ref() {
             SynthTrait::Serialize
         } else {
+            assert_eq!(
+                Some(&trait_key),
+                deserialize_key.as_ref(),
+                "`requests` is filtered to the two serde traits"
+            );
             SynthTrait::Deserialize
         };
         let Some(&target_type_id) = by_name.get(&(target_type_name.clone(), module_source.clone()))
@@ -250,7 +250,7 @@ fn collect_existing_trait_methods(module: &TirModule) -> IndexSet<String> {
                 info.trait_name.as_ref().map(|trait_name| {
                     mangle_local_trait_method(
                         &info.base_struct_name(),
-                        trait_name,
+                        &trait_name.to_mangled(),
                         &info.method_name,
                     )
                 })
@@ -474,7 +474,7 @@ fn i32_eq(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
 #[allow(clippy::too_many_arguments)]
 fn field_schema_method_fn(
     type_name: &FqTypeName,
-    field_schema_trait: &str,
+    field_schema_trait: &crate::name::FqTraitName,
     method: &str,
     param_name: &str,
     param_type: TypeId,
@@ -498,7 +498,7 @@ fn field_schema_method_fn(
         monomorph_info: None,
         method_info: Some(LocalMethodName::new(
             type_name.clone(),
-            Some(field_schema_trait.to_string()),
+            Some(field_schema_trait.clone()),
             method.to_string(),
         )),
         params: vec![TirParam {
@@ -532,7 +532,7 @@ fn field_schema_method_fn(
 
 fn generate_lookup_function(
     type_name: &FqTypeName,
-    field_schema_trait: &str,
+    field_schema_trait: &crate::name::FqTraitName,
     fields: &[(String, String, TypeId, u32)],
     positional_flags: &[bool],
     key_slice_type: TypeId,
@@ -624,7 +624,7 @@ fn generate_lookup_function(
 /// assignment as `lookup`.
 fn generate_positional_at_function(
     type_name: &FqTypeName,
-    field_schema_trait: &str,
+    field_schema_trait: &crate::name::FqTraitName,
     positional_flags: &[bool],
     option_i32: TypeId,
     span: Span,

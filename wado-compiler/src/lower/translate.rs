@@ -1826,7 +1826,7 @@ impl FunctionTranslator<'_, '_> {
                     }
                     _ => crate::name::MethodName::format_local(
                         &tt.fq_type_name(variant_ty),
-                        Some(items.trait_name(crate::compiler_item::CompilerItem::ReflectVariant)),
+                        Some(&items.trait_fq(crate::compiler_item::CompilerItem::ReflectVariant)),
                         items.method_name(
                             crate::compiler_item::CompilerItem::ReflectVariantDiscriminant,
                         ),

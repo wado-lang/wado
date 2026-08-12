@@ -293,7 +293,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the set of identifiers `resolve_call`'s qualified-call fallback may
     /// treat as a deferred effect operation (`Stdout::write()`, etc.).
     fn is_declared_effect_or_resource(&self, name: &str) -> bool {
-        let key = self.canonical_decl_key(name);
+        let key = self.decl_key_or_local(name);
         self.tysys.trait_env.effect_decl_index.contains_key(&key)
             || self.tysys.trait_env.resource_decl_index.contains_key(&key)
     }
@@ -425,7 +425,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ident.name[..pos].to_string(),
                 ident.name[pos + 2..].to_string(),
             );
+            // The path's leading segment is the trait's reference site.
+            let head_site = ident.segments.first().map(|seg| seg.id);
             return self.resolve_trait_qualified_call(
+                head_site,
                 &trait_name,
                 &method_name,
                 call,
@@ -756,7 +759,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let is_reflexive = if arg_is_generic {
                         arg_type_name == prefix
                     } else if let Some(arg_key) = self.type_decl_key(arg_type) {
-                        arg_key == self.canonical_decl_key(prefix)
+                        arg_key == self.decl_key_or_local(prefix)
                     } else {
                         arg_type_name == prefix
                     };
@@ -1149,7 +1152,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // declarations.
                     let final_mangled = MethodName::format_local(
                         &crate::name::FqTypeName::of_head(&struct_module, type_name),
-                        method_ref.trait_name.as_deref(),
+                        method_ref.trait_name.as_ref(),
                         method_name,
                     );
 
@@ -1632,7 +1635,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         effect: &str,
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
-        let canonical_key = self.canonical_decl_key(effect);
+        let canonical_key = self.decl_key_or_local(effect);
         let (_, decl_id) = self
             .tysys
             .trait_env
@@ -2647,7 +2650,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Option<MethodSig> {
-        let key = self.canonical_decl_key(struct_name);
+        let key = self.decl_key_or_local(struct_name);
         let trait_env = &self.tysys.trait_env;
         if let Some(entry) = trait_env
             .static_method_index
@@ -2863,9 +2866,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let Some(bounds) = bounds
             && let Some((found_trait, method_info_result)) = {
-                let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
                 self.find_method_in_trait_bounds(
-                    &bound_names,
+                    &bounds,
                     method_name,
                     type_param_type_id,
                     call.span,

@@ -79,7 +79,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(30)
 
-type "functype//core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(31)
+type "functype//core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(31)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(32)
 
@@ -119,7 +119,7 @@ fn "const_object_globalization_call_arg.wado/byte_sum"(s) {
         l1: loop {
             let __match_4_mv_0: i32;
             let __match_4_mv_1: i32;
-            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(__iter_2);
+            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
             if __match_4_mv_0 == 0 {
                 total = total + builtin::array_get<u8>(_licm_repr_12, __match_4_mv_1);
             } else {
@@ -343,31 +343,31 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, other_len);
 }
 
-fn "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(self) {
+fn "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let current: i32;
     let other: i32;
     let __sroa_self_value_9: i32;
-    if __inline_i32_Ord__cmp_0: block -> "core:prelude/traits.wado//enum:Ordering" {
+    if __inline_i32_core_prelude_traits_wado_Ord__cmp_0: block -> "core:prelude/traits.wado//enum:Ordering" {
         __sroa_self_value_9 = self.start;
         other = self.end;
         if __sroa_self_value_9 < other {
-            break __inline_i32_Ord__cmp_0: 0;
+            break __inline_i32_core_prelude_traits_wado_Ord__cmp_0: 0;
         }
         if __sroa_self_value_9 > other {
-            break __inline_i32_Ord__cmp_0: 2;
+            break __inline_i32_core_prelude_traits_wado_Ord__cmp_0: 2;
         }
-        break __inline_i32_Ord__cmp_0: 1;
+        break __inline_i32_core_prelude_traits_wado_Ord__cmp_0: 1;
     } != 0 {
         return 1, 0;
     }
     current = self.start;
-    __fused___inline_i32_Step__next_step_1: block {
+    __fused___inline_i32_core_prelude_range_wado_Step__next_step_1: block {
         if current == 2147483647 {
             self.start = self.end;
-            break __fused___inline_i32_Step__next_step_1;
+            break __fused___inline_i32_core_prelude_range_wado_Step__next_step_1;
         }
         self.start = current + 1;
-        break __fused___inline_i32_Step__next_step_1;
+        break __fused___inline_i32_core_prelude_range_wado_Step__next_step_1;
     };
     return 0, current;
 }

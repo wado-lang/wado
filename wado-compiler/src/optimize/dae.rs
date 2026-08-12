@@ -162,10 +162,10 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
         let Some(mi) = &func.method_info else {
             continue;
         };
-        let Some(trait_name) = mi.trait_name.as_deref() else {
+        let Some(trait_name) = mi.trait_name.as_ref() else {
             continue;
         };
-        if trait_name != inspect_name && trait_name != inspect_alt_name {
+        if trait_name.base_name() != inspect_name && trait_name.base_name() != inspect_alt_name {
             continue;
         }
         if !functor_struct_names.contains(&(func.module_source.clone(), mi.struct_name().clone())) {

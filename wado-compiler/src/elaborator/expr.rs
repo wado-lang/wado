@@ -3739,18 +3739,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 &self.annotate_ctx,
                                 &self.type_lookup(),
                                 type_arg,
-                                bound,
+                                &bound.name,
+                                self.tysys.resolutions.get(bound.site),
                             ) {
                                 let type_name = self.tysys.type_id_to_string(type_arg);
                                 let reason = self.tysys.trait_unimpl_reason_chain(
                                     &self.annotate_ctx,
                                     &self.type_lookup(),
                                     type_arg,
-                                    bound,
+                                    &bound.name,
                                 );
                                 let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                                     type_name,
-                                    trait_name: bound.clone(),
+                                    trait_name: bound.name.clone(),
                                     param_name: param_name.clone(),
                                     reason,
                                     span: struct_lit.span,
@@ -3948,6 +3949,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &self.type_lookup(),
                     t,
                     "KeyValueLiteral",
+                    None,
                 );
                 let fields = if is_map {
                     None
@@ -3967,6 +3969,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &self.type_lookup(),
                 t,
                 "KeyValueLiteral",
+                None,
             )
         });
         // A pure key-value merge with a map-typed target is the only valid
@@ -4798,14 +4801,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let tt = self.tysys.type_table.borrow();
         let target_name = tt.type_name(target_type);
         let from_name = tt.type_name(from_type);
-        let from_trait_name = tt
-            .compiler_trait_name(crate::compiler_item::CompilerItem::From)
-            .to_string();
+        let from_trait_name = tt.compiler_trait_fq(crate::compiler_item::CompilerItem::From);
         drop(tt);
 
-        // Use "From<SourceType>" as the trait name in mangled names to disambiguate
-        // multiple From impls on the same target type.
-        let from_trait = format!("{from_trait_name}<{from_name}>");
+        // `From<SourceType>` as the trait segment disambiguates several `From`
+        // impls on one target type.
+        let from_trait = from_trait_name.clone().with_args(vec![from_name.clone()]);
         // The receiver the method name is built from — the same value reify
         // puts on the call's `method_info`, so the two cannot drift.
         let target_receiver = self.qualified_receiver_name(&target_name);
@@ -4872,7 +4873,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     header.trait_name.as_deref() == Some(from_trait_name.as_str())
                         && matches!(&header.trait_type, Some(ast::Type::Generic(g))
                         if g.args.first().is_some_and(|arg| {
-                            Self::get_type_name_static(arg) == from_name
+                            super::trait_env::get_type_name_static(arg) == from_name
                         }))
                 })
         };
@@ -5012,6 +5013,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &self.type_lookup(),
                 element_type,
                 &ord_trait_name,
+                None,
             )
         {
             let type_name = self.tysys.type_id_to_string(element_type);

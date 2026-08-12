@@ -1,0 +1,25 @@
+// A bound written under an alias must reach the impl that defines the method.
+//
+// The bound answered with the spelling it wrote, so `T: G` built a call named
+// `S^G::hello` against a definition named `S^Greet::hello` and WIR build
+// reported `S` as not implementing the trait (#1785). Both call forms go
+// through it: the qualified head and the method call on the parameter.
+
+use { Greet as G, make } from "./sub/cross_module_same_name_bound_alias_dep.wado";
+
+fn qualified<T: G>(x: &T) -> i32 {
+    return G::hello(x);
+}
+
+fn dotted<T: G>(x: &T) -> i32 {
+    return x.hello();
+}
+
+test "an aliased bound reaches the trait it aliases" {
+    let s = make(3);
+    assert qualified(&s) == 3;
+    assert dotted(&s) == 3;
+}
+
+__DATA__
+{"test": {}}

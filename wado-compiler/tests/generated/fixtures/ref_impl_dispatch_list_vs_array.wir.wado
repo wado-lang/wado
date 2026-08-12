@@ -87,7 +87,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(32)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(32)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(33)
 
@@ -142,7 +142,7 @@ fn "ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
     __iter_2 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: xs.repr, index: 0, end: 4 };
     b0: block {
         l1: loop {
-            __match_4 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_2);
+            __match_4 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
             if ref.is_null(__match_4) == 0 {
                 item = ref.as_non_null(__match_4);
                 block {
@@ -164,7 +164,7 @@ fn "ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
     __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: a, index: 0, end: end_55 };
     b3: block {
         l4: loop {
-            __match_11 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_5);
+            __match_11 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_5);
             if ref.is_null(__match_11) == 0 {
                 x = ref.as_non_null(__match_11);
                 asum = asum + x.value;
@@ -376,7 +376,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, other_len);
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayRefIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let ref_val: ref "core:prelude/types.wado//Box<i32>";
     if self.index >= self.end {
         return ref.null none;

@@ -122,6 +122,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
         invocations: crate::kiln::InvocationIndex,
         interner: Rc<RefCell<ModuleSourceInterner>>,
+        cm_source_interfaces: &crate::component_model::SourceInterfaceBatch,
         snapshot: Option<&crate::semantics::Semantics>,
     ) -> Result<AnnotateState, Bail> {
         let invocations = Rc::new(invocations);
@@ -182,16 +183,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Item::Struct(struct_decl) => {
                         // Insert with empty fields first - will be populated in second sub-pass
                         // Extract type parameter bounds
-                        let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
-                            .type_params
-                            .iter()
-                            .map(|p| {
-                                (
-                                    p.name.clone(),
-                                    p.bounds.iter().map(|b| b.name.clone()).collect(),
-                                )
-                            })
-                            .collect();
+                        let type_param_bounds: Vec<(String, Vec<super::types::BoundRef>)> =
+                            struct_decl
+                                .type_params
+                                .iter()
+                                .map(|p| {
+                                    (
+                                        p.name.clone(),
+                                        p.bounds
+                                            .iter()
+                                            .map(|b| super::types::BoundRef {
+                                                name: b.name.clone(),
+                                                site: b.id,
+                                            })
+                                            .collect(),
+                                    )
+                                })
+                                .collect();
                         all_struct_fields
                             .entry(module_source.clone())
                             .or_default()
@@ -311,6 +319,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_trait_compiler_item(
                             &type_table,
                             &trait_decl.attrs,
+                            trait_decl.id,
                             &trait_decl.name,
                             &trait_decl.methods,
                             &trait_decl.associated_types,
@@ -551,16 +560,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             field_defaults.push(field.default.clone());
                         }
                         // Extract type parameter bounds
-                        let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
-                            .type_params
-                            .iter()
-                            .map(|p| {
-                                (
-                                    p.name.clone(),
-                                    p.bounds.iter().map(|b| b.name.clone()).collect(),
-                                )
-                            })
-                            .collect();
+                        let type_param_bounds: Vec<(String, Vec<super::types::BoundRef>)> =
+                            struct_decl
+                                .type_params
+                                .iter()
+                                .map(|p| {
+                                    (
+                                        p.name.clone(),
+                                        p.bounds
+                                            .iter()
+                                            .map(|b| super::types::BoundRef {
+                                                name: b.name.clone(),
+                                                site: b.id,
+                                            })
+                                            .collect(),
+                                    )
+                                })
+                                .collect();
                         // Collect TypeIds for struct's own type params in declaration order.
                         // This allows infer_struct_type_args to fill phantom type params
                         // that don't appear in any field (e.g., D in struct DirMap<D, V>).
@@ -776,6 +792,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _span = logger.span("elaborate/cm_interface_registry");
             let (mut cm_interface_registry, world_registry) =
                 CmInterfaceRegistry::build_from_stdlib();
+            // `build_from_stdlib` hands back a process-wide cached `Arc`, and
+            // this compilation answers reference sites into the registry's
+            // interior-mutable table. Take a private copy before anything can
+            // write, or one compilation's answers become every later one's.
+            let _ = Arc::make_mut(&mut cm_interface_registry);
+            // Only the WIT importer knows a component reference's precise
+            // owning interface, so its answers are carried here rather than
+            // re-derived from the binding module's own interface FQ. They must
+            // land before the decls are registered: registration resolves a
+            // parameter's newtype through the interface its reference names.
+            cm_interface_registry.extend_source_interfaces(cm_source_interfaces.clone());
             // Resolve `Interface::method` calls into CM components during
             // annotate — the same role build_from_stdlib plays for WASI.
             fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set);
@@ -809,6 +836,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // This allows find_trait_method_for_type and find_indexing_trait_impl to do O(1)
         // lookups by type name instead of scanning all items in all modules per method call.
         // Also runs orphan rule checking; violations are emitted as errors.
+        // Resolve every reference site once, from the module that wrote it,
+        // before anything asks what a name means.
+        let resolutions = {
+            let _span = logger.span("elaborate/resolutions");
+            Rc::new(crate::resolve::Resolutions::build(modules, symbols))
+        };
+
         let (trait_env, orphan_violations) = {
             let _span = logger.span("elaborate/trait_env");
             super::trait_env::TraitEnv::build(
@@ -817,6 +851,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &mut interner.borrow_mut(),
                 Some(entry_module_source),
                 &invocations,
+                &resolutions,
             )
         };
         for (module_source, violation) in orphan_violations {
@@ -840,32 +875,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             else {
                 continue;
             };
-            let user_owns_name = modules.iter().any(|(ms, m)| {
-                super::trait_env::is_user_local(ms)
-                    && m.items
-                        .iter()
-                        .any(|it| matches!(it, Item::Trait(t) if t.name == sealed_name))
-            });
-            if user_owns_name {
+            // The sealed trait is the *stdlib* declaration of that name. A
+            // user trait sharing the name is a different declaration and
+            // resolves to a different key, so it needs no exemption here.
+            let Some(sealed_key) = trait_env.stdlib_trait_decl_key(&sealed_name) else {
                 continue;
-            }
-            for (module_source, module) in modules {
-                if !super::trait_env::is_user_local(module_source) {
+            };
+            for header in trait_env.impl_headers.values() {
+                if !super::trait_env::is_user_local(&header.module) {
                     continue;
                 }
-                for item in &module.items {
-                    if let Item::Impl(impl_block) = item
-                        && let Some(trait_type) = &impl_block.trait_type
-                        && super::trait_env::get_type_name_static(trait_type) == sealed_name
-                    {
-                        let _ = logger.error_in(
-                            module_source,
-                            TypeError::SealedTraitImpl {
-                                trait_name: sealed_name.clone(),
-                                span: impl_block.span,
-                            },
-                        );
-                    }
+                if header.trait_key.as_ref() == Some(&sealed_key) {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::SealedTraitImpl {
+                            trait_name: sealed_name.clone(),
+                            span: header.span,
+                        },
+                    );
                 }
             }
         }
@@ -875,70 +902,36 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // and only fails Wasm validation — so compare the two here, where every
         // declaration and impl is in hand.
         //
-        // Resolving the impl's trait name through imports needs machinery this
-        // pre-pass lacks. Take the declaration the impl's own module provides,
-        // else the only one bearing the name; a name several modules declare is
-        // left alone rather than matched against the wrong trait.
-        let mut trait_decls: IndexMap<(&ModuleSource, &str), &ast::TraitDecl> = IndexMap::default();
-        let mut decls_named: IndexMap<&str, usize> = IndexMap::default();
-        for (module_source, module) in modules {
-            for item in &module.items {
-                if let Item::Trait(t) = item {
-                    trait_decls.insert((module_source, t.name.as_str()), t);
-                    *decls_named.entry(t.name.as_str()).or_insert(0) += 1;
-                }
-            }
-        }
-        for (module_source, module) in modules {
-            if !super::trait_env::is_user_local(module_source) {
+        // The impl's trait is the one its header resolved to, so a module
+        // implementing its own `Encode` is never checked against another
+        // module's declaration of that name.
+        for header in trait_env.impl_headers.values() {
+            if !super::trait_env::is_user_local(&header.module) {
                 continue;
             }
-            for item in &module.items {
-                let Item::Impl(impl_block) = item else {
+            let Some(decl) = header
+                .trait_key
+                .as_ref()
+                .and_then(|key| trait_env.trait_decl_header(key))
+            else {
+                continue;
+            };
+            for method in &header.methods {
+                let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
                     continue;
                 };
-                let Some(trait_type) = &impl_block.trait_type else {
-                    continue;
-                };
-                let trait_name = super::trait_env::get_type_name_static(trait_type);
-                let decl = trait_decls
-                    .get(&(module_source, trait_name.as_str()))
-                    .or_else(|| {
-                        (decls_named.get(trait_name.as_str()) == Some(&1))
-                            .then(|| {
-                                trait_decls
-                                    .iter()
-                                    .find(|((_, n), _)| *n == trait_name.as_str())
-                                    .map(|(_, d)| d)
-                            })
-                            .flatten()
-                    });
-                let Some(decl) = decl else {
-                    continue;
-                };
-                for method in &impl_block.methods {
-                    let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
-                        continue;
-                    };
-                    let arity = |f: &ast::Function| {
-                        f.params
-                            .iter()
-                            .filter(|p| p.self_kind == ast::SelfKind::None)
-                            .count()
-                    };
-                    let (expected, found) = (arity(declared), arity(method));
-                    if expected != found {
-                        let _ = logger.error_in(
-                            module_source,
-                            TypeError::TraitMethodArityMismatch {
-                                trait_name: trait_name.clone(),
-                                method_name: method.name.clone(),
-                                expected,
-                                found,
-                                span: method.name_span,
-                            },
-                        );
-                    }
+                let (expected, found) = (declared.param_count, method.param_count);
+                if expected != found {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::TraitMethodArityMismatch {
+                            trait_name: decl.name.clone(),
+                            method_name: method.name.clone(),
+                            expected,
+                            found,
+                            span: method.name_span,
+                        },
+                    );
                 }
             }
         }
@@ -1127,7 +1120,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // module is resolved, so resolving module X can look up an associated
         // type from module Y's impl even when Y is processed later. Keyed by
         // the declaring `AstId`, so it must follow the index above.
-        Self::register_all_generic_assoc_type_defs(modules, &type_table, &stdlib_set);
+        Self::register_all_generic_assoc_type_defs(modules, &type_table, &stdlib_set, &resolutions);
 
         // Seed per-module semantics with the snapshot's pre-resolved stdlib
         // entries so the LSP edges remain consistent and the body walk on
@@ -1260,6 +1253,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             all_enum_cases,
             all_flags_cases,
             all_resource_types,
+            resolutions,
             trait_env,
             cm_interface_registry,
             builtin_registry: Rc::new(builtin_registry),
@@ -3508,6 +3502,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         modules: &IndexMap<ModuleSource, Module>,
         type_table: &Rc<RefCell<TypeTable>>,
         stdlib_set: &IndexSet<ModuleSource>,
+        resolutions: &crate::resolve::Resolutions,
     ) {
         for (module_source, module) in modules {
             if stdlib_set.contains(module_source) {
@@ -3523,12 +3518,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     continue;
                 }
                 // Determine the struct name (base name without type args)
-                let struct_name = Self::get_type_name_static(&impl_block.ty);
-                let trait_name = impl_block
+                let struct_name = super::trait_env::get_type_name_static(&impl_block.ty);
+                // The header's own reference site says which trait declares
+                // these bindings; a block naming a trait that reaches no
+                // declaration registers nothing.
+                let Some(trait_key) = impl_block
                     .trait_type
                     .as_ref()
-                    .map(Self::get_type_name_static)
-                    .unwrap_or_default();
+                    .and_then(crate::resolve::head_site)
+                    .and_then(|site| resolutions.declared(site))
+                    .map(|(module, name)| (module.clone(), name.to_string()))
+                else {
+                    continue;
+                };
 
                 // Build a mapping from type param name to index from the explicit `impl<...>` header.
                 let type_param_idx: IndexMap<String, u32> = impl_block
@@ -3586,7 +3588,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,
-                            trait_name.clone(),
+                            trait_key.clone(),
                             binding.name.clone(),
                             type_param_id,
                         );

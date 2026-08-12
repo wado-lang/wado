@@ -223,8 +223,7 @@ fn create_i128_eq_call(
     let (eq_trait_name, i128_struct_name) = {
         let tt = type_table.borrow();
         (
-            tt.compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
-                .to_string(),
+            tt.compiler_trait_fq(crate::compiler_item::CompilerItem::Eq),
             tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::I128),
         )
     };
@@ -278,8 +277,7 @@ fn create_u128_eq_call(
     let (eq_trait_name, u128_struct_name) = {
         let tt = type_table.borrow();
         (
-            tt.compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
-                .to_string(),
+            tt.compiler_trait_fq(crate::compiler_item::CompilerItem::Eq),
             tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::U128),
         )
     };

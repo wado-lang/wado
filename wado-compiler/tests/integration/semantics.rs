@@ -101,19 +101,28 @@ fn semantics_exposes_world_and_cm_interface_registries() {
         "stdlib `wasi:http/service` world should be registered on Semantics"
     );
 
-    // Both registries come from the same `OnceLock`-cached
-    // `build_from_stdlib` singleton, so the references the accessors
-    // hand out are identical to a fresh `build_from_stdlib()` call.
-    // This is what lets the WIT producer (Phase 1) and codegen treat
-    // them as a single frontend-derived view.
-    let (expected_cm_interface, expected_world) =
+    // The world registry is read-only for a compilation, so the accessor hands
+    // out the `OnceLock`-cached `build_from_stdlib` singleton itself — which is
+    // what lets the WIT producer (Phase 1) and codegen treat it as a single
+    // frontend-derived view.
+    //
+    // The CM interface registry is not shared: it carries this compilation's
+    // own answers — a component reference's owning interface, a `--lib`
+    // package's local types, the reference sites synthesis mints — so it is
+    // copied out of the singleton before anything can write. Sharing it would
+    // make one compilation's answers every later one's in the same process.
+    let (stdlib_cm_interface, expected_world) =
         wado_compiler::component_model::CmInterfaceRegistry::build_from_stdlib();
     let cm_interface_registry = sem
         .cm_interface_registry()
         .expect("cm_interface_registry is populated when annotate completes");
     assert!(
-        std::ptr::eq(cm_interface_registry, &raw const *expected_cm_interface),
-        "cm_interface_registry accessor returns the build_from_stdlib singleton",
+        !std::ptr::eq(cm_interface_registry, &raw const *stdlib_cm_interface),
+        "cm_interface_registry accessor hands out this compilation's own copy",
+    );
+    assert!(
+        cm_interface_registry.is_cm_source("wasi:cli/stdout@0.3.0"),
+        "the copy still carries the stdlib registrations",
     );
     assert!(
         std::ptr::eq(world_registry, &raw const *expected_world),

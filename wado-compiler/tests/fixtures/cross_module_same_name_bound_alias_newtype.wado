@@ -1,0 +1,23 @@
+// An aliased bound must survive the recursion into a newtype's base type.
+//
+// `type_implements_trait` knows which declaration the bound names, but every
+// recursive step — a newtype's base, a reference's inner, a flags' base, a
+// structural member — dropped that identity and re-compared spellings. `Wrapped`
+// is a newtype over `i32`, whose impl is recorded under `Greet` while this
+// module writes `G`, so the base-type step answered "no" and the bound was
+// reported unsatisfied. Writing `Greet` instead compiled the same program,
+// which is this class's signature.
+
+use { Greet as G, Wrapped } from "./sub/cross_module_same_name_bound_alias_newtype_dep.wado";
+
+fn dotted<T: G>(x: &T) -> i32 {
+    return x.hello();
+}
+
+test "an aliased bound holds through a newtype's base type" {
+    let w: Wrapped = 1;
+    assert dotted(&w) == 7;
+}
+
+__DATA__
+{"test": {}}

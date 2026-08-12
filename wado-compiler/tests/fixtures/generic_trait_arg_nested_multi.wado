@@ -1,0 +1,34 @@
+// One mangled trait segment, one spelling of its type arguments.
+//
+// The header's `fq_trait` rendered the written trait type with `,` between
+// type arguments while every other producer used `, `. The two agree until an
+// argument is itself a multi-argument generic: `Sink<Pair<i32, i32>>` mangled
+// one way where it was defined and another where it was called, so the call
+// named a function that was never emitted.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Sink<T> {
+    fn take(&self, v: T) -> i32;
+}
+
+struct Grid {
+    n: i32,
+}
+
+impl Sink<Pair<i32, i32>> for Grid {
+    fn take(&self, v: Pair<i32, i32>) -> i32 {
+        return self.n + v.a + v.b;
+    }
+}
+
+test "a nested multi-argument trait type argument mangles to one name" {
+    let g = Grid { n: 1 };
+    assert g.take(Pair { a: 2, b: 3 }) == 6;
+}
+
+__DATA__
+{"test": {}}

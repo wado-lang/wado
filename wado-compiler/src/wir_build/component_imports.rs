@@ -287,14 +287,11 @@ fn needs_canonical_cli_error_code(
         interface.functions.iter().any(|func| {
             let key = format!("{}::{}", func.interface_name, func.method_name);
             project.used_wasi_functions.contains(&key)
-                && (func
-                    .return_type
-                    .as_ref()
-                    .is_some_and(references_cli_error_code)
-                    || func
-                        .params
-                        .iter()
-                        .any(|(_, _, ty)| references_cli_error_code(ty)))
+                && (func.return_type.as_ref().is_some_and(|ty| {
+                    references_cli_error_code(ty, &project.cm_interface_registry)
+                }) || func.params.iter().any(|(_, _, ty)| {
+                    references_cli_error_code(ty, &project.cm_interface_registry)
+                }))
         })
     });
     if import_side {
@@ -313,19 +310,24 @@ fn needs_canonical_cli_error_code(
 }
 
 /// Whether `ty` references the canonical `wasi:cli/types` `ErrorCode`.
-fn references_cli_error_code(ty: &Type) -> bool {
+fn references_cli_error_code(
+    ty: &Type,
+    registry: &crate::component_model::CmInterfaceRegistry,
+) -> bool {
+    let any = |tys: &[Type]| tys.iter().any(|ty| references_cli_error_code(ty, registry));
     match ty {
         Type::Named(named) => {
             named.name == "ErrorCode"
-                && named
-                    .source_interface
-                    .as_deref()
+                && registry
+                    .source_interface(named)
                     .is_some_and(|s| s.starts_with("wasi:cli/types"))
         }
-        Type::Generic(generic) => generic.args.iter().any(references_cli_error_code),
-        Type::NamespacedGeneric(generic) => generic.args.iter().any(references_cli_error_code),
-        Type::Tuple(elems) => elems.iter().any(references_cli_error_code),
-        Type::Reference(inner) | Type::MutReference(inner) => references_cli_error_code(inner),
+        Type::Generic(generic) => any(&generic.args),
+        Type::NamespacedGeneric(generic) => any(&generic.args),
+        Type::Tuple(elems) => any(elems),
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            references_cli_error_code(inner, registry)
+        }
         Type::Function(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => false,
     }
 }

@@ -82,7 +82,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(30)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(31)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(31)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::push" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>", ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]");  // TypeId(32)
 
@@ -420,7 +420,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, other_len);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(self, other) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(self, other) {
     let len: i32;
     let haystack: ref Array<u8>;
     let needle: ref Array<u8>;
@@ -468,7 +468,7 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
     b27: block {
         l28: loop {
             break_if b27 i >= _licm_used_11;
-            if "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_12, i).0, key) {
+            if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_12, i).0, key) {
                 return 1;
             }
             i = i + 1;
@@ -489,7 +489,7 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
     b30: block {
         l31: loop {
             break_if b30 i >= _licm_used_19;
-            if "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_20, i).0, key) {
+            if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_20, i).0, key) {
                 return ref.as_non_null(v = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_20, i).1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_4: ref Array<u8>; __array_clone_src_4 = v.repr; let __array_clone_len_4: i32; __array_clone_len_4 = v.used; let __array_clone_dst_4: ref Array<u8>; __array_clone_dst_4 = builtin::array_new<u8>(__array_clone_len_4); builtin::array_copy<u8>(__array_clone_dst_4, 0, __array_clone_src_4, 0, __array_clone_len_4); __array_clone_dst_4), used: v.used });
             }
             i = i + 1;
@@ -510,7 +510,7 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
     b33: block {
         l34: loop {
             break_if b33 i >= _licm_used_25;
-            if "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_26, i).0, key) {
+            if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_26, i).0, key) {
                 value_16 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: key, 1: value };
                 builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(_licm_repr_26, i, value_16);
                 return;

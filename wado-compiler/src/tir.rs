@@ -472,8 +472,11 @@ pub enum ResolvedType {
         /// builder had no trait, which makes resolution require the name to
         /// be unambiguous.
         owning_trait: Option<String>,
-        /// Trait bounds on this associated type (from the trait declaration)
-        bounds: Vec<String>,
+        /// Trait bounds on this associated type, named by the declarations the
+        /// trait's own `type A: Bound` references resolve to. A projection
+        /// outlives the frame that built it, so a spelling here would be read
+        /// back from a vantage that never wrote it.
+        bounds: Vec<crate::name::FqTraitName>,
         /// Resolved associated type bindings (e.g., [("Item", `u8_typeid`)] for `I::Iter`
         /// when I: `IntoIterator`<Item = u8> and `IntoIterator::Iter`: Iterator<Item = `Self::Item`>)
         assoc_type_bindings: Vec<(String, TypeId)>,
@@ -641,6 +644,13 @@ impl TypeSet {
     }
 }
 
+/// A trait named by the module that declares it.
+///
+/// The associated-type registries key on this rather than a spelling: two
+/// modules' same-named traits each declare their own `Item`, and the name
+/// alone cannot say which one an impl bound (WEP 2026-08-10).
+pub type TraitKey = (ModuleSource, String);
+
 #[derive(Debug, Clone)]
 pub struct TypeTable {
     /// `TypeId` → `ResolvedType`. See [`TypeMap`]; `get` reads this on
@@ -658,14 +668,20 @@ pub struct TypeTable {
     ///
     /// Keyed by trait because one type may implement several declaring the
     /// same name — `f32` has both `FromStr::Err` and `LenientFromStr::Err`.
-    assoc_type_resolutions: IndexMap<(TypeId, String, String), TypeId>,
+    assoc_type_resolutions: IndexMap<(TypeId, TraitKey, String), TypeId>,
+    /// [`Self::assoc_type_resolutions`] keyed by the trait's *written* name,
+    /// for the callers that hold one rather than its declaration. `None` marks
+    /// a name two declarations answer differently for — the same "decline
+    /// rather than let registration order decide" rule the scan had, without
+    /// walking the whole map per projection.
+    assoc_type_resolutions_by_trait_name: IndexMap<(TypeId, String, String), Option<TypeId>>,
     /// Generic associated type definitions:
     /// `(base decl, declaring trait, assoc_name)` → `TypeId`.
     /// The `TypeId` is typically a `TypeParam` that can be substituted using the
     /// `GenericInstance`'s `type_args`. Populated when processing generic impl blocks
     /// (e.g., `impl Iterator for ListIter<T> { type Item = T; }`).
     /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
-    generic_assoc_type_defs: IndexMap<(crate::ast::AstId, String, String), TypeId>,
+    generic_assoc_type_defs: IndexMap<(crate::ast::AstId, TraitKey, String), TypeId>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -724,7 +740,7 @@ pub struct TypeTable {
     /// Read by both `synthesis::serde_synth::synthesize_serde` and
     /// `synthesis::traits::synthesize_traits`, each filtering for the trait
     /// names it owns.
-    bound_driven_synth_requests: IndexSet<(String, ModuleSource, String)>,
+    bound_driven_synth_requests: IndexSet<(String, ModuleSource, TraitKey)>,
     /// Variant case templates: `(variant name, module)` → `(case name, case
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
@@ -833,6 +849,7 @@ impl TypeTable {
             intern_map: IndexMap::default(),
             compiler_items: crate::compiler_item::CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
+            assoc_type_resolutions_by_trait_name: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
@@ -1315,17 +1332,17 @@ impl TypeTable {
         &mut self,
         type_name: &str,
         module_source: &ModuleSource,
-        trait_name: &str,
+        trait_key: &TraitKey,
     ) {
         let already_recorded = self
             .bound_driven_synth_requests
             .iter()
-            .any(|(n, m, t)| n == type_name && m == module_source && t == trait_name);
+            .any(|(n, m, t)| n == type_name && m == module_source && t == trait_key);
         if !already_recorded {
             self.bound_driven_synth_requests.insert((
                 type_name.to_string(),
                 module_source.clone(),
-                trait_name.to_string(),
+                trait_key.clone(),
             ));
         }
     }
@@ -1338,11 +1355,11 @@ impl TypeTable {
     /// means each caller only clones the entries it keeps.
     pub fn bound_driven_synth_requests(
         &self,
-        mut matches: impl FnMut(&str) -> bool,
-    ) -> Vec<(String, ModuleSource, String)> {
+        mut matches: impl FnMut(&TraitKey) -> bool,
+    ) -> Vec<(String, ModuleSource, TraitKey)> {
         self.bound_driven_synth_requests
             .iter()
-            .filter(|(_, _, trait_name)| matches(trait_name))
+            .filter(|(_, _, trait_key)| matches(trait_key))
             .cloned()
             .collect()
     }
@@ -1367,6 +1384,30 @@ impl TypeTable {
 
     pub fn compiler_trait_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
         self.compiler_items.trait_name(item)
+    }
+
+    /// The compiler trait item as a mangled method name embeds it — named by
+    /// the module that declares it.
+    #[must_use]
+    pub fn compiler_trait_fq(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> crate::name::FqTraitName {
+        self.compiler_items.trait_fq(item)
+    }
+
+    /// The declaration a compiler trait item names, as an identity. A compiler
+    /// item is a declaration the compiler knows by construction, so a consumer
+    /// asking "does this type implement *that* trait?" compares this instead of
+    /// a spelling two modules can share (WEP 2026-08-10).
+    #[must_use]
+    pub fn compiler_trait_ref(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> Option<crate::resolve::DeclRef> {
+        self.compiler_items
+            .trait_decl(item)
+            .map(crate::resolve::DeclRef::Decl)
     }
 
     pub fn compiler_variant_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
@@ -2153,7 +2194,7 @@ impl TypeTable {
         &mut self,
         param_id: TypeId,
         assoc_name: String,
-        bounds: Vec<String>,
+        bounds: Vec<crate::name::FqTraitName>,
         assoc_type_bindings: Vec<(String, TypeId)>,
     ) -> TypeId {
         self.make_assoc_type_projection_of_trait(
@@ -2172,7 +2213,7 @@ impl TypeTable {
         param_id: TypeId,
         owning_trait: Option<String>,
         assoc_name: String,
-        bounds: Vec<String>,
+        bounds: Vec<crate::name::FqTraitName>,
         assoc_type_bindings: Vec<(String, TypeId)>,
     ) -> TypeId {
         self.intern(ResolvedType::AssocTypeProjection {
@@ -2190,12 +2231,21 @@ impl TypeTable {
     pub fn register_assoc_type_resolution(
         &mut self,
         concrete_id: TypeId,
-        trait_name: String,
+        trait_key: TraitKey,
         assoc_name: String,
         resolved_id: TypeId,
     ) {
+        let by_name = (concrete_id, trait_key.1.clone(), assoc_name.clone());
+        self.assoc_type_resolutions_by_trait_name
+            .entry(by_name)
+            .and_modify(|prior| {
+                if *prior != Some(resolved_id) {
+                    *prior = None;
+                }
+            })
+            .or_insert(Some(resolved_id));
         self.assoc_type_resolutions
-            .insert((concrete_id, trait_name, assoc_name), resolved_id);
+            .insert((concrete_id, trait_key, assoc_name), resolved_id);
     }
 
     /// Resolve `<concrete_id as trait_name>::assoc_name` — the exact form,
@@ -2203,11 +2253,11 @@ impl TypeTable {
     pub fn resolve_assoc_type_of_trait(
         &self,
         concrete_id: TypeId,
-        trait_name: &str,
+        trait_key: &TraitKey,
         assoc_name: &str,
     ) -> Option<TypeId> {
         self.assoc_type_resolutions
-            .get(&(concrete_id, trait_name.to_string(), assoc_name.to_string()))
+            .get(&(concrete_id, trait_key.clone(), assoc_name.to_string()))
             .copied()
     }
 
@@ -2224,11 +2274,29 @@ impl TypeTable {
     ) -> Option<TypeId> {
         if let Some(trait_name) = owning_trait
             && let Some(resolved) =
-                self.resolve_assoc_type_of_trait(concrete_id, trait_name, assoc_name)
+                self.resolve_assoc_type_of_trait_by_name(concrete_id, trait_name, assoc_name)
         {
             return Some(resolved);
         }
         self.resolve_assoc_type(concrete_id, assoc_name)
+    }
+
+    /// [`Self::resolve_assoc_type_of_trait`] for a caller holding the trait's
+    /// written name rather than its declaration — an `AssocTypeProjection`
+    /// records one. Two declarations sharing the name and disagreeing answer
+    /// `None`, so the unqualified rule takes over rather than one winning by
+    /// registration order.
+    fn resolve_assoc_type_of_trait_by_name(
+        &self,
+        concrete_id: TypeId,
+        trait_name: &str,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        *self.assoc_type_resolutions_by_trait_name.get(&(
+            concrete_id,
+            trait_name.to_string(),
+            assoc_name.to_string(),
+        ))?
     }
 
     /// Resolve an associated type named `assoc_name` on `concrete_id`
@@ -2261,12 +2329,12 @@ impl TypeTable {
     pub fn register_generic_assoc_type_def(
         &mut self,
         base_decl: crate::ast::AstId,
-        trait_name: String,
+        trait_key: TraitKey,
         assoc_name: String,
         type_param_id: TypeId,
     ) {
         self.generic_assoc_type_defs
-            .insert((base_decl, trait_name, assoc_name), type_param_id);
+            .insert((base_decl, trait_key, assoc_name), type_param_id);
     }
 
     /// The generic definition of `assoc_name` on `base_decl`, together with
@@ -2277,16 +2345,16 @@ impl TypeTable {
         &self,
         base_decl: crate::ast::AstId,
         assoc_name: &str,
-    ) -> Option<(String, TypeId)> {
-        let mut found: Option<(String, TypeId)> = None;
-        for ((decl, trait_name, name), &def_id) in &self.generic_assoc_type_defs {
+    ) -> Option<(TraitKey, TypeId)> {
+        let mut found: Option<(TraitKey, TypeId)> = None;
+        for ((decl, trait_key, name), &def_id) in &self.generic_assoc_type_defs {
             if *decl != base_decl || name != assoc_name {
                 continue;
             }
             if found.as_ref().is_some_and(|(_, prior)| *prior != def_id) {
                 return None;
             }
-            found = Some((trait_name.clone(), def_id));
+            found = Some((trait_key.clone(), def_id));
         }
         found
     }
@@ -2308,18 +2376,18 @@ impl TypeTable {
         base_decl: crate::ast::AstId,
         substitution: &IndexMap<u32, TypeId>,
     ) {
-        let defs: Vec<(String, String, TypeId)> = self
+        let defs: Vec<(TraitKey, String, TypeId)> = self
             .generic_assoc_type_defs
             .iter()
             .filter(|((decl, _, _), _)| *decl == base_decl)
-            .map(|((_, trait_name, assoc_name), &def_id)| {
-                (trait_name.clone(), assoc_name.clone(), def_id)
+            .map(|((_, trait_key, assoc_name), &def_id)| {
+                (trait_key.clone(), assoc_name.clone(), def_id)
             })
             .collect();
-        for (trait_name, assoc_name, def_id) in defs {
+        for (trait_key, assoc_name, def_id) in defs {
             let resolved = self.substitute_type_params(def_id, substitution);
             if !self.contains_type_param(resolved) {
-                self.register_assoc_type_resolution(concrete_id, trait_name, assoc_name, resolved);
+                self.register_assoc_type_resolution(concrete_id, trait_key, assoc_name, resolved);
             }
         }
     }
@@ -2460,11 +2528,11 @@ impl TypeTable {
     pub fn resolve_trait_assoc_type(
         &self,
         concrete_id: TypeId,
-        trait_name: &str,
+        trait_key: &TraitKey,
         assoc_name: &str,
     ) -> Option<TypeId> {
         self.assoc_type_resolutions
-            .get(&(concrete_id, trait_name.to_string(), assoc_name.to_string()))
+            .get(&(concrete_id, trait_key.clone(), assoc_name.to_string()))
             .copied()
     }
 
@@ -2476,10 +2544,10 @@ impl TypeTable {
     pub fn resolve_trait_assoc_type_of_instance(
         &mut self,
         concrete_id: TypeId,
-        trait_name: &str,
+        trait_key: &TraitKey,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let key = (concrete_id, trait_name.to_string(), assoc_name.to_string());
+        let key = (concrete_id, trait_key.clone(), assoc_name.to_string());
         if let Some(&resolved) = self.assoc_type_resolutions.get(&key) {
             return Some(resolved);
         }
@@ -2489,7 +2557,7 @@ impl TypeTable {
         };
         let def_key = (
             self.decl_of_type(concrete_id)?,
-            trait_name.to_string(),
+            trait_key.clone(),
             assoc_name.to_string(),
         );
         let def_type_id = *self.generic_assoc_type_defs.get(&def_key)?;
@@ -3251,23 +3319,6 @@ impl TypeTable {
         }
     }
 
-    /// Get a mangled name for a type suitable for use in struct/function names.
-    ///
-    /// Unlike `type_name` which returns human-readable names (e.g., `[i32, String]`),
-    /// this returns mangled names suitable for monomorphization (e.g., `Tuple<i32,String>`).
-    ///
-    /// The format is:
-    /// - Primitives: `i32`, `f64`, `bool`, etc.
-    /// - Unit: `unit`
-    /// - Struct: struct name
-    /// - Tuple: `Tuple<T1,T2,...>`
-    /// - Option: `Option<T>`
-    /// - Result: `Result<T,E>`
-    /// - List: `List<T>`
-    /// - Function: `Fn<paramCount,returnType>`
-    /// - `GenericInstance`: `Name<T1,T2,...>`
-    /// - Ref/MutRef: inner type (references are stripped for mangling)
-    ///
     /// Resolve through newtypes/flags to find the base type.
     /// Returns the original `TypeId` if not a newtype or flags.
     ///
@@ -3389,6 +3440,23 @@ impl TypeTable {
         }
     }
 
+    /// Get a mangled name for a type suitable for use in struct/function names.
+    ///
+    /// Unlike `type_name` which returns human-readable names (e.g., `[i32, String]`),
+    /// this returns mangled names suitable for monomorphization (e.g., `Tuple<i32,String>`).
+    ///
+    /// The format is:
+    /// - Primitives: `i32`, `f64`, `bool`, etc.
+    /// - Unit: `unit`
+    /// - Struct: struct name
+    /// - Tuple: `Tuple<T1,T2,...>`
+    /// - Option: `Option<T>`
+    /// - Result: `Result<T,E>`
+    /// - List: `List<T>`
+    /// - Function: `Fn<paramCount,returnType>`
+    /// - `GenericInstance`: `Name<T1,T2,...>`
+    /// - Ref/MutRef: inner type (references are stripped for mangling)
+    ///
     #[must_use]
     pub fn mangle_type_name(&self, id: TypeId) -> String {
         let info = self.get_type_name_info(id);
@@ -5994,7 +6062,10 @@ mod tests {
         let iter = table.make_assoc_type_projection(
             self_param,
             "Iter".to_string(),
-            vec!["Iterator".to_string()],
+            vec![crate::name::FqTraitName::declared(
+                &ModuleSource::prelude(),
+                "Iterator",
+            )],
             vec![("Item".to_string(), item)],
         );
 
@@ -6029,7 +6100,10 @@ mod tests {
         let projection = table.make_assoc_type_projection(
             self_param,
             "Acc".to_string(),
-            vec!["Default".to_string()],
+            vec![crate::name::FqTraitName::declared(
+                &ModuleSource::prelude(),
+                "Default",
+            )],
             vec![("Item".to_string(), TypeTable::I32)],
         );
 
@@ -6047,11 +6121,24 @@ mod tests {
             panic!("expected a projection");
         };
         assert_eq!(param_id, receiver);
-        assert_eq!(bounds, vec!["Default".to_string()]);
+        assert_eq!(
+            bounds,
+            vec![crate::name::FqTraitName::declared(
+                &ModuleSource::prelude(),
+                "Default"
+            )]
+        );
         assert_eq!(
             assoc_type_bindings,
             vec![("Item".to_string(), TypeTable::I32)]
         );
+    }
+
+    /// A trait declared in the prelude, for the registry tests. The module is
+    /// what tells two same-named traits apart; these two differ by name, so
+    /// one module is enough.
+    fn trait_key(name: &str) -> TraitKey {
+        (ModuleSource::prelude(), name.to_string())
     }
 
     /// Two traits may declare the same associated-type name for one type
@@ -6064,23 +6151,23 @@ mod tests {
         let target = TypeTable::F32;
         table.register_assoc_type_resolution(
             target,
-            "FromStr".to_string(),
+            trait_key("FromStr"),
             "Err".to_string(),
             TypeTable::I32,
         );
         table.register_assoc_type_resolution(
             target,
-            "LenientFromStr".to_string(),
+            trait_key("LenientFromStr"),
             "Err".to_string(),
             TypeTable::I64,
         );
 
         assert_eq!(
-            table.resolve_assoc_type_of_trait(target, "FromStr", "Err"),
+            table.resolve_assoc_type_of_trait(target, &trait_key("FromStr"), "Err"),
             Some(TypeTable::I32)
         );
         assert_eq!(
-            table.resolve_assoc_type_of_trait(target, "LenientFromStr", "Err"),
+            table.resolve_assoc_type_of_trait(target, &trait_key("LenientFromStr"), "Err"),
             Some(TypeTable::I64)
         );
     }
@@ -6095,7 +6182,7 @@ mod tests {
         let target = TypeTable::F32;
         table.register_assoc_type_resolution(
             target,
-            "FromStr".to_string(),
+            trait_key("FromStr"),
             "Err".to_string(),
             TypeTable::I32,
         );
@@ -6107,7 +6194,7 @@ mod tests {
 
         table.register_assoc_type_resolution(
             target,
-            "LenientFromStr".to_string(),
+            trait_key("LenientFromStr"),
             "Err".to_string(),
             TypeTable::I64,
         );

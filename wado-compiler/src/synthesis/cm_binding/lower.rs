@@ -23,8 +23,8 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, expr_stmt,
-    generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, split_packed_ptr_len, synth_span,
+    generic_method_call, i32_const, i64_const, if_stmt, index_value_trait, internal_call,
+    let_mut_stmt, let_stmt, local_ref, loop_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::types::{
@@ -759,7 +759,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
     let elem_local = alloc_local(next_local, locals, elem_type_id);
     let iv_info = LocalMethodName::new(
         FqTypeName::declared(&ModuleSource::list(), &names.array),
-        Some("IndexValue<i32>".to_string()),
+        Some(index_value_trait()),
         "index_value".to_string(),
     );
     let iv_mangled = iv_info.to_mangled_name();
@@ -878,25 +878,31 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         // every source it holds is a CM interface, so a prefix check would be
         // redundant (same for the record/variant gates below).
         Type::Named(n)
-            if n.source_interface.as_deref().is_some_and(|s| {
-                ctx.cm_interface_registry
-                    .get_enum_variants_by_source(s, &n.name)
-                    .is_some()
-            }) =>
+            if ctx
+                .cm_interface_registry
+                .source_interface(n)
+                .is_some_and(|s| {
+                    ctx.cm_interface_registry
+                        .get_enum_variants_by_source(&s, &n.name)
+                        .is_some()
+                }) =>
         {
             flat_args.push(variant_tag(value));
         }
         // Variant → disc + join of all case payload flats
         Type::Named(n)
-            if n.source_interface.as_deref().is_some_and(|s| {
-                ctx.cm_interface_registry
-                    .get_variant_cases_by_source(s, &n.name)
-                    .is_some()
-            }) =>
+            if ctx
+                .cm_interface_registry
+                .source_interface(n)
+                .is_some_and(|s| {
+                    ctx.cm_interface_registry
+                        .get_variant_cases_by_source(&s, &n.name)
+                        .is_some()
+                }) =>
         {
-            let source = n
-                .source_interface
-                .as_deref()
+            let source = ctx
+                .cm_interface_registry
+                .source_interface(n)
                 .expect("CM variant source_interface present");
             let vt = value.type_id;
             let val_local = alloc_local(next_local, locals, vt);
@@ -912,7 +918,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             // Compute max flat payload count across all cases (the "join")
             let cases = ctx
                 .cm_interface_registry
-                .get_variant_cases_by_source(source, &n.name)
+                .get_variant_cases_by_source(&source, &n.name)
                 .unwrap_or(&[]);
             let max_flat_count: usize = cases
                 .iter()
@@ -1089,16 +1095,22 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         ),
         // CM record → its fields' flat args (recursion handles nested records).
         Type::Named(n)
-            if n.source_interface.as_deref().is_some_and(|s| {
-                ctx.cm_interface_registry
-                    .get_struct_fields_with_wado_names_by_source(s, &n.name)
-                    .is_some()
-            }) =>
+            if ctx
+                .cm_interface_registry
+                .source_interface(n)
+                .is_some_and(|s| {
+                    ctx.cm_interface_registry
+                        .get_struct_fields_with_wado_names_by_source(&s, &n.name)
+                        .is_some()
+                }) =>
         {
-            let source = n.source_interface.as_deref().expect("matched above");
+            let source = ctx
+                .cm_interface_registry
+                .source_interface(n)
+                .expect("matched above");
             let fields = ctx
                 .cm_interface_registry
-                .get_struct_fields_with_wado_names_by_source(source, &n.name)
+                .get_struct_fields_with_wado_names_by_source(&source, &n.name)
                 .expect("matched above");
             let value_type_id = value.type_id;
             let val_local = alloc_local(next_local, locals, value_type_id);
@@ -1582,7 +1594,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             let source = ctx
                 .cm_interface_registry
                 .resolve_cm_source_for(n, Some(ctx.wasi_package));
-            if let Some(fields) = source.and_then(|s| {
+            if let Some(fields) = source.as_deref().and_then(|s| {
                 ctx.cm_interface_registry
                     .get_struct_fields_with_wado_names_by_source(s, &n.name)
             }) {
@@ -1636,7 +1648,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // case payload via the registry-backed variant helper, keyed on the
             // same resolved source. Lib-local variants register their cases
             // under the package's default-interface FQ, like WASI variants.
-            if let Some(src) = source
+            if let Some(src) = source.as_deref()
                 && ctx
                     .cm_interface_registry
                     .get_variant_cases_by_source(src, &n.name)

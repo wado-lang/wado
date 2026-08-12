@@ -392,10 +392,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|info| match info.rhs_type {
                 Some(t) => format!(
                     "{}<{}>",
-                    trait_head(&info.trait_name),
+                    info.trait_name.base_name(),
                     tt.type_name(tt.peel_refs(t))
                 ),
-                None => trait_head(&info.trait_name).to_string(),
+                None => info.trait_name.base_name().to_string(),
             })
             .collect();
         let type_name = tt.type_name(base_type_id);
@@ -491,7 +491,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // itself. Ask which declaration the name resolves to first, so an
         // alias answers with its target rather than with another module's
         // type that happens to be spelled the same.
-        let (canonical_module, canonical_name) = self.canonical_decl_key(struct_name);
+        let (canonical_module, canonical_name) = self.decl_key_or_local(struct_name);
         if canonical_name != struct_name
             && self
                 .tysys
@@ -1455,7 +1455,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // any concrete type that implements Iterator. Snapshot the value blankets
         // (module, ast id, bound names) so the per-bound checks below borrow `self`
         // without holding a `trait_env` borrow.
-        let value_blankets: Vec<(ModuleSource, AstId, Vec<String>)> = self
+        let value_blankets: Vec<(ModuleSource, AstId, Vec<super::trait_env::BlanketBound>)> = self
             .tysys
             .trait_env
             .blanket_impls
@@ -1470,13 +1470,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // it recognises synthesized bounds (`ReflectStruct`, `Default`) with no
             // explicit `impl`, which the name-based lookup misses. A viable
             // blanket must survive to the authoritative `candidate_matches_receiver`.
-            let bounds_satisfied = bounds.iter().all(|bound_trait_name| {
+            let bounds_satisfied = bounds.iter().all(|bound| {
                 if let Some(rt) = receiver_type_id
                     && self.tysys.type_implements_trait(
                         &self.annotate_ctx,
                         &type_lookup,
                         rt,
-                        bound_trait_name,
+                        &bound.name,
+                        bound.decl_ref,
                     )
                 {
                     return true;
@@ -1486,7 +1487,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.annotate_ctx,
                         &type_lookup,
                         &target.receiver(),
-                        bound_trait_name,
+                        &bound.name,
+                        bound.decl_ref,
                     )
                 })
             });
@@ -1607,7 +1609,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_type_params: &[ast::GenericParam],
         receiver_type_id: Option<TypeId>,
     ) -> bool {
-        let impl_ty_name = Self::get_type_name_static(impl_ty);
+        let impl_ty_name = super::trait_env::get_type_name_static(impl_ty);
         let Some(param) = impl_type_params
             .iter()
             .find(|tp| tp.name == impl_ty_name && !tp.bounds.is_empty())
@@ -1621,6 +1623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &self.type_lookup(),
                     rt,
                     &bound.name,
+                    self.tysys.resolutions.get(bound.id),
                 )
             })
         })
@@ -1770,8 +1773,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && required_trait.is_none_or(|wanted| {
                 self.tysys
                     .auto_derive_by_method(method_name)
-                    .is_some_and(|(derived, _)| {
-                        self.trait_decl_key_in_frame(&derived) == wanted.decl
+                    .is_some_and(|(item, _, _)| {
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .compiler_trait_fq(item)
+                            .canonical()
+                            .is_some_and(|decl| decl == wanted.decl)
                     })
             })
         {
@@ -2121,7 +2129,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             };
             found_traits.push(TraitMethodMatch {
-                trait_name,
+                trait_name: crate::name::FqTraitName::declared_as_written(
+                    &trait_decl.0,
+                    &trait_decl.1,
+                    &trait_name,
+                ),
                 trait_decl: trait_decl.clone(),
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
@@ -2173,7 +2185,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = default_method.sig.self_kind;
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
-                    trait_name: trait_name_str,
+                    trait_name: crate::name::FqTraitName::declared_as_written(
+                        &trait_decl.0,
+                        &trait_decl.1,
+                        &trait_name_str,
+                    ),
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
@@ -2414,7 +2430,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let mut traits: Vec<String> = std::iter::once(first)
             .chain(rivals)
-            .map(|m| m.trait_name.clone())
+            .map(|m| m.trait_name.to_display())
             .collect();
         traits.dedup();
         Some(traits)
@@ -2921,7 +2937,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // base name: it is what the mangled method name
                     // discriminates instantiations on, exactly as the indexing
                     // path records `IndexValue<i32>`.
-                    trait_name: s.get_type_name_full(header.trait_type.as_ref().unwrap()),
+                    trait_name: header.fq_trait()?,
                     rhs_type,
                 })
             },
@@ -2937,7 +2953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> Vec<ast::GenericParam> {
         for header in self.tysys.trait_env.impl_headers.values() {
-            if Self::get_type_name_static(&header.ty) == struct_name {
+            if super::trait_env::get_type_name_static(&header.ty) == struct_name {
                 for method in &header.methods {
                     if method.name == method_name && !method.type_params.is_empty() {
                         return method.type_params.clone();
@@ -2978,7 +2994,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
-    ) -> Option<(TypeId, ast::SelfKind, String, ModuleSource, Option<TypeId>)> {
+    ) -> Option<(
+        TypeId,
+        ast::SelfKind,
+        crate::name::FqTraitName,
+        ModuleSource,
+        Option<TypeId>,
+    )> {
         // Get concrete type arguments from the base type (for generic instances like Triple<i32>).
         // The raw GC array `Array<T>` carries its element type as the single
         // type arg, mirroring a generic instance, so `impl IndexValue for Array<T>`
@@ -3030,7 +3052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
 
-                let trait_name = s.get_type_name_full(header.trait_type.as_ref().unwrap());
+                let trait_name = header.fq_trait()?;
                 // Find the method. Only its receiver shape is needed here —
                 // the indexing types come from the impl's associated-type
                 // bindings.
@@ -3136,7 +3158,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Look up method info to check if it needs &mut self
         let mut method_info = self.lookup_method_info(output_type, &method_call.method);
-        let mut method_trait_name: Option<String> = None;
+        let mut method_trait_name: Option<crate::name::FqTraitName> = None;
         let mut method_trait_impl_source: Option<ModuleSource> = None;
 
         // This lookup commits the call's resolution (the desugared call is
@@ -3243,11 +3265,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         let output_fq = self.tysys.fq_receiver_head(output_base_type_id);
-        let mangled_method_name = MethodName::format_local(
-            &output_fq,
-            method_trait_name.as_deref(),
-            &method_call.method,
-        );
+        let mangled_method_name =
+            MethodName::format_local(&output_fq, method_trait_name.as_ref(), &method_call.method);
 
         // `module_source` is the body's home module: trait-impl block for
         // trait methods, otherwise the output type's defining module

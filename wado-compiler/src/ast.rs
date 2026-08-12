@@ -81,6 +81,15 @@ impl AstId {
         self.space
     }
 
+    /// Whether this id was minted by [`Self::fresh`] — a synthesized node that
+    /// no module owns and no source position wrote. The resolution table is
+    /// built from the modules, so it never answers for one, and a consumer
+    /// asserting "every reference site is resolved" must exempt them.
+    #[must_use]
+    pub fn is_synthetic(self) -> bool {
+        self.space == AstIdSpace::FRESH
+    }
+
     /// A globally-unique `AstId` for a transient node never owned by a
     /// [`Module`] — synthesized `Type::Named` / `Type::Generic` operands for
     /// type-query functions, and test fixtures. It lives in the reserved
@@ -429,6 +438,21 @@ pub trait AstVisitor: Sized {
         walk_pattern(self, pat);
     }
 
+    /// A declaration's type parameters. Overridable because a bound is a
+    /// reference site and a visitor resolving one needs the bound itself, not
+    /// just the id [`walk_generic_params`] emits.
+    fn visit_generic_params(&mut self, params: &[GenericParam]) {
+        walk_generic_params(self, params);
+    }
+
+    /// Every list of trait bounds reaches a visitor here — a parameter's
+    /// `<T: Trait>`, a trait's supertraits, an associated type's `type A:
+    /// Trait`. They are the same kind of reference, so a visitor that answers
+    /// for one answers for all three.
+    fn visit_trait_bounds(&mut self, bounds: &[TraitBound]) {
+        walk_trait_bounds(self, bounds);
+    }
+
     fn visit_type(&mut self, ty: &Type) {
         walk_type(self, ty);
     }
@@ -454,9 +478,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         }
         Item::Struct(s) => {
             v.visit_id(s.id, s.span);
-            for p in &s.type_params {
-                v.visit_id(p.id, p.span);
-            }
+            v.visit_generic_params(&s.type_params);
             for field in &s.fields {
                 v.visit_id(field.id, field.span);
                 v.visit_type(&field.ty);
@@ -464,18 +486,14 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         }
         Item::Enum(e) => {
             v.visit_id(e.id, e.span);
-            for p in &e.type_params {
-                v.visit_id(p.id, p.span);
-            }
+            v.visit_generic_params(&e.type_params);
             for case in &e.cases {
                 v.visit_id(case.id, case.span);
             }
         }
         Item::Variant(vr) => {
             v.visit_id(vr.id, vr.span);
-            for p in &vr.type_params {
-                v.visit_id(p.id, p.span);
-            }
+            v.visit_generic_params(&vr.type_params);
             for case in &vr.cases {
                 v.visit_id(case.id, case.span);
                 if let Some(payload) = &case.payload {
@@ -491,23 +509,17 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         }
         Item::Newtype(n) => {
             v.visit_id(n.id, n.span);
-            for p in &n.type_params {
-                v.visit_id(p.id, p.span);
-            }
+            v.visit_generic_params(&n.type_params);
             v.visit_type(&n.ty);
         }
         Item::TupleTypeDecl(t) => v.visit_id(t.id, t.span),
         Item::BuiltinTypeDecl(d) => {
             v.visit_id(d.id, d.span);
-            for p in &d.type_params {
-                v.visit_id(p.id, p.span);
-            }
+            v.visit_generic_params(&d.type_params);
         }
         Item::Impl(i) => {
             v.visit_id(i.id, i.span);
-            for p in &i.type_params {
-                v.visit_id(p.id, p.span);
-            }
+            v.visit_generic_params(&i.type_params);
             if let Some(trait_ty) = &i.trait_type {
                 v.visit_type(trait_ty);
             }
@@ -527,11 +539,11 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         }
         Item::Trait(t) => {
             v.visit_id(t.id, t.span);
-            for p in &t.type_params {
-                v.visit_id(p.id, p.span);
-            }
+            v.visit_generic_params(&t.type_params);
+            v.visit_trait_bounds(&t.supertraits);
             for assoc in &t.associated_types {
                 v.visit_id(assoc.id, assoc.span);
+                v.visit_trait_bounds(&assoc.bounds);
             }
             for m in &t.methods {
                 v.visit_function(m);
@@ -539,9 +551,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         }
         Item::Resource(r) => {
             v.visit_id(r.id, r.span);
-            for p in &r.type_params {
-                v.visit_id(p.id, p.span);
-            }
+            v.visit_generic_params(&r.type_params);
             for m in &r.methods {
                 v.visit_interface_method(m);
             }
@@ -562,9 +572,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
 
 pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
     v.visit_id(func.id, func.span);
-    for p in &func.type_params {
-        v.visit_id(p.id, p.span);
-    }
+    v.visit_generic_params(&func.type_params);
     for param in &func.params {
         v.visit_id(param.id, param.span);
         v.visit_type(&param.ty);
@@ -876,6 +884,30 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
             }
         }
         Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {}
+    }
+}
+
+/// Walk a declaration's type parameters: each binder's own id, then the
+/// reference sites inside its bounds. A bound names a trait and its associated
+/// types, so it is a reference site like any other and must be reachable by an
+/// id-collecting walk (WEP 2026-08-10).
+pub fn walk_generic_params<V: AstVisitor>(v: &mut V, params: &[GenericParam]) {
+    for p in params {
+        v.visit_id(p.id, p.span);
+        v.visit_trait_bounds(&p.bounds);
+        if let Some(default) = &p.default {
+            v.visit_type(default);
+        }
+    }
+}
+
+pub fn walk_trait_bounds<V: AstVisitor>(v: &mut V, bounds: &[TraitBound]) {
+    for bound in bounds {
+        v.visit_id(bound.id, bound.span);
+        for assoc in &bound.assoc_types {
+            v.visit_id(assoc.id, assoc.span);
+            v.visit_type(&assoc.ty);
+        }
     }
 }
 
@@ -3124,27 +3156,14 @@ pub struct NamedType {
     pub id: AstId,
     pub name: String,
     pub span: Span,
-    /// The defining source interface for this name reference, populated
-    /// during stdlib bootstrap and user-code resolution so that registry
-    /// lookups are unambiguous. `None` means the reference has not been
-    /// resolved yet (e.g. freshly parsed user code before the elaborator
-    /// runs, or a bare primitive/generic parameter). Format matches the
-    /// `#[cm("...")]` prefix, e.g. `"wasi:filesystem/types@0.3.0-rc-..."`
-    /// or `"core:kiln/types@0.1.0"`.
-    pub source_interface: Option<String>,
 }
 
 impl NamedType {
-    /// Construct a `NamedType` with no resolved source interface. The source
-    /// is populated later during stdlib registration (for stdlib types) or by
-    /// the elaborator (for user-code references into imported symbols).
+    /// A name reference. Which declaration it means is answered once by
+    /// `crate::resolve::Resolutions`, keyed by [`Self::id`] — not stored here
+    /// as a spelling.
     pub fn new(id: AstId, name: String, span: Span) -> Self {
-        Self {
-            id,
-            name,
-            span,
-            source_interface: None,
-        }
+        Self { id, name, span }
     }
 }
 
@@ -3232,6 +3251,8 @@ pub struct InterfaceMethod {
 /// An associated type binding inside a trait bound, e.g., `Output = T` in `Builder<Output = T>`.
 #[derive(Debug, Clone)]
 pub struct AssocTypeBound {
+    /// This reference's own id — the key its resolution is recorded under.
+    pub id: AstId,
     pub name: String,
     pub ty: Type,
     pub span: Span,
@@ -3245,6 +3266,10 @@ pub struct AssocTypeBound {
 /// `"Fn"` or `"FnMut"` for diagnostic and elaborator routing.
 #[derive(Debug, Clone)]
 pub struct TraitBound {
+    /// This reference's own id — the key its resolution is recorded under.
+    /// Distinct from the referenced trait's declaration id: one bound is one
+    /// reference site, and two modules' `T: Greet` are two of them.
+    pub id: AstId,
     pub name: String,
     pub assoc_types: Vec<AssocTypeBound>,
     pub span: Span,
@@ -3589,8 +3614,108 @@ mod ast_id_tests {
         parser.parse_strict().expect("parse")
     }
 
-    /// Collect every `(AstId, Span)` emitted while walking `items` using the
-    /// default [`AstVisitor`] traversal.
+    /// Nodes that name something and deliberately carry no [`AstId`], with the
+    /// reason each needs none. Every other name-bearing node is a *reference
+    /// site* — it names a declaration whose identity depends on the module that
+    /// wrote the name — and must carry an id for its resolution to be recorded
+    /// under (WEP 2026-08-10).
+    const NAMED_WITHOUT_ID: &[(&str, &str)] = &[
+        ("InnerAttribute", "an attribute name, not a declaration"),
+        ("Attribute", "an attribute name, not a declaration"),
+        (
+            "CmImport",
+            "a WIT interface id, resolved against the CM registry",
+        ),
+        ("WorldImport", "a WIT interface id"),
+        ("WorldExportInterface", "a WIT interface id"),
+        ("WorldExportFn", "a world export's own name, a declaration"),
+        (
+            "UseItemSimple",
+            "builds the module scope rather than consulting it; within one \
+             module a local name is unambiguous by construction",
+        ),
+        (
+            "StructLiteralField",
+            "a field of a known struct type, not a module-scoped name",
+        ),
+        ("StructPatternField", "likewise a field of a known type"),
+    ];
+
+    /// A reference site with no id has nowhere to record which declaration it
+    /// means, so its consumers thread the spelling instead and two modules'
+    /// same-named declarations compare equal — the shape of #1785.
+    #[test]
+    fn every_reference_bearing_node_carries_an_ast_id() {
+        let source = include_str!("ast.rs");
+        let mut offenders: Vec<&str> = Vec::new();
+        let mut unused: Vec<&str> = NAMED_WITHOUT_ID.iter().map(|(n, _)| *n).collect();
+
+        for decl in source.split("\npub struct ").skip(1) {
+            let Some((name, rest)) = decl.split_once(" {") else {
+                continue;
+            };
+            let name = name.trim();
+            let Some((body, _)) = rest.split_once("\n}") else {
+                continue;
+            };
+            let names_something = body
+                .lines()
+                .any(|l| l.trim_start().starts_with("pub name") || l.contains("_name: String"));
+            if !names_something || body.contains("pub id: AstId") {
+                continue;
+            }
+            match unused.iter().position(|n| *n == name) {
+                Some(i) => {
+                    unused.remove(i);
+                }
+                None => offenders.push(name),
+            }
+        }
+
+        assert!(
+            offenders.is_empty(),
+            "these nodes name something but carry no `AstId`, so a resolution \
+             has nowhere to be recorded: {offenders:?}. Give each an id, or \
+             register it in NAMED_WITHOUT_ID with the reason it needs none."
+        );
+        assert!(
+            unused.is_empty(),
+            "NAMED_WITHOUT_ID lists nodes that no longer qualify: {unused:?}"
+        );
+    }
+
+    /// Each bound is its own reference site, so two `T: Ord`s are two ids —
+    /// what lets `Ord` mean a different declaration in each, and what a bound
+    /// keyed by its spelling cannot express.
+    #[test]
+    fn each_trait_bound_is_its_own_reference_site() {
+        let m = parse("fn f<T: Ord, U: Ord>(a: T, b: U) {}\n");
+        let bounds: Vec<AstId> = m
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Function(f) => Some(f),
+                _ => None,
+            })
+            .flat_map(|f| f.type_params.iter())
+            .flat_map(|p| p.bounds.iter())
+            .map(|b| b.id)
+            .collect();
+        assert_eq!(bounds.len(), 2);
+        assert_ne!(bounds[0], bounds[1]);
+
+        // And the walk reaches them, so an id-collecting pass sees every site.
+        let walked: IndexSet<AstId> = collect_ids(&m.items)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        for id in bounds {
+            assert!(
+                walked.contains(&id),
+                "bound id {id:?} not reached by the walk"
+            );
+        }
+    }
 
     #[test]
     fn ast_id_spaces_are_unique_per_parse() {

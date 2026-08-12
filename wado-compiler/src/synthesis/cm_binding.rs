@@ -1155,7 +1155,6 @@ mod tests {
             id: crate::ast::AstId::fresh(),
             name: name.to_string(),
             span: synth_span(),
-            source_interface: None,
         })
     }
 
@@ -1341,13 +1340,11 @@ mod tests {
         let wasi_newtype = |name: &str| {
             let source = reg
                 .find_wasi_newtype_source(&crate::name::DeclName::new(name))
-                .expect("wasi newtype source");
-            Type::Named(NamedType {
-                id: crate::ast::AstId::fresh(),
-                name: name.to_string(),
-                span: synth_span(),
-                source_interface: Some(source.to_string()),
-            })
+                .expect("wasi newtype source")
+                .to_string();
+            let named = NamedType::new(crate::ast::AstId::fresh(), name.to_string(), synth_span());
+            reg.set_source_interface(named.id, source);
+            Type::Named(named)
         };
         assert_eq!(
             flatten_param_type(&wasi_newtype("Duration"), &reg, &CmStdlibNames::for_tests()),
@@ -1602,7 +1599,7 @@ mod tests {
             let source = registry
                 .resolve_cm_source_for(elem_named, Some("sockets"))
                 .expect("IpAddress resolves in the stdlib registry");
-            let module_source = ctx.module_source_for(source);
+            let module_source = ctx.module_source_for(&source);
             type_table
                 .borrow_mut()
                 .make_variant("IpAddress".to_string(), module_source);

@@ -411,6 +411,16 @@ impl SymbolTable {
         aliases
     }
 
+    /// The symbol `module` explicitly `use`d under the local name `name`.
+    /// Only the module's own import list — no prelude fallback and no
+    /// declaration of its own — so a caller can order those layers itself.
+    pub fn imported(&self, module: &ModuleSource, name: &str) -> Option<&Symbol> {
+        self.imports
+            .get(module)
+            .and_then(|names| names.get(name))
+            .and_then(|key| self.symbols.get(key))
+    }
+
     /// Look up a name as it resolves when referenced from `module`: the
     /// module's own explicit imports first, then the implicit prelude.
     ///
@@ -422,12 +432,7 @@ impl SymbolTable {
     /// implementation files (`core:prelude*`) resolve only their own imports;
     /// they would otherwise recurse into themselves through this fallback.
     pub fn lookup(&self, module: &ModuleSource, name: &str) -> Option<&Symbol> {
-        if let Some(symbol) = self
-            .imports
-            .get(module)
-            .and_then(|names| names.get(name))
-            .and_then(|key| self.symbols.get(key))
-        {
+        if let Some(symbol) = self.imported(module, name) {
             return Some(symbol);
         }
         let prelude = ModuleSource::prelude();

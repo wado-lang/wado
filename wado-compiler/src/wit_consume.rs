@@ -37,6 +37,10 @@ pub struct ComponentBindings {
     /// capabilities (WASI, etc.). Effect reconstruction maps these onto the
     /// consumer's effects; a purely-computational component imports none.
     pub host_leaf_imports: Vec<String>,
+    /// The CM interface each named-type reference in `module` resolves to,
+    /// keyed by the reference's own site. Merged into the CM registry by the
+    /// loader; the syntax nodes carry no interface of their own.
+    pub source_interfaces: crate::component_model::SourceInterfaceBatch,
 }
 
 /// Read the host-leaf import FQs a component-binding module carries in its
@@ -139,6 +143,7 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         }]
     };
 
+    let source_interfaces = b.source_interfaces;
     let module = Module::with_metadata(
         b.items,
         inner_attributes,
@@ -154,6 +159,7 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         interface_fqs,
         world_func_names,
         host_leaf_imports,
+        source_interfaces,
     })
 }
 
@@ -163,6 +169,7 @@ struct Builder {
     count: u32,
     items: Vec<Item>,
     errors: Vec<String>,
+    source_interfaces: crate::component_model::SourceInterfaceBatch,
 }
 
 impl Builder {
@@ -172,6 +179,7 @@ impl Builder {
             count: 0,
             items: Vec::new(),
             errors: Vec::new(),
+            source_interfaces: crate::component_model::SourceInterfaceBatch::default(),
         }
     }
 
@@ -557,11 +565,14 @@ impl Builder {
     }
 
     fn named(&mut self, name: &str, source_interface: Option<String>) -> Type {
+        let id = self.id();
+        if let Some(source) = source_interface {
+            self.source_interfaces.insert(id, source);
+        }
         Type::Named(NamedType {
-            id: self.id(),
+            id,
             name: name.to_string(),
             span: syn(),
-            source_interface,
         })
     }
 
@@ -649,6 +660,8 @@ mod tests {
     fn builds_catalog_bindings() {
         let (resolve, world) = decode_fixture();
         let b = build_bindings(&resolve, world).expect("build bindings");
+        let registry = crate::component_model::CmInterfaceRegistry::new();
+        registry.extend_source_interfaces(b.source_interfaces.clone());
         assert_eq!(
             b.interface_fqs,
             vec!["wado-lang:cm-catalog/cm-catalog@0.0.16"]
@@ -698,7 +711,7 @@ mod tests {
             Type::Named(n) => {
                 assert_eq!(n.name, "Point");
                 assert_eq!(
-                    n.source_interface.as_deref(),
+                    registry.source_interface(n).as_deref(),
                     Some("wado-lang:cm-catalog/cm-catalog@0.0.16")
                 );
             }
@@ -720,7 +733,7 @@ mod tests {
             Type::Named(n) => {
                 assert_eq!(n.name, "Meters");
                 assert_eq!(
-                    n.source_interface.as_deref(),
+                    registry.source_interface(n).as_deref(),
                     Some("wado-lang:cm-catalog/cm-catalog@0.0.16")
                 );
             }

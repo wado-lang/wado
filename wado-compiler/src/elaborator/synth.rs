@@ -1007,7 +1007,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(primitive) = TypeTable::primitive_by_name(name) {
             return ArgClass::Exact(primitive);
         }
-        let (module, decl) = self.canonical_decl_key(name);
+        let (module, decl) = self.decl_key_or_local(name);
         let generic = self
             .lookup_struct_fields_in(&decl, &module)
             .is_some_and(|info| !info.type_param_type_ids.is_empty());

@@ -1,0 +1,21 @@
+// A head that names no declaration is foreign, not an uncovered type
+// parameter — the package does not own it, so the inherent impl is a coherence
+// violation. Both answers arrive as `ImplTargetKey::TypeParam` (a blanket's
+// binder and an unresolvable name), and reading this one as a binder dropped
+// the impl block, its methods and the only diagnostic the program had.
+
+impl Undeclared {
+    fn f(&self) -> i32 {
+        return 1;
+    }
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "coherence violation: cannot define an inherent `impl` on foreign type `Undeclared`"
+}

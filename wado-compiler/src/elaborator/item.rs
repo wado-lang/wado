@@ -251,6 +251,7 @@ pub(super) fn register_enum_compiler_item<H: CompilerHost>(
 pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
     name: &str,
     methods: &[crate::ast::Function],
     assoc_types: &[crate::ast::AssociatedTypeDecl],
@@ -287,6 +288,7 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     let resolved = Resolved::Trait {
         module_source: module_source.clone(),
         name: name.to_string(),
+        decl,
         method_name,
         assoc_types,
     };
@@ -779,7 +781,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let target_fq = scope.qualified_receiver_name(&scope.get_type_name(&impl_block.ty));
         let trait_decl = impl_block.trait_type.as_ref().map(|trait_type| {
             let head = scope.get_type_name(trait_type);
-            scope.trait_decl_key_in_frame(&head)
+            match crate::resolve::head_site(trait_type) {
+                Some(site) => scope.trait_decl_at(site, &head),
+                None => scope.decl_key_or_local(&head),
+            }
         });
         let self_type = scope
             .annotate_ctx
@@ -861,23 +866,19 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// keys off the written string, so an `impl` of a name nothing declares
     /// registers happily, matches no query, and reaches the back end unmentioned.
     ///
-    /// The check asks only whether *some* declaration bears the name, which is
-    /// the one question that survives shadowing. Asking *which* declaration —
-    /// to require its associated types, say — needs a resolution that
-    /// [`Elaborator::trait_decl_key_in_frame`] does not yet give: it prefers an
-    /// import over a local declaration, and the prelude reaches a module as an
-    /// import, so a module declaring its own `Add` resolves to the prelude's.
-    /// `trait_bound_add_generic.wado` binds `T: Add` to its own declaration
-    /// while that helper answers with the prelude's, and until the two agree
-    /// there is no reliable answer to build on.
+    /// The head resolves through the same chain the block's own facts use, so
+    /// the check and the facts cannot disagree about which declaration it
+    /// names. A head with a reference site answers from the site; a synthesized
+    /// one, which has none, falls back to the name-only chain.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
         let name = super::trait_env::get_type_name_static(trait_type);
+        let key = match crate::resolve::head_site(trait_type) {
+            Some(site) => self.trait_decl_at(site, &name),
+            None => self.decl_key_or_local(&name),
+        };
         if self.trait_decl_header_in_frame(&name).is_some()
-            || self
-                .tysys
-                .trait_env
-                .find_effect_or_resource_decl_key(&name)
-                .is_some()
+            || self.tysys.trait_env.declares_trait(&key)
+            || self.tysys.trait_env.declares_effect_or_resource(&key)
         {
             return;
         }
@@ -1394,6 +1395,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
             "Self".to_string(),
             vec![ast::TraitBound {
+                id: ast::AstId::fresh(),
                 name: trait_decl.name.clone(),
                 assoc_types: Vec::new(),
                 span: trait_decl.span,
@@ -2293,7 +2295,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         func: &Function,
         struct_name: &str,
         impl_type: &Type,
-        trait_name: Option<&str>,
+        trait_name: Option<&crate::name::FqTraitName>,
         trait_type: Option<&Type>,
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],
@@ -2384,7 +2386,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // body just like `impl Counter for BaseCounter`.
         //
         if let Some(name) = base_trait_name.as_deref() {
-            let canonical_key = scope.canonical_decl_key(name);
+            let canonical_key = scope.decl_key_or_local(name);
             let effect_decl = scope
                 .tysys
                 .trait_env

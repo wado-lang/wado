@@ -1,0 +1,29 @@
+// Two modules each declare `Box_` and give it an inherent impl: this module
+// writes one instantiation (`impl Box_<i32>`), the other writes a generic
+// (`impl<T> Box_<T>`). They are unrelated types, so the pair is not the
+// same-owner collision `impl_inherent_concrete_duplicate_method` rejects.
+//
+// The collision check used to key on the head as written, so every `Box_` in
+// the program shared one bucket and this compiled to a spurious
+// "duplicate definition of `a` for `Box_`".
+
+use { generic_a } from "./sub/cross_module_same_name_inherent_generic_a.wado";
+
+struct Box_<T> {
+    v: T,
+}
+
+impl Box_<i32> {
+    fn a(&self) -> i32 {
+        return 1;
+    }
+}
+
+test "same-named types keep their own inherent impls" {
+    let b = Box_ { v: 7 };
+    assert b.a() == 1;
+    assert generic_a() == "generic";
+}
+
+__DATA__
+{"test": {}}
