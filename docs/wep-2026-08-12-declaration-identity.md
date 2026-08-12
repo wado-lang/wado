@@ -230,7 +230,7 @@ incidental fallbacks:
    `f64` are `internal type` declarations in `core:prelude/primitive.wado`, so
    the prelude's implementation is what makes the language's own types nameable,
    and `core:prelude/int128.wado` writing `i64::MAX` needs it. The attribute
-   exempts a module from the prelude *collision check* — it is the prelude, so
+   exempts a module from the prelude _collision check_ — it is the prelude, so
    it may declare `Option` — and never governed what a name means. A module's
    own declarations already rank above this layer, so nothing it defines can be
    shadowed by the prelude's copy of it.
