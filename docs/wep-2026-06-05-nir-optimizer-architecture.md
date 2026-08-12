@@ -383,19 +383,43 @@ local — materialise it into an `_av` and name that.
 rule makes it the only way a local may be named, and drops the parameter
 restriction, which the anchor replaces.
 
-The rule is necessary and not sufficient. Freezing inside the loop under it was
-built and measured, and promoted nothing on either benchmark — zero candidates
-reached `apply_value_freeze`, both modules came out byte-identical, and the pass
-cost 12 % of the loop. The reason is upstream of the rule: too few leaves
-resolve, and `Binary` / `Unary` / `Cast` propagate that `None` through `?`, so
-there is no value to freeze in the first place. Widening the `Local` arm to
-every provably single-version local (from non-`mut` parameters only) resolves
-16 661 more reads on `benchmark/sqlite_parse` and still changes no output,
-because the leaves that matter are field loads and call results, which no
-query-time re-derivation can supply — a `FieldAccess` value is keyed on the
-`heap_ver` at its point, and a version-free id per local index is the recorded
-dead end. The _builder_ mints both correctly, which is where the material has
-to come from.
+The rule is necessary and not sufficient. There is no in-loop freeze: one was
+built under the rule and promoted nothing on either benchmark — zero candidates
+reached `apply_value_freeze`, both modules stayed byte-identical, and it cost
+11.3 % of the loop, so it was removed. Two separate things have to be true, and
+neither was.
+
+The material has to exist. Widening the `Local` arm to every provably
+single-version local (from non-`mut` parameters only) resolves 16 661 more reads
+on `benchmark/sqlite_parse` and still changes no output, because the leaves that
+matter are field loads and call results. A query-time re-derivation cannot
+supply either — a `FieldAccess` value is keyed on the `heap_ver` at its point,
+and a version-free id per local index is the recorded dead end — so the builder
+is the only source, whether through the graph build or a scratch re-walk.
+
+A consumer has to want it. The candidate is `licm` hoisting a loop-invariant
+field load, which nothing does today: its structural `ArithHoist` path is
+deliberately value-graph-free and its value path excludes `FieldAccess` outright.
+Surveyed on the two benchmarks, in-loop field reads that are provably invariant
+are 44 of 1 613 and 127 of 1 793 — 2.7 % and 7.1 %, of which 40 and 109 have a
+hoistable `Opaque(Local)` receiver. That is not enough to pay for maintaining
+promoted operands across `inline` and `sroa`, which is what dropping
+`must_anchor` would require.
+
+The invariance test itself is free, which is worth recording for whoever revives
+this: `apply_loop_heap_effects` bumps every slot the loop may write _before_ the
+body walk, and versions come from a monotonic counter, so a read whose
+`heap_ver` is below the loop-entry watermark saw a slot the loop cannot touch.
+No new alias analysis is needed.
+
+What holds the 2.7 % down is upstream of all of it. `collect_loop_heap_effects`
+marks a call's receiver `mut_borrowed` whether or not the callee can mutate it,
+so a single `self.helper()` inside a loop kills every `self.field` invariance in
+it — and `optimize/alias.rs`'s `CallImmutability` already knows the answer, but
+the builder is handed only `pure_builtin_callees`. Threading the real
+immutability in raises the precision of `store_load_forward`, the field freeze,
+and `condition_implication` at the same time, and needs no part of the anchor
+rule. Measure that before anything here.
 
 So the convergence point has two halves, and both are needed:
 
@@ -490,35 +514,63 @@ Three readings, in order of how much they cost:
       No effect on either benchmark's output: the freeze is starved of shared
       values, not of admissible locals. See the funnel table below.
 
-- [ ] Revive `promote_fields`. It is dead today (funnel table above), and it is
-      the only freeze path whose representatives would be genuinely shared — one
-      `(receiver, field, heap_ver)` triple per field, read at every use — so it
-      is the first thing that could make `apply_value_freeze`'s materialisation
-      count non-zero. The two soundness gates (scalar-field,
-      receiver-availability) are written and unreachable, not missing.
-      The material has to come from a scratch re-walk, since
-      `maintain_pure_node` has no version to supply, but
-      `Engine::scoped_const_reads` cannot be widened to hand it over as-is: a
-      whole-function re-walk is unseeded, so every receiver is a walk-local
-      `Opaque` (`reintern_live_rooted` drops those) and every version numbers
-      from a fresh heap that would over-merge against the live pool's. Both are
-      why the constant filter is there — it is the design, not vestigial. The
-      seeded inline path escapes both by construction and is not a precedent.
-      What does work is to treat the re-walk as an *equivalence oracle* rather
-      than a value source: group the field reads by their scratch `ValueId`, and
-      mint one live triple per group over `canonical_local(i)` — sound exactly
-      when `Engine::local_has_one_version(i)` — at a version above every version
-      already in the live pool. That reproduces the sharing the walk proved
-      while making a collision with an existing live triple impossible.
-      Entry check: the pass and its `cond_impl_post_promote` follow-up cost loop
-      time today for nothing, so measure both before and after.
+- [x] Revive `promote_fields`, which was dead: `maintain_pure_node` has no
+      `FieldAccess` arm, so no field representative ever reached the apply phase
+      and `apply_field_materialise` with both its soundness gates was
+      unreachable. It is the one freeze path whose representatives are genuinely
+      shared — one `(receiver, field, heap_ver)` triple per field, read at every
+      use — and it is what first made the materialisation count non-zero.
+      The material comes from a scratch re-walk, since `maintain_pure_node` has
+      no version to supply, but `Engine::scoped_const_reads` could not hand it
+      over as-is: a whole-function re-walk is unseeded, so every receiver is a
+      walk-local `Opaque` (`reintern_live_rooted` drops those) and every version
+      numbers from a fresh heap that would over-merge against the live pool's.
+      Both are why its constant filter exists — the design, not vestigial. The
+      seeded inline path escapes them by construction and is not a precedent.
+      So the walk is used as an _equivalence oracle_ rather than a value source
+      (`Engine::scoped_field_values`): group the field reads by their scratch
+      `ValueId`, mint one live triple per group over `canonical_local(i)` —
+      sound exactly when `Engine::local_has_one_version(i)` — at a version above
+      every version already in the pool. The sharing the walk proved survives; a
+      collision with an existing live triple is impossible.
+      Two gates were missing rather than merely unreachable, and both surfaced
+      the moment representatives arrived. The receiver must be a **struct**: the
+      extractor re-emits a `StructGet` keyed by field index, and a tuple
+      receiver — where the index means an element — panicked. And the
+      materialiser needed the sharing gate its sibling has: without it 508 of
+      541 materialisations were single-use, each trading one `struct.get` for
+      `struct.get` + `local.set` + `local.get`, which is the whole of the
+      +3.3 KB the first working version added.
+      Measured on `benchmark/sqlite_parse` against the same binary with
+      `WADO_SKIP_PASS`: −32 `struct.get`, +11 `local.set`, +11 `local.get`, so
+      the surviving groups average ~3.9 uses. Both benchmarks came out
+      _smaller_ than before the revival (−37 and −45 bytes), and the pass costs
+      0.139 s → 0.157 s — the per-function re-walk is ~18 ms, so it needs no
+      opt-level gate.
 
-- [ ] Reach the in-loop consumers. Both freezes that may plant a local-naming
-      value run after the fixed-point loop, so the passes inside it still see
+- [ ] Give `collect_loop_heap_effects` the callee immutability the optimizer
+      already computes. It marks a call's receiver `mut_borrowed` whether or not
+      the callee can mutate it, so one `self.helper()` in a loop invalidates
+      every `self.field` in it — which is what holds provable in-loop field
+      invariance to 2.7 % / 7.1 % on the two benchmarks. `optimize/alias.rs`'s
+      `CallImmutability` and `mod_ref::FnEffect` know the answer; the builder is
+      handed only `pure_builtin_callees`. Doing this raises the precision of
+      `store_load_forward`, `promote_fields`, and `condition_implication` at
+      once, and touches no part of the anchor rule, which makes it the first
+      thing to measure before anything else in this section.
+      Relaxing it needs care in one spot: the `Call` arm records `mut_borrowed`
+      only for an argument that is a bare `Local`, and a mutable argument of any
+      other shape is currently covered only because every non-builtin call sets
+      `has_external_writes` anyway. That fallback has to stay for the shapes the
+      arm does not recognise.
+
+- [ ] Reach the in-loop consumers. Every freeze that may plant a local-naming
+      value runs after the fixed-point loop, so the passes inside it still see
       none: LICM's value hoist collected zero loop-entry locals in 10,900
       queries, and `loop_entry_values` still has no working consumer, which is
       why `inline` discarding a non-empty map 1,469 times costs nothing. An
-      in-loop freeze cannot simply be added — the early one is bound by the
+      in-loop freeze cannot simply be added — one was, and is recorded under
+      "The anchor rule"; the early freeze is separately bound by the
       context-free rule under "Measured dead ends". Moving the build to `lower`
       does not lift that bound: it is the extraction that is point-dependent,
       not the build. This and the widening above share one prerequisite, the
