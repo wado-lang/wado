@@ -577,24 +577,18 @@ fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
 /// is rewritten.
 ///
 /// [`update_knowledge_from_instr`] runs after the rewrite, which is right for a
-/// statement's own store: `c.n = c.n + 1` evaluates its operand before storing,
-/// so folding the read with the pre-statement knowledge is correct. It is wrong
-/// for a call, whose arguments are evaluated in order — `total(bump(&mut c),
-/// c.n, c.n)` mutates in the first argument and reads in the next two, and
-/// post-statement invalidation is too late to stop those reads folding to the
-/// pre-call constant.
+/// statement's own store — `c.n = c.n + 1` evaluates its operand before storing,
+/// so folding that read stays correct — and wrong for a call, whose arguments
+/// evaluate in order: `total(bump(&mut c), c.n, c.n)` mutates in the first and
+/// reads in the next two.
 ///
-/// Conservative within the statement: every call in it invalidates, including
-/// one evaluated *after* a read, since the rewrite does not walk in evaluation
-/// order. That only forgoes folding in a statement that both calls with a
-/// reference argument and reads a field of it.
+/// Conservative within the statement: every call invalidates, including one
+/// evaluated after a read, since the rewrite does not walk in evaluation order.
 ///
-/// Stops at a nested body, exactly as `InvalidationScope::Statement` does. A
-/// `Block` / `Seq` / `Loop` / `If` branch is walked statement by statement by
-/// the recursive `forward_fields_in_body`, which pre-invalidates each of *its*
-/// statements in turn; descending here instead would apply a call buried in a
-/// loop body to the statements before the loop. That is what dropped the
-/// hoisted `cref.threshold` fold in `opt_licm_in_match_arm`.
+/// Stops at a nested body, as `InvalidationScope::Statement` does — the
+/// recursive [`forward_fields_in_body`] pre-invalidates each of *its* statements
+/// in turn, and descending here would apply a call buried in a loop to the
+/// statements before that loop (`opt_licm_in_match_arm`).
 fn invalidate_call_effects_before_rewrite(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
     match instr {
         WirInstr::Call { args, .. } => {

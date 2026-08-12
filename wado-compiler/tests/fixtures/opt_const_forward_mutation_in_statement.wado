@@ -1,15 +1,8 @@
-// WIR field-constant forwarding must not fold a field read that a call
-// earlier in the *same statement* already mutated.
+// WIR field-constant forwarding rewrites a statement with the knowledge held
+// before it, then invalidates. Within one statement that is wrong for a call:
+// `bump(&mut c)` is evaluated before the `c.n` arguments beside it.
 //
-// `forward_struct_field_constants` rewrites a statement using the knowledge
-// held before it, then invalidates that statement's mutation effects
-// (`update_knowledge_from_instr` — "after its rewrite"). Within one statement
-// that ordering is wrong: `bump(&mut c)` is evaluated before the `c.n`
-// arguments beside it, so both reads fold to the pre-call constant.
-//
-// A statement's *own* store is not affected — `c.n = c.n + 1` evaluates its
-// operand before storing, so folding the read there stays correct. Only a call
-// can mutate between two operands of one statement.
+// A statement's own store is unaffected — it evaluates its operand first.
 
 struct Counter {
     n: i32,
@@ -27,9 +20,7 @@ fn total(a: i32, b: i32, c: i32) -> i32 {
 }
 
 export fn run() {
-    // `n` is a literal, so its value is known to the forwarding pass.
     let mut c = Counter { n: 8 };
-    // `bump` makes `c.n` 18, so both reads must see 18: 1 + 18 + 18 == 37.
     let r = total(bump(&mut c), c.n, c.n);
     assert r == 37;
     assert c.n == 18;

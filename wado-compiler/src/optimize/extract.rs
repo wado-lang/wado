@@ -219,15 +219,10 @@ fn def_dominates(
     l > 0 && dp.len() == l && dp[l - 1].1 < mp[l - 1].1
 }
 
-/// Whether a `local.get i` placed at `before_stmt` reads the local's value. A
-/// **param** is entry-defined, so available at every point. Any other local is
-/// available only where its defining `let` dominates the insertion point — a
-/// value's `Opaque(Local i)` can differ from a use's syntactic local (copy-prop
-/// / value identity), so `i`'s def must be checked against the actual placement,
-/// not assumed. Without a recoverable def, conservatively `false`.
-///
-/// This answers *where*, not *which version*: that the local holds one value is
-/// the separate, body-wide question `multi_version_locals` settles.
+/// Whether a `local.get i` placed at `before_stmt` reads the local's value: a
+/// parameter is entry-defined, any other local needs its `let` to dominate the
+/// point. Answers *where*, not *which version* — `multi_version_locals` settles
+/// that separately.
 fn leaf_available_at(
     e: &Engine,
     local: u32,
@@ -365,19 +360,13 @@ pub(super) fn freeze_pure_arith(
         engine.set_pure_calls(pure_calls);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
 
-        // Locals a frozen value may not name: a `local.get idx` re-emitted at
-        // another point has to read the version the opaque denotes, so only a
-        // local provably holding one value qualifies. Read off the engine's use
-        // index, the same predicate that decides whether a `Local` read resolves
-        // to a value at all ([`Engine::local_has_one_version`]) — a set built
-        // from the `is_mut` flag instead would reject every `let mut` the body
-        // never reassigns, and admit a temp a pass minted with the flag clear.
+        // Locals a frozen value may not name, from the same predicate that
+        // decides whether a `Local` read resolves at all.
         let multi_version_locals: crate::hashmap::IndexSet<u32> = (0..local_count as u32)
             .filter(|&i| !engine.local_has_one_version(i))
             .collect();
 
-        // Field reads have no value on the maintained graph, so they come from
-        // the scratch re-walk instead. Only `promote_fields` asks.
+        // Field reads have no value on the maintained graph.
         let found = if include_fields {
             engine.scoped_field_values()
         } else {
@@ -522,11 +511,6 @@ fn classify_candidate(
     if !is_pure_arith(engine, id, ctx.include_fields) {
         return None;
     }
-    // A field read's value never comes off the maintained graph — the re-walk
-    // supplies the version a query cannot. Arithmetic *over* a field read still
-    // resolves to `None` and is left alone: `value_fully_reemittable_locally`
-    // refuses a value nesting a `FieldAccess` anyway, since re-emitting a load
-    // inline is unsound once a pass moves the operand.
     let rep = match &engine.body.exprs[id].kind {
         ExprKind::FieldAccess { .. } => ctx.field_values.get(&id).copied()?,
         _ => engine.value(id)?,
@@ -547,29 +531,13 @@ fn classify_candidate(
     let reemittable = match engine.body.values.kind(rep) {
         ValueKind::FieldAccess { receiver, .. } => {
             let recv = *receiver;
-            // Two gates make a `FieldAccess` materialisation sound.
-            // (1) Field-value-type gate: only a **scalar** field — a primitive copy
-            // is value-independent, so pinning + sharing it is sound; an aggregate /
-            // reference field (`List.repr`, a nested struct) aliases a mutable
-            // backing the `heap_ver` does not pin (the `array_index_1` null-ref trap).
+            // Only a scalar field: an aggregate or reference field aliases a
+            // mutable backing the `heap_ver` does not pin (`array_index_1`).
             let scalar_field = ctx
                 .type_table
                 .is_primitive_like(engine.body.exprs[id].type_id);
-            // (2) Receiver-stability gate. The receiver must hold one value
-            // (`multi_version_locals`) and be free of aliases the heap model does
-            // not see (`address_taken`). A non-parameter must additionally own its
-            // object: a local holding a reference has no `let` the anchor can
-            // travel with. Its def must dominate the materialisation point too,
-            // checked in the apply phase (`def_dominates`), since the value's
-            // receiver `Opaque(Local i)` can differ from a use's syntactic local.
-            //
-            // What this deliberately does *not* ask is whether a callee can mutate
-            // the receiver — being `&mut`, or `mut_escaped`. That is the same
-            // question `FieldValues::pinnable_before` answers exactly, from the
-            // versions the builder bumps at each `mut_borrowed` call, and asking it
-            // here as a type-shaped proxy refuses 96 % of the candidates on
-            // `benchmark/sqlite_parse` (1675 of 1747, essentially every
-            // `&mut self` method) to catch what the placement already catches.
+            // Whether a callee can mutate the receiver is deliberately not asked
+            // here — `FieldValues::pinnable_before` answers it at the placement.
             let recv_src = match engine.body.values.kind(recv) {
                 ValueKind::Opaque(o) => Some(*o),
                 _ => None,
@@ -609,22 +577,10 @@ fn classify_candidate(
     Some((id, rep))
 }
 
-/// Apply strategy for a `FieldAccess` representative: pin the load in a `let _av
-/// = <value>` at a statement dominating its uses and rewrite each use to a
-/// **skeleton** `Local _av` read, so receiver-position passes see an ordinary
-/// local (materialiser-first). A `FieldAccess` is never inline-reemittable
-/// (re-emitting a load at an arbitrary slot is unsound once a pass moves the
-/// operand), so this is its only promotion path. Uses share one load at the
-/// nearest common dominator (`materialise_point`), including across blocks.
-///
-/// Sharing is the whole point, so a single use is refused: materialising one
-/// turns a `struct.get` into `struct.get` + `local.set` + `local.get`, which is
-/// strictly worse. Measured before the gate existed, 508 of 541 materialisations
-/// on `benchmark/sqlite_parse` were single-use, and the pass removed 33 loads
-/// while adding 541 stores. Two uses already pay: a load costs more than the
-/// `local.set` plus the extra `local.get` it trades for, which is why this is
-/// `ids.len() > 1` and not [`worth_materialising`] (that counts arithmetic
-/// operations, and a `FieldAccess` has none).
+/// Pin a shared `FieldAccess` in a `let _av` dominating its uses and rewrite
+/// each use to a skeleton `Local _av` read. A `FieldAccess` is never
+/// inline-reemittable, so this is its only promotion path, and only sharing
+/// pays for it — one use would trade a `struct.get` for a store and a read.
 fn apply_field_materialise(
     engine: &mut Engine,
     rep: ValueId,
@@ -639,10 +595,8 @@ fn apply_field_materialise(
     let Some((s, b)) = materialise_point(engine, ids) else {
         return false;
     };
-    // The shared version proves the uses agree with each other, not that they
-    // agree with the statement boundary the `let` lands on: an operand earlier
-    // in that same statement can write the slot, and hoisting the load over it
-    // reads the pre-write value at every use.
+    // The shared version proves the uses agree with each other, not with the
+    // statement boundary the `let` lands on.
     if !found.pinnable_before(rep, s) {
         return false;
     }
@@ -776,12 +730,8 @@ fn apply_value_freeze(
 ) -> bool {
     let mut leaves = crate::hashmap::IndexSet::default();
     engine.body.values.collect_opaque_locals(rep, &mut leaves);
-    // Sharing decides first, because it is the cheap half and the point is not:
-    // `materialise_point` walks a block path per use, and a single-use value —
-    // nearly all of them — never reaches the `_av`.
+    // Sharing decides first: it is cheap, and `materialise_point` is not.
     let shareable = ids.len() > 1 && worth_materialising(&engine.body.values, rep);
-    // Resolved before anything is allocated: the point is what makes leaf
-    // availability answerable, and refusing after minting an `_av` leaks a slot.
     let point = shareable.then(|| materialise_point(engine, ids)).flatten();
     let anchorable = !leaves.is_empty()
         && !value_may_trap(&engine.body.values, rep)

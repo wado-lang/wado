@@ -29,15 +29,10 @@ use crate::nir_arena::{
 use crate::tir::TypeId;
 use crate::token::Span;
 
-/// What [`Engine::scoped_field_values`] recovered: a live-pool representative
-/// per field read, plus what a placement needs to stay sound.
-///
-/// A representative's `heap_ver` proves its *uses* see one load. It says
-/// nothing about the span from a chosen insertion point to the first use, so
-/// pinning the load also needs `walk_version[rep] < stmt_entry_version[stmt]` —
-/// the slot was last written before that statement began. Both versions are in
-/// the scratch walk's numbering, which is the only numbering they are
-/// comparable in.
+/// A live-pool representative per field read, plus the versions a placement
+/// needs: a representative's `heap_ver` proves its *uses* see one load, not
+/// that an insertion point does. Both versions are in the scratch walk's
+/// numbering, the only one they compare in.
 #[derive(Default)]
 pub struct FieldValues {
     pub reads: Vec<(ExprId, crate::nir_value_graph::ValueId)>,
@@ -46,16 +41,14 @@ pub struct FieldValues {
 }
 
 impl FieldValues {
-    /// Whether pinning `rep`'s load immediately before `stmt` still reads what
-    /// its uses read. False when anything between the statement's start and the
-    /// use wrote the slot — a mutation earlier in the *same* statement, which
-    /// the shared version cannot see. Unknown either way is refused.
-    pub fn pinnable_before(
-        &self,
-        rep: crate::nir_value_graph::ValueId,
-        stmt: StmtId,
-    ) -> bool {
-        match (self.walk_version.get(&rep), self.stmt_entry_version.get(&stmt)) {
+    /// Whether pinning `rep`'s load before `stmt` still reads what its uses
+    /// read — false when a mutation earlier in that statement wrote the slot.
+    /// Unknown is refused.
+    pub fn pinnable_before(&self, rep: crate::nir_value_graph::ValueId, stmt: StmtId) -> bool {
+        match (
+            self.walk_version.get(&rep),
+            self.stmt_entry_version.get(&stmt),
+        ) {
             (Some(v), Some(mark)) => v < mark,
             _ => false,
         }
@@ -71,9 +64,7 @@ pub struct LocalUses {
     /// none, and neither does a `LetDestructure` binding (it binds through a
     /// pattern, which this index does not walk).
     pub def: Option<StmtId>,
-    /// How many `Let` statements bind the local. One is the norm; cloning a
-    /// block (`labeled_block_fusion`) copies `local_index` with it, and a second
-    /// binding is a second version.
+    /// How many `Let` statements bind the local; a second is a second version.
     pub defs: u32,
     /// Every `Local { index }` expression node that names this local. (The
     /// place-form distinction — read vs write — is refined when a rule needs
@@ -508,29 +499,17 @@ impl<'a> Engine<'a> {
         out
     }
 
-    /// A live-pool `FieldAccess` value for each field read the scratch re-walk
-    /// can name, sharing one value between exactly the reads the walk proved see
-    /// the same load. This is where `promote_fields` gets its representatives:
-    /// `maintain_pure_node` has no `FieldAccess` arm, because a field value is
-    /// keyed on the heap version at its program point and a point-free
-    /// re-derivation has none.
+    /// A live-pool `FieldAccess` per field read, shared between exactly the
+    /// reads a scratch re-walk proves see one load. `maintain_pure_node` has no
+    /// `FieldAccess` arm — a field value is keyed on the heap version at its
+    /// point — so this is where `promote_fields` gets its representatives.
     ///
-    /// The walk is used as an **equivalence oracle**, not as a value source.
-    /// Its own ids cannot cross into the live pool — a whole-function walk is
-    /// unseeded, so every receiver is a walk-local `Opaque` and every version
-    /// numbers from a fresh heap, which is exactly why
-    /// [`Engine::scoped_const_reads`] surfaces only constants. So each
-    /// equivalence class is re-minted here instead:
-    ///
-    /// - the receiver becomes `canonical_local(i)`, sound only where `i`
-    ///   provably holds one value ([`Engine::local_has_one_version`]) — a
-    ///   receiver that fails it is dropped rather than merged;
-    /// - the version is drawn fresh from above `max_heap_version`, so a minted
-    ///   triple can never collide with one the build-once graph already holds
-    ///   and merge two loads that see different heaps.
-    ///
-    /// Sharing within the walk survives (one class, one version); sharing with
-    /// anything outside it is deliberately given up.
+    /// The walk is an equivalence oracle, not a value source: its ids mean
+    /// nothing in the live pool, an unseeded walk giving every receiver a
+    /// walk-local `Opaque` and every version a fresh-heap number. So each class
+    /// is re-minted over `canonical_local(i)`, sound only where `i` holds one
+    /// value, at a version above `max_heap_version` so it cannot collide with a
+    /// triple the build-once graph holds.
     pub fn scoped_field_values(&mut self) -> FieldValues {
         use crate::nir_value_graph::{OpaqueSource, ValueKind, builder};
         self.ensure_value_graph();
@@ -561,11 +540,9 @@ impl<'a> Engine<'a> {
             if !matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. }) {
                 continue;
             }
-            // The extractor re-emits the load as a `StructGet` keyed by field
-            // index, so a non-struct receiver — a tuple, whose `field_index`
-            // indexes elements instead — has no re-emission and must not be
-            // frozen. The scalar-field gate downstream answers about the field,
-            // not the receiver, so this is the only place it is asked.
+            // The extractor re-emits a `StructGet` keyed by field index, which
+            // a tuple receiver — where the index means an element — has no
+            // re-emission for. Asked nowhere else.
             let ValueKind::FieldAccess {
                 receiver,
                 field_index,
@@ -605,8 +582,6 @@ impl<'a> Engine<'a> {
                 let v = self.body.values.field_access(recv, field_index, next_ver);
                 next_ver = next_ver.bump();
                 minted.insert(sv, v);
-                // The version the *walk* gave this load, kept in the walk's own
-                // numbering so it can be compared against a statement mark.
                 let walk_ver = match scratch.kind(sv) {
                     ValueKind::FieldAccess { heap_ver, .. } => *heap_ver,
                     _ => unreachable!("classes only holds FieldAccess values"),
@@ -763,35 +738,30 @@ impl<'a> Engine<'a> {
     /// safer of the two under the anchor rule, since its `let` travels with any
     /// copy of an operand naming it while a parameter's entry def does not.
     ///
-    /// Single-assignment is *per execution of the binding's scope*, not per
-    /// program run: a `let` in a loop body is written once in the text and once
-    /// per iteration at runtime. So this licenses naming the local at a point in
-    /// the same iteration, and a consumer that relocates a value across an
-    /// iteration boundary needs its own check — which is why `materialise_point`
-    /// refuses a placement outside a loop enclosing any use, and why that refusal
-    /// is load-bearing rather than a nicety.
+    /// Single-assignment is *per execution of the binding's scope*: a `let` in a
+    /// loop body is written once in the text and once per iteration. So this
+    /// licenses naming the local within one iteration, and a consumer relocating
+    /// a value across an iteration boundary needs its own check — which is what
+    /// `materialise_point`'s refusal to place outside an enclosing loop is for.
     ///
-    /// Read off the use index rather than `NirLocal::is_mut`: a pass that mints
-    /// a temp sets that flag by hand, while the index is maintained by the edit
-    /// API. Every half fails safe — `reads` over-approximates (it holds every
-    /// `Local` node in the arena, reachable or not), so an assign that folded
-    /// away still refuses, and refusing costs a promotion, never correctness.
+    /// Read off the use index rather than `NirLocal::is_mut`, which a pass minting
+    /// a temp sets by hand while the index is maintained by the edit API. Every
+    /// half fails safe: `reads` holds every `Local` node in the arena, reachable
+    /// or not, so an assign that folded away still refuses, and refusing costs a
+    /// promotion rather than correctness.
     ///
-    /// The same predicate decides whether a frozen value may name the local
-    /// (`extract`'s `multi_version_locals`), so the two agree by construction.
+    /// `extract`'s `multi_version_locals` is this predicate, so the value query
+    /// and the freeze agree by construction.
     pub fn local_has_one_version(&mut self, local: u32) -> bool {
         match self.local_bindings(local) {
-            // No `Let`: a parameter, which qualifies when the signature never
-            // reassigns it — or a `LetDestructure` binding, which the use index
-            // does not record and which therefore reads as a param and fails
-            // the membership test.
+            // No `Let`: a parameter, or a `LetDestructure` binding the use index
+            // does not record — which then fails the membership test.
             0 => {
                 return self.param_locals.contains(&local)
                     && self.locals().get(local as usize).is_some_and(|l| !l.is_mut);
             }
             1 => {}
-            // Two bindings are two versions. `labeled_block_fusion` clones a
-            // block, `local_index` and all.
+            // `labeled_block_fusion` clones a block, `local_index` and all.
             _ => return false,
         }
         // A write through a reference leaves no assign target to see, so a local
@@ -898,10 +868,8 @@ impl<'a> Engine<'a> {
                         }
                     }
                 }
-                // A pattern binding is a definition too. It gets no `def` — the
-                // dominance gate wants a statement — but it must be *counted*,
-                // or a local bound by both a `let` and a pattern reads as
-                // single-version when it holds two.
+                // A pattern binding gets no `def` (the dominance gate wants a
+                // statement) but still counts as a version.
                 NodeRef::Pat(id) => {
                     if let PatKind::Binding { local_index, .. } = &self.body.pats[id].kind {
                         let index = *local_index;

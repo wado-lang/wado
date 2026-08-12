@@ -524,11 +524,9 @@ struct Builder<'a> {
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
-    /// The version counter as each statement began. A `FieldAccess` whose
-    /// `heap_ver` is below a statement's mark was last written before that
-    /// statement started, so pinning the load there still sees it — the test
-    /// `apply_field_materialise` needs, since a value's version only proves its
-    /// *uses* agree with each other.
+    /// The version counter as each statement began: a `FieldAccess` below a
+    /// statement's mark was last written before it, so pinning the load there
+    /// still sees it.
     stmt_entry_version: IndexMap<StmtId, HeapVersion>,
     /// `ExprId` indices of calls that mutate no caller local. See
     /// [`BuildConfig::pure_calls`].
