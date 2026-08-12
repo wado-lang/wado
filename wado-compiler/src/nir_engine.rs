@@ -29,6 +29,39 @@ use crate::nir_arena::{
 use crate::tir::TypeId;
 use crate::token::Span;
 
+/// What [`Engine::scoped_field_values`] recovered: a live-pool representative
+/// per field read, plus what a placement needs to stay sound.
+///
+/// A representative's `heap_ver` proves its *uses* see one load. It says
+/// nothing about the span from a chosen insertion point to the first use, so
+/// pinning the load also needs `walk_version[rep] < stmt_entry_version[stmt]` —
+/// the slot was last written before that statement began. Both versions are in
+/// the scratch walk's numbering, which is the only numbering they are
+/// comparable in.
+#[derive(Default)]
+pub struct FieldValues {
+    pub reads: Vec<(ExprId, crate::nir_value_graph::ValueId)>,
+    walk_version: IndexMap<crate::nir_value_graph::ValueId, crate::nir_value_graph::HeapVersion>,
+    stmt_entry_version: IndexMap<StmtId, crate::nir_value_graph::HeapVersion>,
+}
+
+impl FieldValues {
+    /// Whether pinning `rep`'s load immediately before `stmt` still reads what
+    /// its uses read. False when anything between the statement's start and the
+    /// use wrote the slot — a mutation earlier in the *same* statement, which
+    /// the shared version cannot see. Unknown either way is refused.
+    pub fn pinnable_before(
+        &self,
+        rep: crate::nir_value_graph::ValueId,
+        stmt: StmtId,
+    ) -> bool {
+        match (self.walk_version.get(&rep), self.stmt_entry_version.get(&stmt)) {
+            (Some(v), Some(mark)) => v < mark,
+            _ => false,
+        }
+    }
+}
+
 /// Per-local use information: where the local is defined and every node that
 /// reads it. Used by the engine to re-enqueue a local's uses when its
 /// definition is rewritten (copy propagation, const-fold through a `Let`, …).
@@ -498,11 +531,11 @@ impl<'a> Engine<'a> {
     ///
     /// Sharing within the walk survives (one class, one version); sharing with
     /// anything outside it is deliberately given up.
-    pub fn scoped_field_values(&mut self) -> Vec<(ExprId, crate::nir_value_graph::ValueId)> {
+    pub fn scoped_field_values(&mut self) -> FieldValues {
         use crate::nir_value_graph::{OpaqueSource, ValueKind, builder};
         self.ensure_value_graph();
         if self.body.value_graph.is_none() {
-            return Vec::new();
+            return FieldValues::default();
         }
         let root = self.body.root;
         let mut scratch = self.body.values.clone();
@@ -524,7 +557,7 @@ impl<'a> Engine<'a> {
         // (scratch class, receiver local, field) for each field read, before any
         // live-pool mutation: `local_has_one_version` borrows the engine.
         let mut classes: Vec<(ExprId, crate::nir_value_graph::ValueId, u32, u32)> = Vec::new();
-        for (e, sv) in scoped {
+        for (e, sv) in scoped.values {
             if !matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. }) {
                 continue;
             }
@@ -553,7 +586,10 @@ impl<'a> Engine<'a> {
             }
             classes.push((e, sv, i, field_index));
         }
-        let mut out = Vec::new();
+        let mut found = FieldValues {
+            stmt_entry_version: scoped.stmt_entry_version,
+            ..FieldValues::default()
+        };
         let mut minted: IndexMap<crate::nir_value_graph::ValueId, crate::nir_value_graph::ValueId> =
             IndexMap::default();
         let mut next_ver = self.body.values.max_heap_version().bump();
@@ -569,11 +605,18 @@ impl<'a> Engine<'a> {
                 let v = self.body.values.field_access(recv, field_index, next_ver);
                 next_ver = next_ver.bump();
                 minted.insert(sv, v);
+                // The version the *walk* gave this load, kept in the walk's own
+                // numbering so it can be compared against a statement mark.
+                let walk_ver = match scratch.kind(sv) {
+                    ValueKind::FieldAccess { heap_ver, .. } => *heap_ver,
+                    _ => unreachable!("classes only holds FieldAccess values"),
+                };
+                found.walk_version.insert(v, walk_ver);
                 v
             };
-            out.push((e, live));
+            found.reads.push((e, live));
         }
-        out
+        found
     }
 
     /// Drop the session's `&local` address-taken scan so the next

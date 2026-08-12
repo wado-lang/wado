@@ -378,11 +378,13 @@ pub(super) fn freeze_pure_arith(
 
         // Field reads have no value on the maintained graph, so they come from
         // the scratch re-walk instead. Only `promote_fields` asks.
-        let field_values: crate::hashmap::IndexMap<ExprId, ValueId> = if include_fields {
-            engine.scoped_field_values().into_iter().collect()
+        let found = if include_fields {
+            engine.scoped_field_values()
         } else {
-            crate::hashmap::IndexMap::default()
+            crate::nir_engine::FieldValues::default()
         };
+        let field_values: crate::hashmap::IndexMap<ExprId, ValueId> =
+            found.reads.iter().copied().collect();
 
         // Phase 1: decide every freeze on the clean, unedited graph. A value
         // query never mutates the skeleton, so the verify oracle (which fires
@@ -428,7 +430,8 @@ pub(super) fn freeze_pure_arith(
             }
             let is_field = matches!(engine.body.values.kind(rep), ValueKind::FieldAccess { .. });
             if is_field {
-                changed |= apply_field_materialise(&mut engine, rep, &ids, id_ty, &param_set);
+                changed |=
+                    apply_field_materialise(&mut engine, rep, &ids, id_ty, &param_set, &found);
             } else {
                 changed |= apply_value_freeze(&mut engine, rep, &ids, id_ty, &param_set, phase);
             }
@@ -621,6 +624,7 @@ fn apply_field_materialise(
     ids: &[ExprId],
     id_ty: crate::tir::TypeId,
     param_set: &crate::hashmap::IndexSet<u32>,
+    found: &crate::nir_engine::FieldValues,
 ) -> bool {
     if ids.len() < 2 {
         return false;
@@ -628,6 +632,13 @@ fn apply_field_materialise(
     let Some((s, b)) = materialise_point(engine, ids) else {
         return false;
     };
+    // The shared version proves the uses agree with each other, not that they
+    // agree with the statement boundary the `let` lands on: an operand earlier
+    // in that same statement can write the slot, and hoisting the load over it
+    // reads the pre-write value at every use.
+    if !found.pinnable_before(rep, s) {
+        return false;
+    }
     if !receiver_available_at(engine, rep, s, param_set) {
         return false;
     }

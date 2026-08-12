@@ -324,7 +324,7 @@ pub(crate) fn build_scoped(
     // re-interned into the live pool. A walk-local value (an `Opaque` of a
     // remapped callee local) is dropped — it has no caller-pool identity.
     let mut out = IndexMap::default();
-    for (e, sv) in scoped {
+    for (e, sv) in scoped.values {
         if let Some(lv) = reintern_live_rooted(scratch, &mut body.values, sv, live_base, type_table)
         {
             out.insert(e, lv);
@@ -352,7 +352,7 @@ pub(crate) fn walk_scoped(
     pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
-) -> Vec<(ExprId, ValueId)> {
+) -> ScopedWalk {
     let pool = std::mem::take(scratch);
     let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table, pool);
     b.pure_builtin_callees.clone_from(pure_builtin_callees);
@@ -373,9 +373,20 @@ pub(crate) fn walk_scoped(
     for s in stmts {
         b.walk_stmt(s);
     }
-    let scoped = b.value_of.iter().map(|(&e, &v)| (e, v)).collect();
+    let values = b.value_of.iter().map(|(&e, &v)| (e, v)).collect();
+    let stmt_entry_version = std::mem::take(&mut b.stmt_entry_version);
     *scratch = b.pool;
-    scoped
+    ScopedWalk {
+        values,
+        stmt_entry_version,
+    }
+}
+
+/// What a [`walk_scoped`] pass observed: each expression's scratch value, and
+/// the version counter as each statement began.
+pub(crate) struct ScopedWalk {
+    pub values: Vec<(ExprId, ValueId)>,
+    pub stmt_entry_version: IndexMap<StmtId, HeapVersion>,
 }
 
 /// Whether `id`'s value is a build-context-free constant safe to freeze into an
@@ -513,6 +524,12 @@ struct Builder<'a> {
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
+    /// The version counter as each statement began. A `FieldAccess` whose
+    /// `heap_ver` is below a statement's mark was last written before that
+    /// statement started, so pinning the load there still sees it — the test
+    /// `apply_field_materialise` needs, since a value's version only proves its
+    /// *uses* agree with each other.
+    stmt_entry_version: IndexMap<StmtId, HeapVersion>,
     /// `ExprId` indices of calls that mutate no caller local. See
     /// [`BuildConfig::pure_calls`].
     pure_calls: crate::hashmap::IndexSet<ExprId>,
@@ -552,6 +569,7 @@ impl<'a> Builder<'a> {
             ref_targets: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
+            stmt_entry_version: IndexMap::default(),
             pure_calls: crate::hashmap::IndexSet::default(),
             pure_builtin_callees: crate::hashmap::IndexSet::default(),
         }
@@ -782,6 +800,7 @@ impl<'a> Builder<'a> {
     }
 
     fn walk_stmt(&mut self, stmt: StmtId) {
+        self.stmt_entry_version.insert(stmt, self.heap_state.next);
         match self.body.stmts[stmt].kind.clone() {
             StmtKind::Let {
                 local_index, value, ..

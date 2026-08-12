@@ -1,0 +1,56 @@
+// A field read shared by two uses inside one statement, where another operand
+// of that same statement mutates the field first.
+//
+// `promote_fields` materialises a shared load into `let _av = c.n` placed
+// before the statement holding the earliest use. The two `c.n` reads agree with
+// each other — one `heap_ver`, since nothing separates them — but they do not
+// agree with the statement boundary: `bump(c)` runs earlier in the same
+// statement and writes the field. Hoisting the load over it makes both uses
+// read the pre-call value.
+//
+// The `heap_ver` proves the uses share a value. It says nothing about the span
+// from the insertion point to the first use, which the placement has to
+// establish separately.
+//
+// The receiver is a `&mut` **parameter** on purpose: the receiver-stability
+// gate admits a parameter without asking whether it is `&mut`-escaped, while
+// the identical shape on a local is refused.
+
+struct Counter {
+    n: i32,
+}
+
+#[inline(never)]
+fn bump(c: &mut Counter) -> i32 {
+    c.n = c.n + 10;
+    return 1;
+}
+
+#[inline(never)]
+fn total(a: i32, b: i32, c: i32) -> i32 {
+    return a + b + c;
+}
+
+// Keeps the field's value out of reach of constant forwarding, so this fixture
+// isolates the placement bug rather than a constant-propagation one.
+#[inline(never)]
+fn seed() -> i32 {
+    return 8;
+}
+
+#[inline(never)]
+fn work(c: &mut Counter) -> i32 {
+    // `bump` makes `c.n` 18, so both reads must see 18: 1 + 18 + 18 == 37.
+    return total(bump(c), c.n, c.n);
+}
+
+export fn run() {
+    let mut c = Counter { n: seed() };
+    assert work(&mut c) == 37;
+    assert c.n == 18;
+}
+
+__DATA__
+{
+    "stdout": ""
+}
