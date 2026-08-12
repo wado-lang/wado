@@ -41,8 +41,8 @@ use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::{
-    block_contains_loop, collect_reads, has_break_to, is_local, is_local_operand,
-    promoted_local_reads, promoted_read_count_at, promoted_read_counts, single_payload_binding,
+    block_contains_loop, has_break_to, is_local, is_local_operand, promoted_read_count_at,
+    single_payload_binding, surviving_read,
 };
 
 /// The slot `sroa_variant_return` reserves for the tag in every scalarized
@@ -72,7 +72,6 @@ impl Rule for LabeledBlockFusionRule {
     }
 
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
-        let promoted_reads = PromotedReadCounts::default();
         let stmts = engine.body.blocks[block].stmts.clone();
         if stmts.len() < 2 {
             return false;
@@ -96,7 +95,7 @@ impl Rule for LabeledBlockFusionRule {
             // consumer statement.
             let consumer_uses =
                 count_local_uses_in_stmt(engine.body, stmts[i + 1], info.temp_local);
-            if body_uses(engine, &promoted_reads, info.temp_local) != consumer_uses {
+            if body_uses(engine, info.temp_local) != consumer_uses {
                 continue;
             }
             if yields && i + 2 == stmts.len() {
@@ -105,8 +104,9 @@ impl Rule for LabeledBlockFusionRule {
             let temp = info.temp_local;
             perform_fusion(engine, block, &stmts, i, info);
             debug_assert!(
-                !is_read(engine.body, temp),
-                "[NIR] labeled_block_fusion: temp local {temp} is still read after fusion"
+                surviving_read(engine.body, &[temp]).is_none(),
+                "[NIR] labeled_block_fusion: temp local {temp} is still read after \
+                 fusion, which deleted the binding that defined it"
             );
             return true;
         }
@@ -1040,34 +1040,8 @@ impl NirRefVisitor for SlotReadCollector {
 /// Every use of `local` in the body, skeleton and value pool alike — the total
 /// [`count_local_uses_in_stmt`] counts within one statement, so the two compare.
 /// The engine's use index sees the skeleton only, hence the second term.
-fn body_uses(engine: &Engine, promoted: &PromotedReadCounts, local: u32) -> usize {
-    engine.local_reads(local).len() + promoted.count(engine.body, local)
-}
-
-/// Whether any reachable read of `local` survives, in the skeleton or the value
-/// pool. The fusion deletes the temp's binding, so one that does would read a
-/// local nothing defines.
-fn is_read(body: &Body, local: u32) -> bool {
-    let mut reads = IndexSet::default();
-    collect_reads(body, &mut reads);
-    promoted_local_reads(body, &mut reads);
-    reads.contains(&local)
-}
-
-/// Per-body count of the reads that live in the value pool, keyed by local and
-/// filled on first ask. The gate below needs it for one temp at a time, but the
-/// walk that answers costs a whole body, so it answers for all of them at once.
-#[derive(Default)]
-struct PromotedReadCounts(std::cell::OnceCell<IndexMap<u32, usize>>);
-
-impl PromotedReadCounts {
-    fn count(&self, body: &Body, local: u32) -> usize {
-        self.0
-            .get_or_init(|| promoted_read_counts(body))
-            .get(&local)
-            .copied()
-            .unwrap_or(0)
-    }
+fn body_uses(engine: &Engine, local: u32) -> usize {
+    engine.local_reads(local).len() + engine.promoted_read_count(local)
 }
 
 /// Counts every read of `local_idx`, skeleton and value pool alike.

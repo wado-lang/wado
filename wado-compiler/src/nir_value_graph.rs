@@ -685,10 +685,35 @@ impl ValuePool {
     /// Whether the value tree at `v` reads any local (an `Opaque(Local)` leaf).
     /// One that names none is context-free — it denotes the same thing at every
     /// program point.
+    ///
+    /// Answers without materialising the leaf set: the engine asks this of
+    /// every operand it writes, and nearly all of them are constant leaves,
+    /// where the question is one `match` and no allocation.
     pub fn names_a_local(&self, v: ValueId) -> bool {
-        let mut out = IndexSet::default();
-        self.collect_opaque_locals(v, &mut out);
-        !out.is_empty()
+        if self.child_count(v) == 0 {
+            return self.is_local_opaque(v);
+        }
+        let mut seen = IndexSet::default();
+        let mut stack = vec![v];
+        while let Some(v) = stack.pop() {
+            if !seen.insert(v) {
+                continue;
+            }
+            if matches!(self.kind(v), ValueKind::Opaque(_)) {
+                if self.is_local_opaque(v) {
+                    return true;
+                }
+                continue;
+            }
+            self.push_value_children(v, &mut stack);
+        }
+        false
+    }
+
+    /// Whether `v` is itself an `Opaque` sourced from a local.
+    fn is_local_opaque(&self, v: ValueId) -> bool {
+        matches!(self.kind(v), ValueKind::Opaque(oid)
+            if matches!(self.opaque_source(*oid), Some(OpaqueSource::Local(_))))
     }
 
     /// Collect into `out` every local index named by an `Opaque(Local)`

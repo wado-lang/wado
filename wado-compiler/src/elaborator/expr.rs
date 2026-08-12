@@ -16,6 +16,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::call::turbofish_holes;
 use super::infer::InferCtx;
+use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
 use super::util;
@@ -3491,9 +3492,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ast::Expr::TupleLiteral(t)
                         if !t.elements.iter().any(|e| matches!(e, Expr::Spread(..)))
                 );
-                if needs_deferred_coercion && tuple_is_spread_free {
+                let coercion_deferred = needs_deferred_coercion && tuple_is_spread_free;
+                if coercion_deferred {
                     deferred_coercions.push((provided_idx, provided_idx));
                 }
+                // A field whose declared type names a slot is not a constraint
+                // on the value — the value is what fixes the slot. Fields
+                // sharing a slot are compared to each other in
+                // `infer_struct_type_args`; comparing one against the
+                // *inferred* argument instead reads back whatever the caller's
+                // expected type put there, not this literal's answer.
+                let field_names_slot = expected_field_type
+                    .is_some_and(|t| self.tysys.type_table.borrow().contains_rigid_param(t));
+                let check_deferred = coercion_deferred || field_names_slot;
 
                 // Check field name exists in struct definition
                 if struct_fields_known && !struct_field_types.iter().any(|(n, _)| n == &field.name)
@@ -3505,9 +3516,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 }
 
-                // Check field value type against declared struct field type
-                if let Some((_, expected_type_id)) =
-                    struct_field_types.iter().find(|(n, _)| n == &field.name)
+                // Check field value type against declared struct field type.
+                // A field whose coercion was deferred still holds its literal
+                // shape — the sequence coercion has not run — so checking it
+                // here would compare `[…]` against the sequence it is about to
+                // become. The second pass checks it once coerced.
+                if !check_deferred
+                    && let Some((_, expected_type_id)) =
+                        struct_field_types.iter().find(|(n, _)| n == &field.name)
                 {
                     self.typecheck(value.type_id, *expected_type_id, field.value.span());
                 }
@@ -3632,6 +3648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &struct_module_source,
                 &fields,
                 expected_type.or(spread_base_type),
+                struct_lit.span,
             );
 
             // Substitute type parameters in field value types.
@@ -3670,22 +3687,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // concrete type arguments are known. For example, [10, 20, 30] in
             // `Container<i32> { items: [10, 20, 30] }` needs List<i32> coercion,
             // but at first pass the field type was List<T> (type param).
-            if !deferred_coercions.is_empty() && !type_args.is_empty() {
-                for &(field_idx, ast_idx) in &deferred_coercions {
-                    let field_name = &fields[field_idx].name;
-                    let concrete_field_type = struct_field_types
-                        .iter()
-                        .find(|(name, _)| name == field_name)
-                        .map(|(_, type_id)| self.substitute_type_params(*type_id, &type_args));
-
-                    if let Some(concrete_type) = concrete_field_type {
-                        let ast_field = &struct_lit.fields[ast_idx];
-                        if let Some(coerced) =
-                            self.try_coerce_tuple_to_sequence(&ast_field.value, ctx, concrete_type)
-                        {
-                            fields[field_idx].value = coerced;
+            for &(field_idx, ast_idx) in &deferred_coercions {
+                let field_name = &fields[field_idx].name;
+                let Some(concrete_type) = struct_field_types
+                    .iter()
+                    .find(|(name, _)| name == field_name)
+                    .map(|(_, type_id)| {
+                        if type_args.is_empty() {
+                            *type_id
+                        } else {
+                            self.substitute_type_params(*type_id, &type_args)
                         }
-                    }
+                    })
+                else {
+                    continue;
+                };
+                let ast_field = &struct_lit.fields[ast_idx];
+                if let Some(coerced) =
+                    self.try_coerce_tuple_to_sequence(&ast_field.value, ctx, concrete_type)
+                {
+                    fields[field_idx].value = coerced;
+                }
+                // The check the first pass skipped — but only once the slot is
+                // actually filled. A field type that still names a rigid
+                // parameter is one this literal did not pin, and comparing
+                // against a declaration's own slot is the very thing the first
+                // pass was skipping.
+                if !self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_rigid_param(concrete_type)
+                {
+                    self.typecheck(
+                        fields[field_idx].value.type_id,
+                        concrete_type,
+                        ast_field.value.span(),
+                    );
                 }
             }
 
@@ -4133,11 +4171,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// ids, which the monomorphizer then substitutes from the surrounding
     /// context. This matches the historical "phantoms are OK" behaviour.
     pub(super) fn infer_struct_type_args(
-        &self,
+        &mut self,
         struct_name: &str,
         struct_module: &ModuleSource,
         fields: &[TirStructField],
         expected_type: Option<TypeId>,
+        span: Span,
     ) -> Vec<TypeId> {
         let Some(struct_info) = self
             .lookup_struct_fields_in(struct_name, struct_module)
@@ -4149,15 +4188,67 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return vec![];
         }
 
-        let mut infer = InferCtx::new(
-            &self.tysys.type_table,
-            struct_info.type_param_type_ids.clone(),
+        // Instantiate the declaration's slots. Inside a generic body the
+        // literal's fields carry the *enclosing* item's parameters, which can
+        // share `(name, index)` with the struct's own — `IterMap { inner:
+        // *self, f }` inside `Iterator::map<U>` renders both as `IterMap<I,
+        // U>` while meaning different things.
+        let inst = self.instantiate(
+            &struct_info.type_param_type_ids,
+            &Instantiation {
+                kind: "struct",
+                name: struct_name,
+                span,
+            },
         );
+        let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();
+        let field_types = self.instantiate_types(&decl_field_types, &inst);
 
-        for (struct_field, (_, expected_field_type, _)) in
-            fields.iter().zip(struct_info.fields.iter())
-        {
-            infer.add(*expected_field_type, struct_field.value.type_id);
+        // Two fields mentioning one slot are each other's evidence: the slot
+        // takes what the first of them says, so a later one has to agree.
+        // Nothing else compares them — the first-pass check is skipped for a
+        // field naming a slot (the value is what fixes the slot), and checking
+        // against the *inferred* argument instead cannot work here, because the
+        // caller's expected type fills the same slot: that is what turned the
+        // prelude's `IterChain { first: *self, second: other }` into `expected
+        // StrCharIter, found J`. Only the literal's own fields are consulted.
+        let mut agreed: IndexMap<TypeId, TypeId> = IndexMap::default();
+        for (struct_field, &expected_field_type) in fields.iter().zip(field_types.iter()) {
+            let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
+            super::infer::unify(
+                &self.tysys.type_table,
+                expected_field_type,
+                struct_field.value.type_id,
+                &mut bindings,
+            );
+            for (var, answer) in bindings {
+                let Some(&first) = agreed.get(&var) else {
+                    agreed.insert(var, answer);
+                    continue;
+                };
+                let disagrees = {
+                    let table = self.tysys.type_table.borrow();
+                    !table.contains_undecided(first)
+                        && !table.contains_undecided(answer)
+                        && matches!(
+                            super::typecheck::check_assignable(answer, first, &table),
+                            super::typecheck::TypeCheckResult::Incompatible
+                        )
+                };
+                if disagrees {
+                    let _ = self.emit(TypeError::TypeMismatch {
+                        expected: self.tysys.type_table.borrow().type_name(first),
+                        found: self.tysys.type_table.borrow().type_name(answer),
+                        span: struct_field.value.span,
+                    });
+                }
+            }
+        }
+
+        let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
+
+        for (struct_field, &expected_field_type) in fields.iter().zip(field_types.iter()) {
+            infer.add(expected_field_type, struct_field.value.type_id);
         }
 
         // Back-infer from the caller's expected type: if it's a GenericInstance
@@ -4173,17 +4264,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && name == struct_info.name
                 && expected_args.len() == struct_info.type_param_type_ids.len()
             {
-                for (&param_id, &expected_arg) in struct_info
-                    .type_param_type_ids
-                    .iter()
-                    .zip(expected_args.iter())
-                {
-                    infer.add_expected_return(param_id, expected_arg);
+                for (&var, &expected_arg) in inst.vars.iter().zip(expected_args.iter()) {
+                    infer.add_expected_return(var, expected_arg);
                 }
             }
         }
 
-        let (inferred, _) = infer.solve_with_phantoms();
+        let mut inferred = infer.solve();
+        // A phantom parameter — one no field mentions — is not an inference
+        // failure: the declaration's own parameter *is* the answer, and
+        // monomorphization substitutes it. A slot a field does mention and
+        // nothing solved is a failure, so its variable stays put to be blamed
+        // and reported.
+        //
+        // Recorded before the answers are, so a phantom's variable is solved
+        // to that parameter rather than left unsolved and pinned to `error`
+        // at finalize behind no diagnostic.
+        for (slot, answer) in inferred.iter_mut().enumerate() {
+            let decl_param = struct_info.type_param_type_ids[slot];
+            let is_phantom = {
+                let table = self.tysys.type_table.borrow();
+                let index = match table.get(decl_param) {
+                    ResolvedType::TypeParam { index, .. }
+                    | ResolvedType::TypePack { index, .. } => *index,
+                    _ => continue,
+                };
+                !decl_field_types
+                    .iter()
+                    .any(|&f| table.contains_type_param_index(f, index))
+            };
+            if inst.vars.get(slot) == Some(answer) && is_phantom {
+                *answer = decl_param;
+            }
+        }
+        self.record_instantiation(&inst, &inferred);
+        self.blame_unsolved(&inst, &inferred);
         inferred
     }
 

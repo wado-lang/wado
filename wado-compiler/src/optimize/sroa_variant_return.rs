@@ -957,6 +957,7 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
         | ResolvedType::Reactive(_)
         | ResolvedType::Unknown
         | ResolvedType::Error => None,
+        ResolvedType::InferVar(var) => panic!("{var} reached SROA slot shaping"),
     }
 }
 
@@ -984,6 +985,7 @@ fn is_gc_ref(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Reactive(_)
         | ResolvedType::Unknown
         | ResolvedType::Error => false,
+        ResolvedType::InferVar(var) => panic!("{var} reached SROA gc-ref test"),
     }
 }
 

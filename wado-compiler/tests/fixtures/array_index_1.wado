@@ -42,11 +42,13 @@ struct Tree<K> {
 }
 
 impl<K> Tree<K> {
-    fn check(&self) -> i32 {
+    // `key` is a parameter rather than a literal: inside this body `K` is
+    // opaque, so no concrete key could satisfy `find_index(&K)`.
+    fn check(&self, key: &K) -> i32 {
         // Multiple calls to methods that should be inlined
         let active = self.root.count_active();
         let full = self.root.is_full(self.max_keys);
-        let idx = self.root.find_index(&"cherry");
+        let idx = self.root.find_index(key);
 
         if full {
             return active + 100;
@@ -94,7 +96,7 @@ fn array_index_inline_btree() with Stdout {
     };
 
 
-    let result = tree.check();
+    let result = tree.check(&"cherry");
     println(`result: ${result}`);
 }
 

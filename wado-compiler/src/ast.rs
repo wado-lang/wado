@@ -3052,6 +3052,43 @@ pub enum Type {
 }
 
 impl Type {
+    /// Every identifier this type mentions, at any depth. A caller matching
+    /// them against a declaration's parameter names learns which of those the
+    /// type determines — a name that is really a concrete type simply matches
+    /// no parameter.
+    pub fn mentioned_names(&self, out: &mut Vec<String>) {
+        match self {
+            Type::Named(n) => out.push(n.name.clone()),
+            Type::Generic(g) => {
+                out.push(g.name.clone());
+                for a in &g.args {
+                    a.mentioned_names(out);
+                }
+            }
+            Type::NamespacedGeneric(g) => {
+                out.push(g.namespace.clone());
+                out.push(g.name.clone());
+                for a in &g.args {
+                    a.mentioned_names(out);
+                }
+            }
+            Type::Function(f) => {
+                for p in &f.params {
+                    p.mentioned_names(out);
+                }
+                f.return_type.mentioned_names(out);
+            }
+            Type::Tuple(elems) => {
+                for e in elems {
+                    e.mentioned_names(out);
+                }
+            }
+            Type::Reference(inner) | Type::MutReference(inner) => inner.mentioned_names(out),
+            Type::TypePackSpread(name, _) => out.push(name.clone()),
+            Type::Infer(_) | Type::Error(_) => {}
+        }
+    }
+
     /// Whether this is the unit type, spelled `()`.
     #[must_use]
     pub fn is_unit(&self) -> bool {
@@ -3262,6 +3299,27 @@ pub struct GenericParam {
 }
 
 impl GenericParam {
+    /// The trait bounds this param declares, by name. An `fn`-signature bound
+    /// is excluded: it is already realised in the parameter's own type, so
+    /// there is no trait to check a type argument against.
+    pub fn trait_bound_names(&self) -> Vec<String> {
+        self.bounds
+            .iter()
+            .filter(|b| b.fn_signature.is_none())
+            .map(|b| b.name.clone())
+            .collect()
+    }
+
+    /// The trait bounds worth remembering for method lookup — the same set
+    /// [`Self::trait_bound_names`] names, kept whole.
+    pub fn real_bounds(&self) -> Vec<TraitBound> {
+        self.bounds
+            .iter()
+            .filter(|b| b.fn_signature.is_none())
+            .cloned()
+            .collect()
+    }
+
     /// Whether this param carries an `fn`-signature bound (`<F: fn(...)>`).
     /// Such params are erased before codegen, so they occupy no positional
     /// monomorphization slot.
@@ -3271,10 +3329,14 @@ impl GenericParam {
 
     /// Whether this param occupies a dense, positional slot — the "real" type
     /// params monomorphization substitutes by index. Excludes effect params
-    /// (`effect E`) and `fn`-bound params (`<F: fn(...)>`). Single source for
-    /// the projection rule shared by the annotate walk and reify.
+    /// (`effect E`) and `fn`-bound params (`<F: fn(...)>`), whose bound already
+    /// fixes them to a concrete function type. A *pack* consumes a slot
+    /// whatever it is bounded by, which is what registers it: both places that
+    /// assign slots resolve a pack's shape before they look at its bounds.
+    /// Single source for the projection rule shared by the annotate walk and
+    /// reify.
     pub fn is_real_type_param(&self) -> bool {
-        !self.is_effect && !self.has_fn_bound()
+        !self.is_effect && (self.is_pack || !self.has_fn_bound())
     }
 }
 

@@ -1273,17 +1273,25 @@ pub(crate) fn blanket_dispatch_for(
         method_name.to_string(),
     )
     .to_mangled_name();
-    // `impl_type_args` is positional against the impl's type params
-    // (`impl<V, ..P>` → `[receiver, P]`). A blanket that projects a pack the
-    // receiver cannot supply does not apply: instantiating it with the pack
-    // missing would leave the body unable to bind it.
-    let mut impl_type_args = vec![type_id];
-    for (bound_trait, assoc) in trait_env.pack_assocs_of_blanket(blanket) {
-        let pack = tt.resolve_trait_assoc_type_of_instance(type_id, &bound_trait, &assoc)?;
-        // Substituting a pack needs interning, so a mutable table. Record it
-        // here, the one place that has one; later readers hold a shared borrow.
-        tt.register_assoc_type_resolution(type_id, bound_trait, assoc, pack);
-        impl_type_args.push(pack);
+    // `impl_type_args` is positional against the impl's type params, so it is
+    // built in declaration order — the receiver at the slot the impl gave it,
+    // each other parameter at its own. A blanket that projects one the receiver
+    // cannot supply does not apply: instantiating it with that argument missing
+    // would leave the body unable to bind it.
+    let mut impl_type_args = Vec::new();
+    for source in trait_env.blanket_param_sources(blanket) {
+        match source {
+            None => impl_type_args.push(type_id),
+            Some((bound_trait, assoc)) => {
+                let projected =
+                    tt.resolve_trait_assoc_type_of_instance(type_id, &bound_trait, &assoc)?;
+                // Substituting a pack needs interning, so a mutable table.
+                // Record it here, the one place that has one; later readers
+                // hold a shared borrow.
+                tt.register_assoc_type_resolution(type_id, bound_trait, assoc, projected);
+                impl_type_args.push(projected);
+            }
+        }
     }
     Some((
         MonomorphInfo {

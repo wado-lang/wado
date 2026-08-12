@@ -534,6 +534,15 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` type parameter that its target and trait reference do not
+    /// mention. Nothing at a use site says what such a parameter is: the
+    /// receiver determines the ones the target names and no more, so the rest
+    /// reach codegen unsubstituted. Rust rejects the same shape (E0207).
+    UnconstrainedImplTypeParam {
+        param_name: String,
+        span: Span,
+    },
+
     /// Coherence violation: an inherent `impl Type { ... }` on a foreign type
     /// (one defined outside this package — a primitive, `Array<T>`, `String`,
     /// or any other stdlib type). Inherent impls may only extend types owned by
@@ -1260,6 +1269,13 @@ impl TypeError {
                 "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) or under a reference (`&[..T]`) is not supported yet".to_string(),
                 *span,
             ),
+            TypeError::UnconstrainedImplTypeParam { param_name, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "the type parameter `{param_name}` is not constrained by the impl target or the trait reference"
+                ),
+                *span,
+            ),
             TypeError::InherentImplOnForeignType {
                 self_type_name,
                 span,
@@ -1599,10 +1615,6 @@ impl MethodOwner {
 
 #[derive(Debug, Clone)]
 pub(super) struct MethodInfo {
-    /// [`crate::tir::method_param_offset`] as the digest applied it, carried
-    /// so consumers read it instead of re-deriving it. `None` when the lookup
-    /// did not come from a digested impl signature.
-    pub(super) impl_offset: Option<u32>,
     /// The declaring node of the method this lookup selected, taken from its
     /// [`crate::elaborator::sig::MethodSig`]. The use→def edge for a call is
     /// recorded from here, so it names the impl dispatch actually chose.
@@ -1632,15 +1644,13 @@ pub(super) struct MethodInfo {
     /// True when the method was found on a reference type impl (e.g., `impl Trait for &T`).
     /// The receiver needs an additional auto-ref for `&self` methods (Self is &T, so &self is &&T).
     pub(super) is_ref_impl: bool,
-    /// Method-level type parameter `TypeId`s in declaration order (excluding effect params).
-    ///
-    /// Populated only by lookups that also set up method-level type params in their
-    /// resolution scope — currently [`Elaborator::find_method_in_trait_bounds`] for
-    /// `T::method()` style calls through a type parameter bound. Other producers
-    /// leave it empty because their call sites have no method-level inference to
-    /// perform (either the method is non-generic, or its type args come from a
-    /// separate method-AST lookup such as [`Elaborator::infer_method_type_args`]).
+    /// The method's own slots, in declaration order, as the signature dispatch
+    /// selected holds them. Empty where the method declares none.
     pub(super) method_type_param_ids: Vec<TypeId>,
+    /// The same slots as the declaration wrote them, parallel to
+    /// [`Self::method_type_param_ids`] — the bounds to enforce and the
+    /// defaults to fill, which only AST carries.
+    pub(super) method_own_params: Vec<ast::GenericParam>,
     /// The module the matched `impl` block lives in. For inherent methods this
     /// is where the method body is registered, which is NOT always the receiver
     /// type's defining module (e.g. a user-written `impl List<u8>` on the

@@ -1,0 +1,19 @@
+// The other side of `error_struct_literal_slot_unpinned`: a slot no field
+// mentions is a phantom, which the annotation pins and monomorphization
+// substitutes. Nothing here is an inference failure.
+
+use { println, Stdout } from "core:cli";
+
+struct Tagged<T> {
+    value: i32,
+}
+
+export fn run() with Stdout {
+    let t: Tagged<i32> = Tagged { value: 1 };
+    println(`${t.value}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n"
+}

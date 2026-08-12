@@ -47,10 +47,10 @@ use crate::name::LocalMethodName;
 use crate::package::Package;
 use crate::synthesis::common::{alloc_local, option_some, ref_expr, synth_span};
 use crate::tir::{
-    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, SubstitutionContext, TirBlock,
-    TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal,
-    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirTemplatePart, TypeId, TypeTable,
+    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBlock, TirCapture, TirEffectOp,
+    TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
+    TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -317,7 +317,15 @@ fn substitute_operations(
     if type_args.is_empty() {
         return template.to_vec();
     }
-    let ctx = SubstitutionContext::new().with_impl_args(type_args);
+    // One frame, and a declaration numbers its own parameters densely from
+    // zero, so the arguments *do* line up with the slots positionally. That is
+    // what `substitute_type_params` is for; `SubstitutionContext` exists for
+    // the case this is not — an impl and its method sharing one index space.
+    let subst: IndexMap<u32, TypeId> = type_args
+        .iter()
+        .enumerate()
+        .map(|(i, &a)| (i as u32, a))
+        .collect();
     template
         .iter()
         .map(|op| {
@@ -325,14 +333,14 @@ fn substitute_operations(
                 .params
                 .iter()
                 .map(|p| TirParam {
-                    type_id: ctx.substitute(p.type_id, type_table),
+                    type_id: type_table.substitute_type_params(p.type_id, &subst),
                     ..p.clone()
                 })
                 .collect();
             TirEffectOp {
                 name: op.name.clone(),
                 params: new_params,
-                return_type: ctx.substitute(op.return_type, type_table),
+                return_type: type_table.substitute_type_params(op.return_type, &subst),
                 span: op.span,
                 cm_name: op.cm_name.clone(),
                 is_async: op.is_async,

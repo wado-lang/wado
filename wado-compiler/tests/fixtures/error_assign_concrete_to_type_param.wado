@@ -1,0 +1,15 @@
+// Assigning to a local declared with the enclosing body's own type parameter
+// is the same opaque comparison as the `let` annotation that declared it.
+
+fn f<T: Eq>(v: T) -> bool {
+    let mut x: T = v;
+    x = 5;
+    return x == v;
+}
+
+export fn run() {
+    assert f("a") == false;
+}
+
+__DATA__
+{ "compile_error": "type mismatch" }

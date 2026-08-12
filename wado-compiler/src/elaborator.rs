@@ -18,6 +18,7 @@ mod expr;
 mod handlers;
 mod infer;
 mod infer_hole;
+mod instantiate;
 mod item;
 pub(crate) mod liveness;
 mod matches;

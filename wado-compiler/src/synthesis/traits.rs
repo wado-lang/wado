@@ -5751,8 +5751,6 @@ fn resolve_impl_module_via_env(
 /// `project.functions` (asserted in `optimize/dce`). Use
 /// [`collect_canonical_fn_signatures`] for the `(arity, return_type)` view.
 fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<FqTypeName>)> {
-    let is_concrete = |t: TypeId| !matches!(tt.get(t), ResolvedType::TypeParam { .. });
-
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
             ResolvedType::GenericInstance {
@@ -5760,7 +5758,7 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<FqTyp
                 type_args,
                 module_source,
             } if TypeTable::is_tuple_type(name) => {
-                if !type_args.iter().all(|e| is_concrete(*e)) {
+                if !type_args.iter().all(|e| tt.is_concrete(*e)) {
                     return None;
                 }
                 let args = type_args.iter().map(|e| tt.fq_type_name(*e)).collect();
@@ -5769,7 +5767,7 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<FqTyp
             ResolvedType::GenericResource {
                 name, type_args, ..
             } => {
-                if !type_args.iter().all(|t| is_concrete(*t)) {
+                if !type_args.iter().all(|t| tt.is_concrete(*t)) {
                     return None;
                 }
                 let args = type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
@@ -5807,7 +5805,6 @@ impl FnSignature {
 }
 
 fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
-    let is_concrete = |t: TypeId| !matches!(tt.get(t), ResolvedType::TypeParam { .. });
     // Dedup by mangled name, not return-type `TypeId`: `&T` / `&mut T` mangle
     // identically and must share one stub, else the stubs collide post-mono.
     let mut seen: IndexSet<(usize, String)> = IndexSet::default();
@@ -5822,7 +5819,13 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
         else {
             continue;
         };
-        if !params.iter().all(|p| is_concrete(*p)) || !is_concrete(*return_type) {
+        // Only the return type has to be determined: it is half the key, and
+        // the parameters are irrelevant at codegen (see the type doc). A
+        // generic `fn(&T, &T) -> Ordering` therefore still supplies the
+        // `(2, Ordering)` stub its monomorphized closures will dispatch
+        // through, while `fn(?0::Item) -> ?1` — whose return type names
+        // nothing — supplies no key at all.
+        if !tt.is_concrete(*return_type) {
             continue;
         }
         let arity = params.len();

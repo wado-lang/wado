@@ -126,7 +126,7 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 ## Shared facilities
 
 - `mod_ref.rs` — a conservative mod/ref summary backing the move-safety predicates (`may_clobber`, `can_move_past`).
-- `arena_query.rs` — shared arena queries (purity and trap classification, mutation and place-root checks, break-target search, the promoted-read census).
+- `arena_query.rs` — shared arena queries (purity and trap classification, mutation and place-root checks, break-target search, the promoted-read queries). The census walk itself is on `Body`, memoized per session by the engine.
 - `nir_visitor.rs` — the shared pre/post-order visitor traits.
 
 ## Differential testing (EMI)

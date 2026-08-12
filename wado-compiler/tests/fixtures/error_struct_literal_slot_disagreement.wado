@@ -1,0 +1,17 @@
+// Two fields naming one slot are each other's evidence. Neither is checked
+// against the slot — the values are what fix it — so without comparing them
+// `Pair { a: 1, b: "x" }` built a `Pair<i32>` holding a `String`, and reading
+// `b` trapped.
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+export fn run() {
+    let p = Pair { a: 1, b: "x" };
+    assert p.a == 1;
+}
+
+__DATA__
+{"compile_error": "expected 'i32', found 'String'"}

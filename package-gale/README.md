@@ -42,9 +42,9 @@ editors, linters, and language servers). A clean parse simply has an empty
 diagnostic list.
 
 Built-in diagnostics and debugging. `gale dump` shows the prediction decision
-for every rule (and `--atn` shows the simulator's automaton); the `trace`
-option makes a generated parser log its recursive descent. See
-[The `gale` command](#the-gale-command).
+for every parser rule (`--atn` shows the simulator's automaton, `--lexer` the
+emit strategy of every lexer rule); the `trace` option makes a generated parser
+log its recursive descent. See [The `gale` command](#the-gale-command).
 
 ## Tutorial: a four-function calculator
 
@@ -331,9 +331,10 @@ wado run package-gale gen --trace Grammar.g4
 # A `.scm` positional arg is a highlight query (see "Syntax highlighting").
 wado run package-gale gen Grammar.g4 Grammar.highlights.scm
 
-# Inspect the prediction decision for every rule (add --atn for the automaton).
+# Inspect the prediction decision for every parser rule.
 wado run package-gale dump Grammar.g4
-wado run package-gale dump --atn Grammar.g4
+wado run package-gale dump --atn Grammar.g4    # the simulator's automaton
+wado run package-gale dump --lexer Grammar.g4  # the lexer's per-rule emit strategy
 ```
 
 Multiple `.g4` files are merged (e.g. a split lexer/parser grammar). The
