@@ -475,6 +475,100 @@ impl<'a> Engine<'a> {
         out
     }
 
+    /// A live-pool `FieldAccess` value for each field read the scratch re-walk
+    /// can name, sharing one value between exactly the reads the walk proved see
+    /// the same load. This is where `promote_fields` gets its representatives:
+    /// `maintain_pure_node` has no `FieldAccess` arm, because a field value is
+    /// keyed on the heap version at its program point and a point-free
+    /// re-derivation has none.
+    ///
+    /// The walk is used as an **equivalence oracle**, not as a value source.
+    /// Its own ids cannot cross into the live pool — a whole-function walk is
+    /// unseeded, so every receiver is a walk-local `Opaque` and every version
+    /// numbers from a fresh heap, which is exactly why
+    /// [`Engine::scoped_const_reads`] surfaces only constants. So each
+    /// equivalence class is re-minted here instead:
+    ///
+    /// - the receiver becomes `canonical_local(i)`, sound only where `i`
+    ///   provably holds one value ([`Engine::local_has_one_version`]) — a
+    ///   receiver that fails it is dropped rather than merged;
+    /// - the version is drawn fresh from above `max_heap_version`, so a minted
+    ///   triple can never collide with one the build-once graph already holds
+    ///   and merge two loads that see different heaps.
+    ///
+    /// Sharing within the walk survives (one class, one version); sharing with
+    /// anything outside it is deliberately given up.
+    pub fn scoped_field_values(&mut self) -> Vec<(ExprId, crate::nir_value_graph::ValueId)> {
+        use crate::nir_value_graph::{OpaqueSource, ValueKind, builder};
+        self.ensure_value_graph();
+        if self.body.value_graph.is_none() {
+            return Vec::new();
+        }
+        let root = self.body.root;
+        let mut scratch = self.body.values.clone();
+        let empty = IndexMap::default();
+        let empty_builtins = IndexSet::default();
+        let scoped = builder::walk_scoped(
+            self.body,
+            root,
+            0,
+            &empty,
+            &self.aliased_locals,
+            &self.untrackable_locals,
+            &self.mut_escaped_locals,
+            self.vg_type_table,
+            self.pure_builtin_callees.unwrap_or(&empty_builtins),
+            &mut scratch,
+            None,
+        );
+        // (scratch class, receiver local, field) for each field read, before any
+        // live-pool mutation: `local_has_one_version` borrows the engine.
+        let mut classes: Vec<(ExprId, crate::nir_value_graph::ValueId, u32, u32)> = Vec::new();
+        for (e, sv) in scoped {
+            if !matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. }) {
+                continue;
+            }
+            let ValueKind::FieldAccess {
+                receiver,
+                field_index,
+                ..
+            } = *scratch.kind(sv)
+            else {
+                continue;
+            };
+            let source = match scratch.kind(receiver) {
+                ValueKind::Opaque(o) => scratch.opaque_source(*o),
+                _ => None,
+            };
+            let Some(OpaqueSource::Local(i)) = source else {
+                continue;
+            };
+            classes.push((e, sv, i, field_index));
+        }
+        let mut out = Vec::new();
+        let mut minted: IndexMap<crate::nir_value_graph::ValueId, crate::nir_value_graph::ValueId> =
+            IndexMap::default();
+        let mut next_ver = self.body.values.max_heap_version().bump();
+        for (e, sv, local, field_index) in classes {
+            if !self.local_has_one_version(local) {
+                continue;
+            }
+            let recv_ty = self.locals()[local as usize].type_id;
+            let live = match minted.get(&sv) {
+                Some(&v) => v,
+                None => {
+                    let recv = self.body.values.canonical_local(local, recv_ty);
+                    let v = self.body.values.field_access(recv, field_index, next_ver);
+                    next_ver = next_ver.bump();
+                    minted.insert(sv, v);
+                    v
+                }
+            };
+            out.push((e, live));
+        }
+        out
+    }
+
     /// Drop the session's `&local` address-taken scan so the next
     /// [`Engine::body_address_taken`] recomputes it. The value graph is
     /// **never** dropped — it is built once and maintained in place (build-once

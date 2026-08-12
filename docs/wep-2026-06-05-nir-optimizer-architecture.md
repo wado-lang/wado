@@ -490,20 +490,28 @@ Three readings, in order of how much they cost:
       No effect on either benchmark's output: the freeze is starved of shared
       values, not of admissible locals. See the funnel table below.
 
-- [ ] Revive `promote_fields` by sourcing its candidates from
-      `Engine::scoped_const_reads` instead of `Engine::value`. It is dead today
-      (funnel table above), and it is the only freeze path whose representatives
-      would be genuinely shared — one `(receiver, field, heap_ver)` triple per
-      field, read at every use — so it is the first thing that could make
-      `apply_value_freeze`'s materialisation count non-zero. The re-walk already
-      supplies the `heap_ver` a query cannot, and `build_scoped` already
-      re-interns a caller-rooted `FieldAccess` tree into the live pool
-      (`reintern_live_rooted`), so the values arrive with live ids. What drops
-      them is `scoped_const_reads`'s own `is_const_value` filter, written when
-      forwarding was the only caller. The two soundness gates (scalar-field,
-      receiver-availability) are written and unreachable, not missing. Entry
-      check: the pass and its `cond_impl_post_promote` follow-up cost loop time
-      today for nothing, so measure both before and after.
+- [ ] Revive `promote_fields`. It is dead today (funnel table above), and it is
+      the only freeze path whose representatives would be genuinely shared — one
+      `(receiver, field, heap_ver)` triple per field, read at every use — so it
+      is the first thing that could make `apply_value_freeze`'s materialisation
+      count non-zero. The two soundness gates (scalar-field,
+      receiver-availability) are written and unreachable, not missing.
+      The material has to come from a scratch re-walk, since
+      `maintain_pure_node` has no version to supply, but
+      `Engine::scoped_const_reads` cannot be widened to hand it over as-is: a
+      whole-function re-walk is unseeded, so every receiver is a walk-local
+      `Opaque` (`reintern_live_rooted` drops those) and every version numbers
+      from a fresh heap that would over-merge against the live pool's. Both are
+      why the constant filter is there — it is the design, not vestigial. The
+      seeded inline path escapes both by construction and is not a precedent.
+      What does work is to treat the re-walk as an *equivalence oracle* rather
+      than a value source: group the field reads by their scratch `ValueId`, and
+      mint one live triple per group over `canonical_local(i)` — sound exactly
+      when `Engine::local_has_one_version(i)` — at a version above every version
+      already in the live pool. That reproduces the sharing the walk proved
+      while making a collision with an existing live triple impossible.
+      Entry check: the pass and its `cond_impl_post_promote` follow-up cost loop
+      time today for nothing, so measure both before and after.
 
 - [ ] Reach the in-loop consumers. Both freezes that may plant a local-naming
       value run after the fixed-point loop, so the passes inside it still see

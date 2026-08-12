@@ -306,31 +306,19 @@ pub(crate) fn build_scoped(
     heap_seed: Option<&HeapSnapshot>,
     live_base: u32,
 ) -> IndexMap<ExprId, ValueId> {
-    let scoped: Vec<(ExprId, ValueId)> = {
-        let pool = std::mem::take(scratch);
-        let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, pool);
-        b.pure_builtin_callees.clone_from(pure_builtin_callees);
-        b.current_value.clone_from(seed);
-        // Seed the heap with the caller's version state at the call site so a
-        // spliced field read carries the version a fresh whole-function build
-        // would assign (a fresh `INITIAL` heap collapses distinct versions — e.g.
-        // a `pop()`-shrunk `.used` — and would over-merge).
-        if let Some(h) = heap_seed {
-            b.heap_state.seed_from(h);
-        }
-        let stmts: Vec<StmtId> = b.body.blocks[block]
-            .stmts
-            .iter()
-            .skip(skip)
-            .copied()
-            .collect();
-        for s in stmts {
-            b.walk_stmt(s);
-        }
-        let scoped = b.value_of.iter().map(|(&e, &v)| (e, v)).collect();
-        *scratch = b.pool;
-        scoped
-    };
+    let scoped = walk_scoped(
+        body,
+        block,
+        skip,
+        seed,
+        aliased,
+        untrackable,
+        mut_escaped,
+        type_table,
+        pure_builtin_callees,
+        scratch,
+        heap_seed,
+    );
     // Surface every caller-rooted re-emittable value (constants, plus
     // `FieldAccess` / arithmetic over the call-site args at their true version),
     // re-interned into the live pool. A walk-local value (an `Opaque` of a
@@ -343,6 +331,51 @@ pub(crate) fn build_scoped(
         }
     }
     out
+}
+
+/// The walk half of [`build_scoped`], stopping before the re-intern: every
+/// `(expr, value)` the scratch walk produced, with the values living in
+/// `scratch`. A caller that only needs to know **which reads see the same
+/// value** wants this — the equivalence is what the walk establishes, while the
+/// scratch ids themselves mean nothing in the live pool (see
+/// `Engine::scoped_field_values`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn walk_scoped(
+    body: &Body,
+    block: BlockId,
+    skip: usize,
+    seed: &IndexMap<u32, ValueId>,
+    aliased: &crate::hashmap::IndexSet<u32>,
+    untrackable: &crate::hashmap::IndexSet<u32>,
+    mut_escaped: &crate::hashmap::IndexSet<u32>,
+    type_table: Option<&crate::tir::TypeTable>,
+    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    scratch: &mut ValuePool,
+    heap_seed: Option<&HeapSnapshot>,
+) -> Vec<(ExprId, ValueId)> {
+    let pool = std::mem::take(scratch);
+    let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table, pool);
+    b.pure_builtin_callees.clone_from(pure_builtin_callees);
+    b.current_value.clone_from(seed);
+    // Seed the heap with the caller's version state at the call site so a
+    // spliced field read carries the version a fresh whole-function build
+    // would assign (a fresh `INITIAL` heap collapses distinct versions — e.g.
+    // a `pop()`-shrunk `.used` — and would over-merge).
+    if let Some(h) = heap_seed {
+        b.heap_state.seed_from(h);
+    }
+    let stmts: Vec<StmtId> = b.body.blocks[block]
+        .stmts
+        .iter()
+        .skip(skip)
+        .copied()
+        .collect();
+    for s in stmts {
+        b.walk_stmt(s);
+    }
+    let scoped = b.value_of.iter().map(|(&e, &v)| (e, v)).collect();
+    *scratch = b.pool;
+    scoped
 }
 
 /// Whether `id`'s value is a build-context-free constant safe to freeze into an

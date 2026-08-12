@@ -376,6 +376,14 @@ pub(super) fn freeze_pure_arith(
             .filter(|&i| !engine.local_has_one_version(i))
             .collect();
 
+        // Field reads have no value on the maintained graph, so they come from
+        // the scratch re-walk instead. Only `promote_fields` asks.
+        let field_values: crate::hashmap::IndexMap<ExprId, ValueId> = if include_fields {
+            engine.scoped_field_values().into_iter().collect()
+        } else {
+            crate::hashmap::IndexMap::default()
+        };
+
         // Phase 1: decide every freeze on the clean, unedited graph. A value
         // query never mutates the skeleton, so the verify oracle (which fires
         // on graph queries) only compares build-vs-rebuild here — clean. (A
@@ -389,6 +397,7 @@ pub(super) fn freeze_pure_arith(
             multi_version_locals: &multi_version_locals,
             address_taken: &address_taken,
             param_set: &param_set,
+            field_values: &field_values,
             phase,
             include_fields,
         };
@@ -444,6 +453,9 @@ struct FreezeCtx<'a> {
     address_taken: &'a crate::hashmap::IndexSet<u32>,
     /// Parameter locals — entry-defined and available at every point.
     param_set: &'a crate::hashmap::IndexSet<u32>,
+    /// The `FieldAccess` representative of each field read, from the scratch
+    /// re-walk ([`Engine::scoped_field_values`]). Empty unless `include_fields`.
+    field_values: &'a crate::hashmap::IndexMap<ExprId, ValueId>,
     phase: FreezePhase,
     include_fields: bool,
 }
@@ -507,7 +519,15 @@ fn classify_candidate(
     if !is_pure_arith(engine, id, ctx.include_fields) {
         return None;
     }
-    let rep = engine.value(id)?;
+    // A field read's value never comes off the maintained graph — the re-walk
+    // supplies the version a query cannot. Arithmetic *over* a field read still
+    // resolves to `None` and is left alone: `value_fully_reemittable_locally`
+    // refuses a value nesting a `FieldAccess` anyway, since re-emitting a load
+    // inline is unsound once a pass moves the operand.
+    let rep = match &engine.body.exprs[id].kind {
+        ExprKind::FieldAccess { .. } => ctx.field_values.get(&id).copied()?,
+        _ => engine.value(id)?,
+    };
     // An early freeze may plant only context-free values. A constant means the
     // same thing wherever `inline` and `sroa` copy the operand to; a value naming
     // a local does not, because those passes renumber locals and splice a callee

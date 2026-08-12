@@ -1168,6 +1168,22 @@ impl ValuePool {
         self.values[phi.0 as usize] = ValueKind::LoopPhi { entry, body_iter };
     }
 
+    /// The highest [`HeapVersion`] any interned `FieldAccess` carries. A caller
+    /// minting field values from a **different** version numbering — a scratch
+    /// re-walk's fresh heap — starts above this, so no triple it mints can
+    /// collide with one already in the pool and silently merge two loads that
+    /// see different heaps.
+    pub fn max_heap_version(&self) -> HeapVersion {
+        self.values
+            .iter()
+            .filter_map(|k| match k {
+                ValueKind::FieldAccess { heap_ver, .. } => Some(*heap_ver),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(HeapVersion::INITIAL)
+    }
+
     #[inline]
     pub fn field_access(
         &mut self,
