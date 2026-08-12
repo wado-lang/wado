@@ -231,19 +231,22 @@ Node.js and Bun, vs native-Rust [Axum](https://github.com/tokio-rs/axum), over
 Hono's official router benchmark route set driven with `oha`. See
 `http_routing/README.md` for the full route set and methodology.
 
-Throughput (requests/sec, higher is better):
+Throughput (requests/sec, higher is better). `wado serve h2c` is the same
+server process as `wado serve`, driven over HTTP/2 cleartext instead of
+HTTP/1.1 — see `http_routing/README.md`.
 
-| Request                         | `wado serve` | Hono (Node) | Hono (Bun) | Axum (native) |
-| ------------------------------- | -----------: | ----------: | ---------: | ------------: |
-| `GET /user`                     |       30,835 |      18,660 |     31,979 |        73,465 |
-| `GET /user/lookup/username/hey` |       26,835 |      15,513 |     31,223 |        75,372 |
-| `GET /event/abcd1234/comments`  |       24,982 |      15,931 |     27,405 |        72,029 |
-| `POST /event/abcd1234/comment`  |       26,181 |      13,138 |     31,410 |        72,488 |
-| `GET /static/index.html`        |       26,019 |      15,048 |     31,427 |        70,690 |
+| Request                                     | `wado serve` | `wado serve h2c` | Hono (Node) | Hono (Bun) | Axum (native) |
+| ------------------------------------------- | -----------: | ---------------: | ----------: | ---------: | ------------: |
+| `GET /user`                                 |       29,251 |           29,541 |      25,454 |     40,164 |        77,699 |
+| `GET /user/comments`                        |       31,535 |           28,612 |      28,306 |     40,057 |        80,316 |
+| `GET /user/lookup/username/hey`             |       29,070 |           28,226 |      24,862 |     35,807 |        80,197 |
+| `GET /event/abcd1234/comments`              |       27,239 |           27,975 |      25,089 |     35,502 |        83,187 |
+| `POST /event/abcd1234/comment`              |       28,399 |           27,871 |      16,795 |     36,113 |        81,531 |
+| `GET /very/deeply/nested/route/hello/there` |       29,887 |           29,734 |      27,519 |     39,062 |        79,578 |
+| `GET /static/index.html`                    |       28,417 |           27,498 |      24,110 |     35,486 |        81,208 |
 
 HTTP routing needs `oha` and Bun, and is measured separately
-(`SLICE=4 ROUNDS=5 CONNECTIONS=50 mise run benchmark-http-routing`). The table
-above carries over from the previous run: this one had no `oha`.
+(`SLICE=4 ROUNDS=5 CONNECTIONS=50 mise run benchmark-http-routing`).
 
 ## Running
 
