@@ -562,15 +562,14 @@ impl<'a> Engine<'a> {
                 continue;
             }
             let recv_ty = self.locals()[local as usize].type_id;
-            let live = match minted.get(&sv) {
-                Some(&v) => v,
-                None => {
-                    let recv = self.body.values.canonical_local(local, recv_ty);
-                    let v = self.body.values.field_access(recv, field_index, next_ver);
-                    next_ver = next_ver.bump();
-                    minted.insert(sv, v);
-                    v
-                }
+            let live = if let Some(&v) = minted.get(&sv) {
+                v
+            } else {
+                let recv = self.body.values.canonical_local(local, recv_ty);
+                let v = self.body.values.field_access(recv, field_index, next_ver);
+                next_ver = next_ver.bump();
+                minted.insert(sv, v);
+                v
             };
             out.push((e, live));
         }
