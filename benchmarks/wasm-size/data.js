@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786532617896,
+  "lastUpdate": 1786540538558,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47465,6 +47465,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 267689,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "200d03abd0b51d96c30697e83eaffcd7051caab2",
+          "message": "Merge pull request #1797 from wado-lang/claude/gale-lexer-duplication-bug-hamxez\n\nfix(gale): a parser literal is an alias for the lexer rule it duplicates",
+          "timestamp": "2026-08-12T22:04:13+09:00",
+          "tree_id": "bbf3c497917383b1696596a78394f99ba954b5de",
+          "url": "https://github.com/wado-lang/wado/commit/200d03abd0b51d96c30697e83eaffcd7051caab2"
+        },
+        "date": 1786540537936,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265549,
             "unit": "bytes"
           }
         ]
