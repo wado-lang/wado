@@ -3584,8 +3584,7 @@ mod ast_id_tests {
 
     /// A reference site with no id has nowhere to record which declaration it
     /// means, so its consumers thread the spelling instead and two modules'
-    /// same-named declarations compare equal. `TraitBound` was such a node, and
-    /// is why an aliased bound was unsatisfiable (#1785).
+    /// same-named declarations compare equal — the shape of #1785.
     #[test]
     fn every_reference_bearing_node_carries_an_ast_id() {
         let source = include_str!("ast.rs");

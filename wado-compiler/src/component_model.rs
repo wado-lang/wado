@@ -603,11 +603,10 @@ pub struct CmInterfaceRegistry {
     /// The CM interface each type reference resolves to, keyed by the
     /// reference site.
     ///
-    /// This was a `String` field on `NamedType`. A resolved fact does not
-    /// belong on the syntax node: stored there it was a second answer beside
-    /// `crate::resolve::Resolutions`, which keys the same `AstId`, and the two
-    /// could disagree. Keyed here, one pass writes it and every consumer reads
-    /// the same entry (WEP 2026-08-10).
+    /// A resolved fact does not belong on the syntax node: there it would be a
+    /// second answer beside `crate::resolve::Resolutions`, which keys the same
+    /// `AstId`, free to disagree with it. Keyed here, one pass writes it and
+    /// every consumer reads the same entry (WEP 2026-08-10).
     source_interfaces: SourceInterfaces,
 
     /// `Effect::method` -> function info

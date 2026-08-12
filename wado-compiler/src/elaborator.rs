@@ -1414,8 +1414,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<(ModuleSource, String)> {
         use crate::tir::ResolvedType;
         // A builtin's identity is its name, and the name path already knows
-        // which module declares it. Answering here from a second table is how
-        // the two sides came to disagree.
+        // which module declares it. A second table answering here would be a
+        // second derivation, free to disagree with that one.
         if let Some(name) = self.builtin_type_name(type_id) {
             return Some(self.decl_key_or_local(&name));
         }

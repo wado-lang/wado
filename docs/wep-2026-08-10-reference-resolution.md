@@ -199,166 +199,166 @@ Costs and risks:
 - 2. [x] B — the resolution pass and `Resolutions`, in shadow mode: every site
          resolved, every impl-header answer compared against what `TraitEnv`
          derives, every difference logged. Nothing reads the table yet.
-- 3. [ ] C — flip consumers to `DeclRef`, subsystem by subsystem. Done:
+- 3. [x] C — flip consumers to `DeclRef`, subsystem by subsystem. Done:
 
-         - `find_trait_impl_for_type_with_args` compares identities when both
-                           sides have one, and the bound-enforcement choke point
-                           (`enforce_single_bound` / `check_and_register_bound`) carries the
-                           bound's. That closes #1785's unsound direction — a same-named
-                           foreign trait no longer satisfies a bound.
-                         - `ImplHeader` reads its trait's `DeclRef` off the table, and the impl
-                           index matches on it rather than on the header's spelling.
-                         - **The mangled name's trait segment is a declaration.** A method
-                           mangle already named its receiver by the declaring module; the trait
-                           half now does too, through `name::FqTraitName` — the same
-                           unforgeable-by-construction discipline `FqTypeName` carries. It
-                           replaces `LocalMethodName`'s three separate fields (`trait_name`,
-                           `base_trait_name`, `base_trait_module`), which could disagree, with
-                           one that cannot. Its constructors take a declaration: the impl
-                           header's site (through `Resolutions`), a `CompilerItems` entry
-                           (`trait_fq`), or a resolved `DeclKey`. Flipping the field's type
-                           enumerated every producer — ~180 of them — which is the property
-                           this design was chosen for. This closes #1785's remaining direction
-                           (an aliased bound reaches the impl that defines the method) and the
-                           collision where two same-named traits implemented for one receiver
-                           mangled to one name and one impl overwrote the other.
-                         - **Every bound position is a reference site.** The resolution walk
-                           reached a generic parameter's bounds and nothing else: `walk_item`'s
-                           `Item::Trait` arm visited neither `trait Sub: Super`'s supertraits
-                           nor `type A: Bound`'s bounds, so those sites had no entry and every
-                           consumer of an inherited bound fell back to resolving a spelling.
-                           All three positions now route through
-                           `AstVisitor::visit_trait_bounds`, which is one rule rather than
-                           three copies of one.
-                         - **The table ranked the prelude above a module's own declarations.**
-                           `resolve_name` asked `SymbolTable::lookup` first, which is imports
-                           *then prelude*, before the module's own declarations — the shape of
-                           #1298, in the table meant to end it. The layers are now ordered
-                           binders → explicit imports → own declarations → prelude, matching
-                           what the consumers derive.
-                         - **A qualified path in expression position is a reference site too.**
-                           `Trait::method(recv, …)` reaches dispatch as a substring of an
-                           `Ident`'s name, which no vantage owns. The path's leading segment
-                           already carries its own `AstId` for LSP navigation; the resolution
-                           walk now records it, and the UFCS dispatcher names the required
-                           trait from it.
-                         - `AssocTypeProjection` carries its bounds as `FqTraitName`, answered
-                           where the trait declaration wrote them. It was the last bound store
-                           that kept a spelling, and it kept one because the sites it needed
-                           were the ones the walk never reached.
+     - `find_trait_impl_for_type_with_args` compares identities when both
+       sides have one, and the bound-enforcement choke point
+       (`enforce_single_bound` / `check_and_register_bound`) carries the
+       bound's. That closes #1785's unsound direction — a same-named
+       foreign trait no longer satisfies a bound.
+     - `ImplHeader` reads its trait's `DeclRef` off the table, and the impl
+       index matches on it rather than on the header's spelling.
+     - **The mangled name's trait segment is a declaration.** A method
+       mangle already named its receiver by the declaring module; the trait
+       half now does too, through `name::FqTraitName` — the same
+       unforgeable-by-construction discipline `FqTypeName` carries. It
+       replaces `LocalMethodName`'s three separate fields (`trait_name`,
+       `base_trait_name`, `base_trait_module`), which could disagree, with
+       one that cannot. Its constructors take a declaration: the impl
+       header's site (through `Resolutions`), a `CompilerItems` entry
+       (`trait_fq`), or a resolved `DeclKey`. Flipping the field's type
+       enumerated every producer — ~180 of them — which is the property
+       this design was chosen for. This closes #1785's remaining direction
+       (an aliased bound reaches the impl that defines the method) and the
+       collision where two same-named traits implemented for one receiver
+       mangled to one name and one impl overwrote the other.
+     - **Every bound position is a reference site.** The resolution walk
+       reached a generic parameter's bounds and nothing else: `walk_item`'s
+       `Item::Trait` arm visited neither `trait Sub: Super`'s supertraits
+       nor `type A: Bound`'s bounds, so those sites had no entry and every
+       consumer of an inherited bound fell back to resolving a spelling.
+       All three positions now route through
+       `AstVisitor::visit_trait_bounds`, which is one rule rather than
+       three copies of one.
+     - **The table ranked the prelude above a module's own declarations.**
+       `resolve_name` asked `SymbolTable::lookup` first, which is imports
+       _then prelude_, before the module's own declarations — the shape of
+       #1298, in the table meant to end it. The layers are now ordered
+       binders → explicit imports → own declarations → prelude, matching
+       what the consumers derive.
+     - **A qualified path in expression position is a reference site too.**
+       `Trait::method(recv, …)` reaches dispatch as a substring of an
+       `Ident`'s name, which no vantage owns. The path's leading segment
+       already carries its own `AstId` for LSP navigation; the resolution
+       walk now records it, and the UFCS dispatcher names the required
+       trait from it.
+     - `AssocTypeProjection` carries its bounds as `FqTraitName`, answered
+       where the trait declaration wrote them. It was the last bound store
+       that kept a spelling, and it kept one because the sites it needed
+       were the ones the walk never reached.
 
-                           Measured on the e2e suite by making the frame fallback panic:
-                           4141 trait references reached it before these three fixes, 4 after,
-                           and those 4 are sites the table *does* hold — with `Unresolved`,
-                           for a name that reaches no import, no local declaration and no
-                           prelude entry. A bodiless derive (`impl Deserialize for Point;`)
-                           may legitimately name a stdlib trait the module never `use`d, and
-                           only the declaration indexes can answer for it. So the rule the
-                           code now asserts is: **a site absent from the table is a bug in the
-                           walk; a site present but undeclared is the frame derivation's to
-                           answer.**
-                         - `fq_trait_name_written` is gone. Its one real caller was operator
-                           dispatch falling back to an auto-derived `Eq` / `Ord`, which knows
-                           the trait as a compiler item; `auto_derive_by_trait` now hands that
-                           item back, so the trait is named by its declaration.
+       Measured on the e2e suite by making the frame fallback panic:
+       4141 trait references reached it before these three fixes, 4 after,
+       and those 4 are sites the table _does_ hold — with `Unresolved`,
+       for a name that reaches no import, no local declaration and no
+       prelude entry. A bodiless derive (`impl Deserialize for Point;`)
+       may legitimately name a stdlib trait the module never `use`d, and
+       only the declaration indexes can answer for it. So the rule the
+       code now asserts is: **a site absent from the table is a bug in the
+       walk; a site present but undeclared is the frame derivation's to
+       answer.**
 
-                         What still keys on a name, each a place the class survives:
+     - `fq_trait_name_written` is gone. Its one real caller was operator
+       dispatch falling back to an auto-derived `Eq` / `Ord`, which knows
+       the trait as a compiler item; `auto_derive_by_trait` now hands that
+       item back, so the trait is named by its declaration.
 
-                         - `blanket_impls` and `trait_impl_modules` are keyed by trait name.
-                           `TraitImplModuleIndex`'s doc says re-keying the receiver "would
-                           require build-time import resolution that `TraitEnv::build` doesn't
-                           have plumbed through" — stage B plumbed it through, and
-                           `impl_target_key` already computes the receiver's `ImplTargetKey` in
-                           the same loop that builds this index, so the stated blocker is gone.
-                         - **The impl-module index answers in two receiver namespaces, and
-                   they are different questions.** A mangled head (`mod/Widget`) picks
-                   out one declaration; a declared name (`Widget`) picks out any
-                   declaration spelling itself that way. The index held one map and one
-                   lookup, while its two producers wrote different namespaces: the AST
-                   layer stored the heads impl blocks wrote, the synthesis layer stored
-                   `base_struct_name()`. A query reached exactly one layer, decided by
-                   which namespace it happened to speak.
+       What still keys on a name, each a place the class survives:
 
-                   The two namespaces now get separate storage, and both layers write
-                   both maps from one receiver identity — `Receiver::head_key` and
-                   `Receiver::decl_key` off the same `ImplTargetKey` — so they cannot
-                   drift apart. The AST layer is derived from the impl headers'
-                   resolved targets rather than the heads they wrote.
+     - `blanket_impls` and `trait_impl_modules` are keyed by trait name.
+       `TraitImplModuleIndex`'s doc says re-keying the receiver "would
+       require build-time import resolution that `TraitEnv::build` doesn't
+       have plumbed through" — stage B plumbed it through, and
+       `impl_target_key` already computes the receiver's `ImplTargetKey` in
+       the same loop that builds this index, so the stated blocker is gone.
+     - **The impl-module index answers in two receiver namespaces, and
+       they are different questions.** A mangled head (`mod/Widget`) picks
+       out one declaration; a declared name (`Widget`) picks out any
+       declaration spelling itself that way. The index held one map and one
+       lookup, while its two producers wrote different namespaces: the AST
+       layer stored the heads impl blocks wrote, the synthesis layer stored
+       `base_struct_name()`. A query reached exactly one layer, decided by
+       which namespace it happened to speak.
 
-                   **The query takes a receiver, not a spelling.** `ImplReceiver` used
-                   to be `Mangled(&str) | Declared(&str)`, and every caller chose its
-                   own label — which is the same defect one level up: nine callers said
-                   `Mangled` while three of them held a bare declaration name. It now
-                   carries `Of(&Receiver)` (the index derives both spellings, so there
-                   is no namespace to get wrong), `Instantiated(&MangledName)` (a
-                   receiver with its type arguments, which only the mangled namespace
-                   can spell) and `Declared(&DeclName)` (a caller that genuinely holds
-                   nothing else). A bare `&str` can no longer claim to be mangled.
-                   Candidate lists are built by one function, so each entry's form is
-                   decided by what produced it.
+       The two namespaces now get separate storage, and both layers write
+       both maps from one receiver identity — `Receiver::head_key` and
+       `Receiver::decl_key` off the same `ImplTargetKey` — so they cannot
+       drift apart. The AST layer is derived from the impl headers'
+       resolved targets rather than the heads they wrote.
 
-                   Three rules fell out, each of which the single-namespace index had
-                   hidden:
+       **The query takes a receiver, not a spelling.** `ImplReceiver` used
+       to be `Mangled(&str) | Declared(&str)`, and every caller chose its
+       own label — which is the same defect one level up: nine callers said
+       `Mangled` while three of them held a bare declaration name. It now
+       carries `Of(&Receiver)` (the index derives both spellings, so there
+       is no namespace to get wrong), `Instantiated(&MangledName)` (a
+       receiver with its type arguments, which only the mangled namespace
+       can spell) and `Declared(&DeclName)` (a caller that genuinely holds
+       nothing else). A bare `&str` can no longer claim to be mangled.
+       Candidate lists are built by one function, so each entry's form is
+       decided by what produced it.
 
-                   - **A type parameter has no spelling in the declaration namespace.**
-                     The synthesis layer recorded core's generic `impl<T: …>` under the
-                     declaration key `("T", trait)`, where it answered for a user
-                     `struct T`. The AST layer already skipped these; the two layers
-                     now share the rule.
-                   - **A bodiless derive asks for an impl, it does not host one.**
-                     Type-param dispatch runs through a blanket only when the receiver
-                     has no per-type impl, and `impl Serialize for Config;` sat in the
-                     index as though it held a body — so dispatch stopped at a module
-                     with none and nothing downstream was instantiated.
-                   - **A frame's own type parameter wins over a same-named
-                     declaration.** The declaration indexes cannot see binders, so a
-                     name-only lookup inside a generic frame must stop before them.
+       Three rules fell out, each of which the single-namespace index had
+       hidden:
 
-                 - **An impl header's trait is the declaration its site resolved to.**
-                           Found by accident: a fixture declaring
-                           `trait Sub { fn sub(&self) -> i32; }` and implementing it was
-                           rejected with "method `sub` takes 0 parameter(s) but `Sub` declares
-                           1" — the arity came from `core:prelude`'s arithmetic `Sub`, whose
-                           `sub` takes a right-hand side. Renaming the trait made the same
-                           program compile, which is this class's signature.
+     - **A type parameter has no spelling in the declaration namespace.**
+       The synthesis layer recorded core's generic `impl<T: …>` under the
+       declaration key `("T", trait)`, where it answered for a user
+       `struct T`. The AST layer already skipped these; the two layers
+       now share the rule.
+     - **A bodiless derive asks for an impl, it does not host one.**
+       Type-param dispatch runs through a blanket only when the receiver
+       has no per-type impl, and `impl Serialize for Config;` sat in the
+       index as though it held a body — so dispatch stopped at a module
+       with none and nothing downstream was instantiated.
+     - **A frame's own type parameter wins over a same-named
+       declaration.** The declaration indexes cannot see binders, so a
+       name-only lookup inside a generic frame must stop before them.
 
-                           The arity check already compared identities; the identity was
-                           wrong. `ImplHeader::trait_key` came from `impl_target_key`, over
-                           `decl_identity_core`, whose `is_defined_in_module` layer cannot see
-                           a trait because a trait has no symbol-table entry, so it fell
-                           through to the prelude. The header already carried `trait_ref` —
-                           the table's answer for the site the header wrote — beside it. That
-                           answers first now; `impl_target_key` is the fallback for a site the
-                           table holds no declaration for.
+     - **An impl header's trait is the declaration its site resolved to.**
+       A fixture declaring `trait Sub { fn sub(&self) -> i32; }` and
+       implementing it was rejected with "method `sub` takes 0 parameter(s)
+       but `Sub` declares 1": the arity came from `core:prelude`'s arithmetic
+       `Sub`. Renaming the trait made the same program compile, which is this
+       class's signature.
 
-                           The **receiver** half of the same header is the next step and is
-                           the larger risk. `type_key` still comes from `impl_target_key`, and
-                           the site can answer it the same way — `RefKind::from_ast` first
-                           (`head_site` unwraps references, so `impl T for &U` would otherwise
-                           key as `U`), then `Binder` → `TypeParam`, `Decl` → `Decl`. What
-                           needs checking before trusting it is the three names
-                           `decl_identity_core` shortcuts by hand: a primitive keys to
-                           `ModuleSource::primitive()`, `Array<T>` to `array()`, the tuple type
-                           to `types()`. Those must agree with what the table answers for the
-                           same spelling, or the impl indexes split in two — which is how
-                           `f169efe54` failed.
-                         - Stores that flatten a bound to its name and lose the site:
-                           `infer_holes`' recorded bounds, `type_param_bounds` on the struct and
-                           trait digests, and `BlanketImpl::bounds`.
-                           `find_method_in_trait_bounds` takes the bounds themselves and
-                           answers from the winning one's site.
-                         - The associated-type registries key on `tir::TraitKey`, the trait's
-                           declaring module and declared name, filled from the impl header's
-                           site and from each blanket bound's. What still asks by spelling is
-                           `resolve_assoc_type_qualified`, because an `AssocTypeProjection`
-                           records the trait as a `String`; it declines when two declarations
-                           sharing the name disagree rather than letting registration order
-                           decide.
-                         - The synthesis gate — `bound_driven_synth_requests` and
-                           `SynthesisCtx`'s `pending` / `requested` — keys on `TraitKey`. The
-                           traits that drive synthesis are all compiler items, so
-                           `OnBoundTrait::compiler_item` reads the declaration off the registry
-                           instead of the bound's spelling.
+       The arity check already compared identities; the identity was wrong,
+       because the header derived it by resolving its own spelling through a
+       layer that cannot see a trait. The header carries `trait_ref` — the
+       table's answer for the site it wrote — and that answers now.
+
+       The receiver half of the header answers the same way, and one rule
+       keeps the two ends of a lookup together: a head that names no
+       declaration gets no module. `ImplTargetKey::of_decl` is where that is
+       decided, mirroring `FqTypeName::of_head`, so a definition reached
+       through a written head and a lookup reached through a resolved type
+       land on the same key. The tuple family is the case that needs it:
+       `internal type [..T]` gets no symbol, so no vantage can name it and
+       only a module-free key agrees.
+
+     - **A namespace-qualified head writes its member's declaration name.**
+       `geo::Tag` writes `Tag`; which module declares it is the reference
+       site's answer, read from the `ns$member` alias the namespace import
+       registers. Rendering these heads as `Unknown` filed an impl under a
+       name no lookup asks for — its methods went missing with no diagnostic
+       — and made coherence treat every one of them as foreign.
+     - Stores that flatten a bound to its name and lose the site:
+       `infer_holes`' recorded bounds, `type_param_bounds` on the struct and
+       trait digests, and `BlanketImpl::bounds`.
+       `find_method_in_trait_bounds` takes the bounds themselves and
+       answers from the winning one's site.
+     - The associated-type registries key on `tir::TraitKey`, the trait's
+       declaring module and declared name, filled from the impl header's
+       site and from each blanket bound's. What still asks by spelling is
+       `resolve_assoc_type_qualified`, because an `AssocTypeProjection`
+       records the trait as a `String`; it declines when two declarations
+       sharing the name disagree rather than letting registration order
+       decide.
+     - The synthesis gate — `bound_driven_synth_requests` and
+       `SynthesisCtx`'s `pending` / `requested` — keys on `TraitKey`. The
+       traits that drive synthesis are all compiler items, so
+       `OnBoundTrait::compiler_item` reads the declaration off the registry
+       instead of the bound's spelling.
 
 - 4. [x] D — delete what the table replaces. Done: `declaring_side_decl_key`,
          `canonical_decl_key_with`, `decl_identity_core`,
@@ -383,8 +383,8 @@ has itself created:
 |                                             | at the start | now |
 | ------------------------------------------- | ------------ | --- |
 | `trait_name: &str` parameters               | 114          | 67  |
-| `struct_name` / `type_name: &str`           | 93           | 93  |
-| `.base_name()` — an identity flattened back | 0            | 27  |
+| `struct_name` / `type_name: &str`           | 93           | 92  |
+| `.base_name()` — an identity flattened back | 0            | 26  |
 
 The receiver half has not moved as a count, but the flip has now been run where
 it decides an answer: `ImplReceiver` takes a receiver identity, and the

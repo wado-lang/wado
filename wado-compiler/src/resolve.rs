@@ -102,8 +102,8 @@ impl Resolutions {
     ///
     /// Runs the same scope order the walk runs at every site, minus the
     /// binders — a caller holding a bare name is outside any item's type
-    /// parameters. Sharing the lookup is the point: a second chain beside it is
-    /// how a consumer's answer came to differ from the table's.
+    /// parameters. One lookup, so a name-only answer and the answer that name's
+    /// site gets cannot differ.
     #[must_use]
     pub fn declaration_named(
         &self,

@@ -259,18 +259,14 @@ Filing it in the digest type-checks and silently answers `None`.
 The digest only holds if each question it answers has a single implementation.
 Every convergence below was forced by a defect where two of them disagreed:
 
-- Which declaration a name means — `canonical_decl_key` from a use site,
-  `declaring_side_decl_key` from the module that wrote the name. A name as
+- Which declaration a name means — from the module that wrote it. A name as
   written and the name a declaration calls itself differ exactly when an alias
   is in play, so a lookup keyed by the wrong one answers with another module's
-  same-named type.
-- Which declaration a name means _in trait position_ —
-  `trait_decl_key_in_frame`, where only trait declarations are candidates. A
-  same-named non-trait is not a competitor, and the distinction is
-  load-bearing because traits have no symbol-table entry: `canonical_decl_key`
-  answers `Left` with `core:prelude/format`'s enum case, displacing a module's
-  own `trait Left`. A local trait answers unless an import names a trait of
-  that name.
+  same-named type. Superseded by WEP 2026-08-10: a reference site is resolved
+  once, by its writing module, and the consumers take the answer rather than
+  each deriving one. The position-scoped variants this section listed — a
+  trait-position lookup where only trait declarations are candidates — are what
+  the site answers directly, since it knows the position it was written in.
 - What a projection means in a frame — `frame_projection`, answering from the
   bindings a projection receiver carries and then from the enclosing `where`
   clause. Three implementations of this question disagreed, and the

@@ -727,8 +727,8 @@ fn push_module(
 /// module by convention.
 ///
 /// A value blanket (`impl<T: Bound> Trait for T`) has no per-type home, and its
-/// target keys as [`ImplTargetKey::TypeParam`] — so excluding that variant is
-/// the same set the receiver classification used to compute.
+/// target keys as [`ImplTargetKey::TypeParam`], so excluding that variant is
+/// what leaves it out.
 fn index_impl_modules(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
     concrete_only: bool,
@@ -1649,7 +1649,8 @@ impl TraitEnv {
                     Some(crate::resolve::DeclRef::Decl(decl)),
                 ) => query == decl,
                 // A caller not yet carrying an identity falls back to the
-                // spelling — the old behaviour and the old hole.
+                // spelling, which two modules can share (WEP 2026-08-10 stage
+                // C has these still to convert).
                 _ => header.trait_name.as_deref() == Some(trait_name),
             }
         })

@@ -220,13 +220,15 @@ the common case. A receiver with no declaring module (a builtin, a tuple) has no
 
 The same rule binds names still in their written form. A type name in source is
 relative to the module that wrote it, so a **reference site** — not a consumer —
-is what an identity is derived at, once. Today that holds for `impl` headers:
-each block's digest (`ImplHeader`) carries its module, its target's
-`ImplTargetKey` and its trait's, and the whole-program checks (coherence, orphan
-rules, sealed traits, trait-method arity) read the digest instead of re-walking
+is where an identity is derived, once: `crate::resolve::Resolutions` answers
+every site before elaboration begins, keyed by the site's own `AstId`. An `impl`
+block's digest (`ImplHeader`) carries its module, its target's `ImplTargetKey`
+and its trait's, and the whole-program checks (coherence, orphan rules, sealed
+traits, trait-method arity) read the digest instead of re-walking
 `loaded_modules`, because a second walk knows no module and can only compare
-spellings. Extending that to every reference site, so identity rather than a
-name is what the queries take, is WEP 2026-08-10.
+spellings. A consumer holding a bare name with no site goes through the table's
+own scope lookup, so it cannot answer differently from the site. See WEP
+2026-08-10.
 
 ## Component Model Registries
 

@@ -547,10 +547,9 @@ pub struct LocalMethodName {
     /// The trait / effect / resource this method implements, named by the
     /// module that declares it — `None` for an inherent method.
     ///
-    /// One field, not three: the declaring module, the declaration name and
-    /// the instantiated spelling used to be stored separately and could
-    /// disagree, which is how two modules' same-named `interface Logger`
-    /// impls collapsed onto whichever landed first in a bare-name table.
+    /// One field, not three. The declaring module, the declaration name and
+    /// the instantiated spelling are all rendered from it, so no two of them
+    /// can disagree about which trait this is.
     pub trait_name: Option<FqTraitName>,
     /// Concrete `TypeId`s of the trait / resource type arguments at this
     /// impl site (e.g. `[u8]` for `impl Stream<u8> for MockCM`). Empty

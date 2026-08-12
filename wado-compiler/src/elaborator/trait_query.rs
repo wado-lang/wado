@@ -2442,8 +2442,8 @@ impl TypeSystem {
     /// unsatisfiable and a same-named foreign trait satisfied (#1785).
     ///
     /// `trait_ref: None` is a caller not yet carrying an identity — the query
-    /// paths WEP 2026-08-10 stage C has still to convert. Those fall back to the
-    /// spelling, which is the old behaviour and the old hole.
+    /// paths WEP 2026-08-10 stage C has still to convert. Those fall back to
+    /// the spelling, which two modules can share.
     fn same_trait(
         &self,
         trait_name: &str,
