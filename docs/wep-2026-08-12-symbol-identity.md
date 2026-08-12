@@ -81,6 +81,15 @@ The last one is the primary function namespace, and both of its modules are
 stdlib modules: a local name is itself module-qualified, and one module's
 rendering is another's prefix at a `/` boundary.
 
+Disambiguating that key surfaced a second instance of the same defect one layer
+down. `MangledName::in_module` is a lookup key, so changing its spelling should
+cost nothing outside `wir_build` — but `wir_func_type_key` derives the WIR type
+table's key from it, so the string is at once the `func_map` identity and a
+display artifact in every `wado dump`. Bracketing the module moved 45,926 lines
+of golden fixture. A name doing two jobs is what this WEP is about, and the
+measurement is that the identity and the rendering are not yet separable even
+where the identity is purely internal.
+
 ### Where a collision goes
 
 `wir_build::functions::register_single_function` returned when a `func_map` key
@@ -342,9 +351,12 @@ are what make one unrepresentable.
 
 Costs and risks:
 
-- Stage 0 changed no rendered name except where one was ambiguous, but the
-  bracketing does change the spelling of the synthesized families, so the WIR
-  golden fixtures are regenerated with it.
+- Stage 0's cost was almost entirely in one place, and not the expected one.
+  Re-spelling the eight synthesized families moved ~1,400 lines of golden
+  fixture; bracketing the `func_map` key moved 45,926, because
+  `wir_func_type_key` renders it. Separating the WIR type key's display from the
+  function's identity is stage 2's work, and until then any change to an
+  internal key pays a corpus-wide diff.
 - Stage 2 touches every consumer of a function name. The flip is what enumerates
   them; it is also what makes the branch large.
 - `Symbol` holds `ModuleSource` (interned, O(1) clone) and `FqTypeName` (not

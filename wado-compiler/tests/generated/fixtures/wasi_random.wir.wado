@@ -36,31 +36,31 @@ type "functype//wasi/wasi:random/Insecure::get_insecure_random_u64" = fn() -> i6
 
 type "functype//wasi/wasi:random/Random::get_random_u64" = fn() -> i64;  // TypeId(13)
 
-type "functype//wasi_random.wado/run" = fn();  // TypeId(14)
+type "functype//{wasi_random.wado}run" = fn();  // TypeId(14)
 
-type "functype//wasi_random.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//{wasi_random.wado}__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wasi_random.wado/__cm_binding__Random_get_random_u64" = fn() -> u64;  // TypeId(16)
+type "functype//{wasi_random.wado}__cm_binding__Random_get_random_u64" = fn() -> u64;  // TypeId(16)
 
-type "functype//wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64" = fn() -> u64;  // TypeId(17)
+type "functype//{wasi_random.wado}__cm_binding__Insecure_get_insecure_random_u64" = fn() -> u64;  // TypeId(17)
 
-type "functype//wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed" = fn() -> ref "tuple//[u64, u64]";  // TypeId(18)
+type "functype//{wasi_random.wado}__cm_binding__InsecureSeed_get_insecure_seed" = fn() -> ref "tuple//[u64, u64]";  // TypeId(18)
 
-type "functype//wasi_random.wado/__cm_export__run" = fn();  // TypeId(19)
+type "functype//{wasi_random.wado}__cm_export__run" = fn();  // TypeId(19)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(20)
+type "functype//{core:cli}write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(20)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(21)
+type "functype//{core:cli}println" = fn(ref "core:prelude/string.wado//String");  // TypeId(21)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(22)
+type "functype//{core:rt}gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(22)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(23)
+type "functype//{core:rt}cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(23)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(24)
+type "functype//{core:rt}cm_await_blocked" = fn(i32) -> i32;  // TypeId(24)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(25)
+type "functype//{core:rt}cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(25)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(26)
+type "functype//{core:prelude/fpfmt.wado}__initialize_module" = fn();  // TypeId(26)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
@@ -86,7 +86,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 global mut global:wasi_random.wado::__modules_initialized: bool = 0;
 
-fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
+fn {wasi_random.wado}run() with Stdout, Random, Insecure, InsecureSeed {
     let r1: u64;
     let r2: u64;
     let ir1: u64;
@@ -97,63 +97,63 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:wasi_random.wado::__modules_initialized);
         cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
+        "{core:prelude/fpfmt.wado}__initialize_module"();
         global:wasi_random.wado::__modules_initialized = 1;
     };
-    r1 = "wasi_random.wado/__cm_binding__Random_get_random_u64"();
-    r2 = "wasi_random.wado/__cm_binding__Random_get_random_u64"();
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 works"), used: 22 });
+    r1 = {wasi_random.wado}__cm_binding__Random_get_random_u64();
+    r2 = {wasi_random.wado}__cm_binding__Random_get_random_u64();
+    {core:cli}println(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 works"), used: 22 });
     if (if r1 != 0_i64 -> i32 {
         1;
     } else {
         r2 != 0_i64;
     }) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 produces non-zero values"), used: 41 });
+        {core:cli}println(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 produces non-zero values"), used: 41 });
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 produced two zeros (unlikely but valid)"), used: 56 });
+        {core:cli}println(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 produced two zeros (unlikely but valid)"), used: 56 });
     }
     if r1 != r2 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 values differ"), used: 30 });
+        {core:cli}println(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 values differ"), used: 30 });
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 values same (unlikely but valid)"), used: 49 });
+        {core:cli}println(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 values same (unlikely but valid)"), used: 49 });
     }
-    ir1 = "wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64"();
-    ir2 = "wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64"();
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure random u64 works"), used: 31 });
+    ir1 = {wasi_random.wado}__cm_binding__Insecure_get_insecure_random_u64();
+    ir2 = {wasi_random.wado}__cm_binding__Insecure_get_insecure_random_u64();
+    {core:cli}println(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure random u64 works"), used: 31 });
     if ir1 != ir2 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure random u64 values differ"), used: 39 });
+        {core:cli}println(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure random u64 values differ"), used: 39 });
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure random u64 values same (unlikely but valid)"), used: 58 });
+        {core:cli}println(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure random u64 values same (unlikely but valid)"), used: 58 });
     }
-    seed = "wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed"();
+    seed = {wasi_random.wado}__cm_binding__InsecureSeed_get_insecure_seed();
     seed_low = seed.0;
     seed_high = seed.1;
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure seed works"), used: 25 });
+    {core:cli}println(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure seed works"), used: 25 });
     if (if seed_low != 0_i64 -> i32 {
         1;
     } else {
         seed_high != 0_i64;
     }) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure seed produces non-zero value"), used: 43 });
+        {core:cli}println(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure seed produces non-zero value"), used: 43 });
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure seed produced zeros (unlikely but valid)"), used: 55 });
+        {core:cli}println(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure seed produced zeros (unlikely but valid)"), used: 55 });
     }
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all random tests passed"), used: 23 });
+    {core:cli}println(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all random tests passed"), used: 23 });
 }
 
-fn "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn {wasi_random.wado}__cm_binding__Stdout_write_via_stream(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wasi_random.wado/__cm_binding__Random_get_random_u64"() with Random {
+fn {wasi_random.wado}__cm_binding__Random_get_random_u64() with Random {
     return "wasi/wasi:random/Random::get_random_u64"();
 }
 
-fn "wasi_random.wado/__cm_binding__Insecure_get_insecure_random_u64"() with Insecure {
+fn {wasi_random.wado}__cm_binding__Insecure_get_insecure_random_u64() with Insecure {
     return "wasi/wasi:random/Insecure::get_insecure_random_u64"();
 }
 
-fn "wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed"() with InsecureSeed {
+fn {wasi_random.wado}__cm_binding__InsecureSeed_get_insecure_seed() with InsecureSeed {
     let __outptr: i32;
     let __lifted_result_1: i64;
     let __lifted_result_2: i64;
@@ -164,18 +164,18 @@ fn "wasi_random.wado/__cm_binding__InsecureSeed_get_insecure_seed"() with Insecu
     return struct.new "tuple//[u64, u64]" { 0: __lifted_result_1, 1: __lifted_result_2 };
 }
 
-fn "wasi_random.wado/__cm_export__run"() {
+fn {wasi_random.wado}__cm_export__run() {
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:wasi_random.wado::__modules_initialized);
         cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
+        "{core:prelude/fpfmt.wado}__initialize_module"();
         global:wasi_random.wado::__modules_initialized = 1;
     };
-    "wasi_random.wado/run"();
+    {wasi_random.wado}run();
     "wasi/task-return"(0);
 }
 
-fn "core:cli/write_to_stream"(tx, message, add_newline) {
+fn {core:cli}write_to_stream(tx, message, add_newline) {
     let len: i32;
     let new_repr: ref Array<u8>;
     let packed_9: i64;
@@ -192,33 +192,33 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         end_15 = len + 1;
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9({core:rt}cm_lower_list_u8(new_repr, 0, end_15 - 0)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
-        "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
+        {core:rt}cm_stream_write_drain(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
         repr_25 = message.repr;
-        ptr_22 = builtin::i32_wrap_i64(local.tee packed_21("core:rt/cm_lower_list_u8"(repr_25, 0, len - 0)));
+        ptr_22 = builtin::i32_wrap_i64(local.tee packed_21({core:rt}cm_lower_list_u8(repr_25, 0, len - 0)));
         raw_len_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
-        "core:rt/cm_stream_write_drain"(tx, ptr_22, raw_len_23, 1);
+        {core:rt}cm_stream_write_drain(tx, ptr_22, raw_len_23, 1);
         drop("mem/realloc"(ptr_22, raw_len_23, 1, 0));
     }
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:cli/println"(message) with Stdout {
+fn {core:cli}println(message) with Stdout {
     let handle: i32;
     let packed: i64;
     let rx_6: i32;
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
-    "core:cli/write_to_stream"(tx_7, message, 1);
+    handle = {wasi_random.wado}__cm_binding__Stdout_write_via_stream(rx_6);
+    {core:cli}write_to_stream(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
-fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
+fn {core:rt}gc_array_to_memory(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
     b7: block {
@@ -231,14 +231,14 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
 }
 
-fn "core:rt/cm_lower_list_u8"(data, start, len) {
+fn {core:rt}cm_lower_list_u8(data, start, len) {
     let ptr: i32;
     ptr = "mem/realloc"(0, 0, 1, len);
-    "core:rt/gc_array_to_memory"(data, start, ptr, len);
+    {core:rt}gc_array_to_memory(data, start, ptr, len);
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
-fn "core:rt/cm_await_blocked"(handle) {
+fn {core:rt}cm_await_blocked(handle) {
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;
@@ -253,7 +253,7 @@ fn "core:rt/cm_await_blocked"(handle) {
     return status;
 }
 
-fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
+fn {core:rt}cm_stream_write_drain(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
@@ -262,7 +262,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
             break_if b9 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
-                result = "core:rt/cm_await_blocked"(handle);
+                result = {core:rt}cm_await_blocked(handle);
             }
             offset = offset + (result >> 4);
             break_if b9 (if (result >> 4) == 0 -> i32 {
@@ -275,7 +275,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     };
 }
 
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
+fn "{core:prelude/fpfmt.wado}__initialize_module"() {
 }
 
-export fn "wasi_random.wado/__cm_export__run" as "run"
+export fn {wasi_random.wado}__cm_export__run as "run"
