@@ -604,9 +604,17 @@ fn classify_candidate(
 /// **skeleton** `Local _av` read, so receiver-position passes see an ordinary
 /// local (materialiser-first). A `FieldAccess` is never inline-reemittable
 /// (re-emitting a load at an arbitrary slot is unsound once a pass moves the
-/// operand), so this is its only promotion path. Single-use places at the use's
-/// own statement; multi-use shares one load at the nearest common dominator of
-/// every use (`materialise_point`), including cross-block uses.
+/// operand), so this is its only promotion path. Uses share one load at the
+/// nearest common dominator (`materialise_point`), including across blocks.
+///
+/// Sharing is the whole point, so a single use is refused: materialising one
+/// turns a `struct.get` into `struct.get` + `local.set` + `local.get`, which is
+/// strictly worse. Measured before the gate existed, 508 of 541 materialisations
+/// on `benchmark/sqlite_parse` were single-use, and the pass removed 33 loads
+/// while adding 541 stores. Two uses already pay: a load costs more than the
+/// `local.set` plus the extra `local.get` it trades for, which is why this is
+/// `ids.len() > 1` and not [`worth_materialising`] (that counts arithmetic
+/// operations, and a `FieldAccess` has none).
 fn apply_field_materialise(
     engine: &mut Engine,
     rep: ValueId,
@@ -614,6 +622,9 @@ fn apply_field_materialise(
     id_ty: crate::tir::TypeId,
     param_set: &crate::hashmap::IndexSet<u32>,
 ) -> bool {
+    if ids.len() < 2 {
+        return false;
+    }
     let Some((s, b)) = materialise_point(engine, ids) else {
         return false;
     };
