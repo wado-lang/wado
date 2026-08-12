@@ -147,15 +147,21 @@ codegen-units = 1
 strip = "symbols"
 
 # `profiling` is `release` with debug info kept, for sampling profilers
-# (samply, perf, Instruments). It matches the production codegen
-# (`lto`/`codegen-units` are inherited) but keeps symbols and full
-# DWARF so inlined frames resolve. Build with
+# (samply, perf, Instruments). Build with
 # `cargo build --profile profiling --bin wado`. It lives in its own
 # `target/profiling/` dir, so it never invalidates the `release` cache
 # the way overriding release via `CARGO_PROFILE_RELEASE_*` would.
 # See the `profile-compiler` skill.
+#
+# `lto`/`codegen-units` are pinned rather than inherited: `release`'s
+# `codegen-units = 1` puts the final link past ten minutes of CPU, which
+# no profiling loop survives. `thin` LTO across 16 units keeps the
+# cross-crate inlining a profile needs to be representative while the
+# units codegen in parallel.
 [profile.profiling]
 inherits = "release"
+lto = "thin"
+codegen-units = 16
 debug = 2
 strip = false
 
