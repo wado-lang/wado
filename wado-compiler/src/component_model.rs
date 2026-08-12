@@ -93,6 +93,10 @@ fn is_trailers_payload(type_table: &TypeTable, type_arg: TypeId) -> bool {
 /// Classify a `stream<T>` element type into its CM stream payload. `u8` keeps
 /// the default `U8` stream; scalar / structural elements use `Value`.
 ///
+/// A WASI-owned element (`stream<directory-entry>`) has no general payload type
+/// and belongs to the registry-driven `Record` path instead, so callers select
+/// between the two with [`cm_payload_type_from_type_id`] before asking.
+///
 /// # Panics
 /// An element with no CM payload type has no `stream<T>` to lower against.
 /// `U8` used to stand in, which silently retyped the stream rather than
@@ -111,7 +115,8 @@ pub fn classify_stream_payload(
     match cm_payload_type_from_type_id(type_table, element) {
         Some(payload) => CmStreamPayload::Value(payload),
         None => panic!(
-            "`Stream<{}>` has no Component Model element type",
+            "`Stream<{}>` has no Component Model element type: a guest-created \
+             stream of a WASI-owned type is not supported yet",
             type_table.base_type_name(element)
         ),
     }

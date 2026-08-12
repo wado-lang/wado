@@ -313,6 +313,15 @@ pub(super) fn synthesize_stream_writes(project: &mut Package) {
     );
 }
 
+/// Whether `elem` has a general CM payload type, which is what separates the
+/// value-payload stream path from the WASI-record one.
+///
+/// Asked directly rather than through `classify_stream_payload`: these are
+/// predicates, and a classifier has to name some type to answer at all.
+fn has_value_payload(tt: &TypeTable, elem: TypeId) -> bool {
+    crate::component_model::cm_payload_type_from_type_id(tt, elem).is_some()
+}
+
 /// The stream-write element type for a scalar / structural `stream-write`, or
 /// `None` for `u8` and record streams (handled elsewhere).
 fn stream_write_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
@@ -325,11 +334,7 @@ fn stream_write_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> 
         recv = *inner;
     }
     let elem = *tt.generic_type_args(recv)?.first()?;
-    matches!(
-        crate::component_model::classify_stream_payload(tt, elem),
-        CmStreamPayload::Value(_)
-    )
-    .then_some(elem)
+    has_value_payload(tt, elem).then_some(elem)
 }
 
 fn stream_write_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
@@ -369,11 +374,7 @@ fn stream_read_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
         return None;
     }
     let elem = *tt.generic_type_args(expr.type_id)?.first()?;
-    matches!(
-        crate::component_model::classify_stream_payload(tt, elem),
-        CmStreamPayload::Value(_)
-    )
-    .then_some(elem)
+    has_value_payload(tt, elem).then_some(elem)
 }
 
 /// The `__cm_stream_read_val_*` helper name for an element type.
@@ -1130,10 +1131,7 @@ fn record_stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId,
         return None;
     }
     let elem_type_id = *tt.generic_type_args(expr.type_id)?.first()?;
-    if matches!(
-        crate::component_model::classify_stream_payload(tt, elem_type_id),
-        CmStreamPayload::Value(_)
-    ) {
+    if has_value_payload(tt, elem_type_id) {
         return None;
     }
     Some((elem_type_id, expr.type_id))
