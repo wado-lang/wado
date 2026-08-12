@@ -9,7 +9,7 @@ use crate::module_source::ModuleSource;
 use crate::name::global_name;
 use crate::nir::{NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
-use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
@@ -2766,22 +2766,24 @@ impl FunctionTranslator<'_, '_> {
             ),
             ExprKind::EnumConstruct { case_index, .. } => WirInstr::I32Const(*case_index as i32),
 
-            ExprKind::CmRawCall {
-                local_name, args, ..
-            } => {
+            ExprKind::CmRawCall { target, args, .. } => {
                 let translated_args: Vec<WirInstr> =
                     args.iter().map(|a| self.translate_operand(*a)).collect();
+                let import_name = target.import_name();
                 // Look up in WASI imports (registered by register_imports from TIR imports)
                 let func_id = if let Some(func_id) = self
                     .ctx
                     .func_map
-                    .get(&crate::name::MangledName::wasi_import(local_name))
+                    .get(&crate::name::MangledName::wasi_import(&import_name))
                 {
                     func_id.clone()
                 } else {
                     // Not pre-registered — lazily register as a canonical intrinsic.
                     // This handles canonical imports (e.g., "task-return") that may not
                     // be in TIR imports but are needed by CM binding synthesis.
+                    let Some(intrinsic) = target.canonical() else {
+                        panic!("unregistered WASI import: {import_name}");
+                    };
                     let params: Vec<WirType> = args
                         .iter()
                         .map(|a| {
@@ -2795,25 +2797,8 @@ impl FunctionTranslator<'_, '_> {
                         } else {
                             vec![self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)]
                         };
-                    let intrinsic = CanonicalIntrinsic::from_import_name(local_name)
-                        .unwrap_or_else(|| panic!("unknown canonical intrinsic: {local_name}"));
-                    // Future-related canonicals with default payload from from_import_name
-                    // are NOT registered here. They must be registered via CM method dispatch
-                    // with the correct CmFuturePayload. If a builtin calls future-drop-readable
-                    // etc., the func_map entry from import registration is used directly.
-                    if intrinsic.future_payload().is_some() {
-                        // Look up the pre-registered import function
-                        self.ctx
-                            .func_map
-                            .get(&crate::name::MangledName::wasi_import(local_name))
-                            .cloned()
-                            .unwrap_or_else(|| {
-                                // No pre-registered import; fall back to ensure_canonical
-                                self.ctx.ensure_canonical(intrinsic, params, results)
-                            })
-                    } else {
-                        self.ctx.ensure_canonical(intrinsic, params, results)
-                    }
+                    self.ctx
+                        .ensure_canonical(intrinsic.clone(), params, results)
                 };
                 WirInstr::Call {
                     func_id,

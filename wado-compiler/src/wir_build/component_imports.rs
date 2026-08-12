@@ -15,7 +15,8 @@ use crate::ast::Type;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexSet;
 use crate::nir_package::NirPackage;
-use crate::wir::{CanonicalIntrinsic, CmFuturePayload, ImportEntry, ImportKind};
+use crate::canonical::{CanonicalIntrinsic, CmFuturePayload};
+use crate::wir::{ImportEntry, ImportKind};
 
 /// Resolve the categorized import plan for `project` from `used_wasi_functions`,
 /// the registry, and the WIR-level canonical intrinsics. This is the decision

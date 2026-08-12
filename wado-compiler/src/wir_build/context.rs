@@ -12,11 +12,8 @@ use crate::name::StructName;
 use crate::nir::NirFunction;
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
-use crate::wir::{
-    CanonicalIntrinsic, WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction,
-    WirGlobal, WirImport, WirImportDesc, WirName, WirNames, WirPackage, WirType, WirTypeDef,
-    WirTypeId,
-};
+use crate::canonical::CanonicalIntrinsic;
+use crate::wir::{WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction, WirGlobal, WirImport, WirImportDesc, WirName, WirNames, WirPackage, WirType, WirTypeDef, WirTypeId};
 
 /// Base offset for defined function `WirFuncId` indices.
 /// Import functions use indices 0..N, defined functions use `DEFINED_FUNC_BASE + 0..M`.

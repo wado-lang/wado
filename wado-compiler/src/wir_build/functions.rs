@@ -10,9 +10,8 @@ use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
 use crate::nir_value_graph::ValueKind;
 use crate::tir::{PrimitiveType, TypeTable};
-use crate::wir::{
-    CanonicalIntrinsic, WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType,
-};
+use crate::canonical::CanonicalIntrinsic;
+use crate::wir::{WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType};
 
 use super::context::{PendingFunctionBody, WirContext};
 
@@ -99,17 +98,14 @@ fn register_imports(ctx: &mut WirContext<'_>) {
         // Track "wasi" namespace imports as needed canonical intrinsics.
         // This ensures they appear in WirPackage::needed_canonicals, which is
         // the single source of truth for component codegen.
+        // A payload-parameterized future annotation (`#[canonical("wasi",
+        // "future-read")]`) states no payload, so it does not parse and is not
+        // tracked here. WIR translation registers it with the payload the call
+        // site's `Future<T>` gives.
         if import.namespace == "wasi"
             && let Some(intrinsic) = CanonicalIntrinsic::from_import_name(&import.canonical_name)
         {
-            // Future-related canonicals with default Trailers payload are not tracked here.
-            // They are registered with the correct CmFuturePayload during WIR translation
-            // via CM method dispatch (cm_future_payload), which has access to the actual
-            // Future<T> type parameter. Tracking them with the wrong payload would force
-            // unnecessary HTTP type definitions.
-            if intrinsic.future_payload().is_none() {
-                ctx.needed_canonicals.insert(intrinsic, func_id.clone());
-            }
+            ctx.needed_canonicals.insert(intrinsic, func_id.clone());
         }
 
         // Also register under the TIR builtin function name so call sites can resolve.

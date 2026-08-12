@@ -25,6 +25,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::Type;
+use crate::canonical::CanonicalIntrinsic;
 use crate::cm_abi;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
@@ -37,7 +38,7 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_raw_call, expr_stmt,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call, expr_stmt,
     generic_method_call, i32_const, if_stmt, index_value_trait, internal_call, let_mut_stmt,
     let_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, param_local, return_stmt,
     split_packed_ptr_len, synth_span,
@@ -1568,8 +1569,8 @@ pub(super) fn synthesize_export_binding(
     let adapter_return = match strategy {
         ExportReturnStrategy::VoidTaskReturn => {
             body_stmts.push(expr_stmt(call_user));
-            body_stmts.push(expr_stmt(cm_raw_call(
-                "task-return",
+            body_stmts.push(expr_stmt(cm_canonical_call(
+                CanonicalIntrinsic::TaskReturn(String::new()),
                 vec![i32_const(0)],
                 TypeTable::UNIT,
             )));
@@ -1995,8 +1996,8 @@ fn push_result_task_return_epilogue(
         .zip(flat_return_types.iter())
         .map(|((local, name), &vt)| local_ref(*local, name, cm_val_type_to_type_id(vt)))
         .collect();
-    body_stmts.push(expr_stmt(cm_raw_call(
-        "task-return",
+    body_stmts.push(expr_stmt(cm_canonical_call(
+        CanonicalIntrinsic::TaskReturn(String::new()),
         task_return_args,
         TypeTable::UNIT,
     )));

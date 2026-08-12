@@ -1209,8 +1209,8 @@ impl<'a> Engine<'a> {
                     .collect(),
                 has_receiver,
             },
-            ExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
-                local_name,
+            ExprKind::CmRawCall { target, args } => ExprKind::CmRawCall {
+                target,
                 args: args.into_iter().map(|a| self.clone_operand(a)).collect(),
             },
             ExprKind::FieldAccess {

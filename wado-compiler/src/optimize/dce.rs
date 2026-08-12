@@ -10,6 +10,7 @@
 //! See [`crate::optimize::run_dce`] for the orchestration: analyze
 //! once, mutate in dependency order.
 
+use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
 
 use crate::hashmap::IndexMap;
@@ -1455,9 +1456,13 @@ impl<'a> DceWalker<'a> {
         }
     }
 
-    fn record_cm_raw_call(&mut self, local_name: &str) {
-        // CmRawCall references a lowered WASI import function.
-        // Parse the local_name (e.g., "wasi:cli/Stdout::write_via_stream")
+    fn record_cm_raw_call(&mut self, target: &CmCallTarget) {
+        // Only a WASI import is tracked here; a canonical built-in has no
+        // interface to attribute it to.
+        let CmCallTarget::WasiAlias(local_name) = target else {
+            return;
+        };
+        // Parse the alias (e.g., "wasi:cli/Stdout::write_via_stream")
         // to extract the interface_name and op_name for WASI import tracking.
         if let Some((interface_name, op_name)) = local_name.split_once("::").map(|(prefix, op)| {
             // prefix is like "wasi:cli/Stdout" → extract "Stdout"
@@ -1541,7 +1546,7 @@ impl DceWalker<'_> {
                             None => self.record_call(callee_descriptor(d, *func_id)),
                         }
                     }
-                    ExprKind::CmRawCall { local_name, .. } => self.record_cm_raw_call(local_name),
+                    ExprKind::CmRawCall { target, .. } => self.record_cm_raw_call(target),
                     ExprKind::ClosureToCanonical {
                         functor_id,
                         target_fn_type,

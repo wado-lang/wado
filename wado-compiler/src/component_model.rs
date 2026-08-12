@@ -14,7 +14,7 @@ use crate::ast::{Attribute, CmImport, GenericType, Type};
 use crate::module_source::ModuleSource;
 use crate::name::to_kebab;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
-use crate::wir::{CmFuturePayload, CmPayloadType, CmScalarType};
+use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType};
 
 /// Classify a future's type argument into the CM future payload category.
 /// The single source of truth shared by the future-read synthesis path and the
@@ -57,8 +57,8 @@ pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFu
 pub fn classify_stream_payload(
     type_table: &TypeTable,
     element: TypeId,
-) -> crate::wir::CmStreamPayload {
-    use crate::wir::CmStreamPayload;
+) -> crate::canonical::CmStreamPayload {
+    use crate::canonical::CmStreamPayload;
     if matches!(
         type_table.get(element),
         ResolvedType::Primitive(PrimitiveType::U8)
@@ -187,9 +187,9 @@ fn cm_scalar_from_ast_name(name: &str) -> Option<CmScalarType> {
 pub fn cm_payload_type_from_ast(
     ty: &crate::ast::Type,
     registry: &CmInterfaceRegistry,
-) -> Option<crate::wir::CmPayloadType> {
+) -> Option<crate::canonical::CmPayloadType> {
     use crate::ast::Type;
-    use crate::wir::CmPayloadType;
+    use crate::canonical::CmPayloadType;
     let resolved = registry.resolve_type(ty);
     match &resolved {
         Type::Named(n) if n.name == "String" => Some(CmPayloadType::String),
@@ -246,9 +246,9 @@ pub fn cm_payload_type_from_ast(
 pub fn classify_stream_payload_from_ast(
     ty: &crate::ast::Type,
     registry: &CmInterfaceRegistry,
-) -> crate::wir::CmStreamPayload {
+) -> crate::canonical::CmStreamPayload {
     use crate::ast::Type;
-    use crate::wir::CmStreamPayload;
+    use crate::canonical::CmStreamPayload;
     let resolved = registry.resolve_type(ty);
     if let Type::Named(n) = &resolved
         && n.name == "u8"

@@ -1591,10 +1591,10 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                 has_receiver,
             }
         }
-        ExprKind::CmRawCall { local_name, args } => {
-            let (ln, args) = (local_name.clone(), args.clone());
+        ExprKind::CmRawCall { target, args } => {
+            let (target, args) = (target.clone(), args.clone());
             ExprKind::CmRawCall {
-                local_name: ln,
+                target,
                 args: args
                     .into_iter()
                     .map(|a| splice_operand(caller, callee, a, ctx))

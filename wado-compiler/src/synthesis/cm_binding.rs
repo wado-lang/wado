@@ -32,7 +32,7 @@ use crate::name::DeclPath;
 use crate::package::Package;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
-use crate::wir::CmPayloadType;
+use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
 use crate::world_registry::{WorldExportInfo, WorldInfo};
 
 pub use export_adapter::export_binding_func_name;
@@ -593,12 +593,12 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                     // the canon to this export's own result (a `--lib`
                     // world may have several async exports of distinct
                     // result types).
-                    let task_return_name = format!("task-return:{}", export.name);
+                    let task_return = CanonicalIntrinsic::TaskReturn(export.name.clone());
                     expand_task_returns_in_func(
                         &user_func_rc,
                         return_type,
                         &flat_types,
-                        &task_return_name,
+                        &task_return,
                         &project.tir_modules,
                         &entry_type_table,
                         &project.cm_interface_registry,
@@ -1778,9 +1778,38 @@ mod tests {
             TypeTable::I32,
         );
         match &call.kind {
-            TirExprKind::CmRawCall { local_name, args } => {
-                assert_eq!(local_name, "wasi:cli/Stdout::write_via_stream");
+            TirExprKind::CmRawCall { target, args } => {
+                assert_eq!(
+                    *target,
+                    crate::canonical::CmCallTarget::WasiAlias(
+                        "wasi:cli/Stdout::write_via_stream".to_string()
+                    )
+                );
                 assert_eq!(args.len(), 3);
+            }
+            other => panic!("expected CmRawCall, got {other:?}"),
+        }
+    }
+
+    /// A canonical built-in reaches WIR as its own identity: the payload type is
+    /// carried, not recovered from the rendered import name.
+    #[test]
+    fn helpers_cm_canonical_call_carries_the_payload() {
+        use crate::canonical::{
+            CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType,
+        };
+        let intrinsic = CanonicalIntrinsic::FutureRead(CmFuturePayload::Value(
+            CmPayloadType::Option(Box::new(CmPayloadType::Scalar(CmScalarType::U32))),
+        ));
+        let call = crate::synthesis::common::cm_canonical_call(
+            intrinsic.clone(),
+            vec![i32_const(0)],
+            TypeTable::I32,
+        );
+        match &call.kind {
+            TirExprKind::CmRawCall { target, .. } => {
+                assert_eq!(target.canonical(), Some(&intrinsic));
+                assert_eq!(target.import_name(), "future-read:val-option<u32>");
             }
             other => panic!("expected CmRawCall, got {other:?}"),
         }

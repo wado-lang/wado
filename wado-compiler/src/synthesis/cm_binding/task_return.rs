@@ -10,6 +10,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::canonical::CanonicalIntrinsic;
+
 use crate::ast::Type;
 use crate::cm_abi;
 use crate::component_model::CmInterfaceRegistry;
@@ -22,7 +24,7 @@ use crate::tir::{
 use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_stmt};
 
 use crate::synthesis::common::{
-    alloc_local, assign, cast, cm_raw_call, expr_stmt, i32_const, let_mut_stmt, let_stmt,
+    alloc_local, assign, cast, cm_canonical_call, expr_stmt, i32_const, let_mut_stmt, let_stmt,
     local_ref, synth_span,
 };
 
@@ -36,14 +38,14 @@ use super::types::{
 /// Expand `TaskReturn` stmts in an `export async fn` user function into inline CM calls.
 ///
 /// Walks the function body and replaces each `TirStmtKind::TaskReturn { value }` with
-/// the flat lowering + `cm_raw_call(task_return_name, flat_args)` sequence, where
-/// `task_return_name` is this export's `task-return:<name>` import.
+/// the flat lowering + `cm_canonical_call(task_return, flat_args)` sequence,
+/// where `task_return` is this export's own `task.return` canonical.
 /// New locals are appended to the function's `locals` and `local_count` is updated.
 pub(super) fn expand_task_returns_in_func(
     user_func: &Rc<RefCell<TirFunction>>,
     return_type: &Type,
     flat_return_types: &[cm_abi::CmValType],
-    task_return_name: &str,
+    task_return: &CanonicalIntrinsic,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     cm_interface_registry: &CmInterfaceRegistry,
@@ -58,7 +60,7 @@ pub(super) fn expand_task_returns_in_func(
     let mut expander = TaskReturnExpander {
         return_type,
         flat_return_types,
-        task_return_name,
+        task_return,
         next_local: func.local_count,
         extra_locals: Vec::new(),
         tir_modules,
@@ -96,8 +98,8 @@ struct TaskReturnExpander<'a> {
     /// The world-declared result, whose flattening defines the slots.
     return_type: &'a Type,
     flat_return_types: &'a [cm_abi::CmValType],
-    /// The `task.return` core import name for this export (`task-return:<name>`).
-    task_return_name: &'a str,
+    /// The `task.return` canonical for this export, keyed by its name.
+    task_return: &'a CanonicalIntrinsic,
     next_local: u32,
     extra_locals: Vec<TirLocal>,
     tir_modules: &'a IndexMap<ModuleSource, TirModule>,
@@ -120,7 +122,7 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
                         value,
                         self.return_type,
                         self.flat_return_types,
-                        self.task_return_name,
+                        self.task_return,
                         &mut self.next_local,
                         &mut self.extra_locals,
                         self.tir_modules,
@@ -179,7 +181,7 @@ fn generate_inline_task_return(
     value: TirExpr,
     return_type: &Type,
     flat_return_types: &[cm_abi::CmValType],
-    task_return_name: &str,
+    task_return: &CanonicalIntrinsic,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
@@ -297,8 +299,8 @@ fn generate_inline_task_return(
                 }
             }
         }
-        ok_stmts.push(expr_stmt(cm_raw_call(
-            task_return_name,
+        ok_stmts.push(expr_stmt(cm_canonical_call(
+            task_return.clone(),
             task_return_args.clone(),
             TypeTable::UNIT,
         )));
@@ -367,8 +369,8 @@ fn generate_inline_task_return(
                 }
             }
         }
-        err_stmts.push(expr_stmt(cm_raw_call(
-            task_return_name,
+        err_stmts.push(expr_stmt(cm_canonical_call(
+            task_return.clone(),
             task_return_args,
             TypeTable::UNIT,
         )));
@@ -450,8 +452,8 @@ fn generate_inline_task_return(
             // Evaluate `value` for side effects, then signal completion
             // with no flat payload.
             stmts.push(expr_stmt(value));
-            stmts.push(expr_stmt(cm_raw_call(
-                task_return_name,
+            stmts.push(expr_stmt(cm_canonical_call(
+                task_return.clone(),
                 vec![],
                 TypeTable::UNIT,
             )));
@@ -482,8 +484,8 @@ fn generate_inline_task_return(
                 }
                 task_return_args.push(arg);
             }
-            stmts.push(expr_stmt(cm_raw_call(
-                task_return_name,
+            stmts.push(expr_stmt(cm_canonical_call(
+                task_return.clone(),
                 task_return_args,
                 TypeTable::UNIT,
             )));

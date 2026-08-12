@@ -3,6 +3,7 @@ pub mod ast;
 pub mod ast_index;
 pub mod bind;
 pub mod builtin_registry;
+pub mod canonical;
 pub mod cm_abi;
 pub mod codegen;
 pub mod codegen_flags;

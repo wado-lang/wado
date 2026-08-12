@@ -16,9 +16,8 @@ use crate::ast::Type;
 use crate::component_model::{CmFunctionInfo, CmTypeGen, CmVariantCase};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_package::NirPackage;
-use crate::wir::{
-    CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload, WirPackage,
-};
+use crate::canonical::{CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
+use crate::wir::WirPackage;
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
     ComponentValType, ExportKind, InstanceType, ModuleArg, PrimitiveValType, TypeBounds,
