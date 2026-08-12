@@ -284,6 +284,7 @@ fn unused_label_flattenable(body: &Body, label: &str, inner: BlockId, mode: Prun
 
 fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
     let base = match &body.stmts[stmt].kind {
+        StmtKind::If { .. } => is_empty_if(body, stmt),
         StmtKind::LabeledBlock { label, block } => {
             unused_label_flattenable(body, label, *block, mode)
         }
@@ -309,6 +310,23 @@ fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
 enum ConstIf {
     Taken(BlockId),
     Empty,
+}
+
+/// An `if` that observes nothing: both branches empty, over a condition that
+/// neither writes nor traps. Reachable once a pass empties a branch, and not
+/// [`const_if_branch`]'s case — the condition is live, just pointless.
+fn is_empty_if(body: &Body, stmt: StmtId) -> bool {
+    let StmtKind::If {
+        condition,
+        then_block,
+        else_block,
+    } = &body.stmts[stmt].kind
+    else {
+        return false;
+    };
+    body.blocks[*then_block].stmts.is_empty()
+        && else_block.is_none_or(|b| body.blocks[b].stmts.is_empty())
+        && super::arena_query::is_pure_nontrapping_operand_typed(body, *condition, None)
 }
 
 fn const_if_branch(body: &Body, stmt: StmtId) -> Option<ConstIf> {
@@ -429,6 +447,9 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
             }
             new_stmts.extend(inner_stmts);
             consumed_inner.push(inner);
+            continue;
+        }
+        if is_empty_if(engine.body, stmt) {
             continue;
         }
         if let Some(taken) = const_if_branch(engine.body, stmt) {

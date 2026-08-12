@@ -1,18 +1,16 @@
-// An `if` whose body dies observes nothing — empty branches over a pure
-// condition — and goes with the loads its condition reads.
-
-#[inline(never)]
-fn seed(n: i32) -> i32 {
-    return n;
-}
+// An `if` whose body dies leaves empty branches over a condition that observes
+// nothing, and holds the reads in that condition alive with it.
+//
+// `black_box` keeps the condition out of reach of constant folding, which would
+// otherwise remove the `if` for its own reasons and stop this testing anything.
 
 export fn run() {
-    let x = seed(3);
+    let n = builtin::black_box(7);
     let mut count = 0;
-    if x & 1024 != 0 {
+    if n & 1024 != 0 {
         count = 1;
     }
-    assert seed(1) == 1;
+    assert n == 7;
 }
 
 __DATA__
