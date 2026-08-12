@@ -342,12 +342,13 @@ lever it looks like.
       Almost none of it is independently reachable, which a kind-by-kind reading
       of the target hides. `Engine::value` is `maintain_pure_node`, and that
       recurses through operands: a `Binary` / `Unary` / `Cast` resolves only if
-      its leaves do, and a leaf `Local` resolves only for a non-`mut` parameter.
-      So the arithmetic left in the skeleton is not gated — it has no value at
-      all, because it bottoms out on an ordinary local. `FieldAccess` has no arm
-      there and never resolves, which is the query-time materialiser under
-      "Measured dead ends". The gates themselves reject almost nothing:
-      `not-reemittable` 64, `extraction-duplicates-work` 0.
+      its leaves do. A leaf `Local` now resolves for any provably single-version
+      local, which was not enough — the arithmetic left in the skeleton is still
+      not gated, it has no value at all, because it bottoms out on a field load
+      or a call result. `FieldAccess` has no arm there and never resolves, which
+      is the query-time materialiser under "Measured dead ends". The gates
+      themselves reject almost nothing: `not-reemittable` 64,
+      `extraction-duplicates-work` 0.
       What that leaves is one independent piece — 19 % of the unresolved
       arithmetic (5 894 of 31 730 `Binary` rejections) is a body the
       `VG_MAX_EXPRS` gate skipped entirely, so retiring that gate is worth doing
@@ -368,9 +369,10 @@ a statement, so `inline` splices the operand into a caller where the same index
 is assigned once per call — and because `ValuePool::canonical_local` hands out
 one `ValueId` per local index, two reads that now denote different values share
 an id. That is the over-merge behind `String::substr_bytes` under
-"Measured dead ends", and the current guard (every leaf is a parameter) is a
-proxy for "this local has one version" that inlining invalidates, since
-parameter-ness does not survive being inlined.
+"Measured dead ends". The guard used to be "every leaf is a parameter", a proxy
+for "this local has one version" that inlining invalidates, since
+parameter-ness does not survive being inlined; it is now the predicate itself
+(`Engine::local_has_one_version`) plus a dominance check at the placement.
 
 A freeze-minted temp satisfies it by construction. `let _av = <value>` is a
 statement in the same body, non-`mut`, and assigned once, so any pass that
@@ -384,12 +386,16 @@ restriction, which the anchor replaces.
 The rule is necessary and not sufficient. Freezing inside the loop under it was
 built and measured, and promoted nothing on either benchmark — zero candidates
 reached `apply_value_freeze`, both modules came out byte-identical, and the pass
-cost 12 % of the loop. The reason is upstream of the rule: `maintain_pure_node`
-resolves an `ExprKind::Local` only for a non-`mut` parameter, and `Binary` /
-`Unary` / `Cast` propagate that `None` through `?`, so there is no value to
-freeze in the first place. Query-time resolution cannot do better — a
-version-free id per local index is the recorded dead end — while the _builder_
-already mints one opaque per assignment and gets it right.
+cost 12 % of the loop. The reason is upstream of the rule: too few leaves
+resolve, and `Binary` / `Unary` / `Cast` propagate that `None` through `?`, so
+there is no value to freeze in the first place. Widening the `Local` arm to
+every provably single-version local (from non-`mut` parameters only) resolves
+16 661 more reads on `benchmark/sqlite_parse` and still changes no output,
+because the leaves that matter are field loads and call results, which no
+query-time re-derivation can supply — a `FieldAccess` value is keyed on the
+`heap_ver` at its point, and a version-free id per local index is the recorded
+dead end. The _builder_ mints both correctly, which is where the material has
+to come from.
 
 So the convergence point has two halves, and both are needed:
 
@@ -418,19 +424,82 @@ case buys a promotion for a store; measure module size and benchmark runtime
 before doing it. `value_may_trap` keeps gating regardless — hoisting a trapping
 value to a dominator changes when it traps.
 
-- [ ] Widen local promotion past parameters. A promoted value may read a local
-      only at the post-loop freezes, and the value freeze takes it only when
-      every local leaf is a parameter (the `FieldAccess` materialiser is wider —
-      an owned, non-`mut`, non-address-taken, non-`&mut`-escaped local whose def
-      dominates the use also qualifies): 37 – 146 such operands per benchmark,
-      against zero before.
-      The gate is not value identity. The builder already mints a fresh
+#### What the freeze funnel actually rejects
+
+Counted end to end on `benchmark/sqlite_parse` at `-O2`, per phase, before
+deciding anything else about the gates. The material is what is scarce; no gate
+is the binding constraint.
+
+| | Early | InLoop | Terminal |
+| --- | ---: | ---: | ---: |
+| exprs seen | 81 067 | 2 126 679 | 549 525 |
+| pure-arith candidates | 10 393 | 96 205 | 34 642 |
+| … with a value at all | 698 | 9 582 | 2 633 |
+| admitted (reemittable, non-duplicating) | 24 | 8 570 | 2 417 |
+| distinct representatives | 17 | 8 399 | 2 375 |
+| **materialised into an `_av`** | **0** | **0** | **0** |
+| redirected inline | 17 | 375 | 682 |
+
+Three readings, in order of how much they cost:
+
+- **`apply_value_freeze`'s materialisation path has never fired.** Every
+  representative is single-use — 8 570 candidates over 8 399 representatives is
+  1.02 uses each — so `ids.len() > 1` refuses nearly all of them and
+  `worth_materialising` the rest. The gates before it reject far less than
+  expected: leaf availability rejects **0** once it is a dominance check rather
+  than a parameter test, `value_may_trap` 22, no common point 383. Widening a
+  gate therefore cannot produce a promotion, which is why unifying the
+  single-version predicate, adding the in-loop freeze, and widening the `Local`
+  arm each emitted a byte-identical module. Anything aimed at this path must
+  first make values shared.
+- **Values are scarce because leaves do not resolve**: 7.6 % of pure-arith nodes
+  at Terminal have a value at all. Two arithmetic nodes can only share a
+  representative if both resolve, so the sharing rate is roughly the square of
+  this. That is the born-at-`lower` prerequisite above, restated as a number.
+- **`promote_fields` is dead.** It is the only caller passing
+  `include_fields = true`, and `field-group = 0` — no `FieldAccess`
+  representative reached the apply phase in the whole compile, so
+  `apply_field_materialise`, `receiver_available_at`, and the
+  `cond_impl_post_promote` re-run that exists to consume its output are all
+  unreachable. The cause is the missing arm: `maintain_pure_node` returns `None`
+  for `ExprKind::FieldAccess`, because a field value carries the `heap_ver` at
+  its program point and a point-free re-derivation has no version to supply.
+  The value it needs does exist — the builder mints it, and
+  `Engine::scoped_const_reads` already recovers `(read, value)` pairs by scratch
+  re-walk for exactly this reason (SROA's post-build stores). Routing the field
+  candidates through that, rather than through `Engine::value`, is what would
+  revive the pass — and field loads are where real sharing lives, so it is also
+  the shortest path to a non-zero materialisation count.
+
+- [x] Widen local promotion past parameters. Landed in two halves, both keyed on
+      one predicate — `Engine::local_has_one_version`, read off the use index
+      (never reassigned, address never taken, bound by exactly one `let`) rather
+      than the `NirLocal::is_mut` flag, which rejects every `let mut` a body
+      leaves alone and admits a temp a pass minted with the flag clear.
+      `maintain_pure_node` resolves a `Local` read under it, and the freeze
+      refuses to name a local failing it (`multi_version_locals`); the two agree
+      by construction. Leaf availability at the materialisation point is now the
+      same dominance check the `FieldAccess` materialiser used
+      (`leaf_available_at`), so parameter-ness no longer gates anything.
+      The gate was never value identity. The builder already mints a fresh
       `Opaque` per assignment, so two versions of a local are two `ValueId`s.
       What is per-index is the extraction: `OpaqueSource::Local(idx)` means
       "emit `local.get idx`", which is only right at a point where the local
-      still holds that version. Widening therefore needs the read to survive
-      relocation — the thing `inline` and `sroa` take away when they renumber
-      locals and splice a callee body into a caller.
+      still holds that version — hence the two conditions, one body-wide and one
+      positional.
+      No effect on either benchmark's output: the freeze is starved of shared
+      values, not of admissible locals. See the funnel table below.
+
+- [ ] Revive `promote_fields` by sourcing its candidates from
+      `Engine::scoped_const_reads` instead of `Engine::value`. It is dead today
+      (funnel table above), and it is the only freeze path whose representatives
+      would be genuinely shared — one `(receiver, field, heap_ver)` triple per
+      field, read at every use — so it is the first thing that could make
+      `apply_value_freeze`'s materialisation count non-zero. The re-walk already
+      supplies the `heap_ver` a query cannot. Its two soundness gates
+      (scalar-field, receiver-availability) are written and unreachable, not
+      missing. Entry check: the pass and its `cond_impl_post_promote` follow-up
+      cost loop time today for nothing, so measure both before and after.
 
 - [ ] Reach the in-loop consumers. Both freezes that may plant a local-naming
       value run after the fixed-point loop, so the passes inside it still see

@@ -866,17 +866,19 @@ impl ValuePool {
     /// `Select` / `LoopPhi` (flow merges — extraction-unsupported), `FieldAccess`,
     /// etc.
     ///
-    /// A `Local` opaque is only sound when the local is **single-assignment**: a
-    /// `local.get idx` at the frozen node's position must read the same value
-    /// the opaque denotes. A reassigned (`is_mut`) local fails this — its value
-    /// at an extraction point can differ from the opaque's version (e.g. a
-    /// `mut` param read after `x = x*2`, or a loop counter), so `mut_locals`
-    /// (the reassignable indices) are rejected. This also excludes loop-variant
-    /// locals, since loop counters are `mut`.
+    /// A `Local` opaque is only sound when the local holds **one value**: a
+    /// `local.get idx` at the frozen node's position must read what the opaque
+    /// denotes. A local written more than once fails this — its value at an
+    /// extraction point can differ from the opaque's version (`x = x*2` after a
+    /// read, a loop counter) — so the caller passes every such index in
+    /// `multi_version_locals` and they are rejected. That set comes from
+    /// `Engine::local_has_one_version`, which reads the use index rather than
+    /// the `is_mut` flag, so an untouched `let mut` is admitted and a local
+    /// written through a reference or bound twice is not.
     pub fn value_fully_reemittable_locally(
         &mut self,
         id: ValueId,
-        mut_locals: &IndexSet<u32>,
+        multi_version_locals: &IndexSet<u32>,
     ) -> bool {
         match self.kind(id).clone() {
             ValueKind::Int(_, _)
@@ -884,7 +886,7 @@ impl ValuePool {
             | ValueKind::Bool(_)
             | ValueKind::Char(_) => true,
             ValueKind::Opaque(op) => match self.opaque_source(op) {
-                Some(OpaqueSource::Local(idx)) => !mut_locals.contains(&idx),
+                Some(OpaqueSource::Local(idx)) => !multi_version_locals.contains(&idx),
                 _ => false,
             },
             // Arithmetic is width-uniform: a `Binary`/`Unary` and its operands
@@ -892,20 +894,20 @@ impl ValuePool {
             // frozen node. `Cast` is excluded — its operand carries the *source*
             // type, unrecoverable from the type-erased value tree.
             ValueKind::Binary { lhs, rhs, .. } => {
-                self.value_fully_reemittable_locally(lhs, mut_locals)
-                    && self.value_fully_reemittable_locally(rhs, mut_locals)
+                self.value_fully_reemittable_locally(lhs, multi_version_locals)
+                    && self.value_fully_reemittable_locally(rhs, multi_version_locals)
             }
             ValueKind::Unary { operand, .. } => {
-                self.value_fully_reemittable_locally(operand, mut_locals)
+                self.value_fully_reemittable_locally(operand, multi_version_locals)
             }
             // A `Select` extracts as a value-producing `if` over its pure arms;
             // re-emittable when the condition and both arms are. The
             // duplication guard keeps a multi-use `Select` from recomputing the
             // `if` at each use.
             ValueKind::Select { cond, then, else_ } => {
-                self.value_fully_reemittable_locally(cond, mut_locals)
-                    && self.value_fully_reemittable_locally(then, mut_locals)
-                    && self.value_fully_reemittable_locally(else_, mut_locals)
+                self.value_fully_reemittable_locally(cond, multi_version_locals)
+                    && self.value_fully_reemittable_locally(then, multi_version_locals)
+                    && self.value_fully_reemittable_locally(else_, multi_version_locals)
             }
             // `FieldAccess` is **never** inline-reemittable: re-emitting a load at
             // an arbitrary use is unsound once a pass moves the operand, and a value

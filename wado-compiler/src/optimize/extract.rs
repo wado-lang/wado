@@ -116,6 +116,14 @@ fn block_path(e: &Engine, expr: ExprId) -> Option<Vec<(crate::nir_arena::BlockId
     Some(path)
 }
 
+/// Whether `b` is the body of a `Loop`, i.e. re-entered per iteration.
+fn is_loop_body(e: &Engine, b: crate::nir_arena::BlockId) -> bool {
+    matches!(
+        e.parent_of(NodeRef::Block(b)),
+        Some(NodeRef::Stmt(s)) if matches!(&e.body.stmts[s].kind, StmtKind::Loop { body } if *body == b)
+    )
+}
+
 /// The statement before which a `let _av = <value>` materialising the uses
 /// `ids` can be inserted so it **dominates all of them**: the nearest common
 /// dominator block (the deepest enclosing block common to every use) with the
@@ -127,14 +135,6 @@ fn block_path(e: &Engine, expr: ExprId) -> Option<Vec<(crate::nir_arena::BlockId
 /// `ValueId`, so no heap bump separates them — the field/value is constant
 /// across the span, and a load pinned at this point reproduces it for all.
 /// `None` if any use lacks a path.
-/// Whether `b` is the body of a `Loop`, i.e. re-entered per iteration.
-fn is_loop_body(e: &Engine, b: crate::nir_arena::BlockId) -> bool {
-    matches!(
-        e.parent_of(NodeRef::Block(b)),
-        Some(NodeRef::Stmt(s)) if matches!(&e.body.stmts[s].kind, StmtKind::Loop { body } if *body == b)
-    )
-}
-
 fn materialise_point(
     e: &Engine,
     ids: &[ExprId],
@@ -219,13 +219,32 @@ fn def_dominates(
     l > 0 && dp.len() == l && dp[l - 1].1 < mp[l - 1].1
 }
 
-/// Whether the receiver of the `FieldAccess` value `rep` is **available** (live)
-/// at the materialisation statement `before_stmt`. A **param** receiver is
-/// entry-defined, so always available. A non-param single-assignment local is
-/// available only when its defining `let` dominates the insertion point — the
-/// value's receiver `Opaque(Local i)` can differ from a use's syntactic local
-/// (copy-prop / value identity), so `i`'s def must be checked against the actual
-/// placement, not assumed. Without a recoverable def, conservatively `false`.
+/// Whether a `local.get i` placed at `before_stmt` reads the local's value. A
+/// **param** is entry-defined, so available at every point. Any other local is
+/// available only where its defining `let` dominates the insertion point — a
+/// value's `Opaque(Local i)` can differ from a use's syntactic local (copy-prop
+/// / value identity), so `i`'s def must be checked against the actual placement,
+/// not assumed. Without a recoverable def, conservatively `false`.
+///
+/// This answers *where*, not *which version*: that the local holds one value is
+/// the separate, body-wide question `multi_version_locals` settles.
+fn leaf_available_at(
+    e: &Engine,
+    local: u32,
+    before_stmt: crate::nir_arena::StmtId,
+    param_set: &crate::hashmap::IndexSet<u32>,
+) -> bool {
+    if param_set.contains(&local) {
+        return true;
+    }
+    match e.local_def(local) {
+        Some(def_stmt) => def_dominates(e, def_stmt, before_stmt),
+        None => false,
+    }
+}
+
+/// Whether the receiver of the `FieldAccess` value `rep` is available at the
+/// materialisation statement — [`leaf_available_at`] on the receiver's local.
 fn receiver_available_at(
     e: &Engine,
     rep: ValueId,
@@ -243,13 +262,7 @@ fn receiver_available_at(
     let Some(crate::nir_value_graph::OpaqueSource::Local(i)) = local else {
         return false;
     };
-    if param_set.contains(&i) {
-        return true;
-    }
-    match e.local_def(i) {
-        Some(def_stmt) => def_dominates(e, def_stmt, before_stmt),
-        None => false,
-    }
+    leaf_available_at(e, i, before_stmt, param_set)
 }
 
 /// Stamp `type_id` onto `v` and its arithmetic children so the WIR extractor
@@ -335,14 +348,7 @@ pub(super) fn freeze_pure_arith(
             &call_immutability,
         );
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
-        // Reassignable locals: a frozen value's `local.get idx` must read the
-        // opaque's version, which only holds for single-assignment locals.
-        let mut_locals: crate::hashmap::IndexSet<u32> = locals
-            .iter()
-            .enumerate()
-            .filter(|(_, l)| l.is_mut)
-            .map(|(i, _)| i as u32)
-            .collect();
+        let local_count = locals.len();
         let param_set: crate::hashmap::IndexSet<u32> = param_locals.iter().copied().collect();
         // Locals a call may mutate through a `&mut` escape (ref_1's
         // `set_bool(&mut c, …)`). A constant read of one is point-specific and the
@@ -359,6 +365,17 @@ pub(super) fn freeze_pure_arith(
         engine.set_pure_calls(pure_calls);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
 
+        // Locals a frozen value may not name: a `local.get idx` re-emitted at
+        // another point has to read the version the opaque denotes, so only a
+        // local provably holding one value qualifies. Read off the engine's use
+        // index, the same predicate that decides whether a `Local` read resolves
+        // to a value at all ([`Engine::local_has_one_version`]) — a set built
+        // from the `is_mut` flag instead would reject every `let mut` the body
+        // never reassigns, and admit a temp a pass minted with the flag clear.
+        let multi_version_locals: crate::hashmap::IndexSet<u32> = (0..local_count as u32)
+            .filter(|&i| !engine.local_has_one_version(i))
+            .collect();
+
         // Phase 1: decide every freeze on the clean, unedited graph. A value
         // query never mutates the skeleton, so the verify oracle (which fires
         // on graph queries) only compares build-vs-rebuild here — clean. (A
@@ -369,7 +386,7 @@ pub(super) fn freeze_pure_arith(
         let ctx = FreezeCtx {
             type_table: &type_table,
             mut_escaped_leaf: &mut_escaped_leaf,
-            mut_locals: &mut_locals,
+            multi_version_locals: &multi_version_locals,
             address_taken: &address_taken,
             param_set: &param_set,
             phase,
@@ -419,9 +436,10 @@ struct FreezeCtx<'a> {
     /// Locals a call may mutate through a retained `&mut` escape — a constant
     /// read of one is point-specific and unstable across the structural passes.
     mut_escaped_leaf: &'a crate::hashmap::IndexSet<u32>,
-    /// Reassignable locals: a frozen value's `local.get idx` must read the
-    /// opaque's version, which only holds for single-assignment locals.
-    mut_locals: &'a crate::hashmap::IndexSet<u32>,
+    /// Locals not provably holding one value: a frozen value's `local.get idx`
+    /// must read the version the opaque denotes, which only a single-assignment
+    /// local guarantees.
+    multi_version_locals: &'a crate::hashmap::IndexSet<u32>,
     /// `&x` / `&mut x` locals — excluded as `FieldAccess` receivers.
     address_taken: &'a crate::hashmap::IndexSet<u32>,
     /// Parameter locals — entry-defined and available at every point.
@@ -529,7 +547,7 @@ fn classify_candidate(
             let recv_stable = match recv_src {
                 Some(crate::nir_value_graph::OpaqueSource::Local(i)) => {
                     ctx.param_set.contains(&i)
-                        || (!ctx.mut_locals.contains(&i)
+                        || (!ctx.multi_version_locals.contains(&i)
                             && !ctx.address_taken.contains(&i)
                             && !ctx.mut_escaped_leaf.contains(&i)
                             && !matches!(
@@ -545,12 +563,12 @@ fn classify_candidate(
                 && engine
                     .body
                     .values
-                    .value_fully_reemittable_locally(recv, ctx.mut_locals)
+                    .value_fully_reemittable_locally(recv, ctx.multi_version_locals)
         }
         _ => engine
             .body
             .values
-            .value_fully_reemittable_locally(rep, ctx.mut_locals),
+            .value_fully_reemittable_locally(rep, ctx.multi_version_locals),
     };
     if !reemittable {
         return None;
@@ -686,19 +704,19 @@ fn worth_materialising(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> 
 }
 
 /// Apply strategy for a non-`FieldAccess` (pure-arith / constant) representative.
-/// A value used by several slots whose leaves are all non-`mut` parameters is
-/// **materialised once** — a single `let _av = <value>` all uses read via
-/// `local.get _av` — placed at the nearest point dominating every use, the same
-/// placement [`apply_field_materialise`] uses. Every other case redirects each
-/// use to the pooled representative inline.
+/// A value used by several slots whose leaves are all available at a common
+/// dominator is **materialised once** — a single `let _av = <value>` all uses
+/// read via `local.get _av` — at that point, the same placement
+/// [`apply_field_materialise`] uses. Every other case redirects each use to the
+/// pooled representative inline.
 ///
-/// The leaves being parameters bounds none of the hazards: availability says
-/// where the value *can* be computed, not that the program wanted it computed
-/// there, nor that computing it once is cheaper. So a trapping value is refused
-/// (hoisting `a / b` out of `if b != 0` traps a program that never divides by
-/// zero), the point is the nearest common dominator rather than function entry,
-/// keeping a branch-only value out of every call, and a value too cheap to share
-/// stays re-emitted ([`worth_materialising`]).
+/// Leaf availability bounds none of the other hazards: it says where the value
+/// *can* be computed, not that the program wanted it computed there, nor that
+/// computing it once is cheaper. So a trapping value is refused (hoisting
+/// `a / b` out of `if b != 0` traps a program that never divides by zero), the
+/// point is the nearest common dominator rather than function entry, keeping a
+/// branch-only value out of every call, and a value too cheap to share stays
+/// re-emitted ([`worth_materialising`]).
 fn apply_value_freeze(
     engine: &mut Engine,
     rep: ValueId,
@@ -709,9 +727,20 @@ fn apply_value_freeze(
 ) -> bool {
     let mut leaves = crate::hashmap::IndexSet::default();
     engine.body.values.collect_opaque_locals(rep, &mut leaves);
+    // Sharing decides first, because it is the cheap half and the point is not:
+    // `materialise_point` walks a block path per use, and a single-use value —
+    // nearly all of them — never reaches the `_av`.
+    let shareable = ids.len() > 1 && worth_materialising(&engine.body.values, rep);
+    // Resolved before anything is allocated: the point is what makes leaf
+    // availability answerable, and refusing after minting an `_av` leaks a slot.
+    let point = shareable.then(|| materialise_point(engine, ids)).flatten();
     let anchorable = !leaves.is_empty()
-        && leaves.iter().all(|l| param_set.contains(l))
-        && !value_may_trap(&engine.body.values, rep);
+        && !value_may_trap(&engine.body.values, rep)
+        && point.is_some_and(|(s, _)| {
+            leaves
+                .iter()
+                .all(|&l| leaf_available_at(engine, l, s, param_set))
+        });
     // The anchor rule. With relocation still to come, a value naming a source
     // local may not be planted as-is: `inline` lands the operand where the same
     // index is assigned per call, and `canonical_local`'s one id per index then
@@ -725,15 +754,13 @@ fn apply_value_freeze(
     // materialising a single-use value trades its computation for a `local.set`
     // plus a `local.get` of the same thing. So the sharing gate still decides,
     // and a value that must be anchored but does not clear it stays put.
-    let worth = anchorable
-        && ids.len() > 1
-        && worth_materialising(&engine.body.values, rep);
-    if must_anchor && !worth {
+    let materialize = shareable && anchorable;
+    if must_anchor && !materialize {
         return false;
     }
-    let materialize = worth;
     let mut changed = false;
     if materialize {
+        let (anchor, block) = point.expect("`anchorable` holds only with a point");
         let name = format!("_av_{}", engine.locals().len());
         let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
         let read = engine
@@ -753,9 +780,6 @@ fn apply_value_freeze(
             },
             crate::token::Span::default(),
         );
-        let Some((anchor, block)) = materialise_point(engine, ids) else {
-            return false;
-        };
         let mut stmts = engine.body.blocks[block].stmts.clone();
         let pos = stmts.iter().position(|&x| x == anchor).unwrap_or(0);
         stmts.insert(pos, let_stmt);

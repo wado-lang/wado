@@ -32,16 +32,16 @@ use crate::token::Span;
 /// Per-local use information: where the local is defined and every node that
 /// reads it. Used by the engine to re-enqueue a local's uses when its
 /// definition is rewritten (copy propagation, const-fold through a `Let`, …).
-// TEMPORARY census — revert.
-pub static ONEVER_OK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-pub static ONEVER_REASSIGNED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-pub static ONEVER_ADDR: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
 #[derive(Default, Debug)]
 pub struct LocalUses {
-    /// The `Let` / `LetDestructure` statement that binds the local, if any.
-    /// Parameters have no defining statement.
+    /// The first `Let` statement binding the local, if any. Parameters have
+    /// none, and neither does a `LetDestructure` binding (it binds through a
+    /// pattern, which this index does not walk).
     pub def: Option<StmtId>,
+    /// How many `Let` statements bind the local. One is the norm; cloning a
+    /// block (`labeled_block_fusion`) copies `local_index` with it, and a second
+    /// binding is a second version.
+    pub defs: u32,
     /// Every `Local { index }` expression node that names this local. (The
     /// place-form distinction — read vs write — is refined when a rule needs
     /// it; for re-enqueue purposes every mention is a use.)
@@ -621,30 +621,41 @@ impl<'a> Engine<'a> {
     ///
     /// Read off the use index rather than `NirLocal::is_mut`: a pass that mints
     /// a temp sets that flag by hand, while the index is maintained by the edit
-    /// API. Both halves fail safe — `reads` over-approximates (it holds every
+    /// API. Every half fails safe — `reads` over-approximates (it holds every
     /// `Local` node in the arena, reachable or not), so an assign that folded
     /// away still refuses, and refusing costs a promotion, never correctness.
-    fn local_has_one_version(&mut self, local: u32) -> bool {
-        if self.local_def(local).is_none() {
-            // No binding statement: a parameter, which qualifies only when the
-            // signature never reassigns it.
-            return self.param_locals.contains(&local)
-                && self.locals().get(local as usize).is_some_and(|l| !l.is_mut);
-        }
-        let mentions = self.local_reads(local).to_vec();
-        if mentions.iter().any(|&m| self.is_assign_target(m)) {
-            ONEVER_REASSIGNED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            return false;
+    ///
+    /// The same predicate decides whether a frozen value may name the local
+    /// (`extract`'s `multi_version_locals`), so the two agree by construction.
+    pub fn local_has_one_version(&mut self, local: u32) -> bool {
+        match self.local_bindings(local) {
+            // No `Let`: a parameter, which qualifies when the signature never
+            // reassigns it — or a `LetDestructure` binding, which the use index
+            // does not record and which therefore reads as a param and fails
+            // the membership test.
+            0 => {
+                return self.param_locals.contains(&local)
+                    && self.locals().get(local as usize).is_some_and(|l| !l.is_mut);
+            }
+            1 => {}
+            // Two bindings are two versions. `labeled_block_fusion` clones a
+            // block, `local_index` and all.
+            _ => return false,
         }
         // A write through a reference leaves no assign target to see, so a local
         // whose address was taken is out regardless of how it reads.
-        let ok = !self.body_address_taken().contains(&local);
-        if ok {
-            ONEVER_OK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        } else {
-            ONEVER_ADDR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if self.body_address_taken().contains(&local) {
+            return false;
         }
-        ok
+        !self
+            .local_reads(local)
+            .iter()
+            .any(|&m| self.is_assign_target(m))
+    }
+
+    /// How many `Let` statements bind `local`.
+    fn local_bindings(&self, local: u32) -> u32 {
+        self.buf.uses.get(local as usize).map_or(0, |u| u.defs)
     }
 
     /// Read-only view of the owning function's local list. Some rules
@@ -708,6 +719,7 @@ impl<'a> Engine<'a> {
                         // `extract`'s dominance gate — so pick explicitly rather
                         // than let the traversal direction decide.
                         let entry = self.buf.uses_entry(index);
+                        entry.defs += 1;
                         if entry.def.is_none() {
                             entry.def = Some(id);
                         }
@@ -1143,7 +1155,9 @@ impl<'a> Engine<'a> {
         }
         if let StmtKind::Let { local_index, .. } = &self.body.stmts[id].kind {
             let index = *local_index;
-            self.buf.uses_entry(index).def = Some(id);
+            let entry = self.buf.uses_entry(index);
+            entry.defs += 1;
+            entry.def = Some(id);
         }
         self.enqueue(NodeRef::Stmt(id));
         id
@@ -2113,6 +2127,56 @@ mod tests {
         let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
         let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         assert_eq!(eng.local_def(0), first);
+    }
+
+    /// A `let mut` the body never reassigns holds one value: the flag records
+    /// what the source wrote, the use index what the body does.
+    #[test]
+    fn an_unreassigned_mut_binding_has_one_version() {
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let init = e(
+                b,
+                ExprKind::Cast {
+                    expr: one,
+                    target_type: TypeTable::I32,
+                },
+            );
+            vec![let_x(b, init, /* is_mut */ true), ret_x(b)]
+        });
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, true)];
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        assert!(eng.local_has_one_version(0));
+    }
+
+    /// Two `Let`s binding one index are two versions, whatever the flag says.
+    /// `labeled_block_fusion` clones a block, `local_index` and all.
+    #[test]
+    fn a_twice_bound_local_has_no_single_version() {
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let a = e(
+                b,
+                ExprKind::Cast {
+                    expr: one,
+                    target_type: TypeTable::I32,
+                },
+            );
+            let two = lit(b, 2);
+            let c = e(
+                b,
+                ExprKind::Cast {
+                    expr: two,
+                    target_type: TypeTable::I32,
+                },
+            );
+            vec![let_x(b, a, false), let_x(b, c, false), ret_x(b)]
+        });
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        assert!(!eng.local_has_one_version(0));
     }
 
     /// A fill between the allocation and the splice sees the operand
