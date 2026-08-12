@@ -1562,11 +1562,6 @@ impl TraitEnv {
         self.decl_index.contains_key(key)
     }
 
-    /// Whether `key` names an effect or a resource declaration.
-    pub(crate) fn declares_effect_or_resource(&self, key: &DeclKey) -> bool {
-        self.effect_decl_index.contains_key(key) || self.resource_decl_index.contains_key(key)
-    }
-
     /// Declaring module of a struct-like type (struct / resource / variant /
     /// enum / builtin) by name, when the name picks out exactly one. Several
     /// modules declaring the name leaves it unresolved rather than guessing:

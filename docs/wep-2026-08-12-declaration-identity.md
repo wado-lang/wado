@@ -95,10 +95,18 @@ more than half the call sites, because the caller was free not to have one.
 
 #### A resolved fact re-spelled as syntax is resolved again
 
-Synthesis builds `Type::Named(name)` with `AstId::fresh()` at 59 sites. It knows
-the referent — it just constructed it — but emits a spelling whose site the table
-never walked, so the elaborator resolves it from whatever module it is standing
-in. The removed defect re-enters through the back door.
+A pass that mints a reference knows its referent — it just constructed it — but
+emits a spelling whose site the table never walked, so the elaborator resolves it
+from whatever module it is standing in. The removed defect re-enters through the
+back door.
+
+The reach is small and worth stating exactly, because the shape matters more than
+the count: `AstId::fresh()` appears at 63 sites, 53 of them under `#[cfg(test)]`
+and most of the rest building an AST type purely to compute a Component Model
+layout, which no scope ever resolves. Two are real reference sites — the
+`Self: <this trait>` bound the elaborator mints for a trait's own body, and the
+bound list a qualified call rebuilds — and each already knew its referent while
+spelling a name anyway.
 
 #### Namespacing the strings made the distinction expressible, not enforced
 
@@ -278,11 +286,13 @@ consumer improvises around, so it panics rather than returning `None`. The three
 cases stay distinct on purpose: reading `Unresolved` as `Binder` loses the
 diagnostic a name that reaches nothing deserves.
 
-`Unresolved` is not a synonym for "error". A bodiless derive
-(`impl Deserialize for Point;`) may name a stdlib trait the module never `use`d.
-That is a gap in the language rule, closed by making the derive's trait reference
-resolve like any other reference — never by a second lookup chain behind the
-consumer's back.
+`Unresolved` is not a synonym for "error", but an `impl` header's trait position
+is: implementing a trait is naming it. `impl Deserialize for Point;` written in a
+module that never named `Deserialize` used to compile, resolved by a global scan
+over every declaration index — and the header then carried no identity, so
+dispatch was left comparing spellings. The header's own reference site answers and
+only it, so every header carries a declaration and the comparison has nothing else
+to fall back to.
 
 ### 4. Queries take identities, never a name beside one
 
@@ -358,20 +368,19 @@ separately readable, not that identity changes.
 
 ### 7. Synthesis records referents, it does not spell names
 
-A pass that synthesises a reference knows what it refers to, so it records that:
+A pass that synthesises a reference knows what it refers to, so it records that
+rather than spelling a name for someone else to resolve.
 
-```rust
-// before — a name whose site the table never walked
-Type::Named(NamedType::new(AstId::fresh(), "Display".into(), span))
+Where the referent is a declaration the walk already visited, the cheapest form
+of recording it is to name that node: the `Self: <this trait>` bound a trait's
+own body carries is minted with the trait declaration's own `AstId`, and the walk
+answers for that node with the trait itself. No new id, no new table, and the
+bound resolves like any written one.
 
-// after — the referent, which needs no resolution
-Type::Resolved(display_def)
-```
-
+Where no such node exists, the reference carries its referent directly:
 `ast::Type` gains a `Resolved(DefId)` variant, absent from parsed syntax and
-produced only by synthesis. Type resolution handles it by returning the
-declaration: no name to look up, no vantage to get wrong. This closes the 59
-synthesised reference sites.
+produced only by synthesis. Type resolution returns the declaration — no name to
+look up, no vantage to get wrong.
 
 ### 8. Mangled names are rendered once, never parsed
 
@@ -464,11 +473,6 @@ completion check.
 - [ ] `Resolutions::at` made total, once nothing mints an unwalked site. Done
       when the `Option` is gone from the signature — five call sites read it
       today.
-- [ ] The impl header's own trait reference. A header whose trait position names
-      no declaration — a bodiless derive naming a stdlib trait its module never
-      `use`d — still leaves `same_trait` comparing spellings. It is the last
-      spelling comparison in trait dispatch, and it closes when the scope answers
-      for that position.
 - [ ] `ResolvedType` nominal variants carry `DefId`. Done when `ResolvedType`
       holds no `(name, module_source)` pair. The nominal variants are matched at
       ~790 sites, 188 of them in or-patterns that bind one `name` across
@@ -524,7 +528,7 @@ The numbers this design is aimed at, measured over `wado-compiler/src`:
 | implementations of "what does this name mean in M"  | 5            | 5       |
 | name-keyed per-module declaration registries        | 7            | 7       |
 | `type_implements_trait` callers passing no identity | 16 of 30     | 0 of 30 |
-| synthesised reference sites absent from the table   | 59           | 59      |
+| synthesised reference sites absent from the table   | 2            | 1       |
 | mangled-name parsing functions                      | 7            | 7       |
 | hand-assembled `(module, name)` keys                | 28           | 22      |
 | of those, substituting the writing module           | 6            | 6       |

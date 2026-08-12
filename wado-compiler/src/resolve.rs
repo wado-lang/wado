@@ -328,7 +328,17 @@ impl AstVisitor for Resolver<'_> {
             Item::BuiltinTypeDecl(d) => (&d.type_params, None),
             Item::Resource(r) => (&r.type_params, Some(r.id)),
             Item::Impl(i) => (&i.type_params, Some(i.id)),
-            Item::Trait(t) => (&t.type_params, Some(t.id)),
+            Item::Trait(t) => {
+                // Inside a trait, `Self` is bounded by that trait. The
+                // elaborator mints that bound rather than the programmer, and a
+                // minted spelling would be a reference the walk never saw — so
+                // the declaration node answers for itself and the bound names
+                // it instead of respelling its name.
+                if let Some(def) = self.defs.of_ast_id(t.id) {
+                    self.record(t.id, Resolution::Def(def));
+                }
+                (&t.type_params, Some(t.id))
+            }
             Item::Function(_)
             | Item::Interface(_)
             | Item::Flags(_)

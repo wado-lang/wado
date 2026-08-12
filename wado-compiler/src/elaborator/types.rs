@@ -1308,7 +1308,9 @@ impl TypeError {
             ),
             TypeError::UnknownTraitImpl { name, span } => (
                 Code::UnknownType,
-                format!("cannot implement `{name}`: no trait, effect or resource by that name"),
+                format!(
+                    "cannot implement `{name}`: no trait, effect or resource by that name is in scope"
+                ),
                 *span,
             ),
             TypeError::InvalidStores { message, span } => {

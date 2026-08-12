@@ -1,0 +1,14 @@
+// Implementing a trait is naming it. A header whose trait reaches no
+// declaration from this module carries no identity, so dispatch would be left
+// comparing spellings — `Deserialize` here means `core:serde`'s only by a
+// global scan the module never asked for.
+struct Point {
+    x: i32,
+}
+
+impl Deserialize for Point;
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "cannot implement `Deserialize`: no trait, effect or resource by that name is in scope"}

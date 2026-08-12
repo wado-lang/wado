@@ -1382,10 +1382,13 @@ impl TypeSystem {
                 let Some(header) = trait_env.impl_headers.get(&entry) else {
                     continue;
                 };
-                let Some(impl_trait_name) = &header.trait_name else {
-                    continue;
-                };
-                if self.same_trait(trait_, header, impl_trait_name)
+                // Both sides are declarations: the query's comes from the
+                // reference site that asked (a bound, a `T::method()` prefix),
+                // the header's from the site it writes, and each was resolved by
+                // the module that wrote it. Comparing spellings instead is what
+                // made an aliased bound unsatisfiable and a same-named foreign
+                // trait satisfied (#1785).
+                if header.trait_ref == Some(trait_)
                     && self.inherent_impl_type_args_match(
                         &header.ty,
                         &header.type_params,
@@ -2526,31 +2529,5 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             is_blanket_ref_impl: false,
             is_variadic_impl: false,
         })
-    }
-}
-
-impl TypeSystem {
-    /// Whether an `impl` block implements the trait a query is asking about.
-    ///
-    /// Identity when both sides have one: the query's comes from the reference
-    /// site that asked (a bound, a `T::method()` prefix), the impl's from the
-    /// site its header writes, and both were resolved by the module that wrote
-    /// them. Comparing the spellings instead is what made an aliased bound
-    /// unsatisfiable and a same-named foreign trait satisfied (#1785).
-    fn same_trait(
-        &self,
-        trait_: DefId,
-        header: &super::trait_env::ImplHeader,
-        impl_trait_name: &str,
-    ) -> bool {
-        // The header carries the table's answer for the site it wrote, so the
-        // two declarations are compared rather than the spellings two modules
-        // can share. The query side always has an identity now; the header side
-        // still falls back for a bodiless derive naming a trait its module
-        // never `use`d, which is the scope gap, not this comparison's.
-        match header.trait_ref {
-            Some(decl) => decl == trait_,
-            _ => impl_trait_name == self.trait_spelling(trait_),
-        }
     }
 }

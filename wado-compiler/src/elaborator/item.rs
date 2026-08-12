@@ -866,24 +866,27 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// keys off the written string, so an `impl` of a name nothing declares
     /// registers happily, matches no query, and reaches the back end unmentioned.
     ///
-    /// The head resolves through the same chain the block's own facts use, so
-    /// the check and the facts cannot disagree about which declaration it
-    /// names. A head with a reference site answers from the site; a synthesized
-    /// one, which has none, falls back to the name-only chain.
+    /// The header's own reference site answers, and only it. A global by-name
+    /// scan would let `impl Deserialize for T;` compile in a module that never
+    /// named `Deserialize` — and the header would then carry no identity, so
+    /// dispatch would be left comparing spellings two modules can share.
+    /// Naming the trait is what a module does to implement it.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
-        let name = super::trait_env::get_type_name_static(trait_type);
-        let key = match crate::resolve::head_site(trait_type) {
-            Some(site) => self.trait_decl_at(site, &name),
-            None => self.decl_key_or_local(&name),
-        };
-        if self.trait_decl_header_in_frame(&name).is_some()
-            || self.tysys.trait_env.declares_trait(&key)
-            || self.tysys.trait_env.declares_effect_or_resource(&key)
-        {
+        let implementable = crate::resolve::head_site(trait_type)
+            .and_then(|site| self.tysys.resolutions.declared(site))
+            .is_some_and(|def| {
+                matches!(
+                    self.tysys.resolutions.defs().kind(def),
+                    crate::defs::DefKind::Trait
+                        | crate::defs::DefKind::Effect
+                        | crate::defs::DefKind::Resource
+                )
+            });
+        if implementable {
             return;
         }
         let _ = self.emit(TypeError::UnknownTraitImpl {
-            name,
+            name: super::trait_env::get_type_name_static(trait_type),
             span: impl_block.span,
         });
     }
@@ -1395,7 +1398,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
             "Self".to_string(),
             vec![ast::TraitBound {
-                id: ast::AstId::fresh(),
+                // The trait's own declaration node, which the resolution walk
+                // answers for: `Self` here is bounded by this trait, and a
+                // fresh id would be a reference site nothing resolved.
+                id: trait_decl.id,
                 name: trait_decl.name.clone(),
                 assoc_types: Vec::new(),
                 span: trait_decl.span,
