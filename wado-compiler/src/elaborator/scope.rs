@@ -196,15 +196,31 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// what a parameter is known to satisfy is elaborated on read instead, by
     /// [`super::tysys::TypeSystem::bound_implies`]. `fn(...)` bounds name no
     /// trait and pass through untouched.
+    ///
+    /// One declaration is one bound, however it is spelled: `T: B + Derived`
+    /// where `B` aliases the `Base` that `Derived` implies is a two-bound list,
+    /// and keeping both would report the alias and the original as competitors
+    /// for a method only one of them can own.
     pub(super) fn elaborate_bounds(&self, bounds: &[ast::TraitBound]) -> Vec<ast::TraitBound> {
-        let mut elaborated = Vec::with_capacity(bounds.len());
+        let mut elaborated: Vec<ast::TraitBound> = Vec::with_capacity(bounds.len());
+        let mut seen: Vec<super::trait_env::DeclKey> = Vec::with_capacity(bounds.len());
+        let mut push = |scope: &Self, elaborated: &mut Vec<ast::TraitBound>, bound: &ast::TraitBound| {
+            if bound.fn_signature.is_none() {
+                let decl = scope.trait_decl_at(bound.id, &bound.name);
+                if seen.contains(&decl) {
+                    return;
+                }
+                seen.push(decl);
+            }
+            push_unique_bound(elaborated, bound);
+        };
         for bound in bounds {
-            push_unique_bound(&mut elaborated, bound);
+            push(self, &mut elaborated, bound);
             if bound.fn_signature.is_some() {
                 continue;
             }
             for inherited in self.supertraits_of_bound(&bound.name) {
-                push_unique_bound(&mut elaborated, &inherited.bound);
+                push(self, &mut elaborated, &inherited.bound);
             }
         }
         elaborated

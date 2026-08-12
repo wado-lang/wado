@@ -404,24 +404,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_param_bounds
                     .get(&name)
                     .cloned()
-                && let Some((found_trait, info)) = {
-                    // A qualified call names one bound, so the others are not
-                    // competitors — without this filter the collision it exists
-                    // to resolve is still reported inside a generic body, and
-                    // the first bound answers regardless of which was named.
-                    // Bounds are compared as declarations, so a same-named
-                    // trait from another module does not answer for the one
-                    // the call named.
-                    let named: Vec<ast::TraitBound> = bounds
-                        .iter()
-                        .filter(|b| {
-                            required_trait
-                                .is_none_or(|w| self.trait_decl_at(b.id, &b.name) == w.decl)
-                        })
-                        .cloned()
-                        .collect();
-                    self.find_method_in_trait_bounds(&named, method_name, base_type_id, span)
-                }
+                && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
+                    &bounds,
+                    method_name,
+                    base_type_id,
+                    span,
+                    required_trait,
+                )
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);
@@ -449,13 +438,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // where the trait declaration wrote them. The `ast` bounds
                     // rebuilt here are spellings for the by-name lookups only;
                     // which trait each means comes from `resolved`.
-                    let named: Vec<crate::name::FqTraitName> = bounds
-                        .into_iter()
-                        .filter(|b| {
-                            required_trait
-                                .is_none_or(|w| b.canonical().is_some_and(|k| k == w.decl))
-                        })
-                        .collect();
+                    let named: Vec<crate::name::FqTraitName> = bounds.into_iter().collect();
                     // Each rebuilt bound is paired with the identity it stands
                     // for by its own id, not by its name: two same-named traits
                     // from different modules are two bounds, and a by-name map
@@ -484,6 +467,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                         base_type_id,
                         span,
+                        required_trait,
                     )
                 }
             {

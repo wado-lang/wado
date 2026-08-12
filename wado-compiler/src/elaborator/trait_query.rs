@@ -1658,6 +1658,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
+        required_trait: Option<&super::types::RequiredTrait>,
     ) -> Option<(crate::name::FqTraitName, MethodInfo)> {
         self.find_method_in_trait_bounds_with(
             bounds,
@@ -1665,6 +1666,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name,
             self_type_id,
             span,
+            required_trait,
         )
     }
 
@@ -1683,6 +1685,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
+        required_trait: Option<&super::types::RequiredTrait>,
     ) -> Option<(crate::name::FqTraitName, MethodInfo)> {
         let bounds = self.elaborate_bounds(bounds);
         // Which trait each bound means is settled once, here: a bound reached
@@ -1700,9 +1703,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         // Stopping at the first hit would hide the ambiguity, so every bound is
         // scanned — by predicate, leaving only the winner to clone.
+        // A qualified call names one bound, so the others are not competitors.
+        // The filter runs *after* elaboration: `T: Derived` carries `Base`, so
+        // `Base::tag(x)` names a supertrait the frame never wrote. Comparing
+        // declarations, not spellings, keeps another module's same-named trait
+        // from answering for the one the call named.
         let candidates: Vec<(ast::TraitBound, super::trait_env::DeclKey)> = keyed
             .into_iter()
-            .filter(|(_, key)| self.trait_declares_method_of(key, method_name))
+            .filter(|(_, key)| {
+                required_trait.is_none_or(|w| *key == w.decl)
+                    && self.trait_declares_method_of(key, method_name)
+            })
             .collect();
         let resolved = candidates.first().and_then(|(bound, key)| {
             self.trait_method_of(key, method_name)

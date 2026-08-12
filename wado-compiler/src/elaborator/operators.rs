@@ -499,7 +499,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
                     && let Some((_trait_name, info)) =
-                        self.find_method_in_trait_bounds(&bounds, "eq", left.type_id, span)
+                        self.find_method_in_trait_bounds(&bounds, "eq", left.type_id, span, None)
                 {
                     let eq_trait_name = self
                         .tysys
@@ -533,7 +533,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) && let Some((_trait_name, info)) =
-                    self.find_method_in_trait_bounds(&bounds, "cmp", left.type_id, span)
+                    self.find_method_in_trait_bounds(&bounds, "cmp", left.type_id, span, None)
                 {
                     let ord_trait_name = self
                         .tysys
@@ -697,7 +697,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => unreachable!(),
                 };
                 if let Some((found_trait, info)) =
-                    self.find_method_in_trait_bounds(&bounds, method_name, left.type_id, span)
+                    self.find_method_in_trait_bounds(&bounds, method_name, left.type_id, span, None)
                 {
                     // For type-param arithmetic operators, Output == Self is the common
                     // case and TypeParam types get properly substituted by monomorphization.
