@@ -1,0 +1,31 @@
+//! A parser literal and a lexer rule with the same text denote one token, so
+//! an alternative led by the rule's name stays reachable — issue #1752.
+//! Trees pinned against ANTLR4 4.13.2.
+
+use g from "./grammars/lit_alias_ref.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lit_alias_ref" },
+    };
+use { TK_EOF } from "./grammars/lit_alias_ref.g4";
+
+fn tree(input: &String) -> String {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    return g::to_string_tree(&result);
+}
+
+test "the alternative led by the rule name is reachable" {
+    assert tree(&"kw x") == "(s kw x)", tree(&"kw x");
+}
+
+test "the literal-only alternative still parses" {
+    assert tree(&"kw") == "(s kw)", tree(&"kw");
+}
+
+test "both spellings tokenize to one kind" {
+    let toks = g::tokenize(&"kw");
+    assert g::to_lexer_string(&toks, TK_EOF) == "[@0,0:1='kw',<1>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n", g::to_lexer_string(
+        &toks,
+        TK_EOF,
+    );
+}

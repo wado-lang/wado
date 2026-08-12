@@ -1412,7 +1412,6 @@ pub global TK_Z: i32 = 1;
 pub global TK_WS: i32 = 2;
 pub global TK_EOF: i32 = 3;
 pub global TK_ERROR: i32 = 4;
-pub global TK_LIT_KW: i32 = 5;
 
 struct Lexer {
     chars: List<char>,
@@ -1468,13 +1467,6 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_kw(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != 'k' { return -1; }
-    if pos + 1 >= chars.len() || chars[pos + 1] != 'w' { return -1; }
-    return pos + 2;
-}
-
 pub fn tokenize(input: &String) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -1489,8 +1481,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char matches { 'k' } {
-            end = try_lit_kw(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_KW; }
+            end = try_K(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_K; }
         } else if first_char matches { 'z' } {
             end = try_Z(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Z; }
@@ -1522,7 +1514,6 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_KW => "TK_LIT_KW",
         _ => "Unknown",
     };
 }
@@ -1804,7 +1795,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     p.no_viable(
         "expected s",
         p.peek_span(),
-        ["TK_LIT_KW", "TK_Z"],
+        ["TK_K", "TK_Z"],
     );
     return;
 }
@@ -1846,16 +1837,16 @@ pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(5);
+    for let mut k = 0; k < 5; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(5);
+    for let mut k = 0; k < 5; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
@@ -1873,7 +1864,7 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_KW | TK_Z };
+    return k matches { TK_K | TK_Z };
 }
 
 global EMPTY_SYNC: List<i32> = [];

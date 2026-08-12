@@ -1413,7 +1413,6 @@ pub global TK_WS: i32 = 2;
 pub global TK_EOF: i32 = 3;
 pub global TK_ERROR: i32 = 4;
 pub global TK_LIT_IF: i32 = 5;
-pub global TK_LIT_ELSE: i32 = 6;
 
 struct Lexer {
     chars: List<char>,
@@ -1432,6 +1431,19 @@ impl Lexer {
     fn slice(&self, start: i32, end: i32) -> LexerSlice with stores[self] {
         return LexerSlice::new(&self.chars, start, end);
     }
+}
+
+fn try_ELSE(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 's' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn try_ID(chars: &List<char>, start: i32) -> i32 {
@@ -1479,15 +1491,6 @@ fn try_lit_if(chars: &List<char>, start: i32) -> i32 {
     return pos + 2;
 }
 
-fn try_lit_else(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != 'e' { return -1; }
-    if pos + 1 >= chars.len() || chars[pos + 1] != 'l' { return -1; }
-    if pos + 2 >= chars.len() || chars[pos + 2] != 's' { return -1; }
-    if pos + 3 >= chars.len() || chars[pos + 3] != 'e' { return -1; }
-    return pos + 4;
-}
-
 pub fn tokenize(input: &String) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -1502,8 +1505,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char matches { 'e' } {
-            end = try_lit_else(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_ELSE; }
+            end = try_ELSE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ELSE; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if first_char matches { 'i' } {
@@ -1546,7 +1549,6 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_EOF => "Eof",
         TK_ERROR => "Error",
         TK_LIT_IF => "TK_LIT_IF",
-        TK_LIT_ELSE => "TK_LIT_ELSE",
         _ => "Unknown",
     };
 }
@@ -1944,11 +1946,11 @@ fn scan_if_stmt(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < 0 { return -1; }
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if sgk_0 == TK_LIT_ELSE {
+    if sgk_0 == TK_ELSE {
         sg_0: {
             pos = gp_0;
             sg_0_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_ELSE { break sg_0_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_ELSE { break sg_0_0; }
                 pos += 1;
                 pos = scan_stmt(tokens, pos, 0);
                 if pos < 0 { break sg_0_0; }
@@ -2018,8 +2020,8 @@ fn _parse_if_stmt__inner(p: &mut Parser) -> () {
     let id = p.expect(TK_ID, &SYNC_1);
     let stmt = _parse_stmt(p);
     let grp_kind = p.peek_kind();
-    if grp_kind == TK_LIT_ELSE {
-        let lit_else = p.expect(TK_LIT_ELSE, &SYNC_1);
+    if grp_kind == TK_ELSE {
+        let else_ = p.expect(TK_ELSE, &SYNC_1);
         let stmt = _parse_stmt(p);
     } else if true {
     }
@@ -2072,8 +2074,8 @@ pub fn parse_if_stmt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult 
 }
 
 fn _ctx_token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(7);
-    for let mut k = 0; k < 7; k += 1 {
+    let mut v: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
         v.push(token_kind_name(k));
     }
     return v;
@@ -2082,16 +2084,16 @@ fn _ctx_token_names() -> List<String> {
 global CTX_TOKEN_NAMES: List<String> = _ctx_token_names();
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(7);
-    for let mut k = 0; k < 7; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(7);
-    for let mut k = 0; k < 7; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;

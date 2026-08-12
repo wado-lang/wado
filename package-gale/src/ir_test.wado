@@ -17,6 +17,7 @@ use {
     check_references,
     merge_grammars,
     assign_action_ids,
+    alias_parser_literals,
 } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 
@@ -288,5 +289,75 @@ test "synthesize_implicit_tokens: EOF is built-in, never synthesized" {
     synthesize_implicit_tokens(&mut g);
     for let lr of &g.lexer_rules {
         assert lr.name != "EOF";
+    }
+}
+
+/// The element a one-alt, one-element parser rule holds after aliasing.
+fn sole_element(g: &Grammar) -> Element {
+    return g.parser_rules[0].alternatives[0].elements[0];
+}
+
+test "alias_parser_literals: a literal duplicating a whole lexer rule body becomes a TokenRef" {
+    let mut g = parsed("grammar T; s : 'kw'; K : 'kw'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut g);
+    if let TokenRef(t) = sole_element(&g) {
+        assert t.name == "K", t.name;
+    } else {
+        panic("expected a TokenRef");
+    }
+}
+
+test "alias_parser_literals: aliasing reaches nested elements" {
+    let mut g = parsed("grammar T; s : ('kw' | ~'kw')* ; K : 'kw'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut g);
+    if let Repeat(rep) = sole_element(&g) {
+        if let Group(grp) = &rep.element {
+            if let TokenRef(t) = &grp.alternatives[0].elements[0] {
+                assert t.name == "K", t.name;
+            } else {
+                panic("expected a TokenRef in the first alt");
+            }
+            if let Not(n) = &grp.alternatives[1].elements[0] {
+                assert n.element matches { TokenRef(_) }, "expected ~TokenRef";
+            } else {
+                panic("expected a Not in the second alt");
+            }
+        } else {
+            panic("expected a Group");
+        }
+    } else {
+        panic("expected a Repeat");
+    }
+}
+
+// ANTLR4 4.13.2 aliases only a body that is exactly one string literal: with
+// either of these the literal mints its own token and `K` goes unreachable.
+test "alias_parser_literals: a concatenated or wrapped body does not alias" {
+    let mut concat = parsed("grammar T; s : 'kw'; K : 'k' 'w'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut concat);
+    assert sole_element(&concat) matches { Literal(_) }, "concatenation must not alias";
+
+    let mut wrapped = parsed("grammar T; s : 'kw'; K : ('kw'); WS : ' ' -> skip;");
+    alias_parser_literals(&mut wrapped);
+    assert sole_element(&wrapped) matches { Literal(_) }, "a wrapped body must not alias";
+}
+
+test "alias_parser_literals: a fragment or a non-default-mode rule does not alias" {
+    let mut frag = parsed("grammar T; s : 'kw'; fragment K : 'kw'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut frag);
+    assert sole_element(&frag) matches { Literal(_) }, "a fragment must not alias";
+
+    let mut moded = parsed("grammar T; s : 'kw'; BT : '`' -> pushMode(M); mode M; K : 'kw';");
+    alias_parser_literals(&mut moded);
+    assert sole_element(&moded) matches { Literal(_) }, "a moded rule must not alias";
+}
+
+test "alias_parser_literals: the first rule with the text wins" {
+    let mut g = parsed("grammar T; s : 'kw'; J : 'kw'; K : 'kw'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut g);
+    if let TokenRef(t) = sole_element(&g) {
+        assert t.name == "J", t.name;
+    } else {
+        panic("expected a TokenRef");
     }
 }

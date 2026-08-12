@@ -8,6 +8,7 @@ use {
     normalize_caches,
     canonicalize_empty_alt_groups,
     unwrap_labeled_transparent_groups,
+    alias_parser_literals,
     assign_atn_call_sites,
     assign_atn_decisions,
     assign_action_ids,
@@ -121,6 +122,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // Fold `( | X)` / `(X | )` empty-alt groups onto the Optional path
     // before any structural pass (lowering, ATN build) sees them, so both
     // the emitter and `build_atn` agree on the canonical repeat shape.
+    // A parser literal that duplicates a lexer rule's whole body denotes that
+    // rule's token; alias it before `collect_literal_tokens` mints a token of
+    // its own (issue #1752).
+    alias_parser_literals(grammar);
     canonicalize_empty_alt_groups(grammar);
     // Before the stamping passes, so lower and emit see the same shape.
     unwrap_labeled_transparent_groups(grammar);

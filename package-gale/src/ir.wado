@@ -1180,6 +1180,108 @@ pub fn canonicalize_empty_alt_groups(grammar: &mut Grammar) {
 /// A wrapper carrying anything of its own — group `options`, an alt label,
 /// alt actions — stays. Runs before `assign_atn_call_sites`, whose numbering
 /// must see the final shape.
+/// The fixed text a lexer rule aliases, or `null` when it aliases nothing.
+///
+/// ANTLR4 aliases a parser string literal to a lexer rule only when the rule's
+/// entire body is that one string literal. `K : 'k' 'w' ;` and `K : ('kw') ;`
+/// do not alias `'kw'` (both confirmed against the 4.13.2 oracle), so the
+/// check is `one alt, one Literal element` — not `try_extract_fixed_text`'s
+/// concatenation. A fragment, a `tokens { }` virtual entry, and a rule outside
+/// the default mode never alias.
+pub fn lexer_alias_text(rule: &LexerRule) -> Option<String> {
+    if rule.is_fragment || rule.is_virtual || rule.mode != DEFAULT_MODE || rule.body.len() != 1 {
+        return null;
+    }
+    let alt = &rule.body[0];
+    if alt.elements.len() != 1 || !alt.actions.is_empty() {
+        return null;
+    }
+    if let Literal(text) = &alt.elements[0] {
+        return Option::<String>::Some(*text);
+    }
+    return null;
+}
+
+/// Rewrite every parser `Literal(t)` that duplicates a lexer rule's whole body
+/// into a reference to that rule: the two spellings denote one token type, as
+/// they do in ANTLR4. Without this the literal mints an anonymous `TK_LIT_*`
+/// and the identically-texted lexer rule is deduped out of dispatch, so a
+/// parser reference to it by name is unreachable — a silent mis-parse.
+///
+/// Runs before `collect_literal_tokens`, which then never sees `t`.
+pub fn alias_parser_literals(grammar: &mut Grammar) {
+    let mut texts: List<String> = [];
+    let mut names: List<String> = [];
+    for let rule of &grammar.lexer_rules {
+        if let Some(t) = lexer_alias_text(rule) {
+            // First rule wins; a later duplicate is already unreachable.
+            if index_of_text(&texts, &t) < 0 {
+                texts.push(t);
+                names.push(rule.name);
+            }
+        }
+    }
+    if texts.is_empty() {
+        return;
+    }
+    for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
+        let aliased = alias_alternatives(&grammar.parser_rules[ri].alternatives, &texts, &names);
+        grammar.parser_rules[ri].alternatives = aliased;
+    }
+}
+
+fn index_of_text(texts: &List<String>, text: &String) -> i32 {
+    for let mut i = 0; i < texts.len(); i += 1 {
+        if texts[i] == *text {
+            return i;
+        }
+    }
+    return -1;
+}
+
+fn alias_alternatives(alts: &List<Alternative>, texts: &List<String>, names: &List<String>) -> List<Alternative> {
+    let mut out: List<Alternative> = [];
+    for let alt of alts {
+        let mut elems: List<Element> = [];
+        for let e of &alt.elements {
+            elems.push(alias_element(e, texts, names));
+        }
+        out.push(Alternative { label: alt.label, options: alt.options, elements: elems, actions: alt.actions });
+    }
+    return out;
+}
+
+fn alias_element(elem: &Element, texts: &List<String>, names: &List<String>) -> Element {
+    return match *elem {
+        Literal(l) => {
+            let i = index_of_text(texts, &l.text);
+            if i < 0 {
+                *elem;
+            } else {
+                Element::TokenRef(TokenRefElement::with_options(names[i], l.options));
+            }
+        },
+        Repeat(rep) => Element::Repeat(RepeatElement {
+            kind: rep.kind,
+            element: alias_element(&rep.element, texts, names),
+            non_greedy: rep.non_greedy,
+        }),
+        Not(n) => Element::Not(NotElement { element: alias_element(&n.element, texts, names) }),
+        Label(lab) => Element::Label(LabelElement {
+            name: lab.name,
+            list: lab.list,
+            element: alias_element(&lab.element, texts, names),
+            snake_name: lab.snake_name,
+            field_name: lab.field_name,
+        }),
+        Group(g) => Element::Group(GroupElement {
+            alternatives: alias_alternatives(&g.alternatives, texts, names),
+            options: g.options,
+        }),
+        _ => *elem,
+    };
+}
+
 pub fn unwrap_labeled_transparent_groups(grammar: &mut Grammar) {
     for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
         let unwrapped = unwrap_label_alternatives(&grammar.parser_rules[ri].alternatives);
