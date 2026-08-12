@@ -497,11 +497,13 @@ fn is_forwardable(instr: &WirInstr) -> bool {
 fn forward_fields_in_body(body: &mut [WirInstr], known: &mut FieldKnowledge<'_>) -> bool {
     let mut changed = false;
     for i in 0..body.len() {
+        invalidate_call_effects_before_rewrite(&body[i], known);
         changed |= forward_fields_in_instr(&mut body[i], known);
         if may_exit_enclosing_block(&body[i]) {
             let mut tail_known = known.fork();
             update_knowledge_from_instr(&body[i], &mut tail_known);
             for j in (i + 1)..body.len() {
+                invalidate_call_effects_before_rewrite(&body[j], &mut tail_known);
                 changed |= forward_fields_in_instr(&mut body[j], &mut tail_known);
                 update_knowledge_from_instr(&body[j], &mut tail_known);
             }
@@ -569,6 +571,49 @@ fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
             found
         }
     }
+}
+
+/// Invalidate what a **call** inside `instr` may mutate, before the statement
+/// is rewritten.
+///
+/// [`update_knowledge_from_instr`] runs after the rewrite, which is right for a
+/// statement's own store: `c.n = c.n + 1` evaluates its operand before storing,
+/// so folding the read with the pre-statement knowledge is correct. It is wrong
+/// for a call, whose arguments are evaluated in order — `total(bump(&mut c),
+/// c.n, c.n)` mutates in the first argument and reads in the next two, and
+/// post-statement invalidation is too late to stop those reads folding to the
+/// pre-call constant.
+///
+/// Conservative within the statement: every call in it invalidates, including
+/// one evaluated *after* a read, since the rewrite does not walk in evaluation
+/// order. That only forgoes folding in a statement that both calls with a
+/// reference argument and reads a field of it.
+fn invalidate_call_effects_before_rewrite(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
+    match instr {
+        WirInstr::Call { args, .. } => {
+            for arg in args {
+                if let WirInstr::LocalGet { name, .. } = arg {
+                    known.invalidate_mutated_local(name);
+                }
+            }
+        }
+        WirInstr::CallRef { args, .. } | WirInstr::CallIndirect { args, .. } => {
+            let mut names = IndexSet::default();
+            for arg in args {
+                collect_local_gets_deep(arg, &mut names);
+            }
+            for name in &names {
+                known.invalidate_mutated_local(name);
+            }
+        }
+        WirInstr::RefAsNonNull(inner) => {
+            if let WirInstr::LocalGet { name, .. } = inner.as_ref() {
+                known.invalidate_mutated_local(name);
+            }
+        }
+        _ => {}
+    }
+    instr.for_each_child(&mut |child| invalidate_call_effects_before_rewrite(child, known));
 }
 
 /// Update field knowledge from a statement (after its rewrite): first
