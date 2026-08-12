@@ -813,13 +813,15 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(s
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(self) {
-    if self.byte_index >= self.used {
+    let _av_5: i32;
+    _av_5 = self.byte_index;
+    if _av_5 >= self.used {
         return 1, 0;
     }
     let __pattern_temp_0_mv_0: u32;
     let __pattern_temp_0_mv_1: i32;
-    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:prelude/string.wado/decode_char_at"(self.repr, self.byte_index);
-    self.byte_index = self.byte_index + __pattern_temp_0_mv_1;
+    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:prelude/string.wado/decode_char_at"(self.repr, _av_5);
+    self.byte_index = _av_5 + __pattern_temp_0_mv_1;
     return 0, __pattern_temp_0_mv_0;
 }
 
@@ -987,6 +989,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -996,10 +999,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
@@ -1189,12 +1193,14 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[core:prelude/stri
     let item: ref "tuple//[core:prelude/string.wado/String, i32]";
     let v_2: ref "tuple//[core:prelude/string.wado/String, i32]";
     let v_3: ref "core:prelude/string.wado//String";
-    if self.index >= self.end {
+    let _av_4: i32;
+    _av_4 = self.index;
+    if _av_4 >= self.end {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(self.repr, self.index);
+    v_2 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(self.repr, _av_4);
     item = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null(v_3 = v_2.0; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<u8>; __array_clone_src_6 = v_3.repr; let __array_clone_len_6: i32; __array_clone_len_6 = v_3.used; let __array_clone_dst_6: ref Array<u8>; __array_clone_dst_6 = builtin::array_new<u8>(__array_clone_len_6); builtin::array_copy<u8>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v_3.used }), 1: v_2.1 };
-    self.index = self.index + 1;
+    self.index = _av_4 + 1;
     return item;
 }
 
@@ -1237,12 +1243,14 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:collections/T
     let item: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>";
     let v_2: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>";
     let v_3: ref "core:prelude/string.wado//String";
-    if self.index >= self.end {
+    let _av_4: i32;
+    _av_4 = self.index;
+    if _av_4 >= self.end {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">(self.repr, self.index);
+    v_2 = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">(self.repr, _av_4);
     item = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>" { key: ref.as_non_null(v_3 = v_2.key; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<u8>; __array_clone_src_6 = v_3.repr; let __array_clone_len_6: i32; __array_clone_len_6 = v_3.used; let __array_clone_dst_6: ref Array<u8>; __array_clone_dst_6 = builtin::array_new<u8>(__array_clone_len_6); builtin::array_copy<u8>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v_3.used }), value: v_2.value, deleted: v_2.deleted };
-    self.index = self.index + 1;
+    self.index = _av_4 + 1;
     return item;
 }
 

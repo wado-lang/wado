@@ -496,16 +496,24 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::set_bit"(self, i) {
 }
 
 fn "core:prelude/int128.wado/core:prelude/int128.wado/u128^core:prelude/traits.wado/Ord::cmp"(self, other) {
-    if self.high <u other.high {
+    let _av_2: u64;
+    let _av_3: u64;
+    let _av_4: u64;
+    let _av_5: u64;
+    _av_2 = self.high;
+    _av_3 = other.high;
+    if _av_2 <u _av_3 {
         return 0;
     }
-    if self.high >u other.high {
+    if _av_2 >u _av_3 {
         return 2;
     }
-    if self.low <u other.low {
+    _av_4 = self.low;
+    _av_5 = other.low;
+    if _av_4 <u _av_5 {
         return 0;
     }
-    if self.low >u other.low {
+    if _av_4 >u _av_5 {
         return 2;
     }
     return 1;
@@ -520,6 +528,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128^core:prelude/traits.w
 
 fn "core:prelude/int128.wado/core:prelude/int128.wado/u128^core:prelude/traits.wado/Shl::shl"(self, rhs) {
     let s_4: u64;
+    let _av_6: u64;
     if rhs >= 128 {
         return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 };
     }
@@ -530,7 +539,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128^core:prelude/traits.w
         return self;
     }
     s_4 = builtin::i64_extend_i32_s(rhs);
-    return struct.new "core:prelude/int128.wado//u128" { low: self.low << s_4, high: (self.high << s_4) | (self.low >>u builtin::i64_extend_i32_s(64 - rhs)) };
+    return struct.new "core:prelude/int128.wado//u128" { low: local.tee _av_6(self.low) << s_4, high: (self.high << s_4) | (_av_6 >>u builtin::i64_extend_i32_s(64 - rhs)) };
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
@@ -646,11 +655,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
     let align: "core:prelude/format.wado//enum:Alignment";
     let left_pad: i32;
     let right_pad: i32;
+    let _av_8: i32;
     content_len = content.used;
-    if (if self.width <= 0 -> i32 {
+    _av_8 = self.width;
+    if (if _av_8 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_8;
     }) {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, content);
         return;
@@ -683,6 +694,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -692,10 +704,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);

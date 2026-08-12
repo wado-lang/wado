@@ -925,6 +925,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -934,10 +935,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
@@ -1043,10 +1045,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>::to_array"(self) {
     let len: i32;
     let out: ref Array<u8>;
-    len = self.end - self.start;
+    let _av_5: i32;
+    _av_5 = self.start;
+    len = self.end - _av_5;
     out = builtin::array_new<u8>(select i32(len > 0, len, 0));
     if len > 0 {
-        builtin::array_copy<u8>(out, 0, self.repr, self.start, len);
+        builtin::array_copy<u8>(out, 0, self.repr, _av_5, len);
     }
     return out;
 }
@@ -1111,11 +1115,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: u8;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<u8>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<u8>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 

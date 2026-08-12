@@ -1839,11 +1839,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
     let align: "core:prelude/format.wado//enum:Alignment";
     let left_pad: i32;
     let right_pad: i32;
+    let _av_8: i32;
     content_len = content.used;
-    if (if self.width <= 0 -> i32 {
+    _av_8 = self.width;
+    if (if _av_8 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_8;
     }) {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, content);
         return;
@@ -1876,6 +1878,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -1885,10 +1888,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
@@ -1947,11 +1951,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: u8;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<u8>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<u8>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 
@@ -1968,11 +1974,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u64>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: u64;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0_i64;
     }
-    item = builtin::array_get<u64>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<u64>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 
@@ -1989,11 +1997,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u64>::push"(self, value) 
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u32>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: u32;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<u32>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<u32>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 
@@ -2010,11 +2020,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>::push"(self, value) 
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u16>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: u16;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<u16>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<u16>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 
@@ -2033,12 +2045,14 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[bool,i32,core:pre
     let item: ref "tuple//[bool, i32, core:prelude/string.wado/String]";
     let v_2: ref "tuple//[bool, i32, core:prelude/string.wado/String]";
     let v_3: ref "core:prelude/string.wado//String";
-    if self.index >= self.end {
+    let _av_4: i32;
+    _av_4 = self.index;
+    if _av_4 >= self.end {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "tuple//[bool, i32, core:prelude/string.wado/String]">(self.repr, self.index);
+    v_2 = builtin::array_get<ref "tuple//[bool, i32, core:prelude/string.wado/String]">(self.repr, _av_4);
     item = struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: v_2.0, 1: v_2.1, 2: ref.as_non_null(v_3 = v_2.2; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_15: ref Array<u8>; __array_clone_src_15 = v_3.repr; let __array_clone_len_15: i32; __array_clone_len_15 = v_3.used; let __array_clone_dst_15: ref Array<u8>; __array_clone_dst_15 = builtin::array_new<u8>(__array_clone_len_15); builtin::array_copy<u8>(__array_clone_dst_15, 0, __array_clone_src_15, 0, __array_clone_len_15); __array_clone_dst_15), used: v_3.used }) };
-    self.index = self.index + 1;
+    self.index = _av_4 + 1;
     return item;
 }
 
@@ -2056,12 +2070,14 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[bool,i32,core:prelude/st
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/string.wado/String>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: ref "core:prelude/string.wado//String";
     let v: ref "core:prelude/string.wado//String";
-    if self.index >= self.end {
+    let _av_3: i32;
+    _av_3 = self.index;
+    if _av_3 >= self.end {
         return ref.null none;
     }
-    v = builtin::array_get<ref "core:prelude/string.wado//String">(self.repr, self.index);
+    v = builtin::array_get<ref "core:prelude/string.wado//String">(self.repr, _av_3);
     item = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_15: ref Array<u8>; __array_clone_src_15 = v.repr; let __array_clone_len_15: i32; __array_clone_len_15 = v.used; let __array_clone_dst_15: ref Array<u8>; __array_clone_dst_15 = builtin::array_new<u8>(__array_clone_len_15); builtin::array_copy<u8>(__array_clone_dst_15, 0, __array_clone_src_15, 0, __array_clone_len_15); __array_clone_dst_15), used: v.used };
-    self.index = self.index + 1;
+    self.index = _av_3 + 1;
     return item;
 }
 
@@ -2078,11 +2094,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i8>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: i8;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<i8>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<i8>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 
@@ -2099,11 +2117,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i8>::push"(self, value) {
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i64>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: i64;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0_i64;
     }
-    item = builtin::array_get<i64>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<i64>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 
@@ -2120,11 +2140,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i64>::push"(self, value) 
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: i32;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<i32>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<i32>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 
@@ -2141,11 +2163,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(self, value) 
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i16>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: i16;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<i16>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<i16>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 
@@ -2162,11 +2186,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i16>::push"(self, value) 
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<f64>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: f64;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<f64>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<f64>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 
@@ -2183,11 +2209,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<f64>::push"(self, value) 
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<f32>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: f32;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0_f32;
     }
-    item = builtin::array_get<f32>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<f32>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 
@@ -2204,11 +2232,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<f32>::push"(self, value) 
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<char>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: char;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<char>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<char>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 
@@ -2225,11 +2255,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<char>::push"(self, value)
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<bool>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: bool;
-    if self.index >= self.end {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<bool>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<bool>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return 0, item;
 }
 

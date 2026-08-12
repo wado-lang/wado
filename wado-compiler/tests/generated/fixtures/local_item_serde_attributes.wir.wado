@@ -1115,17 +1115,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_uncheck
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::is_char_boundary"(self, byte_index) {
     let b: u8;
+    let _av_5: i32;
+    _av_5 = self.used;
     if (if byte_index == 0 -> i32 {
         1;
     } else {
-        byte_index == self.used;
+        byte_index == _av_5;
     }) {
         return 1;
     }
     if (if byte_index < 0 -> i32 {
         1;
     } else {
-        byte_index > self.used;
+        byte_index > _av_5;
     }) {
         return 0;
     }
@@ -1264,16 +1266,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::find"(self, pat) {
     let limit: i32;
     let i: i32;
     let j: i32;
+    let _av_17: i32;
     pat_len = pat.used;
     if pat_len == 0 {
         return 0, 0;
     }
-    if pat_len > self.used {
+    _av_17 = self.used;
+    if pat_len > _av_17 {
         return 1, 0;
     }
     self_repr = self.repr;
     pat_repr = pat.repr;
-    limit = self.used - pat_len;
+    limit = _av_17 - pat_len;
     i = 0;
     b132: block {
         l133: loop {
@@ -1476,11 +1480,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
     let align: "core:prelude/format.wado//enum:Alignment";
     let left_pad: i32;
     let right_pad: i32;
+    let _av_8: i32;
     content_len = content.used;
-    if (if self.width <= 0 -> i32 {
+    _av_8 = self.width;
+    if (if _av_8 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_8;
     }) {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, content);
         return;
@@ -1513,6 +1519,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -1522,10 +1529,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
@@ -1698,6 +1706,7 @@ fn "core:args/core:args/ArgvDeserializer::take_value"(self) {
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
+    let _av_18: i32;
     __match_4 = self.forced;
     if ref.is_null(__match_4) == 0 {
         v_1 = ref.as_non_null(__match_4);
@@ -1715,8 +1724,9 @@ fn "core:args/core:args/ArgvDeserializer::take_value"(self) {
         return "core:args/core:args/ArgvDeserializer::pull_option_value"(self);
     }
     "core:args/core:args/ArgvDeserializer::skip_consumed"(self);
-    if self.pos >= self.tokens.used {
-        return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: builtin::i64_extend_i32_s(self.pos) };
+    _av_18 = self.pos;
+    if _av_18 >= self.tokens.used {
+        return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: builtin::i64_extend_i32_s(_av_18) };
     }
     index_10 = self.pos;
     __v1 = self.tokens.used;

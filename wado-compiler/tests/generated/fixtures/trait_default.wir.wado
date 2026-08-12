@@ -437,11 +437,13 @@ fn "trait_default.wado/trait_default.wado/Robot^trait_default.wado/Greet::name$s
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
     let item: i32;
-    if self.index >= 5 {
+    let _av_2: i32;
+    _av_2 = self.index;
+    if _av_2 >= 5 {
         return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     }
-    item = builtin::array_get<i32>(self.repr, self.index);
-    self.index = self.index + 1;
+    item = builtin::array_get<i32>(self.repr, _av_2);
+    self.index = _av_2 + 1;
     return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: item };
 }
 

@@ -1262,6 +1262,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -1271,10 +1272,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
@@ -1346,24 +1348,28 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[match_nested_patterns.wado/Color,i32]>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
     let item: ref "tuple//[match_nested_patterns.wado/Color, i32]";
     let v: ref "tuple//[match_nested_patterns.wado/Color, i32]";
-    if self.index >= 3 {
+    let _av_3: i32;
+    _av_3 = self.index;
+    if _av_3 >= 3 {
         return ref.null none;
     }
-    v = builtin::array_get<ref "tuple//[match_nested_patterns.wado/Color, i32]">(self.repr, self.index);
+    v = builtin::array_get<ref "tuple//[match_nested_patterns.wado/Color, i32]">(self.repr, _av_3);
     item = struct.new "tuple//[match_nested_patterns.wado/Color, i32]" { 0: v.0, 1: v.1 };
-    self.index = self.index + 1;
+    self.index = _av_3 + 1;
     return item;
 }
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[i32,i32]>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
     let item: ref "tuple//[i32, i32]";
     let v: ref "tuple//[i32, i32]";
-    if self.index >= 2 {
+    let _av_3: i32;
+    _av_3 = self.index;
+    if _av_3 >= 2 {
         return ref.null none;
     }
-    v = builtin::array_get<ref "tuple//[i32, i32]">(self.repr, self.index);
+    v = builtin::array_get<ref "tuple//[i32, i32]">(self.repr, _av_3);
     item = struct.new "tuple//[i32, i32]" { 0: v.0, 1: v.1 };
-    self.index = self.index + 1;
+    self.index = _av_3 + 1;
     return item;
 }
 
