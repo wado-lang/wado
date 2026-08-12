@@ -87,10 +87,8 @@ fn build_kind_index(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>, 
             },
         }
     }
-    // A query writes punctuation by text (`"(" @punctuation.bracket`). A
-    // parser literal with that text is an alias for the lexer rule whose whole
-    // body is it (`alias_parser_literals`), so no `TK_LIT_*` is minted and the
-    // text has to resolve through the rule's own kind.
+    // A query writes punctuation by text (`"(" @punctuation.bracket`). An
+    // aliased text mints no `TK_LIT_*`, so it resolves through its rule's kind.
     for let rule of lexer_rules {
         if let Some(text) = lexer_alias_text(rule) {
             if by_literal.get(text) matches { None } {

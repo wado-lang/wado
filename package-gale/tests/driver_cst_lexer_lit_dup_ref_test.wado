@@ -1,5 +1,5 @@
-//! A lexer rule deduped against a parser literal still gets its own matcher
-//! when another lexer rule references it.
+//! A lexer rule the parser also writes as an inline literal is still callable
+//! from another lexer rule.
 
 use g from "./grammars/lexer_lit_dup_ref.g4"
     with {
@@ -11,12 +11,11 @@ fn dump(input: &String) -> String {
     return g::to_lexer_string(&g::tokenize(input), TK_EOF);
 }
 
-test "the referencing rule matches through the deduped rule" {
+test "the referencing lexer rule matches through it" {
     assert dump(&"zzkw") == "[@0,0:3='zzkw',<2>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n", dump(&"zzkw");
 }
 
-// The literal is an alias for `K`, so `kw` tokenizes as `K` — issue #1752.
-test "the deduped rule still tokenizes as itself" {
+test "the rule tokenizes as itself, not as an anonymous literal token" {
     assert dump(&"kw") == "[@0,0:1='kw',<1>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n", dump(&"kw");
 }
 

@@ -1,9 +1,8 @@
-// Source: Gale test fixture (a literal-deduped lexer rule referenced by another)
+// Source: Gale test fixture (a lexer rule referenced by another)
 // License: same as the Gale package
 //
-// `K` has the same fixed text as the parser literal `'kw'`, so the dispatch
-// path reaches it through the shared literal matcher. `Z` still references it,
-// which needs `K`'s own matcher to exist.
+// The parser literal `'kw'` is an alias for `K`, and `Z` references `K`, so
+// `K` must keep a matcher both paths can reach.
 grammar LexerLitDupRef;
 
 s : 'kw' | Z ;

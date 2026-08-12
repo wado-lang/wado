@@ -1,11 +1,8 @@
 // Source: Gale test fixture (issue #1752 — an aliased rule keeps its action)
 // License: same as the Gale package
 //
-// `K`'s whole body is `'kw'`, which the parser also writes inline, so the
-// literal is an alias for `K`. `try_extract_fixed_text` ignores actions, so
-// refusing the alias here would dedup `K` onto the shared literal matcher and
-// drop the action with it. The counter makes that observable: the second `kw`
-// retypes to `X`.
+// `'kw'` is an alias for `K`, so `K`'s action must still run. The counter
+// makes that observable: the second `kw` retypes to `X`.
 grammar LitAliasAction;
 
 options { language = Wado; }

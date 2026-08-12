@@ -292,7 +292,6 @@ test "synthesize_implicit_tokens: EOF is built-in, never synthesized" {
     }
 }
 
-/// The element a one-alt, one-element parser rule holds after aliasing.
 fn sole_element(g: &Grammar) -> Element {
     return g.parser_rules[0].alternatives[0].elements[0];
 }
@@ -330,8 +329,6 @@ test "alias_parser_literals: aliasing reaches nested elements" {
     }
 }
 
-// ANTLR4 4.13.2 aliases only a body that is exactly one string literal: with
-// either of these the literal mints its own token and `K` goes unreachable.
 test "alias_parser_literals: a concatenated or wrapped body does not alias" {
     let mut concat = parsed("grammar T; s : 'kw'; K : 'k' 'w'; WS : ' ' -> skip;");
     alias_parser_literals(&mut concat);
@@ -342,8 +339,6 @@ test "alias_parser_literals: a concatenated or wrapped body does not alias" {
     assert sole_element(&wrapped) matches { Literal(_) }, "a wrapped body must not alias";
 }
 
-// `try_extract_fixed_text` ignores actions, so refusing the alias would leave
-// the rule deduped onto the shared literal matcher with its action dropped.
 test "alias_parser_literals: an action does not block the alias" {
     let mut g = parsed(
         "grammar T; options { language = Wado; } s : 'kw'; K : 'kw' { lx.count += 1 }; WS : ' ' -> skip;",

@@ -566,7 +566,7 @@ fn group_is_lenient_scan(g: &GroupElement) -> bool {
         return false;
     }
     for let alt of &g.alternatives {
-        if alt.elements.len() != 1 || !alt.actions.is_empty() {
+        if alt.elements.len() != 1 {
             return true;
         }
         if !alt.elements[0] matches { TokenRef(_) | Literal(_) } {
@@ -1172,19 +1172,12 @@ pub fn canonicalize_empty_alt_groups(grammar: &mut Grammar) {
     }
 }
 
-/// The fixed text a lexer rule aliases, or `null` when it aliases nothing.
+/// The fixed text a lexer rule aliases, or `null`.
 ///
-/// ANTLR4 aliases a parser string literal to a lexer rule only when the rule's
-/// entire body is that one string literal. `K : 'k' 'w' ;` and `K : ('kw') ;`
-/// do not alias `'kw'` (both confirmed against the 4.13.2 oracle), so the
-/// check is `one alt, one Literal element` — not `try_extract_fixed_text`'s
-/// concatenation. A fragment, a `tokens { }` virtual entry, and a rule outside
-/// the default mode never alias.
-///
-/// An action does not block the alias (`K : 'kw' {act();} ;` aliases and the
-/// action fires — also oracle-checked). It must not: `try_extract_fixed_text`
-/// ignores actions, so refusing here would leave the rule deduped onto the
-/// shared literal matcher with its action dropped and its token unreachable.
+/// ANTLR4 aliases a parser literal only to a rule whose entire body is that
+/// one string literal: `K : 'k' 'w' ;` and `K : ('kw') ;` do not alias
+/// `'kw'`. An action does not block it, and must not — `is_literal_duplicate`
+/// would then dedup the rule away and drop the action with it.
 pub fn lexer_alias_text(rule: &LexerRule) -> Option<String> {
     if rule.is_fragment || rule.is_virtual || rule.mode != DEFAULT_MODE || rule.body.len() != 1 {
         return null;
@@ -1199,13 +1192,10 @@ pub fn lexer_alias_text(rule: &LexerRule) -> Option<String> {
     return null;
 }
 
-/// Rewrite every parser `Literal(t)` that duplicates a lexer rule's whole body
-/// into a reference to that rule: the two spellings denote one token type, as
-/// they do in ANTLR4. Without this the literal mints an anonymous `TK_LIT_*`
-/// and the identically-texted lexer rule is deduped out of dispatch, so a
-/// parser reference to it by name is unreachable — a silent mis-parse.
-///
-/// Runs before `collect_literal_tokens`, which then never sees `t`.
+/// Rewrite every parser `Literal(t)` that a lexer rule aliases into a
+/// reference to that rule, so the two spellings denote one token type as they
+/// do in ANTLR4. Runs before `collect_literal_tokens`, which then never sees
+/// `t` and mints no anonymous token to dedup the rule against.
 pub fn alias_parser_literals(grammar: &mut Grammar) {
     let mut texts: List<String> = [];
     let mut names: List<String> = [];

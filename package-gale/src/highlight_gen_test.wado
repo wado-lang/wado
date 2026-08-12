@@ -21,8 +21,7 @@ fn parse_grammar(input: String) -> Grammar {
 
 fn highlight_output_q(input: String, query_src: String) -> String {
     let mut g = parse_grammar(input);
-    // Mirror `generate()`: a parser literal duplicating a lexer rule's whole
-    // body is that rule's token, so no `TK_LIT_*` is minted for it.
+    // Mirror `generate()`, whose `lit_tokens` never see an aliased text.
     alias_parser_literals(&mut g);
     let lits = collect_literal_tokens(&g.parser_rules);
     let query = parse_highlight_query(&query_src).unwrap();
@@ -133,8 +132,6 @@ B : 'b' ;
 }
 
 test "default on a named token the parser also writes inline maps that token" {
-    // LP is `'('` and the parser also uses '(' inline; the two spellings are
-    // one token, so mapping (LP) colours both.
     let out = highlight_output_q("grammar T;
 r : '(' B ')' ;
 B : 'b' ;
@@ -145,8 +142,6 @@ RP : ')' ;
 }
 
 test "default on an action-bearing named token the parser also writes inline" {
-    // The action does not block the alias, so `(LP)` still resolves to the
-    // kind the lexer emits for `'('`.
     let out = highlight_output_q("grammar T;
 options { language = Wado; }
 r : '(' B ')' ;
