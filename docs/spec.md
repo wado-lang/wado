@@ -4011,7 +4011,14 @@ geo::distance(p1, p2);           // → distance(p1, p2)
 let p: geo::Point = geo::Point::origin();   // → Point, Point::origin()
 let c = geo::Color::Red;                    // → Color::Red
 let s = geo::Shape::Circle(3.14);           // → Shape::Circle(3.14)
+
+// Traits and types in an `impl` header, on either side
+impl geo::Show for Local { ... }
+impl Show for geo::Tag { ... }
 ```
+
+A qualified head names the namespace's declaration even where the importing
+module declares one of its own by that name.
 
 #### Note
 

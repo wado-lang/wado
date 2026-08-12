@@ -29,6 +29,23 @@ test "the namespace's trait supplies the impl's contract" {
     assert l.show("tag ") == "tag 7";
 }
 
+trait Greet {
+    fn hi(&self) -> String;
+}
+
+// The same rule on the receiver side: an impl on a namespace-qualified self
+// type must register under `Tag`, or its methods go missing with no error.
+impl Greet for geo::Tag {
+    fn hi(&self) -> String {
+        return `hi ${self.n}`;
+    }
+}
+
+test "an impl on a namespace-qualified self type is reachable" {
+    let t = geo::Tag { n: 4 };
+    assert t.hi() == "hi 4";
+}
+
 test "the module's own same-named trait is untouched" {
     let l = Local { v: 3 };
     assert l.label() == "local 3";
