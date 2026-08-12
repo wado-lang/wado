@@ -198,10 +198,26 @@ _every_ node and `AstId::fresh()` is public, so a use-site id type-checks wherev
 a declaration id is expected and one can be minted from nothing; and `AstId` is
 sparse, so per-declaration data cannot be a `Vec`, which is what axis C needs.
 
-`DefId` is a compilation-local index by design: dense, never rendered, never
-serialised, never parsed. A stdlib snapshot stores `(ModuleSource, AstId)` and
-re-derives `DefId`s on restore through `DefTable::of_ast_id`, so the index never
-has to be stable across processes.
+`DefId` is dense, never rendered, never serialised, never parsed. It is an index
+into one table, so every fact that carries one must be read against the table
+that minted it. The stdlib snapshot is where that stops being obvious: it caches
+whole declaration facts — `ModuleDecls::clone_digests_from` hands a later compile
+the stdlib's `ImplSig`s verbatim, and those compiles never re-run the decl pass
+for a snapshot module. A `(ModuleSource, String)` key survived that boundary
+because it describes a declaration rather than indexing one; a `DefId` does not,
+and reading one against a freshly built table silently names some other
+declaration.
+
+So the table is seeded rather than rebuilt: `DefTable::build_seeded` continues the
+snapshot's table, keeping every declaration it already identified at its `DefId`
+and minting only what it never saw. `TypeTable` is seeded the same way and for the
+same reason. What makes it sound is that the stdlib AST is parsed once per process
+and shared, so an `AstId` means the same node in both tables — the invariant the
+snapshot's reference re-seeding already relies on.
+
+This is a precondition for every later step, not a detail of this one: a `DefId`
+in `ResolvedType`, in a registry key, or in any other cached declaration fact
+crosses the same boundary.
 
 ### 2. `Scope` — the one implementation of visibility
 
@@ -468,11 +484,11 @@ completion check.
 - [ ] `ast::Type::Resolved(DefId)`; synthesis stops spelling names. Done when no
       synthesis site builds a `NamedType` from a `&str`. This has to come before
       the table can be total: a synthesised reference carries an `AstId::fresh`
-      the walk never saw, so every consumer must keep tolerating a missing answer
-      while those 59 sites exist.
-- [ ] `Resolutions::at` made total, once nothing mints an unwalked site. Done
-      when the `Option` is gone from the signature — five call sites read it
-      today.
+      the walk never saw, so every consumer must keep tolerating a missing
+      answer while the remaining site exists.
+- [ ] `Resolutions::get` made total, once nothing mints an unwalked site. Done
+      when the `Option` is gone from the signature — four call sites read it
+      today, two of them only to assert the walk reached the site.
 - [ ] `ResolvedType` nominal variants carry `DefId`. Done when `ResolvedType`
       holds no `(name, module_source)` pair. The nominal variants are matched at
       ~790 sites, 188 of them in or-patterns that bind one `name` across
@@ -523,22 +539,32 @@ The numbers this design is aimed at, measured over `wado-compiler/src`:
 
 | quantity                                            | at the start | now     |
 | --------------------------------------------------- | ------------ | ------- |
-| `*name: &str` parameters                            | 867          | 860     |
+| `*name: &str` parameters                            | 867          | 887     |
 | independent walks over the `use` declarations       | 3            | 1       |
 | implementations of "what does this name mean in M"  | 5            | 5       |
 | name-keyed per-module declaration registries        | 7            | 7       |
 | `type_implements_trait` callers passing no identity | 16 of 30     | 0 of 30 |
+| spelling comparisons in trait dispatch              | 2            | 0       |
 | synthesised reference sites absent from the table   | 2            | 1       |
 | mangled-name parsing functions                      | 7            | 7       |
-| hand-assembled `(module, name)` keys                | 28           | 22      |
-| of those, substituting the writing module           | 6            | 6       |
+| `decl_key_or_local` occurrences — the fabrication   | 26           | 26      |
 
 Each row reaches zero — or one, for the rows counting implementations — when its
 step lands. A row that stops falling means a step was declared done while a bypass
 survived it, which is what happened to the earlier `trait_name: &str` count, and
 the reason this document measures the bypass rather than the parameter.
 
-The bypass row is the one that matters, and it is closed: the query takes a
-`DefId` and nothing else, so there is no `None` left to pass. The `*name: &str`
-row has barely moved because the names still travelling are the ones the
-name-keyed registries force, and those go with the storage.
+Two rows are closed. The query takes a `DefId` and nothing else, so there is no
+`None` left to pass; and trait dispatch compares declarations at both ends, with
+no spelling comparison left in the path.
+
+Two rows have not moved, and both say the same thing. `decl_key_or_local` sat at
+24 for one commit, when a qualified call's required trait was made a `DefId`, and
+came back to 26 when that turned out to be wrong: the required trait can name a
+type-parameter binder or a name that reaches no declaration at all, and a `DefId`
+cannot stand for either. `RequiredTrait` becomes an identity when it carries a
+`Resolution` — `Def` or `Binder` — not before, and that waits on its comparison
+partners carrying one too. The `*name: &str` row has gone *up* for the same kind
+of reason: the parameters counted there are what the name-keyed registries force,
+and the identity work so far has added a few renderings on the way to them. Both
+rows move when the storage moves.

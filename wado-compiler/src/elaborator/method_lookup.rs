@@ -20,7 +20,7 @@ use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::sig::InstantiatedImplSig;
 use super::synth::{ArgClass, ArgProbe};
-use super::trait_env::{DeclKey, ImplHeader, TraitEnv};
+use super::trait_env::{ImplHeader, TraitEnv};
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, MethodOwner,
@@ -1752,7 +1752,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // site has resolved by naming one.
         if let Some(wanted) = required_trait {
             found_traits.retain(|m| {
-                m.trait_decl == wanted.decl
+                self.tysys.resolutions.decl_key(m.trait_decl) == wanted.decl
                     && wanted
                         .args
                         .as_ref()
@@ -2036,8 +2036,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .impl_sig(impl_ref.1)
             .expect("the decl pass records every impl block's declaration facts")
             .trait_decl
-            .clone()
             .expect("a candidate reached here through the trait impl index");
+        let defs = scope.tysys.resolutions.defs().clone();
         let trait_args = impl_sig.trait_type_args;
 
         let mut method_found = false;
@@ -2133,11 +2133,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             found_traits.push(TraitMethodMatch {
                 trait_name: crate::name::FqTraitName::declared_as_written(
-                    &trait_decl.0,
-                    &trait_decl.1,
+                    defs.module(trait_decl),
+                    defs.name(trait_decl),
                     &trait_name,
                 ),
-                trait_decl: trait_decl.clone(),
+                trait_decl,
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
                     method_ast_id: Some(method_sig.ast_id),
@@ -2189,8 +2189,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
                     trait_name: crate::name::FqTraitName::declared_as_written(
-                        &trait_decl.0,
-                        &trait_decl.1,
+                        defs.module(trait_decl),
+                        defs.name(trait_decl),
                         &trait_name_str,
                     ),
                     trait_decl,
@@ -2251,14 +2251,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Rule 1 ranks the impls of *one* trait against each other, so it must
         // not outrank locality between traits: a foreign blanket
         // `impl<T> A for T` would otherwise beat a local `impl<..T> B for [..T]`.
-        let traits_with_non_variadic: IndexSet<(DeclKey, Vec<TypeId>)> = found_traits
+        let traits_with_non_variadic: IndexSet<(crate::defs::DefId, Vec<TypeId>)> = found_traits
             .iter()
             .filter(|m| !m.is_variadic_impl)
-            .map(|m| (m.trait_decl.clone(), m.trait_args.clone()))
+            .map(|m| (m.trait_decl, m.trait_args.clone()))
             .collect();
         found_traits.retain(|m| {
             !m.is_variadic_impl
-                || !traits_with_non_variadic.contains(&(m.trait_decl.clone(), m.trait_args.clone()))
+                || !traits_with_non_variadic.contains(&(m.trait_decl, m.trait_args.clone()))
         });
 
         // Sort BEFORE dedup_by, since dedup_by only removes adjacent
@@ -2285,16 +2285,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `s.shout()` dispatches to the `Loud` in scope there). Only when
         // several colliding declarations are in scope does the cross-trait
         // ambiguity below stand.
-        let distinct: IndexSet<DeclKey> = found_traits
+        let distinct: IndexSet<crate::defs::DefId> = found_traits
             .iter()
             .filter(|m| m.blanket_type_param.is_none())
-            .map(|m| m.trait_decl.clone())
+            .map(|m| m.trait_decl)
             .collect();
         if distinct.len() > 1 {
-            let visible: IndexSet<DeclKey> = distinct
+            let visible: IndexSet<crate::defs::DefId> = distinct
                 .iter()
-                .filter(|d| self.trait_decl_in_scope(d))
-                .cloned()
+                .filter(|d| self.trait_decl_in_scope(&self.tysys.resolutions.decl_key(**d)))
+                .copied()
                 .collect();
             if visible.len() == 1 {
                 found_traits
@@ -2469,25 +2469,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The collision is counted on declarations, so two same-named traits
         // from different modules still collide even though their spellings
         // agree — identity is the declaration, not the name.
-        let mut seen: IndexSet<DeclKey> = IndexSet::default();
+        let mut seen: IndexSet<crate::defs::DefId> = IndexSet::default();
         for m in found_traits
             .iter()
             .filter(|m| m.blanket_type_param.is_none())
         {
-            seen.insert(m.trait_decl.clone());
+            seen.insert(m.trait_decl);
         }
         if seen.len() < 2 {
             return;
         }
         // Same-named declarations are qualified by their declaring module —
         // a bare `'Kind' and 'Kind'` names nothing the user can act on.
+        let defs = self.tysys.resolutions.defs();
         let mut bases: Vec<String> = seen
             .iter()
-            .map(|(module, name)| {
-                if seen.iter().filter(|(_, n)| n == name).count() > 1 {
-                    format!("{name} (from \"{module}\")")
+            .map(|d| {
+                let name = defs.name(*d);
+                if seen.iter().filter(|o| defs.name(**o) == name).count() > 1 {
+                    format!("{name} (from \"{}\")", defs.module(*d))
                 } else {
-                    name.clone()
+                    name.to_string()
                 }
             })
             .collect();

@@ -358,9 +358,9 @@ pub(crate) struct ImplSig {
     /// the block's own imports make of the name it wrote. A blanket target
     /// (`impl<T> Trait for T`) is its own binder.
     pub(crate) target_fq: crate::name::FqTypeName,
-    /// Which trait declaration the block implements, resolved in the block's
-    /// frame. `None` for an inherent impl.
-    pub(crate) trait_decl: Option<super::trait_env::DeclKey>,
+    /// Which trait declaration the block implements, answered by the header's
+    /// own reference site. `None` for an inherent impl.
+    pub(crate) trait_decl: Option<crate::defs::DefId>,
 }
 
 impl ImplSig {

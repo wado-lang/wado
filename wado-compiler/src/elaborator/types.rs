@@ -2070,7 +2070,7 @@ pub(super) struct TraitMethodMatch {
     pub(super) trait_name: crate::name::FqTraitName,
     /// The matched trait's declaration key, resolved from the impl's own
     /// module — two same-named traits from different modules stay distinct.
-    pub(super) trait_decl: super::trait_env::DeclKey,
+    pub(super) trait_decl: crate::defs::DefId,
     /// The impl's trait type arguments as resolved types (empty for a trait
     /// with none). Two matches agreeing on `trait_decl` but not here are one
     /// trait at different argument lists — an overload set.

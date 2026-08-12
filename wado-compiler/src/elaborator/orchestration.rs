@@ -840,7 +840,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // before anything asks what a name means.
         let resolutions = {
             let _span = logger.span("elaborate/resolutions");
-            let defs = std::sync::Arc::new(crate::defs::DefTable::build(modules, symbols));
+            // Continue the snapshot's table: a stdlib `ImplSig` cached there
+            // carries `DefId`s, and they only read back as the same
+            // declarations if the identities are the same ones.
+            let seed = snapshot_state.map(|s| s.tysys.resolutions.defs().as_ref());
+            let defs = std::sync::Arc::new(crate::defs::DefTable::build_seeded(
+                seed, modules, symbols,
+            ));
             Rc::new(crate::resolve::Resolutions::build(modules, symbols, defs))
         };
 

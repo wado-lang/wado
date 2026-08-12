@@ -147,6 +147,7 @@ impl DefKind {
 
 /// The facts every declaration carries, whatever it declares.
 #[derive(Debug)]
+#[derive(Clone)]
 struct Def {
     ast_id: AstId,
     module: ModuleSource,
@@ -168,7 +169,7 @@ struct Def {
 /// declaring node. The table hands back what a declaration *is*; it deliberately
 /// cannot answer what a *name* means — that question needs a module scope, and
 /// only [`crate::resolve`] runs one.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct DefTable {
     defs: Vec<Def>,
     by_ast_id: IndexMap<AstId, DefId>,
@@ -179,8 +180,33 @@ impl DefTable {
     /// symbol table collected, then the members each of them declares.
     #[must_use]
     pub fn build(modules: &IndexMap<ModuleSource, Module>, symbols: &SymbolTable) -> Self {
-        let mut table = Self::default();
+        Self::build_seeded(None, modules, symbols)
+    }
+
+    /// [`Self::build`], continuing an earlier table.
+    ///
+    /// A [`DefId`] is an index into one table, so a declaration fact that
+    /// outlives the compile that produced it — the stdlib snapshot caches whole
+    /// `ImplSig`s — is only readable if that compile's identities are still the
+    /// same ones. Seeding keeps them: a declaration the seed already identifies
+    /// keeps its `DefId`, and only what the seed never saw is minted here. This
+    /// is what [`crate::tir::TypeTable`] does for `TypeId` and for the same
+    /// reason.
+    ///
+    /// Both tables index the same declaration nodes because the stdlib AST is
+    /// parsed once per process and shared, so an [`AstId`] means the same node
+    /// in both.
+    #[must_use]
+    pub fn build_seeded(
+        seed: Option<&Self>,
+        modules: &IndexMap<ModuleSource, Module>,
+        symbols: &SymbolTable,
+    ) -> Self {
+        let mut table = seed.cloned().unwrap_or_default();
         for (ast_id, symbol) in symbols.iter() {
+            if table.by_ast_id.contains_key(ast_id) {
+                continue;
+            }
             table.declare(Def {
                 ast_id: *ast_id,
                 module: symbol.module_source().clone(),
@@ -277,6 +303,11 @@ impl DefTable {
             };
             let owner_visibility = self.visibility(owner);
             for member in members {
+                // A seed already linked this member to this owner; linking again
+                // would list it twice under the owner.
+                if self.of_ast_id(member.ast_id).map(|id| self.get(id).parent) == Some(Some(owner)) {
+                    continue;
+                }
                 let id = self.of_ast_id(member.ast_id).unwrap_or_else(|| {
                     self.declare(Def {
                         ast_id: member.ast_id,
@@ -508,7 +539,39 @@ mod tests {
         );
     }
 
+    /// A cached declaration fact carries a [`DefId`], so a later compile that
+    /// re-identifies the same declarations must hand back the same ones — the
+    /// stdlib snapshot reads its `ImplSig`s back this way.
+    #[test]
+    fn seeding_keeps_a_seen_declaration_at_its_identity() {
+        let source = r#"
+            pub struct Point { x: i32, y: i32 }
+            pub trait Greet { fn hello(&self) -> i32; }
+        "#;
+        let (seed, modules, symbols, _) = analyze_source(source);
+        let again = DefTable::build_seeded(Some(&seed), &modules, &symbols);
+
+        assert_eq!(again.len(), seed.len());
+        for def in seed.iter() {
+            assert_eq!(again.of_ast_id(seed.ast_id(def)), Some(def));
+            assert_eq!(again.name(def), seed.name(def));
+            assert_eq!(again.members(def), seed.members(def));
+        }
+    }
+
     fn build_from_source(source: &str) -> (DefTable, ModuleSource) {
+        let (defs, _, _, module) = analyze_source(source);
+        (defs, module)
+    }
+
+    fn analyze_source(
+        source: &str,
+    ) -> (
+        DefTable,
+        IndexMap<ModuleSource, crate::ast::Module>,
+        SymbolTable,
+        ModuleSource,
+    ) {
         use crate::compiler_host::{InMemoryCompilerHost, LogLevel};
         let lexed = crate::lexer::lex(source);
         assert!(lexed.errors.is_empty(), "lex error: {:?}", lexed.errors);
@@ -526,6 +589,7 @@ mod tests {
         let _ =
             analyzer.analyze_loaded_modules(&modules, &module, crate::hashmap::IndexSet::default());
         let symbols = analyzer.into_symbols();
-        (DefTable::build(&modules, &symbols), module)
+        let defs = DefTable::build(&modules, &symbols);
+        (defs, modules, symbols, module)
     }
 }

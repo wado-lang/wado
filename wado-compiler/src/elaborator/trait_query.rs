@@ -2513,8 +2513,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The auto-derived trait is a compiler item, so it is named by the
         // declaration the registry holds, not by a spelling resolved here.
         let trait_fq = self.tysys.type_table.borrow().compiler_trait_fq(item);
-        let trait_decl = trait_fq
-            .canonical()
+        let trait_decl = self
+            .tysys
+            .compiler_trait_def(item)
             .expect("a compiler trait item names a declaration");
         Some(TraitMethodMatch {
             // Auto-derived `Eq` / `Ord` take no type arguments.

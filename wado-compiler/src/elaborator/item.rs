@@ -779,13 +779,14 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         // The block's name-level facts. Answered here because this is the only
         // phase standing in the block's own frame.
         let target_fq = scope.qualified_receiver_name(&scope.get_type_name(&impl_block.ty));
-        let trait_decl = impl_block.trait_type.as_ref().map(|trait_type| {
-            let head = scope.get_type_name(trait_type);
-            match crate::resolve::head_site(trait_type) {
-                Some(site) => scope.trait_decl_at(site, &head),
-                None => scope.decl_key_or_local(&head),
-            }
-        });
+        // The header's own site answers: `check_impl_trait_resolves` rejects a
+        // header whose trait reaches no declaration, so a well-formed block has
+        // an identity here and an erroneous one contributes none.
+        let trait_decl = impl_block
+            .trait_type
+            .as_ref()
+            .and_then(crate::resolve::head_site)
+            .and_then(|site| scope.tysys.resolutions.declared(site));
         let self_type = scope
             .annotate_ctx
             .trait_ctx
