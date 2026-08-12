@@ -1,0 +1,16 @@
+// The first element of a sequence literal decides an open element type; the
+// rest are measured against that answer. Reading the element type afresh each
+// round is what makes the decision stick — left as the variable it was before
+// the first element solved it, every later element defers and `[1, "abc"]`
+// passes, then traps codegen.
+
+fn second<T>(xs: List<T>) -> T {
+    return xs[1];
+}
+
+export fn run() {
+    let x = second([1, "abc"]);
+}
+
+__DATA__
+{"compile_error": "heterogeneous element of type 'String'"}

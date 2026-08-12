@@ -28,13 +28,22 @@ pub(crate) struct StructFieldInfo {
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
-    /// Type parameter bounds: (`param_name`, `trait_bounds`)
-    /// E.g., for `struct Sorted<T: Ord>`, this would be `[("T", ["Ord"])]`
-    pub(super) type_param_bounds: Vec<(String, Vec<String>)>,
+    /// Type parameter bounds: (`param_name`, bounds). Each bound keeps the
+    /// reference site that wrote it, so a consumer asks which trait it means
+    /// rather than comparing the spelling (WEP 2026-08-10).
+    pub(super) type_param_bounds: Vec<(String, Vec<BoundRef>)>,
     /// `TypeIds` of the struct's own type parameters in declaration order.
     /// Used by `infer_struct_type_args` to fill phantom type params
     /// (e.g., `D` in `struct DirMap<D, V>` where D doesn't appear in any field).
     pub(super) type_param_type_ids: Vec<TypeId>,
+}
+
+/// A trait bound as a declaration digest records it: the site that wrote it,
+/// which is what says *which* trait, plus the spelling for diagnostics.
+#[derive(Clone, Debug)]
+pub(super) struct BoundRef {
+    pub(super) name: String,
+    pub(super) site: crate::ast::AstId,
 }
 
 /// Variant case info: case name and payload type
@@ -522,6 +531,15 @@ pub enum TypeError {
     /// elements (`impl<..T> Trait for [i32, ..T]`) or under a reference
     /// (`&[..T]`) — which the compiler does not implement.
     UnsupportedVariadicImplTarget {
+        span: Span,
+    },
+
+    /// An `impl` type parameter that its target and trait reference do not
+    /// mention. Nothing at a use site says what such a parameter is: the
+    /// receiver determines the ones the target names and no more, so the rest
+    /// reach codegen unsubstituted. Rust rejects the same shape (E0207).
+    UnconstrainedImplTypeParam {
+        param_name: String,
         span: Span,
     },
 
@@ -1251,6 +1269,13 @@ impl TypeError {
                 "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) or under a reference (`&[..T]`) is not supported yet".to_string(),
                 *span,
             ),
+            TypeError::UnconstrainedImplTypeParam { param_name, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "the type parameter `{param_name}` is not constrained by the impl target or the trait reference"
+                ),
+                *span,
+            ),
             TypeError::InherentImplOnForeignType {
                 self_type_name,
                 span,
@@ -1590,10 +1615,6 @@ impl MethodOwner {
 
 #[derive(Debug, Clone)]
 pub(super) struct MethodInfo {
-    /// [`crate::tir::method_param_offset`] as the digest applied it, carried
-    /// so consumers read it instead of re-deriving it. `None` when the lookup
-    /// did not come from a digested impl signature.
-    pub(super) impl_offset: Option<u32>,
     /// The declaring node of the method this lookup selected, taken from its
     /// [`crate::elaborator::sig::MethodSig`]. The use→def edge for a call is
     /// recorded from here, so it names the impl dispatch actually chose.
@@ -1623,15 +1644,13 @@ pub(super) struct MethodInfo {
     /// True when the method was found on a reference type impl (e.g., `impl Trait for &T`).
     /// The receiver needs an additional auto-ref for `&self` methods (Self is &T, so &self is &&T).
     pub(super) is_ref_impl: bool,
-    /// Method-level type parameter `TypeId`s in declaration order (excluding effect params).
-    ///
-    /// Populated only by lookups that also set up method-level type params in their
-    /// resolution scope — currently [`Elaborator::find_method_in_trait_bounds`] for
-    /// `T::method()` style calls through a type parameter bound. Other producers
-    /// leave it empty because their call sites have no method-level inference to
-    /// perform (either the method is non-generic, or its type args come from a
-    /// separate method-AST lookup such as [`Elaborator::infer_method_type_args`]).
+    /// The method's own slots, in declaration order, as the signature dispatch
+    /// selected holds them. Empty where the method declares none.
     pub(super) method_type_param_ids: Vec<TypeId>,
+    /// The same slots as the declaration wrote them, parallel to
+    /// [`Self::method_type_param_ids`] — the bounds to enforce and the
+    /// defaults to fill, which only AST carries.
+    pub(super) method_own_params: Vec<ast::GenericParam>,
     /// The module the matched `impl` block lives in. For inherent methods this
     /// is where the method body is registered, which is NOT always the receiver
     /// type's defining module (e.g. a user-written `impl List<u8>` on the
@@ -2044,7 +2063,9 @@ pub(super) struct RequiredTrait {
 
 /// Result of finding a trait method for a type via `find_trait_method_for_type`.
 pub(super) struct TraitMethodMatch {
-    pub(super) trait_name: String,
+    /// The matched trait as a mangled method name embeds it: named by the
+    /// module that declares it, carrying the impl header's type arguments.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// The matched trait's declaration key, resolved from the impl's own
     /// module — two same-named traits from different modules stay distinct.
     pub(super) trait_decl: super::trait_env::DeclKey,
@@ -2371,8 +2392,8 @@ pub(super) struct IndexTraitInfo {
     pub(super) output_type: TypeId,
     /// Self kind for the `index_ref` method (&self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "`IndexRef`<i32>")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
     /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
@@ -2386,8 +2407,8 @@ pub(super) struct IndexAssignTraitInfo {
     pub(super) input_type: TypeId,
     /// Self kind for the `index_assign` method (&mut self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "`IndexAssign`<i32>")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
     /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
@@ -2401,8 +2422,8 @@ pub(super) struct IndexMutTraitInfo {
     pub(super) output_type: TypeId,
     /// Self kind for the `index_mut_ref` method (&mut self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "`IndexMutRef`")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
     /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
@@ -2416,8 +2437,8 @@ pub(super) struct IndexValueTraitInfo {
     pub(super) output_type: TypeId,
     /// Self kind for the `index_value` method (&self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "`IndexValue`<i32>")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
     /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
@@ -2432,8 +2453,8 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) output_type: TypeId,
     /// Self kind for the method (&self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "Add", "Sub")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// The resolved type of the rhs parameter (first non-self parameter)
     pub(super) rhs_type: Option<TypeId>,
 }
@@ -2450,8 +2471,8 @@ pub(super) struct ArithmeticTraitInfo {
 /// [rtq]: crate::elaborator::Elaborator::resolve_trait_method_for_op
 /// [bop]: crate::elaborator::Elaborator::build_trait_op_method_call_on_resolved
 pub(super) struct ResolvedTraitMethod {
-    /// Trait name (e.g., "Eq", "Ord", "Add", "Shl", "Neg", "`BitNot`").
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// Method name (e.g., "eq", "cmp", "add", "shl", "neg", "bitnot").
     pub(super) method_name: String,
     /// Written name of the type whose impl matched — the impl-index key. For
@@ -2486,8 +2507,8 @@ pub(super) struct KeyValueLiteralTraitInfo {
     pub(super) builder_type: TypeId,
     /// Self kind for the `insert_literal` method (&mut self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name used for method mangling (e.g., "`KeyValueLiteralBuilder`")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
 }
 
 /// Info about a `SequenceLiteralBuilder` trait implementation
@@ -2500,8 +2521,8 @@ pub(super) struct SequenceLiteralTraitInfo {
     pub(super) output_type: TypeId,
     /// Self kind for the `push_literal` method (&mut self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name used for method mangling (e.g., "`SequenceLiteralBuilder`")
-    pub(super) trait_name: String,
+    /// The implemented trait, named by the module that declares it.
+    pub(super) trait_name: crate::name::FqTraitName,
     /// The module where the `SequenceLiteralBuilder` impl is defined.
     pub(super) impl_module_source: ModuleSource,
 }

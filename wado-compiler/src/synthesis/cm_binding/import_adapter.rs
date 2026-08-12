@@ -27,8 +27,8 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cm_raw_call, expr_stmt,
-    generic_method_call, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref,
-    loop_stmt, null_expr, return_stmt, split_packed_ptr_len, synth_span,
+    generic_method_call, i32_const, if_stmt, index_value_trait, internal_call, let_mut_stmt,
+    let_stmt, local_ref, loop_stmt, null_expr, return_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::lift::{materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum};
@@ -143,11 +143,11 @@ fn synthesize_lift_flat_result(
             // `try_lift_wasi_variant_or_enum` returns None for non-CM types, so
             // we fall back to a bare Err.
             let lifted_variant = if let Type::Named(n) = err_ty
-                && let Some(source) = n.source_interface.as_deref()
+                && let Some(source) = ctx.cm_interface_registry.source_interface(n)
             {
                 try_lift_wasi_variant_or_enum(
                     n,
-                    source,
+                    &source,
                     disc_expr.clone(),
                     next_local,
                     stmts,
@@ -715,14 +715,16 @@ fn classify_param<'t>(
             ParamLowering::ListBuffer { elem: &g.args[0] }
         }
         Type::Named(n)
-            if n.source_interface
+            if registry
+                .source_interface(n)
                 .as_deref()
                 .is_some_and(|s| registry.get_struct_fields_by_source(s, &n.name).is_some()) =>
         {
             ParamLowering::RecordFlatten { named: n }
         }
         Type::Named(n)
-            if n.source_interface
+            if registry
+                .source_interface(n)
                 .as_deref()
                 .is_some_and(|s| registry.get_variant_cases_by_source(s, &n.name).is_some()) =>
         {
@@ -921,14 +923,15 @@ impl<'a> AdapterBuilder<'a> {
                     self.emit_list_buffer(plan.name, param_local, elem);
                 }
                 ParamLowering::RecordFlatten { named } => {
-                    let source = named
-                        .source_interface
-                        .as_deref()
+                    let source = self
+                        .lower_ctx
+                        .cm_interface_registry
+                        .source_interface(named)
                         .expect("wasi struct source_interface present");
                     let wado_fields = self
                         .lower_ctx
                         .cm_interface_registry
-                        .get_struct_fields_with_wado_names_by_source(source, &named.name)
+                        .get_struct_fields_with_wado_names_by_source(&source, &named.name)
                         .expect("struct fields_with_wado_names present when fields are");
                     let param = &self.params[plan.first_param];
                     let (param_local, struct_type_id) = (param.local_index, param.type_id);
@@ -1164,7 +1167,7 @@ impl<'a> AdapterBuilder<'a> {
         let elem_local = alloc_local(&mut self.next_local, &mut self.locals, elem_type_id);
         let iv_info = LocalMethodName::new(
             FqTypeName::declared(&ModuleSource::list(), &self.lower_ctx.names.array),
-            Some("IndexValue<i32>".to_string()),
+            Some(index_value_trait()),
             "index_value".to_string(),
         );
         let iv_mangled = iv_info.to_mangled_name();
@@ -1339,15 +1342,16 @@ impl<'a> AdapterBuilder<'a> {
                 // WASI variants: lower directly to the buffer using
                 // registry-aware layout. flat_args has one entry (the GC ref).
                 ParamLowering::Variant { named } => {
-                    let source = named
-                        .source_interface
-                        .as_deref()
+                    let source = self
+                        .lower_ctx
+                        .cm_interface_registry
+                        .source_interface(named)
                         .expect("classified WASI variant has a source interface");
                     let variant_value = self.flat_args[flat_idx].clone();
                     flat_idx += 1;
                     synthesize_lower_wasi_variant_to_memory(
                         named,
-                        source,
+                        &source,
                         variant_value,
                         params_buf_addr(params_buf_local, base_offset),
                         &mut self.next_local,
@@ -1615,7 +1619,7 @@ impl<'a> AdapterBuilder<'a> {
             if registry
                 .resolve_cm_source_for(n, Some(self.func_info.package.as_str()))
                 .is_some_and(|s| {
-                    registry.get_struct_fields_by_source(s, &n.name).is_some()
+                    registry.get_struct_fields_by_source(&s, &n.name).is_some()
                 }));
         if needs_flat_result_lifting(&resolved, &self.lower_ctx.names) {
             // Flat return with complex type (e.g., Result<(), ()>): the raw call returns

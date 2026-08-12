@@ -2754,6 +2754,25 @@ impl<T: CollectionBuilder<Output = T>> Collection for T {
 
 This avoids the need for explicit `impl Collection for ...` on every self-building type. The compiler resolves `T::Element` via associated type projection on the type parameter.
 
+#### Impl Type Parameters Must Be Determined
+
+An `impl`'s target and trait reference between them must name every type parameter it declares. A use site determines them from the receiver and the trait arguments and from nothing else, so one neither mentions has no value to be given:
+
+```wado
+impl<A: Eq, T: Eq> Dup for T { ... }  // ERROR: the type parameter `A` is not
+                                      //        constrained by the impl target
+                                      //        or the trait reference
+```
+
+A bound determines one too, through the types it writes:
+
+```wado
+// `S` fixes `FieldTypes`, which fixes `..F`
+impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S { ... }
+```
+
+The bound's subject is not itself determined this way: `A: Eq` says what `A` must satisfy, not what `A` is.
+
 #### Standard Library Traits
 
 The prelude defines `IndexValue`, `IndexAssign`, and `Index` traits using associated types. See [Indexing Traits](#indexing-traits) for full definitions.
@@ -4013,7 +4032,14 @@ geo::distance(p1, p2);           // → distance(p1, p2)
 let p: geo::Point = geo::Point::origin();   // → Point, Point::origin()
 let c = geo::Color::Red;                    // → Color::Red
 let s = geo::Shape::Circle(3.14);           // → Shape::Circle(3.14)
+
+// Traits and types in an `impl` header, on either side
+impl geo::Show for Local { ... }
+impl Show for geo::Tag { ... }
 ```
+
+A qualified head names the namespace's declaration even where the importing
+module declares one of its own by that name.
 
 #### Note
 

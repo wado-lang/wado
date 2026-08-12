@@ -11,14 +11,16 @@
 //! 1. [`check_assignable`] — pure function over the type table. Returns
 //!    [`TypeCheckResult`] (`Compatible` / `Deferred` / `Incompatible`).
 //!    No diagnostics, no host.
-//! 2. [`TypeSystem::typecheck`] / [`TypeSystem::typecheck_return`] —
-//!    type-system operations that build a [`TypeMismatchPayload`] (the
-//!    pretty-printed `expected` / `found` names) on rejection. Still
-//!    host-agnostic — `TypeSystem` does not carry `<H: CompilerHost>`.
-//! 3. [`Elaborator::typecheck`] / [`Elaborator::typecheck_return`] —
-//!    thin wrappers that call (2) and emit a [`TypeError::TypeMismatch`]
-//!    diagnostic via `self.logger` on rejection. This is the layer
-//!    callers in the body walk use.
+//! 2. [`TypeSystem::typecheck`] and friends — type-system operations that
+//!    build a [`TypeMismatchPayload`] (the pretty-printed `expected` /
+//!    `found` names) on rejection. Still host-agnostic — `TypeSystem` does
+//!    not carry `<H: CompilerHost>`.
+//! 3. [`Elaborator::typecheck`] and friends — thin wrappers that call (2)
+//!    and emit a [`TypeError::TypeMismatch`] diagnostic via `self.logger`
+//!    on rejection. This is the layer callers in the body walk use.
+//!
+//! Layers 2 and 3 each come in two flavours: the plain check and the
+//! `_return` one (`UNIT` expected always passes).
 //!
 //! Keeping the `<H>` plumbing confined to layer 3 means future
 //! `TypeSystem` operations that report errors can mirror this split
@@ -49,7 +51,7 @@ pub(super) enum TypeCheckResult {
 /// Rules (in order):
 /// 1. Identity: same `TypeId` -> Compatible
 /// 2. Bottom/Top/Error: UNKNOWN, ERROR -> Deferred; NEVER -> Compatible
-/// 3. Type params: unresolved generics -> Deferred
+/// 3. Undecided: inference variables, packs, projections, unknown -> Deferred
 /// 4. References: &T->non-ref, &T->&mut T -> Incompatible; &mut T->&T -> Compatible
 /// 5. Newtype/flags: distinct from base type and each other
 /// 6. Option: T vs Option<T>, Option<X> vs Option<Y>
@@ -78,23 +80,19 @@ pub(super) fn check_assignable(
         return TypeCheckResult::Compatible;
     }
 
-    // Rule 3: Type params -- defer until monomorphization, except where
-    // substitution cannot rescue the comparison.
+    // Rule 3: defer only what is genuinely undecided.
     //
-    // A bare parameter is opaque inside the body that declares it: whatever a
-    // caller instantiates `T` to, a `T` in hand is not a `String`. Deferring
-    // that never revisits it, so a `-> String` body returning its `T` reached
-    // monomorphization and emitted a `u32` against the declared signature.
+    // A rigid `TypeParam` is not undecided: it is opaque, standing for whatever
+    // a caller instantiates the binding item with, so nothing but itself is
+    // assignable to it in either direction. It reaches a check only inside the
+    // item that binds it — a *use* of a polymorphic signature instantiates its
+    // slots into `InferVar`s first (`super::instantiate`) — so there is no
+    // "maybe this gets substituted later" case left to defer.
     //
-    // Only this direction is decidable. Concrete-where-a-parameter-is-expected
-    // is instantiation, which trait impls rely on (`ListIter<T>` for `I` in the
-    // `Iterator` blanket impl), so it still defers.
-    if matches!(type_table.get(actual), ResolvedType::TypeParam { .. })
-        && !type_table.contains_type_param(expected)
-    {
-        return TypeCheckResult::Incompatible;
-    }
-    if type_table.contains_type_param(actual) || type_table.contains_type_param(expected) {
+    // What is still undecided: an inference variable awaiting its solver, a
+    // type pack awaiting expansion (packs are not instantiated yet), an
+    // associated-type projection awaiting its impl, and `unknown` / `error`.
+    if type_table.contains_undecided(actual) || type_table.contains_undecided(expected) {
         return TypeCheckResult::Deferred;
     }
 

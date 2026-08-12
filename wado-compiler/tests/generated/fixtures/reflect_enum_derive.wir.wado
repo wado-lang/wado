@@ -100,9 +100,9 @@ type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(37)
 
-type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(38)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(38)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(39)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(39)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(40)
 
@@ -118,7 +118,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(46)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(47)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(47)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(48)
 
@@ -126,15 +126,15 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::wri
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(50)
 
-type "functype//core:prelude/format.wado/core:prelude/string.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(51)
+type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(51)
 
-type "functype//reflect_enum_derive.wado/reflect_enum_derive.wado/Size^CaseName::case_name" = fn(ref "core:prelude/types.wado//Box<reflect_enum_derive.wado/Size>") -> ref "core:prelude/string.wado//String";  // TypeId(52)
+type "functype//reflect_enum_derive.wado/reflect_enum_derive.wado/Size^reflect_enum_derive.wado/CaseName::case_name" = fn(ref "core:prelude/types.wado//Box<reflect_enum_derive.wado/Size>") -> ref "core:prelude/string.wado//String";  // TypeId(52)
 
-type "functype//reflect_enum_derive.wado/reflect_enum_derive.wado/Color^CaseName::case_name" = fn(ref "core:prelude/types.wado//Box<reflect_enum_derive.wado/Color>") -> ref "core:prelude/string.wado//String";  // TypeId(53)
+type "functype//reflect_enum_derive.wado/reflect_enum_derive.wado/Color^reflect_enum_derive.wado/CaseName::case_name" = fn(ref "core:prelude/types.wado//Box<reflect_enum_derive.wado/Color>") -> ref "core:prelude/string.wado//String";  // TypeId(53)
 
-type "functype//reflect_enum_derive.wado/reflect_enum_derive.wado/Color^CaseName::by_name" = fn(ref "core:prelude/string.wado//String") -> [i32, "reflect_enum_derive.wado//enum:Color"];  // TypeId(54)
+type "functype//reflect_enum_derive.wado/reflect_enum_derive.wado/Color^reflect_enum_derive.wado/CaseName::by_name" = fn(ref "core:prelude/string.wado//String") -> [i32, "reflect_enum_derive.wado//enum:Color"];  // TypeId(54)
 
-type "functype//reflect_enum_derive.wado/reflect_enum_derive.wado/Size^CaseName::by_name" = fn(ref "core:prelude/string.wado//String") -> [i32, "reflect_enum_derive.wado//enum:Size"];  // TypeId(55)
+type "functype//reflect_enum_derive.wado/reflect_enum_derive.wado/Size^reflect_enum_derive.wado/CaseName::by_name" = fn(ref "core:prelude/string.wado//String") -> [i32, "reflect_enum_derive.wado//enum:Size"];  // TypeId(55)
 
 type "functype//core:prelude/primitive.wado/u64::fmt_base$spec0" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(56)
 
@@ -194,21 +194,21 @@ fn "reflect_enum_derive.wado/__test_0_case_name_derives_the_live_case_s_name"() 
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     if ref.is_null(global:reflect_enum_derive.wado::__const_obj_16) {
-        global:reflect_enum_derive.wado::__const_obj_16 = "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^CaseName::case_name"(struct.new "core:prelude/types.wado//Box<reflect_enum_derive.wado/Color>" { value: 1 });
+        global:reflect_enum_derive.wado::__const_obj_16 = "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^reflect_enum_derive.wado/CaseName::case_name"(struct.new "core:prelude/types.wado//Box<reflect_enum_derive.wado/Color>" { value: 1 });
     }
-    __cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(global:reflect_enum_derive.wado::__const_obj_16, global:reflect_enum_derive.wado::__const_obj_15);
+    __cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(global:reflect_enum_derive.wado::__const_obj_16, global:reflect_enum_derive.wado::__const_obj_15);
     if @unlikely(__cond_1 == 0) {
         cold_path;
-        "core:rt/panic"(__local_4 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(164); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:reflect_enum_derive.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:reflect_enum_derive.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:reflect_enum_derive.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 58); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(global:reflect_enum_derive.wado::__const_obj_11, __local_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:reflect_enum_derive.wado::__const_obj_10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:reflect_enum_derive.wado::__const_obj_9); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/format.wado/core:prelude/string.wado/String^Inspect::inspect"(global:reflect_enum_derive.wado::__const_obj_16, __local_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 10); __local_4);
+        "core:rt/panic"(__local_4 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(164); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:reflect_enum_derive.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:reflect_enum_derive.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:reflect_enum_derive.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 58); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:reflect_enum_derive.wado::__const_obj_11, __local_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:reflect_enum_derive.wado::__const_obj_10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, global:reflect_enum_derive.wado::__const_obj_9); __local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(global:reflect_enum_derive.wado::__const_obj_16, __local_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_4, 10); __local_4);
         unreachable;
     }
     if ref.is_null(global:reflect_enum_derive.wado::__const_obj_8) {
-        global:reflect_enum_derive.wado::__const_obj_8 = "reflect_enum_derive.wado/reflect_enum_derive.wado/Size^CaseName::case_name"(struct.new "core:prelude/types.wado//Box<reflect_enum_derive.wado/Size>" { value: 1 });
+        global:reflect_enum_derive.wado::__const_obj_8 = "reflect_enum_derive.wado/reflect_enum_derive.wado/Size^reflect_enum_derive.wado/CaseName::case_name"(struct.new "core:prelude/types.wado//Box<reflect_enum_derive.wado/Size>" { value: 1 });
     }
-    __cond_3 = "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(global:reflect_enum_derive.wado::__const_obj_8, global:reflect_enum_derive.wado::__const_obj_7);
+    __cond_3 = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(global:reflect_enum_derive.wado::__const_obj_8, global:reflect_enum_derive.wado::__const_obj_7);
     if @unlikely(__cond_3 == 0) {
         cold_path;
-        "core:rt/panic"(__local_6 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(162); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, global:reflect_enum_derive.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, global:reflect_enum_derive.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, global:reflect_enum_derive.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 58); __local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(global:reflect_enum_derive.wado::__const_obj_3, __local_7); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, global:reflect_enum_derive.wado::__const_obj_2); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, global:reflect_enum_derive.wado::__const_obj_1); __local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/core:prelude/string.wado/String^Inspect::inspect"(global:reflect_enum_derive.wado::__const_obj_8, __local_7); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 10); __local_6);
+        "core:rt/panic"(__local_6 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(162); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, global:reflect_enum_derive.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, global:reflect_enum_derive.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, global:reflect_enum_derive.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 58); __local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:reflect_enum_derive.wado::__const_obj_3, __local_7); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, global:reflect_enum_derive.wado::__const_obj_2); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, global:reflect_enum_derive.wado::__const_obj_1); __local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(global:reflect_enum_derive.wado::__const_obj_8, __local_7); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_6, 10); __local_6);
         unreachable;
     }
 }
@@ -222,7 +222,7 @@ fn "reflect_enum_derive.wado/__test_1_by_name_derives_the_reverse_lookup_through
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __vr_11_mv_0: i32;
     let __vr_11_mv_1: "reflect_enum_derive.wado//enum:Color";
-    multivalue_bind [__vr_11_mv_0, __vr_11_mv_1] = "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^CaseName::by_name"(global:reflect_enum_derive.wado::__const_obj_29);
+    multivalue_bind [__vr_11_mv_0, __vr_11_mv_1] = "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^reflect_enum_derive.wado/CaseName::by_name"(global:reflect_enum_derive.wado::__const_obj_29);
     __cond_1 = (if __vr_11_mv_0 == 0 -> bool {
         __vr_11_mv_1 == 2;
     } else {
@@ -230,7 +230,7 @@ fn "reflect_enum_derive.wado/__test_1_by_name_derives_the_reverse_lookup_through
     });
     if @unlikely(__cond_1 == 0) {
         cold_path;
-        "core:rt/panic"(__local_5 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(139); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:reflect_enum_derive.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:reflect_enum_derive.wado::__const_obj_21); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:reflect_enum_derive.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 58); __local_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(global:reflect_enum_derive.wado::__const_obj_25, __local_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, if ref.is_null(global:reflect_enum_derive.wado::__const_obj_24) {
+        "core:rt/panic"(__local_5 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(139); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:reflect_enum_derive.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:reflect_enum_derive.wado::__const_obj_21); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:reflect_enum_derive.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 58); __local_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:reflect_enum_derive.wado::__const_obj_25, __local_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, if ref.is_null(global:reflect_enum_derive.wado::__const_obj_24) {
             global:reflect_enum_derive.wado::__const_obj_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: parse(\"Blue\") matches { Some(c) && c == Color::Blue }
 "), used: 66 };
@@ -239,7 +239,7 @@ condition: parse(\"Blue\") matches { Some(c) && c == Color::Blue }
     }
     let __vr_12_mv_0: i32;
     let __vr_12_mv_1: "reflect_enum_derive.wado//enum:Size";
-    multivalue_bind [__vr_12_mv_0, __vr_12_mv_1] = "reflect_enum_derive.wado/reflect_enum_derive.wado/Size^CaseName::by_name"(global:reflect_enum_derive.wado::__const_obj_23);
+    multivalue_bind [__vr_12_mv_0, __vr_12_mv_1] = "reflect_enum_derive.wado/reflect_enum_derive.wado/Size^reflect_enum_derive.wado/CaseName::by_name"(global:reflect_enum_derive.wado::__const_obj_23);
     __cond_3 = (if __vr_12_mv_0 == 0 -> bool {
         __vr_12_mv_1 == 0;
     } else {
@@ -247,7 +247,7 @@ condition: parse(\"Blue\") matches { Some(c) && c == Color::Blue }
     });
     if @unlikely(__cond_3 == 0) {
         cold_path;
-        "core:rt/panic"(__local_7 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(140); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:reflect_enum_derive.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:reflect_enum_derive.wado::__const_obj_21); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:reflect_enum_derive.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 58); __local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^Display::fmt"(global:reflect_enum_derive.wado::__const_obj_19, __local_8); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, if ref.is_null(global:reflect_enum_derive.wado::__const_obj_18) {
+        "core:rt/panic"(__local_7 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(140); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:reflect_enum_derive.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:reflect_enum_derive.wado::__const_obj_21); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:reflect_enum_derive.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 58); __local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:reflect_enum_derive.wado::__const_obj_19, __local_8); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, if ref.is_null(global:reflect_enum_derive.wado::__const_obj_18) {
             global:reflect_enum_derive.wado::__const_obj_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: parse(\"Small\") matches { Some(s) && s == Size::Small }
 "), used: 67 };
@@ -256,7 +256,7 @@ condition: parse(\"Small\") matches { Some(s) && s == Size::Small }
     }
     let __rebox_25_mv_0: i32;
     let __rebox_25_mv_1: "reflect_enum_derive.wado//enum:Color";
-    multivalue_bind [__rebox_25_mv_0, __rebox_25_mv_1] = "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^CaseName::by_name"(global:reflect_enum_derive.wado::__const_obj_17);
+    multivalue_bind [__rebox_25_mv_0, __rebox_25_mv_1] = "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^reflect_enum_derive.wado/CaseName::by_name"(global:reflect_enum_derive.wado::__const_obj_17);
 }
 
 fn "reflect_enum_derive.wado/__cm_export____test_0_case_name_derives_the_live_case_s_name"() {
@@ -566,11 +566,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
-fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_decimal"(self.value, f);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
+fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(self) {
     if self.byte_index >= self.used {
         return 1, 0;
     }
@@ -649,7 +649,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_uncheck
     builtin::array_set_u8(self.repr, start, byte);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(self, other) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(self, other) {
     let len: i32;
     let haystack: ref Array<u8>;
     let needle: ref Array<u8>;
@@ -775,7 +775,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "core:prelude/format.wado/core:prelude/string.wado/String^Inspect::inspect"(self, f) {
+fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let limit: i32;
     let count: i32;
     let truncated: bool;
@@ -821,7 +821,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^Inspect::inspect"(s
         l72: loop {
             let __match_10_mv_0: i32;
             let __match_10_mv_1: char;
-            multivalue_bind [__match_10_mv_0, __match_10_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_5);
+            multivalue_bind [__match_10_mv_0, __match_10_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(__iter_5);
             if __match_10_mv_0 == 0 {
                 if (if _licm_arith_53 -> i32 {
                     count >= limit;
@@ -889,7 +889,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^Inspect::inspect"(s
     }
 }
 
-fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Size^CaseName::case_name"(self) {
+fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Size^reflect_enum_derive.wado/CaseName::case_name"(self) {
     let out: ref "core:prelude/string.wado//String";
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if self.value == 0 {
@@ -901,7 +901,7 @@ fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Size^CaseName::case_name"(
     return out;
 }
 
-fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^CaseName::case_name"(self) {
+fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^reflect_enum_derive.wado/CaseName::case_name"(self) {
     let out: ref "core:prelude/string.wado//String";
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if self.value == 0 {
@@ -916,24 +916,24 @@ fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^CaseName::case_name"
     return out;
 }
 
-fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^CaseName::by_name"(name) {
-    if "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(global:reflect_enum_derive.wado::__const_obj_34, name) {
+fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^reflect_enum_derive.wado/CaseName::by_name"(name) {
+    if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(global:reflect_enum_derive.wado::__const_obj_34, name) {
         return 0, 0;
     }
-    if "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(global:reflect_enum_derive.wado::__const_obj_15, name) {
+    if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(global:reflect_enum_derive.wado::__const_obj_15, name) {
         return 0, 1;
     }
-    if "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(global:reflect_enum_derive.wado::__const_obj_29, name) {
+    if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(global:reflect_enum_derive.wado::__const_obj_29, name) {
         return 0, 2;
     }
     return 1, 0;
 }
 
-fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Size^CaseName::by_name"(name) {
-    if "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(global:reflect_enum_derive.wado::__const_obj_23, name) {
+fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Size^reflect_enum_derive.wado/CaseName::by_name"(name) {
+    if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(global:reflect_enum_derive.wado::__const_obj_23, name) {
         return 0, 0;
     }
-    if "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(global:reflect_enum_derive.wado::__const_obj_7, name) {
+    if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(global:reflect_enum_derive.wado::__const_obj_7, name) {
         return 0, 1;
     }
     return 1, 0;

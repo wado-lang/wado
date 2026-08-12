@@ -97,7 +97,7 @@ use super::gate::{FunctionGate, GatedPass};
 /// This key is the *method family* identifier — it is invariant under the element
 /// type `T` (i.e., `List<i32>::push` and `List<i64>::push` share the same
 /// `SigKey`). The catalog then uses `(TypeId, SigKey)` for per-element-type lookup.
-type SigKey = (Option<String>, String);
+type SigKey = (Option<crate::name::FqTraitName>, String);
 
 /// Classification of an `List<T>` method by signature shape. Determines whether
 /// the pass can safely rewrite calls on decomposed candidates, and how.

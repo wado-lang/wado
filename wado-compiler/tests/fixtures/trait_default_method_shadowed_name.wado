@@ -1,0 +1,32 @@
+// A parameterless trait method whose name a generic prelude method also uses
+// (`map`, `fold`, `collect`, `zip`, ...). Resolving it must not fall through to
+// a by-name scan and adopt `Iterator::map<U>`'s type parameter: the lookup
+// reports zero slots, so the two disagree and the elaborator panicked.
+
+use { println, Stdout } from "core:cli";
+
+trait Shape {
+    fn map(&self) -> i32 {
+        return 1;
+    }
+
+    fn zip(&self) -> i32 {
+        return 2;
+    }
+}
+
+struct Square {
+    side: i32,
+}
+
+impl Shape for Square {}
+
+export fn run() with Stdout {
+    let s = Square { side: 3 };
+    println(`${s.map()} ${s.zip()}`);
+}
+
+__DATA__
+{
+    "stdout": "1 2\n"
+}

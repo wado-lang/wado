@@ -64,6 +64,11 @@ pub(crate) struct TypeSystem {
     pub(crate) all_flags_cases: Rc<IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>>,
     pub(crate) all_resource_types: Rc<IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>>,
 
+    /// What every type/trait reference site in the program refers to, resolved
+    /// once from the module that wrote it. The single producer of declaration
+    /// identity from written syntax (WEP 2026-08-10).
+    pub(crate) resolutions: Rc<crate::resolve::Resolutions>,
+
     /// Immutable trait knowledge base: impl indices, trait declarations,
     /// and blanket impls. Built once by [`TraitEnv::build`] and shared
     /// across every per-module elaborator via `Arc`.
@@ -516,6 +521,7 @@ impl TypeSystem {
                 format!("fn({}) -> {}", param_strs.join(", "), ret_str)
             }
             ResolvedType::TypeParam { name, .. } => name,
+            ResolvedType::InferVar(var) => var.to_string(),
             ResolvedType::Enum { name, .. }
             | ResolvedType::Resource { name, .. }
             | ResolvedType::Variant { name, .. }

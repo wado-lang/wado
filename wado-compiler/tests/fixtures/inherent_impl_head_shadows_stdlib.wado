@@ -1,0 +1,30 @@
+// A local `TreeMap` is not `core:collections`'s `TreeMap`, so an inherent
+// `impl TreeMap<i32, i32>` here does not collide with the stdlib's
+// `impl<K: Ord> TreeMap<K, V>`. Keying the collision check on the head as
+// written made every stdlib head with a generic inherent impl — `TreeMap`,
+// `TreeSet`, `Router`, `RangeExclusive`, `ArrayIter` — unusable as a local
+// type name, with no second user module needed to trigger it.
+
+use { TreeMap as StdTreeMap } from "core:collections";
+
+struct TreeMap<K, V> {
+    k: K,
+    v: V,
+}
+
+impl TreeMap<i32, i32> {
+    fn get(&self) -> i32 {
+        return self.v;
+    }
+}
+
+test "a local head shadowing a stdlib one keeps its own inherent impl" {
+    let m = TreeMap { k: 1, v: 2 };
+    assert m.get() == 2;
+
+    let s: StdTreeMap<String, i32> = { "a": 1 };
+    assert s.get("a") == Option::Some(1);
+}
+
+__DATA__
+{"test": {}}

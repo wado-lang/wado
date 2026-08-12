@@ -138,9 +138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
-                items
-                    .trait_name(crate::compiler_item::CompilerItem::ReflectStruct)
-                    .to_string(),
+                items.trait_fq(crate::compiler_item::CompilerItem::ReflectStruct),
                 items
                     .method_name(crate::compiler_item::CompilerItem::ReflectStructMembers)
                     .to_string(),
@@ -168,7 +166,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .record_bound_driven_synth_request(&self_name, &module_source, &reflect_trait_name);
+            .record_bound_driven_synth_request(
+                &self_name,
+                &module_source,
+                &reflect_trait_name
+                    .canonical()
+                    .expect("a compiler trait item names a declaration"),
+            );
 
         let return_type = if method == from_fields_method {
             self_ty
@@ -237,13 +241,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         base_name: &str,
         type_args: &[TypeId],
-        trait_name: &str,
+        trait_name: &crate::name::FqTraitName,
         method: &str,
         module_source: crate::module_source::ModuleSource,
     ) -> FunctionRef {
         let mut method_info = LocalMethodName::new(
             FqTypeName::declared(&module_source, base_name),
-            Some(trait_name.to_string()),
+            Some(trait_name.clone()),
             method.to_string(),
         );
         let monomorph_info = if type_args.is_empty() {
@@ -297,7 +301,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
-                items.trait_name(CompilerItem::ReflectStruct).to_string(),
+                items.trait_fq(CompilerItem::ReflectStruct),
                 items
                     .method_name(CompilerItem::ReflectStructTypeName)
                     .to_string(),
@@ -320,7 +324,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_generic_reflect_from_fields(
                 self_ty,
                 type_param_name,
-                &reflect_trait_name,
+                reflect_trait_name.clone(),
                 static_call,
                 ctx,
             );
@@ -338,7 +342,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .make_compiler_enum(CompilerItem::CaseStyle)
         } else if method == defaults_method {
             let Some(slots_ty) =
-                self.struct_defaults_bound_ty(type_param_name, &reflect_trait_name)
+                self.struct_defaults_bound_ty(type_param_name, reflect_trait_name.base_name())
             else {
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: format!(
@@ -350,9 +354,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             slots_ty
         } else if method == members_method {
-            let Some(members_ty) =
-                self.struct_members_bound_ty(self_ty, type_param_name, &reflect_trait_name)
-            else {
+            let Some(members_ty) = self.struct_members_bound_ty(
+                self_ty,
+                type_param_name,
+                reflect_trait_name.base_name(),
+            ) else {
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: format!(
                         "ReflectStruct::<{type_param_name}>::{method} (no `FieldTypes = [..F]` bound on {type_param_name})"
@@ -391,14 +397,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         self_ty: TypeId,
         type_param_name: &str,
-        reflect_trait_name: &str,
+        reflect_trait_name: crate::name::FqTraitName,
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let method = static_call.method.clone();
         let Some(fields_ty) = self.reflect_pack_bound_ty(
             type_param_name,
-            reflect_trait_name,
+            reflect_trait_name.base_name(),
             crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
         ) else {
             let _ = self.emit(TypeError::UnknownFunction {
@@ -426,7 +432,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         self.record_type_param_reflect_dispatch(
             type_param_name,
-            reflect_trait_name.to_string(),
+            reflect_trait_name,
             method,
             static_call,
         );
@@ -439,7 +445,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn record_type_param_reflect_dispatch(
         &mut self,
         type_param_name: &str,
-        reflect_trait_name: String,
+        reflect_trait_name: crate::name::FqTraitName,
         method: String,
         static_call: &ast::StaticMethodCallExpr,
     ) {
@@ -792,7 +798,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
-                items.trait_name(CompilerItem::ReflectVariant).to_string(),
+                items.trait_fq(CompilerItem::ReflectVariant),
                 items
                     .method_name(CompilerItem::ReflectVariantDiscriminant)
                     .to_string(),
@@ -818,7 +824,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .record_bound_driven_synth_request(&self_name, &module_source, &trait_name);
+            .record_bound_driven_synth_request(
+                &self_name,
+                &module_source,
+                &trait_name
+                    .canonical()
+                    .expect("a compiler trait item names a declaration"),
+            );
 
         let return_type = if is_discriminant {
             TypeTable::I32
@@ -899,7 +911,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
-                items.trait_name(CompilerItem::ReflectVariant).to_string(),
+                items.trait_fq(CompilerItem::ReflectVariant),
                 items
                     .method_name(CompilerItem::ReflectVariantTypeName)
                     .to_string(),
@@ -930,7 +942,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             TypeTable::I32
         } else if method == cases_method {
             let Some(members_ty) =
-                self.variant_members_bound_ty(self_ty, type_param_name, &trait_name)
+                self.variant_members_bound_ty(self_ty, type_param_name, trait_name.base_name())
             else {
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: format!(
@@ -1152,7 +1164,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (trait_name, self_name) = {
             let tt = self.tysys.type_table.borrow();
             (
-                tt.compiler_items().trait_name(spec.trait_item).to_string(),
+                tt.compiler_items().trait_fq(spec.trait_item),
                 tt.type_name(self_ty),
             )
         };
@@ -1174,7 +1186,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .record_bound_driven_synth_request(&self_name, &module_source, &trait_name);
+            .record_bound_driven_synth_request(
+                &self_name,
+                &module_source,
+                &trait_name
+                    .canonical()
+                    .expect("a compiler trait item names a declaration"),
+            );
 
         let param_is_mut = self.reflect_scalar_param_is_mut(spec, &method);
         let func_ref = FunctionRef {
@@ -1224,8 +1242,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .compiler_items()
-            .trait_name(spec.trait_item)
-            .to_string();
+            .trait_fq(spec.trait_item);
 
         let Some(return_type) = self.check_reflect_scalar_args(
             spec,

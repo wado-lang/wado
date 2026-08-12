@@ -335,9 +335,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (type_module, canon_key) = super::trait_query::canonical_assoc_const_key(
             key,
             &self.current_module_source,
-            &self.sem.imports,
             self.symbols,
-            &self.tysys.trait_env,
+            &self.tysys.resolutions,
         )?;
         self.tysys
             .signatures
@@ -1336,7 +1335,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // effect-dispatch handler index is built from.
         let mut naming = LocalMethodName::of(
             facts.receiver.clone(),
-            facts.trait_name_mangled.clone(),
+            facts.trait_name.clone(),
             String::new(),
         );
         if let Some(owner) = facts.concrete_owner.as_ref() {
@@ -1344,7 +1343,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         Some(crate::tir::TirImpl {
-            trait_canonical: facts.trait_canonical.clone(),
+            trait_canonical: facts
+                .trait_name
+                .as_ref()
+                .and_then(crate::name::FqTraitName::canonical),
             trait_type_args: facts.trait_type_args.clone(),
             struct_name: naming.struct_name(),
             rest: impl_block.rest,
@@ -1424,7 +1426,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let Some(facts) = self.sem.types.impl_facts.get(&impl_key).cloned() else {
             return Vec::new();
         };
-        let Some(trait_name_mangled) = facts.trait_name_mangled.clone() else {
+        let Some(trait_name_mangled) = facts.trait_name.clone() else {
             return Vec::new();
         };
         let struct_name = facts.struct_name.clone();
@@ -1434,12 +1436,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // concrete functions. Recorded AST-side by the elaborator.
         let concrete_owner: Option<FqTypeName> = facts.concrete_owner.clone();
 
-        let trait_decl_name = super::Elaborator::<H>::get_type_name_static(trait_ast);
+        let trait_decl_name = super::trait_env::get_type_name_static(trait_ast);
         let Some(trait_sig) = super::trait_query::trait_sig_by_name_with(
             &trait_decl_name,
             &self.current_module_source,
-            &self.sem.imports,
             self.symbols,
+            &self.tysys.resolutions,
             &self.tysys.trait_env,
             &self.tysys.signatures,
         ) else {
@@ -1627,7 +1629,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut method_info = {
             let mut info = LocalMethodName::of(
                 facts.receiver.clone(),
-                facts.trait_name_mangled.clone(),
+                facts.trait_name.clone(),
                 func.name.clone(),
             );
             info.is_ref_impl = facts.is_ref_impl;
@@ -1638,10 +1640,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // handler is keyed `Future<>` and the `Future<i32>` binding
             // finds no `DispatchPlan`.
             info.trait_type_args.clone_from(&facts.trait_type_args);
-            if let Some((module, base)) = facts.trait_canonical.clone() {
-                info.base_trait_module = Some(module);
-                info.base_trait_name = Some(base);
-            }
             info
         };
 
@@ -1652,11 +1650,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // monomorphized instance, so DCE / WIR / cross-module inclusion all
         // handle it, and `impl List<u8>` vs `impl List<i32>` stay distinct.
         if let Some(owner) = concrete_owner {
-            mangled_name = crate::name::MethodName::format_local(
-                owner,
-                facts.trait_name_mangled.as_deref(),
-                &func.name,
-            );
+            mangled_name =
+                crate::name::MethodName::format_local(owner, facts.trait_name.as_ref(), &func.name);
             method_info = method_info.with_substituted_struct_name(owner);
             impl_type_params = Vec::new();
         }
@@ -6201,10 +6196,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // return type; otherwise use the expected fn type's return.
         let declared_return = closure.return_type.as_ref().map(|ty| self.resolve_type(ty));
         let body_expected = declared_return.or_else(|| {
-            expected_fn_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
-                ResolvedType::Function { return_type, .. } => Some(*return_type),
-                _ => None,
-            })
+            expected_fn_type
+                .and_then(|t| match self.tysys.type_table.borrow().get(t) {
+                    ResolvedType::Function { return_type, .. } => Some(*return_type),
+                    _ => None,
+                })
+                // A rigid parameter belongs to the signature this call is
+                // instantiating, and the closure's own body is what determines
+                // it — seeding the body with it would demand the body produce
+                // an opaque type it cannot construct. Mirrors `resolve_closure`.
+                .filter(|&rt| {
+                    !matches!(
+                        self.tysys.type_table.borrow().get(rt),
+                        ResolvedType::TypeParam { .. }
+                    )
+                })
         });
 
         // A block body with explicit `return X` has a NEVER/UNIT tail, so its
@@ -6354,7 +6360,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             id: seg.id,
             name: seg.name.clone(),
             span: seg.span,
-            source_interface: None,
         };
         // `resolve_type` yields a `TypeParam` (pack-ness is erased), but its
         // index is the pack's positional slot — the value monomorphization keys
@@ -6986,7 +6991,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 "resolve_from_call records FromCallFacts at every site reify hits — \
                  ?-op, Type::from(x), and Type::<…>::from(x)",
             );
-        let from_trait = format!("{}<{}>", facts.from_trait_name, facts.from_name);
+        let from_trait = facts.from_trait_name.with_args(vec![facts.from_name]);
 
         TirExpr::new(
             TirExprKind::Call {
@@ -6998,8 +7003,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         receiver: Receiver::Type(facts.target_name),
                         struct_type_args: Vec::new(),
                         trait_name: Some(from_trait),
-                        base_trait_name: Some(facts.from_trait_name),
-                        base_trait_module: None,
                         trait_type_args: vec![],
                         method_name: "from".to_string(),
                         method_type_args: vec![],

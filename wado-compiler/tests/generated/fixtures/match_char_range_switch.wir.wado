@@ -82,7 +82,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(31)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next$spec0" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(32)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(32)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
 
@@ -436,7 +436,7 @@ fn "match_char_range_switch.wado/run"() with Stdout {
         l78: loop {
             let __match_6_mv_0: i32;
             let __match_6_mv_1: char;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next$spec0"(__iter_2);
+            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$spec0"(__iter_2);
             if __match_6_mv_0 == 0 {
                 sum = sum + "match_char_range_switch.wado/classify"(__match_6_mv_1);
             } else {
@@ -686,7 +686,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^Iterator::next$spec0"(self) {
+fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$spec0"(self) {
     if self.byte_index >= 5 {
         return 1, 0;
     }

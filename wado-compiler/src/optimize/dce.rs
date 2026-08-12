@@ -206,7 +206,22 @@ fn compute_function_reachability(
     // iteration is needed.
     let inspectable =
         collect_inspectable_signatures_from_reachable(project, descriptors, &reachable_v1);
-    apply_inspect_edges(&mut graph.call_graph, &graph.pending_inspects, &inspectable);
+    let items = project.type_table.borrow();
+    let inspect_traits = (
+        items
+            .compiler_items()
+            .trait_fq(crate::compiler_item::CompilerItem::Inspect),
+        items
+            .compiler_items()
+            .trait_fq(crate::compiler_item::CompilerItem::InspectAlt),
+    );
+    drop(items);
+    apply_inspect_edges(
+        &mut graph.call_graph,
+        &graph.pending_inspects,
+        &inspectable,
+        &inspect_traits,
+    );
 
     // Phase 2c: re-compute the reachable set from the augmented graph.
     let mut reachable = compute_reachable_from_entries(project, &graph.call_graph);
@@ -865,6 +880,7 @@ fn apply_inspect_edges(
     call_graph: &mut CallGraph,
     pending: &PendingInspectsByCaller,
     sigs: &InspectableSignatures,
+    (inspect, inspect_alt): &(crate::name::FqTraitName, crate::name::FqTraitName),
 ) {
     for (caller, edges) in pending {
         let Some(callees) = call_graph.get_mut(caller) else {
@@ -875,7 +891,7 @@ fn apply_inspect_edges(
                 callees.insert(FunctionId::Method(MethodName::new(
                     edge.closure_module.clone(),
                     edge.struct_name.clone(),
-                    Some("Inspect".to_string()),
+                    Some(inspect.clone()),
                     "inspect".to_string(),
                 )));
             }
@@ -883,7 +899,7 @@ fn apply_inspect_edges(
                 callees.insert(FunctionId::Method(MethodName::new(
                     edge.closure_module.clone(),
                     edge.struct_name.clone(),
-                    Some("InspectAlt".to_string()),
+                    Some(inspect_alt.clone()),
                     "inspect_alt".to_string(),
                 )));
             }
@@ -982,7 +998,7 @@ fn scan_inspect_signatures_block(
             && let Some((receiver, func_id, _)) = body.exprs[e].kind.as_method_call()
             && let Some(info) = &callee_descriptor(descriptors, func_id).method_info
             && info.base_struct_name() == "Fn"
-            && let Some(trait_name) = info.base_trait_name.as_deref()
+            && let Some(trait_name) = info.base_trait_name()
         {
             // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>` by the
             // boxing pass); peel both to read the function's arity + return type.
@@ -1234,12 +1250,12 @@ impl<'a> DceWalker<'a> {
                 // the inlining-induced graph stays mergeable.
                 let mangled_func_name = MethodName::format_local(
                     &FqTypeName::declared(module_source, name),
-                    trait_name.as_deref(),
+                    trait_name.as_ref(),
                     &method_name,
                 );
                 let base_method_name = MethodName::format_local(
                     &FqTypeName::declared(module_source, base_struct),
-                    trait_name.as_deref(),
+                    trait_name.as_ref(),
                     &method_name,
                 );
                 let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
@@ -1349,9 +1365,10 @@ impl<'a> DceWalker<'a> {
                     .map(|t| self.type_table.mangle_type_name(*t))
                     .collect();
                 let (mangled_func_name, base_name) = if let Some(ref trait_n) = trait_name {
+                    let trait_n = trait_n.to_mangled();
                     let generic_name = mangle_generic_name(&name, &type_arg_names);
-                    let mangled = mangle_local_trait_method(&generic_name, trait_n, &method_name);
-                    let base = mangle_local_trait_method(&name, trait_n, &method_name);
+                    let mangled = mangle_local_trait_method(&generic_name, &trait_n, &method_name);
+                    let base = mangle_local_trait_method(&name, &trait_n, &method_name);
                     (mangled, base)
                 } else {
                     let mangled = mangle_method_generic(&name, &type_arg_names, &method_name);
@@ -2036,6 +2053,7 @@ fn collect_type_dependencies(
         | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. }
         | ResolvedType::TypePack { .. } => {}
+        ResolvedType::InferVar(var) => panic!("{var} reached DCE"),
 
         // Newtype: collect dependency on base type
         ResolvedType::Newtype { base_type, .. } => {

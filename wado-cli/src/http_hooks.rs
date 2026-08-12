@@ -26,6 +26,24 @@ macro_rules! warn_log {
     ($($arg:tt)*) => { eprintln!("warning: {}", format_args!($($arg)*)) };
 }
 
+const ALPN_H2: &[u8] = b"h2";
+const ALPN_HTTP11: &[u8] = b"http/1.1";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WireProtocol {
+    Http1,
+    Http2,
+}
+
+impl WireProtocol {
+    fn from_alpn(alpn: Option<&[u8]>) -> Self {
+        match alpn {
+            Some(ALPN_H2) => Self::Http2,
+            Some(_) | None => Self::Http1,
+        }
+    }
+}
+
 pub struct WadoHttpHooks {
     client_config: Arc<rustls::ClientConfig>,
 }
@@ -41,9 +59,10 @@ pub struct WadoHttpHooks {
 fn shared_client_config() -> Arc<rustls::ClientConfig> {
     static CONFIG: LazyLock<Arc<rustls::ClientConfig>> = LazyLock::new(|| {
         install_default_crypto_provider();
-        let config = rustls::ClientConfig::builder()
+        let mut config = rustls::ClientConfig::builder()
             .with_root_certificates(build_root_cert_store())
             .with_no_client_auth();
+        config.alpn_protocols = vec![ALPN_H2.to_vec(), ALPN_HTTP11.to_vec()];
         Arc::new(config)
     });
     Arc::clone(&CONFIG)
@@ -158,20 +177,15 @@ async fn send_request(
             warn_log!("tls protocol error: {e:?}");
             ErrorCode::TlsProtocolError
         })?;
-        handshake(tls, connect_timeout).await?
+        let protocol = WireProtocol::from_alpn(tls.get_ref().1.alpn_protocol());
+        handshake(protocol, tls, connect_timeout).await?
     } else {
-        handshake(tcp, connect_timeout).await?
+        handshake(WireProtocol::Http1, tcp, connect_timeout).await?
     };
 
-    *req.uri_mut() = http::Uri::builder()
-        .path_and_query(
-            req.uri()
-                .path_and_query()
-                .map(http::uri::PathAndQuery::as_str)
-                .unwrap_or("/"),
-        )
-        .build()
-        .expect("comes from valid request");
+    if sender.protocol() == WireProtocol::Http1 {
+        *req.uri_mut() = origin_form(req.uri());
+    }
 
     let res = tokio::time::timeout(first_byte_timeout, sender.send_request(req))
         .await
@@ -190,39 +204,97 @@ async fn send_request(
     Ok((res, conn_driver))
 }
 
+fn origin_form(uri: &http::Uri) -> http::Uri {
+    http::Uri::builder()
+        .path_and_query(
+            uri.path_and_query()
+                .map(http::uri::PathAndQuery::as_str)
+                .unwrap_or("/"),
+        )
+        .build()
+        .expect("comes from valid request")
+}
+
+type RequestBody = UnsyncBoxBody<Bytes, ErrorCode>;
+
+enum Sender {
+    Http1(hyper::client::conn::http1::SendRequest<RequestBody>),
+    Http2(hyper::client::conn::http2::SendRequest<RequestBody>),
+}
+
+impl Sender {
+    fn protocol(&self) -> WireProtocol {
+        match self {
+            Self::Http1(_) => WireProtocol::Http1,
+            Self::Http2(_) => WireProtocol::Http2,
+        }
+    }
+
+    async fn send_request(
+        &mut self,
+        req: http::Request<RequestBody>,
+    ) -> hyper::Result<http::Response<hyper::body::Incoming>> {
+        match self {
+            Self::Http1(sender) => sender.send_request(req).await,
+            Self::Http2(sender) => sender.send_request(req).await,
+        }
+    }
+}
+
 async fn handshake<S>(
+    protocol: WireProtocol,
     stream: S,
     connect_timeout: Duration,
-) -> Result<
-    (
-        hyper::client::conn::http1::SendRequest<UnsyncBoxBody<Bytes, ErrorCode>>,
-        BoxFuture<'static, Result<(), ErrorCode>>,
-    ),
-    ErrorCode,
->
+) -> Result<(Sender, BoxFuture<'static, Result<(), ErrorCode>>), ErrorCode>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
 {
-    let (sender, conn) = tokio::time::timeout(
-        connect_timeout,
-        hyper::client::conn::http1::Builder::new().handshake(hyper_util::rt::TokioIo::new(stream)),
-    )
-    .await
-    .map_err(|_| ErrorCode::ConnectionTimeout)?
-    .map_err(ErrorCode::from_hyper_request_error)?;
+    let io = hyper_util::rt::TokioIo::new(stream);
+    match protocol {
+        WireProtocol::Http1 => {
+            let (sender, conn) = await_handshake(
+                connect_timeout,
+                hyper::client::conn::http1::Builder::new().handshake(io),
+            )
+            .await?;
+            Ok((Sender::Http1(sender), spawn_connection(conn)))
+        }
+        WireProtocol::Http2 => {
+            let (sender, conn) = await_handshake(
+                connect_timeout,
+                hyper::client::conn::http2::Builder::new(hyper_util::rt::TokioExecutor::new())
+                    .handshake(io),
+            )
+            .await?;
+            Ok((Sender::Http2(sender), spawn_connection(conn)))
+        }
+    }
+}
 
-    // The hyper connection must be driven concurrently with `sender.send_request`,
-    // otherwise the request never reaches the wire. Spawn the connection on the
-    // tokio runtime now, and forward its result via a channel so the caller can
-    // still observe completion / errors.
+async fn await_handshake<F, T>(connect_timeout: Duration, handshake: F) -> Result<T, ErrorCode>
+where
+    F: Future<Output = hyper::Result<T>>,
+{
+    tokio::time::timeout(connect_timeout, handshake)
+        .await
+        .map_err(|_| ErrorCode::ConnectionTimeout)?
+        .map_err(ErrorCode::from_hyper_request_error)
+}
+
+/// The hyper connection must be driven concurrently with `sender.send_request`,
+/// otherwise the request never reaches the wire. Spawn the connection on the
+/// tokio runtime now, and forward its result via a channel so the caller can
+/// still observe completion / errors.
+fn spawn_connection<C>(conn: C) -> BoxFuture<'static, Result<(), ErrorCode>>
+where
+    C: Future<Output = hyper::Result<()>> + Send + 'static,
+{
     let (tx, rx) = tokio::sync::oneshot::channel();
     tokio::spawn(async move {
         let res = conn.await.map_err(from_hyper_response_error);
         let _ = tx.send(res);
     });
-    let driver: BoxFuture<'static, Result<(), ErrorCode>> =
-        Box::pin(async move { rx.await.unwrap_or(Ok(())) });
-    Ok((sender, driver))
+    Box::pin(async move { rx.await.unwrap_or(Ok(())) })
 }
 
 fn from_hyper_response_error(err: hyper::Error) -> ErrorCode {
@@ -280,5 +352,41 @@ impl http_body::Body for IncomingResponseBody {
 
     fn size_hint(&self) -> http_body::SizeHint {
         self.incoming.size_hint()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn client_config_offers_h2_before_http11() {
+        let config = shared_client_config();
+        assert_eq!(
+            config.alpn_protocols,
+            vec![ALPN_H2.to_vec(), ALPN_HTTP11.to_vec()]
+        );
+    }
+
+    #[test]
+    fn only_negotiated_h2_selects_http2() {
+        assert_eq!(WireProtocol::from_alpn(Some(ALPN_H2)), WireProtocol::Http2);
+        assert_eq!(
+            WireProtocol::from_alpn(Some(ALPN_HTTP11)),
+            WireProtocol::Http1
+        );
+        assert_eq!(WireProtocol::from_alpn(None), WireProtocol::Http1);
+    }
+
+    #[test]
+    fn origin_form_drops_scheme_and_authority() {
+        let uri = "https://example.com/v1/greeter?a=1".parse().unwrap();
+        assert_eq!(origin_form(&uri), "/v1/greeter?a=1");
+    }
+
+    #[test]
+    fn origin_form_of_empty_path_is_root() {
+        let uri = "https://example.com".parse().unwrap();
+        assert_eq!(origin_form(&uri), "/");
     }
 }

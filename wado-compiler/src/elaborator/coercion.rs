@@ -6,9 +6,10 @@ use super::util;
 use super::util::placeholder;
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
+use crate::elaborator::trait_env::ImplReceiver;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -537,7 +538,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let insert_self_kind = from_literal_info.self_kind;
         let trait_name = from_literal_info.trait_name.clone();
         let builder_type = from_literal_info.builder_type;
-        let use_new_api = trait_name == "KeyValueLiteralBuilder";
+        let use_new_api = trait_name.base_name() == "KeyValueLiteralBuilder";
         // Resolve the builder impl's home module — that is where
         // `Builder^Trait::new_literal` is registered, and (post-fix #1110)
         // where the monomorphizer expects to find the template. Fall back to
@@ -567,8 +568,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .impl_module_for(
-                &builder_name_for_lookup,
-                &trait_name,
+                ImplReceiver::Declared(&crate::name::DeclName::new(&builder_name_for_lookup)),
+                trait_name.base_name(),
                 builder_type_module.as_ref(),
             )
             .cloned()
@@ -604,47 +605,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        let mangled_builder_name = builder_base_name.clone().with_args(type_arg_names.clone());
-
-        let new_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
-        let insert_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "insert_literal");
-        let insert_all_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "insert_all");
-        let build_mangled_name = if use_new_api {
-            Some(MethodName::format_local(
-                &mangled_builder_name,
-                Some(&trait_name),
-                "build",
-            ))
-        } else {
-            None
-        };
+        // Names come from `remangle` below, the one place that derives them
+        // from the type arguments — the sweep calls the same thing once a
+        // solved variable changes an argument.
+        let build_mangled_name = use_new_api.then(String::new);
 
         // WEP 2026-05-26: record the resolved
         // `KeyValueLiteralBuilder` impl data so reify can rebuild the
         // same `__kv_lit:` desugar block deterministically.
         let key = expr.id();
-        self.sem.types.key_value_coercions.insert(
-            key,
-            super::sem::types::KeyValueCoercionFacts {
-                builder_type,
-                value_type,
-                insert_self_kind,
-                trait_name,
-                target_type,
-                impl_module_source,
-                builder_base_name,
-                type_arg_ids,
-                type_arg_names,
-                use_new_api,
-                new_mangled_name,
-                insert_mangled_name,
-                insert_all_mangled_name,
-                build_mangled_name,
-            },
-        );
+        let mut facts = super::sem::types::KeyValueCoercionFacts {
+            builder_type,
+            value_type,
+            insert_self_kind,
+            trait_name,
+            target_type,
+            impl_module_source,
+            builder_base_name,
+            type_arg_ids,
+            type_arg_names,
+            use_new_api,
+            new_mangled_name: String::new(),
+            insert_mangled_name: String::new(),
+            insert_all_mangled_name: String::new(),
+            build_mangled_name,
+        };
+        facts.remangle(&self.tysys.type_table.borrow());
+        self.sem.types.key_value_coercions.insert(key, facts);
 
         // Reserve the `__b` builder local on the surrounding scope so
         // subsequent local-index accounting in the enclosing function
@@ -665,14 +652,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // As in the sequence path: the first value decides an open value type,
+        // and the rest are checked against that answer.
+        let mut value_type = value_type;
         for field in &struct_lit.fields {
             let value = self.resolve_expr(&field.value, ctx, Some(value_type));
-            if value != value_type && value != TypeTable::UNKNOWN && value != TypeTable::NEVER {
+            // Route through the shared check rather than comparing ids, for
+            // the reason the sequence path does: an undecided value type — a
+            // callee's slot the call site instantiated — defers to its solver
+            // instead of rejecting every value.
+            let incompatible = matches!(
+                super::typecheck::check_assignable(
+                    value,
+                    value_type,
+                    &self.tysys.type_table.borrow(),
+                ),
+                super::typecheck::TypeCheckResult::Incompatible
+            );
+            if incompatible {
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected: self.tysys.type_table.borrow().type_name(value_type),
                     found: self.tysys.type_table.borrow().type_name(value),
                     span: field.value.span(),
                 });
+            } else {
+                // The values are what decide an open value type.
+                self.solve_infer_holes_against(value_type, value);
+                value_type = self.apply_infer_holes(value_type);
             }
         }
 
@@ -765,44 +771,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        let mangled_builder_name = builder_base_name.clone().with_args(type_arg_names.clone());
-
-        let new_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
-        let push_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "push_literal");
-        let build_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "build");
-
         // WEP 2026-05-26: record the resolved
         // `SequenceLiteralBuilder` impl data so reify can rebuild the
         // same `__seq_lit:` desugar block deterministically — the
         // trait-impl lookup chain (newtype peel + sequence-trait
         // search), the type-arg mangling, and the per-method mangled
-        // names are not reproducible from the AST alone.
+        // names are not reproducible from the AST alone. The names come
+        // from `remangle`, the one place that derives them from the type
+        // arguments — the sweep calls the same thing once a solved variable
+        // changes an argument.
         let key = expr.id();
-        self.sem.types.sequence_coercions.insert(
-            key,
-            super::sem::types::SequenceCoercionFacts {
-                builder_type,
-                element_type,
-                push_self_kind,
-                trait_name,
-                output_type,
-                impl_module_source,
-                builder_base_name,
-                type_arg_ids,
-                type_arg_names,
-                newtype_cast_to: if needs_newtype_cast {
-                    Some(target_type)
-                } else {
-                    None
-                },
-                new_mangled_name,
-                push_mangled_name,
-                build_mangled_name,
+        let mut facts = super::sem::types::SequenceCoercionFacts {
+            builder_type,
+            element_type,
+            push_self_kind,
+            trait_name,
+            output_type,
+            impl_module_source,
+            builder_base_name,
+            type_arg_ids,
+            type_arg_names,
+            newtype_cast_to: if needs_newtype_cast {
+                Some(target_type)
+            } else {
+                None
             },
-        );
+            new_mangled_name: String::new(),
+            push_mangled_name: String::new(),
+            build_mangled_name: String::new(),
+        };
+        facts.remangle(&self.tysys.type_table.borrow());
+        self.sem.types.sequence_coercions.insert(key, facts);
 
         ctx.enter_scope();
 
@@ -814,17 +813,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Walk each element for fact recording + heterogeneous-element
         // diagnostics. Reify rebuilds the `__seq_lit:` desugar block from
         // the recorded `SequenceCoercionFacts` + the AST.
+        // The first element decides an open element type; every element after
+        // it is checked against that answer. Reading `element_type` afresh
+        // each round is what makes the decision stick — left as the variable,
+        // it would defer for every later element and wave through
+        // `[1, "abc"]`.
+        let mut element_type = element_type;
         for element in &tuple_lit.elements {
             let elem_expr = self.resolve_expr(element, ctx, Some(element_type));
-            if elem_expr != element_type
-                && elem_expr != TypeTable::UNKNOWN
-                && element_type != TypeTable::UNKNOWN
-                && !self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .contains_type_param(element_type)
-            {
+            // Route through the shared check rather than comparing ids: a
+            // rigid `T` element type rejects a concrete element (it is the
+            // enclosing body's own parameter), while a variable or a pack
+            // defers to its solver.
+            let incompatible = matches!(
+                super::typecheck::check_assignable(
+                    elem_expr,
+                    element_type,
+                    &self.tysys.type_table.borrow(),
+                ),
+                super::typecheck::TypeCheckResult::Incompatible
+            );
+            if incompatible {
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected: format!(
                         "homogeneous elements of type '{}'",
@@ -836,6 +845,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span: element.span(),
                 });
+            } else {
+                // Where the target left the element type open — a callee's
+                // slot the call site instantiated — the elements decide it.
+                // Nothing else can: the literal is the only evidence of what
+                // this sequence holds.
+                self.solve_infer_holes_against(element_type, elem_expr);
+                element_type = self.apply_infer_holes(element_type);
             }
         }
 

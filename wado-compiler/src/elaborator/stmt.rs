@@ -228,13 +228,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
         }
-        let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
+        let type_param_bounds: Vec<(String, Vec<super::types::BoundRef>)> = struct_decl
             .type_params
             .iter()
             .map(|p| {
                 (
                     p.name.clone(),
-                    p.bounds.iter().map(|b| b.name.clone()).collect(),
+                    p.bounds
+                        .iter()
+                        .map(|b| super::types::BoundRef {
+                            name: b.name.clone(),
+                            site: b.id,
+                        })
+                        .collect(),
                 )
             })
             .collect();
@@ -2127,11 +2133,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &self.type_lookup(),
                 iterable_type_id,
                 "IntoIterator",
+                None,
             ) || self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 inner_type_id,
                 "IntoIterator",
+                None,
             ) || matches!(
                 self.tysys.type_table.borrow().get(iterable_type_id),
                 ResolvedType::Unknown | ResolvedType::TypeParam { .. }
@@ -2529,6 +2537,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.type_lookup(),
             iter_type,
             "Iterator",
+            None,
         ) && !matches!(
             self.tysys.type_table.borrow().get(iter_type),
             ResolvedType::Unknown | ResolvedType::TypeParam { .. }

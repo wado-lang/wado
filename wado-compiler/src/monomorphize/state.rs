@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::elaborator::trait_env::TraitEnv;
+use crate::elaborator::trait_env::{ImplReceiver, ReceiverCandidate, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
@@ -83,25 +83,23 @@ impl FuncInstState {
         info: &LocalMethodName,
         type_module: Option<&ModuleSource>,
     ) -> Option<ModuleSource> {
-        let trait_name = info
-            .base_trait_name
-            .as_deref()
-            .or(info.trait_name.as_deref())?;
-        if let Some(m) =
-            self.trait_env
-                .concrete_impl_module_for(&info.struct_name(), trait_name, type_module)
-        {
+        let trait_name = info.base_trait_name()?;
+        if let Some(m) = self.trait_env.concrete_impl_module_for(
+            ImplReceiver::Instantiated(&info.mangled_struct_name()),
+            trait_name,
+            type_module,
+        ) {
             return Some(m.clone());
         }
-        // Fall back to the head name for argument shapes the qualified
-        // instantiated index above cannot spell (tuples, function types).
-        if info.base_struct_name() != info.struct_name()
-            && let Some(m) = self.trait_env.concrete_impl_module_for(
-                &info.base_struct_name(),
-                trait_name,
-                type_module,
-            )
-        {
+        // Then the receiver identity. Not a same-spelling retry: the
+        // instantiated form above asks the mangled namespace only, while an
+        // identity is answered from whichever namespace holds it — a receiver
+        // that never carried its declaring module is reachable only here.
+        if let Some(m) = self.trait_env.concrete_impl_module_for(
+            ImplReceiver::Of(info.receiver()),
+            trait_name,
+            type_module,
+        ) {
             return Some(m.clone());
         }
         None
@@ -130,21 +128,19 @@ impl FuncInstState {
         info: &LocalMethodName,
         type_module: Option<&ModuleSource>,
     ) -> Option<ModuleSource> {
-        let trait_name = info
-            .base_trait_name
-            .as_deref()
-            .or(info.trait_name.as_deref())?;
-        if let Some(m) =
-            self.trait_env
-                .impl_module_for(&info.struct_name(), trait_name, type_module)
-        {
+        let trait_name = info.base_trait_name()?;
+        if let Some(m) = self.trait_env.impl_module_for(
+            ImplReceiver::Instantiated(&info.mangled_struct_name()),
+            trait_name,
+            type_module,
+        ) {
             return Some(m.clone());
         }
-        if info.base_struct_name() != info.struct_name()
-            && let Some(m) =
-                self.trait_env
-                    .impl_module_for(&info.base_struct_name(), trait_name, type_module)
-        {
+        if let Some(m) = self.trait_env.impl_module_for(
+            ImplReceiver::Of(info.receiver()),
+            trait_name,
+            type_module,
+        ) {
             return Some(m.clone());
         }
         None
@@ -347,14 +343,11 @@ impl Monomorphizer {
         let is_ref_universal_blanket = key.impl_type_args.len() == 1
             && key.method_info.as_ref().is_some_and(|i| {
                 i.ref_receiver().is_some_and(|ref_kind| {
-                    i.base_trait_name
-                        .as_deref()
-                        .or(i.trait_name.as_deref())
-                        .is_some_and(|tn| {
-                            self.functions
-                                .trait_env
-                                .has_universal_ref_blanket(tn, ref_kind == RefKind::Mut)
-                        })
+                    i.base_trait_name().is_some_and(|tn| {
+                        self.functions
+                            .trait_env
+                            .has_universal_ref_blanket(tn, ref_kind == RefKind::Mut)
+                    })
                 })
             });
         let is_blanket_key = key.impl_type_args.len() == 2 || is_ref_universal_blanket;
@@ -464,7 +457,7 @@ impl Monomorphizer {
                 &impl_arg_names[0],
                 None,
                 &[],
-                method_info.trait_name.as_deref(),
+                method_info.trait_name.as_ref(),
             )
         } else {
             // Normal: append type args: "List" → "List<i32>"
@@ -472,7 +465,7 @@ impl Monomorphizer {
                 &method_info.struct_name(),
                 method_info.receiver().ref_kind(),
                 &impl_arg_names,
-                method_info.trait_name.as_deref(),
+                method_info.trait_name.as_ref(),
             )
         };
 
@@ -562,10 +555,10 @@ impl Monomorphizer {
         type_id: TypeId,
         type_table: &TypeTable,
         method_name: &str,
-        trait_name: Option<&str>,
+        trait_name: Option<&crate::name::FqTraitName>,
     ) -> Option<FqTypeName> {
         self.newtype_own_name(type_id, type_table, |_, tid| match trait_name {
-            Some(trait_name) => self.has_own_trait_impl(type_table, tid, trait_name),
+            Some(trait_name) => self.has_own_trait_impl(type_table, tid, trait_name.base_name()),
             None => self
                 .functions
                 .trait_env
@@ -583,9 +576,11 @@ impl Monomorphizer {
         tid: TypeId,
         trait_name: &str,
     ) -> bool {
-        self.functions
-            .trait_env
-            .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(tid), trait_name)
+        self.functions.trait_env.has_any_methodful_impl_by_receiver(
+            &type_table.impl_receiver_key(tid),
+            trait_name,
+            None,
+        )
     }
 
     /// Peel refs/newtypes to the first newtype level satisfying `has_own_impl`
@@ -635,7 +630,7 @@ impl Monomorphizer {
             receiver_type_id,
             type_table,
             &info.method_name,
-            info.trait_name.as_deref(),
+            info.trait_name.as_ref(),
         );
         // Against the *base* receiver: `newtype_own_name` answers a declaration
         // (`MyArray`), while `struct_name` is an instantiation (`MyArray<i32>`).
@@ -663,21 +658,24 @@ impl Monomorphizer {
         receiver_type_id: TypeId,
         type_table: &TypeTable,
         method_name: &str,
-        trait_name: Option<&str>,
-    ) -> (Option<String>, Vec<(String, Option<String>)>) {
+        trait_name: Option<&crate::name::FqTraitName>,
+    ) -> (
+        Option<String>,
+        Vec<(String, Option<crate::name::FqTraitName>)>,
+    ) {
         let own_name = self.newtype_own_struct_name_with_impl(
             receiver_type_id,
             type_table,
             method_name,
             trait_name,
         );
-        let mut names: Vec<(String, Option<String>)> = Vec::new();
+        let mut names: Vec<(String, Option<crate::name::FqTraitName>)> = Vec::new();
         let mut push_for = |s: FqTypeName| {
             names.push((MethodName::format_local(&s, None, method_name), None));
             if let Some(tn) = trait_name {
                 names.push((
                     MethodName::format_local(&s, Some(tn), method_name),
-                    Some(tn.to_string()),
+                    Some(tn.clone()),
                 ));
             }
         };
@@ -699,17 +697,23 @@ impl Monomorphizer {
         own_name: Option<&'a str>,
         info: Option<&'a LocalMethodName>,
         struct_name: &'a str,
-    ) -> Vec<std::borrow::Cow<'a, str>> {
-        use std::borrow::Cow;
-        let mut c: Vec<Cow<'a, str>> = Vec::new();
+    ) -> Vec<ReceiverCandidate> {
+        let mangled = |s: &str| ReceiverCandidate::Instantiated(crate::name::MangledName::new(s));
+        let mut c: Vec<ReceiverCandidate> = Vec::new();
+        // `own_name` is `FqTypeName::to_mangled`, so it carries its module.
         if let Some(own) = own_name {
-            c.push(Cow::Borrowed(own));
+            c.push(mangled(own));
         }
         if let Some(info) = info {
-            c.push(Cow::Owned(info.receiver.head_key().into_string()));
-            c.push(Cow::Owned(info.struct_name()));
+            c.push(ReceiverCandidate::Of(info.receiver.clone()));
+            c.push(mangled(&info.struct_name()));
         }
-        c.push(Cow::Borrowed(struct_name));
+        // `struct_name` is `get_struct_name_from_type`'s rendered spelling —
+        // the declaration's own name, with no module. Asking the mangled map
+        // for it reaches nothing, because every key there is module-qualified.
+        c.push(ReceiverCandidate::Declared(crate::name::DeclName::new(
+            struct_name,
+        )));
         c
     }
 

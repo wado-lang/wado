@@ -1,0 +1,30 @@
+// The test-world twin of `error_infer_hole_violates_bound.wado`. The CLI world
+// also reports the violation from inside `get`'s body, which masked the loss of
+// the deferred-slot bound check; only the call-site diagnostic reaches here.
+
+trait Producer {
+    fn make() -> Self;
+}
+
+impl Producer for i32 {
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+struct Source {}
+
+impl Source {
+    fn get<T: Producer>(&self) -> Option<T> {
+        return Option::Some(T::make());
+    }
+}
+
+test "deferred type argument is checked against its bound" {
+    let s = Source {};
+    let x: String = s.get().unwrap();
+    assert x == "";
+}
+
+__DATA__
+{"test": {}, "compile_error": "does not implement trait 'Producer'"}

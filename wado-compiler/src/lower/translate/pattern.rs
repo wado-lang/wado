@@ -146,7 +146,7 @@ pub struct Lowering {
     /// Map from (`struct_name`, `module_source`) to field definitions.
     struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
     /// Canonical stdlib name of the `Eq` trait.
-    eq_trait_name: String,
+    eq_trait_name: crate::name::FqTraitName,
     /// Canonical stdlib name of the `String` struct.
     string_struct_name: FqTypeName,
     /// Immutable globals with a bare integer-literal initializer, keyed by `(module, name)`.
@@ -190,9 +190,7 @@ impl Lowering {
         }
 
         let type_table = flat.type_table.borrow();
-        let eq_trait_name = type_table
-            .compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
-            .to_string();
+        let eq_trait_name = type_table.compiler_trait_fq(crate::compiler_item::CompilerItem::Eq);
         let string_struct_name =
             type_table.compiler_struct_fq_name(crate::compiler_item::CompilerItem::String);
         Self {
@@ -240,7 +238,7 @@ struct PatternLowerer<'a> {
     /// compiler-item registry so synthesised `String^Eq::eq` calls
     /// follow stdlib renames without falling back to a hard-coded
     /// `"Eq"` literal.
-    eq_trait_name: String,
+    eq_trait_name: crate::name::FqTraitName,
     /// Canonical stdlib name of the `String` struct, resolved through
     /// the same registry so the receiver-type slot of the synthesised
     /// `String^Eq::eq` `LocalMethodName` tracks renames too.
@@ -262,7 +260,7 @@ impl<'a> PatternLowerer<'a> {
     fn new(
         local_count: u32,
         locals: Vec<TirLocal>,
-        eq_trait_name: String,
+        eq_trait_name: crate::name::FqTraitName,
         string_struct_name: FqTypeName,
         variant_case_map: &'a IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
         struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,

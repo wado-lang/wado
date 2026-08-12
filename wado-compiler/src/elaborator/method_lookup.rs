@@ -17,6 +17,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::infer::InferCtx;
+use super::instantiate::Instantiation;
 use super::sig::InstantiatedImplSig;
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{DeclKey, ImplHeader, TraitEnv};
@@ -66,21 +67,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
 /// Inputs for [`Elaborator::infer_method_type_args`].
 ///
-/// Groups everything the caller has already resolved about the method
-/// (signature fields in `TypeParam`-based form, impl-level offset) with the
-/// call-site context (argument list in both typed and raw forms, expected
-/// return type) that the inference solver needs.
+/// Groups what the lookup already resolved about the method — its slots, in
+/// both their signature and declaration forms, and its parameter and return
+/// types — with the call-site context the solver needs.
 pub(super) struct MethodInferenceInput<'a> {
     /// Receiver's `TypeId` at the call site (any reference level; the
     /// helper strips references internally).
     pub receiver_type: TypeId,
-    /// Method name — used to look up the method's AST for the list of
-    /// method-level type parameter names.
+    /// Method name, for the "cannot infer" diagnostic.
     pub method_name: &'a str,
-    /// Number of impl-level type parameters already in scope (e.g. 2 for
-    /// `impl<A, B> Container<A, B>`). Method-level type parameters are
-    /// numbered starting from this offset.
-    pub impl_offset: u32,
+    /// The method's own slots, as the lookup that produced `param_types`
+    /// reported them ([`MethodInfo::method_type_param_ids`]). The answers
+    /// come back in this order, which is the order the caller binds them in.
+    pub slots: &'a [TypeId],
+    /// The same slots as the declaration wrote them
+    /// ([`MethodInfo::method_own_params`]), parallel to `slots`.
+    pub own_params: &'a [ast::GenericParam],
     /// Method parameter types in their `TypeParam`-based (uninstantiated)
     /// form; parallel to `args` / `raw_args`.
     pub param_types: &'a [TypeId],
@@ -105,15 +107,6 @@ pub(super) struct MethodInferenceInput<'a> {
     /// Call-site span, used to anchor a "cannot infer type parameter"
     /// diagnostic when inference leaves a method type parameter dangling.
     pub span: Span,
-}
-
-/// Result of [`Elaborator::infer_method_type_args`]: the inferred method
-/// type-argument `TypeId`s, plus the method's generic params when they were
-/// looked up via the struct/generic-instance path — so the caller's bound
-/// check can reuse them instead of repeating the lookup.
-pub(super) struct InferredMethodTypeArgs {
-    pub type_args: Vec<TypeId>,
-    pub bound_check_params: Option<Vec<ast::GenericParam>>,
 }
 
 impl TypeSystem {
@@ -399,10 +392,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|info| match info.rhs_type {
                 Some(t) => format!(
                     "{}<{}>",
-                    trait_head(&info.trait_name),
+                    info.trait_name.base_name(),
                     tt.type_name(tt.peel_refs(t))
                 ),
-                None => trait_head(&info.trait_name).to_string(),
+                None => info.trait_name.base_name().to_string(),
             })
             .collect();
         let type_name = tt.type_name(base_type_id);
@@ -498,7 +491,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // itself. Ask which declaration the name resolves to first, so an
         // alias answers with its target rather than with another module's
         // type that happens to be spelled the same.
-        let (canonical_module, canonical_name) = self.canonical_decl_key(struct_name);
+        let (canonical_module, canonical_name) = self.decl_key_or_local(struct_name);
         if canonical_name != struct_name
             && self
                 .tysys
@@ -603,7 +596,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let elems = type_args;
                     if method_name == "len" {
                         return Some(MethodInfo {
-                            impl_offset: None,
                             method_ast_id: None,
                             return_type: TypeTable::I32,
                             self_kind: ast::SelfKind::Ref,
@@ -613,6 +605,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             cm_name: None,
                             is_ref_impl: false,
                             method_type_param_ids: vec![],
+                            method_own_params: vec![],
                             impl_module: None,
                             from_concrete_impl: false,
                             param_defaults: vec![],
@@ -645,7 +638,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         let return_type = self.tysys.type_table.borrow_mut().make_tuple(transposed);
                         return Some(MethodInfo {
-                            impl_offset: None,
                             method_ast_id: None,
                             return_type,
                             self_kind: ast::SelfKind::Ref,
@@ -655,6 +647,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             cm_name: None,
                             is_ref_impl: false,
                             method_type_param_ids: vec![],
+                            method_own_params: vec![],
                             impl_module: None,
                             from_concrete_impl: false,
                             param_defaults: vec![],
@@ -898,7 +891,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
 
         Some(MethodInfo {
-            impl_offset: None,
             method_ast_id: Some(sig.ast_id),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
@@ -907,7 +899,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             owner: MethodOwner::Receiver,
             cm_name: None,
             is_ref_impl: false,
-            method_type_param_ids: vec![],
+            method_type_param_ids: sig.own_type_param_ids(),
+            method_own_params: sig.own_params.clone(),
             impl_module: Some(impl_ref.0.clone()),
             from_concrete_impl: self.impl_is_concrete_instantiation(
                 &header.ty,
@@ -948,9 +941,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decl
             .instantiate(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
+        let method_type_param_ids = sig.own_type_param_ids();
 
         Some(MethodInfo {
-            impl_offset: None,
             method_ast_id: Some(sig.ast_id),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
@@ -959,13 +952,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             owner: MethodOwner::Receiver,
             cm_name: sig.cm_name,
             is_ref_impl: false,
-            method_type_param_ids: vec![],
+            method_type_param_ids,
+            method_own_params: sig.own_params.clone(),
             impl_module: None,
             from_concrete_impl: false,
             param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
             param_names: super::sig::Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
         })
+    }
+
+    /// The index the declaration gave the first of `slots`, or 0 when there
+    /// are none. A slot carries its own index; nothing else knows it.
+    fn slot_base(&self, slots: &[TypeId]) -> u32 {
+        let table = self.tysys.type_table.borrow();
+        slots
+            .first()
+            .and_then(|&slot| match table.get(slot) {
+                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                    Some(*index)
+                }
+                _ => None,
+            })
+            .unwrap_or(0)
     }
 
     /// Bind a still-unbound method type param to its declared default,
@@ -979,13 +988,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_type_params: &[ast::GenericParam],
         receiver_type: TypeId,
         trait_name: Option<&str>,
+        slots: &[TypeId],
         declaring_module: Option<ModuleSource>,
-        impl_offset: u32,
         inferred: &mut [TypeId],
     ) {
-        if method_type_params.len() != inferred.len() {
-            return;
-        }
         let receiver_type = self.tysys.get_base_type(receiver_type);
         if self.is_unbound_type_param(receiver_type) {
             return;
@@ -1000,11 +1006,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(trait_name) = trait_name {
             self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_name);
         }
+        // Re-registering the parameters gives a default like `= T` a scope to
+        // resolve against. Number them from the index the declaration gave the
+        // first slot — read off the slot, not counted from the receiver's type
+        // arguments, which overshoots on a concrete or pack-bearing impl.
+        let base = self.slot_base(slots);
         let defaults: Vec<Option<TypeId>> = self.with_self_type(receiver_type, |s| {
             s.with_default_scope_module(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.type_params.clear();
-                scope.register_generic_params(method_type_params, impl_offset);
+                scope.register_generic_params(method_type_params, base);
                 method_type_params
                     .iter()
                     .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
@@ -1029,11 +1040,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Infer method-level type arguments for an instance method call using
     /// the method's already-resolved parameter and return types.
     ///
-    /// `expected_param_types` and `decl_return_type` must come from a method
-    /// lookup (`lookup_method_info` / `find_trait_method_for_type`) so that
-    /// any `TypeParam` ids they contain already use the same indexing
-    /// convention as downstream substitution via
-    /// `SubstitutionContext::with_method_args(args, impl_offset)`.
+    /// `param_types` and `decl_return_type` must come from a method lookup
+    /// (`lookup_method_info` / `find_trait_method_for_type`), so the slots
+    /// they mention are the ones that lookup reported and the caller binds.
     ///
     /// This intentionally does **not** re-resolve the method's AST: doing so
     /// in a fresh scope would emit spurious errors for references like
@@ -1049,11 +1058,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn infer_method_type_args(
         &mut self,
         input: MethodInferenceInput<'_>,
-    ) -> InferredMethodTypeArgs {
+    ) -> Vec<TypeId> {
         let MethodInferenceInput {
             receiver_type,
             method_name,
-            impl_offset,
+            slots,
+            own_params,
             param_types,
             args,
             raw_args,
@@ -1064,76 +1074,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
         } = input;
 
-        let base_type_id = self.tysys.get_base_type(receiver_type);
-        let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
+        // The declaration dispatch selected, in both its forms: the slots to
+        // solve, and the parameters that wrote them. They are parallel by
+        // construction, so nothing here looks the method up again — a name
+        // scan cannot tell which declaration was chosen, and answered with an
+        // unrelated trait's same-named method.
+        let method_type_params = own_params.to_vec();
+        if method_type_params.is_empty() {
+            return vec![];
+        }
 
-        // Params from the struct/generic-instance lookup, returned so the bound
-        // check reuses them instead of repeating it. `None` for other receiver
-        // kinds, where the bound check's struct lookup finds nothing anyway.
-        let mut bound_check_params: Option<Vec<ast::GenericParam>> = None;
+        let inst = self.instantiate(
+            slots,
+            &Instantiation {
+                kind: "method",
+                name: method_name,
+                span,
+            },
+        );
+        self.record_slot_bounds(&inst, &method_type_params, span);
+        let param_types = self.instantiate_types(param_types, &inst);
+        let decl_return_type = self.instantiate_type(decl_return_type, &inst);
 
-        // Locate the method's AST just to recover the list of type parameter
-        // names (excluding effect params). We use these names together with
-        // `impl_offset` to materialise the `TypeParam` ids the solver needs
-        // to track, without re-resolving the method signature.
-        let method_type_params = match &base_type {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            }
-            | ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => {
-                let params = self.find_method_type_param_names(
-                    name,
-                    Some(module_source),
-                    method_name,
-                    trait_name,
-                );
-                bound_check_params.clone_from(&params);
-                params
-            }
-            ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => self
-                .annotate_ctx
-                .trait_ctx
-                .type_param_bounds
-                .get(name)
-                .cloned()
-                .and_then(|bounds| {
-                    self.find_method_type_params_in_trait_bounds(
-                        &bounds.iter().map(|b| b.name.clone()).collect::<Vec<_>>(),
-                        method_name,
-                    )
-                }),
-            ResolvedType::AssocTypeProjection { bounds, .. } => {
-                self.find_method_type_params_in_trait_bounds(bounds, method_name)
-            }
-            _ => None,
-        };
-        let Some(method_type_params) = method_type_params else {
-            return InferredMethodTypeArgs {
-                type_args: vec![],
-                bound_check_params,
-            };
-        };
-
-        let method_type_param_ids: Vec<TypeId> = {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            method_type_params
-                .iter()
-                .enumerate()
-                .map(|(i, p)| tt.make_type_param(p.name.clone(), impl_offset + i as u32))
-                .collect()
-        };
-
-        // Kept for the collision check below: an unconstrained method param
-        // solves to its own id, which can share `(name, index)` — hence the
-        // same `TypeId` — with an enclosing scope param.
-        let method_param_ids = method_type_param_ids.clone();
-        let mut infer = InferCtx::new(&self.tysys.type_table, method_type_param_ids);
+        let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
         for (i, (&param_type, arg)) in param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
                 infer.add_deferred(param_type, arg.type_id);
@@ -1145,18 +1108,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             infer.add_expected_return(decl_return_type, expected);
         }
 
-        // Outer-scope type params (the surrounding impl / fn generics). A method
-        // param the solver forwards to one of these is fine: monomorphization's
-        // index-based substitution rewrites it alongside the surrounding
-        // generics. See the classification below.
-        let scope_params: Vec<TypeId> = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .values()
-            .map(|&(_, tid)| tid)
-            .collect();
-        let (mut inferred, _) = infer.solve_with_phantoms();
+        let mut inferred = infer.solve();
         // Resolve method type params that appear only inside another method
         // param's associated-type-equality bound (e.g.
         // `fn m<T, I: Iterator<Item = T>>`), mirroring the free-function path.
@@ -1165,399 +1117,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method_type_params,
             receiver_type,
             trait_name,
+            slots,
             declaring_module,
-            impl_offset,
             &mut inferred,
         );
-        let all_concrete = inferred.iter().all(|&tid| !self.is_unbound_type_param(tid));
-        if !all_concrete {
-            // Classify each method type parameter that did not resolve to a
-            // concrete type. A parameter is genuinely resolved when it is
-            // pinned by an *argument* — it occurs in a value parameter's type,
-            // so unification fixes it regardless of id collisions — or bound by
-            // the expected return to a *different* outer scope parameter. A
-            // parameter that occurs only in the return type and stayed its own
-            // id is unconstrained: its id can collide *by index* with an
-            // enclosing generic (both `T` at index 0), so it must not be
-            // silently fused to that outer parameter. Defer it to a hole that
-            // the call's sink / expected-type context resolves. (Without this,
-            // serde `Result` deserialize fused `payload<T>` and `payload<E>`
-            // into a single `payload<T>`.)
-            let arg_count = args.len();
-            let arg_inferable: Vec<bool> = (0..method_type_params.len())
-                .map(|i| {
-                    let idx = impl_offset + i as u32;
-                    let tt = self.tysys.type_table.borrow();
-                    param_types
-                        .iter()
-                        .take(arg_count)
-                        .any(|&pt| tt.contains_type_param_index(pt, idx))
-                })
-                .collect();
-            let param_like: Vec<bool> = inferred
-                .iter()
-                .map(|&tid| {
-                    matches!(
-                        self.tysys.type_table.borrow().get(tid),
-                        ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                    )
-                })
-                .collect();
-            // Slots needing attention: still parametric and neither
-            // argument-pinned nor forwarded to a *different* outer scope param.
-            let attention: Vec<usize> = (0..inferred.len())
-                .filter(|&i| {
-                    param_like[i]
-                        && !arg_inferable[i]
-                        && !(scope_params.contains(&inferred[i])
-                            && inferred[i] != method_param_ids[i])
-                })
-                .collect();
-            if !attention.is_empty() {
-                // `fn`-bound parameters (`<F: fn(...) -> ...>`) are constrained
-                // structurally from the bound, not by call-site inference, so an
-                // empty result for them is expected and handled downstream.
-                let deferrable: Vec<usize> = attention
-                    .iter()
-                    .copied()
-                    .filter(|&i| !method_type_params[i].has_fn_bound())
-                    .collect();
-                if !deferrable.is_empty() {
-                    let params = deferrable
-                        .iter()
-                        .map(|&i| format!("`{}`", method_type_params[i].name))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let message = format!(
-                        "cannot infer type parameter {params} of method `{method_name}`; \
-                         add a turbofish (`{method_name}::<...>()`) or a type annotation"
-                    );
-                    // Defer (mint a hole per unresolved param) when no expected
-                    // type pins it yet and the receiver/args are hole-free, so
-                    // the holey result can be solved at an enclosing boundary
-                    // (`p.get().unwrap()`, an `if let` sink, a `return`). An
-                    // unsolved hole still raises `message` in
-                    // `finalize_infer_holes`.
-                    let can_defer = expected_return_type.is_none()
-                        && !self.type_has_infer_hole(receiver_type)
-                        && args.iter().all(|a| !self.type_has_infer_hole(a.type_id));
-                    if can_defer {
-                        for i in deferrable {
-                            let bound_names: Vec<String> = method_type_params[i]
-                                .bounds
-                                .iter()
-                                .filter(|b| b.fn_signature.is_none())
-                                .map(|b| b.name.clone())
-                                .collect();
-                            let name = method_type_params[i].name.clone();
-                            inferred[i] =
-                                self.mint_infer_hole(span, message.clone(), name, bound_names);
-                        }
-                        return InferredMethodTypeArgs {
-                            type_args: inferred,
-                            bound_check_params,
-                        };
-                    }
-                    let _ = self
-                        .logger
-                        .error(TypeError::CannotInferType { message, span });
-                }
-                return InferredMethodTypeArgs {
-                    type_args: vec![],
-                    bound_check_params,
-                };
-            }
-        }
-        InferredMethodTypeArgs {
-            type_args: inferred,
-            bound_check_params,
-        }
-    }
-
-    /// Find the non-effect method type parameter names by searching the
-    /// declarations of the given trait bounds. Used when the receiver is a
-    /// type parameter or an associated-type projection whose concrete type is
-    /// unknown at inference time.
-    fn find_method_type_params_in_trait_bounds(
-        &self,
-        trait_names: &[String],
-        method_name: &str,
-    ) -> Option<Vec<ast::GenericParam>> {
-        // `trait_decl_headers` covers every loaded module (incl. the current
-        // one), so one pass suffices.
-        for header in self.tysys.trait_env.trait_decl_headers.values() {
-            if trait_names.iter().any(|n| n == &header.name) {
-                for trait_method in &header.methods {
-                    if trait_method.name == method_name
-                        && let Some(params) =
-                            Self::non_effect_generic_params(&trait_method.type_params)
-                    {
-                        return Some(params);
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    /// The non-effect subset of a type-parameter list (cloned, in declaration
-    /// order), or `None` when empty. Operates on the bare parameter slice so
-    /// digested headers ([`super::trait_env::ImplMethodHeader`]) can reuse it
-    /// without the method AST.
-    fn non_effect_generic_params(
-        type_params: &[ast::GenericParam],
-    ) -> Option<Vec<ast::GenericParam>> {
-        let params: Vec<ast::GenericParam> = type_params
-            .iter()
-            .filter(|p| !p.is_effect)
-            .cloned()
-            .collect();
-        if params.is_empty() {
-            None
-        } else {
-            Some(params)
-        }
-    }
-
-    /// Enforce an instance method's type-parameter trait bounds, looking up
-    /// the method's generic params and delegating to the shared
-    /// [`Self::enforce_type_arg_bounds`] (the same rule the free-function and
-    /// static-method paths use, so the three cannot drift).
-    pub(super) fn check_method_type_arg_bounds(
-        &mut self,
-        struct_name: &str,
-        struct_module: &ModuleSource,
-        method_name: &str,
-        trait_name: Option<&str>,
-        method_type_args: &[TypeId],
-        span: Span,
-    ) {
-        let Some(params) = self.find_method_type_param_names(
-            struct_name,
-            Some(struct_module),
-            method_name,
-            trait_name,
-        ) else {
-            return;
-        };
-        self.enforce_type_arg_bounds(&params, method_type_args, span);
-    }
-
-    /// Resolve a trait declaration header by name through the module-
-    /// disambiguated canonical key (issue #1298), mirroring
-    /// [`Self::find_trait_decl_type_params`].
-    fn resolve_trait_decl_header(
-        &self,
-        trait_name: &str,
-    ) -> Option<&super::trait_env::TraitDeclHeader> {
-        let canonical_key = self.canonical_decl_key(trait_name);
-        if let Some(loc) = self.tysys.trait_env.decl_index.get(&canonical_key)
-            && let Some(header) = self.tysys.trait_env.trait_decl_headers.get(loc)
-        {
-            return Some(header);
-        }
-        self.tysys
-            .trait_env
-            .trait_decl_headers
-            .iter()
-            .find(|(key, h)| key.0 == self.current_module_source && h.name == trait_name)
-            .map(|(_, h)| h)
-    }
-
-    /// Find the non-effect type parameter names of an instance method, in
-    /// declaration order, for use by `infer_method_type_args` and the bound
-    /// check.
-    ///
-    /// Searches in priority order:
-    /// 0. When the dispatch resolved a specific trait, that trait's
-    ///    declaration of the method (disambiguates same-named methods on
-    ///    different traits, e.g. `payload` on Serialize vs Deserialize).
-    /// 1. Inherent impls on `struct_name` in the struct's own module.
-    /// 2. Inherent impls on `struct_name` in any other loaded module.
-    /// 3. Inherent impls on `struct_name` in the current module.
-    /// 4. Trait default methods (in any loaded module) — these have no
-    ///    enclosing impl block, so "impl type params" are empty and
-    ///    `impl_offset` is already correct.
-    ///
-    /// Returns `None` when no matching method exists or when the matched
-    /// method has no non-effect type parameters (nothing to infer).
-    fn find_method_type_param_names(
-        &self,
-        struct_name: &str,
-        struct_module_source: Option<&ModuleSource>,
-        method_name: &str,
-        trait_name: Option<&str>,
-    ) -> Option<Vec<ast::GenericParam>> {
-        // Prefer the resolved trait's declaration, via the module-disambiguated
-        // canonical key — a bare-name scan would read whichever same-named trait
-        // the map iterates first, defeating the disambiguation.
-        if let Some(tn) = trait_name
-            && let Some(header) = self.resolve_trait_decl_header(tn)
-        {
-            for m in &header.methods {
-                if m.name == method_name
-                    && let Some(names) = Self::non_effect_generic_params(&m.type_params)
-                {
-                    return Some(names);
-                }
-            }
-        }
-
-        // Impl-method passes read the digested headers (which cover every loaded
-        // module, incl. the current one). Inherent impls first
-        // (include_trait = false), preferring the receiver's home module.
-        if let Some(module_source) = struct_module_source
-            && let Some(names) = self.search_impl_headers_method_tps(
-                struct_name,
-                method_name,
-                false,
-                Some(module_source),
-            )
-        {
-            return Some(names);
-        }
-        if let Some(names) =
-            self.search_impl_headers_method_tps(struct_name, method_name, false, None)
-        {
-            return Some(names);
-        }
-
-        // An inherent method is authoritative: if the receiver's type declares
-        // one by this name, its type parameters (empty when the search above
-        // returned `None`) are the answer. Stop before the by-name trait scans,
-        // which would otherwise adopt an unrelated trait method's type
-        // parameters (e.g. `List::get` wrongly taking `Producer::get<T>`'s `T`).
-        if self.has_inherent_method(struct_name, method_name, struct_module_source) {
-            return Some(vec![]);
-        }
-
-        // Fallback: trait default methods (those with a body).
-        for header in self.tysys.trait_env.trait_decl_headers.values() {
-            for m in &header.methods {
-                if m.name == method_name
-                    && m.has_body
-                    && let Some(names) = Self::non_effect_generic_params(&m.type_params)
-                {
-                    return Some(names);
-                }
-            }
-        }
-
-        // Fallback: trait impls on the struct. When the method is defined in
-        // `impl Trait for Struct`, it still has its own type parameters
-        // (e.g. `fn put<T: Display>(&mut self, v: &T)`), which the inference
-        // solver needs to materialise.
-        if let Some(module_source) = struct_module_source
-            && let Some(names) = self.search_impl_headers_method_tps(
-                struct_name,
-                method_name,
-                true,
-                Some(module_source),
-            )
-        {
-            return Some(names);
-        }
-        if let Some(names) =
-            self.search_impl_headers_method_tps(struct_name, method_name, true, None)
-        {
-            return Some(names);
-        }
-
-        // Fallback: trait method declarations (any body). These can be called
-        // through a trait impl that reuses the declared type params.
-        for header in self.tysys.trait_env.trait_decl_headers.values() {
-            for m in &header.methods {
-                if m.name == method_name
-                    && let Some(names) = Self::non_effect_generic_params(&m.type_params)
-                {
-                    return Some(names);
-                }
-            }
-        }
-
-        None
-    }
-
-    /// Scan the digested impl headers for a method named `method_name` on
-    /// `struct_name` (by exact name or generic base name) and return its
-    /// non-effect type parameters. `include_trait` controls whether trait
-    /// impls participate (inherent-only when false); `only_module` restricts
-    /// the scan to a single module's impls when set.
-    fn search_impl_headers_method_tps(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-        include_trait: bool,
-        only_module: Option<&ModuleSource>,
-    ) -> Option<Vec<ast::GenericParam>> {
-        // `all_impl_index` is already in global build order, so iterating it
-        // directly preserves the original order with no merge or per-call sort.
-        let candidates = self
-            .tysys
-            .trait_env
-            .all_impl_index
-            .get(&self.impl_target(struct_name))?;
-        for key in candidates {
-            if let Some(m) = only_module
-                && &key.0 != m
-            {
-                continue;
-            }
-            let Some(header) = self.tysys.trait_env.impl_headers.get(key) else {
-                continue;
-            };
-            if !include_trait && header.trait_name.is_some() {
-                continue;
-            }
-            for method in &header.methods {
-                if method.name == method_name
-                    && let Some(names) = Self::non_effect_generic_params(&method.type_params)
-                {
-                    return Some(names);
-                }
-            }
-        }
-        None
-    }
-
-    /// Whether the receiver's own inherent impls declare a method named
-    /// `method_name`, regardless of its type parameters. Distinguishes "the
-    /// inherent method exists but has no method-level type parameters" from
-    /// "no such inherent method" — a distinction
-    /// [`Self::search_impl_headers_method_tps`] erases by returning `None` in
-    /// both cases.
-    fn has_inherent_method(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-        only_module: Option<&ModuleSource>,
-    ) -> bool {
-        let Some(candidates) = self
-            .tysys
-            .trait_env
-            .all_impl_index
-            .get(&self.impl_target(struct_name))
-        else {
-            return false;
-        };
-        candidates.iter().any(|key| {
-            if let Some(m) = only_module
-                && &key.0 != m
-            {
-                return false;
-            }
-            self.tysys
-                .trait_env
-                .impl_headers
-                .get(key)
-                .is_some_and(|header| {
-                    header.trait_name.is_none()
-                        && header
-                            .methods
-                            .iter()
-                            .any(|method| method.name == method_name)
-                })
-        })
+        // A slot the solver left as its own variable is unconstrained. The
+        // variable already carries the "cannot infer" diagnostic and the
+        // module-end sweep, so nothing needs classifying here: what an
+        // enclosing generic happens to be named cannot be confused with it.
+        self.record_instantiation(&inst, &inferred);
+        self.blame_unsolved(&inst, &inferred);
+        inferred
     }
 
     /// Reject a `&mut self` method call whose receiver place is rooted at an
@@ -1885,7 +1455,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // any concrete type that implements Iterator. Snapshot the value blankets
         // (module, ast id, bound names) so the per-bound checks below borrow `self`
         // without holding a `trait_env` borrow.
-        let value_blankets: Vec<(ModuleSource, AstId, Vec<String>)> = self
+        let value_blankets: Vec<(ModuleSource, AstId, Vec<super::trait_env::BlanketBound>)> = self
             .tysys
             .trait_env
             .blanket_impls
@@ -1900,13 +1470,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // it recognises synthesized bounds (`ReflectStruct`, `Default`) with no
             // explicit `impl`, which the name-based lookup misses. A viable
             // blanket must survive to the authoritative `candidate_matches_receiver`.
-            let bounds_satisfied = bounds.iter().all(|bound_trait_name| {
+            let bounds_satisfied = bounds.iter().all(|bound| {
                 if let Some(rt) = receiver_type_id
                     && self.tysys.type_implements_trait(
                         &self.annotate_ctx,
                         &type_lookup,
                         rt,
-                        bound_trait_name,
+                        &bound.name,
+                        bound.decl_ref,
                     )
                 {
                     return true;
@@ -1916,7 +1487,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.annotate_ctx,
                         &type_lookup,
                         &target.receiver(),
-                        bound_trait_name,
+                        &bound.name,
+                        bound.decl_ref,
                     )
                 })
             });
@@ -2037,7 +1609,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_type_params: &[ast::GenericParam],
         receiver_type_id: Option<TypeId>,
     ) -> bool {
-        let impl_ty_name = Self::get_type_name_static(impl_ty);
+        let impl_ty_name = super::trait_env::get_type_name_static(impl_ty);
         let Some(param) = impl_type_params
             .iter()
             .find(|tp| tp.name == impl_ty_name && !tp.bounds.is_empty())
@@ -2051,6 +1623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &self.type_lookup(),
                     rt,
                     &bound.name,
+                    self.tysys.resolutions.get(bound.id),
                 )
             })
         })
@@ -2200,8 +1773,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && required_trait.is_none_or(|wanted| {
                 self.tysys
                     .auto_derive_by_method(method_name)
-                    .is_some_and(|(derived, _)| {
-                        self.trait_decl_key_in_frame(&derived) == wanted.decl
+                    .is_some_and(|(item, _, _)| {
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .compiler_trait_fq(item)
+                            .canonical()
+                            .is_some_and(|decl| decl == wanted.decl)
                     })
             })
         {
@@ -2354,11 +1932,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !scope.tysys.is_known_type_name(name)
         {
             if let Some(recv_id) = receiver_type_id {
+                // At the slot the impl gave it, which is 0 only when the
+                // receiver is the first parameter written. `impl<A, T:
+                // Holder<Item = A>> Trait for T` puts it at 1, and binding it
+                // at 0 leaves the target itself unsubstituted.
+                let slot = header
+                    .type_params
+                    .iter()
+                    .filter(|p| p.is_real_type_param())
+                    .position(|p| &p.name == name)
+                    .unwrap_or(0) as u32;
                 scope
                     .annotate_ctx
                     .trait_ctx
                     .type_params
-                    .insert(name.clone(), (0, recv_id));
+                    .insert(name.clone(), (slot, recv_id));
             } else {
                 let type_id = scope
                     .tysys
@@ -2454,18 +2042,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let self_kind = method_sig.self_kind;
             let trait_name = scope.get_type_name_full(&trait_type_for_name);
 
-            let impl_offset = crate::tir::method_param_offset_of(impl_slots.keys().copied());
-            for (i, type_param) in method_type_params.iter().enumerate() {
-                let index = impl_offset + i as u32;
-                let type_param_id =
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::TypeParam {
-                            name: type_param.name.clone(),
-                            index,
-                        });
+            // Bring the reported slots into scope, so the body resolves `T`
+            // to the slot the call site binds. Effect and `fn`-bound params
+            // occupy none, so they are not registered.
+            let method_slot_params: Vec<&ast::GenericParam> = method_type_params
+                .iter()
+                .filter(|p| p.is_real_type_param())
+                .collect();
+            let method_type_param_ids: Vec<TypeId> = method_sig.own_type_param_ids();
+            assert_eq!(
+                method_slot_params.len(),
+                method_type_param_ids.len(),
+                "`{method_name}` declares {} slots, its signature reports {}",
+                method_slot_params.len(),
+                method_type_param_ids.len()
+            );
+            for (type_param, &type_param_id) in
+                method_slot_params.iter().zip(method_type_param_ids.iter())
+            {
+                let index = match scope.tysys.type_table.borrow().get(type_param_id) {
+                    ResolvedType::TypeParam { index, .. }
+                    | ResolvedType::TypePack { index, .. } => *index,
+                    other => panic!("method slot is not a type parameter: {other:?}"),
+                };
                 scope
                     .annotate_ctx
                     .trait_ctx
@@ -2530,11 +2129,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             };
             found_traits.push(TraitMethodMatch {
-                trait_name,
+                trait_name: crate::name::FqTraitName::declared_as_written(
+                    &trait_decl.0,
+                    &trait_decl.1,
+                    &trait_name,
+                ),
                 trait_decl: trait_decl.clone(),
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
-                    impl_offset: Some(impl_offset),
                     method_ast_id: Some(method_sig.ast_id),
                     return_type,
                     self_kind,
@@ -2543,7 +2145,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     owner: MethodOwner::Receiver,
                     cm_name: None,
                     is_ref_impl: false,
-                    method_type_param_ids: vec![],
+                    method_type_param_ids,
+                    method_own_params: method_sig.own_params,
                     impl_module: Some(impl_module_source.clone()),
                     from_concrete_impl: impl_is_concrete,
                     param_defaults,
@@ -2582,11 +2185,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = default_method.sig.self_kind;
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
-                    trait_name: trait_name_str,
+                    trait_name: crate::name::FqTraitName::declared_as_written(
+                        &trait_decl.0,
+                        &trait_decl.1,
+                        &trait_name_str,
+                    ),
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
-                        impl_offset: Some(default_method.sig.declaring_slot_count),
                         method_ast_id: Some(default_method.sig.ast_id),
                         return_type: instantiated.return_type,
                         self_kind,
@@ -2597,12 +2203,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         owner: MethodOwner::Receiver,
                         cm_name: None,
                         is_ref_impl: false,
-                        method_type_param_ids: default_method.sig.decl.type_params
-                            [(default_method.sig.declaring_slot_count as usize)
-                                .min(default_method.sig.decl.type_params.len())..]
-                            .iter()
-                            .map(|(_, id)| *id)
-                            .collect(),
+                        method_type_param_ids: default_method.sig.own_type_param_ids(),
+                        method_own_params: default_method.sig.own_params.clone(),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
                         param_defaults: default_method
@@ -2828,7 +2430,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let mut traits: Vec<String> = std::iter::once(first)
             .chain(rivals)
-            .map(|m| m.trait_name.clone())
+            .map(|m| m.trait_name.to_display())
             .collect();
         traits.dedup();
         Some(traits)
@@ -3335,7 +2937,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // base name: it is what the mangled method name
                     // discriminates instantiations on, exactly as the indexing
                     // path records `IndexValue<i32>`.
-                    trait_name: s.get_type_name_full(header.trait_type.as_ref().unwrap()),
+                    trait_name: header.fq_trait()?,
                     rhs_type,
                 })
             },
@@ -3351,7 +2953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> Vec<ast::GenericParam> {
         for header in self.tysys.trait_env.impl_headers.values() {
-            if Self::get_type_name_static(&header.ty) == struct_name {
+            if super::trait_env::get_type_name_static(&header.ty) == struct_name {
                 for method in &header.methods {
                     if method.name == method_name && !method.type_params.is_empty() {
                         return method.type_params.clone();
@@ -3392,7 +2994,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
-    ) -> Option<(TypeId, ast::SelfKind, String, ModuleSource, Option<TypeId>)> {
+    ) -> Option<(
+        TypeId,
+        ast::SelfKind,
+        crate::name::FqTraitName,
+        ModuleSource,
+        Option<TypeId>,
+    )> {
         // Get concrete type arguments from the base type (for generic instances like Triple<i32>).
         // The raw GC array `Array<T>` carries its element type as the single
         // type arg, mirroring a generic instance, so `impl IndexValue for Array<T>`
@@ -3444,7 +3052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
 
-                let trait_name = s.get_type_name_full(header.trait_type.as_ref().unwrap());
+                let trait_name = header.fq_trait()?;
                 // Find the method. Only its receiver shape is needed here —
                 // the indexing types come from the impl's associated-type
                 // bindings.
@@ -3550,7 +3158,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Look up method info to check if it needs &mut self
         let mut method_info = self.lookup_method_info(output_type, &method_call.method);
-        let mut method_trait_name: Option<String> = None;
+        let mut method_trait_name: Option<crate::name::FqTraitName> = None;
         let mut method_trait_impl_source: Option<ModuleSource> = None;
 
         // This lookup commits the call's resolution (the desugared call is
@@ -3574,7 +3182,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let MethodInfo {
-            impl_offset: _,
             method_ast_id: _,
             return_type,
             self_kind,
@@ -3582,6 +3189,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_is_mut: method_param_is_mut,
             owner: _,
             cm_name: _,
+            method_own_params: _,
             is_ref_impl: method_is_ref_impl,
             method_type_param_ids: _,
             impl_module: _,
@@ -3657,11 +3265,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         let output_fq = self.tysys.fq_receiver_head(output_base_type_id);
-        let mangled_method_name = MethodName::format_local(
-            &output_fq,
-            method_trait_name.as_deref(),
-            &method_call.method,
-        );
+        let mangled_method_name =
+            MethodName::format_local(&output_fq, method_trait_name.as_ref(), &method_call.method);
 
         // `module_source` is the body's home module: trait-impl block for
         // trait methods, otherwise the output type's defining module

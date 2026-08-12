@@ -304,7 +304,7 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(68)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(69)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(69)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(70)
 
@@ -516,7 +516,7 @@ fn "stream_await_blocked_roundtrip.wado/handle"(request) {
                 l3: loop {
                     let __match_192_mv_0: i32;
                     let __match_192_mv_1: u8;
-                    multivalue_bind [__match_192_mv_0, __match_192_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(__iter_8);
+                    multivalue_bind [__match_192_mv_0, __match_192_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next"(__iter_8);
                     if __match_192_mv_0 == 0 {
                         "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(body, __match_192_mv_1);
                     } else {
@@ -914,7 +914,7 @@ fn "stream_await_blocked_roundtrip.wado/handle"(request) {
         l97: loop {
             let __match_196_mv_0: i32;
             let __match_196_mv_1: u8;
-            multivalue_bind [__match_196_mv_0, __match_196_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(__iter_17);
+            multivalue_bind [__match_196_mv_0, __match_196_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next"(__iter_17);
             if __match_196_mv_0 == 0 {
                 one = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(__match_196_mv_1), used: 1 };
                 "core:rt/cm_stream_write_u8"(tx_213, one);
@@ -1388,7 +1388,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: u8;
     if self.index >= self.end {
         return 1, 0;

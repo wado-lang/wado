@@ -18,6 +18,7 @@ mod expr;
 mod handlers;
 mod infer;
 mod infer_hole;
+mod instantiate;
 mod item;
 pub(crate) mod liveness;
 mod matches;
@@ -41,6 +42,7 @@ mod typecheck;
 pub(crate) mod types;
 mod tysys;
 mod util;
+mod written;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -71,30 +73,6 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
     index
 }
 
-/// `true` if `name` denotes a built-in type resolved by name alone. Must
-/// list exactly what `resolve_named_type` answers before consulting any
-/// declaration: a name treated as builtin there but not here reaches
-/// [`Elaborator::canonical_decl_key`] and `TraitEnv::build` by different
-/// routes, and they key it to different modules.
-pub(crate) fn is_primitive_type_name(name: &str) -> bool {
-    matches!(
-        name,
-        "i8" | "i16"
-            | "i32"
-            | "i64"
-            | "u8"
-            | "u16"
-            | "u32"
-            | "u64"
-            | "f32"
-            | "f64"
-            | "v128"
-            | "bool"
-            | "char"
-            | "()"
-            | "!"
-    )
-}
 pub use types::TypeError;
 use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
@@ -525,12 +503,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         receiver_module: Option<&ModuleSource>,
         written_name: &str,
     ) -> Vec<trait_env::DeclKey> {
-        let mut keys = vec![self.canonical_decl_key(written_name)];
+        let mut keys = vec![self.decl_key_or_local(written_name)];
         if let Some(module) = receiver_module {
-            let by_receiver =
-                self.tysys
-                    .trait_env
-                    .declaring_side_key(self.symbols, module, written_name);
+            // From the receiver's own vantage, not the call site's.
+            let by_receiver = self
+                .tysys
+                .resolutions
+                .declaration_named(module, written_name, self.symbols)
+                .unwrap_or_else(|| (module.clone(), written_name.to_string()));
             if by_receiver != keys[0] {
                 keys.push(by_receiver);
             }
@@ -853,8 +833,139 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if crate::name::is_builtin_shape_name(written) {
             return crate::name::FqTypeName::builtin(written);
         }
-        let (module, name) = self.canonical_decl_key(written);
+        let (module, name) = self.decl_key_or_local(written);
         crate::name::FqTypeName::of_head(&module, &name)
+    }
+
+    /// The declared name of the trait `trait_name` refers to here — the same
+    /// name past a `use … as` alias.
+    pub(super) fn declared_trait_name(&self, trait_name: &str) -> String {
+        self.decl_key_or_local(trait_name).1
+    }
+
+    /// The declaration `name` means from this module's vantage, for the callers
+    /// that hold a name and no reference site to key on.
+    ///
+    /// Runs the resolution table's own scope lookup rather than a second chain
+    /// beside it, so a name-only caller and the site that wrote the same name
+    /// cannot disagree.
+    ///
+    /// `None` when the name reaches no declaration. Answering with the writing
+    /// module instead would hand back a key indistinguishable from a real
+    /// declaration's, which is the confusion this whole design exists to end —
+    /// so the caller decides what its own absence means.
+    pub(crate) fn canonical_decl_key(&self, name: &str) -> Option<trait_env::DeclKey> {
+        self.tysys
+            .resolutions
+            .declaration_named(&self.current_module_source, name, self.symbols)
+    }
+
+    /// [`Self::canonical_decl_key`], then the declaration indexes, then the
+    /// writing module — for the callers that must produce *some* bucket.
+    ///
+    /// A name the module never imported still has a declaration: a struct-like
+    /// type reached only through a return type, a stdlib trait a bodiless
+    /// derive names. The indexes answer for those, and decline when several
+    /// modules declare the name rather than picking one — guessing between
+    /// them is the mis-identification this design exists to prevent.
+    pub(crate) fn decl_key_or_local(&self, name: &str) -> trait_env::DeclKey {
+        // A type parameter in scope shadows every declaration of that name, so
+        // a frame writing `T` means its own binder even where a `struct T`
+        // exists. The indexes cannot see binders and would answer with the
+        // struct.
+        if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
+            return (self.current_module_source.clone(), name.to_string());
+        }
+        let env = &self.tysys.trait_env;
+        self.canonical_decl_key(name)
+            .or_else(|| env.find_struct_like_decl_key(name))
+            .or_else(|| env.unique_trait_decl_key(name))
+            .or_else(|| env.unique_effect_or_resource_decl_key(name))
+            .unwrap_or_else(|| (self.current_module_source.clone(), name.to_string()))
+    }
+
+    /// The trait a bound's reference site names. `written` supplies the type
+    /// arguments and the diagnostic spelling.
+    ///
+    /// A site that names no declaration falls back to the frame's derivation;
+    /// see [`Self::fq_trait_name_undeclared`].
+    pub(super) fn fq_trait_name_at(
+        &self,
+        site: crate::ast::AstId,
+        written: &str,
+    ) -> crate::name::FqTraitName {
+        let resolutions = &self.tysys.resolutions;
+        let answer = resolutions.get(site);
+        debug_assert!(
+            answer.is_some() || site.is_synthetic(),
+            "every reference site is resolved before elaboration, `{written}` was not"
+        );
+        if let Some(crate::resolve::DeclRef::Binder(_)) = answer {
+            return crate::name::FqTraitName::binder(written);
+        }
+        let (base, args) = crate::name::split_head_and_args(written);
+        resolutions
+            .declared(site)
+            .map_or_else(
+                || self.fq_trait_name_undeclared(base),
+                |(module, name)| crate::name::FqTraitName::declared(module, name),
+            )
+            .with_args(args)
+    }
+
+    /// The answer for a trait reference whose site names no declaration the
+    /// resolution walk can see: a name reaching no import, no declaration of
+    /// the writing module and no prelude entry.
+    ///
+    /// That is not always an error — a bodiless derive (`impl Deserialize for
+    /// Point;`) may name a stdlib trait the module never `use`d — and only the
+    /// declaration indexes can answer for it, which is what the frame
+    /// derivation consults past its import layers. A genuinely unknown trait
+    /// also lands here and is reported elsewhere.
+    fn fq_trait_name_undeclared(&self, base: &str) -> crate::name::FqTraitName {
+        let (module, name) = self
+            .canonical_decl_key(base)
+            .or_else(|| self.tysys.trait_env.unique_trait_decl_key(base))
+            .unwrap_or_else(|| (self.current_module_source.clone(), base.to_string()));
+        crate::name::FqTraitName::declared(&module, &name)
+    }
+
+    /// The trait a reference site names, in the form a mangled method name
+    /// embeds it: the declaration the site resolves to, plus the type
+    /// arguments the site wrote.
+    ///
+    /// The answer comes from [`crate::resolve::Resolutions`] — resolved once,
+    /// in the module that wrote the reference — so an alias and a second
+    /// module's same-named trait cannot reach the mangle. A site that names no
+    /// declaration falls back to [`Self::fq_trait_name_undeclared`].
+    pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> crate::name::FqTraitName {
+        let written = self.get_type_name(ty);
+        let args: Vec<String> = match ty {
+            ast::Type::Generic(generic) => generic
+                .args
+                .iter()
+                .map(|a| self.get_type_name_full(a))
+                .collect(),
+            _ => Vec::new(),
+        };
+        let head = crate::resolve::head_site(ty)
+            .and_then(|site| {
+                let resolutions = &self.tysys.resolutions;
+                debug_assert!(
+                    resolutions.get(site).is_some() || site.is_synthetic(),
+                    "every reference site is resolved before elaboration, `{written}` was not"
+                );
+                match resolutions.get(site) {
+                    Some(crate::resolve::DeclRef::Binder(_)) => {
+                        Some(crate::name::FqTraitName::binder(&written))
+                    }
+                    _ => resolutions
+                        .declared(site)
+                        .map(|(module, name)| crate::name::FqTraitName::declared(module, name)),
+                }
+            })
+            .unwrap_or_else(|| self.fq_trait_name_undeclared(&written));
+        head.with_args(args)
     }
 
     /// Record the impl-block resolution facts keyed by the
@@ -933,10 +1044,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     "explicit derive marker validated for non-nominal type `{other:?}`"
                 ),
             };
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(target_type_name, &module_source, trait_name);
+            // The marker's own site says which trait it names; the request is
+            // keyed by that declaration, not by the spelling.
+            if let Some(key) = self.fq_trait_name(trait_type).canonical() {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request(target_type_name, &module_source, &key);
+            }
             return;
         }
         let receiver = Receiver::Type(self.tysys.fq_receiver_head(target_type_id));
@@ -945,6 +1060,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &self.type_lookup(),
             &receiver,
             trait_name,
+            None,
         ) {
             return;
         }
@@ -1108,9 +1224,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let (type_module, canon_key) = trait_query::canonical_assoc_const_key(
             key,
             &self.current_module_source,
-            &self.sem.imports,
             self.symbols,
-            &self.tysys.trait_env,
+            &self.tysys.resolutions,
         )?;
         self.tysys
             .signatures
@@ -1217,41 +1332,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         sources
     }
 
-    /// Resolve a bare declaration name (effect / resource / trait / type)
-    /// referenced in the current module to its canonical
-    /// `(declaring module, name)` key. The decl indices on [`TraitEnv`] are
-    /// keyed by this canonical pair so two modules can host same-named
-    /// declarations without colliding; every lookup site must canonicalise
-    /// the name through this helper before consulting the index.
+    /// Canonical impl-target key for a type named at a use site, for the impl
+    /// indexes.
     ///
-    /// Resolution order, in priority:
-    /// 1. `imported_type_sources` — per-module `use { Foo as Bar } from "…"`
-    ///    declarations, with `import_original_names` so an aliased import
-    ///    canonicalises to the original declaration name rather than the
-    ///    local alias.
-    /// 2. `effect_sources` — local `interface` / `resource` definitions in
-    ///    the current module (and non-aliased imports). Consulted second so
-    ///    aliased effect/resource imports go through the alias-aware path
-    ///    above.
-    /// 3. The current module — a name *defined* here shadows the symbol-table
-    ///    and decl-index fallbacks below, so a local declaration always wins
-    ///    over an unrelated same-named item in another module (issue #1298).
-    /// 4. The symbol table, scoped to the current module's imports plus the
-    ///    implicit prelude — canonicalises explicitly imported names and
-    ///    prelude/stdlib names to their defining module.
-    /// 5. The global decl indices on [`TraitEnv`] — last-resort fallback
-    ///    for prelude traits referenced from stdlib code where neither
-    ///    the per-module import context nor the symbol table carries the
-    ///    binding (prelude is implicit, not threaded through `use`).
-    ///
-    /// When the canonicalised name had an alias (`use { Foo as Bar }`),
-    /// the returned key uses the *original* declaration name, so the index
-    /// (whose key is `(decl_module, decl_name)`) matches.
-    /// Canonical impl-target key for a type named at a use site, for the
-    /// impl indexes. Goes through [`Self::canonical_decl_key`], so an alias
-    /// and its original resolve to the same key.
+    /// Through [`Self::decl_key_or_local`], so an impl target and every other
+    /// name-only lookup answer from one chain. The table alone leaves out the
+    /// declaration indexes, and a receiver the module never imported — reached
+    /// only through a return type — would then key to the call site instead of
+    /// where it is declared.
     pub(crate) fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
-        trait_env::ImplTargetKey::Decl(self.canonical_decl_key(type_name))
+        let (module, name) = self.decl_key_or_local(type_name);
+        trait_env::ImplTargetKey::of_decl(&module, &name)
     }
 
     /// Impl-target key for a receiver whose `TypeId` is known. The type
@@ -1265,7 +1356,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         fallback_name: &crate::name::DeclName,
     ) -> trait_env::ImplTargetKey {
         match self.type_decl_key(type_id) {
-            Some(key) => trait_env::ImplTargetKey::Decl(key),
+            Some((module, name)) => trait_env::ImplTargetKey::of_decl(&module, &name),
             None => self.impl_target(fallback_name.as_decl_str()),
         }
     }
@@ -1284,16 +1375,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    pub(crate) fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
-        super::elaborator::trait_query::canonical_decl_key_with(
-            name,
-            &self.current_module_source,
-            &self.sem.imports,
-            self.symbols,
-            &self.tysys.trait_env,
-        )
-    }
-
     /// Canonical decl identity `(module, name)` of the declared type behind
     /// `type_id` (refs peeled), or `None` for a type parameter, an associated
     /// type projection and the other shapes that name no declaration. Unlike a
@@ -1304,10 +1385,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<(ModuleSource, String)> {
         use crate::tir::ResolvedType;
         // A builtin's identity is its name, and the name path already knows
-        // which module declares it. Answering here from a second table is how
-        // the two sides came to disagree.
+        // which module declares it. A second table answering here would be a
+        // second derivation, free to disagree with that one.
         if let Some(name) = self.builtin_type_name(type_id) {
-            return Some(self.canonical_decl_key(&name));
+            return Some(self.decl_key_or_local(&name));
         }
         let tt = self.tysys.type_table.borrow();
         match tt.get(tt.peel_refs(type_id)) {
@@ -1566,7 +1647,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect();
         for (type_name, const_name, ty, value) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
-            let (type_module, canon_type_name) = self.canonical_decl_key(&type_name);
+            let (type_module, canon_type_name) = self.decl_key_or_local(&type_name);
             // An associated-constant key is `Type::CONST` with the module held
             // as the other half of the map key — not a mangled method name, so
             // it does not carry the module inside the string.
@@ -1736,7 +1817,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let trait_name = impl_block
             .trait_type
             .as_ref()
-            .map(|t| scope.get_type_name_full(t));
+            .map(|t| scope.fq_trait_name(t));
 
         // Register type parameters from impl block's generic type FIRST
         // e.g., impl IndexValue<i32> for Triple<T> needs T registered
@@ -1774,6 +1855,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
                 // Register in TypeTable for substitution resolution
                 // Only for concrete types (not generic impls like impl<T> Trait for List<T>)
+                let Some(trait_key) = trait_name
+                    .as_ref()
+                    .and_then(crate::name::FqTraitName::canonical)
+                else {
+                    continue;
+                };
                 if is_concrete {
                     scope
                         .tysys
@@ -1781,7 +1868,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             target_type_id,
-                            trait_name.clone().unwrap_or_default(),
+                            trait_key,
                             binding.name.clone(),
                             type_id,
                         );
@@ -1796,7 +1883,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .borrow_mut()
                             .register_generic_assoc_type_def(
                                 base_decl,
-                                trait_name.clone().unwrap_or_default(),
+                                trait_key,
                                 binding.name.clone(),
                                 type_id,
                             );
@@ -1815,17 +1902,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // bindings, and the handler / ref-impl flags.
         {
             let self_type = scope.resolve_type(&impl_block.ty);
-            let trait_canonical = impl_block.trait_type.as_ref().map(|t| {
-                let base = scope.get_type_name(t);
-                scope.canonical_decl_key(&base)
-            });
-            let is_handler_method = trait_canonical
+            let is_handler_method = trait_name
                 .as_ref()
-                .map(|key| {
-                    scope.tysys.trait_env.effect_decl_index.contains_key(key)
-                        || scope.tysys.trait_env.resource_decl_index.contains_key(key)
-                })
-                .unwrap_or(false);
+                .and_then(crate::name::FqTraitName::canonical)
+                .is_some_and(|key| {
+                    scope.tysys.trait_env.effect_decl_index.contains_key(&key)
+                        || scope.tysys.trait_env.resource_decl_index.contains_key(&key)
+                });
             let is_ref_impl = matches!(
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
@@ -1869,8 +1952,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             scope.record_impl_facts(
                 impl_block.id,
                 sem::types::ImplFacts {
-                    trait_name_mangled: trait_name.clone(),
-                    trait_canonical,
+                    trait_name: trait_name.clone(),
                     trait_type_args,
                     is_handler_method,
                     is_ref_impl,
@@ -1903,7 +1985,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 method,
                 &struct_name,
                 &impl_block.ty,
-                trait_name.as_deref(),
+                trait_name.as_ref(),
                 impl_block.trait_type.as_ref(),
                 impl_is_concrete,
                 &impl_block.type_params,

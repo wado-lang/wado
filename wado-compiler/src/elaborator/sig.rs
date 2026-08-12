@@ -162,6 +162,15 @@ pub(crate) struct MethodSig {
     /// separately (`Type<A>::method<B>()`), so it needs the split; nothing
     /// else does, because a slot carries its own index.
     pub(crate) declaring_slot_count: u32,
+    /// The method's own slots as the declaration wrote them, parallel to
+    /// [`Self::own_type_params`]. Bounds and defaults are irreducibly AST and
+    /// live nowhere else, and a use site needs them to enforce the one and
+    /// fill the other.
+    ///
+    /// Carried rather than re-found by name. A name scan cannot tell which
+    /// declaration dispatch actually chose, so it could answer with an
+    /// unrelated trait's same-named method — and did.
+    pub(crate) own_params: Vec<crate::ast::GenericParam>,
     /// Canonical name from `#[cm("…")]`, resolved at the declaration.
     pub(crate) cm_name: Option<String>,
     pub(crate) is_async: bool,
@@ -196,10 +205,54 @@ impl Param {
     }
 }
 
+/// The slot-consuming subset of a declaration's type parameters, in order —
+/// the AST counterpart of [`MethodSig::own_type_params`], filtered by the same
+/// rule so the two stay parallel by construction.
+pub(super) fn own_params_of(
+    type_params: &[crate::ast::GenericParam],
+) -> Vec<crate::ast::GenericParam> {
+    type_params
+        .iter()
+        .filter(|p| p.is_real_type_param())
+        .cloned()
+        .collect()
+}
+
 impl MethodSig {
     /// Index of the first non-receiver parameter in `decl.param_types`.
     pub(crate) fn first_value_param(&self) -> usize {
         usize::from(self.self_kind != crate::ast::SelfKind::None)
+    }
+
+    /// Where `decl.type_params` splits: the declaring block's slots before
+    /// this index, the method's own after it.
+    pub(crate) fn declaring_split(&self) -> usize {
+        let split = self.declaring_slot_count as usize;
+        assert!(
+            split <= self.decl.type_params.len(),
+            "declaring slots ({split}) outnumber the signature's ({})",
+            self.decl.type_params.len()
+        );
+        split
+    }
+
+    /// The slots the declaring block contributes.
+    pub(crate) fn declaring_type_params(&self) -> &[(String, TypeId)] {
+        &self.decl.type_params[..self.declaring_split()]
+    }
+
+    /// The method's own slots — what a use site binds.
+    ///
+    /// Rebuilding these from a counted offset instead is what let
+    /// `impl<T, ..F> Emit for T` number `emit<S>` at a slot its signature does
+    /// not use.
+    pub(crate) fn own_type_params(&self) -> &[(String, TypeId)] {
+        &self.decl.type_params[self.declaring_split()..]
+    }
+
+    /// [`Self::own_type_params`] as bare ids.
+    pub(crate) fn own_type_param_ids(&self) -> Vec<TypeId> {
+        self.own_type_params().iter().map(|(_, id)| *id).collect()
     }
 
     /// Fill the declaring block's slots from `declaring_args` and the
@@ -216,14 +269,14 @@ impl MethodSig {
         declaring_args: &[TypeId],
         method_args: &[TypeId],
     ) -> InstantiatedSig {
-        let split = (self.declaring_slot_count as usize).min(self.decl.type_params.len());
         let mut substitution = IndexMap::default();
         {
             let table = type_table.borrow();
-            let pairs = self.decl.type_params[..split]
+            let pairs = self
+                .declaring_type_params()
                 .iter()
                 .zip(declaring_args)
-                .chain(self.decl.type_params[split..].iter().zip(method_args));
+                .chain(self.own_type_params().iter().zip(method_args));
             for ((_, slot), &arg) in pairs {
                 if let crate::tir::ResolvedType::TypeParam { index, .. }
                 | crate::tir::ResolvedType::TypePack { index, .. } = table.get(*slot)

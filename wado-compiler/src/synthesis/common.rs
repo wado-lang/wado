@@ -21,6 +21,17 @@ use crate::token::Span;
 ///
 /// All synthesized TIR nodes share this span, making them identifiable
 /// as compiler-generated rather than user-written code.
+/// The `IndexValue<i32>` trait segment the CM list adapters call through.
+///
+/// `IndexValue` is an `internal trait` in `core:prelude/traits.wado`; naming it
+/// by that module is what keeps the mangle from colliding with a user trait of
+/// the same name.
+#[must_use]
+pub fn index_value_trait() -> crate::name::FqTraitName {
+    crate::name::FqTraitName::declared(&ModuleSource::traits(), "IndexValue")
+        .with_args(vec!["i32".to_string()])
+}
+
 pub fn synth_span() -> Span {
     Span::new(0, 0, 1, 1)
 }

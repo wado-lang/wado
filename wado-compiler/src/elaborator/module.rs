@@ -36,13 +36,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         field_defaults.push(field.default.clone());
                     }
                     // Extract type parameter bounds
-                    let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
+                    let type_param_bounds: Vec<(String, Vec<super::types::BoundRef>)> = struct_decl
                         .type_params
                         .iter()
                         .map(|p| {
                             (
                                 p.name.clone(),
-                                p.bounds.iter().map(|b| b.name.clone()).collect(),
+                                p.bounds
+                                    .iter()
+                                    .map(|b| super::types::BoundRef {
+                                        name: b.name.clone(),
+                                        site: b.id,
+                                    })
+                                    .collect(),
                             )
                         })
                         .collect();
@@ -288,6 +294,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     super::item::register_trait_compiler_item(
                         &self.tysys.type_table,
                         &trait_decl.attrs,
+                        trait_decl.id,
                         &trait_decl.name,
                         &trait_decl.methods,
                         &trait_decl.associated_types,
@@ -441,7 +448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let trait_name = impl_block
                     .trait_type
                     .as_ref()
-                    .map(|t| scope.get_type_name(t));
+                    .map(|t| scope.fq_trait_name(t).head_only());
 
                 // Register methods that carry `#[compiler_item("...")]`
                 // against the impl's owning type. This is the only place
@@ -508,7 +515,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     let mangled_name =
-                        MethodName::format_local(&struct_name, trait_name.as_deref(), &method.name);
+                        MethodName::format_local(&struct_name, trait_name.as_ref(), &method.name);
                     scope
                         .sem
                         .decls
@@ -520,26 +527,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // are auto-restored on `drop(scope)`.
                 drop(scope);
             }
-        }
-    }
-
-    pub(super) fn get_type_name_static(ty: &Type) -> String {
-        match ty {
-            Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
-            Type::Named(named) => named.name.clone(),
-            Type::Generic(generic) => generic.name.clone(),
-            Type::Reference(_) | Type::MutReference(_) => RefKind::from_ast(ty)
-                .expect("ref classify")
-                .prefix()
-                .to_string(),
-            Type::Tuple(elems) => {
-                if elems.is_empty() {
-                    TypeTable::UNIT_TYPE_NAME.to_string()
-                } else {
-                    TypeTable::TUPLE_TYPE_NAME.to_string()
-                }
-            }
-            _ => "Unknown".to_string(),
         }
     }
 

@@ -797,7 +797,7 @@ impl ClosureLowerer {
         let string_type = type_table.make_compiler_struct(CompilerItem::String);
 
         for (item, body) in &CLOSURE_FORMAT_TRAITS {
-            let name = |it| type_table.compiler_items().trait_name(it).to_string();
+            let name = |it| type_table.compiler_items().trait_fq(it);
             let method = |it| {
                 type_table
                     .compiler_items()
@@ -845,7 +845,7 @@ impl ClosureLowerer {
     fn build_functor_write_method(
         &self,
         struct_name: &str,
-        trait_name: &str,
+        trait_name: &crate::name::FqTraitName,
         method_name: &str,
         payload: &str,
         self_ref_type: TypeId,
@@ -910,9 +910,9 @@ impl ClosureLowerer {
     fn build_functor_delegate_method(
         &self,
         struct_name: &str,
-        trait_name: &str,
+        trait_name: &crate::name::FqTraitName,
         method_name: &str,
-        target_trait: &str,
+        target_trait: &crate::name::FqTraitName,
         target_method: &str,
         self_ref_type: TypeId,
         formatter_mut_ref: TypeId,
@@ -947,7 +947,7 @@ impl ClosureLowerer {
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         FqTypeName::declared(&self.module_source, struct_name),
-                        Some(target_trait.to_string()),
+                        Some(target_trait.clone()),
                         target_method.to_string(),
                     )),
                 },
@@ -977,7 +977,7 @@ impl ClosureLowerer {
     fn make_functor_method(
         &self,
         struct_name: &str,
-        trait_name: &str,
+        trait_name: &crate::name::FqTraitName,
         method_name: &str,
         body: TirBlock,
         self_ref_type: TypeId,
@@ -999,7 +999,7 @@ impl ClosureLowerer {
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
                 FqTypeName::declared(&self.module_source, struct_name),
-                Some(trait_name.to_string()),
+                Some(trait_name.clone()),
                 method_name.to_string(),
             )),
             params: vec![
@@ -1728,7 +1728,7 @@ impl ClosureCallSiteLowerer<'_> {
         if info.base_struct_name() != crate::name::CLOSURE_FN_TRAIT {
             return;
         }
-        let Some(base_trait) = info.base_trait_name.as_deref() else {
+        let Some(base_trait) = info.base_trait_name() else {
             return;
         };
         // Retarget any format-trait call on a directly-known closure literal to
@@ -1774,7 +1774,7 @@ impl ClosureCallSiteLowerer<'_> {
 
         let new_method_info = LocalMethodName::new(
             FqTypeName::declared(&functor.module_source, &functor.struct_name),
-            Some(base_trait.to_string()),
+            info.trait_name.clone(),
             info.method_name.clone(),
         );
         let new_name = new_method_info.to_mangled_name();

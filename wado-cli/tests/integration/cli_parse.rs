@@ -358,6 +358,21 @@ fn serve_help() {
 }
 
 #[test]
+fn serve_help_explains_http_versions() {
+    let parser = Parser::from_args(&["--help"]);
+    let Err(err) = wado_cli::serve::parse_args(parser) else {
+        panic!("expected help exit");
+    };
+    for fragment in ["HTTP/1.1", "h2c", "`Trailer` header", "`TE: trailers`"] {
+        assert!(
+            err.message.contains(fragment),
+            "expected help to contain {fragment:?}, got {:?}",
+            err.message
+        );
+    }
+}
+
+#[test]
 fn serve_no_input() {
     // `wado serve` resolves the entry point against `[world]."wasi:http/service"`;
     // the repo-root wado.toml is missing that, so the resolver emits the

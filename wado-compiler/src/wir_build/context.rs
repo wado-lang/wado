@@ -961,6 +961,9 @@ impl<'a> WirContext<'a> {
             ResolvedType::TypePack { name, index, .. } => {
                 panic!("unsubstituted TypePack `..{name}` (index {index}) reached codegen")
             }
+            ResolvedType::InferVar(var) => {
+                panic!("unsolved inference variable `{var}` reached codegen")
+            }
             ResolvedType::AssocTypeProjection { assoc_name, .. } => {
                 panic!("unsubstituted AssocTypeProjection `{assoc_name}` reached codegen")
             }

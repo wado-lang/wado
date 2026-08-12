@@ -356,6 +356,11 @@ pub struct LoadResult {
     /// bytes plus the extracted function-export signatures used by TIR
     /// synthesis.
     pub wasm_assets: IndexMap<String, WasmAsset>,
+    /// The CM interface each named-type reference in a decoded component's
+    /// binding module resolves to, keyed by the reference's own site. The WIT
+    /// importer is the only pass that knows a reference's precise owning
+    /// interface, so it answers here rather than leaving a spelling behind.
+    pub cm_source_interfaces: crate::component_model::SourceInterfaceBatch,
     /// Kiln invocation redirects propagated from the loader so later phases
     /// (analyze, elaborator) can also rewrite `use ... from "<schema>"`
     /// clauses consistently.
@@ -1051,6 +1056,7 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// Wasm assets loaded via `use ... from "<path>" with { type: ... }`.
     /// Keyed by canonical namespace string (`wasm:<path>`).
     wasm_assets: IndexMap<String, WasmAsset>,
+    cm_source_interfaces: crate::component_model::SourceInterfaceBatch,
     /// Set of wasm asset namespace keys whose bytes are already in
     /// `wasm_assets` (used for dedup across multiple imports of the same
     /// asset).
@@ -1096,6 +1102,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             loading: IndexSet::default(),
             implicit_modules: IndexSet::default(),
             wasm_assets: IndexMap::default(),
+            cm_source_interfaces: crate::component_model::SourceInterfaceBatch::default(),
             loaded_wasm_namespaces: IndexSet::default(),
             pending_implicit_wasm_imports: Vec::new(),
             pending_component_imports: Vec::new(),
@@ -1306,6 +1313,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             implicit_modules: self.implicit_modules,
             included_files,
             wasm_assets: self.wasm_assets,
+            cm_source_interfaces: self.cm_source_interfaces,
             invocations: self.invocations,
             interner: self.interner,
         })
@@ -1480,6 +1488,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             }
         }
 
+        self.cm_source_interfaces.extend(bindings.source_interfaces);
         self.bind_module(&bindings.module, source)?;
         self.loaded.insert(source.clone(), bindings.module);
         self.loaded_wasm_namespaces.insert(namespace.to_string());

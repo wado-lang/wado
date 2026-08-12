@@ -93,9 +93,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(33)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(34)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(34)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>", ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>") -> bool;  // TypeId(35)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^core:prelude/traits.wado/Eq::eq" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>", ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>") -> bool;  // TypeId(35)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
@@ -136,7 +136,7 @@ fn "trait_bound_7.wado/trait_bound_result_eq"() with Stdout {
     d = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 97, 105, 108), used: 4 } };
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok == Ok"), used: 8 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok != Err"), used: 9 });
-    if "core:prelude/types.wado/core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" { value: c }, d) {
+    if "core:prelude/types.wado/core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" { value: c }, d) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Err == Err"), used: 10 });
     }
 }
@@ -354,7 +354,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, other_len);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(self, other) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(self, other) {
     let len: i32;
     let haystack: ref Array<u8>;
     let needle: ref Array<u8>;
@@ -381,7 +381,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(self, other
     };
 }
 
-fn "core:prelude/types.wado/core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(self, other) {
+fn "core:prelude/types.wado/core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^core:prelude/traits.wado/Eq::eq"(self, other) {
     let a_2: i32;
     let b_3: i32;
     let a_4: ref "core:prelude/string.wado//String";
@@ -400,7 +400,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Result<i32,core:prelude/stri
             0;
         } else {
             b_5 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(other).payload_0;
-            "core:prelude/string.wado/core:prelude/string.wado/String^Eq::eq"(a_4, b_5);
+            "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(a_4, b_5);
         }
     });
 }

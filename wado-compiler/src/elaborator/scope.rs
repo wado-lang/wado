@@ -14,19 +14,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
 use super::Elaborator;
-use super::trait_env::{DeclKey, InheritedBound, push_unique_bound};
-
-/// A bound name paired with the declaration it resolves to.
-pub(super) struct ElaboratedBound {
-    pub(super) name: String,
-    pub(super) decl: DeclKey,
-}
-
-fn push_unique_elaborated(bounds: &mut Vec<ElaboratedBound>, bound: ElaboratedBound) {
-    if !bounds.iter().any(|b| b.decl == bound.decl) {
-        bounds.push(bound);
-    }
-}
+use super::trait_env::InheritedBound;
 
 /// Mutable trait resolution context scoped to the current resolution site.
 ///
@@ -207,50 +195,103 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// what a parameter is known to satisfy is elaborated on read instead, by
     /// [`super::tysys::TypeSystem::bound_implies`]. `fn(...)` bounds name no
     /// trait and pass through untouched.
+    ///
+    /// One declaration is one bound, however it is spelled: `T: B + Derived`
+    /// where `B` aliases the `Base` that `Derived` implies is a two-bound list,
+    /// and keeping both would report the alias and the original as competitors
+    /// for a method only one of them can own.
     pub(super) fn elaborate_bounds(&self, bounds: &[ast::TraitBound]) -> Vec<ast::TraitBound> {
-        let mut elaborated = Vec::with_capacity(bounds.len());
+        self.elaborate_bounds_with(bounds, &IndexMap::default())
+    }
+
+    /// [`Self::elaborate_bounds`] for bounds that carry no reference site of
+    /// their own.
+    ///
+    /// `known` maps a bound's id to the declaration it means, answered where
+    /// the bound was first read. A projection's bounds are rebuilt here with
+    /// fresh ids that the table cannot answer for, so without `known` the
+    /// dedup would fall back to the spelling and collapse two same-named
+    /// traits into one.
+    pub(super) fn elaborate_bounds_with(
+        &self,
+        bounds: &[ast::TraitBound],
+        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+    ) -> Vec<ast::TraitBound> {
+        // Each entry carries the declaration it merged on, so a bound that has
+        // none — a `fn(..)` bound — cannot shift the ones after it.
+        let mut out: Vec<(ast::TraitBound, Option<super::trait_env::DeclKey>)> =
+            Vec::with_capacity(bounds.len());
         for bound in bounds {
-            push_unique_bound(&mut elaborated, bound);
+            self.merge_bound(&mut out, bound, known);
             if bound.fn_signature.is_some() {
                 continue;
             }
-            for inherited in self.supertraits_of_bound(&bound.name) {
-                push_unique_bound(&mut elaborated, &inherited.bound);
+            for inherited in self.supertraits_of_bound(bound, known) {
+                self.merge_bound(&mut out, &inherited.bound, known);
             }
         }
-        elaborated
+        out.into_iter().map(|(bound, _)| bound).collect()
     }
 
-    fn supertraits_of_bound(&self, name: &str) -> Vec<InheritedBound> {
+    /// Add `bound` unless the list already holds its declaration, in which case
+    /// the constrained spelling wins — `T: Iterator + Iterator<Item = i32>` is
+    /// one bound, and it is the one carrying the associated type.
+    ///
+    /// A `fn(..)` bound names no trait, so it has no declaration to merge on
+    /// and falls back to merging on its own site: two bounds written at two
+    /// sites stay two bounds, and only a bound repeated at one site merges.
+    fn merge_bound(
+        &self,
+        out: &mut Vec<(ast::TraitBound, Option<super::trait_env::DeclKey>)>,
+        bound: &ast::TraitBound,
+        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+    ) {
+        if bound.fn_signature.is_some() {
+            if !out
+                .iter()
+                .any(|(b, _)| b.name == bound.name && b.id == bound.id)
+            {
+                out.push((bound.clone(), None));
+            }
+            return;
+        }
+        let decl = self.bound_decl(bound, known);
+        if let Some((existing, _)) = out.iter_mut().find(|(_, d)| d.as_ref() == Some(&decl)) {
+            if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
+                *existing = bound.clone();
+            }
+            return;
+        }
+        out.push((bound.clone(), Some(decl)));
+    }
+
+    /// The declaration a bound names: `known` first, then the bound's own site.
+    fn bound_decl(
+        &self,
+        bound: &ast::TraitBound,
+        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+    ) -> super::trait_env::DeclKey {
+        known
+            .get(&bound.id)
+            .and_then(crate::name::FqTraitName::canonical)
+            .unwrap_or_else(|| self.trait_decl_at(bound.id, &bound.name))
+    }
+
+    /// The transitive supertraits of the trait `bound` names, as bounds.
+    ///
+    /// Answered from the bound's own reference site: two modules may declare
+    /// the same name, and expanding by spelling picks whichever the by-name
+    /// index holds — for the loser, an empty closure, so a supertrait's methods
+    /// silently vanish.
+    fn supertraits_of_bound(
+        &self,
+        bound: &ast::TraitBound,
+        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+    ) -> Vec<InheritedBound> {
         self.tysys
             .trait_env
-            .supertrait_closure(&self.trait_decl_key_in_frame(name))
+            .supertrait_closure(&self.bound_decl(bound, known))
             .to_vec()
-    }
-
-    /// [`Self::elaborate_bounds`] over bare trait names.
-    ///
-    /// Each name keeps its writing frame's spelling — it reaches method
-    /// mangling, where rewriting it hides the impl in the trait's own module.
-    pub(super) fn elaborate_bound_names(&self, names: &[String]) -> Vec<ElaboratedBound> {
-        let mut elaborated: Vec<ElaboratedBound> = Vec::with_capacity(names.len());
-        for name in names {
-            let written = ElaboratedBound {
-                name: name.clone(),
-                decl: self.trait_decl_key_in_frame(name),
-            };
-            push_unique_elaborated(&mut elaborated, written);
-            for inherited in self.supertraits_of_bound(name) {
-                push_unique_elaborated(
-                    &mut elaborated,
-                    ElaboratedBound {
-                        name: inherited.bound.name,
-                        decl: inherited.decl,
-                    },
-                );
-            }
-        }
-        elaborated
     }
 
     /// Register a list of generic parameters as `TypeParam` / `TypePack` ids
@@ -314,12 +355,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // Filter out `fn`/`fn mut` bounds before recording (they're already
             // realised in the bound type itself); only "real" trait bounds need
             // remembering for method lookup.
-            let real_bounds: Vec<ast::TraitBound> = tp
-                .bounds
-                .iter()
-                .filter(|b| b.fn_signature.is_none())
-                .cloned()
-                .collect();
+            let real_bounds = tp.real_bounds();
             if !real_bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx

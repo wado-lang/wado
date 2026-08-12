@@ -1,0 +1,33 @@
+// One receiver implements two same-named traits from different modules.
+//
+// A method mangle names its receiver by the module that declares it but spelled
+// the trait as the impl block wrote it, so both impls mangled to `S^Greet::hello`
+// and one overwrote the other.
+
+use { Greet as A } from "./sub/cross_module_same_name_trait_two_impls_a.wado";
+use { Greet as B } from "./sub/cross_module_same_name_trait_two_impls_b.wado";
+
+struct S {
+    internal v: i32,
+}
+
+impl A for S {
+    fn hello(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl B for S {
+    fn hello(&self) -> i32 {
+        return self.v + 100;
+    }
+}
+
+test "each same-named trait keeps its own impl" {
+    let s = S { v: 3 };
+    assert A::hello(&s) == 3;
+    assert B::hello(&s) == 103;
+}
+
+__DATA__
+{"test": {}}

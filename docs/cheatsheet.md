@@ -32,7 +32,8 @@ Namespace imports make all pub symbols from the source module directly available
 
 ```wado
 use geo from "./geo.wado";
-let p = geo::Point::new(1, 2);  // access via namespace
+let p = geo::Point::new(1, 2);      // access via namespace
+impl geo::Show for Local { ... }    // and on either side of an impl head
 ```
 
 ### Schema Imports

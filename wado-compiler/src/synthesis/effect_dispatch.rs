@@ -47,10 +47,10 @@ use crate::name::LocalMethodName;
 use crate::package::Package;
 use crate::synthesis::common::{alloc_local, option_some, ref_expr, synth_span};
 use crate::tir::{
-    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, SubstitutionContext, TirBlock,
-    TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal,
-    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirTemplatePart, TypeId, TypeTable,
+    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBlock, TirCapture, TirEffectOp,
+    TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
+    TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -317,7 +317,15 @@ fn substitute_operations(
     if type_args.is_empty() {
         return template.to_vec();
     }
-    let ctx = SubstitutionContext::new().with_impl_args(type_args);
+    // One frame, and a declaration numbers its own parameters densely from
+    // zero, so the arguments *do* line up with the slots positionally. That is
+    // what `substitute_type_params` is for; `SubstitutionContext` exists for
+    // the case this is not — an impl and its method sharing one index space.
+    let subst: IndexMap<u32, TypeId> = type_args
+        .iter()
+        .enumerate()
+        .map(|(i, &a)| (i as u32, a))
+        .collect();
     template
         .iter()
         .map(|op| {
@@ -325,14 +333,14 @@ fn substitute_operations(
                 .params
                 .iter()
                 .map(|p| TirParam {
-                    type_id: ctx.substitute(p.type_id, type_table),
+                    type_id: type_table.substitute_type_params(p.type_id, &subst),
                     ..p.clone()
                 })
                 .collect();
             TirEffectOp {
                 name: op.name.clone(),
                 params: new_params,
-                return_type: ctx.substitute(op.return_type, type_table),
+                return_type: type_table.substitute_type_params(op.return_type, &subst),
                 span: op.span,
                 cm_name: op.cm_name.clone(),
                 is_async: op.is_async,
@@ -2843,10 +2851,10 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 // `cm_to_wrappers` is keyed by the resource declaration as it
                 // is written, with the module alongside — the same namespace
                 // the instance path reads off the receiver type.
-                let base_name = method_info
-                    .base_trait_name
-                    .clone()
-                    .unwrap_or_else(|| method_info.receiver().decl_key().into_string());
+                let base_name = method_info.base_trait_name().map_or_else(
+                    || method_info.receiver().decl_key().into_string(),
+                    str::to_string,
+                );
                 let decl_module = func.module_source.clone();
                 // Static resource call: receiver type isn't directly
                 // available, fall back to single-instantiation routing.
@@ -3344,16 +3352,16 @@ fn build_handler_impl_index(
             // `impl Stream<u8>` and `impl Stream<i32>` produce two
             // distinct keys so the dispatch synthesis emits one infra
             // triple per instantiation.
-            let Some(base_trait_name) = &method_info.base_trait_name else {
+            let Some(base_trait_name) = method_info.base_trait_name() else {
                 continue;
             };
-            let Some(effect_module) = method_info.base_trait_module.as_ref() else {
+            let Some(effect_module) = method_info.base_trait_module() else {
                 // Elaborator did not record a declaring module — only the
                 // synthesis-derived auto-impl path leaves this `None`,
                 // and those never target effects / resources.
                 continue;
             };
-            let effect_key = (effect_module.clone(), base_trait_name.clone());
+            let effect_key = (effect_module.clone(), base_trait_name.to_string());
             if !effect_index.contains_key(&effect_key) {
                 // Not an effect / resource — skip (the trait is a regular
                 // user trait whose decl module just happens to match).
@@ -3362,7 +3370,7 @@ fn build_handler_impl_index(
             let key: HandlerImplKey = (
                 method_info.struct_name().clone(),
                 effect_module.clone(),
-                base_trait_name.clone(),
+                base_trait_name.to_string(),
                 method_info.trait_type_args.clone(),
             );
             let entry = out.entry(key).or_insert_with(|| HandlerImplInfo {
@@ -3453,7 +3461,7 @@ fn lower_resume_in_handler_methods(project: &mut Package) {
             // declaration name; generic-resource impls carry the full
             // mangled form in `trait_name` ("Stream<u8>") and resolve
             // against the index via the canonical base name.
-            let Some(base_trait_name) = &method_info.base_trait_name else {
+            let Some(base_trait_name) = method_info.base_trait_name() else {
                 continue;
             };
             if !handler_names.contains(base_trait_name) {

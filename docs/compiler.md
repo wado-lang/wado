@@ -79,6 +79,26 @@ The elaborator covers trait selection, generic inference, method dispatch, coerc
 
 One trait implemented for one receiver at several argument lists is chosen by the arguments, which are classified before they are elaborated (`elaborator/synth.rs`, [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)). That classification is a read-only query: it runs under `Logger::quiet`, and debug builds assert it recorded no fact.
 
+### Rigid and flexible type variables
+
+The type table keeps the two apart, because a type check asks opposite things of them:
+
+- `ResolvedType::TypeParam` is **rigid**. It stands for whatever a caller instantiates the binding item with, so inside that item it is opaque: nothing but itself is assignable to it, in either direction. `let x: T = 5` in a body that declares `T` is a type error.
+- `ResolvedType::InferVar` is **flexible**. It stands for a type the solver has yet to determine, so it accepts and records.
+
+A rigid parameter appears only inside the item that binds it. Every _use_ of a polymorphic signature instantiates its slots into fresh variables first (`elaborator/instantiate.rs`), so a callee's parameter never reaches a check as itself. Without that step the two collapse: `TypeParam` is interned by `(name, index)`, so `fn f<T>`'s `T` and `fn g<T>`'s `T` are one `TypeId`, and a check meeting a bare `T` cannot tell the enclosing body's parameter from a callee's slot.
+
+`check_assignable` therefore defers only what is genuinely undecided — an inference variable, a type pack awaiting expansion, an associated-type projection awaiting its impl, `unknown` / `error` — and compares a rigid parameter nominally.
+
+Two consequences worth knowing when adding a check:
+
+- A value is checked where its expected type is known. A callee's parameter types name its own slots until it is instantiated, so a call site instantiates first and checks the arguments once, against the substituted types. The same holds for a struct literal's fields and a parameter's default.
+- A bare slot is not a constraint. `struct Context<T> { fields: T }` accepts whatever the literal puts in `fields`; that value is what fixes `T`. Where several values fix one slot — two fields naming it, or a sequence literal's elements — they are checked against each other instead.
+
+A _flexible_ variable never survives elaboration: `finalize_infer_holes` substitutes solved ones away and pins unsolved ones to `error` after reporting them, and the backend passes panic on one rather than classifying it. A rigid parameter does survive — it is what a generic body is written in — and dies at monomorphization instead.
+
+Only the recorded facts are swept. The type table keeps every type ever considered, so a pass enumerating it selects with `TypeTable::is_concrete` rather than assuming the table holds only live types.
+
 ## Synthesis
 
 `synthesis::synthesize` (`synthesis.rs`) generates synthetic TIR that the user does not write:
@@ -217,6 +237,18 @@ A method key is `(impl module, declared receiver, trait, method)`, so `{impl}`
 and `{decl}` repeat whenever a type is implemented in the module declaring it —
 the common case. A receiver with no declaring module (a builtin, a tuple) has no
 `{decl}` segment. See WEP 2026-07-29 for why neither segment is removable alone.
+
+The same rule binds names still in their written form. A type name in source is
+relative to the module that wrote it, so a **reference site** — not a consumer —
+is where an identity is derived, once: `crate::resolve::Resolutions` answers
+every site before elaboration begins, keyed by the site's own `AstId`. An `impl`
+block's digest (`ImplHeader`) carries its module, its target's `ImplTargetKey`
+and its trait's, and the whole-program checks (coherence, orphan rules, sealed
+traits, trait-method arity) read the digest instead of re-walking
+`loaded_modules`, because a second walk knows no module and can only compare
+spellings. A consumer holding a bare name with no site goes through the table's
+own scope lookup, so it cannot answer differently from the site. See WEP
+2026-08-10.
 
 ## Component Model Registries
 

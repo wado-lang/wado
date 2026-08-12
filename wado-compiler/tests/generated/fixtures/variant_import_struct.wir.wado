@@ -66,7 +66,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(26)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(27)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(27)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(28)
 
@@ -167,9 +167,9 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
         };
     };
     return let __match_scrut_0: ref "./variant_import_struct_module.wado//Align", __match_scrut_0 = opts.align, (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String^Add::add"(s, pad);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(s, pad);
     } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String^Add::add"(pad, s);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(pad, s);
     } else {
         left = pad_len / 2;
         right = pad_len - left;
@@ -195,7 +195,7 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
                 continue l9;
             };
         };
-        "core:prelude/string.wado/core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/core:prelude/string.wado/String^Add::add"(lpad, s), rpad);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(lpad, s), rpad);
     });
 }
 
@@ -344,7 +344,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, other_len);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String^Add::add"(self, other) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(self, other) {
     let result: ref "core:prelude/string.wado//String";
     result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self.used + other.used), used: 0 };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result, self);
