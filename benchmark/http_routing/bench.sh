@@ -105,12 +105,18 @@ cargo build --release --quiet --manifest-path Cargo.toml
 echo "=== Installing Hono dependencies ==="
 npm install --prefix . --silent --no-audit --no-fund
 
-# Server roster, populated in start order. Hono on Bun is optional.
+# Measurement roster, populated in start order. Hono on Bun is optional.
+# A row is a (name, url, extra oha flags) triple, not a process: `wado serve`
+# sniffs the connection preface, so the h2c row drives the same process over
+# HTTP/2 rather than starting a second server. Rows rotate slice by slice, so
+# two rows sharing a process never load it at the same time.
 SERVER_NAMES=()
 SERVER_URLS=()
+SERVER_FLAGS=()
 register() {
   SERVER_NAMES+=("$1")
   SERVER_URLS+=("$2")
+  SERVER_FLAGS+=("${3:-}")
 }
 
 # Multi-threaded servers are sized to the server core budget so none is
@@ -122,6 +128,7 @@ echo "=== Starting servers ==="
   --workers "$SERVER_CORE_COUNT" app.wado >/dev/null 2>&1 &
 PIDS+=($!)
 register "wado serve" "http://${WADO_ADDR}"
+register "wado serve h2c" "http://${WADO_ADDR}" "--http2"
 
 PORT="$HONO_PORT" "${SERVER_PIN[@]}" node app.js >/dev/null 2>&1 &
 PIDS+=($!)
@@ -155,8 +162,10 @@ for round in $(seq 1 "$ROUNDS"); do
     method="${req%% *}"
     path="${req#* }"
     for si in "${!SERVER_NAMES[@]}"; do
+      # Unquoted on purpose: an empty entry must expand to no argument.
+      # shellcheck disable=SC2086
       out=$("${OHA_PIN[@]}" "$OHA_BIN" -m "$method" -z "${SLICE}s" \
-        -c "$CONNECTIONS" --no-tui "${SERVER_URLS[$si]}${path}" 2>/dev/null)
+        -c "$CONNECTIONS" --no-tui ${SERVER_FLAGS[$si]} "${SERVER_URLS[$si]}${path}" 2>/dev/null)
       rps=$(echo "$out" | awk '/Requests\/sec/ {printf "%.0f", $2}')
       [ -z "$rps" ] && rps=0
       key="${si}|${ri}"

@@ -56,6 +56,16 @@ The four servers span four runtimes:
   fastest-JS reference point.
 - **Axum** — native Rust on Tokio; the native-compiled reference point.
 
+`wado serve` also gets a second row, **`wado serve h2c`**. It is the same
+server process, not a fifth runtime: `wado serve` sniffs the connection
+preface and speaks HTTP/1.1 or h2c accordingly, so the row only differs
+in that `oha` is given `--http2`. Every other row stays on HTTP/1.1, and
+the two `wado serve` rows are measured in different slices, so they never
+load the process at the same time. It is its own row rather than folded
+into the HTTP/1.1 number because the protocols are not interchangeable
+here: h2c pays framing and flow-control per request that HTTP/1.1 does
+not, which a single-stream-per-connection load pattern cannot amortize.
+
 ## Files
 
 - `app.wado` — Wado `wasi:http/service` world server.
