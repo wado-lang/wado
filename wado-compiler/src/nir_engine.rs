@@ -528,6 +528,11 @@ impl<'a> Engine<'a> {
             if !matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. }) {
                 continue;
             }
+            // The extractor re-emits the load as a `StructGet` keyed by field
+            // index, so a non-struct receiver — a tuple, whose `field_index`
+            // indexes elements instead — has no re-emission and must not be
+            // frozen. The scalar-field gate downstream answers about the field,
+            // not the receiver, so this is the only place it is asked.
             let ValueKind::FieldAccess {
                 receiver,
                 field_index,
@@ -543,6 +548,9 @@ impl<'a> Engine<'a> {
             let Some(OpaqueSource::Local(i)) = source else {
                 continue;
             };
+            if !self.local_is_struct_typed(i) {
+                continue;
+            }
             classes.push((e, sv, i, field_index));
         }
         let mut out = Vec::new();
@@ -750,6 +758,27 @@ impl<'a> Engine<'a> {
     /// How many `Let` statements bind `local`.
     fn local_bindings(&self, local: u32) -> u32 {
         self.buf.uses.get(local as usize).map_or(0, |u| u.defs)
+    }
+
+    /// Whether `local` holds a struct, looking through a reference. `false`
+    /// without a type table, and for every other shape a `FieldAccess` can name
+    /// — a tuple above all, whose field index means something else entirely.
+    fn local_is_struct_typed(&self, local: u32) -> bool {
+        use crate::tir::ResolvedType;
+        let Some(types) = self.vg_type_table else {
+            return false;
+        };
+        let Some(l) = self.locals.get(local as usize) else {
+            return false;
+        };
+        let mut ty = l.type_id;
+        loop {
+            match types.get(ty) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => ty = *inner,
+                ResolvedType::Struct { .. } => return true,
+                _ => return false,
+            }
+        }
     }
 
     /// Read-only view of the owning function's local list. Some rules
