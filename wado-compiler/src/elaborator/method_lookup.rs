@@ -1471,13 +1471,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // explicit `impl`, which the name-based lookup misses. A viable
             // blanket must survive to the authoritative `candidate_matches_receiver`.
             let bounds_satisfied = bounds.iter().all(|bound| {
+                let Some(bound_def) = bound.decl_ref else {
+                    return false;
+                };
                 if let Some(rt) = receiver_type_id
                     && self.tysys.type_implements_trait(
                         &self.annotate_ctx,
                         &type_lookup,
                         rt,
-                        &bound.name,
-                        bound.decl_ref,
+                        bound_def,
                     )
                 {
                     return true;
@@ -1487,8 +1489,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.annotate_ctx,
                         &type_lookup,
                         &target.receiver(),
-                        &bound.name,
-                        bound.decl_ref,
+                        bound_def,
                     )
                 })
             });
@@ -1617,13 +1618,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         };
         param.bounds.iter().all(|bound| {
+            let Some(bound_def) = self.bound_trait_def(bound.id) else {
+                return true;
+            };
             receiver_type_id.is_some_and(|rt| {
                 self.tysys.type_implements_trait(
                     &self.annotate_ctx,
                     &self.type_lookup(),
                     rt,
-                    &bound.name,
-                    self.tysys.resolutions.get(bound.id),
+                    bound_def,
                 )
             })
         })

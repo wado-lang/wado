@@ -840,7 +840,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // before anything asks what a name means.
         let resolutions = {
             let _span = logger.span("elaborate/resolutions");
-            Rc::new(crate::resolve::Resolutions::build(modules, symbols))
+            let defs = std::sync::Arc::new(crate::defs::DefTable::build(modules, symbols));
+            Rc::new(crate::resolve::Resolutions::build(modules, symbols, defs))
         };
 
         let (trait_env, orphan_violations) = {
@@ -3527,7 +3528,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .as_ref()
                     .and_then(crate::resolve::head_site)
                     .and_then(|site| resolutions.declared(site))
-                    .map(|(module, name)| (module.clone(), name.to_string()))
+                    .map(|def| resolutions.decl_key(def))
                 else {
                     continue;
                 };

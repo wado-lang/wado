@@ -11,6 +11,7 @@ pub mod compiler_host;
 pub mod compiler_item;
 pub mod component_model;
 pub mod const_eval;
+pub mod defs;
 pub mod doc;
 pub mod effect_check;
 pub mod elaborator;
@@ -1825,7 +1826,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 resolved_modules,
                 symbols.clone(),
                 tysys.trait_env,
-                implicit_modules.clone(),
+                        implicit_modules.clone(),
                 module_name,
                 tysys.cm_interface_registry,
                 world_registry,

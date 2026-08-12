@@ -173,7 +173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Verify the underlying struct type has `impl <Effect> for <Type>`.
         if let Some(EffectRef::Concrete {
             name: interface_name,
-            ..
+            module_source: interface_module,
         }) = &effect
         {
             // Skip the check for an unresolved handler (`Unknown` / `Error`):
@@ -192,15 +192,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 underlying,
                 ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
             );
+            // The effect reference already names its declaring module, so the
+            // declaration is looked up where it lives rather than resolved
+            // again from this frame's vantage.
+            let effect_def = self
+                .tysys
+                .resolutions
+                .declared_in(interface_module, interface_name);
             if is_real_type
                 && (is_type_param
-                    || !self.tysys.type_implements_trait(
-                        &self.annotate_ctx,
-                        &self.type_lookup(),
-                        handler_type,
-                        interface_name,
-                        None,
-                    ))
+                    || !effect_def.is_some_and(|trait_| {
+                        self.tysys.type_implements_trait(
+                            &self.annotate_ctx,
+                            &self.type_lookup(),
+                            handler_type,
+                            trait_,
+                        )
+                    }))
             {
                 let type_name = self.tysys.type_table.borrow().type_name(handler_type);
                 let _ = self.emit(TypeError::HandlerEffectNotImplemented {

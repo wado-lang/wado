@@ -30,7 +30,7 @@ pub(crate) struct StructFieldInfo {
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
     /// Type parameter bounds: (`param_name`, bounds). Each bound keeps the
     /// reference site that wrote it, so a consumer asks which trait it means
-    /// rather than comparing the spelling (WEP 2026-08-10).
+    /// rather than comparing the spelling (WEP 2026-08-12).
     pub(super) type_param_bounds: Vec<(String, Vec<BoundRef>)>,
     /// `TypeIds` of the struct's own type parameters in declaration order.
     /// Used by `infer_struct_type_args` to fill phantom type params

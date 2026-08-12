@@ -3120,15 +3120,17 @@ impl SynthesisCtx<'_, '_, '_> {
         scope: ImplScope,
     ) -> bool {
         let type_key = self.receiver(type_name);
+        let Some(trait_) = self.trait_env.trait_def(trait_key) else {
+            return self.pending_has(type_name, trait_key);
+        };
         let real = match scope {
             ImplScope::CurrentModule => {
                 self.trait_env
-                    .has_methodful_impl_by_receiver(&type_key, &trait_key.1, &self.module)
+                    .has_methodful_impl_by_receiver(&type_key, trait_, &self.module)
             }
-            ImplScope::AnyModule => {
-                self.trait_env
-                    .has_any_methodful_impl_by_receiver(&type_key, &trait_key.1, None)
-            }
+            ImplScope::AnyModule => self
+                .trait_env
+                .has_any_methodful_impl_by_receiver(&type_key, trait_),
         };
         real || self.pending_has(type_name, trait_key)
     }

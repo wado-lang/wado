@@ -544,12 +544,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for (i, (param_name, bounds)) in info.type_param_bounds.iter().enumerate() {
                             if let Some(&type_arg) = type_args.get(i) {
                                 for bound in bounds {
+                                    let Some(bound_def) = self.bound_trait_def(bound.site) else {
+                                        continue;
+                                    };
                                     if !self.tysys.type_implements_trait(
                                         &self.annotate_ctx,
                                         &self.type_lookup(),
                                         type_arg,
-                                        &bound.name,
-                                        self.tysys.resolutions.get(bound.site),
+                                        bound_def,
                                     ) {
                                         // Get the type name for the error message
                                         let type_name = self.tysys.type_id_to_string(type_arg);

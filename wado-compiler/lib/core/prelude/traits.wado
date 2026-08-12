@@ -916,6 +916,7 @@ internal trait UpperHexAlt {
 }
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.
+#[compiler_item("iterator")]
 internal trait Iterator {
     type Item;
 
@@ -1275,6 +1276,7 @@ impl<I: Iterator, J: Iterator> IntoIterator for IterZip<I, J> {
 
 /// Conversion into an Iterator.
 /// Types implementing this trait can be used in `for-of` loops directly.
+#[compiler_item("into_iterator")]
 internal trait IntoIterator {
     type Item;
     type Iter: Iterator<Item = Self::Item>;
@@ -1355,6 +1357,7 @@ internal trait KeyValueLiteralBuilder {
 /// Implemented automatically for any `T: KeyValueLiteralBuilder<Output = T>`.
 /// For immutable output types, implement this explicitly and set `type Builder`
 /// to the mutable builder struct that builds this type.
+#[compiler_item("key_value_literal")]
 internal trait KeyValueLiteral {
     type Value;
     type Builder;

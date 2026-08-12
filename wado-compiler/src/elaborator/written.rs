@@ -5,8 +5,8 @@
 //! a binder is scoped to the item that wrote it, so no module scope is
 //! consulted and no identity is produced.
 //!
-//! WEP 2026-08-10 makes the *identity* question a table keyed by the reference
-//! site (`Resolutions: AstId -> DeclRef`); this helper is the binder arm of that
+//! WEP 2026-08-12 makes the *identity* question a table keyed by the reference
+//! site (`Resolutions: AstId -> Resolution`); this helper is the binder arm of that
 //! resolution, and the only part of the written-syntax layer that survives it.
 
 use crate::ast;

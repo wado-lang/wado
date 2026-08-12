@@ -201,6 +201,15 @@ pub enum CompilerItem {
     /// each deserializable struct, providing the static, allocation-free
     /// field-name → index `lookup` that self-describing formats invoke.
     FieldSchema,
+    /// `core:prelude/traits::Iterator` — the trait a `for-of` loop's iterator
+    /// must implement.
+    Iterator,
+    /// `core:prelude/traits::IntoIterator` — the trait a `for-of` loop's
+    /// subject must implement.
+    IntoIterator,
+    /// `core:prelude/traits::KeyValueLiteral` — the marker separating a
+    /// key-value literal's map target from a struct composition.
+    KeyValueLiteral,
     /// `core:prelude/traits::Display` — anchor for `{x}` template-string
     /// dispatch and the auto-derive Display→Inspect fallback.
     Display,
@@ -514,6 +523,9 @@ impl CompilerItem {
         Self::DeserializeSeq,
         Self::DeserializeVariant,
         Self::FieldSchema,
+        Self::Iterator,
+        Self::IntoIterator,
+        Self::KeyValueLiteral,
         Self::Display,
         Self::DisplayAlt,
         Self::Inspect,
@@ -665,6 +677,9 @@ impl CompilerItem {
             Self::DeserializeSeq => "deserialize_seq",
             Self::DeserializeVariant => "deserialize_variant",
             Self::FieldSchema => "field_schema",
+            Self::Iterator => "iterator",
+            Self::IntoIterator => "into_iterator",
+            Self::KeyValueLiteral => "key_value_literal",
             Self::Display => "display",
             Self::DisplayAlt => "display_alt",
             Self::Inspect => "inspect",
@@ -896,7 +911,10 @@ impl CompilerItem {
             | Self::UpperHex
             | Self::UpperHexAlt
             | Self::LowerExp
-            | Self::UpperExp => true,
+            | Self::UpperExp
+            | Self::Iterator
+            | Self::IntoIterator
+            | Self::KeyValueLiteral => true,
             // Kiln generator world only.
             Self::KilnRequest => world == "core:kiln/generator",
             // Loaded only when the user imports `core:serde` (which
@@ -993,6 +1011,9 @@ impl CompilerItem {
             | Self::DeserializeSeq
             | Self::DeserializeVariant
             | Self::FieldSchema
+            | Self::Iterator
+            | Self::IntoIterator
+            | Self::KeyValueLiteral
             | Self::Display
             | Self::DisplayAlt
             | Self::Inspect
@@ -1186,8 +1207,8 @@ pub enum Resolved {
         name: String,
         /// The trait declaration's own node. A compiler item is a declaration
         /// the compiler knows by construction, so a consumer asking "is this
-        /// that trait?" compares this rather than the spelling (WEP
-        /// 2026-08-10).
+        /// that trait?" compares this rather than the spelling
+        /// (WEP 2026-08-12).
         decl: crate::ast::AstId,
         /// Primary method name for **single-method** traits, captured
         /// automatically by the elaborator when registering the trait's
@@ -1533,8 +1554,10 @@ impl CompilerItems {
         }
     }
 
-    /// The declaration this trait item names, as an identity. `None` when the
-    /// item is not registered.
+    /// The node that declares this trait item. A compiler item is a
+    /// declaration the compiler knows by construction, so a consumer asking
+    /// "is this that trait?" resolves this to a `DefId` and compares that,
+    /// rather than matching the spelling a user trait can share.
     #[must_use]
     pub fn trait_decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
         match self.get(item)? {

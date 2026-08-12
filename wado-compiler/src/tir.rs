@@ -648,7 +648,7 @@ impl TypeSet {
 ///
 /// The associated-type registries key on this rather than a spelling: two
 /// modules' same-named traits each declare their own `Item`, and the name
-/// alone cannot say which one an impl bound (WEP 2026-08-10).
+/// alone cannot say which one an impl bound (WEP 2026-08-12).
 pub type TraitKey = (ModuleSource, String);
 
 #[derive(Debug, Clone)]
@@ -1394,20 +1394,6 @@ impl TypeTable {
         item: crate::compiler_item::CompilerItem,
     ) -> crate::name::FqTraitName {
         self.compiler_items.trait_fq(item)
-    }
-
-    /// The declaration a compiler trait item names, as an identity. A compiler
-    /// item is a declaration the compiler knows by construction, so a consumer
-    /// asking "does this type implement *that* trait?" compares this instead of
-    /// a spelling two modules can share (WEP 2026-08-10).
-    #[must_use]
-    pub fn compiler_trait_ref(
-        &self,
-        item: crate::compiler_item::CompilerItem,
-    ) -> Option<crate::resolve::DeclRef> {
-        self.compiler_items
-            .trait_decl(item)
-            .map(crate::resolve::DeclRef::Decl)
     }
 
     pub fn compiler_variant_name(&self, item: crate::compiler_item::CompilerItem) -> &str {

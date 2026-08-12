@@ -558,7 +558,11 @@ impl Monomorphizer {
         trait_name: Option<&crate::name::FqTraitName>,
     ) -> Option<FqTypeName> {
         self.newtype_own_name(type_id, type_table, |_, tid| match trait_name {
-            Some(trait_name) => self.has_own_trait_impl(type_table, tid, trait_name.base_name()),
+            Some(trait_name) => self
+                .functions
+                .trait_env
+                .trait_def_of_fq(trait_name)
+                .is_some_and(|trait_| self.has_own_trait_impl(type_table, tid, trait_)),
             None => self
                 .functions
                 .trait_env
@@ -574,13 +578,11 @@ impl Monomorphizer {
         &self,
         type_table: &TypeTable,
         tid: TypeId,
-        trait_name: &str,
+        trait_: crate::defs::DefId,
     ) -> bool {
-        self.functions.trait_env.has_any_methodful_impl_by_receiver(
-            &type_table.impl_receiver_key(tid),
-            trait_name,
-            None,
-        )
+        self.functions
+            .trait_env
+            .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(tid), trait_)
     }
 
     /// Peel refs/newtypes to the first newtype level satisfying `has_own_impl`

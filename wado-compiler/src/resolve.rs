@@ -1,80 +1,184 @@
 //! Reference resolution: one answer per reference site.
 //!
-//! A type name in Wado source is module-relative, so which declaration a
-//! spelling means is a fact about the module that wrote it. This pass answers
-//! that question once, at the site, and records the answer under the site's own
+//! A name in Wado source is module-relative, so which declaration a spelling
+//! means is a fact about the module that wrote it. This pass answers that
+//! question once, at the site, and records the answer under the site's own
 //! [`AstId`]. Consumers read the table; none of them re-derives an identity from
 //! a name, and none of them needs a module it may not have.
 //!
-//! See `docs/wep-2026-08-10-reference-resolution.md`.
+//! This is the only place a name becomes a [`DefId`]: [`Scope`] is private here,
+//! and [`crate::defs::DefTable`] has no name-keyed lookup of its own.
+//!
+//! See `docs/wep-2026-08-12-declaration-identity.md`.
+
+use std::sync::Arc;
 
 use crate::ast::{self, AstId, AstVisitor, GenericParam, Item, Module, Type};
+use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::symbol::SymbolTable;
 
 /// What a reference site refers to.
 ///
-/// Identity is the declaring node's [`AstId`] — the key [`SymbolTable`] is
-/// already built on — so equality is declaration identity and there is no
-/// spelling to compare instead.
+/// The three cases stay distinct on purpose: reading [`Self::Unresolved`] as a
+/// binder loses the diagnostic a name that reaches nothing deserves.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum DeclRef {
-    /// A declaration, named by the node that declares it.
-    Decl(AstId),
+pub enum Resolution {
+    /// A declaration.
+    Def(DefId),
     /// A type parameter of an enclosing item, named by the parameter's own
     /// node. `Self` binds to the `impl` or `trait` that introduces it.
     Binder(AstId),
-    /// Reaches no declaration. Distinct from [`Self::Binder`] on purpose: a
-    /// name that names nothing is not a type parameter, and reading it as one
-    /// loses the diagnostic it deserves.
+    /// Reaches no declaration.
     Unresolved,
 }
 
+impl Resolution {
+    /// The declaration this answer names, or `None` for a binder and for a name
+    /// that reaches nothing.
+    #[must_use]
+    pub fn def(self) -> Option<DefId> {
+        match self {
+            Self::Def(def) => Some(def),
+            Self::Binder(_) | Self::Unresolved => None,
+        }
+    }
+}
+
 /// Every reference site's answer, keyed by the site's own [`AstId`].
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Resolutions {
-    refs: IndexMap<AstId, DeclRef>,
-    /// Every declaration a reference reaches, by its declaring node's `AstId`.
-    /// Carried here so a consumer can name what a site resolved to without
-    /// holding the `SymbolTable` — the table is the one place both are known.
-    decls: IndexMap<AstId, (ModuleSource, String)>,
-    /// The prelude's declarations, kept so [`Self::declaration_named`] performs
-    /// the same lookup the walk did rather than a second one beside it.
-    prelude: IndexMap<String, AstId>,
+    /// Every declaration in the program. Carried here because this pass is what
+    /// produces identities, and a consumer reading an answer needs the table to
+    /// render it.
+    defs: Arc<DefTable>,
+    refs: IndexMap<AstId, Resolution>,
+    /// The module scopes, layered. Held here rather than recomputed, so the
+    /// site walk and a name-only caller run one implementation and cannot
+    /// answer differently.
+    scopes: Scopes,
+}
+
+/// What every module can see, by layer.
+///
+/// The layers are stored rather than flattened per module: the prelude is in
+/// scope everywhere, and copying it into each module's map would cost the
+/// prelude's size times the module count for no added answer.
+#[derive(Debug, Default)]
+struct Scopes {
+    /// Each module's explicit `use` imports, by the local name — an alias, or a
+    /// namespace import's `ns$member`.
+    imports: IndexMap<ModuleSource, IndexMap<String, DefId>>,
+    /// Each module's own declarations, including what its own `pub use`
+    /// re-exports reach.
+    own: IndexMap<ModuleSource, IndexMap<String, DefId>>,
+    /// The prelude's public surface, then its implementation modules' own
+    /// declarations. In scope in every module without a `use`, which is what
+    /// makes `i32` and `List` universal and lets a sealed compiler item
+    /// (`ReflectStruct`, `Member`) resolve for a module that never named it.
+    prelude: IndexMap<String, DefId>,
+}
+
+impl Scopes {
+    /// Which declaration `name` reaches from `module`, ignoring type-parameter
+    /// binders: the module's imports, then its own declarations, then the
+    /// prelude.
+    ///
+    /// The one implementation of the scope order.
+    fn resolve(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
+        if let Some(def) = self.imports.get(module).and_then(|m| m.get(name)) {
+            return Some(*def);
+        }
+        if let Some(def) = self.own.get(module).and_then(|m| m.get(name)) {
+            return Some(*def);
+        }
+        self.prelude.get(name).copied()
+    }
+
+    fn build(
+        modules: &IndexMap<ModuleSource, Module>,
+        symbols: &SymbolTable,
+        defs: &DefTable,
+    ) -> Self {
+        let mut out = Self::default();
+        for (name, sym) in symbols.iter() {
+            if is_prelude_module(sym.module_source())
+                && let Some(def) = defs.of_ast_id(*name)
+            {
+                out.prelude.entry(sym.name.clone()).or_insert(def);
+            }
+        }
+        // The prelude's own surface — its declarations and what it re-exports —
+        // ranks above its implementation modules' internals.
+        let prelude = ModuleSource::prelude();
+        let mut surface: IndexMap<String, DefId> = IndexMap::default();
+        for name in symbols.reexport_names(&prelude) {
+            if let Some(sym) = symbols.lookup_in_module(&prelude, &name)
+                && let Some(def) = defs.of_ast_id(sym.defined_at)
+            {
+                surface.insert(name, def);
+            }
+        }
+        for (name, def) in out.prelude.drain(..) {
+            surface.entry(name).or_insert(def);
+        }
+        out.prelude = surface;
+
+        for module in modules.keys() {
+            let imports: IndexMap<String, DefId> = symbols
+                .imports_in(module)
+                .filter_map(|(name, sym)| Some((name.to_string(), defs.of_ast_id(sym.defined_at)?)))
+                .collect();
+            let mut own: IndexMap<String, DefId> = symbols
+                .get_module_symbols(module)
+                .into_iter()
+                .filter_map(|sym| Some((sym.name.clone(), defs.of_ast_id(sym.defined_at)?)))
+                .collect();
+            for name in symbols.reexport_names(module) {
+                if let Some(sym) = symbols.lookup_in_module(module, &name)
+                    && let Some(def) = defs.of_ast_id(sym.defined_at)
+                {
+                    own.entry(name).or_insert(def);
+                }
+            }
+            out.imports.insert(module.clone(), imports);
+            out.own.insert(module.clone(), own);
+        }
+        out
+    }
 }
 
 impl Resolutions {
     /// Resolve every reference site in every loaded module, each from the
     /// module that wrote it.
-    pub fn build(modules: &IndexMap<ModuleSource, Module>, symbols: &SymbolTable) -> Self {
-        let prelude = prelude_declarations(symbols);
+    pub fn build(
+        modules: &IndexMap<ModuleSource, Module>,
+        symbols: &SymbolTable,
+        defs: Arc<DefTable>,
+    ) -> Self {
+        let scopes = Scopes::build(modules, symbols, &defs);
         let mut refs = IndexMap::default();
         for (module_source, module) in modules {
             let mut resolver = Resolver {
                 module: module_source,
                 symbols,
+                defs: &defs,
                 binders: Vec::new(),
-                prelude: &prelude,
+                scopes: &scopes,
                 refs: &mut refs,
             };
             for item in &module.items {
                 resolver.visit_item(item);
             }
         }
-        let mut decls: IndexMap<AstId, (ModuleSource, String)> = IndexMap::default();
-        for answer in refs.values() {
-            if let DeclRef::Decl(id) = answer
-                && let Some(sym) = symbols.get(id)
-            {
-                decls.insert(*id, (sym.module_source().clone(), sym.name.clone()));
-            }
-        }
-        Self {
-            refs,
-            decls,
-            prelude,
-        }
+        Self { defs, refs, scopes }
+    }
+
+    /// Every declaration in the program.
+    #[must_use]
+    pub fn defs(&self) -> &Arc<DefTable> {
+        &self.defs
     }
 
     /// The declaration `name` means from `module`'s vantage, with no reference
@@ -85,42 +189,52 @@ impl Resolutions {
     /// parameters. One lookup, so a name-only answer and the answer that name's
     /// site gets cannot differ.
     #[must_use]
-    pub fn declaration_named(
-        &self,
-        module: &ModuleSource,
-        name: &str,
-        symbols: &SymbolTable,
-    ) -> Option<(ModuleSource, String)> {
-        module_scope_lookup(module, name, symbols, &self.prelude)
-            .and_then(|id| symbols.get(&id))
-            .map(|sym| (sym.module_source().clone(), sym.name.clone()))
+    pub fn declaration_named(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
+        self.scopes.resolve(module, name)
     }
 
-    /// The declaration a [`DeclRef`] names, for a consumer that already holds
-    /// the answer rather than the site it came from.
+    /// The `(module, name)` pair a declaration renders to.
+    ///
+    /// A rendering *out of* an identity, which is the only direction a name is
+    /// allowed to travel — but it exists for the consumers whose keys are still
+    /// spellings, and it goes when `DeclKey` does.
     #[must_use]
-    pub fn decl_named(&self, answer: DeclRef) -> Option<(&ModuleSource, &str)> {
-        match answer {
-            DeclRef::Decl(id) => self.decls.get(&id).map(|(m, n)| (m, n.as_str())),
-            DeclRef::Binder(_) | DeclRef::Unresolved => None,
-        }
+    pub fn decl_key(&self, def: DefId) -> (ModuleSource, String) {
+        (
+            self.defs.module(def).clone(),
+            self.defs.name(def).to_string(),
+        )
     }
 
-    /// The declaration a reference site names: the module that declares it and
-    /// the name that declaration writes. `None` for a binder, a builtin shape,
-    /// an unresolved name, or a site the walk never reached.
+    /// The declaration `module` itself declares under `name`.
+    ///
+    /// Not a scope lookup: `module` is the *declaring* module, so this asks a
+    /// module about its own declarations rather than asking what a spelling
+    /// means from some vantage. For the passes that still key on
+    /// `(module, name)` pairs; it goes when they carry identities.
     #[must_use]
-    pub fn declared(&self, site: AstId) -> Option<(&ModuleSource, &str)> {
+    pub fn declared_in(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
+        self.scopes
+            .own
+            .get(module)
+            .and_then(|m| m.get(name))
+            .copied()
+    }
+
+    /// The declaration a reference site names. `None` for a binder, a builtin
+    /// shape, an unresolved name, or a site the walk never reached.
+    #[must_use]
+    pub fn declared(&self, site: AstId) -> Option<DefId> {
         match self.get(site)? {
-            DeclRef::Decl(id) => self.decls.get(&id).map(|(m, n)| (m, n.as_str())),
-            DeclRef::Binder(_) | DeclRef::Unresolved => None,
+            Resolution::Def(def) => Some(def),
+            Resolution::Binder(_) | Resolution::Unresolved => None,
         }
     }
 
     /// The answer for a reference site, or `None` when the site was never
     /// walked — a coverage hole rather than an unresolved name.
     #[must_use]
-    pub fn get(&self, site: AstId) -> Option<DeclRef> {
+    pub fn get(&self, site: AstId) -> Option<Resolution> {
         self.refs.get(&site).copied()
     }
 
@@ -138,64 +252,23 @@ impl Resolutions {
 /// The name `Self` binds to inside a `trait` or `impl` body.
 const SELF_TYPE: &str = "Self";
 
-/// Every declaration in the prelude and its implementation modules, by name.
-///
-/// The prelude is in scope everywhere without a `use`, and `internal`
-/// visibility governs what a user may *implement*, not whether the compiler can
-/// tell which declaration a name means — an `impl ReflectStruct for T` has to
-/// resolve before it can be rejected as sealed. First writer wins, matching the
-/// load order the rest of the compiler sees.
-fn prelude_declarations(symbols: &SymbolTable) -> IndexMap<String, AstId> {
-    let mut out: IndexMap<String, AstId> = IndexMap::default();
-    for (id, sym) in symbols.iter() {
-        if is_prelude_module(sym.module_source()) {
-            out.entry(sym.name.clone()).or_insert(*id);
-        }
-    }
-    out
-}
-
-/// Which declaration `name` reaches from `module`, ignoring type-parameter
-/// binders: the module's own `use` imports, then its own declarations, then the
-/// prelude's public surface, then the prelude's `internal` declarations.
-///
-/// The one implementation of the scope order, so the site walk and a name-only
-/// caller cannot answer differently.
-fn module_scope_lookup(
-    module: &ModuleSource,
-    name: &str,
-    symbols: &SymbolTable,
-    prelude: &IndexMap<String, AstId>,
-) -> Option<AstId> {
-    if let Some(sym) = symbols.imported(module, name) {
-        return Some(sym.defined_at);
-    }
-    if let Some(sym) = symbols.lookup_in_module(module, name) {
-        return Some(sym.defined_at);
-    }
-    if let Some(sym) = symbols.lookup_in_module(&ModuleSource::prelude(), name) {
-        return Some(sym.defined_at);
-    }
-    prelude.get(name).copied()
-}
-
 fn is_prelude_module(module: &ModuleSource) -> bool {
     matches!(module, ModuleSource::Core { name } if name.as_str() == "prelude"
         || name.as_str().starts_with("prelude/"))
 }
 
+/// A module's declaration scope: the one implementation of "what does this name
+/// mean here", and the only place a name becomes a [`DefId`].
 struct Resolver<'a> {
     /// The vantage: the module every name in this walk is written in.
     module: &'a ModuleSource,
     symbols: &'a SymbolTable,
+    defs: &'a DefTable,
     /// Binders in scope, innermost last. A name found here is the enclosing
     /// item's parameter and no module scope is consulted for it.
     binders: Vec<IndexMap<String, AstId>>,
-    /// The prelude's declarations, including the `internal` ones its
-    /// implementation modules keep to themselves. Every module sees these
-    /// without a `use`, which is what makes `i32` and `List` universal.
-    prelude: &'a IndexMap<String, AstId>,
-    refs: &'a mut IndexMap<AstId, DeclRef>,
+    scopes: &'a Scopes,
+    refs: &'a mut IndexMap<AstId, Resolution>,
 }
 
 impl Resolver<'_> {
@@ -218,15 +291,16 @@ impl Resolver<'_> {
     /// The module's own declarations rank above the prelude, so a module that
     /// declares `trait Left` means its own, not `core:prelude/format`'s enum
     /// case of that name (issue #1298).
-    fn resolve_name(&self, name: &str) -> DeclRef {
+    fn resolve_name(&self, name: &str) -> Resolution {
         if let Some(id) = self.binder(name) {
-            return DeclRef::Binder(id);
+            return Resolution::Binder(id);
         }
-        module_scope_lookup(self.module, name, self.symbols, self.prelude)
-            .map_or(DeclRef::Unresolved, DeclRef::Decl)
+        self.scopes
+            .resolve(self.module, name)
+            .map_or(Resolution::Unresolved, Resolution::Def)
     }
 
-    fn record(&mut self, site: AstId, answer: DeclRef) {
+    fn record(&mut self, site: AstId, answer: Resolution) {
         self.refs.insert(site, answer);
     }
 
@@ -305,7 +379,7 @@ impl AstVisitor for Resolver<'_> {
                 // The member is named relative to the bound's trait, not to
                 // this module, so the site is recorded and left for the
                 // consumer that knows the trait.
-                self.record(assoc.id, DeclRef::Unresolved);
+                self.record(assoc.id, Resolution::Unresolved);
                 self.visit_type(&assoc.ty);
             }
         }
@@ -349,14 +423,15 @@ impl AstVisitor for Resolver<'_> {
                 // the writing module instead would confidently answer with a
                 // different declaration that happens to share the name.
                 let answer = match self.binder(&ns.namespace) {
-                    Some(_) => DeclRef::Unresolved,
+                    Some(_) => Resolution::Unresolved,
                     None => self
                         .symbols
                         .imported(
                             self.module,
                             &crate::name::namespace_member_alias(&ns.namespace, &ns.name),
                         )
-                        .map_or(DeclRef::Unresolved, |sym| DeclRef::Decl(sym.defined_at)),
+                        .and_then(|sym| self.defs.of_ast_id(sym.defined_at))
+                        .map_or(Resolution::Unresolved, Resolution::Def),
                 };
                 self.record(ns.id, answer);
                 for arg in &ns.args {

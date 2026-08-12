@@ -1543,7 +1543,12 @@ impl Monomorphizer {
         let Some(trait_name) = &info.trait_name else {
             return tid;
         };
-        if self.has_own_trait_impl(type_table, tid, trait_name.base_name()) {
+        if self
+            .functions
+            .trait_env
+            .trait_def_of_fq(trait_name)
+            .is_some_and(|trait_| self.has_own_trait_impl(type_table, tid, trait_))
+        {
             return tid;
         }
         base

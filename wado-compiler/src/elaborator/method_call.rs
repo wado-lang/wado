@@ -2450,13 +2450,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .find(|(_, _, _, bounds)| {
                 bounds.iter().all(|bound| {
-                    self.tysys.type_implements_trait(
-                        &self.annotate_ctx,
-                        &self.type_lookup(),
-                        receiver_type_id,
-                        &bound.name,
-                        bound.decl_ref,
-                    )
+                    bound.decl_ref.is_some_and(|bound_def| {
+                        self.tysys.type_implements_trait(
+                            &self.annotate_ctx,
+                            &self.type_lookup(),
+                            receiver_type_id,
+                            bound_def,
+                        )
+                    })
                 })
             })
             .map(|(trait_name, param, module, _)| (trait_name, param, module))

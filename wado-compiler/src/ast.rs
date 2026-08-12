@@ -890,7 +890,7 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
 /// Walk a declaration's type parameters: each binder's own id, then the
 /// reference sites inside its bounds. A bound names a trait and its associated
 /// types, so it is a reference site like any other and must be reachable by an
-/// id-collecting walk (WEP 2026-08-10).
+/// id-collecting walk (WEP 2026-08-12).
 pub fn walk_generic_params<V: AstVisitor>(v: &mut V, params: &[GenericParam]) {
     for p in params {
         v.visit_id(p.id, p.span);
@@ -3299,19 +3299,9 @@ pub struct GenericParam {
 }
 
 impl GenericParam {
-    /// The trait bounds this param declares, by name. An `fn`-signature bound
-    /// is excluded: it is already realised in the parameter's own type, so
-    /// there is no trait to check a type argument against.
-    pub fn trait_bound_names(&self) -> Vec<String> {
-        self.bounds
-            .iter()
-            .filter(|b| b.fn_signature.is_none())
-            .map(|b| b.name.clone())
-            .collect()
-    }
-
-    /// The trait bounds worth remembering for method lookup — the same set
-    /// [`Self::trait_bound_names`] names, kept whole.
+    /// The trait bounds this param declares. An `fn`-signature bound is
+    /// excluded: it is already realised in the parameter's own type, so there
+    /// is no trait to check a type argument against.
     pub fn real_bounds(&self) -> Vec<TraitBound> {
         self.bounds
             .iter()
@@ -3618,7 +3608,7 @@ mod ast_id_tests {
     /// reason each needs none. Every other name-bearing node is a *reference
     /// site* — it names a declaration whose identity depends on the module that
     /// wrote the name — and must carry an id for its resolution to be recorded
-    /// under (WEP 2026-08-10).
+    /// under (WEP 2026-08-12).
     const NAMED_WITHOUT_ID: &[(&str, &str)] = &[
         ("InnerAttribute", "an attribute name, not a declaration"),
         ("Attribute", "an attribute name, not a declaration"),

@@ -67,7 +67,7 @@ impl TraitContext {
 #[derive(Default)]
 pub(super) struct Scope {
     pub(super) trait_ctx: TraitContext,
-    pub(super) trait_check_stack: RefCell<Vec<(TypeId, String)>>,
+    pub(super) trait_check_stack: RefCell<Vec<(TypeId, crate::defs::DefId)>>,
     /// When resolving a default-expression AST at a call site, fall back to
     /// looking up unresolved identifiers in this module's global scope —
     /// the callee's lexical scope for defaults that reference

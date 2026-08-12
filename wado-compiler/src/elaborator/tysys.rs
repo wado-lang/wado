@@ -66,7 +66,7 @@ pub(crate) struct TypeSystem {
 
     /// What every type/trait reference site in the program refers to, resolved
     /// once from the module that wrote it. The single producer of declaration
-    /// identity from written syntax (WEP 2026-08-10).
+    /// identity from written syntax (WEP 2026-08-12).
     pub(crate) resolutions: Rc<crate::resolve::Resolutions>,
 
     /// Immutable trait knowledge base: impl indices, trait declarations,

@@ -2128,19 +2128,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 inner_type_id = t;
             }
-            let implements_into_iter = self.tysys.type_implements_trait(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                iterable_type_id,
-                "IntoIterator",
-                None,
-            ) || self.tysys.type_implements_trait(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                inner_type_id,
-                "IntoIterator",
-                None,
-            ) || matches!(
+            let into_iterator = self
+                .tysys
+                .compiler_trait_def(crate::compiler_item::CompilerItem::IntoIterator);
+            let implements_into_iter = into_iterator.is_some_and(|trait_| {
+                self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    iterable_type_id,
+                    trait_,
+                ) || self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    inner_type_id,
+                    trait_,
+                )
+            }) || matches!(
                 self.tysys.type_table.borrow().get(iterable_type_id),
                 ResolvedType::Unknown | ResolvedType::TypeParam { .. }
             );
@@ -2532,13 +2535,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Iterator-trait conformance check, mirroring the pre-refactor
         // surface error.
-        if !self.tysys.type_implements_trait(
-            &self.annotate_ctx,
-            &self.type_lookup(),
-            iter_type,
-            "Iterator",
-            None,
-        ) && !matches!(
+        let iterator = self
+            .tysys
+            .compiler_trait_def(crate::compiler_item::CompilerItem::Iterator);
+        if !iterator.is_some_and(|trait_| {
+            self.tysys.type_implements_trait(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                iter_type,
+                trait_,
+            )
+        }) && !matches!(
             self.tysys.type_table.borrow().get(iter_type),
             ResolvedType::Unknown | ResolvedType::TypeParam { .. }
         ) {

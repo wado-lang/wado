@@ -3735,12 +3735,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
                     if let Some(&type_arg) = type_args.get(i) {
                         for bound in bounds {
+                            let Some(bound_def) = self.bound_trait_def(bound.site) else {
+                                continue;
+                            };
                             if !self.tysys.type_implements_trait(
                                 &self.annotate_ctx,
                                 &self.type_lookup(),
                                 type_arg,
-                                &bound.name,
-                                self.tysys.resolutions.get(bound.site),
+                                bound_def,
                             ) {
                                 let type_name = self.tysys.type_id_to_string(type_arg);
                                 let reason = self.tysys.trait_unimpl_reason_chain(
@@ -3941,16 +3943,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|spread| self.resolve_expr(&spread.expr, ctx, None))
             .collect();
+        let kv_literal = self
+            .tysys
+            .compiler_trait_def(crate::compiler_item::CompilerItem::KeyValueLiteral);
         let base_info: Vec<BaseSpreadInfo> = spread_base_types
             .iter()
             .map(|&t| {
-                let is_map = self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    t,
-                    "KeyValueLiteral",
-                    None,
-                );
+                let is_map = kv_literal.is_some_and(|trait_| {
+                    self.tysys.type_implements_trait(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
+                        t,
+                        trait_,
+                    )
+                });
                 let fields = if is_map {
                     None
                 } else {
@@ -3964,13 +3970,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let compose_union = has_spread && base_info.iter().all(|(m, f)| !m && f.is_some());
         let all_map = base_info.iter().all(|(m, _)| *m);
         let expected_is_map = expected_type.is_some_and(|t| {
-            self.tysys.type_implements_trait(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                t,
-                "KeyValueLiteral",
-                None,
-            )
+            kv_literal.is_some_and(|trait_| {
+                self.tysys
+                    .type_implements_trait(&self.annotate_ctx, &self.type_lookup(), t, trait_)
+            })
         });
         // A pure key-value merge with a map-typed target is the only valid
         // non-composition spread.
@@ -5007,14 +5010,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .compiler_trait_name(crate::compiler_item::CompilerItem::Ord)
             .to_string();
+        let ord = self
+            .tysys
+            .compiler_trait_def(crate::compiler_item::CompilerItem::Ord);
         if element_type != TypeTable::ERROR
-            && !self.tysys.type_implements_trait(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                element_type,
-                &ord_trait_name,
-                None,
-            )
+            && !ord.is_some_and(|trait_| {
+                self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    element_type,
+                    trait_,
+                )
+            })
         {
             let type_name = self.tysys.type_id_to_string(element_type);
             let reason = self.tysys.trait_unimpl_reason_chain(

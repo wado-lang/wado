@@ -51,61 +51,48 @@ pub(super) fn module_import_scope(
     // case (e.g. a `FieldKind::List` case must not hide the prelude `List`
     // type). Collected here, inserted with `or_insert` at the end.
     let mut pending_cases: Vec<(String, ModuleSource)> = Vec::new();
+
+    // What an explicit `use` means is decided once, by the analyzer, and
+    // recorded in the symbol table: the local name (an alias, or a namespace
+    // import's `ns$member`) paired with the declaration it reaches, re-export
+    // chains already followed (issue #1416). Re-walking the `use` declarations
+    // here answered the same question a second way, with its own module-path
+    // resolution and its own alias handling, and the two could disagree.
+    for (local_name, sym) in symbols.imports_in(from_module) {
+        let def_source = sym.module_source().clone();
+        scope
+            .sources
+            .insert(local_name.to_string(), def_source.clone());
+        if local_name != sym.name {
+            scope
+                .original_names
+                .insert(local_name.to_string(), sym.name.clone());
+        }
+        // Importing a variant/enum/flags type brings its case names into scope
+        // so bare `Some` / `Ok` / enum cases resolve through the import branch.
+        collect_case_names(&mut pending_cases, sym, &def_source);
+    }
+
+    // Which module a namespace alias stands for is the one import fact the
+    // symbol table does not record — it registers the members, not the alias —
+    // so the `use` declarations still answer for it.
     for item in &module.items {
         if let Item::Use(use_decl) = item {
-            let source = crate::loader::resolve_use_decl_source(
-                interner,
-                from_module,
-                use_decl,
-                entry_module,
-                invocations,
-            );
-            for use_item in &use_decl.items {
-                match use_item {
-                    ast::UseItem::Simple { name, alias, .. } => {
-                        let local_name = alias.as_ref().unwrap_or(name);
-                        // Resolve through re-export chains so a name imported
-                        // from a `pub use` barrel records its true definer
-                        // module — not the barrel, which doesn't register the
-                        // type, so `lookup_ref` would otherwise miss it and
-                        // resolve to nothing (issue #1416).
-                        let resolved = symbols.lookup_in_module(&source, name);
-                        let (def_source, def_name) = resolved
-                            .map(|sym| (sym.module_source().clone(), sym.name.clone()))
-                            .unwrap_or_else(|| (source.clone(), name.clone()));
-                        scope.sources.insert(local_name.clone(), def_source.clone());
-                        if local_name != &def_name {
-                            scope.original_names.insert(local_name.clone(), def_name);
-                        }
-                        // Importing a variant/enum/flags type brings its case
-                        // names into scope so bare `Some` / `Ok` / enum cases
-                        // resolve through the import branch.
-                        if let Some(sym) = resolved {
-                            collect_case_names(&mut pending_cases, sym, &def_source);
-                        }
-                    }
-                    ast::UseItem::Namespace { name: ns } => {
-                        // Expand each public type member to its `ns$Type` alias.
-                        for sym in symbols.get_module_symbols(&source) {
-                            if matches!(
-                                sym.kind,
-                                crate::symbol::SymbolKind::Struct(_)
-                                    | crate::symbol::SymbolKind::Enum(_)
-                                    | crate::symbol::SymbolKind::Flags(_)
-                                    | crate::symbol::SymbolKind::Variant(_)
-                                    | crate::symbol::SymbolKind::Newtype(_)
-                                    | crate::symbol::SymbolKind::Resource(_)
-                                    | crate::symbol::SymbolKind::BuiltinType
-                            ) {
-                                let alias = name::namespace_member_alias(ns, &sym.name);
-                                scope.sources.insert(alias.clone(), source.clone());
-                                scope.original_names.insert(alias, sym.name.clone());
-                            }
-                        }
-                        scope.namespace_imports.insert(ns.clone(), source.clone());
-                    }
-                    ast::UseItem::InterfaceFunctions { .. } | ast::UseItem::Wildcard => {}
-                }
+            let namespaces = use_decl.items.iter().filter_map(|use_item| match use_item {
+                ast::UseItem::Namespace { name: ns } => Some(ns),
+                ast::UseItem::Simple { .. }
+                | ast::UseItem::InterfaceFunctions { .. }
+                | ast::UseItem::Wildcard => None,
+            });
+            for ns in namespaces {
+                let source = crate::loader::resolve_use_decl_source(
+                    interner,
+                    from_module,
+                    use_decl,
+                    entry_module,
+                    invocations,
+                );
+                scope.namespace_imports.insert(ns.clone(), source);
             }
         }
     }
@@ -258,12 +245,12 @@ impl ImplTargetKey {
     pub(crate) fn of_written(
         name: &str,
         module: &ModuleSource,
-        symbols: &SymbolTable,
         resolutions: &crate::resolve::Resolutions,
     ) -> Self {
-        let (declaring, declared) = resolutions
-            .declaration_named(module, name, symbols)
-            .unwrap_or_else(|| (module.clone(), name.to_string()));
+        let (declaring, declared) = resolutions.declaration_named(module, name).map_or_else(
+            || (module.clone(), name.to_string()),
+            |def| resolutions.decl_key(def),
+        );
         Self::of_decl(&declaring, &declared)
     }
 
@@ -350,11 +337,12 @@ pub(super) struct ImplHeader {
     /// Identity of the implemented trait, resolved the same way; `None` for
     /// inherent `impl Type { … }` blocks.
     pub(super) trait_key: Option<ImplTargetKey>,
-    /// What the trait reference in this header refers to, read from
-    /// `Resolutions` rather than resolved a second time. This is what an impl
-    /// index matches against, so a lookup compares declarations rather than
-    /// spellings two modules can share (WEP 2026-08-10).
-    pub(super) trait_ref: Option<crate::resolve::DeclRef>,
+    /// The trait this header implements, read from `Resolutions` rather than
+    /// resolved a second time. This is what an impl index matches against, so a
+    /// lookup compares declarations rather than spellings two modules can share
+    /// (WEP 2026-08-12). `None` for an inherent block, and for a trait position
+    /// whose site names no declaration.
+    pub(super) trait_ref: Option<crate::defs::DefId>,
     /// Trait name for `impl Trait for Type` blocks (via `get_type_name_static`
     /// on the trait reference); `None` for inherent `impl Type { … }` blocks.
     /// The memoised head name of [`Self::trait_type`], so the index filters
@@ -430,8 +418,8 @@ fn blanket_pack_assocs(
                         .any(|e| matches!(e, ast::Type::TypePackSpread(..))))
             })
             .filter_map(|(bound, assoc)| {
-                let (module, name) = resolutions.declared(bound.id)?;
-                Some(((module.clone(), name.to_string()), assoc.name.clone()))
+                let def = resolutions.declared(bound.id)?;
+                Some((resolutions.decl_key(def), assoc.name.clone()))
             })
             .collect();
         if !pairs.is_empty() {
@@ -499,13 +487,10 @@ fn blanket_param_sources(
                 else {
                     return BlanketParamSource::Unresolved;
                 };
-                let Some((module, name)) = resolutions.declared(bound.id) else {
+                let Some(def) = resolutions.declared(bound.id) else {
                     return BlanketParamSource::Unresolved;
                 };
-                BlanketParamSource::Projection(
-                    (module.clone(), name.to_string()),
-                    assoc.name.clone(),
-                )
+                BlanketParamSource::Projection(resolutions.decl_key(def), assoc.name.clone())
             })
             .collect();
         out.insert(key, sources);
@@ -548,9 +533,9 @@ pub(crate) enum BlanketReceiver {
 #[derive(Clone, Debug)]
 pub(crate) struct BlanketBound {
     pub(crate) name: String,
-    /// What the bound's reference site resolves to, `None` where it reaches no
+    /// The trait the bound's reference site names, `None` where it reaches no
     /// declaration.
-    pub(crate) decl_ref: Option<crate::resolve::DeclRef>,
+    pub(crate) decl_ref: Option<crate::defs::DefId>,
 }
 
 /// A reified blanket impl `impl<Param: Bounds, ..> Trait for <receiver>`.
@@ -720,7 +705,7 @@ pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), Vec<ModuleSour
 /// spelling itself that way — so they get separate storage and a query answers
 /// only from the namespace it named. Storing both in one map is what let a
 /// mangled query reach only the synthesised layer and a declared query only the
-/// AST layer (WEP 2026-08-10).
+/// AST layer (WEP 2026-08-12).
 #[derive(Debug, Default, Clone)]
 pub struct ImplModuleIndex {
     by_mangled: TraitImplModuleIndex,
@@ -867,6 +852,10 @@ pub struct TraitEnv {
     all_by_receiver: ReceiverImplIndex,
     /// Trait name → trait declaration location.
     pub(super) decl_index: TraitDeclIndex,
+    /// Every declaration in the program. Held here so a whole-program index
+    /// keyed by a `(module, name)` pair can hand back the identity the impl
+    /// headers compare, without every caller threading the table.
+    pub(super) defs: std::sync::Arc<crate::defs::DefTable>,
     /// Effect name → effect declaration location.
     pub(super) effect_decl_index: EffectDeclIndex,
     /// Resource name → resource declaration location. Used alongside
@@ -880,7 +869,7 @@ pub struct TraitEnv {
     /// Per blanket impl, the `(declaring trait, associated type)` pairs whose
     /// binding is a type pack. Resolved once at build time from each bound's
     /// own reference site, so the trait is a declaration rather than the
-    /// spelling the blanket wrote (WEP 2026-08-10).
+    /// spelling the blanket wrote (WEP 2026-08-12).
     pub(super) blanket_pack_assocs: IndexMap<(ModuleSource, AstId), Vec<(DeclKey, String)>>,
     /// Per blanket impl, what determines each of its parameters, in
     /// declaration order. Resolved once at build time from each bound's own
@@ -1250,23 +1239,19 @@ impl TraitEnv {
                     continue;
                 };
                 let type_name = get_type_name_static(&impl_block.ty);
-                let type_key =
-                    impl_target_key_at(&impl_block.ty, module_source, symbols, resolutions);
-                let trait_ref = impl_block
+                let type_key = impl_target_key_at(&impl_block.ty, module_source, resolutions);
+                let trait_ref: Option<crate::defs::DefId> = impl_block
                     .trait_type
                     .as_ref()
                     .and_then(crate::resolve::head_site)
-                    .and_then(|site| resolutions.get(site));
+                    .and_then(|site| resolutions.declared(site));
                 let trait_key = impl_block.trait_type.as_ref().map(|trait_type| {
                     // The site the header wrote answers first. `impl_target_key`
                     // resolves through the symbol table, which holds no entry
                     // for a trait, so a module implementing its own `trait Sub`
                     // fell through to `core:prelude`'s arithmetic one.
                     trait_ref
-                        .and_then(|answer| resolutions.decl_named(answer))
-                        .map(|(module, name)| {
-                            ImplTargetKey::Decl((module.clone(), name.to_string()))
-                        })
+                        .map(|def| ImplTargetKey::Decl(resolutions.decl_key(def)))
                         .unwrap_or_else(|| {
                             // A trait position whose site names no declaration
                             // — a bodiless derive naming a stdlib trait the
@@ -1282,14 +1267,7 @@ impl TraitEnv {
                                 &resource_decl_index,
                             )
                             .map_or_else(
-                                || {
-                                    impl_target_key_at(
-                                        trait_type,
-                                        module_source,
-                                        symbols,
-                                        resolutions,
-                                    )
-                                },
+                                || impl_target_key_at(trait_type, module_source, resolutions),
                                 ImplTargetKey::Decl,
                             )
                         })
@@ -1346,7 +1324,7 @@ impl TraitEnv {
                                     .iter()
                                     .map(|b| BlanketBound {
                                         name: b.name.clone(),
-                                        decl_ref: resolutions.get(b.id),
+                                        decl_ref: resolutions.declared(b.id),
                                     })
                                     .collect()
                             })
@@ -1419,7 +1397,7 @@ impl TraitEnv {
         // fall back to comparing spellings.
         let resolve_written =
             |module: &ModuleSource, ty: &ast::Type, _type_params: &[ast::GenericParam]| {
-                impl_target_key_at(ty, module, symbols, resolutions)
+                impl_target_key_at(ty, module, resolutions)
             };
 
         let mut violations = check_all_orphan_rules(
@@ -1435,7 +1413,7 @@ impl TraitEnv {
         let resolve_trait = |module: &ModuleSource, bound: &ast::TraitBound| {
             let key = resolutions.declared(bound.id).map_or_else(
                 || (module.clone(), bound.name.clone()),
-                |(decl_module, name)| (decl_module.clone(), name.to_string()),
+                |def| resolutions.decl_key(def),
             );
             decl_index.get(&key).cloned()
         };
@@ -1456,6 +1434,7 @@ impl TraitEnv {
                 impl_index,
                 all_impl_index,
                 decl_index,
+                defs: resolutions.defs().clone(),
                 effect_decl_index,
                 resource_decl_index,
                 blanket_pack_assocs: blanket_pack_assocs(
@@ -1651,23 +1630,37 @@ impl TraitEnv {
     pub(crate) fn has_any_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
-        trait_name: &str,
-        trait_ref: Option<crate::resolve::DeclRef>,
+        trait_: crate::defs::DefId,
     ) -> bool {
         self.entries_by_receiver(receiver)
-            .any(|entry| self.methodful_header_matches(entry, trait_name, trait_ref))
+            .any(|entry| self.methodful_header_matches(entry, trait_))
     }
 
     /// Receiver-matched form of [`Self::has_methodful_impl`].
+    /// The trait declaration a `(module, name)` key names.
+    ///
+    /// The index already holds the declaring node, so this is a rendering of
+    /// what the key means rather than a second resolution of the name. For the
+    /// passes that still carry `TraitKey`s.
+    pub(crate) fn trait_def(&self, key: &DeclKey) -> Option<crate::defs::DefId> {
+        let (_, decl) = self.decl_index.get(key)?;
+        self.defs.of_ast_id(*decl)
+    }
+
+    /// The trait an [`crate::name::FqTraitName`] names, for the passes that
+    /// carry one rather than an identity.
+    pub(crate) fn trait_def_of_fq(&self, fq: &name::FqTraitName) -> Option<crate::defs::DefId> {
+        self.trait_def(&fq.canonical()?)
+    }
+
     pub(crate) fn has_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
-        trait_name: &str,
+        trait_: crate::defs::DefId,
         module_source: &ModuleSource,
     ) -> bool {
-        self.entries_by_receiver(receiver).any(|entry| {
-            entry.0 == *module_source && self.methodful_header_matches(entry, trait_name, None)
-        })
+        self.entries_by_receiver(receiver)
+            .any(|entry| entry.0 == *module_source && self.methodful_header_matches(entry, trait_))
     }
 
     /// Whether an inherent `impl` on `receiver` declares `method_name`.
@@ -1690,28 +1683,11 @@ impl TraitEnv {
     fn methodful_header_matches(
         &self,
         entry: &(ModuleSource, AstId),
-        trait_name: &str,
-        trait_ref: Option<crate::resolve::DeclRef>,
+        trait_: crate::defs::DefId,
     ) -> bool {
-        self.impl_headers.get(entry).is_some_and(|header| {
-            if header.methods.is_empty() {
-                return false;
-            }
-            match (trait_ref, header.trait_ref) {
-                // Both sides named a declaration, so this is a question about
-                // declarations. Only `Decl` qualifies: `Unresolved` is a unit
-                // variant, so comparing raw answers would make any two
-                // undeclared traits the same one.
-                (
-                    Some(crate::resolve::DeclRef::Decl(query)),
-                    Some(crate::resolve::DeclRef::Decl(decl)),
-                ) => query == decl,
-                // A caller not yet carrying an identity falls back to the
-                // spelling, which two modules can share (WEP 2026-08-10 stage
-                // C has these still to convert).
-                _ => header.trait_name.as_deref() == Some(trait_name),
-            }
-        })
+        self.impl_headers
+            .get(entry)
+            .is_some_and(|header| !header.methods.is_empty() && header.trait_ref == Some(trait_))
     }
 
     /// Return the home module of a *value* blanket (`impl<T: Bound> Trait for
@@ -1880,7 +1856,7 @@ impl TraitEnv {
 /// receiver picks out one declaration, a declared name picks out any
 /// declaration spelling itself that way. Each namespace has its own storage,
 /// written from one receiver identity, so a query cannot land in the wrong one
-/// — see WEP 2026-08-10.
+/// — see WEP 2026-08-12.
 ///
 /// [`Self::Of`] carries the identity and lets the index derive both spellings;
 /// the other two are for callers that hold only one. A bare `&str` cannot claim
@@ -1955,16 +1931,10 @@ fn static_receiver_key(type_key: &ImplTargetKey, otherwise: impl FnOnce() -> Dec
 fn impl_target_key_at(
     ty: &ast::Type,
     module_source: &ModuleSource,
-    symbols: &SymbolTable,
     resolutions: &crate::resolve::Resolutions,
 ) -> ImplTargetKey {
     sited_impl_target_key(ty, module_source, resolutions).unwrap_or_else(|| {
-        ImplTargetKey::of_written(
-            &get_type_name_static(ty),
-            module_source,
-            symbols,
-            resolutions,
-        )
+        ImplTargetKey::of_written(&get_type_name_static(ty), module_source, resolutions)
     })
 }
 
@@ -2020,14 +1990,15 @@ fn sited_impl_target_key(
         // The impl's own binder, which shadows any declaration of that name —
         // `impl<T> Trait for T` written where a `struct T` exists stays a
         // blanket.
-        crate::resolve::DeclRef::Binder(_) => Some(ImplTargetKey::TypeParam(
+        crate::resolve::Resolution::Binder(_) => Some(ImplTargetKey::TypeParam(
             module_source.clone(),
             get_type_name_static(ty),
         )),
-        answer @ crate::resolve::DeclRef::Decl(_) => resolutions
-            .decl_named(answer)
-            .map(|(module, name)| ImplTargetKey::of_decl(module, name)),
-        crate::resolve::DeclRef::Unresolved => None,
+        crate::resolve::Resolution::Def(def) => {
+            let defs = resolutions.defs();
+            Some(ImplTargetKey::of_decl(defs.module(def), defs.name(def)))
+        }
+        crate::resolve::Resolution::Unresolved => None,
     }
 }
 

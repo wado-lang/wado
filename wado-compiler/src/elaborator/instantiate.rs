@@ -147,7 +147,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if diag.is_none() {
                 continue;
             }
-            self.attach_infer_var_bounds(var, param.name.clone(), param.trait_bound_names(), span);
+            let bounds = self.declared_bounds(param);
+            self.attach_infer_var_bounds(var, param.name.clone(), bounds, span);
         }
     }
 

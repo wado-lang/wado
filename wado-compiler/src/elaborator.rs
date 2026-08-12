@@ -506,11 +506,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut keys = vec![self.decl_key_or_local(written_name)];
         if let Some(module) = receiver_module {
             // From the receiver's own vantage, not the call site's.
-            let by_receiver = self
-                .tysys
-                .resolutions
-                .declaration_named(module, written_name, self.symbols)
-                .unwrap_or_else(|| (module.clone(), written_name.to_string()));
+            let resolutions = &self.tysys.resolutions;
+            let by_receiver = resolutions
+                .declaration_named(module, written_name)
+                .map_or_else(
+                    || (module.clone(), written_name.to_string()),
+                    |def| resolutions.decl_key(def),
+                );
             if by_receiver != keys[0] {
                 keys.push(by_receiver);
             }
@@ -855,9 +857,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// declaration's, which is the confusion this whole design exists to end —
     /// so the caller decides what its own absence means.
     pub(crate) fn canonical_decl_key(&self, name: &str) -> Option<trait_env::DeclKey> {
-        self.tysys
-            .resolutions
-            .declaration_named(&self.current_module_source, name, self.symbols)
+        let resolutions = &self.tysys.resolutions;
+        resolutions
+            .declaration_named(&self.current_module_source, name)
+            .map(|def| resolutions.decl_key(def))
     }
 
     /// [`Self::canonical_decl_key`], then the declaration indexes, then the
@@ -900,7 +903,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             answer.is_some() || site.is_synthetic(),
             "every reference site is resolved before elaboration, `{written}` was not"
         );
-        if let Some(crate::resolve::DeclRef::Binder(_)) = answer {
+        if let Some(crate::resolve::Resolution::Binder(_)) = answer {
             return crate::name::FqTraitName::binder(written);
         }
         let (base, args) = crate::name::split_head_and_args(written);
@@ -908,7 +911,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .declared(site)
             .map_or_else(
                 || self.fq_trait_name_undeclared(base),
-                |(module, name)| crate::name::FqTraitName::declared(module, name),
+                |def| {
+                    let defs = resolutions.defs();
+                    crate::name::FqTraitName::declared(defs.module(def), defs.name(def))
+                },
             )
             .with_args(args)
     }
@@ -956,12 +962,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     "every reference site is resolved before elaboration, `{written}` was not"
                 );
                 match resolutions.get(site) {
-                    Some(crate::resolve::DeclRef::Binder(_)) => {
+                    Some(crate::resolve::Resolution::Binder(_)) => {
                         Some(crate::name::FqTraitName::binder(&written))
                     }
-                    _ => resolutions
-                        .declared(site)
-                        .map(|(module, name)| crate::name::FqTraitName::declared(module, name)),
+                    _ => resolutions.declared(site).map(|def| {
+                        let defs = resolutions.defs();
+                        crate::name::FqTraitName::declared(defs.module(def), defs.name(def))
+                    }),
                 }
             })
             .unwrap_or_else(|| self.fq_trait_name_undeclared(&written));
@@ -1055,13 +1062,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
         let receiver = Receiver::Type(self.tysys.fq_receiver_head(target_type_id));
-        if self.tysys.has_real_trait_impl_for_type(
-            &self.annotate_ctx,
-            &self.type_lookup(),
-            &receiver,
-            trait_name,
-            None,
-        ) {
+        // The marker's own site says which trait it names, so an already-present
+        // impl is recognised by declaration rather than by a spelling another
+        // module's trait can share.
+        let requested = crate::resolve::head_site(trait_type)
+            .and_then(|site| self.tysys.resolutions.declared(site));
+        if requested.is_some_and(|trait_| {
+            self.tysys.has_real_trait_impl_for_type(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                &receiver,
+                trait_,
+            )
+        }) {
             return;
         }
         let reason = self.tysys.trait_unimpl_reason_chain(
@@ -1224,7 +1237,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let (type_module, canon_key) = trait_query::canonical_assoc_const_key(
             key,
             &self.current_module_source,
-            self.symbols,
             &self.tysys.resolutions,
         )?;
         self.tysys
@@ -1278,48 +1290,64 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().flags_case_in(name, module_source)
     }
 
-    /// Build effect name → module source map from a module's import declarations.
+    /// Build effect name → declaring module map for a module.
     ///
-    /// For `use { Stdout::{write_via_stream} } from "wasi:cli"`, maps "Stdout" → resolved("wasi:cli").
-    /// For `use { Stdout } from "core:cli"`, maps "Stdout" → resolved("core:cli").
-    /// For local effect declarations, maps name → current module source.
+    /// Three sources, in precedence order: `use { Iface::{f} }`, which names an
+    /// interface without importing it, so the `use` declaration is the only
+    /// record of what `Iface` means; the module's explicit imports, read from
+    /// the symbol table where the analyzer already resolved aliases and
+    /// re-export chains; and the module's own `interface` / `resource`
+    /// declarations, which win over any import of the name.
+    ///
+    /// An import earns an entry by *being* an effect or a resource, asked of
+    /// the declaration. Guessing from the spelling — the `PascalCase` test this
+    /// replaces — admitted every imported struct and let a same-named one
+    /// answer for an effect it has nothing to do with.
     fn build_effect_sources(
         interner: &mut ModuleSourceInterner,
         module: &Module,
         module_source: &ModuleSource,
         entry: Option<&ModuleSource>,
         invocations: &crate::kiln::InvocationIndex,
+        symbols: &crate::symbol::SymbolTable,
     ) -> IndexMap<String, ModuleSource> {
         let mut sources = IndexMap::default();
         for item in &module.items {
-            match item {
-                Item::Use(use_decl) => {
-                    // `entry` must be threaded so identities match the loader
-                    // (see `name::resolve_local_identity`). Wasm-asset imports
-                    // resolve to `ModuleSource::Wasm`, matching the loader.
-                    let source = crate::loader::resolve_use_decl_source(
-                        interner,
-                        module_source,
-                        use_decl,
-                        entry,
-                        invocations,
-                    );
-                    for use_item in &use_decl.items {
-                        match use_item {
-                            ast::UseItem::InterfaceFunctions { interface_name, .. } => {
-                                sources.insert(interface_name.clone(), source.clone());
-                            }
-                            ast::UseItem::Simple { name, alias, .. } => {
-                                // Track simple imports that look like effect names (PascalCase)
-                                let local_name = alias.as_ref().unwrap_or(name);
-                                if local_name.starts_with(|c: char| c.is_ascii_uppercase()) {
-                                    sources.insert(local_name.clone(), source.clone());
-                                }
-                            }
-                            ast::UseItem::Wildcard | ast::UseItem::Namespace { .. } => {}
-                        }
-                    }
+            let Item::Use(use_decl) = item else {
+                continue;
+            };
+            let mut interfaces = use_decl.items.iter().filter_map(|use_item| match use_item {
+                ast::UseItem::InterfaceFunctions { interface_name, .. } => Some(interface_name),
+                ast::UseItem::Simple { .. }
+                | ast::UseItem::Wildcard
+                | ast::UseItem::Namespace { .. } => None,
+            });
+            if let Some(first) = interfaces.next() {
+                // `entry` must be threaded so identities match the loader
+                // (see `name::resolve_local_identity`). Wasm-asset imports
+                // resolve to `ModuleSource::Wasm`, matching the loader.
+                let source = crate::loader::resolve_use_decl_source(
+                    interner,
+                    module_source,
+                    use_decl,
+                    entry,
+                    invocations,
+                );
+                for interface_name in std::iter::once(first).chain(interfaces) {
+                    sources.insert(interface_name.clone(), source.clone());
                 }
+            }
+        }
+        for (local_name, sym) in symbols.imports_in(module_source) {
+            if matches!(
+                sym.kind,
+                crate::symbol::SymbolKind::Effect(_) | crate::symbol::SymbolKind::Resource(_)
+            ) {
+                sources.insert(local_name.to_string(), sym.module_source().clone());
+            }
+        }
+        for item in &module.items {
+            match item {
                 Item::Interface(effect_decl) => {
                     sources.insert(effect_decl.name.clone(), module_source.clone());
                 }
@@ -1577,6 +1605,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &module_source,
             Some(&self.entry_module_source),
             &self.invocations,
+            self.symbols,
         );
 
         // Record use→def edges for names that appear inside `use { ... }` specifiers.

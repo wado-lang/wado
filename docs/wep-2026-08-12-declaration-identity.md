@@ -146,22 +146,31 @@ Every declaration in the program gets a `DefId`: an opaque dense index into a
 ```rust
 pub struct DefId(u32);          // private field, `crate::defs` only
 
-pub struct DefTable { /* columns indexed by DefId */ }
+pub struct DefTable { /* dense rows indexed by DefId */ }
 
 impl DefTable {
     pub fn module(&self, def: DefId) -> &ModuleSource;
     pub fn name(&self, def: DefId) -> &str;          // a rendering, not a key
     pub fn ast_id(&self, def: DefId) -> AstId;
     pub fn kind(&self, def: DefId) -> DefKind;
+    pub fn parent(&self, def: DefId) -> Option<DefId>;
+    pub fn members(&self, def: DefId) -> &[DefId];
     pub fn of_ast_id(&self, id: AstId) -> Option<DefId>;
 }
 ```
 
+A member is a declaration too. A struct's fields, a variant's cases, a trait's
+methods each get a `DefId` under their owner, so the case a pattern names and the
+field a projection reads are identities rather than strings looked up against
+their owner. Members the symbol table already collected — an effect or resource
+method, registered there under its importable `Owner::method` name — keep that one
+identity and are only linked to their owner, so nothing gets two.
+
 The properties are in what is absent:
 
-- No public constructor. `DefId` is minted by `DefTable::declare`, called from the
-  collect pass and nowhere else. Rust's privacy is the enforcement; no lint and no
-  test is needed to hold it.
+- No public constructor. `DefId` is minted by `DefTable::declare`, which is
+  private to `crate::defs` and called only by `DefTable::build`. Rust's privacy is
+  the enforcement; no lint and no test is needed to hold it.
 - No `DefTable::lookup(module, name)`. **There is no function from a name to an
   identity outside the resolve pass.** This is the single rule the design rests
   on: a consumer holding only a name cannot obtain an identity, so it cannot
@@ -217,6 +226,12 @@ incidental fallbacks:
 `module_import_scope`, `ModuleImports` and `TypeLookup`'s import branch are
 deleted. The facts they carried that are not scope — a module's re-export list, an
 interface's members — stay, keyed by `DefId`.
+
+What an explicit `use` means is the analyzer's answer and only its answer: it
+resolves aliases and re-export chains once and records them, and every consumer
+reads that record. Re-walking the `use` declarations to answer the same question a
+second way is what let a namespace-qualified import and a `pub use` barrel resolve
+differently depending on which walk a pass happened to reach.
 
 ### 3. `Resolutions` — the one answer, total over reference sites
 
@@ -389,8 +404,8 @@ decides which declaration is meant.
 
 Each mechanism states what it makes impossible, not what it discourages.
 
-- `DefId`'s field is private to `crate::defs` and `DefTable::declare` is
-  `pub(crate)`. A pass cannot mint an identity. Enforced by the module system.
+- `DefId`'s field and `DefTable::declare` are both private to `crate::defs`. A
+  pass cannot mint an identity. Enforced by the module system.
 - `DefTable` has no name-keyed lookup and `Scope` is private to `crate::resolve`.
   A pass cannot turn a name into an identity. Enforced by the absence of the API.
 - Identity parameters are non-`Option` and are not accompanied by their own name.
@@ -406,46 +421,49 @@ Each mechanism states what it makes impossible, not what it discourages.
 
 ## Migration
 
-Each stage compiles, passes the suite, and ends with a mechanical completion
-check. The order is forced: identity before consumers, consumers before the
-name-keyed storage, storage before the mangling.
+What is left, in the order it has to happen: identity before consumers, consumers
+before the name-keyed storage, storage before the mangling. Each step compiles,
+passes the suite, and ends with a mechanical completion check.
 
--
-  1. [ ] `crate::defs` — `DefId`, `DefTable`, built from the loaded modules;
-         `Resolution::Def(DefId)` replaces `DeclRef::Decl(AstId)` (~25 sites).
-         Done when `DeclRef` is gone.
--
-  2. [ ] `Scope` — one implementation, checked against the other four by a
-         differential test over the fixture corpus before any is deleted.
-         Done when `SymbolTable`'s name lookups, `module_import_scope`,
-         `ModuleImports` and `TypeLookup`'s import branch are deleted.
--
-  3. [ ] `Resolutions::at` made total; the walk extended until no fixture panics.
-         Done when the `Option` is gone from the signature.
--
-  4. [ ] Identity-deciding queries flipped to `DefId`-only, starting with
-         `type_implements_trait`, `find_trait_impl_for_type_with_args`,
-         `locate_static_method_impl` and the indexes they read.
-         Done when no query takes both a name and an identity.
--
-  5. [ ] `ResolvedType` nominal variants carry `DefId`.
-         Done when `ResolvedType` holds no `(name, module_source)` pair.
--
-  6. [ ] Declaration data moved onto `DefTable`; `TypeLookup`'s scope walk deleted.
-         Done when no `IndexMap<ModuleSource, IndexMap<String, _>>` remains.
--
-  7. [ ] `ast::Type::Resolved(DefId)`; synthesis stops spelling names.
-         Done when no synthesis site builds a `NamedType` from a `&str`.
--
-  8. [ ] `SymbolPath`; the mangled-name parsers deleted; DCE retention keys the
-         struct's identity rather than re-deriving a name that must match one built
-         elsewhere.
-         Done when `name.rs` exports no function taking a mangled string.
+- [ ] `Scope` — one implementation of what a name means in a module. Done when
+      `SymbolTable`'s name lookups, `module_import_scope`, `ModuleImports` and
+      `TypeLookup`'s import branch are deleted.
+  - [ ] The prelude tier. `module_scope_lookup` ignores `#![no_prelude]` and
+        admits every kind; `module_import_scope` honours the attribute and admits
+        types and traits. The opt-out should hold — with the prelude's
+        implementation modules still reachable, since that is what lets a sealed
+        compiler item resolve for a module that never named it.
+  - [ ] A `use` colliding with a local declaration of the same name is ambiguous,
+        and no layering answers it honestly. Diagnose it, and the
+        imports-before-own-declarations order stops being observable.
+  - [ ] Function-local items (`Stmt::Item`). The symbol table collects only
+        module-level declarations, so a local `struct` has no identity and no
+        scope entry; `TypeLookup`'s function-local tier answers for it by name.
+        It needs a `DefId` scoped to its declaring function.
+- [ ] `Resolutions::at` made total; the walk extended until no fixture panics.
+      Done when the `Option` is gone from the signature.
+- [ ] The impl header's own trait reference. A header whose trait position names
+      no declaration — a bodiless derive naming a stdlib trait its module never
+      `use`d — still leaves `same_trait` comparing spellings. It is the last
+      spelling comparison in trait dispatch, and it closes when the scope answers
+      for that position.
+- [ ] Identity-deciding queries flipped to `DefId`-only, starting with
+      `type_implements_trait`, `find_trait_impl_for_type_with_args`,
+      `locate_static_method_impl` and the indexes they read. Done when no query
+      takes both a name and an identity.
+- [ ] `ResolvedType` nominal variants carry `DefId`. Done when `ResolvedType`
+      holds no `(name, module_source)` pair.
+- [ ] Declaration data moved onto `DefTable`; `TypeLookup`'s scope walk deleted.
+      Done when no `IndexMap<ModuleSource, IndexMap<String, _>>` remains.
+- [ ] `ast::Type::Resolved(DefId)`; synthesis stops spelling names. Done when no
+      synthesis site builds a `NamedType` from a `&str`.
+- [ ] `SymbolPath`; the mangled-name parsers deleted; DCE retention keys the
+      struct's identity rather than re-deriving a name that must match one built
+      elsewhere. Done when `name.rs` exports no function taking a mangled string.
 
-Stage 2 is the one with a real risk of behaviour change, because the five scopes
-disagree today and unifying them picks a winner. The differential test turns each
-disagreement into a decision made deliberately, with a fixture, rather than one
-absorbed.
+The `Scope` step is the one with a real risk of behaviour change, because the
+remaining scopes disagree and unifying them picks a winner. Each disagreement is
+a decision made deliberately, with a fixture, rather than one absorbed.
 
 ## Consequences
 
@@ -484,18 +502,24 @@ Costs and risks:
 
 The numbers this design is aimed at, measured over `wado-compiler/src`:
 
-| quantity                                            | now      |
-| --------------------------------------------------- | -------- |
-| `*name: &str` parameters                            | 867      |
-| implementations of "what does this name mean in M"  | 5        |
-| name-keyed per-module declaration registries        | 7        |
-| `type_implements_trait` callers passing no identity | 16 of 30 |
-| synthesised reference sites absent from the table   | 59       |
-| mangled-name parsing functions                      | 7        |
-| hand-assembled `(module, name)` keys                | 28       |
-| of those, substituting the writing module           | 6        |
+| quantity                                            | at the start | now     |
+| --------------------------------------------------- | ------------ | ------- |
+| `*name: &str` parameters                            | 867          | 860     |
+| independent walks over the `use` declarations       | 3            | 1       |
+| implementations of "what does this name mean in M"  | 5            | 5       |
+| name-keyed per-module declaration registries        | 7            | 7       |
+| `type_implements_trait` callers passing no identity | 16 of 30     | 0 of 30 |
+| synthesised reference sites absent from the table   | 59           | 59      |
+| mangled-name parsing functions                      | 7            | 7       |
+| hand-assembled `(module, name)` keys                | 28           | 22      |
+| of those, substituting the writing module           | 6            | 6       |
 
-Each row reaches zero when its stage lands. A row that stops falling means a stage
-was declared done while a bypass survived it — which is what happened to the
-earlier `trait_name: &str` count, and the reason this document measures the bypass
-rather than the parameter.
+Each row reaches zero — or one, for the rows counting implementations — when its
+step lands. A row that stops falling means a step was declared done while a bypass
+survived it, which is what happened to the earlier `trait_name: &str` count, and
+the reason this document measures the bypass rather than the parameter.
+
+The bypass row is the one that matters, and it is closed: the query takes a
+`DefId` and nothing else, so there is no `None` left to pass. The `*name: &str`
+row has barely moved because the names still travelling are the ones the
+name-keyed registries force, and those go with the storage.

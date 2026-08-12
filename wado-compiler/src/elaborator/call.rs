@@ -2404,7 +2404,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 new_args.push(type_args[i]);
                 continue;
             }
-            let bounds = p.trait_bound_names();
+            let bounds = self.declared_bounds(p);
             // `infer_fn_type_args` already instantiated this slot, so the
             // variable standing in for it is the one to blame — minting a
             // second would orphan the first, which the sweep would then pin to

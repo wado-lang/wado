@@ -1780,7 +1780,7 @@ pub const TUPLE_TYPE_NAME: &str = "[]";
 /// go-to-definition.
 ///
 /// Distinct from a mangled name, which carries the declaring module and which
-/// no declaration lookup stores. Every naming defect in WEP 2026-07-28 was one
+/// no declaration lookup stores. Every naming defect in WEP 2026-08-12 was one
 /// substituted for the other, and both being `String` is what let that compile.
 /// So this deliberately has no `Deref<Target = str>`, no `AsRef<str>` and no
 /// `From<String>`: it is minted by the authorities that know the namespace —
