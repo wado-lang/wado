@@ -258,6 +258,14 @@ Three registries collect declarative information from the standard library and f
 - `WorldRegistry` (`world_registry.rs`) — collects world definitions (e.g., the `Command` world from `wasi/cli.wado`) and provides export signatures.
 - `BuiltinRegistry` (`builtin_registry.rs`) — collects function signatures from `lib/core/builtin.wado`. Functions tagged `#[canonical("ns", "name")]` import a CM canonical builtin (`wasi`, `mem`, or `bundled`); untagged builtins compile directly to Wasm instructions.
 
+### Canonical intrinsics
+
+`canon future.read` and its siblings are typed — the Component Model instantiates one per `future<T>` — so the core module needs a distinct import per payload type. `CanonicalIntrinsic` (`canonical.rs`) is that identity, and `CmRawCall` carries it from synthesis through TIR and NIR into WIR.
+
+`import_name` renders the identity as the core import name at the end of that path. It is a rendering, not a carrier: nothing parses it back to recover a payload, so it only has to be injective. Do not reintroduce the round-trip — the trailers future renders to the bare base name, which is also what a `#[canonical("wasi", "future-read")]` annotation spells, and reading that back as a payload is how an unclassified `future<T>` once became the HTTP trailers future.
+
+A payload that classifies as nothing is reported, never defaulted. `classify_future_payload` recognizes the trailers shape structurally and panics otherwise; `classify_stream_payload` panics rather than falling back to `stream<u8>`. Callers that only need to know whether an element has a payload type ask `cm_payload_type_from_type_id` directly instead of reading a classifier's answer.
+
 ## LSP
 
 The language server (`wado-lsp/`) is a thin layer on top of `wado_compiler::semantics`. The `Engine` holds open documents and answers LSP queries (diagnostics, hover, go-to-definition, references, document highlight, semantic tokens). Each query:
