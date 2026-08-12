@@ -384,6 +384,18 @@ export async fn id_future_result(v: Future<Result<u32, String>>) -> Future<Resul
         tx.write(x);
     }
 }
+// A unit Ok arm is also the shape of the WASI transmission future
+// (`future<result<_, error-code>>`). Only a WASI error-code makes it one; with
+// any other Err type this is an ordinary `result<_, E>` payload.
+export async fn id_future_result_err(v: Future<Result<(), String>>) -> Future<Result<(), String>> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Result<(), String>>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
 export async fn id_future_list(v: Future<List<u32>>) -> Future<List<u32>> {
     let value = v.read();
     v.drop();

@@ -657,6 +657,8 @@ fn run_round_trips(opt_level: OptLevel) {
         check!(future_round_trip(&mut store, &instance, i, "id-future-string", "héllo, wörld".to_string()));
         check!(future_round_trip(&mut store, &instance, i, "id-future-option", Some(42u32)));
         check!(future_round_trip(&mut store, &instance, i, "id-future-result", Ok::<u32, String>(7)));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-result-err", Err::<(), String>("boom".to_string())));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-result-err", Ok::<(), String>(())));
         check!(future_round_trip(&mut store, &instance, i, "id-future-list", vec![1u32, 2, 3]));
         check!(future_round_trip(&mut store, &instance, i, "id-future-tuple", (5u32, "x".to_string())));
         check!(future_round_trip(&mut store, &instance, i, "id-future-record", Point { x: 1.5, y: -2.5 }));

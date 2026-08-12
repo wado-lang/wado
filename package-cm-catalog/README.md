@@ -42,7 +42,9 @@ Full intended scope; checked items are implemented.
 - [x] `string`
 - [x] `record`
 - [x] `option<_>`
-- [x] `result<_, _>`
+- [x] `result<_, _>`, including the unit-Ok form — `future<result<_, string>>`
+      has the shape of the WASI transmission future, and only a WASI error-code
+      on the Err side makes it one
 - [x] `list<_>`
 - [x] `tuple<…>`
 - [x] `variant` / `enum` / `flags` payloads
