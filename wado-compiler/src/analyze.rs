@@ -78,6 +78,16 @@ pub enum AnalyzeError {
         span: Span,
         first: Span,
     },
+    /// An import whose local name the module also declares.
+    ///
+    /// Nothing can answer which one a reference means, so the layerings that
+    /// resolve names each pick one and they need not agree. Rejecting the
+    /// program is the only honest answer.
+    ImportShadowsDefinition {
+        name: String,
+        span: Span,
+        declared: Span,
+    },
     /// Undefined symbol reference
     UndefinedSymbol { name: String, span: Span },
     /// Invalid module path (not a valid URI reference)
@@ -128,6 +138,17 @@ impl std::fmt::Display for AnalyzeError {
                     f,
                     "{}:{}: duplicate definition '{}' (first defined at {}:{})",
                     span.line, span.column, name, first.line, first.column
+                )
+            }
+            AnalyzeError::ImportShadowsDefinition {
+                name,
+                span,
+                declared,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: import of '{}' collides with the declaration at {}:{}",
+                    span.line, span.column, name, declared.line, declared.column
                 )
             }
             AnalyzeError::UndefinedSymbol { name, span } => {
@@ -219,6 +240,18 @@ impl From<AnalyzeError> for crate::compiler_host::Diagnostic {
                 format!(
                     "duplicate definition '{name}' (first defined at {}:{})",
                     first.line, first.column
+                ),
+                *span,
+            ),
+            AnalyzeError::ImportShadowsDefinition {
+                name,
+                span,
+                declared,
+            } => (
+                Code::DuplicateDefinition,
+                format!(
+                    "import of '{name}' collides with the declaration at {}:{}",
+                    declared.line, declared.column
                 ),
                 *span,
             ),
@@ -888,6 +921,34 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         Ok(())
     }
 
+    /// Reject an import whose local name the module also declares.
+    ///
+    /// The name then means two declarations at once, and every layering that
+    /// resolves it picks one on its own terms — which is how the same spelling
+    /// came to mean different things in different parts of the compiler. An
+    /// alias resolves it, so the program says which one it meant.
+    fn reject_import_collision(
+        &self,
+        module_source: &ModuleSource,
+        local_name: &str,
+        span: Span,
+    ) -> Result<(), Bail> {
+        let Some(declared) = self
+            .symbols
+            .defined_span_in_module(module_source, local_name)
+        else {
+            return Ok(());
+        };
+        self.logger.error_in(
+            module_source,
+            AnalyzeError::ImportShadowsDefinition {
+                name: local_name.to_string(),
+                span,
+                declared,
+            },
+        )
+    }
+
     /// Validate imports in a module (for pre-loaded modules)
     fn validate_imports(
         &mut self,
@@ -961,6 +1022,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     from_module_source,
                                     &module_source,
                                     name,
+                                    use_decl.span,
+                                )?;
+                                self.reject_import_collision(
+                                    from_module_source,
+                                    import_name,
                                     use_decl.span,
                                 )?;
                                 self.symbols

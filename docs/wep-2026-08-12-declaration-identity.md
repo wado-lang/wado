@@ -220,7 +220,9 @@ incidental fallbacks:
 2. the module's explicit imports, keyed by local name so an alias resolves to what
    it aliases, including the `ns$member` aliases a namespace import registers;
 3. the module's own declarations, including the function-local items in scope at
-   the site;
+   the site — an import whose local name the module also declares is rejected,
+   so this layer and the one above it can never both answer and the order
+   between them is unobservable;
 4. the prelude — its re-exports, then its implementation modules, so an `internal`
    compiler item (`ReflectStruct`, `Member`, `Ref`) resolves for a module that
    never `use`d it and can then be diagnosed as sealed;
@@ -442,9 +444,6 @@ completion check.
         types and traits. The opt-out should hold — with the prelude's
         implementation modules still reachable, since that is what lets a sealed
         compiler item resolve for a module that never named it.
-  - [ ] A `use` colliding with a local declaration of the same name is ambiguous,
-        and no layering answers it honestly. Diagnose it, and the
-        imports-before-own-declarations order stops being observable.
   - [ ] Function-local items (`Stmt::Item`). The symbol table collects only
         module-level declarations, so a local `struct` has no identity and no
         scope entry; `TypeLookup`'s function-local tier answers for it by name.
