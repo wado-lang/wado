@@ -564,7 +564,7 @@ came back to 26 when that turned out to be wrong: the required trait can name a
 type-parameter binder or a name that reaches no declaration at all, and a `DefId`
 cannot stand for either. `RequiredTrait` becomes an identity when it carries a
 `Resolution` — `Def` or `Binder` — not before, and that waits on its comparison
-partners carrying one too. The `*name: &str` row has gone *up* for the same kind
+partners carrying one too. The `*name: &str` row has gone _up_ for the same kind
 of reason: the parameters counted there are what the name-keyed registries force,
 and the identity work so far has added a few renderings on the way to them. Both
 rows move when the storage moves.

@@ -844,9 +844,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // carries `DefId`s, and they only read back as the same
             // declarations if the identities are the same ones.
             let seed = snapshot_state.map(|s| s.tysys.resolutions.defs().as_ref());
-            let defs = std::sync::Arc::new(crate::defs::DefTable::build_seeded(
-                seed, modules, symbols,
-            ));
+            let defs =
+                std::sync::Arc::new(crate::defs::DefTable::build_seeded(seed, modules, symbols));
             Rc::new(crate::resolve::Resolutions::build(modules, symbols, defs))
         };
 

@@ -146,8 +146,7 @@ impl DefKind {
 }
 
 /// The facts every declaration carries, whatever it declares.
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Def {
     ast_id: AstId,
     module: ModuleSource,
@@ -305,7 +304,8 @@ impl DefTable {
             for member in members {
                 // A seed already linked this member to this owner; linking again
                 // would list it twice under the owner.
-                if self.of_ast_id(member.ast_id).map(|id| self.get(id).parent) == Some(Some(owner)) {
+                if self.of_ast_id(member.ast_id).map(|id| self.get(id).parent) == Some(Some(owner))
+                {
                     continue;
                 }
                 let id = self.of_ast_id(member.ast_id).unwrap_or_else(|| {
