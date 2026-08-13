@@ -491,18 +491,14 @@ fn build_lr_suffix_element(
                 RepeatKind::Star => element_first_has_lr(&rep.element, lr_first) || follow_has,
                 RepeatKind::Plus => element_first_has_lr(&rep.element, lr_first) || follow_has,
             };
-            build_repeat_prec(
+            build_repeat(
                 b,
                 rep.kind,
                 rep.non_greedy,
                 &rep.element,
-                rule_name,
-                lr_first,
-                conflict_min,
-                iter_has,
                 r,
-                rule_index,
                 rep.atn_decision,
+                |bb: &mut AtnBuilder, e: &Element| build_lr_suffix_element(bb, e, rule_name, lr_first, conflict_min, iter_has, r, rule_index),
             );
         },
         // A self-ref nested under `Not` is not a rule operand; build generically.
@@ -559,73 +555,6 @@ fn build_sequence_prec(
         cursor = seg.1;
     }
     return [entry, cursor];
-}
-
-/// Follow-aware mirror of `build_repeat`: identical state/edge shape, but the
-/// inner element builds via `build_lr_suffix_element` with the iteration
-/// follow `iter_has` (the caller folds in the body's re-entry FIRST).
-fn build_repeat_prec(
-    b: &mut AtnBuilder,
-    kind: RepeatKind,
-    non_greedy: bool,
-    inner: &Element,
-    rule_name: &String,
-    lr_first: &List<String>,
-    conflict_min: i32,
-    iter_has: bool,
-    r: i32,
-    rule_index: &TreeMap<String, i32>,
-    site: i32,
-) -> [i32, i32] {
-    return match kind {
-        Optional => {
-            let start = b.new_state(ATN_BLOCK_START, r);
-            let end = b.new_state(ATN_BLOCK_END, r);
-            b.mark_decision_for_site(start, site);
-            let seg = build_lr_suffix_element(b, inner, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
-            if non_greedy {
-                b.add_eps(start, end);
-                b.add_eps(start, seg.0);
-            } else {
-                b.add_eps(start, seg.0);
-                b.add_eps(start, end);
-            }
-            b.add_eps(seg.1, end);
-            [start, end];
-        },
-        Star => {
-            let entry = b.new_state(ATN_STAR_LOOP_ENTRY, r);
-            let end = b.new_state(ATN_LOOP_END, r);
-            b.mark_decision_for_site(entry, site);
-            let seg = build_lr_suffix_element(b, inner, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
-            let back = b.new_state(ATN_STAR_LOOP_BACK, r);
-            if non_greedy {
-                b.add_eps(entry, end);
-                b.add_eps(entry, seg.0);
-            } else {
-                b.add_eps(entry, seg.0);
-                b.add_eps(entry, end);
-            }
-            b.add_eps(seg.1, back);
-            b.add_eps(back, entry);
-            [entry, end];
-        },
-        Plus => {
-            let seg = build_lr_suffix_element(b, inner, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
-            let back = b.new_state(ATN_PLUS_LOOP_BACK, r);
-            let end = b.new_state(ATN_LOOP_END, r);
-            b.mark_decision_for_site(back, site);
-            b.add_eps(seg.1, back);
-            if non_greedy {
-                b.add_eps(back, end);
-                b.add_eps(back, seg.0);
-            } else {
-                b.add_eps(back, seg.0);
-                b.add_eps(back, end);
-            }
-            [seg.0, end];
-        },
-    };
 }
 
 /// True iff FIRST(`elem`) can contain a token in `lr_first`. Opaque elements
@@ -821,7 +750,15 @@ fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &Tre
         Group(g) => build_alternation(b, &g.alternatives, rule, rule_index, g.atn_decision),
         Label(lab) => build_element(b, &lab.element, rule, rule_index),
         Not(n) => not_segment(b, &n.element, rule),
-        Repeat(rep) => build_repeat(b, rep.kind, rep.non_greedy, &rep.element, rule, rule_index, rep.atn_decision),
+        Repeat(rep) => build_repeat(
+            b,
+            rep.kind,
+            rep.non_greedy,
+            &rep.element,
+            rule,
+            rep.atn_decision,
+            |bb: &mut AtnBuilder, e: &Element| build_element(bb, e, rule, rule_index),
+        ),
     };
 }
 
@@ -865,15 +802,15 @@ fn build_repeat(
     non_greedy: bool,
     inner: &Element,
     rule: i32,
-    rule_index: &TreeMap<String, i32>,
     site: i32,
+    build_inner: fn(&mut AtnBuilder, &Element) -> [i32, i32],
 ) -> [i32, i32] {
     return match kind {
         Optional => {
             let start = b.new_state(ATN_BLOCK_START, rule);
             let end = b.new_state(ATN_BLOCK_END, rule);
             b.mark_decision_for_site(start, site);
-            let seg = build_element(b, inner, rule, rule_index);
+            let seg = build_inner(b, inner);
             if non_greedy {
                 b.add_eps(start, end);
                 b.add_eps(start, seg.0);
@@ -888,7 +825,7 @@ fn build_repeat(
             let entry = b.new_state(ATN_STAR_LOOP_ENTRY, rule);
             let end = b.new_state(ATN_LOOP_END, rule);
             b.mark_decision_for_site(entry, site);
-            let seg = build_element(b, inner, rule, rule_index);
+            let seg = build_inner(b, inner);
             let back = b.new_state(ATN_STAR_LOOP_BACK, rule);
             if non_greedy {
                 b.add_eps(entry, end);
@@ -902,7 +839,7 @@ fn build_repeat(
             [entry, end];
         },
         Plus => {
-            let seg = build_element(b, inner, rule, rule_index);
+            let seg = build_inner(b, inner);
             let back = b.new_state(ATN_PLUS_LOOP_BACK, rule);
             let end = b.new_state(ATN_LOOP_END, rule);
             b.mark_decision_for_site(back, site);

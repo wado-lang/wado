@@ -782,7 +782,7 @@ test "lower token-only Group produces TokenOnly shape with single field" {
                 panic("expected MultiAltDispatch::Direct");
             }
             // Scan side mirrors the parse-side dispatch.
-            if let Direct(dd) = &go.scan_dispatch {
+            if let Direct(dd) = &go.dispatch {
                 assert dd.branches.len() == 2;
             } else {
                 panic("expected scan dispatch Direct");
@@ -2485,10 +2485,10 @@ test "lower multi-alt rule with overlapping first sets emits Tournament dispatch
         } else {
             panic("expected MultiAltDispatch::Tournament");
         }
-        if let Tournament(_) = &m.scan_dispatch {
+        if let Tournament(_) = &m.dispatch {
             assert true;
         } else {
-            panic("expected scan_dispatch Tournament");
+            panic("expected dispatch Tournament");
         }
     } else {
         panic("expected Rule::MultiAlt");

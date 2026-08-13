@@ -16,6 +16,7 @@ use {
     RepeatElement,
     LabelElement,
     AltAction,
+    find_lexer_rule,
 } from "./ir.wado";
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
 use { translate_lexer_predicate, translate_lexer_action } from "./action_translate.wado";
@@ -2730,15 +2731,6 @@ fn gen_lexer_not(
     w.line(&`pos = not_saved_${id};`);
     w.line(&`if not_matched_${id} \{ ${fail_action}; \}`);
     w.line(&"pos += 1;");
-}
-
-fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
-    for let rule of all_rules {
-        if rule.name == *name {
-            return Option::<&LexerRule>::Some(rule);
-        }
-    }
-    return null;
 }
 
 fn find_fragment(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {

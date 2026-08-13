@@ -215,13 +215,8 @@ pub struct MultiAltRule {
     /// Scan-side counterpart of `alts`, again indexed by original
     /// alt index.
     pub scan_alts: List<ScanBody>,
-    /// Parse-side dispatch shape between the alternatives.
+    /// Dispatch shape between the alternatives. Parse and scan share it.
     pub dispatch: MultiAltDispatch,
-    /// Scan-side dispatch shape. Today this is always a byte-identical
-    /// copy of `dispatch` (lower builds one dispatch and assigns it to
-    /// both fields); kept as a separate field so the two sides can
-    /// diverge later without a structural change.
-    pub scan_dispatch: MultiAltDispatch,
 }
 
 /// Direct left-recursive rule. The atom holds the non-LR alternatives
@@ -743,11 +738,10 @@ pub struct GroupOp {
     pub alts: List<AltBody>,
     /// Scan-side mirror.
     pub scan_alts: List<ScanBody>,
-    /// Parse-time dispatch when the group has multiple alts. For
-    /// single-alt groups this is `MultiAltDispatch::Direct` with one
-    /// branch.
+    /// Dispatch when the group has multiple alts; parse and scan share
+    /// it. For single-alt groups this is `MultiAltDispatch::Direct` with
+    /// one branch.
     pub dispatch: MultiAltDispatch,
-    pub scan_dispatch: MultiAltDispatch,
 }
 
 /// Lower-side classification of a Repeat's body op shape. Drives

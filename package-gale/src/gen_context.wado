@@ -58,8 +58,7 @@ pub global FOLLOW_MASK_MAX_K: i32 = 4;
 /// Codegen-time context shared across emit walkers. Holds the
 /// first / nullable / single-token / scannable caches, the
 /// `single_alt_owner` and `kind_set` registries, and the
-/// follow-mask registry. No walker-mutable state — every
-/// per-walk value (caller follow, current rule name, etc.) is
+/// follow-mask registry. Caller follow is never stored here — it is
 /// threaded as an explicit parameter through the lowering and
 /// emission call chains.
 pub struct GenContext {

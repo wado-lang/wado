@@ -5736,7 +5736,7 @@ fn unwrap_optional_op(op: &Op) -> &Op with stores[op] {
 /// Op-driven scan-guard for a `Group`-shaped Optional inner. Mirrors
 /// `gen_rep_scan_guard` but walks the scan side via op-driven
 /// helpers (`gen_scan_op_elements_in_block` / `gen_scan_op_group`)
-/// using `g_op.scan_alts` / `g_op.scan_dispatch` directly, instead
+/// using `g_op.scan_alts` / `g_op.dispatch` directly, instead
 /// of the surface `gen_scan_elements_in_block` / `gen_scan_group`
 /// graph. `g_elem` is the surface `Group` matching `g_op`; it is
 /// consulted only to compute per-alt first sets for the multi-alt
@@ -5773,7 +5773,7 @@ fn gen_op_opt_scan_guard_for_group(
         }
         let scan_elem = ScanGroupElement {
             alts: g_op.scan_alts,
-            dispatch: g_op.scan_dispatch,
+            dispatch: g_op.dispatch,
             lenient: false,
             alt_first_sets,
             wildcard_alt_indices: wildcard_indices,
