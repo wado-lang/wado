@@ -999,7 +999,12 @@ mod tests {
     impl Setup {
         fn new(local_types: &[LocalKind]) -> Self {
             let mut type_table = TypeTable::new();
-            let struct_ty = type_table.make_struct("P".to_string(), ModuleSource::prelude());
+            let def = type_table.declare_for_test(
+                "P",
+                ModuleSource::prelude(),
+                crate::defs::DefKind::Struct,
+            );
+            let struct_ty = type_table.make_struct(crate::tir::StructDef::Decl(def));
             let mut_ref_ty = type_table.make_mut_ref(struct_ty);
             let locals = local_types
                 .iter()

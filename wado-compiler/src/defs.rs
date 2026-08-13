@@ -438,6 +438,31 @@ impl DefTable {
         self.defs.is_empty()
     }
 
+    /// Mint a declaration for a unit test that needs one without parsing a
+    /// module.
+    ///
+    /// `#[cfg(test)]`, so production code still has no constructor — which is
+    /// the property this design rests on. A test that wants a *struct type*
+    /// rather than a declaration should use an anonymous shape instead.
+    #[cfg(test)]
+    pub(crate) fn declare_for_test(
+        &mut self,
+        module: &ModuleSource,
+        name: &str,
+        kind: DefKind,
+    ) -> DefId {
+        self.declare(Def {
+            ast_id: AstId::fresh(),
+            module: module.clone(),
+            name: name.to_string(),
+            kind,
+            visibility: Visibility::Public,
+            span: None,
+            parent: None,
+            members: Vec::new(),
+        })
+    }
+
     /// Every declaration, in collect order.
     pub fn iter(&self) -> impl Iterator<Item = DefId> + '_ {
         (0..self.defs.len()).map(|i| DefId(i as u32))

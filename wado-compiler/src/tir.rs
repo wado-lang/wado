@@ -1128,6 +1128,19 @@ impl TypeTable {
         }
     }
 
+    /// Mint a declaration in this table's own `DefTable`, for a unit test that
+    /// builds a type without parsing a module. See
+    /// [`crate::defs::DefTable::declare_for_test`].
+    #[cfg(test)]
+    pub(crate) fn declare_for_test(
+        &mut self,
+        name: &str,
+        module: ModuleSource,
+        kind: crate::defs::DefKind,
+    ) -> crate::defs::DefId {
+        std::sync::Arc::make_mut(&mut self.defs).declare_for_test(&module, name, kind)
+    }
+
     /// The declaration `module` declares under `name`, read back out of the
     /// type already interned for it.
     ///
@@ -5887,17 +5900,11 @@ mod tests {
         let mut interner = ModuleSourceInterner::new();
         let m = interner.local("./main.wado");
 
-        let base = table.make_struct("Box".to_string(), m.clone());
-        let boxed_i32 = table.make_monomorphized_struct_from_args(
-            "Box".to_string(),
-            m.clone(),
-            vec![TypeTable::I32],
-        );
-        let boxed_i64 = table.make_monomorphized_struct_from_args(
-            "Box".to_string(),
-            m.clone(),
-            vec![TypeTable::I64],
-        );
+        let def = table.declare_for_test("Box", m.clone(), crate::defs::DefKind::Struct);
+        let head = StructDef::Decl(def);
+        let base = table.make_struct(head);
+        let boxed_i32 = table.make_monomorphized_struct_from_args(head, vec![TypeTable::I32]);
+        let boxed_i64 = table.make_monomorphized_struct_from_args(head, vec![TypeTable::I64]);
         assert_eq!(table.find_struct_by_name("Box<i32>", &m), Some(boxed_i32));
 
         let keep: IndexSet<TypeId> = [base, boxed_i32, boxed_i64].into_iter().collect();
@@ -5947,7 +5954,8 @@ mod tests {
         let first = crate::ast::AstId::new(space, 10);
         let second = crate::ast::AstId::new(space, 20);
 
-        let first_type = table.make_struct("Point".to_string(), module.clone());
+        let point = table.declare_for_test("Point", module.clone(), crate::defs::DefKind::Struct);
+        let first_type = table.make_struct(StructDef::Decl(point));
         table.register_decl_type(first, first_type);
 
         // A second, distinct declaration reusing the same source name
@@ -5955,8 +5963,7 @@ mod tests {
         // (bypassing the name-keyed intern_map, as a local declaration's
         // constructor will) and register it under its own AstId.
         let second_type = table.push_fresh(ResolvedType::Struct {
-            decl_name: "Point".to_string(),
-            module_source: module,
+            def: StructDef::Decl(point),
             type_args: Vec::new(),
         });
         table.register_decl_type(second, second_type);

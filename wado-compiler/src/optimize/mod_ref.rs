@@ -1238,9 +1238,10 @@ mod tests {
         // no-table path is `field_access_is_heap_read_and_may_trap`.
         use crate::tir::{ResolvedType, TypeTable};
         let mut types = TypeTable::new();
+        let def =
+            types.declare_for_test("W", ModuleSource::default(), crate::defs::DefKind::Struct);
         let struct_ty = types.intern(ResolvedType::Struct {
-            decl_name: "W".to_string(),
-            module_source: ModuleSource::default(),
+            def: crate::tir::StructDef::Decl(def),
             type_args: Vec::new(),
         });
         let mut body = Body::empty();

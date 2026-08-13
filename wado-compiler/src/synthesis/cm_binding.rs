@@ -1182,13 +1182,15 @@ mod tests {
         // rather than wrong, which is the harder failure to notice.
         let bind_variant = |tt: &mut TypeTable, name: &str, module: ModuleSource| {
             let decl = crate::ast::AstId::fresh();
-            let ty = tt.make_variant(name.to_string(), module);
+            let def = tt.declare_for_test(name, module, crate::defs::DefKind::Variant);
+            let ty = tt.make_variant(def);
             tt.register_decl_type(decl, ty);
             decl
         };
         let bind_struct = |tt: &mut TypeTable, name: &str, module: ModuleSource| {
             let decl = crate::ast::AstId::fresh();
-            let ty = tt.make_struct(name.to_string(), module);
+            let def = tt.declare_for_test(name, module, crate::defs::DefKind::Struct);
+            let ty = tt.make_struct(crate::tir::StructDef::Decl(def));
             tt.register_decl_type(decl, ty);
             decl
         };
@@ -1621,9 +1623,12 @@ mod tests {
                 .resolve_cm_source_for(elem_named, Some("sockets"))
                 .expect("IpAddress resolves in the stdlib registry");
             let module_source = ctx.module_source_for(&source);
-            type_table
-                .borrow_mut()
-                .make_variant("IpAddress".to_string(), module_source);
+            let def = type_table.borrow_mut().declare_for_test(
+                "IpAddress",
+                module_source,
+                crate::defs::DefKind::Variant,
+            );
+            type_table.borrow_mut().make_variant(def);
         }
 
         let list_ty = cm_abi::generic_type("List", vec![elem_ty]);
@@ -1850,7 +1855,12 @@ mod tests {
     #[test]
     fn param_needs_lifting_string() {
         let mut tt = TypeTable::new();
-        let s = tt.make_struct("String".to_string(), ModuleSource::string());
+        let def = tt.declare_for_test(
+            "String",
+            ModuleSource::string(),
+            crate::defs::DefKind::Struct,
+        );
+        let s = tt.make_struct(crate::tir::StructDef::Decl(def));
         assert!(param_needs_lifting(s, &tt));
     }
 
@@ -1858,10 +1868,12 @@ mod tests {
     fn param_needs_lifting_resource() {
         // Resources are i32 handles — no lift.
         let mut tt = TypeTable::new();
-        let r = tt.intern(crate::tir::ResolvedType::Resource {
-            name: "Request".to_string(),
-            module_source: ModuleSource::wasi_http(),
-        });
+        let def = tt.declare_for_test(
+            "Request",
+            ModuleSource::wasi_http(),
+            crate::defs::DefKind::Resource,
+        );
+        let r = tt.intern(crate::tir::ResolvedType::Resource { def });
         assert!(!param_needs_lifting(r, &tt));
     }
 
@@ -1869,10 +1881,12 @@ mod tests {
     fn param_needs_lifting_enum() {
         let mut tt = TypeTable::new();
         let mut interner = ModuleSourceInterner::new();
-        let e = tt.intern(crate::tir::ResolvedType::Enum {
-            name: "Color".to_string(),
-            module_source: interner.entry_point("<test>"),
-        });
+        let def = tt.declare_for_test(
+            "Color",
+            interner.entry_point("<test>"),
+            crate::defs::DefKind::Enum,
+        );
+        let e = tt.intern(crate::tir::ResolvedType::Enum { def });
         assert!(!param_needs_lifting(e, &tt));
     }
 
@@ -1882,9 +1896,13 @@ mod tests {
         // (avoids `make_option`'s dependency on comp-feature registration,
         // which isn't present in a bare `TypeTable::new()`).
         let mut tt = TypeTable::new();
+        let def = tt.declare_for_test(
+            "Option",
+            ModuleSource::types(),
+            crate::defs::DefKind::Variant,
+        );
         let opt = tt.intern(crate::tir::ResolvedType::GenericInstance {
-            name: "Option".to_string(),
-            module_source: ModuleSource::types(),
+            def,
             type_args: vec![TypeTable::I32],
         });
         assert!(param_needs_lifting(opt, &tt));
@@ -1893,9 +1911,13 @@ mod tests {
     #[test]
     fn param_needs_lifting_array() {
         let mut tt = TypeTable::new();
+        let def = tt.declare_for_test(
+            "List",
+            ModuleSource::prelude(),
+            crate::defs::DefKind::Struct,
+        );
         let arr = tt.intern(crate::tir::ResolvedType::GenericInstance {
-            name: "List".to_string(),
-            module_source: ModuleSource::prelude(),
+            def,
             type_args: vec![TypeTable::I32],
         });
         assert!(param_needs_lifting(arr, &tt));
@@ -1917,9 +1939,14 @@ mod tests {
     #[test]
     fn export_needs_lifting_with_string() {
         let tt_cell = std::cell::RefCell::new(TypeTable::new());
+        let def = tt_cell.borrow_mut().declare_for_test(
+            "String",
+            ModuleSource::string(),
+            crate::defs::DefKind::Struct,
+        );
         let string_id = tt_cell
             .borrow_mut()
-            .make_struct("String".to_string(), ModuleSource::string());
+            .make_struct(crate::tir::StructDef::Decl(def));
         let params = vec![mk_param(string_id)];
         assert!(export_needs_param_lifting(&params, &tt_cell));
     }
