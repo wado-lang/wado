@@ -646,6 +646,23 @@ compiles, passes the suite, and ends with a mechanical completion check.
       declaration through `decl_of_type`. Those are the sites this design is
       actually about, and no shim can carry them.
 
+      The expand step was run to the point where that is provable, and the
+      numbers are worth keeping. Adding `def` beside the pair on the four
+      simple variants — `Enum`, `Variant`, `Resource`, `Flags` — is 88 errors,
+      of which **79 are patterns that list every field** and take a `..`
+      mechanically. The other **9 are constructors**, and they do not yield to
+      a rule: about 25 callers reach them, and the `synthesis/*` ones hold a
+      name and a module and nothing else. Several of those are not
+      constructing at all — they re-intern a type that already exists purely to
+      get its `TypeId` back, which is `find_decl_type_by_name` written as a
+      `make_`. Rewriting them to ask for the declaration is the fix, and it is
+      per-site work, not a substitution.
+
+      So the ratio to plan against is roughly nine parts mechanical to one part
+      judgment, with the judgment concentrated in synthesis and the
+      monomorphizer. Budget the step by the constructors, not by the error
+      count.
+
       Do not trust a grep for the pair shape. It also matches
       `ExprKind::GlobalVarGet`, which is a NIR node carrying a global's name —
       a real problem, and a different one. Read each candidate.
