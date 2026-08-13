@@ -44,11 +44,7 @@ use {
     RepeatKind,
     GroupElement,
 } from "./ir.wado";
-use {
-    alt_is_wildcard_led,
-    compute_overlap_groups,
-    sort_group_by_element_count,
-} from "./alt_grouping.wado";
+use { alt_is_wildcard_led, compute_overlap_groups, sort_group_by_element_count } from "./alt_grouping.wado";
 use {
     rule_type_name,
     literal_const_name,
@@ -1677,7 +1673,9 @@ fn build_overlap_dispatch(
     first_sets: &List<List<String>>,
     ctx: &mut GenContext,
 ) -> MultiAltDispatch {
-    assert first_sets.len() == indices.len(), `${*owner_label}: first_sets is parallel to indices, not to alts (${first_sets.len()} vs ${indices.len()})`;
+    let n_sets = first_sets.len();
+    let n_indices = indices.len();
+    assert n_sets == n_indices, `${*owner_label}: first_sets is parallel to indices, not to alts (${n_sets} vs ${n_indices})`;
 
     // An open-ended alt's static first set is empty, so `any_overlap` reads it
     // as disjoint and the Direct chain would give it an unreachable
