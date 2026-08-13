@@ -1759,7 +1759,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // site has resolved by naming one.
         if let Some(wanted) = required_trait {
             found_traits.retain(|m| {
-                self.tysys.resolutions.decl_key(m.trait_decl) == wanted.decl
+                crate::resolve::Resolution::Def(m.trait_decl) == wanted.decl
                     && wanted
                         .args
                         .as_ref()
@@ -1785,11 +1785,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .auto_derive_by_method(method_name)
                     .is_some_and(|(item, _, _)| {
                         self.tysys
-                            .type_table
-                            .borrow()
-                            .compiler_trait_fq(item)
-                            .canonical()
-                            .is_some_and(|decl| decl == wanted.decl)
+                            .compiler_trait_def(item)
+                            .is_some_and(|decl| {
+                                crate::resolve::Resolution::Def(decl) == wanted.decl
+                            })
                     })
             })
         {

@@ -1707,7 +1707,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let candidates: Vec<(ast::TraitBound, super::trait_env::DeclKey)> = keyed
             .into_iter()
             .filter(|(_, key)| {
-                required_trait.is_none_or(|w| *key == w.decl)
+                required_trait.is_none_or(|w| match w.decl {
+                    // A binder or an unreached name declares no trait, so it
+                    // competes with none — which is what the fabricated key
+                    // amounted to.
+                    crate::resolve::Resolution::Def(def) => {
+                        self.tysys.resolutions.decl_key(def) == *key
+                    }
+                    _ => false,
+                })
                     && self.trait_declares_method_of(key, method_name)
             })
             .collect();

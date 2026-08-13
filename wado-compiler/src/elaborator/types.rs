@@ -2061,7 +2061,7 @@ pub(super) enum VarRef {
 /// resolved types, so aliased spellings compare equal. `display` keeps the
 /// caller's spelling for diagnostics.
 pub(super) struct RequiredTrait {
-    pub(super) decl: super::trait_env::DeclKey,
+    pub(super) decl: crate::resolve::Resolution,
     pub(super) args: Option<Vec<TypeId>>,
     pub(super) display: String,
 }

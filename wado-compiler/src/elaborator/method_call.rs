@@ -1170,10 +1170,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let required = super::types::RequiredTrait {
-            decl: head_site.map_or_else(
-                || self.decl_key_or_local(trait_name),
-                |site| self.trait_decl_at(site, trait_name),
-            ),
+            // The site's own answer. A prefix naming a type-parameter binder
+            // is a `Binder`, which matches no trait declaration — the same
+            // outcome the fabricated key produced, said rather than simulated.
+            decl: head_site.map_or(crate::resolve::Resolution::Unresolved, |site| {
+                self.tysys.resolutions.get(site)
+            }),
             args: None,
             display: self.declared_trait_name(trait_name),
         };
@@ -1404,7 +1406,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let args_spelled: Vec<String> =
                     g.args.iter().map(|a| self.get_type_name_full(a)).collect();
                 let required = super::types::RequiredTrait {
-                    decl: self.trait_decl_at(g.id, &g.name),
+                    decl: self.tysys.resolutions.get(g.id),
                     args: Some(trait_args),
                     display: format!("{declared_head}<{}>", args_spelled.join(", ")),
                 };
