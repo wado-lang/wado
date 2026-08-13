@@ -629,30 +629,27 @@ impl FunctionTranslator<'_, '_> {
     /// or enum the compiler can enumerate here.
     fn case_indexer(&self, scrut_type: TypeId) -> Option<CaseIndexer> {
         match self.type_table.get(scrut_type) {
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => self.variant_case_indexer(name, module_source),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => {
-                let mangled = super::types::generic_instance_name(self.type_table, name, type_args);
-                self.variant_case_indexer(&mangled, module_source)
+            ResolvedType::Variant { def } => self.variant_case_indexer(
+                self.type_table.def_name(*def),
+                self.type_table.def_module(*def),
+            ),
+            ResolvedType::GenericInstance { def, type_args } => {
+                let mangled = super::types::generic_instance_name(
+                    self.type_table,
+                    self.type_table.def_name(*def),
+                    type_args,
+                );
+                self.variant_case_indexer(&mangled, self.type_table.def_module(*def))
             }
-            ResolvedType::Enum {
-                name,
-                module_source,
-                ..
-            } => self
+            ResolvedType::Enum { def } => self
                 .ctx
                 .package
                 .enums
                 .iter()
-                .find(|e| e.name == *name && e.module_source == *module_source)
+                .find(|e| {
+                    e.name == self.type_table.def_name(*def)
+                        && e.module_source == *self.type_table.def_module(*def)
+                })
                 .map(|e| CaseIndexer {
                     names: None,
                     total: e.cases.len(),
@@ -686,19 +683,17 @@ impl FunctionTranslator<'_, '_> {
     #[track_caller]
     fn variant_type_key(&self, type_id: TypeId) -> String {
         match self.type_table.get(type_id) {
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => crate::name::wir_type_key(module_source, name),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => {
-                let mangled = super::types::generic_instance_name(self.type_table, name, type_args);
-                crate::name::wir_type_key(module_source, &mangled)
+            ResolvedType::Variant { def } => crate::name::wir_type_key(
+                self.type_table.def_module(*def),
+                self.type_table.def_name(*def),
+            ),
+            ResolvedType::GenericInstance { def, type_args } => {
+                let mangled = super::types::generic_instance_name(
+                    self.type_table,
+                    self.type_table.def_name(*def),
+                    type_args,
+                );
+                crate::name::wir_type_key(self.type_table.def_module(*def), &mangled)
             }
             other => panic!("[WIR] expected a variant type, got {other:?}"),
         }
@@ -1354,16 +1349,11 @@ impl FunctionTranslator<'_, '_> {
     /// proved the pattern names a field this struct has.
     #[track_caller]
     fn resolve_struct_field_type(&self, struct_type: TypeId, field_name: &str) -> TypeId {
-        let ResolvedType::Struct {
-            decl_name,
-            module_source,
-            type_args,
-            ..
-        } = self.type_table.get(struct_type)
-        else {
+        let ResolvedType::Struct { def, type_args } = self.type_table.get(struct_type) else {
             panic!("[WIR] struct pattern on non-struct {struct_type:?}");
         };
-        let name = self.type_table.struct_rendered_name(decl_name, type_args);
+        let name = self.type_table.struct_rendered_name(*def, type_args);
+        let module_source = self.type_table.struct_head_module(*def).clone();
         self.ctx
             .package
             .structs
