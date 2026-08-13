@@ -308,7 +308,15 @@ impl Resolutions {
     /// walked — a coverage hole rather than an unresolved name.
     #[must_use]
     pub fn get(&self, site: AstId) -> Option<Resolution> {
-        self.refs.get(&site).copied()
+        let answer = self.refs.get(&site).copied();
+        // Stated here rather than at the callers so it covers every one of
+        // them, `declared` included. A missing answer is a coverage hole in the
+        // walk, not a name that reaches nothing — those are `Unresolved`.
+        debug_assert!(
+            answer.is_some(),
+            "every reference site is resolved before elaboration, {site:?} was not"
+        );
+        answer
     }
 
     #[must_use]

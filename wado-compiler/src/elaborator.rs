@@ -890,10 +890,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> crate::name::FqTraitName {
         let resolutions = &self.tysys.resolutions;
         let answer = resolutions.get(site);
-        debug_assert!(
-            answer.is_some(),
-            "every reference site is resolved before elaboration, `{written}` was not"
-        );
         if let Some(crate::resolve::Resolution::Binder(_)) = answer {
             return crate::name::FqTraitName::binder(written);
         }
@@ -948,10 +944,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let head = crate::resolve::head_site(ty)
             .and_then(|site| {
                 let resolutions = &self.tysys.resolutions;
-                debug_assert!(
-                    resolutions.get(site).is_some(),
-                    "every reference site is resolved before elaboration, `{written}` was not"
-                );
                 match resolutions.get(site) {
                     Some(crate::resolve::Resolution::Binder(_)) => {
                         Some(crate::name::FqTraitName::binder(&written))

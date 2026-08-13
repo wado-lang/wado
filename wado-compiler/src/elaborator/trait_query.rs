@@ -1517,10 +1517,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         site: crate::ast::AstId,
         written: &str,
     ) -> super::trait_env::DeclKey {
-        debug_assert!(
-            self.tysys.resolutions.get(site).is_some(),
-            "every reference site is resolved before elaboration, `{written}` was not"
-        );
         if let Some(def) = self.tysys.resolutions.declared(site) {
             let key = self.tysys.resolutions.decl_key(def);
             if self.tysys.trait_env.decl_index.contains_key(&key) {
