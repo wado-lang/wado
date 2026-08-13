@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786622793746,
+  "lastUpdate": 1786623457055,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47621,6 +47621,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1a92cc3e37790a5e8c030c895a52edafc26bfdf7"
         },
         "date": 1786622793032,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265490,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6eec2c0628961d088bac3cd0ef513853c581218d",
+          "message": "Merge pull request #1800 from wado-lang/claude/niri-smell-investigation-p1003u\n\nfix(niri): refuse folds that outlive the write they depend on",
+          "timestamp": "2026-08-13T21:02:14+09:00",
+          "tree_id": "02d6496a69bdaaa024715181a541e646f14be84d",
+          "url": "https://github.com/wado-lang/wado/commit/6eec2c0628961d088bac3cd0ef513853c581218d"
+        },
+        "date": 1786623456507,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
