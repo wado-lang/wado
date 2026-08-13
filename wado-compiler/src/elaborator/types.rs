@@ -62,8 +62,11 @@ pub(crate) struct VariantCaseData {
 #[derive(Clone)]
 pub(crate) struct VariantInfo {
     /// Canonical type name (original declaration name, not import alias).
-    pub(super) name: String,
-    pub(super) module_source: ModuleSource,
+    /// `pub(crate)` alongside `module_source` so the Semantics-based effect
+    /// checker can key its payload map by the declaration, now that the
+    /// registry no longer spells one out in its key.
+    pub(crate) name: String,
+    pub(crate) module_source: ModuleSource,
     /// `AstId` of the `variant` declaration (`VariantDecl::id`).
     pub(super) defined_at: AstId,
     pub(super) type_params: Vec<String>,
@@ -2116,6 +2119,10 @@ pub(crate) struct TypeLookup<'a> {
     /// pass. The registries this view reads are keyed by declaration, so this is
     /// how a written name reaches one.
     pub(crate) resolutions: &'a crate::resolve::Resolutions,
+    /// Read only by the two trait-scope helpers in `trait_query`, which are
+    /// deliberately blind to the prelude: an ambient compiler trait must stay
+    /// distinguishable from a same-named user `trait`. Everything else reaches a
+    /// declaration through [`Self::declaration`].
     pub(crate) imported_type_sources: &'a IndexMap<String, ModuleSource>,
     pub(crate) import_original_names: &'a IndexMap<String, String>,
     /// Namespace-import aliases (`use ns from "..."`). A `ns::Type` reference
@@ -2126,9 +2133,9 @@ pub(crate) struct TypeLookup<'a> {
     pub(crate) namespace_imports: &'a IndexMap<String, ModuleSource>,
     pub(crate) all_newtypes: &'a IndexMap<crate::defs::DefId, TypeId>,
     pub(crate) all_struct_fields: &'a IndexMap<crate::defs::DefId, StructFieldInfo>,
-    pub(crate) all_variant_cases: &'a IndexMap<ModuleSource, IndexMap<String, VariantInfo>>,
-    pub(crate) all_enum_cases: &'a IndexMap<ModuleSource, IndexMap<String, EnumInfo>>,
-    pub(crate) all_flags_cases: &'a IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>,
+    pub(crate) all_variant_cases: &'a IndexMap<crate::defs::DefId, VariantInfo>,
+    pub(crate) all_enum_cases: &'a IndexMap<crate::defs::DefId, EnumInfo>,
+    pub(crate) all_flags_cases: &'a IndexMap<crate::defs::DefId, FlagsInfo>,
     pub(crate) all_resource_types: &'a IndexMap<crate::defs::DefId, ResourceInfo>,
     pub(crate) all_generic_newtypes: &'a IndexMap<crate::defs::DefId, GenericNewtypeInfo>,
     pub(crate) local_struct_fields: &'a IndexMap<String, StructFieldInfo>,
@@ -2147,116 +2154,6 @@ pub(crate) struct TypeLookup<'a> {
 }
 
 impl<'a> TypeLookup<'a> {
-    /// Resolve `name` against `all_per_module` using the (local → current →
-    /// imports → any) precedence. Borrows have lifetime `'a`, so the caller
-    /// can keep the returned reference alive across `&self` re-borrows.
-    fn lookup_ref<V>(
-        &self,
-        name: &str,
-        local: Option<&'a IndexMap<String, V>>,
-        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
-    ) -> Option<&'a V> {
-        // Canonicalize a `ns::Type` reference to its `ns$Type` alias — the
-        // single chokepoint for every type-name lookup. The alias resolves
-        // through the `imported_type_sources` branch below to the namespace's
-        // own module.
-        let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
-        let name = canon.as_deref().unwrap_or(name);
-        if let Some(local) = local
-            && let Some(v) = local.get(name)
-        {
-            return Some(v);
-        }
-        if let Some(v) = all_per_module
-            .get(self.current_module_source)
-            .and_then(|m| m.get(name))
-        {
-            return Some(v);
-        }
-        if let Some(src) = self.imported_type_sources.get(name) {
-            let canonical = self
-                .import_original_names
-                .get(name)
-                .map(String::as_str)
-                .unwrap_or(name);
-            if let Some(v) = all_per_module.get(src).and_then(|m| m.get(canonical)) {
-                return Some(v);
-            }
-            if let ModuleSource::Wasi { interface } = src {
-                let prefix = format!("{interface}/");
-                for (s, m) in all_per_module {
-                    if let ModuleSource::Wasi { interface: sub } = s
-                        && sub.starts_with(&prefix)
-                        && let Some(v) = m.get(canonical)
-                    {
-                        return Some(v);
-                    }
-                }
-            }
-            // Imported but absent from this registry: the name is simply of
-            // another kind (e.g. an imported `enum` queried against the variant
-            // registry). `src` is the true definer — `module_import_scope`
-            // resolves `pub use` chains — so there is nowhere else to look.
-        }
-        // No global-scan fallback. A bare name resolves only through locals, the
-        // current module, or imports (the prelude is injected into every
-        // module's import scope, so its types resolve through the import branch
-        // above). Returning the first same-named match from any module is what
-        // let a type bind to an unrelated module's same-named type (issue #1416).
-        None
-    }
-
-    /// Resolve `name` keyed strictly by `module_source`: the local override
-    /// matches only when its own module agrees, then the per-module table is
-    /// indexed directly. Unlike [`Self::lookup_ref`] it applies no import
-    /// precedence, so a resolved `ResolvedType` (which carries its
-    /// `module_source`) can never resolve to a same-named type from another
-    /// module (issue #1416). The bare-name lookups are for names written in
-    /// source, where import precedence is the right policy.
-    fn lookup_ref_in<V>(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-        local: &'a IndexMap<String, V>,
-        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
-        module_of: impl Fn(&V) -> &ModuleSource,
-    ) -> Option<&'a V> {
-        local
-            .get(name)
-            .filter(|v| *module_of(v) == *module_source)
-            .or_else(|| all_per_module.get(module_source).and_then(|m| m.get(name)))
-    }
-
-    /// Resolve a *source-written* bare `name` with function-local
-    /// precedence: the current function's own local items (`fn_local`, see
-    /// `ModuleDecls::fn_local_struct_fields`) shadow everything else, ahead
-    /// of `lookup_ref`'s (local → current module → imports → any) chain.
-    /// Consolidates the identical wrapper every bare-name accessor below
-    /// used to duplicate by hand.
-    ///
-    /// Only for resolving a name as *written in source* — an already-known
-    /// `(name, module_source)` identity recovered from a resolved `TypeId`
-    /// (e.g. reify's `recorded_type`) must use [`Self::lookup_ref_in`]
-    /// directly (via the `_in` accessors below) and *not* this tier: the
-    /// function-local table is a flat, unordered map mutated in place as
-    /// annotate walks the function sequentially, so by the time a later,
-    /// independent pass (reify) looks up a name, it reflects the *end* of
-    /// that function's local declarations, not the position-appropriate
-    /// state — consulting it for an already-resolved identity risks
-    /// resolving to an unrelated later-declared local item that happens to
-    /// share the same bare name as an outer, non-local type.
-    fn fn_local_first<V>(
-        &self,
-        name: &str,
-        fn_local: &'a IndexMap<String, V>,
-        local: Option<&'a IndexMap<String, V>>,
-        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
-    ) -> Option<&'a V> {
-        fn_local
-            .get(name)
-            .or_else(|| self.lookup_ref(name, local, all_per_module))
-    }
-
     pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
         if let Some(info) = self.fn_local_struct_fields.get(name) {
             return Some(info);
@@ -2303,12 +2200,13 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
-        self.fn_local_first(
-            name,
-            self.fn_local_variant_cases,
-            Some(self.local_variant_cases),
-            self.all_variant_cases,
-        )
+        if let Some(info) = self.fn_local_variant_cases.get(name) {
+            return Some(info);
+        }
+        if let Some(info) = self.local_variant_cases.get(name) {
+            return Some(info);
+        }
+        self.all_variant_cases.get(&self.declaration(name)?)
     }
 
     pub(super) fn variant_case_in(
@@ -2316,22 +2214,25 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a VariantInfo> {
-        self.lookup_ref_in(
-            name,
-            module_source,
-            self.local_variant_cases,
-            self.all_variant_cases,
-            |info| &info.module_source,
-        )
+        if let Some(info) = self
+            .local_variant_cases
+            .get(name)
+            .filter(|info| info.module_source == *module_source)
+        {
+            return Some(info);
+        }
+        self.all_variant_cases
+            .get(&self.resolutions.declared_in(module_source, name)?)
     }
 
     pub(super) fn enum_case(&self, name: &str) -> Option<&'a EnumInfo> {
-        self.fn_local_first(
-            name,
-            self.fn_local_enum_cases,
-            Some(self.local_enum_cases),
-            self.all_enum_cases,
-        )
+        if let Some(info) = self.fn_local_enum_cases.get(name) {
+            return Some(info);
+        }
+        if let Some(info) = self.local_enum_cases.get(name) {
+            return Some(info);
+        }
+        self.all_enum_cases.get(&self.declaration(name)?)
     }
 
     pub(super) fn enum_case_in(
@@ -2339,22 +2240,25 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a EnumInfo> {
-        self.lookup_ref_in(
-            name,
-            module_source,
-            self.local_enum_cases,
-            self.all_enum_cases,
-            |info| &info.module_source,
-        )
+        if let Some(info) = self
+            .local_enum_cases
+            .get(name)
+            .filter(|info| info.module_source == *module_source)
+        {
+            return Some(info);
+        }
+        self.all_enum_cases
+            .get(&self.resolutions.declared_in(module_source, name)?)
     }
 
     pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {
-        self.fn_local_first(
-            name,
-            self.fn_local_flags_cases,
-            Some(self.local_flags_cases),
-            self.all_flags_cases,
-        )
+        if let Some(info) = self.fn_local_flags_cases.get(name) {
+            return Some(info);
+        }
+        if let Some(info) = self.local_flags_cases.get(name) {
+            return Some(info);
+        }
+        self.all_flags_cases.get(&self.declaration(name)?)
     }
 
     pub(super) fn flags_case_in(
@@ -2362,13 +2266,15 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a FlagsInfo> {
-        self.lookup_ref_in(
-            name,
-            module_source,
-            self.local_flags_cases,
-            self.all_flags_cases,
-            |info| &info.module_source,
-        )
+        if let Some(info) = self
+            .local_flags_cases
+            .get(name)
+            .filter(|info| info.module_source == *module_source)
+        {
+            return Some(info);
+        }
+        self.all_flags_cases
+            .get(&self.resolutions.declared_in(module_source, name)?)
     }
 
     pub(super) fn resource_type(&self, name: &str) -> Option<&'a ResourceInfo> {

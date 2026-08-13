@@ -429,13 +429,11 @@ impl OwnedEffectData {
         // detection descends into variant case payloads.
         let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
             IndexMap::default();
-        for (module, variants) in state.tysys.all_variant_cases.iter() {
-            for (variant_name, info) in variants {
-                variant_payloads.insert(
-                    (module.clone(), variant_name.clone()),
-                    info.cases.iter().map(|case| case.payload).collect(),
-                );
-            }
+        for info in state.tysys.all_variant_cases.values() {
+            variant_payloads.insert(
+                (info.module_source.clone(), info.name.clone()),
+                info.cases.iter().map(|case| case.payload).collect(),
+            );
         }
 
         // Effect / resource propagation closure: holding effect `E` admits the
@@ -1446,8 +1444,8 @@ fn build_returns(
         }
     }
 
-    for variants in state.tysys.all_variant_cases.values() {
-        for info in variants.values() {
+    for info in state.tysys.all_variant_cases.values() {
+        {
             for case in &info.cases {
                 let mut positions = IndexSet::default();
                 if !matches!(sem.types.get(case.payload), ResolvedType::Unit) {
@@ -1679,13 +1677,11 @@ impl TypeRefCtx {
         }
         let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
             IndexMap::default();
-        for (module, variants) in state.tysys.all_variant_cases.iter() {
-            for (variant_name, info) in variants {
-                variant_payloads.insert(
-                    (module.clone(), variant_name.clone()),
-                    info.cases.iter().map(|case| case.payload).collect(),
-                );
-            }
+        for info in state.tysys.all_variant_cases.values() {
+            variant_payloads.insert(
+                (info.module_source.clone(), info.name.clone()),
+                info.cases.iter().map(|case| case.payload).collect(),
+            );
         }
         Self {
             struct_fields,

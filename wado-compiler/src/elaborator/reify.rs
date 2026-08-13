@@ -813,11 +813,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `annotate_decls` interned via `make_flags`; reify reads it from
     /// `tysys.all_flags_cases`.
     fn reify_flags(&self, flags_decl: &ast::FlagsDecl) -> Option<TirFlags> {
-        let info = self
-            .tysys
-            .all_flags_cases
-            .get(&self.current_module_source)?
-            .get(&flags_decl.name)?;
+        let def = self.tysys.resolutions.defs().of_ast_id(flags_decl.id)?;
+        let info = self.tysys.all_flags_cases.get(&def)?;
         Some(TirFlags {
             name: flags_decl.name.clone(),
             module_source: self.current_module_source.clone(),
@@ -1062,9 +1059,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_variant_decl(&mut self, variant_decl: &ast::VariantDecl) -> TirVariantDecl {
         let case_info = self
             .tysys
-            .all_variant_cases
-            .get(&self.current_module_source)
-            .and_then(|m| m.get(&variant_decl.name));
+            .resolutions
+            .defs()
+            .of_ast_id(variant_decl.id)
+            .and_then(|def| self.tysys.all_variant_cases.get(&def));
 
         let cases: Vec<tir::TirVariantCase> = variant_decl
             .cases
@@ -7774,9 +7772,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let case_name = &suffix[inner + 2..];
                 if let Some(variant_info) = self
                     .tysys
-                    .all_variant_cases
-                    .get(&ns_source)
-                    .and_then(|m| m.get(type_name))
+                    .resolutions
+                    .declared_in(&ns_source, type_name)
+                    .and_then(|def| self.tysys.all_variant_cases.get(&def))
                     .cloned()
                     && let Some((case_index, case_data)) = variant_info
                         .cases

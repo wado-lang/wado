@@ -1039,9 +1039,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Check if this is a variant construction in the namespace
                     let ns_variant = self
                         .tysys
-                        .all_variant_cases
-                        .get(&ns_source)
-                        .and_then(|m| m.get(type_name))
+                        .resolutions
+                        .declared_in(&ns_source, type_name)
+                        .and_then(|def| self.tysys.all_variant_cases.get(&def))
                         .cloned();
                     if let Some(variant_info) = ns_variant {
                         let case_match = variant_info

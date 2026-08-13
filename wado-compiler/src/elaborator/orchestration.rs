@@ -174,14 +174,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             snapshot_state
                 .map(|s| (*s.tysys.all_struct_fields).clone())
                 .unwrap_or_default();
-        let mut all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>> =
+        let mut all_variant_cases: IndexMap<crate::defs::DefId, VariantInfo> =
             snapshot_state
                 .map(|s| (*s.tysys.all_variant_cases).clone())
                 .unwrap_or_default();
-        let mut all_enum_cases: IndexMap<ModuleSource, IndexMap<String, EnumInfo>> = snapshot_state
+        let mut all_enum_cases: IndexMap<crate::defs::DefId, EnumInfo> = snapshot_state
             .map(|s| (*s.tysys.all_enum_cases).clone())
             .unwrap_or_default();
-        let mut all_flags_cases: IndexMap<ModuleSource, IndexMap<String, FlagsInfo>> =
+        let mut all_flags_cases: IndexMap<crate::defs::DefId, FlagsInfo> =
             snapshot_state
                 .map(|s| (*s.tysys.all_flags_cases).clone())
                 .unwrap_or_default();
@@ -249,11 +249,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .iter()
                             .map(|p| p.name.clone())
                             .collect();
-                        all_variant_cases
-                            .entry(module_source.clone())
-                            .or_default()
-                            .insert(
-                                variant_decl.name.clone(),
+                        if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
+                            all_variant_cases.insert(
+                                def,
                                 VariantInfo {
                                     name: variant_decl.name.clone(),
                                     module_source: module_source.clone(),
@@ -263,6 +261,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     type_param_type_ids: Vec::new(),
                                 },
                             );
+                        }
                         super::item::register_variant_compiler_item(
                             &type_table,
                             &variant_decl.attrs,
@@ -286,11 +285,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::Enum(enum_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
-                        all_enum_cases
-                            .entry(module_source.clone())
-                            .or_default()
-                            .insert(
-                                enum_decl.name.clone(),
+                        if let Some(def) = resolutions.defs().of_ast_id(enum_decl.id) {
+                            all_enum_cases.insert(
+                                def,
                                 EnumInfo::new(
                                     enum_decl.name.clone(),
                                     module_source.clone(),
@@ -298,6 +295,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     Vec::new(),
                                 ),
                             );
+                        }
                         super::item::register_enum_compiler_item(
                             &type_table,
                             &enum_decl.attrs,
@@ -703,11 +701,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     .make_type_param(name.clone(), i as u32)
                             })
                             .collect();
-                        all_variant_cases
-                            .entry(module_source.clone())
-                            .or_default()
-                            .insert(
-                                variant_decl.name.clone(),
+                        if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
+                            all_variant_cases.insert(
+                                def,
                                 VariantInfo {
                                     name: variant_decl.name.clone(),
                                     module_source: module_source.clone(),
@@ -717,6 +713,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     type_param_type_ids,
                                 },
                             );
+                        }
                     }
                     Item::Enum(enum_decl) => {
                         // Populate enum cases (no field types, just names and indices)
@@ -730,11 +727,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 ast_id: case.id,
                             })
                             .collect();
-                        all_enum_cases
-                            .entry(module_source.clone())
-                            .or_default()
-                            .insert(
-                                enum_decl.name.clone(),
+                        if let Some(def) = resolutions.defs().of_ast_id(enum_decl.id) {
+                            all_enum_cases.insert(
+                                def,
                                 EnumInfo::new(
                                     enum_decl.name.clone(),
                                     module_source.clone(),
@@ -742,6 +737,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     cases,
                                 ),
                             );
+                        }
                     }
                     Item::Flags(flags_decl) => {
                         // A flags value is a single 32-bit word at the CM
@@ -780,17 +776,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 ast_id: m.id,
                             })
                             .collect();
-                        all_flags_cases
-                            .entry(module_source.clone())
-                            .or_default()
-                            .insert(
-                                flags_decl.name.clone(),
+                        if let Some(def) = resolutions.defs().of_ast_id(flags_decl.id) {
+                            all_flags_cases.insert(
+                                def,
                                 FlagsInfo {
                                     type_id: flags_type,
                                     module_source: module_source.clone(),
                                     members,
                                 },
                             );
+                        }
                     }
                     _ => {}
                 }
@@ -958,20 +953,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for info in all_struct_fields.values() {
                 cache.insert(info.name.clone());
             }
-            for m in all_variant_cases.values() {
-                for name in m.keys() {
-                    cache.insert(name.clone());
-                }
+            for def in all_variant_cases.keys() {
+                cache.insert(resolutions.defs().name(*def).to_string());
             }
-            for m in all_enum_cases.values() {
-                for name in m.keys() {
-                    cache.insert(name.clone());
-                }
+            for def in all_enum_cases.keys() {
+                cache.insert(resolutions.defs().name(*def).to_string());
             }
-            for m in all_flags_cases.values() {
-                for name in m.keys() {
-                    cache.insert(name.clone());
-                }
+            for def in all_flags_cases.keys() {
+                cache.insert(resolutions.defs().name(*def).to_string());
             }
             for def in all_newtypes.keys() {
                 cache.insert(resolutions.defs().name(*def).to_string());
@@ -996,17 +985,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // the global cache, so it can only remove false positives.
         let module_visible_types: IndexMap<ModuleSource, IndexSet<String>> = {
             // Own-declared type names per module.
-            fn collect<V>(
-                src: &IndexMap<ModuleSource, IndexMap<String, V>>,
-                out: &mut IndexMap<ModuleSource, IndexSet<String>>,
-            ) {
-                for (ms, inner) in src {
-                    let entry = out.entry(ms.clone()).or_default();
-                    for name in inner.keys() {
-                        entry.insert(name.clone());
-                    }
-                }
-            }
             let mut local: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
             for info in all_struct_fields.values() {
                 local
@@ -1014,9 +992,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .or_default()
                     .insert(info.name.clone());
             }
-            collect(&all_variant_cases, &mut local);
-            collect(&all_enum_cases, &mut local);
-            collect(&all_flags_cases, &mut local);
+            for def in all_variant_cases.keys() {
+                let defs = resolutions.defs();
+                local
+                    .entry(defs.module(*def).clone())
+                    .or_default()
+                    .insert(defs.name(*def).to_string());
+            }
+            for def in all_enum_cases.keys() {
+                let defs = resolutions.defs();
+                local
+                    .entry(defs.module(*def).clone())
+                    .or_default()
+                    .insert(defs.name(*def).to_string());
+            }
+            for def in all_flags_cases.keys() {
+                let defs = resolutions.defs();
+                local
+                    .entry(defs.module(*def).clone())
+                    .or_default()
+                    .insert(defs.name(*def).to_string());
+            }
             for def in all_newtypes.keys() {
                 let defs = resolutions.defs();
                 local
