@@ -1,16 +1,8 @@
-//! Borrow-keyed function-identity containers for the value-copy analyses.
-//!
-//! A function is identified by `(module_source, name)` — the same pair
-//! `ownership::func_key` folds into a `FunctionId`. Keying an `IndexMap` /
-//! `IndexSet` by `FunctionId` forces every lookup to first *build* that key:
-//! clone the `ModuleSource` and heap-allocate `name.to_string()`. In the
-//! interprocedural fixpoints and the per-call fold walk that lookup runs on
-//! every call node, so the allocation dominates.
-//!
-//! Splitting the key into a two-level `module -> name -> _` map lets a lookup
-//! borrow both halves (`ModuleSource` by reference, `name` as `&str` via
-//! `String: Borrow<str>`), so membership tests allocate nothing while staying
-//! byte-for-byte equivalent to the `FunctionId`-keyed map.
+//! Borrow-keyed function-identity containers for the value-copy analyses. A
+//! `FunctionId`-keyed map makes every lookup *build* its key first, cloning a
+//! `ModuleSource` and allocating a `String` — on every call node of the
+//! interprocedural fixpoints, where that dominates. A two-level
+//! `module -> name -> _` map lets a lookup borrow both halves instead.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;

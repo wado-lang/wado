@@ -1,15 +1,9 @@
-//! Plan Wado's value-copy semantics.
-//!
-//! [`analyze::collect_seed_types`] returns the set of `TypeId`s the
-//! fold will wrap in `$value_copy$T(...)`;
-//! [`synthesize::synthesize_helpers`] generates a per-type helper for
-//! the seed plus its transitive closure of nested value-typed fields.
-//! The fold (`lower::translate`) emits wrap calls directly using
-//! [`ValueCopyPlan::name_for_type`], but only at consumption sites the ownership
-//! analysis cannot prove a move, share, or fresh value: last-use liveness
-//! ([`last_use`]), interprocedural freshness ([`ownership`]), per-parameter
-//! confinement ([`confine`]), and the read-only-share refinement. There is no
-//! later elision pass — every emitted copy is necessary by construction.
+//! Plan Wado's value-copy semantics: [`analyze::collect_seed_types`] names the
+//! types the fold wraps in `$value_copy$T(…)` and
+//! [`synthesize::synthesize_helpers`] generates a helper apiece. A wrap is
+//! emitted only where the ownership analyses — last-use liveness, freshness,
+//! confinement, read-only sharing — cannot prove a move, share or fresh value,
+//! so every copy is necessary and there is no later elision pass.
 
 pub mod analyze;
 pub mod callgraph;

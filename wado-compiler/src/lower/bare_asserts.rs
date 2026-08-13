@@ -1,24 +1,8 @@
-//! Lower the `assert_failed` marker reify emits for assertion failures.
-//!
-//! `assert cond[, msg]` reifies to
-//! `if !cond { cold_path(); assert_failed(<template>) }`, where `<template>`
-//! formats the asserted operands through the whole `Formatter` / `Inspect` /
-//! `String` stack (see `elaborator::reify::reify_assert`). The reify-emitted
-//! `core:rt::assert_failed` is a distinct callee — a marker — so this
-//! lowering can treat assertion failures differently from explicit
-//! `panic(...)` calls:
-//!
-//! - default: rewrite the call back to `core:rt::panic`, so the marker
-//!   never reaches codegen and the output is identical to a direct `panic` —
-//!   no `assert_failed` wrapper frame, no codegen drift.
-//! - `-f bare-asserts` (on by default at `-Os`): replace the whole cold block
-//!   with a bare `unreachable()`. The assertion still checks and traps, but the
-//!   message-building statements and diagnostic literals are gone; the
-//!   now-unreachable formatting functions then fall out at the next DCE.
-//!
-//! It runs in `lower` *before* string-literal planning, so the dropped template
-//! literals are never collected into the data section, and before NIR
-//! conversion, so the discarded formatting is never lowered.
+//! Lower the `assert_failed` marker reify emits for an assertion failure, a
+//! distinct callee precisely so this can treat it unlike an explicit `panic`. By
+//! default it rewrites back to `core:rt::panic`, leaving no wrapper frame; under
+//! `-f bare-asserts` (default at `-Os`) the cold block becomes `unreachable()`,
+//! so the assertion still traps while its message-building falls out at DCE.
 
 use crate::flat_package::FlatPackage;
 use crate::synthesis::common::builtin_call;
