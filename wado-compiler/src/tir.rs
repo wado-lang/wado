@@ -2789,11 +2789,7 @@ impl TypeTable {
                     )
                 }
             }
-            ResolvedType::GenericResource {
-                name,
-                module_source,
-                type_args,
-            } => {
+            ResolvedType::GenericResource { def, type_args } => {
                 let new_args: Vec<TypeId> = type_args
                     .iter()
                     .map(|&a| self.subst_rec(a, substitution, vars, projections))
@@ -2802,17 +2798,14 @@ impl TypeTable {
                     type_id
                 } else {
                     self.intern(ResolvedType::GenericResource {
-                        name,
-                        module_source,
+                        def,
                         type_args: new_args,
                     })
                 }
             }
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
+                let name = self.def_name(def).to_string();
+                let module_source = self.def_module(def).clone();
                 if Self::is_tuple_type(&name) {
                     // Tuples need TypePack expansion: splice pack elements
                     // into the tuple's type-arg list.
@@ -3465,11 +3458,9 @@ impl TypeTable {
     pub fn mangle_type_name_resolving_newtypes(&self, id: TypeId) -> String {
         let base = self.resolve_newtype_base(id);
         match self.get(base) {
-            ResolvedType::GenericInstance {
-                name,
-                type_args,
-                module_source,
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
+                let name = self.def_name(*def);
+                let module_source = self.def_module(*def);
                 let args: Vec<String> = type_args
                     .iter()
                     .map(|t| self.mangle_type_name_resolving_newtypes(*t))
@@ -3497,11 +3488,7 @@ impl TypeTable {
     pub fn resolve_newtypes_deep(&mut self, id: TypeId) -> TypeId {
         let base = self.resolve_newtype_base(id);
         match self.get(base).clone() {
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
                 let resolved: Vec<TypeId> = type_args
                     .iter()
                     .map(|t| self.resolve_newtypes_deep(*t))
@@ -3509,7 +3496,7 @@ impl TypeTable {
                 if resolved == type_args {
                     base
                 } else {
-                    self.make_generic_instance(name, module_source, resolved)
+                    self.make_generic_instance(def, resolved)
                 }
             }
             ResolvedType::BuiltinArray(elem) => {
@@ -3713,20 +3700,17 @@ impl TypeTable {
             ResolvedType::Newtype { .. } | ResolvedType::Flags { .. } => {
                 self.mangle_type_arg_erased(self.get_ultimate_base_type(id))
             }
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
                 let args: Vec<String> = type_args
                     .iter()
                     .map(|t| self.mangle_type_arg_erased(*t))
                     .collect();
+                let name = self.def_name(*def);
                 if Self::is_tuple_type(name) {
                     return crate::name::mangle_tuple_type(&args);
                 }
                 let unqualified = crate::name::mangle_generic_name(name, &args);
-                format!("{module_source}/{unqualified}")
+                format!("{}/{unqualified}", self.def_module(*def))
             }
             ResolvedType::Ref(inner) => format!("&{}", self.mangle_type_arg_erased(*inner)),
             ResolvedType::MutRef(inner) => format!("&mut {}", self.mangle_type_arg_erased(*inner)),
@@ -3745,8 +3729,8 @@ impl TypeTable {
     #[must_use]
     pub fn base_type_name(&self, id: TypeId) -> String {
         match self.get(id) {
-            ResolvedType::GenericInstance { name, .. } => name.clone(),
-            ResolvedType::Struct { decl_name, .. } => decl_name.clone(),
+            ResolvedType::GenericInstance { def, .. } => self.def_name(*def).to_string(),
+            ResolvedType::Struct { def, .. } => self.struct_head_name(*def),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.base_type_name(*inner),
             _ => self.mangle_type_name(id),
         }
