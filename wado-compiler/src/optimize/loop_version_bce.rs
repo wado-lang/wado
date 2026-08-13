@@ -1,13 +1,8 @@
 //! Loop-versioned bounds-check elimination, for the checks
 //! `condition_implication` cannot statically prove: the loop becomes
 //! `if H < B { <clone, checks deleted> } else { <original> }`, sound by
-//! per-iteration transitivity from the guard's `i <= H`. All three locals must
-//! share one integer type, and the slow arm keeps assert timing identical.
-//!
-//! A fast arm that is exactly `a[i] = CONST; i += 1` then collapses to one
-//! `builtin::array_fill` ([`try_fill_idiom`]), the residual also proving
-//! `H + 1` cannot overflow. Runs once after the optimization loop, and only
-//! over leaf loops, so cloning never compounds.
+//! per-iteration transitivity from the guard's `i <= H`. A fast arm that is
+//! exactly `a[i] = CONST; i += 1` then collapses to one [`try_fill_idiom`].
 
 use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, ExprKind, NodeRef, Operand, StmtId, StmtKind};

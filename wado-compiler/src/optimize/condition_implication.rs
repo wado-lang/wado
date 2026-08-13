@@ -1,14 +1,8 @@
 //! Condition Implication — drives to `false` every bounds check a guard already
-//! refutes, leaving `const_branch_prune` to remove the dead branch. The
-//! recognised guards are a loop guard, a dominating `if`, a straight-line early
-//! exit, a short-circuit LHS, a bitmask range, an earlier panic-guard on the same
-//! index ([`rbce_walk`]), and a `let idx = arr.len() - k` ([`len_minus_fact`]).
-//!
-//! Matching is syntactic over the skeleton plus the value pool, never the
-//! `value_of` side-table: `var` and `bound` compare by structure ([`BoundKey`]),
-//! and a promoted operand decomposes through `body.values`. Flow-correctness
-//! comes from a position-aware "nothing modified `var` / `bound` in between"
-//! scan rather than from `ValueId` identity.
+//! refutes, leaving `const_branch_prune` the dead branch. Guards recognised: a
+//! loop guard, dominating `if`, early exit, short-circuit LHS, bitmask range, an
+//! earlier panic-guard, a `len() - k`. Matching is syntactic over the skeleton
+//! and value pool, with flow-correctness from a position-aware modification scan.
 
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};

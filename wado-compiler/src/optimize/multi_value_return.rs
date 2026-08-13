@@ -725,16 +725,10 @@ fn validate_stmt(
 }
 
 /// Walk a `return`ed value, sparing a pass-through call in every tail position
-/// [`expr_returns_match`] accepts it — a block or labeled-block tail, an `If`
-/// branch tail, a `Match` arm body, a `Switch` arm tail — and recursively,
-/// since those nest. Everything the value reaches off that spine is an ordinary
-/// use.
-///
-/// The two halves have to agree: a position the return side admits but this one
-/// walks as an escape invalidates the callee, and the fix-point then withdraws
-/// the caller as well, so both keep the heap-tuple ABI. Break values are the
-/// deliberate exception — see [`ExpectedShape::tail_call_lowerable`], which
-/// refuses them on the return side too.
+/// [`expr_returns_match`] accepts — block, `If` branch, `Match` arm, `Switch`
+/// arm — and recursively, since those nest. The two halves must agree: a
+/// position one admits and the other walks as an escape invalidates the callee
+/// and, at fixpoint, the caller. Break values are refused on both sides.
 fn validate_tail_return(
     body: &Body,
     op: Operand,

@@ -1,13 +1,8 @@
 //! Materialize `ExprKind::ArrayLiteral` from the builder sequence an array
 //! literal lowers to — a `List<T> { repr: array_new(N), used: 0 }` struct
-//! followed by `N` `List::push` calls on it or on a field of it — rewriting the
-//! struct and dropping the pushes. They need not be contiguous: element temps
-//! sit between them, and pushes to distinct array fields may interleave.
-//!
-//! Runs *after* `inline`, which must expose the raw window first, and as a
-//! block-level [`Rule`], the window being a run of sibling statements. Giving
-//! constant arrays this analyzable shape lets hash-consing, `const_fold`, BCE
-//! and globalization act on them; `wir_build` emits `array.new_fixed`.
+//! followed by `N` `List::push` calls — rewriting the struct and dropping the
+//! pushes, which need not be contiguous. Runs after `inline` exposes that
+//! window; `wir_build` then emits `array.new_fixed`.
 
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::hashmap::{IndexMap, IndexSet};

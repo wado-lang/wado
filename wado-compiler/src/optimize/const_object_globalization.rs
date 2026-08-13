@@ -1,14 +1,8 @@
-//! Body globalization — hoist a constant, read-only aggregate `let` out of a
-//! function body into a shared module global, so Wasm 3.0 GC builds it once at
-//! instantiation instead of rebuilding it per call. The hoisted global mirrors
-//! `lower::plan::globals::extract`: a Wasm-mutable slot with a `null`
-//! placeholder, which [`crate::wir_optimize::const_global`] later classifies.
-//!
-//! Two independent gates carry the soundness — the initializer must be a
-//! side-effect-free constant with no free locals ([`is_globalizable_const`]), and
-//! every use must be a reading position ([`is_readonly_body`]). A constant handed
-//! to a call by value crosses uncopied, so the callee's parameter is gated too,
-//! with [`param_storage_escapes`] ruling out an owned projection.
+//! Body globalization — hoist a constant, read-only aggregate `let` into a
+//! shared module global, so Wasm 3.0 GC builds it once at instantiation. Two
+//! gates carry the soundness: the initializer must be a side-effect-free
+//! constant with no free locals, and every use a reading position — including
+//! the callee's parameter, a by-value constant crossing uncopied.
 
 use cranelift_entity::EntityRef;
 use std::cell::RefCell;

@@ -2263,15 +2263,9 @@ fn cse_operand_in_scope(
 
 /// Common-subexpression elimination inside a loop body: hash-consing dedups a
 /// repeated pure subexpression to one `ValueId` but cannot *materialise* it, so
-/// each occurrence is still re-emitted. This restores the one-computation
-/// `__cse_N` shape — bind a clone to a temp before the earliest top-level
-/// statement holding an occurrence, and redirect them all to read it.
-///
-/// That placement dominates every occurrence in the body's linear statement
-/// list, and occurrences sharing a `ValueId` read the same leaves, so those are
-/// in scope where the temp is inserted. Trap-prone ops are excluded, so
-/// computing it up front — perhaps on an iteration that would have skipped it —
-/// cannot trap.
+/// each occurrence is still re-emitted. Binding a clone to a temp before the
+/// earliest occurrence's statement dominates them all, and their shared leaves
+/// are in scope there. Trap-prone ops are excluded, so hoisting cannot trap.
 fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVars) -> bool {
     let stmts = engine.body.blocks[loop_body].stmts.clone();
     // Occurrences of each materialisable arith value, keyed by a value-graph-free

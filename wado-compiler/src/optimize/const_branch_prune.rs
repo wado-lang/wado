@@ -1,31 +1,8 @@
-//! Constant branch pruning for Wado NIR
-//!
-//! Simplifies trivial blocks left over after other passes:
-//! - `{ expr; }` → `expr`
-//! - `label: { break label: val; }` → `val`
-//! - Empty blocks → `()`
-//!
-//! Constant-condition `if` folding is handled by `niri` via the `const_folding`
-//! pass; this pass intentionally does *not* duplicate that logic. Copy
-//! propagation (including the in-block copies of loop-mutated locals the
-//! inliner leaves behind) is `copy_prop`'s job — this pass keys only on block
-//! and control-flow *structure*, never on labels or variable names.
-//!
-//! Runs on the worklist rewrite engine (see
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a [`Rule`]: the
-//! expression simplifications are an `apply_expr` peephole and the
-//! statement-list flattening / dead-code elimination is an `apply_block`
-//! rewrite. The break-target queries are read-only walks over the arena
-//! (`arena_query::has_break_to`). All edits go through the engine API
-//! (`become_expr`, `replace_expr_kind`, `set_block_stmts`, `alloc_stmt`) so the
-//! parent map and use index stay coherent.
-//!
-//! The in-loop run rides the unified [`super::peephole`] session
-//! (`PruneMode::Fixpoint`). Two standalone entry points keep their own engine
-//! session for the callers outside that session: [`prune_constant_branches`]
-//! (`Fixpoint`, used by the post-globalization cleanup) and
-//! [`prune_template_block_wrappers`] (`PostFixpoint`, the final `__tmpl:`
-//! flatten after the fixpoint converges).
+//! Constant branch pruning: the trivial blocks other passes leave behind —
+//! `{ expr; }`, `label: { break label: val; }`, an empty block. Keys only on
+//! block and control-flow *structure*, never on labels or names, leaving
+//! constant-condition folding to `const_folding`. The in-loop run rides the
+//! unified [`super::peephole`] session; the two standalone entries keep theirs.
 
 use crate::nir::NirFunction;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
