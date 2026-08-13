@@ -1,9 +1,8 @@
 //! Dead Return Value Elimination: a function whose return value is dropped at
 //! every call site turns void, each `Return`'s verified-pure value going away
-//! while the call sites stay structurally identical. Running at NIR, unlike the
-//! WIR analog, exposes the freshly dead expressions to the rest of the loop —
-//! after `inline` collapses a `Result<(), Error>` helper nobody reads, DCE takes
-//! the `Ok(())` constructor with it.
+//! while the call sites stay structurally identical. Running at NIR exposes the
+//! freshly dead expressions to the rest of the loop — after `inline` collapses a
+//! `Result<(), Error>` helper nobody reads, DCE takes its `Ok(())` too.
 //!
 //! Conservative: it skips DAE's pinned set, needs the body to end in an explicit
 //! `Return` with every other `Return` carrying a pure value, and needs at least

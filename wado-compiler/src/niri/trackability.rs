@@ -224,31 +224,15 @@ enum Reach {
     Write,
 }
 
-/// Locals of `body` that may bind an aggregate constant: ones every mention
-/// only reads.
+/// Locals of `body` that may bind an aggregate constant: ones every mention only
+/// reads. The read positions are listed rather than inferred from the absence of
+/// the others, so an untaught node kind costs a fold and never a wrong one.
 ///
-/// The read positions are listed rather than inferred from the absence of the
-/// others, so a node kind nobody taught this walk about costs a fold and never
-/// a wrong one. A shared borrow and a cast are read positions that pass the
-/// read on to their operand — Wado has no interior mutability, and a cast
-/// names the same storage — which is what lets `push_str(&b)` count as a read
-/// of `b` rather than an unknown mention.
-///
-/// The two sides of the check deliberately scan different populations.
-/// Mentions and disqualifications come from the reachable body alone: an
-/// orphaned mention cannot run, so it must not disqualify anything. Two of the
-/// `value_reads` sources read the whole arena instead — the statement sweep
-/// below and [`Reached`]'s call collectors; the taught-position expression
-/// walk above stays reachable — because an in-place rewrite shares ids
-/// between a live node and the displaced parent that used to hold it, so a
-/// reachable mention's only read-position witness may sit in a statement or
-/// call no live node refers to. Narrowing those sweeps to the reachable tree
-/// disqualifies the string-building locals every Display chain folds through
-/// (measured: the `default_trait` and `display_1` goldens grew back by
-/// hundreds of lines). This is the rule's one home;
-/// `a_displaced_parent_still_vouches_for_its_mention` pins the statement
-/// witness and `a_displaced_call_still_vouches_for_its_argument` the call
-/// one.
+/// The two sides scan different populations. Mentions and disqualifications come
+/// from the reachable body alone, an orphaned mention being unable to run. Two
+/// `value_reads` sources sweep the whole arena instead: an in-place rewrite
+/// shares ids between a live node and the displaced parent that held it, so a
+/// mention's only witness may sit where nothing live refers to.
 pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
