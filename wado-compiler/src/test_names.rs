@@ -1,26 +1,12 @@
-//! Encoding of the `org.wado-lang.test-names` custom section.
+//! Encoding of the `org.wado-lang.test-names` custom section. A CM export name
+//! must be ASCII kebab-case, so `test-0-hello-world` is a lossy rendering of
+//! `test "Hello, World!"`; codegen writes this section mapping each export name
+//! back to the faithful one for `wado test` to label results with. Writer and
+//! reader both depend on this module, so the wire format lives in one place.
 //!
-//! Component Model export names must be ASCII kebab-case, so the test export
-//! name (`test-0-hello-world`) is an ASCII-folded, lowercased rendering of the
-//! original `test "Hello, World!"` string — lossy and unsuitable for display.
-//! To recover the faithful name, codegen writes this custom section mapping
-//! each test export name to its original (lossless, possibly multibyte) name.
-//! The `wado test` runner reads it back to label results.
-//!
-//! Both the writer (`wado-compiler` codegen) and the reader (`wado-cli`)
-//! depend on this module so the wire format lives in exactly one place.
-//!
-//! ## Wire format
-//!
-//! All integers are little-endian `u32`. Strings are UTF-8, length-prefixed.
-//!
-//! ```text
-//! count: u32
-//! repeat `count` times:
-//!   export_name_len: u32, export_name: [u8; export_name_len]
-//!   has_name: u8 (0 = unnamed test, 1 = named)
-//!   name_len: u32, name: [u8; name_len]   // name_len is 0 when has_name == 0
-//! ```
+//! Integers are little-endian `u32` and strings length-prefixed UTF-8: a `count`
+//! followed by that many `(export_name, has_name, name)` records, where a `0`
+//! `has_name` marks an unnamed test and leaves `name_len` zero.
 
 /// Name of the custom section embedded in test-world components.
 pub const SECTION_NAME: &str = "org.wado-lang.test-names";

@@ -1,49 +1,13 @@
-//! Resource drop elaboration.
+//! Resource drop elaboration. A CM `own<resource>` handle must be released with
+//! `resource.drop` exactly once, and Wado has no destructors, so an untransferred
+//! resource would leak a host table slot. Runs pre-monomorphize, inserting a drop
+//! wherever a value is still owned at the end of its scope.
 //!
-//! A Component Model `own<resource>` handle (`Request`, `Response`, `Fields`,
-//! `RequestOptions`, …) must be released with `resource.drop` exactly once.
-//! Wado's surface language has no destructors, so without this pass every
-//! resource a guest creates or receives — and never explicitly transfers —
-//! leaks a host resource-table slot. Under `wado serve`'s pooled instance
-//! reuse the table eventually exhausts (issue #1133).
-//!
-//! This pass runs pre-monomorphize, before CM-binding synthesis rewrites
-//! resource method calls into canonical intrinsics. For every
-//! function body it tracks each owned resource value and inserts a
-//! `resource.drop` (emitted as a `CmRawCall` to the `resource-drop:<cm>`
-//! canonical intrinsic) on every control-flow path where the value is still
-//! owned at the end of its scope.
-//!
-//! ## Ownership model
-//!
-//! A resource value is *owned* by the binding it is stored in (a parameter or
-//! a `let`). Ownership is *transferred* when the value is:
-//!
-//! - passed as a by-value argument to a call (constructors such as
-//!   `Response::new(fields, …)`, consumers such as
-//!   `Request::consume_body(request, …)`, or any user function taking the
-//!   resource by value),
-//! - returned, or placed into an aggregate / variant payload.
-//!
-//! A resource used only as a borrowing method receiver (`fields.has(…)`), a
-//! `matches` test, or behind `&` is *not* transferred. The pass drops exactly
-//! those owned resources that are never transferred on a given path, so the
-//! drop is always the unique remaining owner — it can never double-free.
-//!
-//! A binding whose type only *contains* a resource (e.g.
-//! `Result<Fields, HeaderError>` returned by `Fields::from_list`) is dropped
-//! structurally: a synthesized `match` extracts and drops the resource in the
-//! case(s) that carry one.
-//!
-//! ## Relationship to the ownership system
-//!
-//! Ownership transfer is read straight off the surface program: a value is
-//! transferred when it is passed by value, returned, placed in an aggregate,
-//! or used as the receiver of a by-value (`self`) method. Extraction is a
-//! by-value method (`Result::unwrap(self) -> T`), so it needs no special
-//! casing — the receiver is consumed like any other by-value argument. The
-//! pass therefore drops "every owned binding not transferred on this path"
-//! with no aggregate-shape guessing.
+//! A resource is *owned* by its binding and *transferred* when passed by value,
+//! returned, or placed in an aggregate; a borrowing receiver, a `matches` test
+//! and a `&` are not. So the drop is always the unique remaining owner and
+//! cannot double-free. A binding that merely *contains* one is dropped through a
+//! synthesized `match` over the cases carrying it.
 
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;

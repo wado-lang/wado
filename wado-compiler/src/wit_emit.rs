@@ -1,9 +1,8 @@
 //! WIT text emission from [`Semantics`] — the producer side of WIT
 //! interoperability (WEP 2026-05-02), rendering the frontend's interfaces,
 //! exports, world and type table through [`wit_encoder`]. `wado wit` prints it;
-//! `wado compile` embeds it via [`crate::wit_bundle`]. Name and type resolution
-//! fully determine WIT, so emission reads a [`WitEmitInput`] view and never
-//! touches monomorphize, lower or codegen.
+//! `wado compile` embeds it via [`crate::wit_bundle`]. Reads a [`WitEmitInput`]
+//! view, so it never touches monomorphize, lower or codegen.
 
 use std::collections::{BTreeMap, BTreeSet};
 
