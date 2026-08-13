@@ -170,25 +170,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             snapshot_state
                 .map(|s| (*s.tysys.all_generic_newtypes).clone())
                 .unwrap_or_default();
-        let mut all_struct_fields: IndexMap<crate::defs::DefId, StructFieldInfo> =
-            snapshot_state
-                .map(|s| (*s.tysys.all_struct_fields).clone())
-                .unwrap_or_default();
-        let mut all_variant_cases: IndexMap<crate::defs::DefId, VariantInfo> =
-            snapshot_state
-                .map(|s| (*s.tysys.all_variant_cases).clone())
-                .unwrap_or_default();
+        let mut all_struct_fields: IndexMap<crate::defs::DefId, StructFieldInfo> = snapshot_state
+            .map(|s| (*s.tysys.all_struct_fields).clone())
+            .unwrap_or_default();
+        let mut all_variant_cases: IndexMap<crate::defs::DefId, VariantInfo> = snapshot_state
+            .map(|s| (*s.tysys.all_variant_cases).clone())
+            .unwrap_or_default();
         let mut all_enum_cases: IndexMap<crate::defs::DefId, EnumInfo> = snapshot_state
             .map(|s| (*s.tysys.all_enum_cases).clone())
             .unwrap_or_default();
-        let mut all_flags_cases: IndexMap<crate::defs::DefId, FlagsInfo> =
-            snapshot_state
-                .map(|s| (*s.tysys.all_flags_cases).clone())
-                .unwrap_or_default();
-        let mut all_resource_types: IndexMap<crate::defs::DefId, ResourceInfo> =
-            snapshot_state
-                .map(|s| (*s.tysys.all_resource_types).clone())
-                .unwrap_or_default();
+        let mut all_flags_cases: IndexMap<crate::defs::DefId, FlagsInfo> = snapshot_state
+            .map(|s| (*s.tysys.all_flags_cases).clone())
+            .unwrap_or_default();
+        let mut all_resource_types: IndexMap<crate::defs::DefId, ResourceInfo> = snapshot_state
+            .map(|s| (*s.tysys.all_resource_types).clone())
+            .unwrap_or_default();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (module_source, module) in modules {

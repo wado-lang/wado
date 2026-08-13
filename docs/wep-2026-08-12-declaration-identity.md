@@ -468,15 +468,17 @@ What is left, in the order it has to happen: the storage before the scope,
 synthesis before the table can be total, both before the mangling. Each step
 compiles, passes the suite, and ends with a mechanical completion check.
 
-- [ ] Declaration data keyed by `DefId`. Done when no
-      `IndexMap<ModuleSource, IndexMap<String, _>>` remains. `all_newtypes` goes
-      first and is a deletion rather than a rekey: every site that writes it
-      already calls `TypeTable::register_decl_type` on the same declaration one
-      line away, so the registry is a name-keyed duplicate of an index that is
-      already keyed by the declaring node.
+- [x] Declaration data keyed by `DefId`. All seven registries key on the
+      declaration, and `TypeLookup`'s `lookup_ref` / `lookup_ref_in` /
+      `fn_local_first` are deleted with them.
 - [ ] `Scope` — one implementation of what a name means in a module. Done when
-      `SymbolTable`'s name lookups, `module_import_scope`, `ModuleImports` and
-      `TypeLookup`'s import branch are deleted.
+      `SymbolTable`'s name lookups, `module_import_scope` and `ModuleImports` are
+      deleted. Two helpers in `trait_query` (`scoped_trait_decl_key`,
+      `scoped_trait_decl_module`) are what still read the import maps directly,
+      and they are the semantic decision this step turns on: both are blind to
+      the prelude on purpose, so that an ambient compiler trait stays
+      distinguishable from a same-named user `trait`. The layered scope sees the
+      prelude. Whichever way that resolves needs a fixture.
   - [ ] The prelude tier. `module_scope_lookup` ignores `#![no_prelude]` and
         admits every kind; `module_import_scope` honours the attribute and admits
         types and traits. The opt-out should hold — with the prelude's
@@ -508,14 +510,21 @@ compiles, passes the suite, and ends with a mechanical completion check.
       struct's identity rather than re-deriving a name that must match one built
       elsewhere. Done when `name.rs` exports no function taking a mangled string.
 
-The storage comes before the scope because it is what the scope is for.
-`TypeLookup::lookup_ref` walks fn-local, module-local, current module and imports
-to turn a spelling into the `(module, name)` pair its registry is keyed by; there
-is nothing else it does. Each registry that moves to `DefId` deletes one caller
-of that walk, and the walk goes when the last one does. Attempting it the other
-way round means keeping a flat name scope that has to serve seven kind-partitioned
-registries at once, which it cannot: a type and a same-named case belong to
-different registries today and a single flat answer must pick one of them.
+The storage came before the scope because it is what the scope was for.
+`TypeLookup::lookup_ref` walked fn-local, module-local, current module and
+imports to turn a spelling into the `(module, name)` pair its registry was keyed
+by; there was nothing else it did. Each registry that moved to `DefId` deleted
+one caller of that walk, and the walk went when the last one did. The other order
+would have meant keeping a flat name scope serving seven kind-partitioned
+registries at once, which it cannot: a query that misses in one registry must
+fall through rather than shadow, and one flat answer cannot both shadow and fall
+through.
+
+Function-local items are what still keeps two name-keyed tiers above the
+registries. A local `struct` has no `DefId`, and its durable entry is keyed by a
+mangled storage name that no declaration carries, so `TypeLookup` reads those two
+maps directly. They go when a local item gets an identity scoped to its declaring
+function.
 
 Unifying the scope is the step with a real risk of behaviour change, because the
 remaining scopes disagree and unifying them picks a winner. Each disagreement is
@@ -555,10 +564,10 @@ The numbers this design is aimed at, measured over `wado-compiler/src`:
 
 | quantity                                            | at the start | now     |
 | --------------------------------------------------- | ------------ | ------- |
-| `*name: &str` parameters                            | 867          | 887     |
+| `*name: &str` parameters                            | 867          | 885     |
 | independent walks over the `use` declarations       | 3            | 1       |
-| implementations of "what does this name mean in M"  | 5            | 5       |
-| name-keyed per-module declaration registries        | 7            | 7       |
+| implementations of "what does this name mean in M"  | 5            | 4       |
+| name-keyed per-module declaration registries        | 7            | 0       |
 | `type_implements_trait` callers passing no identity | 16 of 30     | 0 of 30 |
 | spelling comparisons in trait dispatch              | 2            | 0       |
 | synthesised reference sites absent from the table   | 2            | 1       |
@@ -570,9 +579,10 @@ step lands. A row that stops falling means a step was declared done while a bypa
 survived it, which is what happened to the earlier `trait_name: &str` count, and
 the reason this document measures the bypass rather than the parameter.
 
-Two rows are closed. The query takes a `DefId` and nothing else, so there is no
-`None` left to pass; and trait dispatch compares declarations at both ends, with
-no spelling comparison left in the path.
+Three rows are closed. The query takes a `DefId` and nothing else, so there is no
+`None` left to pass; trait dispatch compares declarations at both ends, with no
+spelling comparison left in the path; and no declaration's contents are reached
+by a name and a module any more, which took `TypeLookup`'s scope walk with it.
 
 Two rows have not moved, and both say the same thing. `decl_key_or_local` sat at
 24 for one commit, when a qualified call's required trait was made a `DefId`, and
