@@ -236,8 +236,7 @@ struct BlockScan {
 /// mutation into all enclosing blocks at their current statement index rather
 /// than re-walking subtrees per nesting level (O(N²) on deep bodies).
 /// [`for_each_mutated_root`] decides what counts, so a read-only `x.len()`
-/// receiver does not end `x`'s stability interval while `r.f = v` through a
-/// `&mut` alias does.
+/// does not end `x`'s interval while `r.f = v` through a `&mut` alias does.
 fn scan_blocks(
     body: &Body,
     type_table: &TypeTable,

@@ -1,16 +1,8 @@
-//! NIR Value Graph (Layer 2 — hash-consed pure-value DAG).
-//!
-//! Hash-consed DAG of pure values. Each value has a [`ValueId`] (newtype
-//! over `u32`); two structurally-equivalent values share one `ValueId`. CSE is
-//! pure hash-consing — there are no e-class merges, so a `ValueId` is stable
-//! once allocated. The
-//! `SkelTree` (Layer 1 — see [`crate::nir_arena`]) references pure operands by
-//! `ValueId`; pure values live exclusively here.
-//!
-//! Consumed by [`crate::nir_engine::Engine::value`] (which lazily builds the
-//! per-function graph via [`builder::build`]) and through that by the CSE
-//! and store-load-forward rules. See
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
+//! NIR Value Graph (Layer 2): a hash-consed DAG where structurally-equivalent
+//! values share one [`ValueId`]. CSE is pure hash-consing, with no e-class
+//! merges, so an id is stable once allocated; the `SkelTree` references pure
+//! operands by id and holds none itself. Built lazily per function by
+//! [`crate::nir_engine::Engine::value`]. See WEP 2026-06-05.
 
 pub mod builder;
 
@@ -829,18 +821,11 @@ impl ValuePool {
         }
     }
 
-    /// Remap every `OpaqueSource::Local` index through `remap` (old → new).
-    /// A pass that renumbers a body's locals must call this so a promoted
-    /// `Opaque` value (extracted as `local.get idx`) still names the right slot.
-    ///
-    /// A `None` entry marks a dropped local. The pool is append-only, so a
-    /// source naming one is the residue of a promoted read that folded away —
-    /// the caller drops a local only when no reachable operand reads it
-    /// ([`crate::optimize::arena_query::promoted_local_reads`]). Such a source
-    /// is cleared rather than remapped: the value is unreachable, and clearing
-    /// it turns any use into the "no recorded extraction source" panic at WIR
-    /// build instead of a silent read of the wrong slot. The canonical-local
-    /// cache is keyed by index, so it renumbers alongside.
+    /// Remap every `OpaqueSource::Local` index through `remap` (old → new), which
+    /// a pass renumbering a body's locals must call so a promoted `Opaque` still
+    /// names the right slot. A `None` entry marks a dropped local, whose source
+    /// is cleared rather than remapped: any use then hits the "no recorded
+    /// extraction source" panic instead of silently reading the wrong slot.
     pub fn remap_opaque_locals(&mut self, remap: &[Option<u32>]) {
         self.canonical_locals = self
             .canonical_locals
@@ -859,22 +844,11 @@ impl ValuePool {
         });
     }
 
-    /// Whether `id`'s value can be re-emitted by the extractor purely from the
-    /// graph + side-effect-free, position-independent leaves: literal constants
-    /// and `Local`-sourced opaques (a `local.get`), composed by `Binary` /
-    /// `Unary` / `Cast`. Excludes `Opaque(Expr)` (effectful / unscheduled),
-    /// `Select` / `LoopPhi` (flow merges — extraction-unsupported), `FieldAccess`,
-    /// etc.
-    ///
-    /// A `Local` opaque is only sound when the local holds **one value**: a
-    /// `local.get idx` at the frozen node's position must read what the opaque
-    /// denotes. A local written more than once fails this — its value at an
-    /// extraction point can differ from the opaque's version (`x = x*2` after a
-    /// read, a loop counter) — so the caller passes every such index in
-    /// `multi_version_locals` and they are rejected. That set comes from
-    /// `Engine::local_has_one_version`, which reads the use index rather than
-    /// the `is_mut` flag, so an untouched `let mut` is admitted and a local
-    /// written through a reference or bound twice is not.
+    /// Whether `id`'s value can be re-emitted purely from the graph and
+    /// position-independent leaves: literal constants and `Local`-sourced
+    /// opaques, composed by `Binary` / `Unary` / `Cast`. A `Local` opaque is
+    /// sound only when the local holds **one value**, so the caller rejects every
+    /// index in `multi_version_locals` (`Engine::local_has_one_version`).
     pub fn value_fully_reemittable_locally(
         &mut self,
         id: ValueId,
@@ -1026,16 +1000,10 @@ impl ValuePool {
     }
 
     /// [`ValuePool::binary`], collapsed to a literal when both operands are
-    /// already constants.
-    ///
-    /// Interning is where every producer meets — the builder, the engine's
-    /// maintenance re-derivation, and the scratch-pool reintern inlining runs —
-    /// so folding here is what holds the invariant that no node in the pool is
-    /// a foldable operation. A nested constant depends on it: the outer
-    /// operation's operand is the inner operation's node, so a node interned
-    /// raw is one no later reader can fold.
-    ///
-    /// Folding needs operand widths; without a `TypeTable` nothing folds.
+    /// already constants. Interning is where every producer meets, so folding
+    /// here is what holds the invariant that no node in the pool is a foldable
+    /// operation — a nested constant depends on it, an outer operand being the
+    /// inner node. Folding needs operand widths, so a `TypeTable` is required.
     pub fn binary_folded(
         &mut self,
         op: NirBinaryOp,

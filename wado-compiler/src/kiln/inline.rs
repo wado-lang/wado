@@ -1,15 +1,8 @@
-//! Inline-invocation collection for `use ... with { generator: { ... } }`.
-//!
-//! Every Kiln invocation is declared at the import site; the manifest does
-//! not declare invocations. This module walks the parsed [`UseDecl`]s,
-//! extracts the `generator: {...}` object from
-//! [`crate::ast::ImportAttributes`], and builds matching
-//! [`crate::kiln::Invocation`]s before [`crate::kiln::plan::build_plan`] runs.
-//!
-//! Two clauses with identical `(module, from, inputs, output_dir,
-//! options_canonical)` tuples are merged into a single invocation. Two
-//! clauses that share `from` but disagree on any other field produce a
-//! diagnostic citing both spans.
+//! Inline-invocation collection for `use ... with { generator: { ... } }`. Every
+//! Kiln invocation is declared at its import site, never in the manifest, so
+//! this walks the parsed [`UseDecl`]s and builds [`crate::kiln::Invocation`]s
+//! ahead of [`crate::kiln::plan::build_plan`]. Identical clauses merge; two
+//! sharing `from` but disagreeing elsewhere produce a diagnostic on both spans.
 
 use sha2::{Digest, Sha256};
 
@@ -26,19 +19,11 @@ use super::options_check::{CanonicalOptions, validate};
 /// under `build/kiln/<synthetic_id>` unless it declares its own `output_dir`.
 pub const DEFAULT_INLINE_OUTPUT_DIR_PREFIX: &str = "build/kiln";
 
-/// Elaborator-side lookup table that redirects a `use ... from "<from>"` whose
-/// `<from>` path matches an inline Kiln invocation's primary source to the
-/// invocation's generated entry module.
-///
-/// Built once per compilation unit from the inline invocation set, after the
-/// pipeline has populated `build/kiln/…` so the entry module's on-disk
-/// location is known. For consume-only mode (no pipeline run), the index is
-/// built from the last recorded lockfile entry's `output.entry = true` path
-/// — that path lives on disk already or the cache check failed.
-///
-/// Lookups are keyed by `(declaring_file_normalized, from_path_normalized)`.
-/// A bare `use ... from "./schema.<ext>"` in any other file fails with
-/// `Code::KilnMissingWith`.
+/// Elaborator-side lookup table redirecting a `use ... from "<from>"` that
+/// matches an inline Kiln invocation's primary source to the generated entry
+/// module. Built once per compilation unit, after the pipeline populates
+/// `build/kiln/…`, or in consume-only mode from the lockfile's `output.entry`
+/// path. Keyed by `(declaring_file, from_path)`, both normalized.
 #[derive(Debug, Default, Clone)]
 pub struct InvocationIndex {
     /// Entries mapping `(decl_file, from_path)` → entry module URI. The URI
@@ -102,23 +87,14 @@ impl InvocationIndex {
     }
 }
 
-/// Scan every `UseDecl` in `modules` for an inline
-/// `with { generator: { ... } }` clause and lower it to a canonical
-/// [`Invocation`].
-///
-/// `descriptors` is a per-module-spec lookup — when present, the inline
-/// clause's `options` object is validated and encoded through the typed
-/// pipeline. Missing descriptors fall through to an empty canonical options
-/// blob (matching the behavior for a generator without a declared
-/// `Options` struct).
-///
-/// Diagnostics are batched: a single malformed clause does not prevent the
-/// rest of the tree from being collected. Returns `Err` only when at least
-/// one `Severity::Error` diagnostic was emitted.
+/// Scan every `UseDecl` in `modules` for an inline `with { generator: { … } }`
+/// clause and lower it to a canonical [`Invocation`]. A present `descriptors`
+/// entry validates and encodes the clause's `options` through the typed
+/// pipeline; a missing one yields an empty canonical blob.
 ///
 /// # Errors
-/// Every shape mismatch, options-validation error, and dedup conflict is
-/// reported through the returned `Vec<Diagnostic>`.
+/// Diagnostics are batched, so one malformed clause does not stop the rest of
+/// the tree. `Err` only when at least one was `Severity::Error`.
 pub fn collect_inline_invocations<'a, I>(
     modules: I,
     descriptors: &IndexMap<String, OptionsDescriptor>,
@@ -514,20 +490,11 @@ fn lower_module_specifier(
     None
 }
 
-/// Re-anchor `resolved` (project-root-relative) to `manifest_root` so the
-/// resulting [`GeneratorModule::LocalPath`] is relative to the manifest
-/// root; the provider resolves it as `manifest_root.join(path)`.
-///
-/// When `resolved` lies under `manifest_root` the shared prefix is stripped.
-/// When `resolved` lies above or beside `manifest_root` (e.g. an inline
-/// clause in `wasm-size/foo/bar.wado` referencing
-/// `../../package-gale/src/generator.wado`), `..` segments are emitted to
-/// walk up out of `manifest_root` before descending into `resolved`.
-///
-/// An empty or `.` `manifest_root` returns the path verbatim. `.` segments are
-/// dropped on both sides, so a `.` root (compiling an entry next to
-/// `wado.toml`) does not emit a spurious leading `..` that would put output
-/// outside the project (e.g. `output_dir: "generated"` → `../generated`).
+/// Re-anchor `resolved` (project-root-relative) to `manifest_root`, which the
+/// provider resolves as `manifest_root.join(path)`: a shared prefix is stripped,
+/// and a `resolved` above or beside the root gets `..` segments to walk out
+/// first. An empty or `.` root returns the path verbatim, `.` segments being
+/// dropped on both sides so no spurious `..` sends output out of the project.
 fn strip_manifest_root_prefix(manifest_root: &str, resolved: &str) -> String {
     let is_segment = |p: &&str| !p.is_empty() && *p != ".";
     let root_parts: Vec<&str> = manifest_root.split('/').filter(is_segment).collect();

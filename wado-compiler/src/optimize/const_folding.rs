@@ -1,23 +1,8 @@
-//! Constant folding optimization for Wado NIR.
-//!
-//! Walks every function's arena [`Body`] and applies the
-//! [`niri::Interpreter`] rewrite rules at each visited node. All
-//! reduction logic (literal folding, integer cast collapsing,
-//! short-circuit identity rules, env-aware local lookup) lives in
-//! [`crate::niri`]; this module is only the visitor glue that drives
-//! `reduce_local` across function bodies and feeds the interpreter's
-//! local-variable env from `Let` / `Assign` statements.
-//!
-//! This walker tracks only scalar local lattices; reaching-def of a struct
-//! field `obj.f` is the engine [`ValueGraph`]'s job (store-load forwarding +
-//! hash-cons CSE). The local env needs no branch fork because mutable locals
-//! are recorded [`Lattice::NonConst`] up front.
-//!
-//! The visitor mutates the arena `Body` directly: the per-node rewrites
-//! (`reduce_local`) and the block-level branch splice
-//! (`reduce_local_block`) operate on arena ids. Global initializers are
-//! arena `ExprBody`s too, so the global env / global-field env are read from
-//! them via the arena interpreter path.
+//! Constant folding for Wado NIR: visitor glue driving [`niri::Interpreter`]'s
+//! `reduce_local` across every arena [`Body`] and feeding its local env from
+//! `Let` / `Assign`. All reduction logic lives in [`crate::niri`]. Only scalar
+//! local lattices are tracked — a struct field's reaching def is the engine
+//! [`ValueGraph`]'s job — and mutable locals start `NonConst`, so no fork.
 //!
 //! [`ValueGraph`]: crate::nir_value_graph
 
@@ -170,19 +155,11 @@ fn fold_function(
     visitor.visit_block(&mut engine, root)
 }
 
-/// Engine rule: environment-free constant folding.
-///
-/// Runs the [`Interpreter::const_fold_value`] subset — literal arithmetic and
-/// pure CTFE — over the worklist rewrite engine, applying each fold through the
-/// engine's edit API so the parent map and use index stay coherent. The
-/// program-wide [`CalleeMap`] is installed; the per-function `env` stays empty,
-/// so the flow-sensitive folds (env-bound locals, immutable globals,
-/// constant-branch collapse) remain with the standalone [`fold_constants`]
-/// walker that still runs once per fixed-point iteration.
-///
-/// `const_fold_value` needs `&mut Interpreter` (CTFE advances the call stack
-/// and step budget), but [`Rule::apply_expr`] is `&self`, so the interpreter
-/// lives behind a [`RefCell`].
+/// Engine rule: environment-free constant folding — the
+/// [`Interpreter::const_fold_value`] subset of literal arithmetic and pure CTFE,
+/// run over the worklist engine. The program-wide [`CalleeMap`] is installed but
+/// `env` stays empty, leaving the flow-sensitive folds to [`fold_constants`].
+/// The interpreter sits behind a [`RefCell`], `apply_expr` being `&self`.
 pub(super) struct ConstFoldRule<'a> {
     interpreter: RefCell<Interpreter<'a>>,
 }
@@ -324,18 +301,11 @@ pub(super) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
     map
 }
 
-/// Pre-build the [`GlobalEnv`] from every global in `project`. Each
-/// non-`mut` global's initializer is reduced through a fresh
-/// [`Interpreter`] (with `callees` installed so calls in initializers
-/// fold, and with the partially-built env installed so a later global
-/// initializer can read constants computed from earlier ones).
-/// Mutable globals are recorded as `NonConst` so a parent fold like
-/// `GLOBAL_MUT + 1` correctly reports `NonConst` instead of
-/// `Unevaluated`. Globals whose initializer doesn't reduce are left
-/// out of the map (absent → `Lattice::Unevaluated` by default).
-///
-/// Global initializers are arena `ExprBody`s, so this reduces them on the
-/// arena [`Interpreter::reduce_to_lattice`] path.
+/// Pre-build the [`GlobalEnv`] from every global in `project`, reducing each
+/// non-`mut` initializer through a fresh [`Interpreter`] carrying `callees` and
+/// the partially-built env, so a later initializer reads earlier constants. A
+/// mutable global is recorded `NonConst`, making `GLOBAL_MUT + 1` report that
+/// rather than `Unevaluated`; an irreducible one is left out of the map.
 fn build_global_env(
     project: &NirPackage,
     type_table: &TypeTable,
@@ -441,17 +411,11 @@ fn const_seq_len(body: &Body, e: ExprId) -> Option<i32> {
     }
 }
 
-/// What the interpreter knows about module globals for one pass.
-///
-/// A declared initializer is only half the story: a non-trivial one never
-/// reaches the global's slot. `lower/plan`'s `globals::extract` moves it into
-/// module init, and body globalization hoists a constant read-only binding into
-/// a fresh global the same way — both leave a placeholder in the slot and the
-/// real value in an inline `GlobalVarSet`. Reading that store back is what lets
-/// such a global fold at all.
-///
-/// A store's value is function-body content, which the optimizer loop is still
-/// reducing, so this is rebuilt per pass rather than cached in [`FoldMaps`].
+/// What the interpreter knows about module globals for one pass. A declared
+/// initializer is half the story: a non-trivial one is moved into module init or
+/// hoisted, leaving a placeholder in the slot and the real value in an inline
+/// `GlobalVarSet`, so reading that store back is what lets it fold. A store's
+/// value is body content still being reduced, hence rebuilt per pass.
 struct GlobalView {
     /// What each global holds. Seeded from [`FoldMaps::declared_globals`]; a
     /// global every store of which is the same constant overrides its

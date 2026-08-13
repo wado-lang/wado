@@ -12,8 +12,7 @@
 //!
 //! A function containing a closure, effect handler, or `resume` is skipped
 //! wholesale, since either can re-observe a local this pass does not model.
-//! Soundness rests on `live` over-approximating everywhere: an unknown control
-//! target keeps every local live, so at worst a copy is kept.
+//! `live` over-approximates everywhere, so at worst a copy is kept.
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
@@ -179,26 +178,11 @@ pub fn compute_move_eligible(
     a.walk_block(body, &mut live, true);
     a.resolve_pending_mut_aliases();
 
-    // Structural freshness: the locals that *hold* an owned (unaliased) value,
-    // regardless of how many times they are read. A least fixpoint — start with
-    // every sourced local and drop those whose source is not owned given the
-    // rest. `is_owned_value` resolves a `Local` reference through this set, so a
-    // deserialize temporary read twice (the `?` tag-test + payload-extract, or a
-    // re-wrapped `Err` arm) still counts, propagating freshness up the chain to
-    // the field that is finally moved.
-    // By-value (non-reference) parameters are owned storage the function holds
-    // exclusively: the caller either deep-copied the argument in, or move-elided
-    // a fresh-and-dead one (whose source is then dead), so nothing live aliases
-    // the parameter. Consuming it at its final use is therefore a move — a
-    // `build(self) -> Self { return self }` returns its receiver without a copy.
-    // Multi-use or borrow-escaping parameters are still held back by `non_final`
-    // / `borrow_escaped`, so this only frees genuinely final consumptions.
-    // Reference parameters (`&self`) borrow the caller's storage and are never
-    // seeded. The interprocedural return convention (`ownership.rs`) seeds
-    // by-value params the same way and for the same reason: a returned parameter
-    // is never confined, so the caller always deep-copies it in, and returning it
-    // (a stored-then-returned parameter's store copied it too, since it is live at
-    // the return) yields a value that aliases only the callee's own copy.
+    // Structural freshness: the locals *holding* an owned value, however often
+    // read. A least fixpoint — seed every sourced local, drop those whose source
+    // is not owned given the rest. By-value params are seeded too, the caller
+    // having deep-copied or move-elided the argument; reference params borrow
+    // the caller's storage and never are.
     let mut fresh: IndexSet<u32> = a
         .let_sources
         .keys()
@@ -829,16 +813,10 @@ impl Analyzer<'_> {
     }
 
     /// The positions an indirect (functor) callee may store, from its functor
-    /// type's declared `stores` clause. `None` is conservative: every position
-    /// may be stored.
-    ///
-    /// Only a call through a functor *parameter* is trusted. A parameter's
-    /// declared `stores` is a sound upper bound of every value bound to it: the
-    /// frontend checks each call argument (closure / function) against the
-    /// parameter's `stores`, rejecting one that would store more. A functor
-    /// value from any other source (a `let`-bound closure whose synthesized type
-    /// records no `stores`, a returned functor) carries no such guarantee, so it
-    /// stays conservative and its `&`/`&mut` arguments keep their copies.
+    /// type's declared `stores` clause; `None` means every position may be.
+    /// Only a call through a functor *parameter* is trusted, the frontend having
+    /// checked each argument against that parameter's `stores`. A functor from
+    /// any other source carries no such guarantee and keeps its copies.
     fn functor_stores(&self, callee: &TirExpr) -> Option<IndexSet<u32>> {
         let TirExprKind::Local { index, .. } = &callee.kind else {
             return None;

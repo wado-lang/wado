@@ -1079,10 +1079,9 @@ impl Monomorphizer {
                             let generic_func = generic_func_rc.borrow();
                             // A true ref blanket (`impl<T> Inspect for &T`) needs
                             // the ref's whole inner type — `[List<i32>]` for
-                            // `&List<i32>` — while a specific ref impl (`for
-                            // &List<T>`) wants what `get_struct_info_from_type`
-                            // gave. `&&TypeParam` is the blanket, not
-                            // `&&GenericInstance`.
+                            // `&List<i32>` — while a specific ref impl wants
+                            // what `get_struct_info_from_type` gave.
+                            // `&&TypeParam` is the blanket, not `&&GenericInstance`.
                             let effective_impl_type_args = if is_ref_blanket_impl
                                 && generic_method_name == &names_to_try[0]
                             {
