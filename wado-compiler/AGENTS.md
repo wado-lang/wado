@@ -33,10 +33,15 @@ What a contributor trips over:
   `census_note_operand` / `census_note_node_operands` for what it writes, and
   `census_note_structure` for what it attaches, which an edit that allocates now
   and splices later needs just as much.
-- niri's `scratch_folds` is the one surviving `ExprId` memo. The rewrite that
-  commits an aggregate consumes the node that produced it, so an enclosing fold
-  cannot re-derive the value from the tree — folding a string-building region to
-  a literal depends on it.
+- niri keeps the two surviving `ExprId`-keyed tables, and they are sound for
+  different reasons. `scratch_folds` records what a node denoted: the rewrite
+  that commits an aggregate consumes the node that produced it, so an enclosing
+  fold cannot re-derive the value from the tree — folding a string-building
+  region to a literal depends on it — and every niri rewrite is
+  value-preserving, so the memo survives a node whose content was replaced.
+  `region_misses` records a refusal instead, which nothing makes value-preserving:
+  it is bounded to the shapes `region_shape` admits and costs at worst a fold
+  nobody re-attempts until the next pass. Neither is a licence for a third.
 - Do not narrow niri's trackability read-position whitelist to the reachable
   tree: two attempts each lost the string-builder folds. See
   `aggregate_safe_locals` and the two `still_vouches` tests in

@@ -25,7 +25,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, Operand, PatId, StmtId,
+    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, Operand, PatId, PatKind, StmtId,
     StmtKind, StmtNode,
 };
 use crate::nir_value_graph::ValueKind;
@@ -224,9 +224,11 @@ impl EditSink for BodySink<'_> {
 /// `type_params` and `impl_type_params` empty, since CTFE runs after
 /// monomorphization.
 ///
-/// Neither `inline_hint` nor `stores` is consulted. Where a body is placed says
-/// nothing about compile-time knowability, and what a callee keeps is a
-/// snapshot that `Reached` is what holds sound.
+/// `inline_hint` is not consulted: where a body is placed says nothing about
+/// compile-time knowability. Nor is `stores`, which bears on whether the value
+/// a run produces may be substituted rather than on whether the body may run —
+/// a frame runs a storing callee for the writes it performs, and refuses only
+/// its result (see `run_call`).
 #[must_use]
 pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
     func.effects.is_empty()
@@ -463,16 +465,44 @@ impl<'a> Interpreter<'a> {
             Trackability::outside_frame(body, self.facts).aggregate_locals;
     }
 
+    /// Record which locals a `let` bound to `&GLOBAL`, so a read through one
+    /// resolves against the global it borrows.
+    ///
+    /// An index more than one binder names keeps no alias, whatever the other
+    /// binders say. The scan is flow-insensitive and reads the whole arena —
+    /// which is what lets a read still fold through a binding an in-place
+    /// rewrite has since displaced — so a second binder is one it cannot order
+    /// against the first: an orphaned `let x = &GLOBAL` must not speak for the
+    /// live binding that replaced it, and a live rebinding must not inherit the
+    /// alias its predecessor left. Both directions cost a fold and neither
+    /// costs a wrong one.
+    ///
+    /// Every binder counts, not only a `let`: a destructuring `let` and a match
+    /// arm bind through a pattern, and index reuse across the two is real.
+    /// Reading them off `body.pats` catches both without a walk.
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
         self.frame.ref_global_aliases.clear();
         let mut seen: IndexSet<u32> = IndexSet::default();
+        let mut rebound: IndexSet<u32> = IndexSet::default();
+        for (_, st) in &body.stmts {
+            if let StmtKind::Let { local_index, .. } = &st.kind
+                && !seen.insert(*local_index)
+            {
+                rebound.insert(*local_index);
+            }
+        }
+        for (_, pat) in &body.pats {
+            if let PatKind::Binding { local_index, .. } = &pat.kind
+                && !seen.insert(*local_index)
+            {
+                rebound.insert(*local_index);
+            }
+        }
         for (id, st) in &body.stmts {
-            if let Some((local, key)) = let_ref_global(body, &st.kind) {
-                if seen.insert(local) {
-                    self.frame.ref_global_aliases.insert(local, (id, key));
-                } else {
-                    self.frame.ref_global_aliases.swap_remove(&local);
-                }
+            if let Some((local, key)) = let_ref_global(body, &st.kind)
+                && !rebound.contains(&local)
+            {
+                self.frame.ref_global_aliases.insert(local, (id, key));
             }
         }
     }

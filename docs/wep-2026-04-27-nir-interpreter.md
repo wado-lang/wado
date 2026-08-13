@@ -104,7 +104,13 @@ Bindings:
   merely reads it. `niri` models whole values, not the heap, so a local
   another handle can write through would go stale.
 - A borrow denotes what it points at rather than operating on it, so a local
-  bound to `&CONST` carries the referent and reads project out of it.
+  bound to `&CONST` carries the referent and reads project out of it. Which
+  locals those are is decided once per body and flow-insensitively, which is
+  what lets a read still fold through a binding an in-place rewrite has since
+  displaced. An index more than one binder names therefore carries nothing: a
+  scan that cannot order two bindings cannot say which one a read is governed
+  by, and an orphaned `let x = &GLOBAL` would otherwise speak for the live
+  binding that replaced it.
 
 Control flow:
 
@@ -135,6 +141,14 @@ Calls:
   `break`, and a loop all reach a value. Recursion and total work are bounded.
   A body that does not produce a constant leaves the call in place, so a
   runtime trap inside it stays observable.
+- A call whose result may carry the caller's own storage runs for its writes but
+  yields no value. Two parameter kinds reach that storage — a `&mut` one, whose
+  referent the result may embed (`Formatter::new(&mut buf)`), and one the callee
+  declares it keeps past the call (`stores[p]`), whose alias leaves inside an
+  ordinary aggregate that neither the return type nor the write targets name.
+  The engine has no reference values, so either result would stand as a snapshot
+  the next write to that storage leaves stale. A scalar embeds nothing and is
+  handed back as usual.
 - A statement counts as executed only when everything it evaluates lands on a
   constant. Reducing an expression is not performing it: an unfolded call, a
   global write, or an operation that would trap all leave work undone, and
