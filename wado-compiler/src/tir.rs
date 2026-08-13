@@ -3624,48 +3624,25 @@ impl TypeTable {
     /// is unaffected by this function.
     pub fn mangle_type_arg_for_generic(&self, id: TypeId) -> String {
         match self.get(id) {
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
+            ResolvedType::Variant { def }
+            | ResolvedType::Enum { def }
+            | ResolvedType::Resource { def }
+            | ResolvedType::Newtype { def, .. }
+            | ResolvedType::Flags { def } => {
+                format!("{}/{}", self.def_module(*def), self.def_name(*def))
             }
-            | ResolvedType::Enum {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Resource {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Newtype {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Flags {
-                name,
-                module_source,
-                ..
-            } => format!("{module_source}/{name}"),
             // A struct mangles as a type argument by its rendered spelling:
             // `TreeMap<String,i32>` and `TreeMap<String,String>` are distinct
             // arguments, and naming both `TreeMap` collides the functions
             // instantiated over them.
-            ResolvedType::Struct {
-                decl_name,
-                module_source,
-                type_args,
-            } => format!(
-                "{module_source}/{}",
-                self.struct_rendered_name(decl_name, type_args)
+            ResolvedType::Struct { def, type_args } => format!(
+                "{}/{}",
+                self.struct_head_module(*def),
+                self.struct_rendered_name(*def, type_args)
             ),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
+                let name = self.def_name(*def);
+                let module_source = self.def_module(*def);
                 // Qualify the BASE name of the instance and recursively
                 // qualify each type argument so the result is identical
                 // to the qualified name produced once the instance is
