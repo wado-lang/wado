@@ -572,10 +572,10 @@ compiles, passes the suite, and ends with a mechanical completion check.
         declaration carries one, which reaches to codegen — and it is what
         `ResolvedType` losing the pair forces, since a downstream consumer will
         have nothing to read off the type.
-- [ ] `RequiredTrait` carries a `Resolution`. A qualified call's trait prefix can
-      name a type-parameter binder or reach no declaration at all, so a bare
-      `DefId` cannot stand for it — the answer the site already has can. Waits on
-      the trait bounds it is compared against carrying one too.
+- [x] `RequiredTrait` carries a `Resolution`. A qualified call's trait prefix
+      can name a type-parameter binder or reach no declaration, so a bare
+      `DefId` cannot stand for it — the answer the site already has can.
+
 - [ ] `SymbolPath`; the mangled-name parsers deleted; DCE retention keys the
       struct's identity rather than re-deriving a name that must match one built
       elsewhere. Done when `name.rs` exports no function taking a mangled string.

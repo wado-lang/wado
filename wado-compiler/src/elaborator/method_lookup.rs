@@ -1784,11 +1784,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys
                     .auto_derive_by_method(method_name)
                     .is_some_and(|(item, _, _)| {
-                        self.tysys
-                            .compiler_trait_def(item)
-                            .is_some_and(|decl| {
-                                crate::resolve::Resolution::Def(decl) == wanted.decl
-                            })
+                        self.tysys.compiler_trait_def(item).is_some_and(|decl| {
+                            crate::resolve::Resolution::Def(decl) == wanted.decl
+                        })
                     })
             })
         {

@@ -1715,8 +1715,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.tysys.resolutions.decl_key(def) == *key
                     }
                     _ => false,
-                })
-                    && self.trait_declares_method_of(key, method_name)
+                }) && self.trait_declares_method_of(key, method_name)
             })
             .collect();
         let resolved = candidates.first().and_then(|(bound, key)| {
