@@ -45,13 +45,14 @@
 //! pass therefore drops "every owned binding not transferred on this path"
 //! with no aggregate-shape guessing.
 
+use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::synthesis::common::{
-    cm_raw_call, expr_stmt, let_stmt, local_ref, return_stmt, synth_span,
+    cm_canonical_call, expr_stmt, let_stmt, local_ref, return_stmt, synth_span,
 };
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirPattern,
@@ -431,8 +432,8 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
             .reg
             .get_resource_cm_name_by_module(&module_source.to_string(), &name)
         {
-            Some(cm) => vec![expr_stmt(cm_raw_call(
-                &format!("resource-drop:{cm}"),
+            Some(cm) => vec![expr_stmt(cm_canonical_call(
+                CanonicalIntrinsic::ResourceDrop(cm.to_string()),
                 vec![scrutinee],
                 TypeTable::UNIT,
             ))],

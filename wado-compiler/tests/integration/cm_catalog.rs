@@ -290,7 +290,28 @@ fn cases() -> Vec<Case> {
                 Val::Tuple(vec![point(), Val::U32(2)]),
             ]),
         ),
+        // Flags in memory rather than a flat i32 slot: three labels are one
+        // CM byte, and only these read a stride or an offset.
+        case("id-option-flags", Val::Option(b(flags(&["write"])))),
+        case("id-option-flags", Val::Option(None)),
+        case(
+            "id-list-flags",
+            Val::List(vec![
+                flags(&["read"]),
+                flags(&[]),
+                flags(&["write", "execute"]),
+                flags(&["read", "write", "execute"]),
+            ]),
+        ),
+        case(
+            "id-tuple-flags",
+            Val::Tuple(vec![flags(&["read", "execute"]), Val::U32(9)]),
+        ),
     ]
+}
+
+fn flags(names: &[&str]) -> Val {
+    Val::Flags(names.iter().map(|s| (*s).to_string()).collect())
 }
 
 fn lookup_func(
@@ -635,9 +656,15 @@ fn run_round_trips(opt_level: OptLevel) {
         check!(future_round_trip(&mut store, &instance, i, "id-future-string", "héllo, wörld".to_string()));
         check!(future_round_trip(&mut store, &instance, i, "id-future-option", Some(42u32)));
         check!(future_round_trip(&mut store, &instance, i, "id-future-result", Ok::<u32, String>(7)));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-result-err", Err::<(), String>("boom".to_string())));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-result-err", Ok::<(), String>(())));
         check!(future_round_trip(&mut store, &instance, i, "id-future-list", vec![1u32, 2, 3]));
         check!(future_round_trip(&mut store, &instance, i, "id-future-tuple", (5u32, "x".to_string())));
         check!(future_round_trip(&mut store, &instance, i, "id-future-record", Point { x: 1.5, y: -2.5 }));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-newtype", 100.5f64));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-enum", Color::Green));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-variant", Shape::Rect((1.5, -2.5))));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-flags", Perms::READ | Perms::EXECUTE));
 
         check!(stream_round_trip(&mut store, &instance, i, "id-stream-u8", vec![1u8, 2, 3, 4]));
         // Stream consume/produce: each element round-trips through CM memory.
@@ -649,6 +676,18 @@ fn run_round_trips(opt_level: OptLevel) {
         check!(stream_round_trip(
             &mut store, &instance, i, "id-stream-record",
             vec![Point { x: 1.0, y: 2.0 }, Point { x: -3.5, y: 4.5 }],
+        ));
+        check!(stream_round_trip(
+            &mut store, &instance, i, "id-stream-enum",
+            vec![Color::Blue, Color::Red, Color::Green],
+        ));
+        check!(stream_round_trip(
+            &mut store, &instance, i, "id-stream-variant",
+            vec![Shape::Circle(1.25), Shape::Nothing, Shape::Rect((-3.0, 4.0))],
+        ));
+        check!(stream_round_trip(
+            &mut store, &instance, i, "id-stream-flags",
+            vec![Perms::READ, Perms::default(), Perms::WRITE | Perms::EXECUTE],
         ));
 
         check!(embedded_future_round_trip(
@@ -1102,6 +1141,14 @@ fn run_future_identity_round_trips(opt_level: OptLevel) {
         "id-future-tuple",
         (5u32, "x".to_string()),
     );
+    // A unit Ok arm is also the WASI transmission shape; only a WASI
+    // error-code on the Err side makes it one.
+    run_future_identity(
+        opt_level,
+        "Result<(), String>",
+        "id-future-result-err",
+        Err::<(), String>("boom".to_string()),
+    );
 }
 
 #[test]
@@ -1259,6 +1306,302 @@ fn cm_stream_record_identity_o2() {
     run_record_stream_identity(OptLevel::O2);
 }
 
+/// Host mirrors; the `#[component]` names are the CM kebab names.
+#[derive(
+    wasmtime::component::ComponentType,
+    wasmtime::component::Lower,
+    wasmtime::component::Lift,
+    Clone,
+    Copy,
+    PartialEq,
+    Debug,
+)]
+#[component(enum)]
+#[repr(u8)]
+enum Color {
+    #[component(name = "red")]
+    Red,
+    #[component(name = "green")]
+    Green,
+    #[component(name = "blue")]
+    Blue,
+}
+
+#[derive(
+    wasmtime::component::ComponentType,
+    wasmtime::component::Lower,
+    wasmtime::component::Lift,
+    Clone,
+    Copy,
+    PartialEq,
+    Debug,
+)]
+#[component(variant)]
+enum Shape {
+    #[component(name = "circle")]
+    Circle(f64),
+    #[component(name = "rect")]
+    Rect((f64, f64)),
+    #[component(name = "nothing")]
+    Nothing,
+}
+
+wasmtime::component::flags! {
+    Perms {
+        #[component(name = "read")]
+        const READ;
+        #[component(name = "write")]
+        const WRITE;
+        #[component(name = "execute")]
+        const EXECUTE;
+    }
+}
+
+/// `future<T>` / `stream<T>` over the named non-record shapes, which carry a
+/// discriminant — and, for `variant`, a per-case payload union.
+const NAMED_ASYNC_SOURCE: &str = r#"
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+variant Shape {
+    Circle(f64),
+    Rect([f64, f64]),
+    Nothing,
+}
+flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+export async fn id_future_color(v: Future<Color>) -> Future<Color> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Color>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+export async fn id_future_shape(v: Future<Shape>) -> Future<Shape> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Shape>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+export async fn id_future_perms(v: Future<Perms>) -> Future<Perms> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Perms>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+export async fn id_stream_color(v: Stream<Color>) -> Stream<Color> {
+    let [rx, tx] = Stream::<Color>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
+}
+export async fn id_stream_shape(v: Stream<Shape>) -> Stream<Shape> {
+    let [rx, tx] = Stream::<Shape>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
+}
+export async fn id_stream_perms(v: Stream<Perms>) -> Stream<Perms> {
+    let [rx, tx] = Stream::<Perms>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
+}
+"#;
+
+fn run_named_future_identity(opt_level: OptLevel) {
+    let wasm = compile_lib_source(NAMED_ASYNC_SOURCE, opt_level);
+    let engine = crate::common::engine();
+    let rt = crate::common::runtime();
+    let opt = crate::common::opt_level_name(opt_level);
+
+    rt.block_on(async {
+        let component = Component::new(engine, &wasm).expect("instantiate component type");
+        let linker = crate::common::linker(engine).expect("build linker");
+        let state = crate::common::WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        store.set_epoch_deadline((crate::common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate named-payload future component");
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx);
+        let i = iface.as_ref();
+
+        let mut failures = Vec::new();
+        macro_rules! check {
+            ($call:expr) => {
+                if let Err(e) = $call.await {
+                    failures.push(format!("[{opt}] {e}"));
+                }
+            };
+        }
+        // Every case: a wrong discriminant survives one but not all.
+        for color in [Color::Red, Color::Green, Color::Blue] {
+            check!(future_round_trip(
+                &mut store,
+                &instance,
+                i,
+                "id-future-color",
+                color
+            ));
+        }
+
+        for shape in [Shape::Circle(2.5), Shape::Rect((1.5, -2.5)), Shape::Nothing] {
+            check!(future_round_trip(
+                &mut store,
+                &instance,
+                i,
+                "id-future-shape",
+                shape
+            ));
+        }
+        for perms in [
+            Perms::default(),
+            Perms::WRITE,
+            Perms::READ | Perms::EXECUTE,
+            Perms::READ | Perms::WRITE | Perms::EXECUTE,
+        ] {
+            check!(future_round_trip(
+                &mut store,
+                &instance,
+                i,
+                "id-future-perms",
+                perms
+            ));
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    });
+}
+
+#[test]
+fn cm_future_named_identity_o0() {
+    run_named_future_identity(OptLevel::O0);
+}
+
+#[test]
+fn cm_future_named_identity_o2() {
+    run_named_future_identity(OptLevel::O2);
+}
+
+/// The same shapes over `stream<T>`, where the element stride matters too.
+/// Each batch mixes cases, to catch a stride taken from one case's payload.
+fn run_named_stream_identity(opt_level: OptLevel) {
+    let wasm = compile_lib_source(NAMED_ASYNC_SOURCE, opt_level);
+    let engine = crate::common::engine();
+    let rt = crate::common::runtime();
+    let opt = crate::common::opt_level_name(opt_level);
+
+    rt.block_on(async {
+        let component = Component::new(engine, &wasm).expect("instantiate component type");
+        let linker = crate::common::linker(engine).expect("build linker");
+        let state = crate::common::WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        store.set_epoch_deadline((crate::common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate named-payload stream component");
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx);
+        let i = iface.as_ref();
+
+        let mut failures = Vec::new();
+        macro_rules! check {
+            ($call:expr) => {
+                if let Err(e) = $call.await {
+                    failures.push(format!("[{opt}] {e}"));
+                }
+            };
+        }
+        check!(stream_round_trip(
+            &mut store,
+            &instance,
+            i,
+            "id-stream-color",
+            vec![Color::Blue, Color::Red, Color::Green, Color::Blue],
+        ));
+        check!(stream_round_trip(
+            &mut store,
+            &instance,
+            i,
+            "id-stream-shape",
+            vec![
+                Shape::Circle(1.25),
+                Shape::Nothing,
+                Shape::Rect((-3.0, 4.0)),
+                Shape::Circle(-0.5),
+            ],
+        ));
+        check!(stream_round_trip(
+            &mut store,
+            &instance,
+            i,
+            "id-stream-perms",
+            vec![
+                Perms::READ,
+                Perms::default(),
+                Perms::WRITE | Perms::EXECUTE,
+                Perms::READ | Perms::WRITE | Perms::EXECUTE,
+            ],
+        ));
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    });
+}
+
+#[test]
+fn cm_stream_named_identity_o0() {
+    run_named_stream_identity(OptLevel::O0);
+}
+
+#[test]
+fn cm_stream_named_identity_o2() {
+    run_named_stream_identity(OptLevel::O2);
+}
+
 /// A single-export `--lib` async identity over `stream<T>`: read the input
 /// stream element-by-element, write each chunk into a fresh `stream<T>`, and
 /// deliver the readable end via `task return`. Exercises the general stream
@@ -1372,6 +1715,67 @@ fn try_compile_lib(source: &str) -> Result<(), String> {
     crate::common::compile_source_with_compiler_options(Path::new("lib.wado"), source, options)
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+/// An unnameable payload is reported, not panicked on. Being a representable
+/// boundary *value* is not enough: `()` is one, with no payload type.
+#[test]
+fn cm_lib_rejects_an_unclassifiable_future_payload() {
+    let err =
+        try_compile_lib("export fn id_unit(v: Future<()>) -> Future<()> {\n    return v;\n}\n")
+            .expect_err("`future<()>` export should fail to compile");
+    assert!(
+        err.contains("future") && err.contains("Component Model"),
+        "expected a future-payload diagnostic, got: {err}"
+    );
+}
+
+/// The same through `Future::<T>::new()` rather than an export signature.
+#[test]
+fn cm_lib_rejects_an_unclassifiable_future_new() {
+    // The parameter brings the `Future` resource into the world.
+    let err = try_compile_lib(
+        "export fn make(v: Future<u32>) -> u32 {\n    \
+         v.drop();\n    \
+         let [rx, tx] = Future::<()>::new();\n    \
+         rx.drop();\n    tx.drop();\n    return 1;\n}\n",
+    )
+    .expect_err("`Future::<()>::new()` should fail to compile");
+    assert!(
+        err.contains("future") && err.contains("Component Model"),
+        "expected a future-payload diagnostic, got: {err}"
+    );
+}
+
+/// A newtype is a WIT type alias, so its payload is its base's, at every level.
+#[test]
+fn cm_lib_accepts_newtype_future_payloads() {
+    for ty in ["Meters", "Option<Meters>", "List<Meters>", "[Meters, u32]"] {
+        let source = format!(
+            "pub type Meters = f64;\n\
+             export async fn id(v: Future<{ty}>) -> Future<{ty}> {{\n    \
+             let value = v.read();\n    v.drop();\n    \
+             let [rx, tx] = Future::<{ty}>::new();\n    \
+             task return rx;\n    \
+             if let Some(x) = value {{\n        tx.write(x);\n    }}\n}}\n"
+        );
+        try_compile_lib(&source).unwrap_or_else(|e| panic!("`Future<{ty}>` should compile: {e}"));
+    }
+}
+
+/// A lib-local type whose CM name collides with a bundled WASI one: the
+/// reverse lookup must be scoped to the library's own interface.
+#[test]
+fn cm_lib_builds_a_type_whose_cm_name_collides_with_wasi() {
+    try_compile_lib(
+        "pub enum ErrorCode {\n    Io,\n    Timeout,\n}\n\
+         export async fn id(v: Future<ErrorCode>) -> Future<ErrorCode> {\n    \
+         let value = v.read();\n    v.drop();\n    \
+         let [rx, tx] = Future::<ErrorCode>::new();\n    \
+         task return rx;\n    \
+         if let Some(x) = value {\n        tx.write(x);\n    }\n}\n",
+    )
+    .expect("a lib-local `ErrorCode` future payload should compile");
 }
 
 /// A library export whose signature carries a type with no Component Model value

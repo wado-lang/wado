@@ -4893,9 +4893,9 @@ impl<'a> TirUnparser<'a> {
                 self.unparse_type_args(type_args);
                 self.delimited("(", ")", rest, |s, arg| s.unparse_expr(&arg.expr));
             }
-            TirExprKind::CmRawCall { local_name, args } => {
+            TirExprKind::CmRawCall { target, args } => {
                 self.output.push_str("cm_raw_call ");
-                self.output.push_str(local_name);
+                self.output.push_str(&target.import_name());
                 self.delimited("(", ")", args, TirUnparser::unparse_expr);
             }
             TirExprKind::FieldAccess {

@@ -624,13 +624,29 @@ fn check_cm_boundary_representable_inner(
             R::Primitive(_) | R::Unit | R::Enum { .. } | R::Flags { .. } | R::Resource { .. } => {
                 Ok(())
             }
-            // Stream/Future handles are themselves i32, but their payload is
-            // lifted/lowered by value on read/write, so it must be
-            // representable (and non-recursive) too.
-            R::GenericResource { type_args, .. } => {
+            // The handle is an i32, but its payload is lifted and lowered by
+            // value, so it must be classifiable too — `()` is representable
+            // yet has no payload type.
+            R::GenericResource {
+                name, type_args, ..
+            } => {
+                let name = name.clone();
                 let args = type_args.clone();
-                for a in args {
+                for &a in &args {
                     recurse(a, visited)?;
+                }
+                if let Some(&payload) = args.first()
+                    && let Some(reason) = match name.as_str() {
+                        "Future" | "FutureWritable" => {
+                            crate::component_model::future_payload_rejection(type_table, payload)
+                        }
+                        "Stream" | "StreamWritable" => {
+                            crate::component_model::stream_payload_rejection(type_table, payload)
+                        }
+                        _ => None,
+                    }
+                {
+                    return Err(reason);
                 }
                 Ok(())
             }
@@ -1401,6 +1417,11 @@ pub(super) fn type_id_to_ast_type(
             name,
             module_source,
         } => cm_named(name, module_source),
+        // Its own CM type, 1 byte at ≤8 labels, not a four-byte `i32`.
+        ResolvedType::Flags {
+            name,
+            module_source,
+        } => cm_named(name, module_source),
         ResolvedType::Resource { name, .. } => named_no_source(name),
         ResolvedType::GenericInstance {
             name, type_args, ..
@@ -1452,7 +1473,18 @@ pub(super) fn type_id_to_ast_type(
             type_table,
             cm_interface_registry,
         ))),
-        _ => named_no_source("i32"),
+        ResolvedType::Never
+        | ResolvedType::Function { .. }
+        | ResolvedType::Reactive(_)
+        | ResolvedType::BuiltinArray(_)
+        | ResolvedType::TypeParam { .. }
+        | ResolvedType::InferVar(_)
+        | ResolvedType::TypePack { .. }
+        | ResolvedType::AssocTypeProjection { .. }
+        | ResolvedType::Unknown
+        | ResolvedType::Error => {
+            panic!("type has no Component Model surface: {resolved:?}")
+        }
     }
 }
 

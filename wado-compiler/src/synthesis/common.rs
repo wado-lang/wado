@@ -5,6 +5,7 @@
 //! - TIR expression and statement builders
 //! - Synthetic function creation
 
+use crate::canonical::{CanonicalIntrinsic, CmCallTarget};
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
 
@@ -257,11 +258,26 @@ pub fn assign(target: TirExpr, value: TirExpr) -> TirExpr {
 
 /// Create a `CmRawCall` expression targeting a lowered WASI import.
 pub fn cm_raw_call(local_name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
+    cm_target_call(
+        CmCallTarget::WasiAlias(local_name.to_string()),
+        args,
+        return_type,
+    )
+}
+
+/// Create a `CmRawCall` expression targeting a Component Model canonical
+/// built-in, so its payload type reaches WIR intact.
+pub fn cm_canonical_call(
+    intrinsic: CanonicalIntrinsic,
+    args: Vec<TirExpr>,
+    return_type: TypeId,
+) -> TirExpr {
+    cm_target_call(CmCallTarget::Canonical(intrinsic), args, return_type)
+}
+
+fn cm_target_call(target: CmCallTarget, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
     TirExpr::new(
-        TirExprKind::CmRawCall {
-            local_name: local_name.to_string(),
-            args,
-        },
+        TirExprKind::CmRawCall { target, args },
         return_type,
         synth_span(),
     )

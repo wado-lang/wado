@@ -12,6 +12,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::canonical::CmCallTarget;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -4298,14 +4299,14 @@ pub enum TirExprKind {
         /// never-value-copy-a-receiver rule.
         has_receiver: bool,
     },
-    /// Raw Component Model call to a lowered WASI import.
+    /// Raw Component Model call to a lowered WASI import or a canonical built-in.
     ///
-    /// Used inside synthesized CM binding functions to call the flat-ABI WASI function
+    /// Used inside synthesized CM binding functions to call the flat-ABI function
     /// directly, bypassing the normal effect call mechanism. Args are already lowered
     /// to flat CM types (i32, i64, f32, f64).
     CmRawCall {
-        /// Full WASI local alias name (e.g., "wasi:cli/stdout@0.3.0/write-via-stream")
-        local_name: String,
+        /// Which function this calls, by identity rather than by rendered name.
+        target: CmCallTarget,
         /// Flat ABI arguments (already lowered to core Wasm types)
         args: Vec<TirExpr>,
     },

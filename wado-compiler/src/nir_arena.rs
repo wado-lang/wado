@@ -15,6 +15,7 @@
 
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
+use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBinaryOp, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
@@ -217,7 +218,7 @@ pub enum ExprKind {
         has_receiver: bool,
     },
     CmRawCall {
-        local_name: String,
+        target: CmCallTarget,
         args: Vec<Operand>,
     },
     FieldAccess {
@@ -816,8 +817,8 @@ impl Body {
                     .collect(),
                 has_receiver,
             },
-            ExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
-                local_name,
+            ExprKind::CmRawCall { target, args } => ExprKind::CmRawCall {
+                target,
                 args: args.into_iter().map(|a| self.clone_operand(a)).collect(),
             },
             ExprKind::FieldAccess {

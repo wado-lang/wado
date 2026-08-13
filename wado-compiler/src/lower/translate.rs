@@ -1525,8 +1525,8 @@ impl FunctionTranslator<'_, '_> {
                 args,
                 has_receiver,
             } => self.convert_call(func, type_args, args, *has_receiver),
-            TirExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
-                local_name: local_name.clone(),
+            TirExprKind::CmRawCall { target, args } => ExprKind::CmRawCall {
+                target: target.clone(),
                 args: args.iter().map(|a| self.convert_operand(a)).collect(),
             },
             TirExprKind::FieldAccess {

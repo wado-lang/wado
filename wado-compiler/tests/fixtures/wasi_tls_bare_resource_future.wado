@@ -1,0 +1,17 @@
+// A guest-created `future<option<own<error>>>`: no imported signature names the
+// payload resource, so nothing else pulls its interface in. Wrapped in `option`
+// because the guest cannot construct an `Error`, and dropping an unwritten
+// writable end traps.
+use { println, Stdout } from "core:cli";
+use { Connector, Error } from "wasi:tls";
+
+export fn run() with Stdout, Connector, Error {
+    let [rx, tx] = Future::<Option<Error>>::new();
+    tx.write(null);
+    rx.drop();
+
+    println("resource future written");
+}
+
+__DATA__
+{"stdout": "resource future written\n"}

@@ -26,13 +26,13 @@ use std::rc::Rc;
 use crate::cm_abi::CmValType;
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::DeclPath;
 use crate::package::Package;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
-use crate::wir::CmPayloadType;
 use crate::world_registry::{WorldExportInfo, WorldInfo};
 
 pub use export_adapter::export_binding_func_name;
@@ -147,21 +147,16 @@ mod record_payload_validation {
             let tt = module.type_table.borrow();
             for func_rc in &module.functions {
                 let func = func_rc.borrow();
-                if !reachable.contains(&(module_source.clone(), func.name.clone())) {
-                    continue;
-                }
                 let Some(body) = &func.body else { continue };
                 let mut finder = super::NamedPayloadFinder {
                     tt: &tt,
                     registry: project.cm_interface_registry.as_ref(),
+                    check_records: reachable.contains(&(module_source.clone(), func.name.clone())),
                     found: None,
                 };
                 finder.visit_block(body);
-                if let Some(name) = finder.found {
-                    return Err(format!(
-                        "record type `{name}` is used as a `future` / `stream` payload, \
-                         which is only supported in library (`--lib`) components"
-                    ));
+                if let Some(reason) = finder.found {
+                    return Err(reason);
                 }
             }
         }
@@ -249,6 +244,9 @@ impl TirRefVisitor for CalleeCollector {
 struct NamedPayloadFinder<'a> {
     tt: &'a TypeTable,
     registry: &'a crate::component_model::CmInterfaceRegistry,
+    /// Only where the world keeps the code: a record's resolvability depends on
+    /// the world, unlike classifiability, which is always checked.
+    check_records: bool,
     found: Option<String>,
 }
 
@@ -265,22 +263,42 @@ impl TirRefVisitor for NamedPayloadFinder<'_> {
 
     fn visit_expr(&mut self, expr: &TirExpr) {
         if self.found.is_none() {
-            self.found = unresolvable_future_stream_payload(self.tt, self.registry, expr);
+            self.found = unresolvable_future_stream_payload(
+                self.tt,
+                self.registry,
+                expr,
+                self.check_records,
+            );
         }
         self.walk_expr(expr);
     }
 }
 
-/// For a `Future::<T>::new()` / `Stream::<T>::new()` static call whose payload
-/// `T` contains a named record with no CM type to lower against, return that
-/// record's Wado name. `new` is the only way to obtain a `Future<T>` /
-/// `Stream<T>` outside `--lib` (non-lib world exports have fixed signatures), so
-/// checking it covers the creation sites.
 fn unresolvable_future_stream_payload(
     tt: &TypeTable,
     registry: &crate::component_model::CmInterfaceRegistry,
     expr: &TirExpr,
+    check_records: bool,
 ) -> Option<String> {
+    let (payload, is_future) = future_stream_payload_site(tt, expr)?;
+    if check_records && let Some(name) = unresolvable_record_in_payload(tt, registry, payload) {
+        return Some(format!(
+            "record type `{name}` is used as a `future` / `stream` payload, \
+             which is only supported in library (`--lib`) components"
+        ));
+    }
+    if is_future {
+        return crate::component_model::future_payload_rejection(tt, payload);
+    }
+    if crate::component_model::is_cm_record_stream_element(tt, payload) {
+        return None;
+    }
+    crate::component_model::stream_payload_rejection(tt, payload)
+}
+
+/// Two shapes name a payload: a `new()` static call, and a CM method on a
+/// handle. The bool is whether it is a future's.
+fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId, bool)> {
     let TirExprKind::Call { func, .. } = &expr.kind else {
         return None;
     };
@@ -288,44 +306,54 @@ fn unresolvable_future_stream_payload(
         .method_info
         .as_ref()
         .and_then(|m| m.cm_name.as_deref())?;
-    if cm != "future-new" && cm != "stream-new" {
-        return None;
+    if let Some(is_future) = match cm {
+        "future-new" => Some(true),
+        "stream-new" => Some(false),
+        _ => None,
+    } {
+        let payload = func
+            .monomorph_info
+            .as_ref()?
+            .impl_type_args
+            .first()
+            .copied()?;
+        return Some((payload, is_future));
     }
-    let payload = func
-        .monomorph_info
-        .as_ref()?
-        .impl_type_args
-        .first()
-        .copied()?;
-    unresolvable_record_in_payload(tt, registry, payload)
+    let is_future = if cm.starts_with("future-") {
+        true
+    } else if cm.starts_with("stream-") {
+        false
+    } else {
+        return None;
+    };
+    let (receiver, _, _) = expr.kind.as_method_call()?;
+    let mut type_id = receiver.type_id;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
+        type_id = *inner;
+    }
+    Some((*tt.generic_type_args(type_id)?.first()?, is_future))
 }
 
-/// The Wado name of the first user record nested anywhere in a CM payload type
-/// (`Future<Point>`, `Future<List<Point>>`, `Future<[Point, u32]>`, …) that is
-/// not registered under its own module source — i.e. has no CM type to lower
-/// against. `None` if every named record in the payload resolves.
-///
-/// Resolvability is keyed on the record's own `module_source`, never its bare
-/// name: a user record that happens to share a name with an imported WASI/
-/// dependency struct must still be rejected, since the homonym lives under a
-/// different source and carries different fields.
+/// Keyed on `module_source`, never the bare name: a homonym of an imported
+/// WASI or dependency declaration lives under a different source and carries a
+/// different shape.
 fn unresolvable_record_in_payload(
     tt: &TypeTable,
     registry: &crate::component_model::CmInterfaceRegistry,
     type_id: TypeId,
 ) -> Option<String> {
-    if let ResolvedType::Struct {
-        decl_name: name,
-        module_source,
-        ..
-    } = tt.get(type_id)
+    if let Some((name, module_source)) = named_decl_of(tt.get(type_id))
         && matches!(
             crate::component_model::cm_payload_type_from_type_id(tt, type_id),
             Some(CmPayloadType::Named(_))
         )
-        && !registry.is_struct_registered_from(module_source, name)
+        && !registry.is_named_type_registered_from(module_source, name)
     {
         return Some(name.clone());
+    }
+    // Codegen peels aliases, so check through them here too.
+    if let ResolvedType::Newtype { base_type, .. } = tt.get(type_id) {
+        return unresolvable_record_in_payload(tt, registry, *base_type);
     }
     if let Some(inner) = tt.as_option(type_id).or_else(|| tt.as_list(type_id)) {
         return unresolvable_record_in_payload(tt, registry, inner);
@@ -346,6 +374,29 @@ fn unresolvable_record_in_payload(
             .find_map(|&a| unresolvable_record_in_payload(tt, registry, a));
     }
     None
+}
+
+fn named_decl_of(ty: &ResolvedType) -> Option<(&String, &ModuleSource)> {
+    match ty {
+        ResolvedType::Struct {
+            decl_name,
+            module_source,
+            ..
+        } => Some((decl_name, module_source)),
+        ResolvedType::Enum {
+            name,
+            module_source,
+        }
+        | ResolvedType::Variant {
+            name,
+            module_source,
+        }
+        | ResolvedType::Flags {
+            name,
+            module_source,
+        } => Some((name, module_source)),
+        _ => None,
+    }
 }
 
 /// Phase entry point: generate CM binding functions and rewrite call sites.
@@ -571,12 +622,12 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                     // the canon to this export's own result (a `--lib`
                     // world may have several async exports of distinct
                     // result types).
-                    let task_return_name = format!("task-return:{}", export.name);
+                    let task_return = CanonicalIntrinsic::TaskReturn(export.name.clone());
                     expand_task_returns_in_func(
                         &user_func_rc,
                         return_type,
                         &flat_types,
-                        &task_return_name,
+                        &task_return,
                         &project.tir_modules,
                         &entry_type_table,
                         &project.cm_interface_registry,
@@ -1756,9 +1807,34 @@ mod tests {
             TypeTable::I32,
         );
         match &call.kind {
-            TirExprKind::CmRawCall { local_name, args } => {
-                assert_eq!(local_name, "wasi:cli/Stdout::write_via_stream");
+            TirExprKind::CmRawCall { target, args } => {
+                assert_eq!(
+                    *target,
+                    crate::canonical::CmCallTarget::WasiAlias(
+                        "wasi:cli/Stdout::write_via_stream".to_string()
+                    )
+                );
                 assert_eq!(args.len(), 3);
+            }
+            other => panic!("expected CmRawCall, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn helpers_cm_canonical_call_carries_the_payload() {
+        use crate::canonical::{CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType};
+        let intrinsic = CanonicalIntrinsic::FutureRead(CmFuturePayload::Value(
+            CmPayloadType::Option(Box::new(CmPayloadType::Scalar(CmScalarType::U32))),
+        ));
+        let call = crate::synthesis::common::cm_canonical_call(
+            intrinsic.clone(),
+            vec![i32_const(0)],
+            TypeTable::I32,
+        );
+        match &call.kind {
+            TirExprKind::CmRawCall { target, .. } => {
+                assert_eq!(target.canonical(), Some(&intrinsic));
+                assert_eq!(target.import_name(), "future-read:val-option<u32>");
             }
             other => panic!("expected CmRawCall, got {other:?}"),
         }

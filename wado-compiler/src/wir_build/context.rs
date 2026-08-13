@@ -7,15 +7,15 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::MangledName;
 
+use crate::canonical::CanonicalIntrinsic;
 use crate::module_source::ModuleSource;
 use crate::name::StructName;
 use crate::nir::NirFunction;
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
 use crate::wir::{
-    CanonicalIntrinsic, WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction,
-    WirGlobal, WirImport, WirImportDesc, WirName, WirNames, WirPackage, WirType, WirTypeDef,
-    WirTypeId,
+    WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction, WirGlobal, WirImport,
+    WirImportDesc, WirName, WirNames, WirPackage, WirType, WirTypeDef, WirTypeId,
 };
 
 /// Base offset for defined function `WirFuncId` indices.

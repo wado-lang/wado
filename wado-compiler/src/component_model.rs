@@ -11,54 +11,138 @@ use crate::hashmap::{IndexMap, IndexSet};
 use wasm_encoder::ValType;
 
 use crate::ast::{Attribute, CmImport, GenericType, Type};
+use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType};
 use crate::module_source::ModuleSource;
 use crate::name::to_kebab;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
-use crate::wir::{CmFuturePayload, CmPayloadType, CmScalarType};
 
-/// Classify a future's type argument into the CM future payload category.
-/// The single source of truth shared by the future-read synthesis path and the
-/// WIR-build future-write / cancel / drop / new paths, so every operation on a
-/// given `Future<T>` agrees on its component-level future type.
+/// The one classifier, so every operation on a given `Future<T>` — read, write,
+/// cancel, drop, new — agrees on its component-level future type.
 ///
-/// - Primitive scalar → `Scalar(s)`
-/// - `Result<(), E>` (unit Ok type) → `Transmission(error-code package)`
-/// - Anything else → `Trailers` (the HTTP trailers pattern)
+/// # Panics
+/// On a payload it cannot classify. Ask [`future_payload_rejection`] first, for
+/// a diagnostic instead.
 pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFuturePayload {
+    try_classify_future_payload(type_table, type_arg).unwrap_or_else(|| {
+        panic!(
+            "`Future<{}>` has no Component Model payload type",
+            type_table.base_type_name(type_arg)
+        )
+    })
+}
+
+pub fn future_payload_rejection(type_table: &TypeTable, payload: TypeId) -> Option<String> {
+    try_classify_future_payload(type_table, payload)
+        .is_none()
+        .then(|| {
+            format!(
+                "`{}` has no Component Model representation as a `future` payload",
+                type_table.type_name(payload)
+            )
+        })
+}
+
+/// The registry-driven `Record` stream path needs no [`CmPayloadType`].
+pub fn is_cm_record_stream_element(type_table: &TypeTable, element: TypeId) -> bool {
+    matches!(
+        type_table.get(peel_newtypes(type_table, element)),
+        ResolvedType::Struct { module_source, .. } if is_cm_owned_source(module_source)
+    )
+}
+
+pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Option<String> {
+    let element = peel_newtypes(type_table, element);
+    if matches!(
+        type_table.get(element),
+        ResolvedType::Primitive(PrimitiveType::U8)
+    ) {
+        return None;
+    }
+    cm_payload_type_from_type_id(type_table, element)
+        .is_none()
+        .then(|| {
+            format!(
+                "`{}` has no Component Model representation as a `stream` element",
+                type_table.type_name(element)
+            )
+        })
+}
+
+/// A WIT alias has no representation of its own. The AST classifier's
+/// `resolve_type` peels too, and the two must agree.
+///
+/// Newtypes only: `TypeTable::resolve_newtype_base` also collapses `flags` to
+/// `u32`, and a CM `flags` is its own type, one byte wide at ≤8 labels.
+pub fn peel_newtypes(type_table: &TypeTable, type_id: TypeId) -> TypeId {
+    let mut id = type_id;
+    while let ResolvedType::Newtype { base_type, .. } = type_table.get(id) {
+        id = *base_type;
+    }
+    id
+}
+
+fn try_classify_future_payload(
+    type_table: &TypeTable,
+    type_arg: TypeId,
+) -> Option<CmFuturePayload> {
+    let type_arg = peel_newtypes(type_table, type_arg);
     match type_table.get(type_arg) {
         ResolvedType::Primitive(prim) => {
             if let Some(scalar) = primitive_to_cm_scalar(prim) {
-                return CmFuturePayload::Scalar(scalar);
+                return Some(CmFuturePayload::Scalar(scalar));
             }
         }
         ResolvedType::GenericInstance {
             name, type_args, ..
         } if name == "Result" && type_args.len() >= 2 => {
-            if matches!(type_table.get(type_args[0]), ResolvedType::Unit) {
-                return CmFuturePayload::Transmission(error_code_source(type_table, type_args[1]));
+            if matches!(type_table.get(type_args[0]), ResolvedType::Unit)
+                && let Some(source) = wasi_error_code_source(type_table, type_args[1])
+            {
+                return Some(CmFuturePayload::Transmission(source));
             }
         }
         _ => {}
     }
-    // A general value payload (`future<string>`, `future<list<u32>>`, …). Named
-    // types (records / variants / enums / resources) currently return `None`,
-    // so the WASI trailers / transmission shapes fall through to the legacy
-    // `Trailers` classification unchanged.
     if let Some(payload) = cm_payload_type_from_type_id(type_table, type_arg) {
-        return CmFuturePayload::Value(payload);
+        return Some(CmFuturePayload::Value(payload));
     }
-    CmFuturePayload::Trailers
+    is_trailers_payload(type_table, type_arg).then_some(CmFuturePayload::Trailers)
 }
 
-/// Classify a `stream<T>` element type into its CM stream payload. `u8` keeps
-/// the default `U8` stream; scalar / structural elements use `Value`; anything
-/// else (named records / unsupported) falls back to `U8` so existing behaviour
-/// is unchanged.
+/// `result<option<trailers>, error-code>`, recognized by shape: codegen builds
+/// this `future<T>` from the HTTP types interface, not from a [`CmPayloadType`].
+fn is_trailers_payload(type_table: &TypeTable, type_arg: TypeId) -> bool {
+    let ResolvedType::GenericInstance {
+        name, type_args, ..
+    } = type_table.get(type_arg)
+    else {
+        return false;
+    };
+    if name != "Result" || type_args.len() < 2 {
+        return false;
+    }
+    let Some(inner) = type_table.as_option(type_args[0]) else {
+        return false;
+    };
+    matches!(
+        type_table.get(type_table.get_ultimate_base_type(inner)),
+        ResolvedType::Resource { .. }
+    )
+}
+
+/// A WASI-owned element (`stream<directory-entry>`) belongs to the
+/// registry-driven `Record` path instead — select with
+/// [`is_cm_record_stream_element`] before asking.
+///
+/// # Panics
+/// On an element it cannot classify. Ask [`stream_payload_rejection`] first,
+/// for a diagnostic instead.
 pub fn classify_stream_payload(
     type_table: &TypeTable,
     element: TypeId,
-) -> crate::wir::CmStreamPayload {
-    use crate::wir::CmStreamPayload;
+) -> crate::canonical::CmStreamPayload {
+    use crate::canonical::CmStreamPayload;
+    let element = peel_newtypes(type_table, element);
     if matches!(
         type_table.get(element),
         ResolvedType::Primitive(PrimitiveType::U8)
@@ -67,18 +151,22 @@ pub fn classify_stream_payload(
     }
     match cm_payload_type_from_type_id(type_table, element) {
         Some(payload) => CmStreamPayload::Value(payload),
-        None => CmStreamPayload::U8,
+        None => panic!(
+            "`Stream<{}>` has no Component Model element type: a guest-created \
+             stream of a WASI-owned type is not supported yet",
+            type_table.base_type_name(element)
+        ),
     }
 }
 
-/// Build a self-contained [`CmPayloadType`] from a resolved type, for use as a
-/// `future<T>` / `stream<T>` payload identity. Returns `None` for types not yet
-/// supported as general payloads (named records / variants / enums / resources,
-/// 128-bit and SIMD primitives), so callers fall back to legacy handling.
+/// `None` for a type with no general payload: a CM-owned record, which takes
+/// the registry-driven path, and 128-bit / SIMD primitives, which have no CM
+/// scalar.
 pub fn cm_payload_type_from_type_id(
     type_table: &TypeTable,
     type_id: TypeId,
 ) -> Option<CmPayloadType> {
+    let type_id = peel_newtypes(type_table, type_id);
     if let Some(inner) = type_table.as_option(type_id) {
         return Some(CmPayloadType::Option(Box::new(
             cm_payload_type_from_type_id(type_table, inner)?,
@@ -118,26 +206,34 @@ pub fn cm_payload_type_from_type_id(
                 arm(type_args[1])?,
             ))
         }
-        // A user/dependency record: lower/lift it as a named CM record. WASI and
-        // kiln records keep their own (registry-driven) paths, so they stay
-        // `None` here and fall through to the legacy classification.
         ResolvedType::Struct {
             decl_name: name,
             module_source,
             ..
         } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),
+        ResolvedType::Enum {
+            name,
+            module_source,
+        }
+        | ResolvedType::Variant {
+            name,
+            module_source,
+        }
+        | ResolvedType::Flags {
+            name,
+            module_source,
+        } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),
+        // Unlike the records above, a WASI-owned resource is included: its
+        // component type is aliased from the defining interface, so `own<…>`
+        // has one to point at.
+        ResolvedType::Resource { name, .. } => Some(CmPayloadType::Resource(to_kebab(name))),
         _ => None,
     }
 }
 
-/// Whether a type's module source already owns a CM lowering path (`wasi:*`
-/// interfaces and the `core:kiln/*` generator surface). User, local, and
-/// dependency records do not, so they route through the general `Named` payload.
 /// Whether a type's module source already owns a CM lowering path: `wasi:*`
-/// interfaces and the `core:kiln/*` generator surface (modules sourced as
-/// `kiln/...`). Keep in sync with the AST mirror in `cm_payload_type_from_ast`,
-/// which applies the equivalent `wasi:` / `core:kiln/` check on the resolved
-/// source string.
+/// interfaces and the `core:kiln/*` generator surface. User, local, and
+/// dependency declarations do not, so they route through `Named`.
 fn is_cm_owned_source(ms: &ModuleSource) -> bool {
     match ms {
         ModuleSource::Wasi { .. } => true,
@@ -169,15 +265,14 @@ fn cm_scalar_from_ast_name(name: &str) -> Option<CmScalarType> {
     })
 }
 
-/// AST-`Type` analogue of [`cm_payload_type_from_type_id`], for codegen (which
-/// works off the export's raw Wado return type). Returns `None` for named
-/// records / variants / enums and other unsupported shapes.
+/// AST-`Type` analogue of [`cm_payload_type_from_type_id`], for codegen, which
+/// works off the export's raw Wado return type.
 pub fn cm_payload_type_from_ast(
     ty: &crate::ast::Type,
     registry: &CmInterfaceRegistry,
-) -> Option<crate::wir::CmPayloadType> {
+) -> Option<crate::canonical::CmPayloadType> {
     use crate::ast::Type;
-    use crate::wir::CmPayloadType;
+    use crate::canonical::CmPayloadType;
     let resolved = registry.resolve_type(ty);
     match &resolved {
         Type::Named(n) if n.name == "String" => Some(CmPayloadType::String),
@@ -185,15 +280,19 @@ pub fn cm_payload_type_from_ast(
             if let Some(scalar) = cm_scalar_from_ast_name(&n.name) {
                 return Some(CmPayloadType::Scalar(scalar));
             }
-            // A user/dependency record: a registered struct whose source is not
-            // a CM-owned (`wasi:*` / `core:kiln/*`) interface. Mirrors the
-            // `Named` arm of `cm_payload_type_from_type_id`.
-            // Mirror of `is_cm_owned_source` on the resolved source string.
             let src = registry.resolve_cm_source_for(n, None)?;
+            // Before the CM-owned bail below: a WASI resource counts.
+            if let Some(cm) = registry.get_resource_cm_name_by_source(&src, &n.name) {
+                return Some(CmPayloadType::Resource(cm.to_string()));
+            }
             if src.starts_with("wasi:") || src.starts_with("core:kiln/") {
                 return None;
             }
-            let cm = registry.get_struct_cm_name_by_source(&src, &n.name)?;
+            let cm = registry
+                .get_struct_cm_name_by_source(&src, &n.name)
+                .or_else(|| registry.get_variant_cm_name_by_source(&src, &n.name))
+                .or_else(|| registry.get_enum_cm_name_by_source(&src, &n.name))
+                .or_else(|| registry.get_flags_cm_name_by_source(&src, &n.name))?;
             Some(CmPayloadType::Named(cm.to_string()))
         }
         Type::Tuple(elems) => elems
@@ -229,9 +328,9 @@ pub fn cm_payload_type_from_ast(
 pub fn classify_stream_payload_from_ast(
     ty: &crate::ast::Type,
     registry: &CmInterfaceRegistry,
-) -> crate::wir::CmStreamPayload {
+) -> crate::canonical::CmStreamPayload {
     use crate::ast::Type;
-    use crate::wir::CmStreamPayload;
+    use crate::canonical::CmStreamPayload;
     let resolved = registry.resolve_type(ty);
     if let Type::Named(n) = &resolved
         && n.name == "u8"
@@ -240,12 +339,18 @@ pub fn classify_stream_payload_from_ast(
     }
     match cm_payload_type_from_ast(ty, registry) {
         Some(payload) => CmStreamPayload::Value(payload),
-        None => CmStreamPayload::U8,
+        None => panic!(
+            "`Stream<{}>` has no Component Model element type",
+            render_ast_type(ty)
+        ),
     }
 }
 
 /// Classify an AST-`Type` future payload (codegen's `task.return` resolver),
-/// mirroring [`classify_future_payload`] on resolved types.
+/// mirroring [`classify_future_payload`] on resolved types. The two must agree:
+/// one classifies the future the guest operates on, the other the future the
+/// export's signature declares, and a disagreement builds a component whose
+/// declared type is not the one the body reads.
 pub fn classify_future_payload_from_ast(
     ty: &crate::ast::Type,
     registry: &CmInterfaceRegistry,
@@ -257,10 +362,81 @@ pub fn classify_future_payload_from_ast(
     {
         return CmFuturePayload::Scalar(scalar);
     }
+    if let Type::Generic(g) = &resolved
+        && g.name == "Result"
+        && g.args.len() == 2
+        && is_unit_type(&g.args[0])
+        && let Some(source) = wasi_error_code_source_from_ast(&g.args[1], registry)
+    {
+        return CmFuturePayload::Transmission(source);
+    }
     if let Some(payload) = cm_payload_type_from_ast(ty, registry) {
         return CmFuturePayload::Value(payload);
     }
-    CmFuturePayload::Trailers
+    if is_trailers_payload_from_ast(&resolved, registry) {
+        return CmFuturePayload::Trailers;
+    }
+    panic!(
+        "`Future<{}>` has no Component Model payload type",
+        render_ast_type(&resolved)
+    );
+}
+
+fn wasi_error_code_source_from_ast(
+    ty: &crate::ast::Type,
+    registry: &CmInterfaceRegistry,
+) -> Option<String> {
+    let crate::ast::Type::Named(n) = &registry.resolve_type(ty) else {
+        return None;
+    };
+    let source = registry.resolve_cm_source_for(n, None)?;
+    let wasi = source.strip_prefix("wasi:")?;
+    let package = wasi.split(['/', '@']).next()?;
+    (registry
+        .get_enum_cm_name_by_source(&source, &n.name)
+        .is_some()
+        || registry
+            .get_variant_cm_name_by_source(&source, &n.name)
+            .is_some())
+    .then(|| package.to_string())
+}
+
+/// `result<option<resource>, _>`.
+fn is_trailers_payload_from_ast(
+    resolved: &crate::ast::Type,
+    registry: &CmInterfaceRegistry,
+) -> bool {
+    use crate::ast::Type;
+    let Type::Generic(g) = resolved else {
+        return false;
+    };
+    if g.name != "Result" || g.args.len() != 2 {
+        return false;
+    }
+    let Type::Generic(ok) = &registry.resolve_type(&g.args[0]) else {
+        return false;
+    };
+    if ok.name != "Option" || ok.args.len() != 1 {
+        return false;
+    }
+    let Type::Named(inner) = &registry.resolve_type(&ok.args[0]) else {
+        return false;
+    };
+    registry
+        .resolve_cm_source_for(inner, None)
+        .and_then(|source| {
+            registry
+                .get_resource_cm_name_by_source(&source, &inner.name)
+                .map(str::to_string)
+        })
+        .is_some()
+}
+
+/// For a diagnostic or a panic message — the `Debug` form dumps spans and ids.
+fn render_ast_type(ty: &crate::ast::Type) -> String {
+    let mut out = String::new();
+    crate::unparse::unparse_type_into(ty, &mut out);
+    out
 }
 
 /// Map a primitive type to its CM scalar type, or `None` for non-CM-scalars.
@@ -282,21 +458,19 @@ pub fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
     })
 }
 
-/// WASI package owning an `ErrorCode` type (e.g. `"http/types.wado"` → `"http"`).
-/// Each package's error-code is a distinct CM type, so the transmission future
-/// is parameterized by it. Falls back to `"cli"` for a non-WASI error type.
-pub fn error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> String {
-    let module_source = match type_table.get(error_type_id) {
-        ResolvedType::Enum { module_source, .. } | ResolvedType::Variant { module_source, .. } => {
-            module_source
-        }
-        _ => return "cli".to_string(),
+/// WASI package owning an `ErrorCode` type (`"http/types.wado"` → `"http"`), or
+/// `None` if the type is not a WASI error-code — an ordinary `result<_, E>`
+/// payload, then, not a transmission future.
+fn wasi_error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> Option<String> {
+    let (ResolvedType::Enum { module_source, .. } | ResolvedType::Variant { module_source, .. }) =
+        type_table.get(error_type_id)
+    else {
+        return None;
     };
-    if let ModuleSource::Wasi { interface } = module_source {
-        interface.split('/').next().unwrap_or("cli").to_string()
-    } else {
-        "cli".to_string()
-    }
+    let ModuleSource::Wasi { interface } = module_source else {
+        return None;
+    };
+    Some(interface.split('/').next().unwrap_or("cli").to_string())
 }
 
 /// A variant case with both CM and Wado names.
@@ -518,7 +692,7 @@ impl CmFunctionInfo {
         })
     }
 
-    /// Whether this function returns a Future<T> or a tuple containing Future<T>.
+    /// Whether this function returns a `Future<T>`, or a tuple containing one.
     pub fn return_type_has_future(&self) -> bool {
         fn has_future(ty: &Type) -> bool {
             match ty {
@@ -2187,20 +2361,50 @@ impl CmInterfaceRegistry {
             .map(|(cm_name, _, _)| cm_name.as_str())
     }
 
-    /// Reverse-lookup a struct's Wado name from its CM (kebab) name, when
-    /// unambiguous across interfaces. Used by codegen to reconstruct the
-    /// declaring `Type::Named` for a `CmPayloadType::Named(<cm-name>)` payload.
-    pub fn find_struct_wado_name_by_cm(&self, cm_name: &str) -> Option<&str> {
-        let mut hit = None;
-        for ((_, wado_name), (cm, _, _)) in &self.structs {
-            if cm == cm_name {
-                if hit.is_some() {
-                    return None;
-                }
-                hit = Some(wado_name.as_str());
-            }
-        }
-        hit
+    /// [`Self::find_named_type_wado_name_by_cm`] restricted to one interface,
+    /// for a CM name that more than one interface registers.
+    pub fn find_named_type_wado_name_by_cm_in(
+        &self,
+        interface: &str,
+        cm_name: &str,
+    ) -> Option<&str> {
+        self.structs
+            .iter()
+            .map(|((iface, wado), (cm, ..))| (iface, wado, cm))
+            .chain(
+                self.variants
+                    .iter()
+                    .map(|((iface, wado), (cm, _))| (iface, wado, cm)),
+            )
+            .chain(
+                self.enums
+                    .iter()
+                    .map(|((iface, wado), (cm, _))| (iface, wado, cm)),
+            )
+            .chain(
+                self.flags
+                    .iter()
+                    .map(|((iface, wado), (cm, _))| (iface, wado, cm)),
+            )
+            .find(|(iface, _, cm)| iface.as_str() == interface && cm.as_str() == cm_name)
+            .map(|(_, wado, _)| wado.as_str())
+    }
+
+    /// The Wado name a record / variant / enum / flags is declared under, when
+    /// unambiguous across interfaces and kinds. Codegen rebuilds the declaring
+    /// `Type::Named` for a `CmPayloadType::Named` payload through it.
+    pub fn find_named_type_wado_name_by_cm(&self, cm_name: &str) -> Option<&str> {
+        let mut hits = self
+            .structs
+            .iter()
+            .map(|((_, wado), (cm, ..))| (wado, cm))
+            .chain(self.variants.iter().map(|((_, wado), (cm, _))| (wado, cm)))
+            .chain(self.enums.iter().map(|((_, wado), (cm, _))| (wado, cm)))
+            .chain(self.flags.iter().map(|((_, wado), (cm, _))| (wado, cm)))
+            .filter(|(_, cm)| cm.as_str() == cm_name)
+            .map(|(wado, _)| wado.as_str());
+        let first = hits.next()?;
+        hits.next().is_none().then_some(first)
     }
 
     /// Struct registered at `(interface, name)`; returns CM-kebab field
@@ -2602,18 +2806,21 @@ impl CmInterfaceRegistry {
             .map(|(cm_name, _)| cm_name.as_str())
     }
 
-    /// Whether a struct named `name` is registered under an interface whose CM
-    /// source is exactly `source`. Unlike [`Self::get_struct_fields_by_source`],
-    /// this keys on the struct's own module source, so a user record is never
-    /// confused with a same-named WASI/dependency struct (which lives under a
-    /// different source). A `--lib` entry record is registered under the package default
-    /// interface, whose source [`register_lib_local_decls`] maps to the entry
-    /// module; outside `--lib` the user record is registered nowhere, so this is
-    /// `false` and the payload has no CM type to lower against.
-    pub fn is_struct_registered_from(&self, source: &ModuleSource, name: &str) -> bool {
-        self.structs.keys().any(|(fq, struct_name)| {
-            struct_name == name && self.cm_interface_module_sources.get(fq) == Some(source)
-        })
+    /// Keying on the declaration's own module source keeps a user type from
+    /// being confused with a same-named WASI or dependency declaration.
+    ///
+    /// A `--lib` entry declaration is registered under the package default
+    /// interface, whose source [`Self::register_lib_local_decls`] maps to the entry
+    /// module; outside `--lib` it is registered nowhere, so this is `false` and
+    /// the payload has no CM type to lower against.
+    pub fn is_named_type_registered_from(&self, source: &ModuleSource, name: &str) -> bool {
+        let declared_here = |fq: &String, decl_name: &String| {
+            decl_name == name && self.cm_interface_module_sources.get(fq) == Some(source)
+        };
+        self.structs.keys().any(|(fq, n)| declared_here(fq, n))
+            || self.variants.keys().any(|(fq, n)| declared_here(fq, n))
+            || self.enums.keys().any(|(fq, n)| declared_here(fq, n))
+            || self.flags.keys().any(|(fq, n)| declared_here(fq, n))
     }
 
     /// Find the interface name (e.g., `"types"`) for a WASI struct given its
@@ -2750,7 +2957,7 @@ impl CmInterfaceRegistry {
             })
     }
 
-    /// Get the resource type from a return type (if it's Option<ResourceName>)
+    /// The resource named by a return type, if it is an `Option<Resource>`.
     /// Returns (Wado name, CM name) if the return type references a resource
     pub fn get_resource_from_return_type(
         &self,
@@ -3462,6 +3669,10 @@ impl CmTypeGen {
             cache: IndexMap::default(),
             interface_hint: Some(interface_hint.to_string()),
         }
+    }
+
+    pub fn interface_hint(&self) -> Option<&str> {
+        self.interface_hint.as_deref()
     }
 
     /// Register a pre-existing type index for cache lookups
