@@ -1,3 +1,17 @@
+//! Parser rule-body emit: one `_parse_<rule>` / `scan_<rule>` per rule.
+//!
+//! Given a `LoweredGrammar` — every codegen decision already committed by
+//! `lower` — this module walks each rule and writes its recursive-descent
+//! body, its static-scan twin, the multi-alt dispatch, and the LR
+//! precedence climb.
+//!
+//! What does not belong here:
+//!
+//! * the generated parser's fixed scaffolding — `parser_runtime_gen.wado`
+//! * actions, predicates, and the value channel — `action_gen.wado`
+//! * token-set tables and lookahead conditions — `kind_set_gen.wado`
+//! * naming, classification, and set helpers — `gen_util.wado`
+
 use {
     Grammar,
     ParserRule,
@@ -6,28 +20,18 @@ use {
     RepeatElement,
     GroupElement,
     AltAction,
-    ActionKind,
     ActionSource,
 } from "./ir.wado";
 use {
-    rule_type_name,
     literal_field_name,
     not_element_field_name,
-    strip_suffix,
     literal_const_name,
-    is_simple_cst_group,
     is_token_only_group,
-    is_single_alt_group,
-    is_storable_group,
-    group_variant_type_name,
     group_field_base_name,
-    group_case_name,
     single_alt_group_type_name,
     single_alt_group_field_name,
     token_group_field_name,
-    is_general_group,
     general_group_field_name,
-    str_set_insert_all,
     gen_visibility_comment,
     to_snake_case,
     first_contains,
@@ -51,7 +55,6 @@ use {
     PredictionNode,
     PredictionDispatch,
     ConsumeNode,
-    AmbiguityReason,
     build_group_prediction_tree,
     prediction_collect_all_indices,
     prediction_at_end_conflicts,
@@ -70,19 +73,13 @@ use {
 use {
     LoweredGrammar,
     Rule,
-    SimpleRule,
-    MultiAltRule,
-    LeftRecursiveRule,
     LrAlt,
     LrDispatchData,
     MultiAltDispatch,
     AltBody,
     Op,
-    TokenOp,
-    LiteralOp,
     RuleCallOp,
     FollowArg,
-    WildcardOp,
     ExcludedOp,
     RepeatOp,
     OptionalShapeLookaheadStrategy,
@@ -90,16 +87,11 @@ use {
     GroupShape,
     SimpleCstShape,
     TokenOnlyShape,
-    SingleAltShape,
     GeneralShape,
     ListLabelOp,
-    FieldDecl,
-    FieldKind,
     ScanBody,
     ScanElement,
-    ScanTokenElement,
     ScanRuleCallElement,
-    ScanExcludedElement,
     ScanRepeatElement,
     ScanGroupElement,
     ScanOptionalLookaheadElement,
@@ -107,12 +99,7 @@ use {
     rule_alt_scan_body,
 } from "./gir.wado";
 
-use {
-    vals_struct_name,
-    rule_threads_args,
-    rule_span_lo_local,
-    rule_span_hi_local,
-} from "./action_translate.wado";
+use { vals_struct_name, rule_threads_args, rule_span_lo_local, rule_span_hi_local } from "./action_translate.wado";
 
 use {
     NO_ACTIONS,
@@ -162,12 +149,7 @@ use {
     gen_scan_lookahead_condition,
     sync_set_ref,
 } from "./kind_set_gen.wado";
-use {
-    compute_shapes_for_alt,
-    shape_lookahead_signature_for_alt,
-    rebind_op_field,
-    non_greedy_static_undecided,
-} from "./lower.wado";
+use { rebind_op_field, non_greedy_static_undecided } from "./lower.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
 /// parse/scan/LR function signature, BEFORE any `min_prec` so a
@@ -275,7 +257,7 @@ fn scannable_prefix_len(elements: &List<Element>, ctx: &mut GenContext) -> i32 {
 /// Generate a scan function for a tournament alternative (`parse_X_alt_N` —
 /// the `_alt_` infix is historical) if it has at least one scannable leading
 /// element. The scan covers the scannable prefix only.
-pub fn gen_alt_scan_if_possible(
+fn gen_alt_scan_if_possible(
     w: &mut CodeWriter,
     alt: &Alternative,
     lowered_rule: &Rule,
@@ -336,7 +318,7 @@ fn alt_scan_is_full(elements: &List<Element>, ctx: &mut GenContext) -> bool {
 // successful recognition, or -1 on failure. Used to disambiguate Ambiguous
 // alternatives without expensive speculative parsing.
 
-pub fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
+fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         gen_scan_function(w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
     }
@@ -2856,7 +2838,7 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
 /// emitted field name comes from `op.field` exclusively — `dedup_base`
 /// is consulted only for the sync. The sync goes away entirely once
 /// every emit path consumes `Op`.
-pub fn gen_op_leaf(
+fn gen_op_leaf(
     w: &mut CodeWriter,
     op: &Op,
     ctx: &mut GenContext,
@@ -4972,7 +4954,7 @@ fn gen_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp) {
 /// Render the runtime FOLLOW argument expression for a
 /// `RuleCall` per its `FollowArg`. Passed as the callee's `follow`
 /// parameter (parse and scan share the spelling — both bind `follow`).
-pub fn follow_arg_expr(arg: &FollowArg) -> String {
+fn follow_arg_expr(arg: &FollowArg) -> String {
     return match arg {
         NoFollow => "&EMPTY_FOLLOW",
         Mask(id) => `&FOLLOW_MASK_${id}`,
@@ -5305,7 +5287,7 @@ fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &List<Strin
     return ctx.kind_negate_check_str(&excluded, &"p.peek_kind()");
 }
 
-pub fn compute_non_greedy_condition(
+fn compute_non_greedy_condition(
     rep_op: &RepeatOp,
     follow_first: &List<String>,
     follow_second: &List<String>,
@@ -5370,7 +5352,7 @@ fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
 /// Same shape as gen_rep_scan_guard but uses `rep_scan_*` naming. Requires
 /// the scan to advance at least one token; 0-advance is treated as failure
 /// so lenient scans of LR rules (which can no-op at EOF) don't loop forever.
-pub fn gen_rep_scan_guard(
+fn gen_rep_scan_guard(
     w: &mut CodeWriter,
     scan_inner: &ScanElement,
     ctx: &mut GenContext,
@@ -6062,7 +6044,7 @@ fn gen_general_group_scan_dispatch(
     w.end();
 }
 
-pub fn compute_lr_second_token(shared_token: &String, elements: &List<Element>, ctx: &mut GenContext) -> List<String> {
+fn compute_lr_second_token(shared_token: &String, elements: &List<Element>, ctx: &mut GenContext) -> List<String> {
     // Find what token follows the shared_token in this alternative's suffix.
     // Walk suffix elements (starting at index 1) to find the shared token,
     // then return the first set of the next element.
