@@ -10,9 +10,15 @@ use crate::nir_arena::{Body, ExprId, ExprKind, Operand};
 /// The operand a borrow or a cast wraps. Both name the same storage as their
 /// operand — `&mut x.repr as &mut Array<u8>` is how a borrow reaches a builtin
 /// after monomorphization — so every walk asking what storage is named looks
-/// through them. This is niri's one statement of the wrapper set; the
-/// optimizer keeps its own in `optimize/arena_query.rs` (`strip_refs`,
-/// `storage_root`), so a new transparent node kind must be taught to both.
+/// through them.
+///
+/// This states the wrapper set only. The projection set is spelled again by
+/// [`lvalue_root_local`] and [`place_of`], each taking what its own question
+/// needs, and a third time by `optimize/arena_query.rs` (`strip_refs`,
+/// `storage_root`), which reaches through `VariantPayload` where none of these
+/// do. A place niri cannot root at is refused rather than mis-rooted — the
+/// executor finds nowhere to write and abandons the frame — so the divergence
+/// costs folds; a new transparent node kind still has to be taught to each.
 fn wrapped_operand(body: &Body, e: ExprId) -> Option<Operand> {
     match &body.exprs[e].kind {
         ExprKind::Unary {
