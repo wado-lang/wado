@@ -438,12 +438,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if struct_lit.name.is_none() {
                     // Check if target type is a struct
                     let target_resolved = self.tysys.type_table.borrow().get(target_type).clone();
-                    if let ResolvedType::Struct {
-                        decl_name: name,
-                        module_source,
-                        ..
-                    } = target_resolved
-                    {
+                    if let ResolvedType::Struct { .. } = target_resolved {
+                        let (name, module_source) = self.tysys.type_table.borrow()
+                            .nominal_head(target_type)
+                            .expect("a struct names a declaration");
                         let struct_type = target_type;
 
                         let struct_field_types: Vec<(String, TypeId)> = self
@@ -761,25 +759,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
-            ResolvedType::Enum {
-                name,
-                module_source,
-                ..
-            } => self
-                .lookup_enum_case_in(name, module_source)
-                .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
+            ResolvedType::Enum { .. } => {
+                let (name, module_source) = &self.tysys.type_table.borrow()
+                    .nominal_head(type_id)
+                    .expect("an enum names a declaration");
+                self.lookup_enum_case_in(name, module_source)
+                    .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name))
             }
-            | ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => self
-                .lookup_variant_case_in(name, module_source)
-                .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
+            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                let (name, module_source) = &self.tysys.type_table.borrow()
+                    .nominal_head(type_id)
+                    .expect("a nominal type names a declaration");
+                self.lookup_variant_case_in(name, module_source)
+                    .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name))
+            }
             _ => false,
         }
     }
@@ -794,22 +787,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let scrutinee_resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
         let (scrutinee_name, scrutinee_module, scrutinee_arg_len) = match &scrutinee_resolved {
-            ResolvedType::Enum {
-                name,
-                module_source,
-                ..
+            ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => {
+                let (n, m) = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(scrutinee_type)
+                    .expect("a nominal type names a declaration");
+                (n, m, None)
             }
-            | ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => (name.as_str(), module_source, None),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => (name.as_str(), module_source, Some(type_args.len())),
+            ResolvedType::GenericInstance { type_args, .. } => {
+                let (n, m) = self.tysys.type_table.borrow()
+                    .nominal_head(scrutinee_type)
+                    .expect("a generic instance names a declaration");
+                (n, m, Some(type_args.len()))
+            }
             _ => {
                 return false;
             }
@@ -822,26 +814,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // iff the namespace resolves to the scrutinee's defining
                 // module, so the bare case lookup below validates the rest —
                 // mirroring an unqualified `Case` pattern.
-                t.name == scrutinee_name
+                t.name == *scrutinee_name
                     || self
                         .sem
                         .imports
                         .namespace_imports
                         .get(&t.name)
-                        .is_some_and(|m| m == scrutinee_module)
+                        .is_some_and(|m| *m == scrutinee_module)
             }
             Type::Generic(g) => {
-                g.name == scrutinee_name && scrutinee_arg_len.is_none_or(|n| n == g.args.len())
+                g.name == *scrutinee_name && scrutinee_arg_len.is_none_or(|n| n == g.args.len())
             }
             Type::NamespacedGeneric(ns) => {
-                ns.name == scrutinee_name
+                ns.name == *scrutinee_name
                     && scrutinee_arg_len.is_none_or(|n| n == ns.args.len())
                     && self
                         .sem
                         .imports
                         .namespace_imports
                         .get(&ns.namespace)
-                        .is_some_and(|m| m == scrutinee_module)
+                        .is_some_and(|m| *m == scrutinee_module)
             }
             Type::Function(_)
             | Type::Tuple(_)
@@ -1015,11 +1007,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let struct_name = {
                     let type_table = self.tysys.type_table.borrow();
                     match type_table.get(type_id) {
-                        ResolvedType::Struct {
-                            decl_name,
-                            type_args,
-                            ..
-                        } => Some(type_table.struct_rendered_name(decl_name, type_args)),
+                        ResolvedType::Struct { def, type_args } => {
+                            Some(type_table.struct_rendered_name(*def, type_args))
+                        }
                         _ => None,
                     }
                 };
@@ -1538,10 +1528,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier.as_ref())
                 {
                     let expected = match &resolved_type {
-                        ResolvedType::Enum { name, .. } => format!("valid case of enum {name}"),
-                        ResolvedType::Variant { name, .. }
-                        | ResolvedType::GenericInstance { name, .. } => {
-                            format!("valid case of variant {name}")
+                        ResolvedType::Enum { def } => {
+                            format!("valid case of enum {}", self.tysys.type_table.borrow().def_name(*def))
+                        }
+                        ResolvedType::Variant { def }
+                        | ResolvedType::GenericInstance { def, .. } => {
+                            format!("valid case of variant {}", self.tysys.type_table.borrow().def_name(*def))
                         }
                         _ => "variant or enum case".to_string(),
                     };
@@ -1554,12 +1546,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Handle enum types (no payload, just discriminant matching)
-                if let ResolvedType::Enum {
-                    name,
-                    module_source,
-                    ..
-                } = &resolved_type
-                {
+                if let ResolvedType::Enum { .. } = &resolved_type {
+                    let (name, module_source) = &self.tysys.type_table.borrow()
+                        .nominal_head(scrutinee_type)
+                        .expect("an enum names a declaration");
                     if !bindings.is_empty() {
                         let _ = self.emit(TypeError::InvalidPattern {
                             message: format!("enum case `{variant_name}` does not have a payload"),
@@ -1621,24 +1611,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Determine the payload type for the variant case.
                 let payload_type: TypeId = match &resolved_type {
                     // Non-generic variant
-                    ResolvedType::Variant {
-                        name,
-                        module_source,
-                        ..
-                    } => self.get_variant_case_payload_type(
-                        name,
-                        module_source,
-                        normalized_variant_name,
-                        &[],
-                        *span,
-                    ),
+                    ResolvedType::Variant { .. } => {
+                        let (name, module_source) = &self.tysys.type_table.borrow()
+                            .nominal_head(scrutinee_type)
+                            .expect("a variant names a declaration");
+                        self.get_variant_case_payload_type(
+                            name,
+                            module_source,
+                            normalized_variant_name,
+                            &[],
+                            *span,
+                        )
+                    }
                     // Generic variant instantiation
-                    ResolvedType::GenericInstance {
-                        name,
-                        module_source,
-                        type_args,
-                        ..
-                    } => {
+                    ResolvedType::GenericInstance { type_args, .. } => {
+                        let (name, module_source) = &self.tysys.type_table.borrow()
+                            .nominal_head(scrutinee_type)
+                            .expect("a generic instance names a declaration");
                         // Check if this is a variant (not a struct)
                         if self.contains_variant(name) {
                             self.get_variant_case_payload_type(
@@ -1706,11 +1695,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut type_name_matches = true;
                 if let Some(expected_name) = type_name {
                     let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                    if let ResolvedType::Struct {
-                        decl_name: ref name,
-                        ..
-                    } = resolved
-                    {
+                    if let ResolvedType::Struct { def, .. } = resolved {
+                        let name = &self.tysys.type_table.borrow().struct_head_name(def);
                         let expected_short = self
                             .strip_ns_prefix(expected_name)
                             .unwrap_or(expected_name.as_str());
@@ -1747,11 +1733,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let struct_name = {
                         let type_table = self.tysys.type_table.borrow();
                         match type_table.get(scrutinee_type) {
-                            ResolvedType::Struct {
-                                decl_name,
-                                type_args,
-                                ..
-                            } => Some(type_table.struct_rendered_name(decl_name, type_args)),
+                            ResolvedType::Struct { def, type_args } => {
+                                Some(type_table.struct_rendered_name(*def, type_args))
+                            }
                             _ => None,
                         }
                     };
@@ -1923,7 +1907,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         ) || matches!(
             scrutinee_resolved,
-            ResolvedType::Struct { decl_name: ref name, .. } if name == "u128"
+            ResolvedType::Struct { def, .. } if self.tysys.type_table.borrow().struct_head_name(def) == "u128"
         );
 
         let start_val = self.pattern_to_i128(start, is_unsigned);
@@ -2605,17 +2589,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `get_variant_case_payload_type` call below can re-borrow `&mut self`.
         let option_shape: Option<(String, ModuleSource, Vec<TypeId>)> =
             match self.tysys.type_table.borrow().get(option_type).clone() {
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                    ..
-                } if self.contains_variant(&name) => Some((name, module_source, type_args)),
-                ResolvedType::Variant {
-                    name,
-                    module_source,
-                    ..
-                } if self.contains_variant(&name) => Some((name, module_source, vec![])),
+                ResolvedType::GenericInstance { def, type_args }
+                    if self.contains_variant(self.tysys.type_table.borrow().def_name(def)) =>
+                {
+                    let (n, m) = self.tysys.type_table.borrow()
+                        .nominal_head(option_type)
+                        .expect("a generic instance names a declaration");
+                    Some((n, m, type_args))
+                }
+                ResolvedType::Variant { def } if self.contains_variant(self.tysys.type_table.borrow().def_name(def)) => {
+                    let (n, m) = self.tysys.type_table.borrow()
+                        .nominal_head(option_type)
+                        .expect("a variant names a declaration");
+                    Some((n, m, vec![]))
+                }
                 _ => None,
             };
         let item_type = match option_shape {
@@ -2709,7 +2696,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Flags { .. }
             | ResolvedType::Function { .. }
             | ResolvedType::Resource { .. } => true,
-            ResolvedType::GenericInstance { name, .. } => self.contains_variant(&name),
+            ResolvedType::GenericInstance { def, .. } => {
+                self.contains_variant(self.tysys.type_table.borrow().def_name(def))
+            }
             ResolvedType::Newtype { base_type, .. } => self.is_replace_on_assign_element(base_type),
             _ => false,
         }
