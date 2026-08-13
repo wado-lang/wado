@@ -615,18 +615,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .map(|&tid| self.tysys.type_id_to_string(tid))
                         .collect();
-                    // The instantiation is named by its declaration, not by
-                    // the rendered `MyArray<i32>` its display spelling shows.
+                    // The instantiation is named by its declaration and keeps
+                    // its arguments beside it, not fused into a rendered
+                    // `MyArray<i32>` head no `impl` header writes.
                     let def = self
                         .tysys
                         .type_table
                         .borrow()
                         .decl_named_in(name, &gn_info.module_source)
                         .expect("the generic newtype being instantiated exists");
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_newtype(def, base_type_id)
+                    self.tysys.type_table.borrow_mut().make_newtype_instance(
+                        def,
+                        resolved_args,
+                        base_type_id,
+                    )
                 } else if let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone()
                     && scope_mod != self.current_module_source
                 {

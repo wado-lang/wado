@@ -507,6 +507,11 @@ pub enum ResolvedType {
     /// Newtypes are distinct from their base types but can be cast between them.
     Newtype {
         def: crate::defs::DefId,
+        /// What this instantiation was made with; empty for a declaration
+        /// written as such. The same head/arguments split `Struct` has — the
+        /// stored name used to bake them into the head (`MyArray<i32>`), which
+        /// is a fused spelling no `impl` header writes.
+        type_args: Vec<TypeId>,
         /// The direct base type (may be another newtype for chained newtypes)
         base_type: TypeId,
     },
@@ -2983,7 +2988,26 @@ impl TypeTable {
 
     /// Create a newtype wrapping a base type
     pub fn make_newtype(&mut self, def: crate::defs::DefId, base_type: TypeId) -> TypeId {
-        self.intern(ResolvedType::Newtype { def, base_type })
+        self.intern(ResolvedType::Newtype {
+            def,
+            type_args: Vec::new(),
+            base_type,
+        })
+    }
+
+    /// A generic newtype's instantiation: the declaration with what it was
+    /// applied to, so the head stays the one an `impl` header writes.
+    pub fn make_newtype_instance(
+        &mut self,
+        def: crate::defs::DefId,
+        type_args: Vec<TypeId>,
+        base_type: TypeId,
+    ) -> TypeId {
+        self.intern(ResolvedType::Newtype {
+            def,
+            type_args,
+            base_type,
+        })
     }
 
     /// Create a flags type (bitmask over u32)
@@ -3390,8 +3414,15 @@ impl TypeTable {
                     )
                 }
             }
-            ResolvedType::Newtype { def, .. } => {
-                crate::name::strip_local_item_id(self.def_name(*def)).to_string()
+            ResolvedType::Newtype { def, type_args, .. } => {
+                let head = crate::name::strip_local_item_id(self.def_name(*def)).to_string();
+                if type_args.is_empty() {
+                    head
+                } else {
+                    let args: Vec<String> =
+                        type_args.iter().map(|t| self.type_name(*t)).collect();
+                    format!("{head}<{}>", args.join(", "))
+                }
             }
             ResolvedType::Flags { def } => self.def_name(*def).to_string(),
             ResolvedType::TypePack { name, .. } => format!("..{name}"),
