@@ -351,6 +351,18 @@ impl std::fmt::Debug for AnonStructId {
     }
 }
 
+/// A struct shape the compiler minted rather than source declared.
+///
+/// A struct literal is identified by its fields, because two literals of the
+/// same shape are one type. A closure environment is identified by the name
+/// lowering assigns it, because two closures with identical captures are
+/// still two environments.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum AnonShape {
+    Fields(Vec<(String, TypeId)>),
+    Synthetic(String),
+}
+
 /// What a struct type's head is.
 ///
 /// A struct literal with no type name has no declaration and no node to
@@ -753,10 +765,10 @@ pub struct TypeTable {
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
     variant_case_index: IndexMap<crate::defs::DefId, Vec<(String, u32, TypeId)>>,
-    /// Every anonymous struct shape, by [`AnonStructId`].
-    anon_structs: Vec<(ModuleSource, Vec<(String, TypeId)>)>,
+    /// Every struct shape the compiler minted, by [`AnonStructId`].
+    anon_structs: Vec<(ModuleSource, AnonShape)>,
     /// Dedup for the above: the same shape in the same module is one id.
-    anon_struct_index: IndexMap<(ModuleSource, Vec<(String, TypeId)>), AnonStructId>,
+    anon_struct_index: IndexMap<(ModuleSource, AnonShape), AnonStructId>,
     /// `(name, module)` of each type declaration, for [`Self::decl_named_in`].
     /// Built with [`Self::attach_defs`], so it answers at any point in the
     /// pipeline rather than only after a declaration's type is interned.
@@ -1093,7 +1105,22 @@ impl TypeTable {
         module_source: ModuleSource,
         fields: Vec<(String, TypeId)>,
     ) -> AnonStructId {
-        let key = (module_source, fields);
+        self.intern_shape(module_source, AnonShape::Fields(fields))
+    }
+
+    /// A struct the compiler mints under a name it assigns — a closure
+    /// environment, which names no declaration but is not identified by its
+    /// captures either.
+    pub fn intern_synthetic_struct(
+        &mut self,
+        module_source: ModuleSource,
+        name: String,
+    ) -> AnonStructId {
+        self.intern_shape(module_source, AnonShape::Synthetic(name))
+    }
+
+    fn intern_shape(&mut self, module_source: ModuleSource, shape: AnonShape) -> AnonStructId {
+        let key = (module_source, shape);
         if let Some(&id) = self.anon_struct_index.get(&key) {
             return id;
         }
@@ -1103,10 +1130,13 @@ impl TypeTable {
         id
     }
 
-    /// The fields of an anonymous struct shape.
+    /// The fields of an anonymous struct shape; empty for a synthetic one.
     #[must_use]
     pub fn anon_struct_fields(&self, id: AnonStructId) -> &[(String, TypeId)] {
-        &self.anon_structs[id.0 as usize].1
+        match &self.anon_structs[id.0 as usize].1 {
+            AnonShape::Fields(fields) => fields,
+            AnonShape::Synthetic(_) => &[],
+        }
     }
 
     /// The module the shape was written in.
@@ -1119,12 +1149,16 @@ impl TypeTable {
     /// the same `__anon_{x:i32,y:i32}` form the synthesized name used to be.
     #[must_use]
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
-        let parts: Vec<String> = self
-            .anon_struct_fields(id)
-            .iter()
-            .map(|(n, ty)| format!("{n}:{}", self.type_name(*ty)))
-            .collect();
-        format!("__anon_{{{}}}", parts.join(","))
+        match &self.anon_structs[id.0 as usize].1 {
+            AnonShape::Synthetic(name) => name.clone(),
+            AnonShape::Fields(fields) => {
+                let parts: Vec<String> = fields
+                    .iter()
+                    .map(|(n, ty)| format!("{n}:{}", self.type_name(*ty)))
+                    .collect();
+                format!("__anon_{{{}}}", parts.join(","))
+            }
+        }
     }
 
     /// The name a struct head renders to: the declaration's, or the shape's.
