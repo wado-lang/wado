@@ -783,7 +783,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Topologically sort modules based on struct field type dependencies
         // A module depends on another if it has a struct with a field of a type defined there
         let sorted_sources =
-            Self::topological_sort_modules(modules, &all_struct_fields, &type_table.borrow());
+            Self::topological_sort_modules(
+                modules,
+                &all_struct_fields,
+                &type_table.borrow(),
+                resolutions.defs(),
+            );
 
         let (cm_interface_registry, world_registry) = {
             let _span = logger.span("elaborate/cm_interface_registry");
@@ -1843,31 +1848,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn collect_cross_module_deps(
         type_id: TypeId,
         type_table: &TypeTable,
-        out: &mut Vec<(String, ModuleSource)>,
+        defs: &crate::defs::DefTable,
+        out: &mut Vec<crate::defs::DefId>,
     ) {
         match type_table.get(type_id) {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => {
-                out.push((name.clone(), module_source.clone()));
+            ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
+                // The dependency is the declaration, so the type is asked for
+                // it rather than destructured for a pair naming it.
+                if let Some(def) = type_table
+                    .decl_of_type(type_id)
+                    .and_then(|decl| defs.of_ast_id(decl))
+                {
+                    out.push(def);
+                }
             }
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
             | ResolvedType::BuiltinArray(inner)
             | ResolvedType::Reactive(inner) => {
-                Self::collect_cross_module_deps(*inner, type_table, out);
+                Self::collect_cross_module_deps(*inner, type_table, defs, out);
             }
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => {
                 for arg in type_args {
-                    Self::collect_cross_module_deps(*arg, type_table, out);
+                    Self::collect_cross_module_deps(*arg, type_table, defs, out);
                 }
             }
             _ => {}
@@ -1881,6 +1885,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         modules: &IndexMap<ModuleSource, Module>,
         all_struct_fields: &IndexMap<crate::defs::DefId, StructFieldInfo>,
         type_table: &TypeTable,
+        defs: &crate::defs::DefTable,
     ) -> Vec<ModuleSource> {
         // Collect and sort sources for deterministic ordering
         let mut sources: Vec<&ModuleSource> = modules.keys().collect();
@@ -1898,27 +1903,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Analyze struct fields to find cross-module dependencies.
         // Recursively unwrap wrapper types (Ref, MutRef, Option, GenericInstance,
         // Tuple, etc.) to detect dependencies through any nesting level.
-        for info in all_struct_fields.values() {
+        for (this, info) in all_struct_fields {
             let module_src = &info.module_source;
             let Some(&from_idx) = source_to_idx.get(module_src) else {
                 continue;
             };
-            {
-                let struct_name = &info.name;
-                for (_field_name, field_type_id, _) in &info.fields {
-                    let mut dep_sources = Vec::new();
-                    Self::collect_cross_module_deps(*field_type_id, type_table, &mut dep_sources);
-                    for (ref_name, ref_module_source) in dep_sources {
-                        // Skip self-references (same struct or same module)
-                        if ref_name == *struct_name || ref_module_source == *module_src {
-                            continue;
-                        }
-                        if let Some(&to_idx) = source_to_idx.get(&ref_module_source) {
-                            // from_idx depends on to_idx (dependency edge)
-                            if seen_edges.insert((from_idx, to_idx)) {
-                                dependency_count[from_idx] += 1;
-                                dependents[to_idx].push(from_idx);
-                            }
+            for (_field_name, field_type_id, _) in &info.fields {
+                let mut deps = Vec::new();
+                Self::collect_cross_module_deps(*field_type_id, type_table, defs, &mut deps);
+                for dep in deps {
+                    // A struct depending on itself, or on anything its own
+                    // module declares, orders nothing.
+                    if dep == *this || defs.module(dep) == module_src {
+                        continue;
+                    }
+                    if let Some(&to_idx) = source_to_idx.get(defs.module(dep)) {
+                        // from_idx depends on to_idx (dependency edge)
+                        if seen_edges.insert((from_idx, to_idx)) {
+                            dependency_count[from_idx] += 1;
+                            dependents[to_idx].push(from_idx);
                         }
                     }
                 }
