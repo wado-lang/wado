@@ -445,17 +445,11 @@ pub fn wasm_asset_kind_from_attrs(
     }
 }
 
-/// Resolve a wasm asset import source against the importing module.
-///
-/// `./libm.wat` from `core:builtin`        → `core:libm.wat`
-/// `./libm.wat` from `core:prelude/x.wado` → `core:prelude/libm.wat`
-/// `./foo.wat`  from `./entry.wado`        → `./foo.wat`
-/// `./foo.wat`  from `./sub/entry.wado`    → `./sub/foo.wat`
-///
-/// Phase 1 only accepts relative paths (`./` or `../`). Absolute
-/// namespace-qualified targets like `core:libm.wat` are not supported
-/// from user code (and aren't needed by the stdlib because the prelude
-/// imports its own siblings via `./`).
+/// Resolve a wasm asset import against the importing module's directory:
+/// `./libm.wat` from `core:prelude/x.wado` gives `core:prelude/libm.wat`, from
+/// `./sub/entry.wado` gives `./sub/foo.wat`. Only relative paths are accepted —
+/// an absolute namespace-qualified target is unsupported from user code, and the
+/// stdlib does not need one, its prelude importing siblings via `./`.
 pub fn resolve_wasm_asset_path(
     from: &ModuleSource,
     import_source: &str,
@@ -493,17 +487,11 @@ pub fn resolve_wasm_asset_path(
     }
 }
 
-/// Join `relative` (which may use `./` or `../` segments) onto the
-/// directory of `base` (a slash-separated sub-namespace path like
-/// `prelude/primitive.wado` or `cli/types.wado`) and collapse `..`
-/// segments. The result has no leading namespace prefix and no leading
-/// `./`.
-///
-/// Examples:
-/// - `("builtin",                 "./libm.wat")`        → `"libm.wat"`
-/// - `("prelude/primitive.wado",  "../libm.wat")`       → `"libm.wat"`
-/// - `("prelude/primitive.wado",  "./other.wat")`       → `"prelude/other.wat"`
-/// - `("a/b/c.wado",              "../../d/e.wat")`     → `"d/e.wat"`
+/// Join `relative` onto the directory of `base` — a slash-separated
+/// sub-namespace path such as `prelude/primitive.wado` — collapsing `..`
+/// segments: `("prelude/primitive.wado", "./other.wat")` gives
+/// `"prelude/other.wat"`. The result carries neither a namespace prefix nor a
+/// leading `./`.
 fn join_namespace_relative_path(base: &str, relative: &str) -> String {
     // Start from the base's directory: drop the last `/`-segment.
     let base_dir = match base.rfind('/') {
@@ -538,22 +526,13 @@ fn wasm_core_val_type_name(ty: WasmCoreValType) -> &'static str {
     }
 }
 
-/// Synthesize a Wado source string that declares one extern `pub fn` per
-/// export of a wasm asset, each annotated with
-/// `#[canonical("<namespace>", "<export>")]` so the existing
-/// builtin/import lowering machinery picks the call up.
-///
-/// The synthesized module is fed back through the regular
-/// parse/bind pipeline. Doing it as text (rather than building
-/// an `ast::Module` programmatically) keeps `AstId` allocation,
-/// span/source-map invariants, and the LSP "AST is the source of
-/// truth" rule honoured without special cases — see
-/// `wado-compiler/CLAUDE.md`.
-///
-/// The generated identifiers are the wat-export names verbatim, so a
-/// stdlib re-exporter such as `core:libm` can write
-/// `pub use { libm_sin, libm_cos, ... } from "./libm.wat" with { type: "wat" };`
-/// and the names line up with the wat module's actual exports.
+/// Synthesize Wado source declaring one extern `pub fn` per export of a wasm
+/// asset, each carrying `#[canonical("<namespace>", "<export>")]` so the existing
+/// import lowering picks the call up. Emitted as text and fed back through the
+/// regular parse/bind pipeline, which keeps `AstId` allocation, spans, and the
+/// "AST is the source of truth" rule honoured with no special cases. The
+/// identifiers are the wat export names verbatim, so a re-exporter's
+/// `pub use { libm_sin, … }` lines up with the module's actual exports.
 fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -> String {
     use std::fmt::Write;
     let mut out = String::with_capacity(64 * exports.len().saturating_add(8));
@@ -779,19 +758,8 @@ fn parse_wasm_module_exports(
     Ok(function_exports)
 }
 
-/// Module loader
-///
-/// Loads all modules upfront before analysis and codegen.
-/// Uses a `CompilerHost` for I/O operations.
-/// Format a compiler error for a stdlib module with a source snippet and caret.
-///
-/// Emits a multi-line message shaped like:
-///
-/// ```text
-/// parser error in core:zlib at core:zlib:2365:113: expected pattern, found Semicolon
-///   2365 |         0 => return DeflateConfig { ... };
-///        |                                                                                                                 ^
-/// ```
+/// Format a compiler error for a stdlib module: the kind, module and position,
+/// then the offending source line with a caret under the column.
 fn format_stdlib_error(
     kind: &str,
     label: &str,
@@ -970,21 +938,12 @@ mod tests {
     }
 }
 
-/// Per-module lazy cache for stdlib AST.
-///
-/// Each module is parsed and bound at most once per process. The slot
-/// table (path → slot) is built eagerly on first access — that walk is
-/// just map inserts of empty [`OnceLock`]s, no parsing — and then
-/// each module's actual parse runs only when [`cached_stdlib_module`]
-/// is called for that import path.
-///
-/// Keyed by the canonical display form (`"core:foo"`, `"wasi:bar/baz.wado"`)
-/// rather than by `ModuleSource` value. The cache is process-global, but
-/// every `ModuleLoader` instance creates `ModuleSource` keys through its
-/// own private interner — using string keys here keeps the cache lookup
-/// content-addressed and avoids forcing the cache to share an interner
-/// with every loader. See [`stdlib_cache_key`] for how callers compute
-/// the lookup string from a `ModuleSource`.
+/// Per-module lazy cache for stdlib AST: each module is parsed and bound at most
+/// once per process. The slot table is built eagerly on first access — just map
+/// inserts of empty [`OnceLock`]s — and a module parses only when
+/// [`cached_stdlib_module`] asks for it. Keyed by canonical display string rather
+/// than `ModuleSource`, since every `ModuleLoader` interns through its own
+/// private interner and this cache is process-global.
 struct StdlibSlot {
     source: &'static str,
     module: std::sync::OnceLock<Module>,
@@ -1036,6 +995,8 @@ fn stdlib_cache_key(ms: &ModuleSource) -> Option<String> {
     }
 }
 
+/// Loads every module up front, before analysis and codegen, doing its I/O
+/// through a `CompilerHost`.
 pub struct ModuleLoader<'a, H: CompilerHost> {
     /// Host for I/O operations
     host: &'a H,
@@ -1928,31 +1889,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     }
 }
 
-/// Resolve an include path relative to the module that contains it.
-///
-/// Returns a path suitable for passing to `CompilerHost::load_source`, which
-/// joins the result with `base_path`. The logic forks on the module source's
-/// shape:
-///
-/// - **CWD-relative entry module** (path begins with `./` or `../`): the
-///   user's input path already encodes the prefix `base_path` will
-///   re-introduce, because `compile_with_options` derives `base_path` from
-///   the entry's parent directory. Prepending `dir` here would make
-///   `host.load_source`'s subsequent `base_path.join(...)` double the prefix
-///   — e.g. `wado test ./pkg/src/main.wado` resolving `#include_str("./x")`
-///   would otherwise produce `./pkg/src/./pkg/src/x`. Strip the leading
-///   `./` from `raw_path` only and let the host's join restore the prefix.
-/// - **Absolute entry module** (path begins with `/`): keep the dir-prefixed
-///   result. `Path::join` collapses absolute joins to the absolute path, so
-///   `base_path.join("/abs/dir/x")` returns `/abs/dir/x` unchanged. Test
-///   hosts (e.g. `wado-lsp/tests/definition.rs`) key on this form.
-/// - **Imported module rooted at `./` or `../`** (`./sub/helper.wado`): the
-///   `dir` is itself base_path-relative, so prepending it to `stripped`
-///   yields the right base_path-relative result for the include.
-/// - **Other shapes** (entry without leading `./` / `../` / `/`, or an
-///   import without a `./` prefix): the dir prefix is already part of the
-///   `base_path` the host will rejoin, so we strip to the bare filename
-///   like the cwd-relative entry case.
+/// Resolve an include path relative to its containing module, returning what
+/// `CompilerHost::load_source` should join onto `base_path`. Whether to keep the
+/// module's directory as a prefix is [`dir_prefix_to_keep`]'s decision: a
+/// cwd-relative entry already encodes what the host's join re-introduces, so
+/// prefixing would double it, while an absolute path collapses cleanly under
+/// `Path::join` and a `./`-rooted import needs the prefix to stay inside the
+/// importer's directory.
 fn resolve_include_path_impl(
     entry_module_source: Option<&str>,
     module_source_str: &str,
@@ -1976,25 +1919,12 @@ fn is_cwd_relative(path: &str) -> bool {
     path.starts_with("./") || path.starts_with("../")
 }
 
-/// Decide whether the include path should keep its containing module's
-/// directory as a prefix (`Some(dir)`) or collapse to the bare filename
-/// (`None`).
-///
-/// Two situations strip to the bare filename — both because re-prepending
-/// `dir` would only duplicate what `host.load_source`'s
-/// `base_path.join(...)` is already going to add:
-///
-/// 1. The cwd-relative entry module itself. Its `dir` IS `base_path`.
-/// 2. Any module whose `dir` does not look base_path-relative. Imports
-///    normalised by the loader sit under `./...`/`../...`; entries whose
-///    module-source string is a bare `pkg/src/main.wado` carry `base_path`
-///    inside the source string already, so the dir there is also part of
-///    what `base_path.join` will re-introduce.
-///
-/// The remaining cases (absolute paths, and imports rooted at `./` /
-/// `../`) keep the dir prefix. Absolute joins collapse cleanly via
-/// `Path::join`; relative-rooted imports need the prefix to stay inside
-/// the importer's directory.
+/// Whether an include path keeps its module's directory as a prefix, or collapses
+/// to the bare filename. Two cases collapse, both because re-prepending `dir`
+/// would duplicate what `base_path.join` adds: the cwd-relative entry module,
+/// whose `dir` *is* `base_path`, and any module whose `dir` does not look
+/// base_path-relative, carrying it inside the source string already. Absolute
+/// paths and `./`-rooted imports keep the prefix.
 fn dir_prefix_to_keep<'a>(
     entry_module_source: Option<&str>,
     module_source_str: &'a str,

@@ -1,23 +1,11 @@
-//! Module identity (`ModuleSource`) and its interner.
-//!
-//! `ModuleSource` is the canonical identity for a Wado module — the
-//! "where did this code come from" half of `symbol-coordinate = (ModuleSource,
-//! AstId)`. It is **not** a name-mangling concept: rendering it into a
-//! mangled symbol is the job of `crate::name`.
-//!
-//! # Pointer-identity interning
-//!
-//! `ModuleSource` is used pervasively as an `IndexMap` key during
-//! monomorphization and elaborator lookups. To make `clone` / `eq` /
-//! `hash` all O(1), every string field is canonicalised into an
-//! `Arc<str>` shared via [`ModuleSourceInterner`], which wraps the
-//! generic [`StringInterner`] from [`crate::intern`].
-//!
-//! Well-known names (the targets of zero-arg constructors like
-//! [`ModuleSource::prelude`]) live in `LazyLock<Arc<str>>` statics so
-//! they can be constructed without an interner reference. The interner
-//! adopts these statics on construction, ensuring that
-//! `interner.core("prelude") == ModuleSource::prelude()` (ptr-equal).
+//! Module identity and its interner. `ModuleSource` is the "where did this code
+//! come from" half of `symbol-coordinate = (ModuleSource, AstId)` — not a
+//! name-mangling concept; rendering one into a mangled symbol is `crate::name`'s
+//! job. It is used pervasively as a map key, so every string field is
+//! canonicalised into an `Arc<str>` through [`ModuleSourceInterner`] and `clone`
+//! / `eq` / `hash` are O(1). Well-known names live in statics the interner
+//! adopts on construction, so a zero-arg constructor needs no interner and
+//! `interner.core("prelude")` is pointer-equal to [`ModuleSource::prelude`].
 
 use crate::intern::{InternedStr, StringInterner};
 use std::fmt;
@@ -101,28 +89,13 @@ fn well_known_arcs() -> Vec<Arc<str>> {
     arcs
 }
 
-/// Canonical `Arc<str>` values for every stdlib module's `ModuleSource`
-/// payload.
-///
-/// Derived from [`crate::stdlib::ALL_CORE_MODULES`],
-/// [`crate::stdlib::ALL_WASI_MODULES`] and
-/// [`crate::stdlib::ALL_CORE_WASM_ASSETS`] — the single source of truth
-/// for the stdlib module set.  Every [`ModuleSourceInterner`] adopts
-/// these, so `ModuleSource` values for stdlib modules compare
-/// pointer-equal across independently constructed interners. This is
-/// the foundation that lets the stdlib TIR cache key its `IndexMaps` by
-/// `ModuleSource`.
-///
-/// For each variant, the interned payload is the portion of the
-/// import path that lands inside the `ModuleSource` variant:
-///
-/// * [`ModuleSource::Core`] holds the path stripped of its `core:`
-///   prefix (e.g. `"prelude"`, `"prelude/types.wado"`).
-/// * [`ModuleSource::Wasi`] holds the path stripped of its `wasi:`
-///   prefix.
-/// * [`ModuleSource::Wasm`] holds the full canonical path including
-///   the `core:` prefix (matching what the loader passes to
-///   [`ModuleSourceInterner::wasm`]).
+/// Canonical `Arc<str>` payloads for every stdlib module, derived from the
+/// `crate::stdlib` module lists. Every [`ModuleSourceInterner`] adopts them, so
+/// stdlib `ModuleSource` values compare pointer-equal across independently
+/// constructed interners — what lets the stdlib TIR cache key its maps by
+/// `ModuleSource`. Each payload is the part of the import path that lands inside
+/// the variant: `Core` and `Wasi` hold theirs with the prefix stripped, `Wasm`
+/// the full canonical path, matching what the loader passes in.
 static STDLIB_NAME_ARCS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
     let mut arcs: Vec<Arc<str>> = Vec::new();
     for (path, _src) in crate::stdlib::ALL_CORE_MODULES {
@@ -282,33 +255,12 @@ impl WasmAssetKind {
     }
 }
 
-/// Source location of a module.
-///
-/// This enum provides a structured representation of module paths,
-/// replacing raw `Vec<String>` for better type safety and clearer semantics.
-///
-/// String payloads are [`InternedStr`]; construct values via the
-/// well-known zero-arg constructors (e.g. [`ModuleSource::prelude`])
-/// or through [`ModuleSourceInterner`].
-///
-/// # Examples
-///
-/// ```ignore
-/// // Well-known sources need no interner.
-/// let prelude = ModuleSource::prelude();           // core:prelude
-/// let cli     = ModuleSource::cli();               // core:cli
-/// let wasi    = ModuleSource::wasi_cli();          // wasi:cli
-///
-/// // Arbitrary content goes through the interner so identity is
-/// // canonicalised (`Arc::ptr_eq` on the inner string).
-/// let mut interner = ModuleSourceInterner::new();
-/// let local  = interner.local("./geometry.wado");
-/// let wasi_x = interner.wasi("io");
-/// ```
-///
-/// Note: Two `EntryPoint` variants are considered equal regardless of their
-/// `filename` field. This ensures that types defined in the entry module
-/// are consistent across different compilation phases.
+/// Structured source location of a module. String payloads are [`InternedStr`]:
+/// a well-known source comes from a zero-arg constructor
+/// ([`ModuleSource::prelude`]), anything else from [`ModuleSourceInterner`],
+/// which canonicalises identity down to `Arc::ptr_eq`. Two `EntryPoint`s compare
+/// equal regardless of `filename`, so a type defined in the entry module stays
+/// consistent across compilation phases.
 #[derive(Debug, Clone)]
 pub enum ModuleSource {
     /// Core library module (e.g., `core:prelude`, `core:cli`, `core:rt`, `core:builtin`)
@@ -326,19 +278,13 @@ pub enum ModuleSource {
         /// Relative path (e.g., "./geometry.wado", "./utils/helper.wado")
         path: InternedStr,
     },
-    /// A module belonging to a dependency package, resolved from a bare-name
-    /// `use { … } from "<dep>"` clause against `[dependencies]`.
-    ///
-    /// Identity is the resolved entry-module `path` — within a compilation
-    /// the same resolved path is the same file, hence the same package, so
-    /// two `[dependencies]` aliases that point at the same package unify.
-    /// The variant is distinct from [`ModuleSource::Local`] to carry the
-    /// package boundary (only `export` items are visible across it) and to
-    /// keep dependency modules from resolving the consumer's `[dependencies]`.
-    /// `path` is loaded by the host exactly like `Local` — wado-to-wado
-    /// source dependencies compile into the same component (the CM boundary
-    /// is skipped), so dependency modules are ordinary Wado source once
-    /// loaded.
+    /// A module of a dependency package, resolved from a bare-name
+    /// `use { … } from "<dep>"` against `[dependencies]`. Identity is the
+    /// resolved entry-module `path`, so two aliases pointing at the same package
+    /// unify. Distinct from [`ModuleSource::Local`] to carry the package boundary
+    /// — only `export` items cross it — and to stop a dependency resolving the
+    /// consumer's own `[dependencies]`. Loaded exactly like `Local`: a
+    /// wado-to-wado dependency compiles into the same component.
     Dependency { path: InternedStr },
     /// Remote module loaded via HTTP/HTTPS
     Remote {
@@ -350,34 +296,22 @@ pub enum ModuleSource {
         /// Filename of the entry point (e.g., "hello.wado", "<stdin>", "<entry>")
         filename: InternedStr,
     },
-    /// Module loaded through a Kiln invocation redirect.
-    ///
-    /// The contained `uri` is opaque to most of the compiler — it is
-    /// passed verbatim to `CompilerHost::load_source`, which decides
-    /// how to interpret it. The CLI's `FilesystemCompilerHost` accepts
-    /// `file:` URIs and reads the absolute path; in-memory hosts use
-    /// the URI as a key. Using a URI keeps `wado-compiler` free of
-    /// `std::path` (and therefore `wasm32-unknown-unknown`-friendly).
-    ///
-    /// Created by [`crate::loader::ModuleLoader::resolve_import`] when
-    /// an import target matches an entry in the
-    /// [`crate::kiln::InvocationIndex`]; never written by user source.
+    /// Module loaded through a Kiln invocation redirect, created when an import
+    /// matches the [`crate::kiln::InvocationIndex`] and never written by user
+    /// source. The `uri` is opaque to the compiler, passed verbatim to
+    /// `CompilerHost::load_source` — the CLI host reads a `file:` path, an
+    /// in-memory host uses it as a key. A URI rather than a path keeps
+    /// `wado-compiler` free of `std::path`, and so `wasm32`-friendly.
     Redirected {
         /// Absolute URI (typically `file:///abs/path/to/file.wado`).
         uri: InternedStr,
     },
-    /// Wasm asset imported via `use ... from "<path>" with { type: "wat"|"wasm" }`.
-    ///
-    /// `path` is the canonical identifier for the asset, computed by
-    /// [`crate::loader::ModuleLoader::resolve_import`]:
-    /// - `core:libm.wat` for stdlib-bundled wat next to a core module.
-    /// - `./geometry.wat` (or normalized form) for entry-relative imports.
-    /// - The full `wasi:` / `core:` path with `.wat`/`.wasm` extension when
-    ///   the importing module is a core/wasi module.
-    ///
-    /// The asset is loaded as raw bytes and parsed by the wasm-import
-    /// loader path; the resulting Wado module exposes one extern fn per
-    /// requested export. See `docs/wep-2026-01-10-wasm-import.md`.
+    /// Wasm asset imported via
+    /// `use … from "<path>" with { type: "wat"|"wasm" }`. `path` is the canonical
+    /// identifier `resolve_import` computed — `core:libm.wat` for a bundled asset
+    /// beside a core module, an entry-relative path, or the full `core:` / `wasi:`
+    /// path when the importer is one. Loaded as raw bytes; the resulting Wado
+    /// module exposes one extern fn per requested export.
     Wasm {
         /// Canonical path identifier (used as the unique module key and
         /// as the namespace component of the synthesized
@@ -705,18 +639,12 @@ impl ModuleSource {
         format!("{self}//{name}")
     }
 
-    /// The module's real source location.
-    ///
-    /// This is the counterpart to the portable qualifier ([`Self::to_path`] /
-    /// [`Display`]): it keeps the entry point's full compile path (absolute
-    /// under the test harness, relative on the CLI) rather than its base name.
-    /// Consumed both where a real path is needed to resolve sibling files
-    /// (`#include_str` / `#include_bytes`) and as the filename shown in
-    /// diagnostics.
-    ///
-    /// Returns an empty string for entry points without real filenames
-    /// (e.g., `<stdin>`, `<entry>`) so that `Logger::apply_file_context`
-    /// can fill in the correct file from the logger's current file context.
+    /// The module's real source location — the counterpart to the portable
+    /// qualifier ([`Self::to_path`]), keeping the entry point's full compile path
+    /// rather than its base name. Read where a real path must resolve a sibling
+    /// file (`#include_str`) and as the filename in diagnostics. Empty for an
+    /// entry point with no real filename, such as `<stdin>`, so
+    /// `Logger::apply_file_context` can supply one from its own context.
     #[must_use]
     pub fn source_path(&self) -> String {
         match self {

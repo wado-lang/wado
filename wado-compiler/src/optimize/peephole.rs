@@ -1,44 +1,15 @@
-//! Unified peephole engine pass.
+//! Unified peephole engine pass: every position-flexible local rewrite rule
+//! interleaved over one engine session per function — one parent map, use index
+//! and worklist — rather than a session apiece. Only the env-free half of
+//! constant folding runs here; the flow-sensitive folds need the driving
+//! visitor's per-function dataflow state and stay in `const_folding`. Likewise
+//! `select_lowering`, a terminal post-loop lowering.
 //!
-//! Runs the position-flexible local peephole rewrite rules — short `push_str`
-//! simplification (`string_push`), constant-ASCII `push` specialization
-//! (`ConstAsciiPushRule`), array-literal materialization
-//! (`array_literal`), write-only local elimination (`elide_local`), the
-//! environment-free subset of constant folding (`const_folding::ConstFoldRule`
-//! — literal arithmetic and pure CTFE), and trivial-block / dead-statement
-//! pruning (`const_branch_prune::BranchPruneRule`) — over one shared worklist
-//! per function: a single engine session (parent map, use index, post-order
-//! seed) on which all the rules interleave.
-//! See `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
-//!
-//! Constant folding is only partly here. Its flow-sensitive folds — env-bound
-//! locals, forwarded struct fields, immutable-global reads, and constant-branch
-//! collapse — need the driving visitor's per-function dataflow state and stay
-//! with the standalone `const_folding::fold_constants` walker. The engine rule
-//! handles only the folds that depend on a node and its already-folded children
-//! plus the program-wide CTFE callee map, applied through the engine's edit API
-//! so the worklist and use index stay coherent.
-//!
-//! `match_to_switch` (dense `Match` → `Switch`) also runs here as a rule:
-//! folding it into the shared session means a function's `Match` lowering reuses
-//! the same engine the other rules already build, instead of a separate
-//! per-function session each iteration. Global initializer bodies are not
-//! visited by the function-level loop, so their `Match` lowering runs once via
-//! `match_to_switch_globals`, and `-O0` (loop skipped) keeps `match_to_switch_all`.
-//!
-//! `select_lowering` stays a terminal post-loop lowering (`If` → `select`) that
-//! must run after all other transformations.
-//!
-//! The pass is invoked at two points in the fixed-point loop — before `inline`
-//! (so `string_push` sees the `push_str` call before inlining expands it;
-//! `value_copy_demote` then runs after) and after `inline` (so `array_literal`
-//! sees the exposed
-//! `array_new + push` window, `RefElimRule` cleans up the ref bindings
-//! inlining exposes, `ElideBoxLocalRule` collapses the `Box<T>` shells, and
-//! `LabeledBlockFusionRule` folds inlined `Option`/`Result` allocations into
-//! the consumer's `if-let`/`match` site). `array_literal` no-ops in the first
-//! run and `string_push` no-ops in the second; both bail immediately on a
-//! non-matching node, so the wasted dispatch is negligible.
+//! Invoked twice per fixed-point iteration: before `inline`, where `string_push`
+//! can still see a `push_str` call, and after, where `array_literal` sees the
+//! exposed `array_new + push` window and the ref / box rules clean up what
+//! inlining left. Each rule no-ops in the run that is not its own, bailing on the
+//! first non-matching node. See WEP 2026-06-05.
 
 use cranelift_entity::EntityRef;
 

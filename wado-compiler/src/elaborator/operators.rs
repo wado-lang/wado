@@ -69,16 +69,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.build_binary_op_tir(left, binary.op, right, binary.span, Some(binary.id))
     }
 
-    /// Resolve both operands of a binary op, applying the standard
-    /// bidirectional numeric-literal coercion. Shared between
-    /// [`Self::resolve_binary`] and elaborator-internal callers like
-    /// [`Self::desugar_comparison_chain`].
-    ///
-    /// For primitive numeric types: coerce the literal to the other operand's type.
-    /// For struct types (e.g. `i128`/`u128`): look up the operator trait to determine
-    /// the expected type for each operand from the method signature. This naturally
-    /// handles operators with asymmetric parameter types (e.g. `Shl::shl(&self, rhs: u32)`)
-    /// without special-casing specific operators.
+    /// Resolve both operands of a binary op with the bidirectional
+    /// numeric-literal coercion, shared with [`Self::desugar_comparison_chain`].
+    /// A primitive coerces the literal to the other operand's type; a struct type
+    /// such as `i128` takes each expected type from the operator trait's method
+    /// signature, which handles an asymmetric operator like
+    /// `Shl::shl(&self, rhs: u32)` without special-casing it.
     pub(super) fn resolve_binary_operands_with_coercion(
         &mut self,
         left_ast: &ast::Expr,
@@ -188,16 +184,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether an operand's own elaboration would consult the expected type, so
-    /// a comparison resolves the *other* side first and hands this one its type.
-    /// A syntactic subset of the forms argument synthesis classifies as
-    /// [`super::synth::ArgClass::Opaque`], and syntactic on purpose: reify
-    /// decides the same order with no synthesis to ask, and a type-dependent
-    /// order would desync the two walks inside a tuple `for-of`, where one
-    /// sub-tree is visited once per element.
-    ///
-    /// Subset, not equality, is the safe side: a form left out resolves on its
-    /// own, as every operand did before.
+    /// Whether an operand's own elaboration would consult the expected type, so a
+    /// comparison resolves the *other* side first and hands this one its type. A
+    /// syntactic subset of what argument synthesis calls
+    /// [`super::synth::ArgClass::Opaque`], syntactic on purpose: reify decides the
+    /// same order with no synthesis to ask, and a type-dependent order would
+    /// desync the two walks inside a tuple `for-of`. Subset rather than equality
+    /// is the safe side — a form left out just resolves on its own.
     pub(super) fn takes_shape_from_expected_type(expr: &ast::Expr) -> bool {
         match expr {
             ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => true,
@@ -335,22 +328,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         if is_comparison {
-            // Get struct name for trait lookup.
-            // Newtypes of primitives (e.g. type Radians = f64) use primitive comparison.
-            // Newtypes of structs need trait-based comparison via the base type's impl.
-            //
-            // `Enum` is deliberately absent: its `==` lowers to a native
-            // discriminant compare, no method dispatch involved. `Variant`
-            // must be present: it carries payload data, so its `==`/`Ord`
-            // dispatch to a synthesized method, and only going through
-            // `resolve_trait_method_for_op` here records the bound-driven
-            // synthesis request (WEP 2026-06-25-trait-derivation) — otherwise
-            // a plain variant's comparison falls through to
-            // `try_lower_comparison` at monomorphize time, after synthesis
-            // already ran, and the method is never generated.
-            // The receiver is named by the module that declares it, read off
-            // the resolved type itself — the declaration is right here, so
-            // nothing re-resolves a written name.
+            // The receiver for trait lookup, named by its declaring module and
+            // read off the resolved type — the declaration is right here, so no
+            // written name is re-resolved. `Enum` is deliberately absent, its
+            // `==` lowering to a native discriminant compare; `Variant` must be
+            // present, since only reaching `resolve_trait_method_for_op` records
+            // the bound-driven synthesis request, and otherwise its comparison
+            // falls through to monomorphize time, after synthesis already ran.
             let struct_name = match &left_type {
                 ResolvedType::Struct {
                     decl_name: name,
@@ -1142,17 +1126,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.assign_to_target(&assign.target, AssignValue::Ast(&assign.value), ctx)
     }
 
-    /// Whether an `Index` assignment target reaching `assign_to_target`'s
-    /// general path is an assignable place. The `IndexAssign` path above
-    /// already returned for index-assignable receivers, so the remaining
-    /// shapes are classified from the AST + recorded facts:
-    ///   - a read-only `Index` trait access (recorded `operator_dispatch`
-    ///     with `needs_deref`) lowers to `*recv.index(i)` over `&Output`, so
-    ///     a write would go through an immutable reference (diagnosed here);
-    ///   - an `IndexValue` access is a by-value method call — not a place;
-    ///   - with no recorded read dispatch the only assignable shape is a
-    ///     tuple index (`t[0]`, lowered to a `FieldAccess`); an unindexable
-    ///     receiver was already diagnosed by `resolve_index`.
+    /// Whether an `Index` assignment target reaching `assign_to_target`'s general
+    /// path is an assignable place — index-assignable receivers already returned
+    /// above. A read-only `Index` access lowers to `*recv.index(i)` over
+    /// `&Output`, so writing through it is an immutable-reference error; an
+    /// `IndexValue` access is a by-value call and no place at all; and with no
+    /// recorded read dispatch only a tuple index is assignable, an unindexable
+    /// receiver having been diagnosed by `resolve_index`.
     fn index_target_assignable(&mut self, index_expr: &ast::IndexExpr) -> bool {
         let needs_deref = self
             .sem
@@ -1495,21 +1475,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::UNIT
     }
 
-    /// Resolve `target op= value` as the equivalent `target = target op value`,
-    /// fully TIR-direct.
-    ///
-    /// The READ side comes from `resolve_expr(&compound.target, …)`, which
-    /// naturally dispatches the `Index` trait for indexed reads on custom
-    /// types. The WRITE side reuses [`Self::assign_to_target`], which
-    /// handles `GlobalVarSet`, the `IndexAssign` trait, and plain `Assign`
-    /// — feeding it the already-resolved combined value via
-    /// [`AssignValue::Resolved`] so no synthesised AST is involved.
-    ///
-    /// Note: `target` is evaluated twice. For pure l-values (locals,
-    /// globals, fields of locals) that is fine; for impure l-values like
-    /// `arr[bump()] += 1` the inner sub-expressions run twice, matching
-    /// the historical desugar-phase behaviour. Binding impure
-    /// sub-expressions to temporaries first is a separate concern.
+    /// Resolve `target op= value` as `target = target op value`, TIR-direct. The
+    /// read side is an ordinary `resolve_expr` on the target, which dispatches
+    /// the `Index` trait for a custom indexed read; the write side reuses
+    /// [`Self::assign_to_target`], fed the already-resolved value through
+    /// [`AssignValue::Resolved`] so no synthesised AST is involved. `target` is
+    /// evaluated twice, which is fine for a pure l-value and runs the inner
+    /// sub-expressions of `arr[bump()] += 1` twice.
     pub(super) fn resolve_compound_assign(
         &mut self,
         compound: &ast::CompoundAssignExpr,
@@ -1692,28 +1664,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         placeholder(type_id, span)
     }
 
-    /// Single TIR-level builder for every operator that dispatches to a
-    /// trait method — unary (`Neg::neg`, `BitNot::bitnot`) as well as
-    /// binary (`Eq::eq`, `Ord::cmp`, `Add::add`, …, `Shl::shl`).  Inputs
-    /// are already-resolved [`TirExpr`]s: the receiver and zero or more
-    /// argument operands matching `resolved.param_types` in order.
-    ///
-    /// The builder is the single source of truth for:
-    ///
-    /// 1. Type-checking each argument against the trait's declared
-    ///    parameter type.  Mismatches emit `TypeMismatch` and return an
-    ///    `ERROR` expression; there is no way for a caller to skip the
-    ///    check.  For `&Self` parameters the expected value type is the
-    ///    receiver's own type so newtype dispatch (base-impl method
-    ///    called through the newtype) still accepts the newtype on both
-    ///    sides.
-    /// 2. Adjusting the receiver via
-    ///    [`Self::adjust_receiver_for_self_kind`].
-    /// 3. Wrapping each argument in `&` iff the matching parameter type
-    ///    is a reference — never otherwise, so `Shl::shl(&self, rhs:
-    ///    u32)` receives the `u32` by value.
-    /// 4. Constructing the method [`TirExprKind::Call`] with the correct
-    ///    mangled name and `resolved.return_type`.
+    /// The single TIR-level builder for every operator dispatching to a trait
+    /// method, unary and binary alike, over already-resolved operands matching
+    /// `resolved.param_types` in order. It is the sole authority for four things:
+    /// type-checking each argument against the declared parameter type — with a
+    /// `&Self` parameter expecting the receiver's own type, so newtype dispatch
+    /// accepts the newtype on both sides — adjusting the receiver, wrapping an
+    /// argument in `&` iff its parameter is a reference, and building the `Call`.
     fn build_trait_op_method_call_on_resolved(
         &mut self,
         receiver: TirExpr,
@@ -1735,18 +1692,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         }
 
-        // For each argument, decide whether the trait parameter is by
-        // reference, compute the logical expected value type for the arg,
-        // and delegate to `Elaborator::typecheck` — the same helper that
-        // `resolve_method_call` uses at its own argument-typecheck tail.
-        //
-        // Using the shared primitive means operator dispatch and direct
-        // method calls apply identical `check_assignable` rules
-        // (Unknown/Error deferral, newtype propagation, reference
-        // unwrapping) and any divergence there is impossible by
-        // construction.  We no longer early-return on mismatch; errors
-        // are accumulated via the logger and compilation fails at the
-        // end, matching method-call behavior.
+        // Per argument, decide whether the parameter is by reference, compute the
+        // logical expected type, and delegate to the same `typecheck` helper
+        // `resolve_method_call` uses — so operator dispatch and a direct call
+        // apply identical `check_assignable` rules and cannot diverge. Mismatches
+        // accumulate in the logger rather than early-returning, as method calls do.
         let mut wrap_flags: Vec<bool> = Vec::with_capacity(args.len());
         for (arg, &param_ty) in args.iter().zip(resolved.param_types.iter()) {
             let wrap = matches!(

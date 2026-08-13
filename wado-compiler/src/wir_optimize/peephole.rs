@@ -1,17 +1,9 @@
-//! Peephole optimization pass for WIR.
-//!
-//! Per-function pass that applies local rewrites:
-//! - Constant folding on integer comparisons
-//! - Dead `If` elimination (constant condition)
-//! - Redundant `ValueCopy` elision
-//! - Copy-used-only-for-field-reads elision
-//! - Sign-extension folding into loads / mask elision
-//! - Redundant `ref.cast` / `ref.test` elimination
-//! - `local.set` + first `local.get` fusion into `local.tee`
-//!
-//! These are Wasm-instruction-selection-level rewrites that have no NIR
-//! analogue (`local.tee`, the signed-load variants, `ref.cast` redundancy
-//! against the WIR static type), so they only make sense after lowering.
+//! Per-function peephole rewrites for WIR: constant folding on comparisons,
+//! dead `If` and redundant `ValueCopy` elision, sign-extension folding into
+//! loads, redundant `ref.cast` / `ref.test` removal, and `local.set` +
+//! `local.get` fusion into `local.tee`. All are instruction-selection-level and
+//! have no NIR analogue — `local.tee`, the signed loads, and cast redundancy
+//! against the WIR static type only exist after lowering.
 
 use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 use crate::wir_optimize::nullability::Nullability;
@@ -55,25 +47,13 @@ fn is_immediate_const(instr: &WirInstr) -> bool {
     )
 }
 
-/// Propagate trivial copies (`alias = source`) and constant bindings
-/// (`alias = 0`) across a function: every use of `alias` is replaced, then the
-/// now-dead definition is deleted.
-///
-/// A copy `LocalSet { alias, LocalGet { source } }` is propagated when:
-/// - `alias` is single-def: this copy is its only `LocalSet`, it is never
-///   `LocalTee`'d, and it is not a parameter. Every read of `alias` therefore
-///   observes the value written by this copy.
-/// - `source` has at most one definition and is never `LocalTee`'d, and that
-///   definition (if any) structurally dominates the copy — or `source` is a
-///   parameter. Together this means `source` is never rewritten between the
-///   copy and the alias uses, so it is invariant over that span.
-/// - the copy dominates every use of `alias` (checked structurally over the
-///   WIR control flow), so no use can observe `alias`'s zero-initialized value
-///   before the copy runs.
-///
-/// Under those conditions `alias == source` holds at every use of `alias`, so
-/// the substitution is sound. Running before SROA also lets variant SROA see
-/// direct RefTest/RefCast patterns on the original local.
+/// Propagate trivial copies and constant bindings across a function, replacing
+/// every use of `alias` and deleting the dead definition. Sound when `alias` is
+/// single-def and never tee'd, `source` is invariant over the span (at most one
+/// definition, dominating the copy, or a parameter), and the copy dominates
+/// every use — so no read observes the zero-initialized value. Together these
+/// give `alias == source` at every use. Running before SROA also lets variant
+/// SROA see `RefTest` / `RefCast` on the original local.
 pub(super) fn propagate_trivial_copies(module: &mut WirPackage) {
     for func in &mut module.functions {
         let Some(body) = &mut func.body else {
@@ -193,23 +173,12 @@ impl WirRefVisitor for CopyCollector<'_> {
     }
 }
 
-/// Structural dominance check: walks the function in execution order tracking,
-/// per scope, which locals have had a definition executed. It enforces two
-/// conditions per candidate copy `alias = source`:
-///
-/// - the copy dominates every use of `alias` — a `LocalGet alias` reached
-///   before the copy disqualifies `alias`, so no use observes the alias's
-///   zero-initialized value;
-/// - `source` is invariant from the copy onward — its definition must already
-///   dominate the copy (or `source` is a parameter / never defined). Combined
-///   with `source` having at most one definition (checked by `CopyCollector`),
-///   this guarantees `source` is not rewritten between the copy and the alias
-///   uses, so `alias == source` holds at every use.
-///
-/// `defined` is threaded by value into conditional and looping scopes
-/// (`Block` / `Loop` / `If` branches) so a definition inside one of them does
-/// not count as executed on paths that skip it. `Seq` is unconditional
-/// straight-line code, so definitions inside it leak to the enclosing scope.
+/// Structural dominance check for [`propagate_trivial_copies`]: walks in
+/// execution order tracking which locals have a definition executed per scope,
+/// disqualifying a copy whose `alias` is read before it or whose `source` is not
+/// already dominated. `defined` is threaded by value into conditional and looping
+/// scopes, so a definition inside one does not count on paths that skip it;
+/// `Seq` is straight-line, so its definitions leak to the enclosing scope.
 fn check_dominance_in_body(
     body: &[WirInstr],
     candidates: &IndexMap<String, CopySource>,
@@ -394,21 +363,13 @@ fn apply_in_instr(instr: &mut WirInstr, subst: &IndexMap<String, CopySource>) {
     }
 }
 
-/// Run the peephole rewrites over one function body to a fixed point.
-///
-/// Each sub-pass is one whole-tree post-order sweep (children fold before
-/// their parents within a sweep), and the sub-pass sequence loops until no
-/// sweep changes anything: one rewrite routinely enables another across
-/// sub-pass boundaries — e.g. `try_simplify_ref_op` folding a `RefTest`
-/// condition to a constant hands `try_eliminate_const_if` a dead branch.
-/// Usually quiescent after 2 rounds; a defensive cap guards against a
-/// pathological rewrite cycle.
-///
-/// Value-copy elision is a single whole-function pass (see
-/// `elide_value_copies_whole_function`) rather than per-scope, because safe
-/// elision requires knowing every trailing instruction reachable after the
-/// copy — including those in enclosing scopes — and recursive per-scope calls
-/// cannot observe them.
+/// Run the peephole rewrites over one function body to a fixed point. Each
+/// sub-pass is a whole-tree post-order sweep, and the sequence loops until
+/// nothing changes: one rewrite routinely enables another across sub-pass
+/// boundaries, as folding a `RefTest` to a constant hands the next a dead
+/// branch. Usually quiescent after two rounds, with a defensive cap. Value-copy
+/// elision runs whole-function instead of per-scope, since it must see every
+/// trailing instruction reachable after the copy, enclosing scopes included.
 pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: &[WirTypeDef]) {
     const MAX_ROUNDS: u32 = 8;
     let mut rounds = 0;
@@ -904,18 +865,11 @@ fn is_boolean_valued(instr: &WirInstr) -> bool {
     )
 }
 
-/// Fold integer sign-extension instructions into a cheaper equivalent.
-///
-/// All of these are pure Wasm-instruction-selection rewrites:
-/// - `i32.extend8_s(i32.load8_u a)` → `i32.load8_s a` (and the 16-bit variant);
-///   the unsigned load + explicit sign-extend collapses into the signed load.
-/// - `i32.extend8_s(i32.load8_s a)` → `i32.load8_s a`; re-extending an already
-///   sign-extended byte is a no-op (idempotent).
-/// - `i32.extend8_s(x & mask)` → `i32.extend8_s(x)` when `mask`'s low 8 bits are
-///   all set; `extend8_s` only inspects the low byte, so the mask is dead.
-/// - `i32.extend8_s(i32.extend8_s x)` → `i32.extend8_s x` (idempotent), and
-///   `i32.extend16_s(i32.extend8_s x)` → `i32.extend8_s x` (the 8-bit result
-///   already fits the 16-bit signed range).
+/// Fold an integer sign-extension into a cheaper equivalent: over an unsigned
+/// load it collapses into the signed load, over an already-extended value it is
+/// idempotent (as is a wider extension over a narrower one, whose result already
+/// fits), and over a mask whose low bits are all set the mask is dead, since the
+/// extension inspects only those bits.
 fn try_fold_sign_extension(instr: &mut WirInstr) -> bool {
     // The width (in bits) this sign extension reads from: 8 or 16.
     let width = match instr {
@@ -1025,17 +979,12 @@ fn static_ref_type(instr: &WirInstr) -> Option<(WirTypeId, bool)> {
     }
 }
 
-/// Eliminate a redundant `ref.cast` / `ref.test` against the WIR static type.
-///
-/// - `ref.cast $T(expr)` where `expr` is statically a `$T` reference is the
-///   identity. It collapses to `expr`, or to `ref.as_non_null(expr)` when the
-///   cast asserts non-null but the source type is nullable.
-/// - `ref.test $T(expr)` where `expr` is statically a `$T` reference and the
-///   test cannot fail (the source is non-null, or the test accepts null) folds
-///   to `1`, provided dropping `expr`'s evaluation is observably safe.
-///
-/// Only exact `type_id` matches are recognised; supertype/subtype narrowing
-/// (the shape variant pattern matching emits) is deliberately left untouched.
+/// Eliminate a `ref.cast` / `ref.test` made redundant by the WIR static type. A
+/// cast to a type the operand already has is the identity, collapsing to the
+/// operand or to `ref.as_non_null` where it asserts non-null over a nullable
+/// source; a test that cannot fail folds to `1`, provided dropping the operand's
+/// evaluation is observably safe. Only exact `type_id` matches count —
+/// supertype narrowing, which variant pattern matching emits, is left alone.
 fn try_simplify_ref_op(instr: &mut WirInstr, null: &Nullability) -> bool {
     match instr {
         WirInstr::RefCast {
@@ -1099,23 +1048,13 @@ fn fuse_local_tees(instrs: &mut [WirInstr]) -> bool {
     fuser.changed | fuse_local_tee(instrs)
 }
 
-/// Fuse a `local.set` with the first subsequent `local.get` of the same local
-/// into a single `local.tee`.
-///
-/// When a statement `local.set $x (v)` is followed — skipping `Nop`s minted by
-/// earlier sub-passes — by a statement whose first-evaluated leaf is
-/// `local.get $x`, the pair `(local.set $x v) … (local.get $x …)` collapses to
-/// `(local.tee $x v) …`, dropping one `local.get`. The set value `v` is
-/// evaluated at the tee site, which is the first thing the consumer statement
-/// runs — so nothing executes between the old set and the moved evaluation and
-/// the order is preserved. The emptied `local.set` becomes a `Nop`, which the
-/// phase-7 `cleanup` removes.
-///
-/// Restricted to non-reference locals so the tee never interacts with codegen's
-/// `ref.as_non_null`-on-`local.tee` narrowing for `ref_locals`. Descent into the
-/// consumer stops at control flow (`Block`/`Loop`/`If`/`Seq`/`Br*`/`Select`):
-/// these either evaluate their first child conditionally / repeatedly, or list
-/// their operands in an order that does not match Wasm's evaluation order.
+/// Fuse a `local.set` with the next statement's first-evaluated `local.get` of
+/// the same local into one `local.tee`, dropping the read. Order is preserved:
+/// the set value moves to the tee site, which is the first thing the consumer
+/// runs, so nothing executes in between. The emptied set becomes a `Nop` for
+/// `cleanup`. Restricted to non-reference locals, away from codegen's
+/// `ref.as_non_null`-on-tee narrowing, and descent stops at control flow, which
+/// evaluates its first child conditionally or in a different order.
 fn fuse_local_tee(instrs: &mut [WirInstr]) -> bool {
     let mut changed = false;
     for i in 0..instrs.len() {
