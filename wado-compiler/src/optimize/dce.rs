@@ -118,7 +118,11 @@ impl DceAnalysis {
         if self.struct_monomorph_names.contains(s.name.as_str()) {
             return true;
         }
-        let rendered = type_table.struct_rendered_name(&mono.generic_name, &mono.impl_type_args);
+        let Some(base) = type_table.decl_named_in(&mono.generic_name, &s.module_source) else {
+            return false;
+        };
+        let rendered = type_table
+            .struct_rendered_name(crate::tir::StructDef::Decl(base), &mono.impl_type_args);
         self.struct_monomorph_names.contains(rendered.as_str())
             || type_table
                 .find_struct_by_name(&rendered, &s.module_source)
@@ -1181,15 +1185,13 @@ impl<'a> DceWalker<'a> {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                     current_type = self.type_table.get(*inner);
                 }
-                ResolvedType::Newtype {
-                    name,
-                    module_source,
-                    base_type,
-                    ..
-                } => {
+                ResolvedType::Newtype { def, base_type } => {
                     // Remember the outermost newtype for its own trait impls
                     if newtype_info.is_none() {
-                        newtype_info = Some((name.clone(), module_source.clone()));
+                        newtype_info = Some((
+                            self.type_table.def_name(*def).to_string(),
+                            self.type_table.def_module(*def).clone(),
+                        ));
                     }
                     current_type = self.type_table.get(*base_type);
                 }
@@ -1238,13 +1240,12 @@ impl<'a> DceWalker<'a> {
 
         match base_receiver_type {
             ResolvedType::Struct {
-                ref decl_name,
+                ref def,
                 ref type_args,
-                ref module_source,
-                ..
             } if !type_args.is_empty() => {
-                let base_struct = decl_name;
-                let name = &self.type_table.struct_rendered_name(decl_name, type_args);
+                let base_struct = &self.type_table.struct_head_name(*def);
+                let module_source = self.type_table.struct_head_module(*def);
+                let name = &self.type_table.struct_rendered_name(*def, type_args);
                 // Monomorphized struct method (e.g. `Box<i32>::get`):
                 // monomorphized functions live in the *using* module, so
                 // route the callee id through `current_module`. The base
@@ -1283,11 +1284,9 @@ impl<'a> DceWalker<'a> {
                     self.analysis.callees.insert(original_method_id);
                 }
             }
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => {
+            ResolvedType::Struct { def, .. } => {
+                let name = self.type_table.struct_head_name(def);
+                let module_source = self.type_table.struct_head_module(def);
                 // Non-monomorphized struct method.
                 let method_id = FunctionId::Method(MethodName::new(
                     module_source.clone(),
@@ -1301,7 +1300,7 @@ impl<'a> DceWalker<'a> {
                 // since trait impls may live in a different module than the type
                 // (e.g., `impl Display for String` is in format.wado, not string.wado)
                 let func_module = func.module_source.clone();
-                if func_module != module_source
+                if &func_module != module_source
                     && let Some(info) = func.method_info.clone()
                 {
                     let alt_method_id = FunctionId::Method(MethodName::new(
@@ -1337,9 +1336,9 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(method_id);
             }
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } if TypeTable::is_tuple_type(&name) => {
+            ResolvedType::GenericInstance { def, type_args }
+                if TypeTable::is_tuple_type(self.type_table.def_name(def)) =>
+            {
                 // Tuple method call: synthesized with struct_name `"[]<f64,f64>"`.
                 let elements: Vec<FqTypeName> = type_args
                     .iter()
@@ -1353,12 +1352,8 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(method_id);
             }
-            ResolvedType::GenericInstance {
-                name,
-                type_args,
-                module_source: _,
-                ..
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
+                let name = self.type_table.def_name(def).to_string();
                 // Generic instance method (e.g. `Box<i32>::get`,
                 // `TreeMap<String,i32>^Index::index`). Trait methods
                 // need the trait name baked into the mangle so trait-
@@ -1385,11 +1380,9 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(callee_id);
             }
-            ResolvedType::Enum {
-                name,
-                module_source,
-                ..
-            } => {
+            ResolvedType::Enum { def } => {
+                let name = self.type_table.def_name(def).to_string();
+                let module_source = self.type_table.def_module(def).clone();
                 // Enum method (user-defined or auto-derived trait impl).
                 let method_id = FunctionId::Method(MethodName::new(
                     module_source.clone(),
@@ -1399,17 +1392,16 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(method_id);
             }
-            ResolvedType::Resource { name, .. } => {
+            ResolvedType::Resource { def } => {
+                let name = self.type_table.def_name(def).to_string();
                 // Resource instance method (e.g. `fields.has()`):
                 // recorded as an effect so it lands in
                 // `used_wasi_functions`.
                 self.analysis.effect_calls.insert((name, method_name));
             }
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => {
+            ResolvedType::Variant { def } => {
+                let name = self.type_table.def_name(def).to_string();
+                let module_source = self.type_table.def_module(def).clone();
                 // Variant method, e.g. `Shape^Inspect::inspect`.
                 let method_id = FunctionId::Method(MethodName::new(
                     module_source.clone(),
@@ -1439,9 +1431,8 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(method_id);
             }
-            ResolvedType::GenericResource {
-                name, type_args, ..
-            } => {
+            ResolvedType::GenericResource { def, type_args } => {
+                let name = self.type_table.def_name(def).to_string();
                 // Generic resource method, e.g. `Future<T>^Inspect::inspect`.
                 let resource_args: Vec<FqTypeName> = type_args
                     .iter()
@@ -1622,7 +1613,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
             ));
             analysis.callees.insert(method_id);
         }
-        ResolvedType::Struct { decl_name, .. } if decl_name == "String" => {}
+        ResolvedType::Struct { def, .. } if type_table.struct_head_name(*def) == "String" => {}
         _ => {}
     }
 }
@@ -1711,47 +1702,40 @@ impl DceAnalysis {
         self.enum_exact.clear();
         for &id in &self.types {
             match type_table.get(id) {
-                ResolvedType::Struct {
-                    decl_name,
-                    module_source,
-                    type_args,
-                    ..
-                } => {
+                ResolvedType::Struct { def, type_args } => {
+                    let decl_name = type_table.struct_head_name(*def);
+                    let module_source = type_table.struct_head_module(*def);
                     if type_args.is_empty() {
-                        self.struct_exact
-                            .insert((decl_name.clone(), module_source.clone()));
+                        self.struct_exact.insert((decl_name, module_source.clone()));
                     } else {
                         self.struct_monomorph_names
-                            .insert(type_table.struct_rendered_name(decl_name, type_args));
-                        self.struct_monomorph_bases.insert(decl_name.clone());
+                            .insert(type_table.struct_rendered_name(*def, type_args));
+                        self.struct_monomorph_bases.insert(decl_name);
                     }
                 }
-                ResolvedType::Variant {
-                    name,
-                    module_source,
-                    ..
-                } => {
-                    self.variant_exact
-                        .insert((name.clone(), module_source.clone()));
+                ResolvedType::Variant { def } => {
+                    self.variant_exact.insert((
+                        type_table.def_name(*def).to_string(),
+                        type_table.def_module(*def).clone(),
+                    ));
                 }
-                ResolvedType::Enum {
-                    name,
-                    module_source,
-                    ..
-                } => {
-                    self.enum_exact
-                        .insert((name.clone(), module_source.clone()));
+                ResolvedType::Enum { def } => {
+                    self.enum_exact.insert((
+                        type_table.def_name(*def).to_string(),
+                        type_table.def_module(*def).clone(),
+                    ));
                 }
-                ResolvedType::GenericInstance {
-                    name, type_args, ..
-                } => {
-                    self.generic_instance_names.insert(name.clone());
+                ResolvedType::GenericInstance { def, type_args } => {
+                    self.generic_instance_names
+                        .insert(type_table.def_name(*def).to_string());
                     // The spelling a live `Struct` with type args records, so
                     // `keeps_struct` recognises the monomorph either way: a dead
                     // local still declares its type, and `wir_build` declares a
                     // Wasm local for it.
-                    self.struct_monomorph_names
-                        .insert(type_table.struct_rendered_name(name, type_args));
+                    self.struct_monomorph_names.insert(
+                        type_table
+                            .struct_rendered_name(crate::tir::StructDef::Decl(*def), type_args),
+                    );
                 }
                 _ => {}
             }
@@ -1786,16 +1770,9 @@ fn variant_decls_kept_past_use(
         .iter()
         .filter_map(|f| f.borrow().scalarized_from)
         .filter_map(|t| match type_table.get(t) {
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
+            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                type_table.nominal_head(t)
             }
-            | ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => Some((name.clone(), module_source.clone())),
             _ => None,
         })
         .collect();

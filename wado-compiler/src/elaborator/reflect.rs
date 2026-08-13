@@ -514,17 +514,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn reflect_struct_subject(&self, self_ty: TypeId) -> Option<ReflectSubject> {
         let (base_name, module_source, type_args) =
             match self.tysys.type_table.borrow().get(self_ty).clone() {
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                    ..
-                } => (name, module_source, type_args),
-                ResolvedType::Struct {
-                    decl_name: name,
-                    module_source,
-                    ..
-                } => (name, module_source, Vec::new()),
+                ResolvedType::GenericInstance { type_args, .. } => {
+                    let (name, module_source) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(self_ty)
+                        .expect("a nominal type names a declaration");
+                    (name, module_source, type_args)
+                }
+                ResolvedType::Struct { .. } => {
+                    let (name, module_source) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(self_ty)
+                        .expect("a nominal type names a declaration");
+                    (name, module_source, Vec::new())
+                }
                 _ => {
                     let name = self.tysys.type_table.borrow().type_name(self_ty);
                     let module_source = self.find_struct_module_source(&name);
@@ -551,17 +558,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn reflect_variant_subject(&self, self_ty: TypeId) -> Option<ReflectSubject> {
         let (base_name, module_source, type_args) =
             match self.tysys.type_table.borrow().get(self_ty).clone() {
-                ResolvedType::Variant {
-                    name,
-                    module_source,
-                    ..
-                } => (name, module_source, Vec::new()),
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                    ..
-                } => (name, module_source, type_args),
+                ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                    let type_args = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .generic_type_args(self_ty)
+                        .unwrap_or_default();
+                    let (name, module_source) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(self_ty)
+                        .expect("a nominal type names a declaration");
+                    (name, module_source, type_args)
+                }
                 _ => return None,
             };
         let info = self
