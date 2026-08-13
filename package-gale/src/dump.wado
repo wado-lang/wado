@@ -232,7 +232,7 @@ fn render_lr_loop_entry(out: &mut String, l: &LeftRecursiveRule) {
 /// the shared `build_group_prediction_tree_from_order`) inline.
 fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut GenContext) {
     let header = rule_header(rule);
-    let surface = find_parser_rule(grammar, &header.name);
+    let surface = grammar.parser_rules.iter().find(|r| r.name == header.name);
     let surface = match surface {
         Some(r) => r,
         None => {
@@ -353,15 +353,6 @@ fn ambiguity_reason_label(reason: &AmbiguityReason) -> String {
         MultiAtEnd => "multiple alts end together: true ambiguity",
         NoViableAlt => "no viable alt",
     };
-}
-
-fn find_parser_rule(grammar: &Grammar, name: &String) -> Option<ParserRule> {
-    for let r of &grammar.parser_rules {
-        if r.name == *name {
-            return Option::<ParserRule>::Some(*r);
-        }
-    }
-    return null;
 }
 
 fn push_spaces(out: &mut String, n: i32) {

@@ -1893,12 +1893,7 @@ struct LrDispatchSide {
 }
 
 fn lr_atn_has_overlap_group(lr_dispatch: &LrDispatchData) -> bool {
-    for let group of &lr_dispatch.groups {
-        if group.len() >= 2 {
-            return true;
-        }
-    }
-    return false;
+    return lr_dispatch.groups.iter().any(|group| group.len() >= 2);
 }
 
 /// `let mut` only where `emit_lr_atn_group_repick` will overwrite `_atn_alt`,
@@ -2819,12 +2814,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
 /// first token enter longest-match commit), lenient gate, and the
 /// `sg_<gc>_done` / `sg_<gc>` block structure.
 fn is_wildcard_alt(indices: &List<i32>, alt_index: i32) -> bool {
-    for let idx of indices {
-        if *idx == alt_index {
-            return true;
-        }
-    }
-    return false;
+    return indices.iter().any(|idx| *idx == alt_index);
 }
 
 fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenContext, fail_stmt: &String, lenient: bool) {
@@ -3517,12 +3507,7 @@ fn rule_body_needs_start(has_overlaps: bool, groups: &List<List<i32>>) -> bool {
     if !has_overlaps {
         return true;
     }
-    for let g of groups {
-        if g.len() == 1 {
-            return true;
-        }
-    }
-    return false;
+    return groups.iter().any(|g| g.len() == 1);
 }
 
 fn gen_parse_fn_named(
@@ -4206,12 +4191,7 @@ fn alt_initial_gate_conditions(alt: &Alternative, ctx: &GenContext) -> List<Stri
 /// Whether any alt in an `Ambiguous` overlap group carries a gateable
 /// alt-initial predicate.
 fn ambiguous_group_has_gate(amb_alts: &List<i32>, alts: &List<Alternative>, ctx: &GenContext) -> bool {
-    for let idx of amb_alts {
-        if !alt_initial_gate_conditions(&alts[*idx], ctx).is_empty() {
-            return true;
-        }
-    }
-    return false;
+    return amb_alts.iter().any(|idx| !alt_initial_gate_conditions(&alts[*idx], ctx).is_empty());
 }
 
 /// Whether every alt in an overlap group matches the same terminal sequence, so

@@ -391,14 +391,14 @@ fn rule_member_expr(
             `${*handle}.text_between(${rule_span_lo_local(&binding)}, ${rule_span_hi_local(&binding)})`,
         );
     }
-    let target = match find_rule(rules, &r.rule_name) {
+    let target = match rules.iter().find(|c| c.name == r.rule_name) {
         Some(t) => t,
         None => {
             builtin::cold_path();
             return Result::Err(`$${r.name}: unknown referenced rule '${r.rule_name}'`);
         },
     };
-    if !rule_returns_vals(&target) {
+    if !rule_returns_vals(target) {
         builtin::cold_path();
         return Result::Err(
             `$${r.name}: rule '${r.rule_name}' does not expose a value channel (needs single-alt + defaultable returns/locals)`,
@@ -406,7 +406,7 @@ fn rule_member_expr(
     }
     return match &r.member {
         Some(m) => {
-            if field_default(&target, m) matches { Some(_) } {
+            if field_default(target, m) matches { Some(_) } {
                 Result::Ok(`${binding}.${*m}`);
             } else {
                 Result::Err(`$${r.name}.${*m}: not an emittable value-channel field of '${r.rule_name}'`);
@@ -414,15 +414,6 @@ fn rule_member_expr(
         },
         None => Result::Ok(binding),
     };
-}
-
-fn find_rule(rules: &List<ParserRule>, name: &String) -> Option<ParserRule> {
-    for let rule of rules {
-        if rule.name == *name {
-            return Option::Some(*rule);
-        }
-    }
-    return null;
 }
 
 /// The `wado_type_default` of a rule's returns/locals field named `name`, or
@@ -441,27 +432,15 @@ fn field_type(rule: &ParserRule, name: &String) -> String {
     };
 }
 
-fn find_field(rule: &ParserRule, name: &String) -> Option<AttrDecl> {
-    for let d of &rule.returns_decls {
-        if d.name == *name {
-            return Option::Some(*d);
-        }
+fn find_field(rule: &ParserRule, name: &String) -> Option<&AttrDecl> with stores[rule] {
+    if let Some(d) = rule.returns_decls.iter().find(|d| d.name == *name) {
+        return Option::Some(d);
     }
-    for let d of &rule.locals_decls {
-        if d.name == *name {
-            return Option::Some(*d);
-        }
-    }
-    return null;
+    return rule.locals_decls.iter().find(|d| d.name == *name);
 }
 
 fn is_arg(rule: &ParserRule, name: &String) -> bool {
-    for let d of &rule.args {
-        if d.name == *name {
-            return true;
-        }
-    }
-    return false;
+    return rule.args.iter().any(|d| d.name == *name);
 }
 
 /// Whether a rule exposes a value channel to callers (a defaultable
@@ -477,12 +456,8 @@ pub fn rule_returns_vals(rule: &ParserRule) -> bool {
 /// surface level so the value-channel decision can exclude LR rules without a
 /// lowered `Rule`.
 pub fn rule_is_left_recursive(rule: &ParserRule) -> bool {
-    for let alt of &rule.alternatives {
-        if !alt.elements.is_empty() && is_self_ref_element(&alt.elements[0], &rule.name) {
-            return true;
-        }
-    }
-    return false;
+    return rule.alternatives.iter().any(|alt| !alt.elements.is_empty()
+        && is_self_ref_element(&alt.elements[0], &rule.name));
 }
 
 /// Whether a rule exposes an emittable value channel: a returns / locals field

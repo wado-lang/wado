@@ -1890,12 +1890,7 @@ pub fn is_nullable(elem: &Element) -> bool {
 }
 
 pub fn sets_overlap(a: &List<String>, b: &List<String>) -> bool {
-    for let x of a {
-        if b.contains(x) {
-            return true;
-        }
-    }
-    return false;
+    return a.iter().any(|x| b.contains(x));
 }
 
 /// Append-and-dedup union of two token-kind arrays, preserving the

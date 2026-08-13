@@ -63,12 +63,9 @@ pub struct LatnResult {
 /// non-greedy repeat whose body recurses into its owning rule). Gates the
 /// whole lexer-ATN path: builder, blob, runtime fragment.
 pub fn grammar_needs_latn(grammar: &Grammar) -> bool {
-    for let rule of &grammar.lexer_rules {
-        if !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules) {
-            return true;
-        }
-    }
-    return false;
+    return grammar.lexer_rules.iter().any(
+        |rule| !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules),
+    );
 }
 
 /// A lexer rule is ATN-class when a non-greedy repeat *directly in its body*

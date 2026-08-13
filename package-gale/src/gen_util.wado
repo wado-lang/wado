@@ -531,12 +531,7 @@ pub fn case_names_for_rule(alts: &List<Alternative>) -> List<String> {
 
 /// Return `true` when `first` contains `token` (linear scan).
 pub fn first_contains(first: &List<String>, token: &String) -> bool {
-    for let item of first {
-        if *item == *token {
-            return true;
-        }
-    }
-    return false;
+    return first.iter().any(|item| *item == *token);
 }
 
 /// Append every token in `source` to `arr`, skipping duplicates already in `arr`.

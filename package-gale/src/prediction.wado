@@ -228,12 +228,7 @@ fn prediction_contains_ambiguous(node: &PredictionNode) -> bool {
         Ambiguous(_) => true,
         Consume(c) => prediction_contains_ambiguous(&c.child),
         Dispatch(d) => {
-            for let b of &d.branches {
-                if prediction_contains_ambiguous(&b.child) {
-                    return true;
-                }
-            }
-            return false;
+            return d.branches.iter().any(|b| prediction_contains_ambiguous(&b.child));
         },
         Leaf(_) => false,
     };

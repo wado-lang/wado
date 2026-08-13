@@ -192,12 +192,7 @@ fn rule_calls_super(rule: &LexerRule, all_rules: &List<LexerRule>, needle: &Stri
         return false;
     }
     visited.push(rule.name);
-    for let alt of &rule.body {
-        if alt_calls_super(alt, all_rules, needle, visited) {
-            return true;
-        }
-    }
-    return false;
+    return rule.body.iter().any(|alt| alt_calls_super(alt, all_rules, needle, visited));
 }
 
 fn alt_calls_super(
@@ -211,12 +206,7 @@ fn alt_calls_super(
             return true;
         }
     }
-    for let e of &alt.elements {
-        if elem_calls_super(e, all_rules, needle, visited) {
-            return true;
-        }
-    }
-    return false;
+    return alt.elements.iter().any(|e| elem_calls_super(e, all_rules, needle, visited));
 }
 
 fn elem_calls_super(
