@@ -1761,13 +1761,12 @@ impl TypeTable {
 
     /// If `type_id` is a `GenericResource`, return `(name, module_source, type_args)`.
     pub fn as_generic_resource(&self, type_id: TypeId) -> Option<(&str, &ModuleSource, &[TypeId])> {
-        if let ResolvedType::GenericResource {
-            name,
-            module_source,
-            type_args,
-        } = self.get(type_id)
-        {
-            Some((name.as_str(), module_source, type_args.as_slice()))
+        if let ResolvedType::GenericResource { def, type_args } = self.get(type_id) {
+            Some((
+                self.def_name(*def),
+                self.def_module(*def),
+                type_args.as_slice(),
+            ))
         } else {
             None
         }
@@ -1811,8 +1810,8 @@ impl TypeTable {
     pub fn is_tuple(&self, id: TypeId) -> bool {
         matches!(
             self.get(id),
-            ResolvedType::GenericInstance { name, .. }
-                if Self::is_tuple_type(name)
+            ResolvedType::GenericInstance { def, .. }
+                if Self::is_tuple_type(self.def_name(*def))
         )
     }
 
@@ -1908,21 +1907,16 @@ impl TypeTable {
     pub fn make_monomorphized_struct(
         &mut self,
         name: String,
-        module_source: ModuleSource,
-        base_name: String,
+        def: StructDef,
         type_args: Vec<TypeId>,
     ) -> TypeId {
         debug_assert_eq!(
             name,
-            self.struct_rendered_name(&base_name, &type_args),
+            self.struct_rendered_name(def, &type_args),
             "the caller's rendering must be what `struct_rendered_name` derives"
         );
         let _ = name;
-        self.intern(ResolvedType::Struct {
-            decl_name: base_name,
-            module_source,
-            type_args,
-        })
+        self.intern(ResolvedType::Struct { def, type_args })
     }
 
     /// Intern the instantiation of `base_name` with `type_args`, deriving its
@@ -2087,11 +2081,10 @@ impl TypeTable {
     pub fn find_generic_instance(&self, name: &str, type_args: &[TypeId]) -> Option<TypeId> {
         for (type_id, resolved) in self.all_types() {
             if let ResolvedType::GenericInstance {
-                name: gname,
+                def,
                 type_args: gargs,
-                ..
             } = resolved
-                && gname == name
+                && self.def_name(*def) == name
                 && gargs == type_args
             {
                 return Some(type_id);
@@ -2100,18 +2093,12 @@ impl TypeTable {
         None
     }
 
-    pub fn make_enum(&mut self, name: String, module_source: ModuleSource) -> TypeId {
-        self.intern(ResolvedType::Enum {
-            name,
-            module_source,
-        })
+    pub fn make_enum(&mut self, def: crate::defs::DefId) -> TypeId {
+        self.intern(ResolvedType::Enum { def })
     }
 
-    pub fn make_resource(&mut self, name: String, module_source: ModuleSource) -> TypeId {
-        self.intern(ResolvedType::Resource {
-            name,
-            module_source,
-        })
+    pub fn make_resource(&mut self, def: crate::defs::DefId) -> TypeId {
+        self.intern(ResolvedType::Resource { def })
     }
 
     /// Replace the type at an existing `TypeId` with a new type.
@@ -2956,29 +2943,13 @@ impl TypeTable {
     /// Create a generic instance (e.g., `Box<i32>`)
     pub fn make_generic_instance(
         &mut self,
-        name: String,
-        module_source: ModuleSource,
+        def: crate::defs::DefId,
         type_args: Vec<TypeId>,
     ) -> TypeId {
-        // Record which declaration the instantiation came from, now, while that
-        // declaration's own type is still interned. Deriving it later — by
-        // looking the base up by name — depends on the base surviving
-        // `prune`, and after monomorphization only the instances are reachable,
-        // so the identity would go missing exactly where codegen needs it.
-        let base = self
-            .find_decl_type_by_name(&name, &module_source)
-            .and_then(|base| self.symbol_by_type.get(base).copied());
-        let id = self.intern(ResolvedType::GenericInstance {
-            name,
-            module_source,
-            type_args,
-        });
-        if let Some(decl) = base
-            && self.symbol_by_type.get(id).is_none()
-        {
-            self.register_mono_type(decl, id);
-        }
-        id
+        // The instantiation carries the declaration it came from, so nothing
+        // has to be registered beside it and nothing re-derives the answer
+        // from a spelling whose base `prune` may already have dropped.
+        self.intern(ResolvedType::GenericInstance { def, type_args })
     }
 
     /// Create an List<T> type (`GenericInstance` { name: "List", ... })
@@ -2993,25 +2964,13 @@ impl TypeTable {
     }
 
     /// Create a newtype wrapping a base type
-    pub fn make_newtype(
-        &mut self,
-        name: String,
-        module_source: ModuleSource,
-        base_type: TypeId,
-    ) -> TypeId {
-        self.intern(ResolvedType::Newtype {
-            name,
-            module_source,
-            base_type,
-        })
+    pub fn make_newtype(&mut self, def: crate::defs::DefId, base_type: TypeId) -> TypeId {
+        self.intern(ResolvedType::Newtype { def, base_type })
     }
 
     /// Create a flags type (bitmask over u32)
-    pub fn make_flags(&mut self, name: String, module_source: ModuleSource) -> TypeId {
-        self.intern(ResolvedType::Flags {
-            name,
-            module_source,
-        })
+    pub fn make_flags(&mut self, def: crate::defs::DefId) -> TypeId {
+        self.intern(ResolvedType::Flags { def })
     }
 
     /// Erase all `Newtype` and `Flags` entries from the type table by populating
