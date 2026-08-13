@@ -615,8 +615,36 @@ compiles, passes the suite, and ends with a mechanical completion check.
       or-patterns — `Struct { decl_name: name, .. } | Variant { name, .. } |
       Resource { name, .. } => …` binds one `name` across alternatives, so an
       alternative whose field changed no longer binds it and the arm has to be
-      split. Flipping `Resource` alone, the smallest at 27, would split arms
-      shared with variants that have not moved. They go together.
+      split. All 115 such groups mix more than one nominal variant, and 43 of
+      them include `Struct`. Flipping `Resource` alone, the smallest at 27,
+      would split arms shared with variants that have not moved. They go
+      together.
+
+      Flipping all eight at once was tried and measured: **754 compile errors**
+      in `wado-compiler`, concentrated in `tir.rs` (176), the elaborator (about
+      250 over `method_call`, `expr`, `reify`, `stmt`, `method_lookup`,
+      `trait_query`, `operators`), and thinning out across the optimizer,
+      monomorphizer, synthesis and codegen. That is the whole change in one
+      non-compiling step, which is more than a session can verify, so it lands
+      the other way round:
+
+      - the head types (`StructDef`, `AnonStructId`) and the renderer land
+        first — `TypeTable` holds an `Arc<DefTable>` and answers `def_name` /
+        `def_module`, which is what lets a flipped variant spell itself at all;
+      - each nominal variant then gains its `def` **beside** the pair, so every
+        construction site is forced to produce an identity while every reader
+        still compiles;
+      - readers move to `def` file by file, each step green;
+      - the pair fields are deleted last, which is when the criterion is met.
+
+      The construction sites are the real work, not the readers: 107 calls to
+      `make_struct` / `make_variant` / `make_enum` / `make_flags` /
+      `make_newtype` / `make_resource` / `make_generic_instance` /
+      `make_monomorphized_struct*`. An elaborator caller has the identity from
+      the site it resolved; a `monomorphize::substitute` caller builds a type
+      out of a mangled spelling and has nothing, so it has to reach the base
+      declaration through `decl_of_type`. Those are the sites this design is
+      actually about, and no shim can carry them.
 
       Do not trust a grep for the pair shape. It also matches
       `ExprKind::GlobalVarGet`, which is a NIR node carrying a global's name —

@@ -750,6 +750,13 @@ pub struct TypeTable {
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
     variant_case_index: IndexMap<(String, ModuleSource), Vec<(String, u32, TypeId)>>,
+    /// Every declaration in the program, for rendering a nominal type's head.
+    ///
+    /// A name comes out of an identity and never goes back in. Attached where
+    /// [`crate::resolve::Resolutions`] is built, and again on the snapshot
+    /// restore path with the seeded table — which is what keeps a `DefId` a
+    /// cached type carries pointing at the same declaration.
+    defs: std::sync::Arc<crate::defs::DefTable>,
 }
 
 impl Default for TypeTable {
@@ -865,6 +872,7 @@ impl TypeTable {
             symbol_by_type: TypeMap::default(),
             bound_driven_synth_requests: IndexSet::default(),
             variant_case_index: IndexMap::default(),
+            defs: std::sync::Arc::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -1029,6 +1037,30 @@ impl TypeTable {
     /// newtype, resource). Both directions of the map are populated:
     /// forward `type_by_symbol[key] = type_id` and inverse
     /// `symbol_by_type[type_id] = key`.
+    /// Attach the program's declarations, so a nominal type can render its
+    /// head once it carries one instead of a spelling.
+    pub fn attach_defs(&mut self, defs: std::sync::Arc<crate::defs::DefTable>) {
+        self.defs = defs;
+    }
+
+    /// Every declaration in the program.
+    #[must_use]
+    pub fn defs(&self) -> &crate::defs::DefTable {
+        &self.defs
+    }
+
+    /// The name `def` writes — a rendering, for a diagnostic or a mangle.
+    #[must_use]
+    pub fn def_name(&self, def: crate::defs::DefId) -> &str {
+        self.defs.name(def)
+    }
+
+    /// The module that declares `def`.
+    #[must_use]
+    pub fn def_module(&self, def: crate::defs::DefId) -> &ModuleSource {
+        self.defs.module(def)
+    }
+
     pub fn register_decl_type(&mut self, key: crate::ast::AstId, type_id: TypeId) {
         self.type_by_symbol.insert(key, type_id);
         self.symbol_by_type.set_growing(type_id, key);

@@ -157,6 +157,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let seed = snapshot_state.map(|s| s.tysys.resolutions.defs().as_ref());
             let defs =
                 std::sync::Arc::new(crate::defs::DefTable::build_seeded(seed, modules, symbols));
+            // The type table renders a nominal type's head out of the
+            // declaration it carries, so it reads the same identities.
+            type_table.borrow_mut().attach_defs(defs.clone());
             Rc::new(crate::resolve::Resolutions::build(modules, symbols, defs))
         };
 
