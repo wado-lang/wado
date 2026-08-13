@@ -218,6 +218,26 @@ impl DefTable {
             });
         }
         for (module, ast) in modules {
+            // The tuple family declares a type the symbol table skips — it has
+            // no written name, only the `[]` every mangler spells it with — so
+            // it would otherwise be the one type in the language with no
+            // declaration to name it.
+            for item in &ast.items {
+                if let Item::TupleTypeDecl(decl) = item
+                    && !table.by_ast_id.contains_key(&decl.id)
+                {
+                    table.declare(Def {
+                        ast_id: decl.id,
+                        module: module.clone(),
+                        name: crate::name::TUPLE_TYPE_NAME.to_string(),
+                        kind: DefKind::BuiltinType,
+                        visibility: decl.visibility,
+                        span: Some(decl.span),
+                        parent: None,
+                        members: Vec::new(),
+                    });
+                }
+            }
             table.declare_members(module, ast);
             let mut locals = LocalItems {
                 table: &mut table,
