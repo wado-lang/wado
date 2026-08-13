@@ -281,12 +281,20 @@ Regions:
 
 ### Values the engine cannot represent
 
-- A place-valued field, so an aggregate can carry a `&mut`. Today such an
+- A place-valued field, so an aggregate can carry a reference. Today such an
   aggregate is simply not a constant, since a field holding the referent's
   value would take a write meant for the referent. What the field needs to
   hold is the place the frame already names elsewhere, which would make the
   alias machinery reach through a struct as well as through a local.
-  `Formatter { buf: &mut __r }` is the shape waiting on this.
+  `Formatter { buf: &mut __r }` is the shape waiting on this, and so is every
+  result a `stores` callee hands back.
+
+  The refusal is whole-value, which costs more than the alias it protects: a
+  scalar field cannot name storage, so the scalars such a result carries are
+  safe to project and are refused anyway. `Array::slice` is where that shows —
+  it returns the backing it was given alongside two bounds it computed itself,
+  and the bounds stop folding because the backing shares their aggregate.
+  Naming the place per field is what separates them.
 - An aggregate that is not a byte sequence has no way back into the IR. A
   `List<T>` of scalars would want the `ArrayLiteral` shape, and a plain struct
   a `StructLiteral` over its materialized fields; both are exits to add beside

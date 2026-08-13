@@ -25,8 +25,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, Operand, PatId, PatKind, StmtId,
-    StmtKind, StmtNode,
+    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, Operand, PatId, PatKind,
+    StmtId, StmtKind, StmtNode,
 };
 use crate::nir_value_graph::ValueKind;
 use crate::tir::{TypeId, TypeTable};
