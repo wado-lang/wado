@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786623457055,
+  "lastUpdate": 1786660082651,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47665,6 +47665,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6eec2c0628961d088bac3cd0ef513853c581218d"
         },
         "date": 1786623456507,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265490,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d68c8a823205154289b4aa854ebbe25eaf0a6a6a",
+          "message": "Merge pull request #1803 from wado-lang/claude/wado-compiler-comment-cleanup-ocunsx\n\ndocs(compiler): condense long comments in wado-compiler/src",
+          "timestamp": "2026-08-14T07:16:04+09:00",
+          "tree_id": "464226f540d65414a5a66d3ff1ee4ed165a2960d",
+          "url": "https://github.com/wado-lang/wado/commit/d68c8a823205154289b4aa854ebbe25eaf0a6a6a"
+        },
+        "date": 1786660082248,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
