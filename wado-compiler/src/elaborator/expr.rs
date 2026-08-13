@@ -4601,10 +4601,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             if tt.as_option(return_type).is_some() {
                 None
-            } else if let ResolvedType::GenericInstance {
-                name, type_args, ..
-            } = tt.get(return_type)
-                && name == "Result"
+            } else if let ResolvedType::GenericInstance { type_args, .. } = tt.get(return_type)
+                && tt.is_result(return_type)
                 && type_args.len() == 2
             {
                 Some(type_args[1])
@@ -4635,10 +4633,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Determine whether the operand is Option<T> or Result<T, E>
         let is_option = tt.as_option(inner_type).is_some();
-        let is_result = matches!(
-            tt.get(inner_type),
-            ResolvedType::GenericInstance { name, .. } if name == "Result"
-        );
+        let is_result = tt.is_result(inner_type);
         drop(tt);
 
         if !is_option && !is_result {
@@ -4653,10 +4648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = ctx.return_type;
         let tt = self.tysys.type_table.borrow();
         let ret_is_option = tt.as_option(return_type).is_some();
-        let ret_is_result = matches!(
-            tt.get(return_type),
-            ResolvedType::GenericInstance { name, .. } if name == "Result"
-        );
+        let ret_is_result = tt.is_result(return_type);
         drop(tt);
 
         if is_option && !ret_is_option {
