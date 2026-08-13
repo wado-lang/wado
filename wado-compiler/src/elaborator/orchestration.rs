@@ -637,7 +637,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 &mut type_table.borrow_mut(),
                                 &lookup,
                             );
-                            let newtype_id ={ let def = type_table.borrow_mut().decl_named_in(&newtype_decl.name, &module_source).expect("the declaration this type names exists"); type_table.borrow_mut().make_newtype(def, base_type_id) };
+                            let newtype_id = {
+                                let def = type_table
+                                    .borrow_mut()
+                                    .decl_named_in(&newtype_decl.name, &module_source)
+                                    .expect("the declaration this type names exists");
+                                type_table.borrow_mut().make_newtype(def, base_type_id)
+                            };
                             type_table
                                 .borrow_mut()
                                 .register_decl_type(newtype_decl.id, newtype_id);
@@ -754,9 +760,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             continue;
                         }
                         // Create a distinct Flags type (not a newtype over u32)
-                        let flags_type ={ let def = type_table
-                            .borrow_mut().decl_named_in(&flags_decl.name, &module_source).expect("the declaration this type names exists"); type_table
-                            .borrow_mut().make_flags(def) };
+                        let flags_type = {
+                            let def = type_table
+                                .borrow_mut()
+                                .decl_named_in(&flags_decl.name, &module_source)
+                                .expect("the declaration this type names exists");
+                            type_table.borrow_mut().make_flags(def)
+                        };
                         type_table
                             .borrow_mut()
                             .register_decl_type(flags_decl.id, flags_type);

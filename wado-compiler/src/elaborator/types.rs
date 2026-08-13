@@ -2308,10 +2308,7 @@ impl<'a> TypeLookup<'a> {
     /// The declaration is the key: nothing here re-resolves a spelling, so a
     /// caller that reached `def` off a type cannot land on another module's
     /// same-named struct.
-    pub(super) fn struct_fields_of(
-        &self,
-        def: crate::defs::DefId,
-    ) -> Option<&'a StructFieldInfo> {
+    pub(super) fn struct_fields_of(&self, def: crate::defs::DefId) -> Option<&'a StructFieldInfo> {
         self.local_item_struct_fields
             .get(&def)
             .or_else(|| self.all_struct_fields.get(&def))

@@ -581,7 +581,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (struct_name, struct_module_source, receiver_type_args, newtype_base) = match &base_type
         {
             ResolvedType::Struct { .. } | ResolvedType::Resource { .. } => {
-                let (name, module_source) = self.tysys.type_table.borrow()
+                let (name, module_source) = self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(base_type_id)
                     .expect("a nominal type names a declaration");
                 (name, Some(module_source), None, None)
@@ -679,7 +682,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args: newtype_args,
                 ..
             } => {
-                let (name, module_source) = &self.tysys.type_table.borrow()
+                let (name, module_source) = &self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(base_type_id)
                     .expect("a newtype names a declaration");
                 let (head, own_type_args) = if !newtype_args.is_empty() {
@@ -702,8 +708,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Flags: first try looking up methods on the flags type itself,
             // then fall back to u32 for method inheritance
             ResolvedType::Flags { .. } => (
-                self.tysys.type_table.borrow().nominal_head(base_type_id).expect("a flags type names a declaration").0,
-                Some(self.tysys.type_table.borrow().nominal_head(base_type_id).expect("a flags type names a declaration").1),
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(base_type_id)
+                    .expect("a flags type names a declaration")
+                    .0,
+                Some(
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(base_type_id)
+                        .expect("a flags type names a declaration")
+                        .1,
+                ),
                 None,
                 Some(TypeTable::U32),
             ),
@@ -726,7 +744,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), None, None, None),
             // Enum types - search for impl blocks by enum name
             ResolvedType::Enum { .. } => {
-                let (name, module_source) = self.tysys.type_table.borrow()
+                let (name, module_source) = self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(base_type_id)
                     .expect("an enum names a declaration");
                 (name, Some(module_source), None, None)
@@ -1577,7 +1598,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::GenericResource { .. }
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. }
-            | ResolvedType::Variant { .. } => self.tysys.type_table.borrow()
+            | ResolvedType::Variant { .. } => self
+                .tysys
+                .type_table
+                .borrow()
                 .nominal_head(rt)
                 .map(|(n, _)| n)
                 .unwrap_or_default(),
@@ -3102,9 +3126,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
-                self.tysys.type_table.borrow().nominal_head(base_type_id).map(|(n, _)| n)?
-            }
+            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_head(base_type_id)
+                .map(|(n, _)| n)?,
             _ => return None, // Not a struct type
         };
 
@@ -3133,16 +3160,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .clone()
         {
             ResolvedType::Struct { .. } => {
-                let (n, m) = self.tysys.type_table.borrow()
+                let (n, m) = self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(output_base_type_id)
                     .expect("a struct names a declaration");
                 (n, m, None)
             }
             ResolvedType::GenericInstance { type_args, .. } => (
-                self.tysys.type_table.borrow().nominal_head(output_base_type_id)
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(output_base_type_id)
                     .expect("a generic instance names a declaration")
                     .0,
-                self.tysys.type_table.borrow().nominal_head(output_base_type_id)
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(output_base_type_id)
                     .expect("a generic instance names a declaration")
                     .1,
                 if type_args.is_empty() {

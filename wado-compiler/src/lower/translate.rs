@@ -841,52 +841,54 @@ impl FunctionTranslator<'_, '_> {
         //     positional fields `0..n` typed by the tuple's element types.
         // Any other type falls through to the default single-statement lowering.
         let inner_resolved = self.base.type_table.borrow().get(inner_type_id).clone();
-        let fields: Vec<(String, u32, tir::TypeId)> = if let crate::tir::ResolvedType::Struct {
-            decl_name,
-            module_source,
-            type_args,
-            ..
-        } = inner_resolved
-        {
-            let name = self
-                .base
-                .type_table
-                .borrow()
-                .struct_rendered_name(&decl_name, &type_args);
-            self.base
-                .struct_fields_map
-                .get(&(name, module_source))?
-                .iter()
-                .map(|f| (f.name.clone(), f.index, f.type_id))
-                .collect()
-        } else {
-            let (list_elem, tuple_elems) = {
-                let tt = self.base.type_table.borrow();
-                (tt.as_list(inner_type_id), tt.as_tuple(inner_type_id))
-            };
-            if let Some(elem) = list_elem {
-                let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
-                vec![
-                    (
-                        SeqField::Backing.field_name().to_string(),
-                        SeqField::Backing.index(),
-                        repr_ty,
-                    ),
-                    (
-                        SeqField::Len.field_name().to_string(),
-                        SeqField::Len.index(),
-                        crate::tir::TypeTable::I32,
-                    ),
-                ]
-            } else {
-                let elems = tuple_elems?;
-                elems
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, ty)| (i.to_string(), i as u32, ty))
+        let fields: Vec<(String, u32, tir::TypeId)> =
+            if let crate::tir::ResolvedType::Struct { def, type_args } = inner_resolved {
+                let decl_name = self.base.type_table.borrow().struct_head_name(def);
+                let module_source = self
+                    .base
+                    .type_table
+                    .borrow()
+                    .struct_head_module(def)
+                    .clone();
+                let name = self
+                    .base
+                    .type_table
+                    .borrow()
+                    .struct_rendered_name(&decl_name, &type_args);
+                self.base
+                    .struct_fields_map
+                    .get(&(name, module_source))?
+                    .iter()
+                    .map(|f| (f.name.clone(), f.index, f.type_id))
                     .collect()
-            }
-        };
+            } else {
+                let (list_elem, tuple_elems) = {
+                    let tt = self.base.type_table.borrow();
+                    (tt.as_list(inner_type_id), tt.as_tuple(inner_type_id))
+                };
+                if let Some(elem) = list_elem {
+                    let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
+                    vec![
+                        (
+                            SeqField::Backing.field_name().to_string(),
+                            SeqField::Backing.index(),
+                            repr_ty,
+                        ),
+                        (
+                            SeqField::Len.field_name().to_string(),
+                            SeqField::Len.index(),
+                            crate::tir::TypeTable::I32,
+                        ),
+                    ]
+                } else {
+                    let elems = tuple_elems?;
+                    elems
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, ty)| (i.to_string(), i as u32, ty))
+                        .collect()
+                }
+            };
         if fields.is_empty() {
             return None;
         }
@@ -1787,23 +1789,18 @@ impl FunctionTranslator<'_, '_> {
                     .box_plan
                     .get_box_inner_type(peeled)
                     .or_else(|| match tt.get(peeled) {
-                        tir::ResolvedType::Struct {
-                            decl_name: base,
-                            module_source,
-                            type_args,
-                            ..
-                        } if !type_args.is_empty() && *base == box_name => self
-                            .base
-                            .struct_fields_map
-                            .get(&(
-                                self.base
-                                    .type_table
-                                    .borrow()
-                                    .struct_rendered_name(base, type_args),
-                                module_source.clone(),
-                            ))
-                            .and_then(|fields| fields.first())
-                            .map(|f| f.type_id),
+                        tir::ResolvedType::Struct { def, type_args }
+                            if !type_args.is_empty() && tt.struct_head_name(*def) == box_name =>
+                        {
+                            self.base
+                                .struct_fields_map
+                                .get(&(
+                                    tt.struct_rendered_name(*def, type_args),
+                                    tt.struct_head_module(*def).clone(),
+                                ))
+                                .and_then(|fields| fields.first())
+                                .map(|f| f.type_id)
+                        }
                         _ => None,
                     })
                     .unwrap_or(peeled);
@@ -1811,13 +1808,10 @@ impl FunctionTranslator<'_, '_> {
                 // A plain variant carries the tag read as a trait method on its
                 // declaration. A generic one has no instantiated declaration,
                 // so it uses the per-instance helper minted post-monomorphize.
-                let module = match tt.get(variant_ty) {
-                    tir::ResolvedType::Variant { module_source, .. }
-                    | tir::ResolvedType::GenericInstance { module_source, .. } => {
-                        module_source.clone()
-                    }
-                    other => panic!("variant_tag marker on non-variant type: {other:?}"),
-                };
+                let module = tt
+                    .nominal_head(variant_ty)
+                    .map(|(_, m)| m)
+                    .unwrap_or_else(|| panic!("variant_tag marker on a non-variant type"));
                 let items = tt.compiler_items();
                 let name = match tt.get(variant_ty) {
                     tir::ResolvedType::GenericInstance { .. } => {
@@ -1879,10 +1873,10 @@ impl FunctionTranslator<'_, '_> {
                     &tt.mangle_type_arg_for_generic(struct_ty),
                     &tt.mangle_type_arg_for_generic(field_ty),
                 );
-                let module = match tt.get(struct_ty) {
-                    tir::ResolvedType::Struct { module_source, .. } => module_source.clone(),
-                    other => panic!("struct_field_get marker on non-struct type: {other:?}"),
-                };
+                let module = tt
+                    .nominal_head(struct_ty)
+                    .map(|(_, m)| m)
+                    .unwrap_or_else(|| panic!("struct_field_get marker on a non-struct type"));
                 (name, module)
             };
 
@@ -1941,11 +1935,10 @@ impl FunctionTranslator<'_, '_> {
             // An instantiated generic variant stays spelled as a
             // `GenericInstance`; its bridges are homed in the declaration's
             // module.
-            let module = match tt.get(variant_ty) {
-                tir::ResolvedType::Variant { module_source, .. }
-                | tir::ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
-                other => panic!("case bridge marker on non-variant type: {other:?}"),
-            };
+            let module = tt
+                .nominal_head(variant_ty)
+                .map(|(_, m)| m)
+                .unwrap_or_else(|| panic!("case bridge marker on a non-variant type"));
             (name, module)
         };
 

@@ -632,8 +632,7 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
         // `element<T: Serialize>(&mut self, value: &T)` the first arg is `&T`,
         // so unwrap references (and an auto-boxed `Box<T>`) to reach T.
         let mut arg_type = self.type_table.peel_refs(first_arg.expr.type_id);
-        if let ResolvedType::GenericInstance { def, type_args: ta } =
-            self.type_table.get(arg_type)
+        if let ResolvedType::GenericInstance { def, type_args: ta } = self.type_table.get(arg_type)
             && self.type_table.def_name(*def) == "Box"
             && ta.len() == 1
         {
@@ -1356,10 +1355,8 @@ impl Monomorphizer {
                                     let arg_idx = pi - 1;
                                     if let Some(arg) = args.get(arg_idx) {
                                         let mut arg_type = type_table.peel_refs(arg.expr.type_id);
-                                        if let ResolvedType::GenericInstance {
-                                            def,
-                                            type_args: ta,
-                                        } = type_table.get(arg_type)
+                                        if let ResolvedType::GenericInstance { def, type_args: ta } =
+                                            type_table.get(arg_type)
                                             && type_table.def_name(*def) == "Box"
                                             && ta.len() == 1
                                         {
@@ -4846,9 +4843,10 @@ fn try_lower_comparison(
     let operand_type = type_table.get(left.type_id);
     let (impl_type_args, type_module_source): (Vec<FqTypeName>, Option<ModuleSource>) =
         match operand_type {
-            ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
-                (vec![], type_table.nominal_head(left.type_id).map(|(_, m)| m))
-            }
+            ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => (
+                vec![],
+                type_table.nominal_head(left.type_id).map(|(_, m)| m),
+            ),
             ResolvedType::GenericInstance { def, type_args } => {
                 let name = &type_table.def_name(*def).to_string();
                 let module_source = &type_table.def_module(*def).clone();

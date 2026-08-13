@@ -263,13 +263,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // generic struct (its own usage sites mint separate
         // `GenericInstance` TypeIds; this one exists so bare-name lookups
         // like `type_id_of_decl` have something to find).
-        let type_id ={ let def = self
-            .tysys
-            .type_table
-            .borrow_mut().decl_named_in(&mangled_name, &module_source).expect("the declaration this type names exists"); self
-            .tysys
-            .type_table
-            .borrow_mut().make_struct(crate::tir::StructDef::Decl(def)) };
+        let type_id = {
+            let def = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .decl_named_in(&mangled_name, &module_source)
+                .expect("the declaration this type names exists");
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_struct(crate::tir::StructDef::Decl(def))
+        };
         self.tysys
             .type_table
             .borrow_mut()
@@ -320,7 +325,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let module_source = self.current_module_source.clone();
         let base_type_id = self.resolve_type(&newtype_decl.ty);
         let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
-        let type_id ={ let def = self.tysys.type_table.borrow_mut().decl_named_in(&mangled_name, &module_source).expect("the declaration this type names exists"); self.tysys.type_table.borrow_mut().make_newtype(def, base_type_id) };
+        let type_id = {
+            let def = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .decl_named_in(&mangled_name, &module_source)
+                .expect("the declaration this type names exists");
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_newtype(def, base_type_id)
+        };
         self.tysys
             .type_table
             .borrow_mut()
@@ -439,7 +455,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Check if target type is a struct
                     let target_resolved = self.tysys.type_table.borrow().get(target_type).clone();
                     if let ResolvedType::Struct { .. } = target_resolved {
-                        let (name, module_source) = self.tysys.type_table.borrow()
+                        let (name, module_source) = self
+                            .tysys
+                            .type_table
+                            .borrow()
                             .nominal_head(target_type)
                             .expect("a struct names a declaration");
                         let struct_type = target_type;
@@ -760,14 +779,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Enum { .. } => {
-                let (name, module_source) = &self.tysys.type_table.borrow()
+                let (name, module_source) = &self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(type_id)
                     .expect("an enum names a declaration");
                 self.lookup_enum_case_in(name, module_source)
                     .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name))
             }
             ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
-                let (name, module_source) = &self.tysys.type_table.borrow()
+                let (name, module_source) = &self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(type_id)
                     .expect("a nominal type names a declaration");
                 self.lookup_variant_case_in(name, module_source)
@@ -797,7 +822,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (n, m, None)
             }
             ResolvedType::GenericInstance { type_args, .. } => {
-                let (n, m) = self.tysys.type_table.borrow()
+                let (n, m) = self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(scrutinee_type)
                     .expect("a generic instance names a declaration");
                 (n, m, Some(type_args.len()))
@@ -1529,11 +1557,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let expected = match &resolved_type {
                         ResolvedType::Enum { def } => {
-                            format!("valid case of enum {}", self.tysys.type_table.borrow().def_name(*def))
+                            format!(
+                                "valid case of enum {}",
+                                self.tysys.type_table.borrow().def_name(*def)
+                            )
                         }
                         ResolvedType::Variant { def }
                         | ResolvedType::GenericInstance { def, .. } => {
-                            format!("valid case of variant {}", self.tysys.type_table.borrow().def_name(*def))
+                            format!(
+                                "valid case of variant {}",
+                                self.tysys.type_table.borrow().def_name(*def)
+                            )
                         }
                         _ => "variant or enum case".to_string(),
                     };
@@ -1547,7 +1581,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Handle enum types (no payload, just discriminant matching)
                 if let ResolvedType::Enum { .. } = &resolved_type {
-                    let (name, module_source) = &self.tysys.type_table.borrow()
+                    let (name, module_source) = &self
+                        .tysys
+                        .type_table
+                        .borrow()
                         .nominal_head(scrutinee_type)
                         .expect("an enum names a declaration");
                     if !bindings.is_empty() {
@@ -1612,7 +1649,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let payload_type: TypeId = match &resolved_type {
                     // Non-generic variant
                     ResolvedType::Variant { .. } => {
-                        let (name, module_source) = &self.tysys.type_table.borrow()
+                        let (name, module_source) = &self
+                            .tysys
+                            .type_table
+                            .borrow()
                             .nominal_head(scrutinee_type)
                             .expect("a variant names a declaration");
                         self.get_variant_case_payload_type(
@@ -1625,7 +1665,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     // Generic variant instantiation
                     ResolvedType::GenericInstance { type_args, .. } => {
-                        let (name, module_source) = &self.tysys.type_table.borrow()
+                        let (name, module_source) = &self
+                            .tysys
+                            .type_table
+                            .borrow()
                             .nominal_head(scrutinee_type)
                             .expect("a generic instance names a declaration");
                         // Check if this is a variant (not a struct)
@@ -2592,13 +2635,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::GenericInstance { def, type_args }
                     if self.contains_variant(self.tysys.type_table.borrow().def_name(def)) =>
                 {
-                    let (n, m) = self.tysys.type_table.borrow()
+                    let (n, m) = self
+                        .tysys
+                        .type_table
+                        .borrow()
                         .nominal_head(option_type)
                         .expect("a generic instance names a declaration");
                     Some((n, m, type_args))
                 }
-                ResolvedType::Variant { def } if self.contains_variant(self.tysys.type_table.borrow().def_name(def)) => {
-                    let (n, m) = self.tysys.type_table.borrow()
+                ResolvedType::Variant { def }
+                    if self.contains_variant(self.tysys.type_table.borrow().def_name(def)) =>
+                {
+                    let (n, m) = self
+                        .tysys
+                        .type_table
+                        .borrow()
                         .nominal_head(option_type)
                         .expect("a variant names a declaration");
                     Some((n, m, vec![]))

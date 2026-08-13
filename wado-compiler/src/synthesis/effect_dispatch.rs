@@ -912,13 +912,19 @@ fn build_dispatch_wrapper_function(
         let string_type_id = {
             let tt = type_table.borrow();
             let (string_module, string_struct_name) =
-                tt.compiler_struct_owned(crate::compiler_item::CompilerItem::String);{ let def = tt.decl_named_in(&string_struct_name, &string_module).expect("the declaration this type names exists"); tt.find_struct_type(crate::tir::StructDef::Decl(def)) }
-                .unwrap_or_else(|| {
-                    panic!(
-                        "core:prelude/string.wado String type missing from \
+                tt.compiler_struct_owned(crate::compiler_item::CompilerItem::String);
+            {
+                let def = tt
+                    .decl_named_in(&string_struct_name, &string_module)
+                    .expect("the declaration this type names exists");
+                tt.find_struct_type(crate::tir::StructDef::Decl(def))
+            }
+            .unwrap_or_else(|| {
+                panic!(
+                    "core:prelude/string.wado String type missing from \
                          the package type table at effect-dispatch synthesis"
-                    )
-                })
+                )
+            })
         };
         let message = TirExpr::new(
             TirExprKind::StringLiteral(format!("no handler installed for `{label}::{op_name}`")),

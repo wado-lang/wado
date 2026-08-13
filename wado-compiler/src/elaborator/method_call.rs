@@ -861,7 +861,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => {
-                let (name, module_source) = self.tysys.type_table.borrow()
+                let (name, module_source) = self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(method_impl_type_id)
                     .expect("a nominal type names a declaration");
                 // Qualify the base and the arguments alike, so a concrete-generic
@@ -892,9 +895,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Named by its declaring module: a bare head names no definition,
             // and re-resolution would peel past the impl to the base.
             ResolvedType::Newtype { def, .. }
-                if matched_impl_struct_name.as_deref() == Some(self.tysys.type_table.borrow().def_name(def)) =>
+                if matched_impl_struct_name.as_deref()
+                    == Some(self.tysys.type_table.borrow().def_name(def)) =>
             {
-                let base = self.tysys.type_table.borrow().fq_base_type_name(method_impl_type_id);
+                let base = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .fq_base_type_name(method_impl_type_id);
                 (base.clone(), base, vec![], None)
             }
             // A generic newtype's instantiation carries its arguments beside
@@ -1643,8 +1651,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Handle custom variant construction: Shape::Circle(5.0) or MyVariant::Unit
-        if let ResolvedType::Variant { .. } = self.tysys.type_table.borrow().get(target_type_id).clone() {
-            let (name, module_source) = self.tysys.type_table.borrow()
+        if let ResolvedType::Variant { .. } =
+            self.tysys.type_table.borrow().get(target_type_id).clone()
+        {
+            let (name, module_source) = self
+                .tysys
+                .type_table
+                .borrow()
                 .nominal_head(target_type_id)
                 .expect("a variant names a declaration");
             // Look up the variant case info
@@ -1841,24 +1854,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(target_type_id)
         {
             ResolvedType::Struct { .. } | ResolvedType::Resource { .. } => {
-                let (name, module_source) = self.tysys.type_table.borrow()
+                let (name, module_source) = self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(target_type_id)
                     .expect("a nominal type names a declaration");
-                let fq = self.tysys.type_table.borrow().fq_base_type_name(target_type_id);
+                let fq = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .fq_base_type_name(target_type_id);
                 (name, module_source, fq, vec![])
             }
             // Generic resource types (Future<T>, Stream<T>, etc.) - handle like generic structs
             // for static method resolution: use the base name and type args for substitution.
             ResolvedType::GenericResource { type_args, .. } => {
-                let (name, module_source) = self.tysys.type_table.borrow()
+                let (name, module_source) = self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(target_type_id)
                     .expect("a generic resource names a declaration");
                 let type_arg_names: Vec<FqTypeName> = type_args
                     .iter()
                     .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                     .collect();
-                let mangled =
-                    FqTypeName::declared(&module_source, &name).with_args(type_arg_names);
+                let mangled = FqTypeName::declared(&module_source, &name).with_args(type_arg_names);
                 (name, module_source, mangled, type_args.clone())
             }
             ResolvedType::Primitive(prim) => (
@@ -1878,14 +1900,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             }
             ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => {
-                let (name, module_source) = self.tysys.type_table.borrow()
+                let (name, module_source) = self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(target_type_id)
                     .expect("a nominal type names a declaration");
-                let fq = self.tysys.type_table.borrow().fq_base_type_name(target_type_id);
+                let fq = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .fq_base_type_name(target_type_id);
                 (name, module_source, fq, vec![])
             }
             ResolvedType::GenericInstance { type_args, .. } => {
-                let (name, module_source) = self.tysys.type_table.borrow()
+                let (name, module_source) = self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(target_type_id)
                     .expect("a generic instance names a declaration");
                 let args: Vec<FqTypeName> = type_args
@@ -1897,7 +1929,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ResolvedType::Newtype { base_type, .. } => {
                 // First try the newtype's own name (for methods defined via `impl NewtypeName`)
-                let (newtype_name, newtype_module) = self.tysys.type_table.borrow()
+                let (newtype_name, newtype_module) = self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(target_type_id)
                     .expect("a newtype names a declaration");
 
@@ -1909,14 +1944,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Fall back to the base type for inherited methods
                     match self.tysys.type_table.borrow().get(*base_type).clone() {
                         ResolvedType::Struct { .. } => {
-                            let (name, module_source) = self.tysys.type_table.borrow()
+                            let (name, module_source) = self
+                                .tysys
+                                .type_table
+                                .borrow()
                                 .nominal_head(*base_type)
                                 .expect("a struct names a declaration");
                             let fq = self.tysys.type_table.borrow().fq_base_type_name(*base_type);
                             (name, module_source, fq, vec![])
                         }
                         ResolvedType::GenericInstance { type_args, .. } => {
-                            let (name, module_source) = self.tysys.type_table.borrow()
+                            let (name, module_source) = self
+                                .tysys
+                                .type_table
+                                .borrow()
                                 .nominal_head(*base_type)
                                 .expect("a generic instance names a declaration");
                             let args: Vec<FqTypeName> = type_args
@@ -1934,10 +1975,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             loop {
                                 match self.tysys.type_table.borrow().get(current).clone() {
                                     ResolvedType::Struct { .. } => {
-                                        let (name, module_source) = self.tysys.type_table.borrow()
+                                        let (name, module_source) = self
+                                            .tysys
+                                            .type_table
+                                            .borrow()
                                             .nominal_head(current)
                                             .expect("a struct names a declaration");
-                                        let fq = self.tysys.type_table.borrow().fq_base_type_name(current);
+                                        let fq = self
+                                            .tysys
+                                            .type_table
+                                            .borrow()
+                                            .fq_base_type_name(current);
                                         break (name, module_source, fq, vec![]);
                                     }
                                     ResolvedType::Newtype {
@@ -1966,7 +2014,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ResolvedType::Flags { .. } => {
                 // First try the flags' own name, then fall back to u32
-                let (flags_name, flags_module) = self.tysys.type_table.borrow()
+                let (flags_name, flags_module) = self
+                    .tysys
+                    .type_table
+                    .borrow()
                     .nominal_head(target_type_id)
                     .expect("a flags type names a declaration");
                 if self.has_static_method_direct(&flags_name, &static_call.method) {
@@ -2662,7 +2713,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             loop {
                 match self.tysys.type_table.borrow().get(current_type).clone() {
                     ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
-                        break self.tysys.type_table.borrow().nominal_head(current_type).map(|(n, m)| (m, n));
+                        break self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .nominal_head(current_type)
+                            .map(|(n, m)| (m, n));
                     }
                     ResolvedType::Newtype { base_type, .. } => current_type = base_type,
                     ResolvedType::Flags { .. } => {

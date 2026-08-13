@@ -285,9 +285,9 @@ impl Monomorphizer {
             // keeps its identity so its trait impls resolve. See wado-lang/wado#1626.
             // The head stays the declaration; only the arguments move, which
             // is why nothing here re-derives a head by truncating a spelling.
-            ResolvedType::Newtype {
-                def, base_type, ..
-            } if type_table.contains_type_param(base_type) => {
+            ResolvedType::Newtype { def, base_type, .. }
+                if type_table.contains_type_param(base_type) =>
+            {
                 let new_base = self.substitute_type(base_type, substitution, type_table);
                 if new_base == base_type {
                     return type_id;

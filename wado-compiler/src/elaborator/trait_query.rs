@@ -1084,11 +1084,17 @@ impl TypeSystem {
 
         if let ResolvedType::Struct { def, .. } = &resolved
             && on_bound == Some(OnBoundTrait::Default)
-            && let Some(name) = def.decl().map(|d| self.type_table.borrow().def_name(d).to_string())
+            && let Some(name) = def
+                .decl()
+                .map(|d| self.type_table.borrow().def_name(d).to_string())
             && self.auto_derive_default_struct_type(scope, &name).is_some()
         {
             if let Some(key) = on_bound.and_then(|t| self.synth_trait_key(t)) {
-                let module_source = self.type_table.borrow().def_module(def.decl().unwrap()).clone();
+                let module_source = self
+                    .type_table
+                    .borrow()
+                    .def_module(def.decl().unwrap())
+                    .clone();
                 self.type_table
                     .borrow_mut()
                     .record_bound_driven_synth_request(&name, &module_source, &key);
@@ -1134,8 +1140,7 @@ impl TypeSystem {
                         && self.is_reflect_eligible(type_id)
                 }
                 Some(OnBoundTrait::ReflectVariant) => {
-                    scope.variant_cases_of(*def).is_some()
-                        && self.is_reflect_eligible(type_id)
+                    scope.variant_cases_of(*def).is_some() && self.is_reflect_eligible(type_id)
                 }
                 _ => false,
             }

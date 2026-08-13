@@ -3419,8 +3419,7 @@ impl TypeTable {
                 if type_args.is_empty() {
                     head
                 } else {
-                    let args: Vec<String> =
-                        type_args.iter().map(|t| self.type_name(*t)).collect();
+                    let args: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
                     format!("{head}<{}>", args.join(", "))
                 }
             }

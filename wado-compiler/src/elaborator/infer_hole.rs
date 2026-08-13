@@ -215,7 +215,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|_| {
                 self.mint_infer_hole(span, message.clone(), variant_name.to_string(), Vec::new())
             })
-            .collect();{ let def = self.tysys.type_table.borrow_mut().decl_named_in(&variant_info.name, &variant_info.module_source).expect("the declaration this type names exists"); self.tysys.type_table.borrow_mut().make_generic_instance(def, holes) }
+            .collect();
+        {
+            let def = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .decl_named_in(&variant_info.name, &variant_info.module_source)
+                .expect("the declaration this type names exists");
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_generic_instance(def, holes)
+        }
     }
 
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {

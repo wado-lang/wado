@@ -142,7 +142,11 @@ fn register_variant_cases(flat: &FlatPackage) {
             .cases
             .iter()
             .map(|c| (c.name.clone(), c.index, c.payload))
-            .collect();{ let def = type_table.decl_named_in(&variant.name, &variant.module_source).expect("the declaration this type names exists"); type_table.register_variant_cases(def, cases) };
+            .collect();
+        let Some(def) = type_table.decl_named_in(&variant.name, &variant.module_source) else {
+            continue;
+        };
+        type_table.register_variant_cases(def, cases);
     }
 }
 
@@ -216,17 +220,11 @@ fn needs_copy_in_env(
         // Concrete structs need a field-by-field deep copy, except for
         // the `Box<T>` shortcut whose semantics intentionally share
         // the underlying cell.
-        ResolvedType::Struct {
-            decl_name,
-            type_args,
-            ..
-        } => decl_name != box_name || type_args.is_empty(),
-        ResolvedType::GenericInstance {
-            name,
-            module_source,
-            type_args,
-            ..
-        } => {
+        ResolvedType::Struct { def, type_args } => {
+            type_table.struct_head_name(*def) != box_name || type_args.is_empty()
+        }
+        ResolvedType::GenericInstance { def, type_args } => {
+            let name = type_table.def_name(*def);
             if name == box_name {
                 return false;
             }
@@ -235,16 +233,16 @@ fn needs_copy_in_env(
                 // element-wise deep copy.
                 return !type_args.is_empty();
             }
-            if name =={ let def = list_name {
+            if name == list_name {
                 return true;
             }
-            if type_table.decl_named_in(&name, &module_source).expect("the declaration this type names exists"); list_name {
+            if type_table
+                .find_struct_type(crate::tir::StructDef::Decl(*def))
+                .is_some()
+            {
                 return true;
             }
-            if type_table.find_struct_type(crate::tir::StructDef::Decl(def)) }.is_some() {
-                return true;
-            }
-            if let Some(cases) = type_table.variant_template_cases(name, module_source) {
+            if let Some(cases) = type_table.variant_template_cases(*def) {
                 let frame = EnvFrame {
                     args: type_args,
                     parent: env,
@@ -258,17 +256,15 @@ fn needs_copy_in_env(
         // A variant is reference-shaped at the WIR level, so copying it
         // shares the payload storage: it needs a deep copy exactly when
         // one of its payloads does.
-        ResolvedType::Variant {
-            name,
-            module_source,
-            ..
-        } => type_table
-            .variant_template_cases(name, module_source)
-            .is_some_and(|cases| {
-                cases
-                    .iter()
-                    .any(|(_, _, payload)| needs_copy_in_env(*payload, None, type_table, depth + 1))
-            }),
+        ResolvedType::Variant { def } => {
+            type_table
+                .variant_template_cases(*def)
+                .is_some_and(|cases| {
+                    cases.iter().any(|(_, _, payload)| {
+                        needs_copy_in_env(*payload, None, type_table, depth + 1)
+                    })
+                })
+        }
         // An unresolvable projection gets `true`: a spurious copy is
         // safe, a missed one aliases.
         ResolvedType::AssocTypeProjection {

@@ -481,9 +481,14 @@ fn build_template_block(
         span,
     )];
 
-    let formatter_type ={ let def = tt
-        .borrow_mut().decl_named_in(&ctx.names.formatter, &ModuleSource::format()).expect("the declaration this type names exists"); tt
-        .borrow_mut().make_struct(crate::tir::StructDef::Decl(def)) };
+    let formatter_type = {
+        let def = tt
+            .borrow_mut()
+            .decl_named_in(&ctx.names.formatter, &ModuleSource::format())
+            .expect("the declaration this type names exists");
+        tt.borrow_mut()
+            .make_struct(crate::tir::StructDef::Decl(def))
+    };
     let mut_ref_formatter = tt.borrow_mut().make_mut_ref(formatter_type);
     let ref_string_type = tt.borrow_mut().make_ref(string_type);
     let mut fmt_local_index: Option<u32> = None;
@@ -832,9 +837,13 @@ fn build_formatter_expr(
     }
 
     let pf = parsed.as_ref().unwrap();
-    let alignment_type ={ let def = tt
-        .borrow_mut().decl_named_in(&names.alignment, &ModuleSource::format()).expect("the declaration this type names exists"); tt
-        .borrow_mut().make_enum(def) };
+    let alignment_type = {
+        let def = tt
+            .borrow_mut()
+            .decl_named_in(&names.alignment, &ModuleSource::format())
+            .expect("the declaration this type names exists");
+        tt.borrow_mut().make_enum(def)
+    };
     let fill_char = pf.fill.unwrap_or(if pf.zero_pad { '0' } else { ' ' });
     let (align_index, align_name): (u32, &str) = match pf.align {
         Some('<') => (names.left_index, names.left_name.as_str()),
@@ -983,20 +992,19 @@ fn peel_transparent_newtype(
         let base = {
             let tt = ctx.tt.borrow();
             match tt.get(tid) {
-                ResolvedType::Newtype {
-                    def, base_type, ..
-                } if ctx
-                    .trait_env
-                    .trait_def_of_fq(trait_name)
-                    .is_none_or(|trait_| {
-                        !ctx.trait_env.has_any_methodful_impl_by_receiver(
-                            &Receiver::Type(FqTypeName::of_head(
-                                tt.def_module(*def),
-                                tt.def_name(*def),
-                            )),
-                            trait_,
-                        )
-                    }) =>
+                ResolvedType::Newtype { def, base_type, .. }
+                    if ctx
+                        .trait_env
+                        .trait_def_of_fq(trait_name)
+                        .is_none_or(|trait_| {
+                            !ctx.trait_env.has_any_methodful_impl_by_receiver(
+                                &Receiver::Type(FqTypeName::of_head(
+                                    tt.def_module(*def),
+                                    tt.def_name(*def),
+                                )),
+                                trait_,
+                            )
+                        }) =>
                 {
                     *base_type
                 }

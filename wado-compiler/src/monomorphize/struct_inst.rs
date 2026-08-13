@@ -26,8 +26,16 @@ impl Monomorphizer {
         //   struct Node<T> { left: Option<&mut Node<T>>, right: Option<&mut Node<T>> }
         // When substituting field types, the inner Node<T> needs to resolve to the
         // monomorphized struct type, not a GenericInstance.
-        let concrete_type_id ={ let def = type_table.decl_named_in(&key.name, &struct_module_source).expect("the declaration this type names exists"); type_table.make_monomorphized_struct(mangled_name.clone(), crate::tir::StructDef::Decl(def), // base_name: the original generic struct name
-            key.impl_type_args.clone()) };
+        let concrete_type_id = {
+            let def = type_table
+                .decl_named_in(&key.name, &struct_module_source)
+                .expect("the declaration this type names exists");
+            type_table.make_monomorphized_struct(
+                mangled_name.clone(),
+                crate::tir::StructDef::Decl(def), // base_name: the original generic struct name
+                key.impl_type_args.clone(),
+            )
+        };
 
         // Find the GenericInstance TypeId and record the substitution early
         // so that substitute_type can use it for self-references

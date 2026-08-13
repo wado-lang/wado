@@ -331,9 +331,11 @@ impl TypeSystem {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
             | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. } => {
-                self.type_table.borrow().nominal_head(type_id).map(|(n, _)| n)
-            }
+            | ResolvedType::Flags { .. } => self
+                .type_table
+                .borrow()
+                .nominal_head(type_id)
+                .map(|(n, _)| n),
             _ => None,
         }
     }

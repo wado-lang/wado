@@ -52,12 +52,10 @@ fn coerce_value_to_binding(
         ),
         // A `&primitive` / `&variant` / `&fn` binding type that boxing
         // has redefined to its `Box<T>` struct: build the struct literal.
-        ResolvedType::Struct {
-            decl_name,
-            type_args,
-            ..
-        } if type_table.box_payload_of(binding_type).is_some() => {
-            let struct_name = type_table.struct_rendered_name(decl_name, type_args);
+        ResolvedType::Struct { def, type_args }
+            if type_table.box_payload_of(binding_type).is_some() =>
+        {
+            let struct_name = type_table.struct_rendered_name(*def, type_args);
             TirExpr::new(
                 TirExprKind::StructLiteral {
                     struct_type: binding_type,
@@ -299,16 +297,11 @@ impl<'a> PatternLowerer<'a> {
     /// Look up struct field definitions by `type_id`
     fn get_struct_fields(&self, type_id: TypeId, type_table: &TypeTable) -> Option<Vec<TirField>> {
         match type_table.get(type_id) {
-            ResolvedType::Struct {
-                decl_name,
-                module_source,
-                type_args,
-                ..
-            } => self
+            ResolvedType::Struct { def, type_args } => self
                 .struct_fields_map
                 .get(&(
-                    type_table.struct_rendered_name(decl_name, type_args),
-                    module_source.clone(),
+                    type_table.struct_rendered_name(*def, type_args),
+                    type_table.struct_head_module(*def).clone(),
                 ))
                 .cloned(),
             _ => None,
@@ -632,16 +625,9 @@ impl<'a> PatternLowerer<'a> {
 
                 // Generate VariantTest condition
                 let variant_type_info = match type_table.get(*enum_type) {
-                    ResolvedType::Variant {
-                        name,
-                        module_source,
-                        ..
+                    ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                        type_table.nominal_head(*enum_type)
                     }
-                    | ResolvedType::GenericInstance {
-                        name,
-                        module_source,
-                        ..
-                    } => Some((name.clone(), module_source.clone())),
                     _ => None,
                 };
 
@@ -1039,16 +1025,9 @@ impl<'a> PatternLowerer<'a> {
                     peel_refs_and_box(variant_local, pattern_type, type_table, span);
 
                 let variant_type_info = match type_table.get(*enum_type) {
-                    ResolvedType::Variant {
-                        name,
-                        module_source,
-                        ..
+                    ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                        type_table.nominal_head(*enum_type)
                     }
-                    | ResolvedType::GenericInstance {
-                        name,
-                        module_source,
-                        ..
-                    } => Some((name.clone(), module_source.clone())),
                     _ => None,
                 };
                 let case_index_opt = variant_type_info
