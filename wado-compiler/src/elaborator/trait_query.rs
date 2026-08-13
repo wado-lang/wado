@@ -1518,7 +1518,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         written: &str,
     ) -> super::trait_env::DeclKey {
         debug_assert!(
-            self.tysys.resolutions.get(site).is_some() || site.is_synthetic(),
+            self.tysys.resolutions.get(site).is_some(),
             "every reference site is resolved before elaboration, `{written}` was not"
         );
         if let Some(def) = self.tysys.resolutions.declared(site) {
