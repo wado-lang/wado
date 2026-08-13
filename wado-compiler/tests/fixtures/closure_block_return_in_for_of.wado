@@ -3,15 +3,20 @@
 // nothing while the caller popped a value, and the module failed core-Wasm
 // validation ("type mismatch: expected i32 but nothing on stack").
 //
-// The closure's return type is inferred by walking the body AST for a
-// `return`, reading each returned expression's recorded type. That walk comes
-// up empty when the site elaborates twice and the committed pass is not the
-// one that recorded the body — so the inference fell through to the body's own
-// (correctly divergent) `!`. The expected fn type from context settles it.
+// Such a body diverges — every path exits — so the returned expressions are
+// the only source of the real return type. The inference looked for them by
+// walking the body AST and reading `expression_types`, which is empty when the
+// site elaborates twice and the committed pass is not the one that recorded
+// the body. This site has no expected fn type to fall back on either, so the
+// inference fell through to the body's own (correctly divergent) `!`. It now
+// reads the body TIR, which exists whichever pass recorded what.
 //
-// `for … of` over a range, a `let`-bound closure, and an expression-bodied
-// closure all took different paths and were unaffected; they are pinned here
-// too so a future narrowing of the fix cannot quietly lose them.
+// The TIR walk has to cover every construct a `return` can hide in, so each
+// one gets a case here: a bare `loop`, `for … of` and `while` (both reify as a
+// labeled block around a loop), `if`, and `match`. `for … of` over a range, a
+// `let`-bound closure, and an expression-bodied closure took different paths
+// and were unaffected; they are pinned too so a future narrowing cannot
+// quietly lose them.
 
 fn call(f: fn() -> i32) -> i32 {
     return f();
@@ -85,4 +90,73 @@ test "shapes that already worked" {
         total += call(f);
     }
     assert total == 9;
+}
+
+test "the only return sits inside a bare loop" {
+    let mut total = 0;
+    for let i of [1, 2] {
+        total += call(|| {
+            loop {
+                return i * 10;
+            }
+        });
+    }
+    assert total == 30;
+}
+
+test "the only return sits inside a nested for-of" {
+    let mut total = 0;
+    for let i of [1, 2] {
+        total += call(|| {
+            for let k of [5] {
+                return k + i;
+            }
+            panic("the inner loop always returns");
+        });
+    }
+    assert total == 13;
+}
+
+test "the only return sits inside a while" {
+    let mut total = 0;
+    for let i of [3, 4] {
+        total += call(|| {
+            while true {
+                return i;
+            }
+            panic("the while always returns");
+        });
+    }
+    assert total == 7;
+}
+
+test "the only return sits inside a match arm" {
+    let mut total = 0;
+    for let i of [1, 2] {
+        total += call(|| {
+            match i {
+                1 => {
+                    return 100;
+                },
+                _ => {
+                    return 200;
+                },
+            }
+        });
+    }
+    assert total == 300;
+}
+
+test "the only return sits inside an if/else" {
+    let mut total = 0;
+    for let i of [1, 2] {
+        total += call(|| {
+            if i == 1 {
+                return 7;
+            } else {
+                return 9;
+            }
+        });
+    }
+    assert total == 16;
 }

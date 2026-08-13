@@ -6253,30 +6253,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // bodies (e.g. `|c| c.method()`) take their body's type as the return
         // type directly, and block bodies use the return-expression type
         // computed above.
+        // A body that exits through `return <expr>` has that expression's type
+        // as its return type, whatever value type the block itself carries —
+        // `!` when every path exits, `()` for a `loop { return x; }`.
+        // `block_return_type` finds those expressions in the AST via
+        // `expression_types`, and comes up empty when the site elaborated twice
+        // and the committed pass is not the one that recorded the body; a
+        // closure argument inside `for … of` over a `List` is such a site, and
+        // it has no `expected_type` to fall back on either. Taking the block's
+        // own type there typed `__call` as `-> !` (or `-> ()`), so it pushed
+        // nothing while the caller popped a value and the module failed
+        // core-Wasm validation.
+        //
+        // The body TIR was just built, so read the returns off that instead —
+        // it exists whichever pass recorded what.
         let return_type = declared_return
             .or(block_return_type)
-            .unwrap_or_else(|| {
-                // A block body whose every path exits reifies as NEVER, so the
-                // returned expressions are the only source of the real return
-                // type. `block_return_type` looks for them in the AST via
-                // `expression_types`, and comes up empty when the site
-                // elaborated twice and the committed pass is not the one that
-                // recorded the body — a closure argument inside `for … of`
-                // over a `List` is such a site, and it has no `expected_type`
-                // to fall back on either. Falling through to NEVER types
-                // `__call` as `-> !`: it pushes nothing while the caller pops
-                // a value, and the module fails core-Wasm validation.
-                //
-                // The body TIR was just built, so read the type off that
-                // instead — it exists whichever pass recorded what.
-                if body.type_id == TypeTable::NEVER {
-                    tir_block_return_type(&body)
-                        .or(body_expected)
-                        .unwrap_or(body.type_id)
-                } else {
-                    body.type_id
-                }
-            });
+            .or_else(|| tir_block_return_type(&body))
+            .unwrap_or(body.type_id);
 
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
@@ -10865,20 +10859,30 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
 /// The AST-level companion (`control_flow::find_return_type_in_block`) reads
 /// `expression_types`, which is empty for a body whose recording pass the site
 /// discarded. This one reads the TIR the caller just built, so it answers
-/// whenever a `return <value>` exists at all. Walks the same nesting the AST
-/// version does: blocks, `if` arms, loops, labeled blocks, and `match` arms.
+/// whenever a `return <value>` exists at all.
+///
+/// It walks every construct the AST companion does, and must keep doing so: a
+/// construct missing here is a body whose `return` is invisible, which is the
+/// mistyped-closure ICE all over again. `for … of` and `while` both reify as a
+/// `LabeledBlock` around a `Loop`, so those two carry most of the weight.
 fn tir_block_return_type(body: &crate::tir::TirExpr) -> Option<crate::tir::TypeId> {
     use crate::tir::{TirExprKind, TirStmtKind};
 
     fn in_block(block: &crate::tir::TirBlock) -> Option<crate::tir::TypeId> {
         block.stmts.iter().find_map(|stmt| match &stmt.kind {
             TirStmtKind::Return { value } => value.as_ref().map(|v| v.type_id),
+            // `resume value` lowers to `return value`, mirroring the AST
+            // companion's `Expr::Resume` arm.
+            TirStmtKind::TaskReturn { value, .. } => Some(value.type_id),
             TirStmtKind::If {
                 then_block,
                 else_block,
                 ..
             } => in_block(then_block).or_else(|| else_block.as_ref().and_then(in_block)),
             TirStmtKind::Loop { body, .. } => in_block(body),
+            TirStmtKind::LabeledBlock { block, .. } => in_block(block),
+            TirStmtKind::VariadicForOf { body, .. } => in_block(body),
+            TirStmtKind::Let { value, .. } => in_expr(value),
             TirStmtKind::Expr(e) => in_expr(e),
             _ => None,
         })
@@ -10887,7 +10891,14 @@ fn tir_block_return_type(body: &crate::tir::TirExpr) -> Option<crate::tir::TypeI
     fn in_expr(expr: &crate::tir::TirExpr) -> Option<crate::tir::TypeId> {
         match &expr.kind {
             TirExprKind::Block(block) => in_block(block),
+            TirExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => in_block(then_branch).or_else(|| else_branch.as_ref().and_then(in_block)),
             TirExprKind::Match { arms, .. } => arms.iter().find_map(|arm| in_expr(&arm.body)),
+            TirExprKind::WithHandler { body, .. } => in_block(body),
+            TirExprKind::Resume { value } => Some(value.type_id),
             _ => None,
         }
     }
