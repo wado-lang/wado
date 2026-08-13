@@ -500,8 +500,22 @@ compiles, passes the suite, and ends with a mechanical completion check.
         needs a `DefId` scoped to its declaring function.
 - [x] `Resolutions::get` made total. The `Option` is gone, so no consumer has a
       "no answer" case to write a fallback for.
-- [ ] `ast::Type::Resolved(DefId)`; synthesis stops spelling names. Done when no
-      synthesis site builds a `NamedType` from a `&str`. This was written as
+- [ ] `ast::Type::Resolved(DefId)`; synthesis stops spelling names. The
+      completion check "no synthesis site builds a `NamedType` from a `&str`"
+      counts the wrong thing, the way the `ResolvedType` step's "790 sites" did.
+      Three production sites build one: `wit_consume` generates module AST that
+      then goes through the ordinary loader and resolve pass, so its names are
+      resolved at their own sites like any source; `cm_abi` and
+      `component_model` build a type purely to compute a Component Model
+      layout, which no scope ever resolves. None of those is the defect.
+
+      The defect is a reference a consumer resolves from a spelling that was
+      minted beside a known referent, and there is one: the bound list a
+      qualified call rebuilds pairs each bound with the `FqTraitName` it stands
+      for in a side map, keyed by an `AstId` the walk never saw. Nothing queries
+      those ids today — `Resolutions::get` is total across the corpus, which is
+      the evidence — so the invariant holds by that pairing rather than by the
+      type. Done when the bound carries its referent instead. This was written as
       gating the step above, on the theory that a synthesised reference carries
       an `AstId::fresh` the walk never saw and every consumer must therefore
       tolerate a missing answer. It does not: the one production site pairs each

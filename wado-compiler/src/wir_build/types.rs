@@ -1193,8 +1193,7 @@ fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
     let mut leaf: Vec<(crate::tir::TypeId, String)> = Vec::new();
     let mut nested: Vec<(crate::tir::TypeId, String)> = Vec::new();
     for (elem_tid, elem_name) in &array_elem_types {
-        if tt.is_list(*elem_tid)
-        {
+        if tt.is_list(*elem_tid) {
             nested.push((*elem_tid, elem_name.clone()));
         } else {
             leaf.push((*elem_tid, elem_name.clone()));

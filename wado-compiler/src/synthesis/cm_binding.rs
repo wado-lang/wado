@@ -1181,7 +1181,7 @@ mod tests {
         use crate::compiler_item::{CompilerItem, Resolved};
         // A compiler item names a declaration, so each one gets a declaring
         // node with its base type bound to it. Registering a node nothing is
-        // bound to leaves the identity reads this fixture exists for — 
+        // bound to leaves the identity reads this fixture exists for —
         // `is_result`, `as_option`, `is_string`, `is_list` — answering no
         // rather than wrong, which is the harder failure to notice.
         let bind_variant = |tt: &mut TypeTable, name: &str, module: ModuleSource| {
