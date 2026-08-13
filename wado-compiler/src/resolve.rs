@@ -66,12 +66,18 @@ struct Scopes {
     /// makes `i32` and `List` universal and lets a sealed compiler item
     /// (`ReflectStruct`, `Member`) resolve for a module that never named it.
     prelude: IndexMap<String, DefId>,
+    /// The cases the types above bring with them — `Some`, `Ok`, an `enum`
+    /// case written bare. Their own tier, under every type tier, because a type
+    /// always shadows a same-named case: an imported `FieldKind::List` must not
+    /// hide the prelude's `List`.
+    cases: IndexMap<ModuleSource, IndexMap<String, DefId>>,
+    prelude_cases: IndexMap<String, DefId>,
 }
 
 impl Scopes {
-    /// Which declaration `name` reaches from `module`, ignoring type-parameter
-    /// binders: the module's imports, then its own declarations, then the
-    /// prelude.
+    /// Which declaration `name` reaches from `module` in type position,
+    /// ignoring type-parameter binders: the module's imports, then its own
+    /// declarations, then the prelude.
     ///
     /// The one implementation of the scope order.
     fn resolve(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
@@ -82,6 +88,35 @@ impl Scopes {
             return Some(*def);
         }
         self.prelude.get(name).copied()
+    }
+
+    /// [`Self::resolve`], then the case tier.
+    ///
+    /// A name in value or pattern position can mean a case, which no type
+    /// position can; the two orders share every tier but this last one, so they
+    /// share the implementation rather than layering a second scope beside it.
+    fn resolve_value(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
+        self.resolve(module, name)
+            .or_else(|| self.cases.get(module).and_then(|m| m.get(name)).copied())
+            .or_else(|| self.prelude_cases.get(name).copied())
+    }
+
+    /// The cases the declarations in `from` bring into scope with them.
+    fn collect_cases(defs: &DefTable, from: &IndexMap<String, DefId>) -> IndexMap<String, DefId> {
+        let mut out: IndexMap<String, DefId> = IndexMap::default();
+        for def in from.values() {
+            if !matches!(
+                defs.kind(*def),
+                crate::defs::DefKind::Variant | crate::defs::DefKind::Enum | crate::defs::DefKind::Flags
+            ) {
+                continue;
+            }
+            for member in defs.members(*def) {
+                out.entry(defs.name(*member).to_string())
+                    .or_insert(*member);
+            }
+        }
+        out
     }
 
     fn build(
@@ -112,6 +147,7 @@ impl Scopes {
             surface.entry(name).or_insert(def);
         }
         out.prelude = surface;
+        out.prelude_cases = Self::collect_cases(defs, &out.prelude);
 
         for module in modules.keys() {
             let imports: IndexMap<String, DefId> = symbols
@@ -130,8 +166,15 @@ impl Scopes {
                     own.entry(name).or_insert(def);
                 }
             }
+            // Both tiers bring their cases, imports ranking first for the same
+            // reason the type tiers do.
+            let mut cases = Self::collect_cases(defs, &imports);
+            for (name, def) in Self::collect_cases(defs, &own) {
+                cases.entry(name).or_insert(def);
+            }
             out.imports.insert(module.clone(), imports);
             out.own.insert(module.clone(), own);
+            out.cases.insert(module.clone(), cases);
         }
         out
     }
@@ -179,6 +222,18 @@ impl Resolutions {
     #[must_use]
     pub fn declaration_named(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
         self.scopes.resolve(module, name)
+    }
+
+    /// [`Self::declaration_named`] for a name written in value or pattern
+    /// position, where a case is reachable and a type of the same name shadows
+    /// it.
+    ///
+    /// Same scope, one tier longer — a caller asks this rather than the type
+    /// query because of where the name is written, not because it wants a
+    /// second opinion.
+    #[must_use]
+    pub fn value_named(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
+        self.scopes.resolve_value(module, name)
     }
 
     /// The `(module, name)` pair a declaration renders to.
@@ -576,6 +631,29 @@ mod tests {
         assert_ne!(here, there);
         assert_eq!(r.defs().module(here), &entry);
         assert_eq!(r.defs().module(there), &other);
+    }
+
+    /// A case is reachable unqualified wherever its type is, in value position
+    /// only — and a type of the same name shadows it, whichever tier each is on.
+    #[test]
+    fn a_type_shadows_a_same_named_case() {
+        let (r, entry, other) = resolve(
+            r#"use { FieldKind } from "./other.wado";
+               pub struct List { n: i32 }"#,
+            "pub variant FieldKind { List(i32), Leaf }",
+        );
+        // `Leaf` reaches nothing in type position and its case in value position.
+        assert!(r.declaration_named(&entry, "Leaf").is_none());
+        let leaf = r.value_named(&entry, "Leaf").unwrap();
+        assert_eq!(r.defs().kind(leaf), crate::defs::DefKind::VariantCase);
+        assert_eq!(r.defs().module(leaf), &other);
+
+        // `List` is both a case of the imported variant and this module's own
+        // struct. The type wins in both positions.
+        let list = r.value_named(&entry, "List").unwrap();
+        assert_eq!(list, r.declaration_named(&entry, "List").unwrap());
+        assert_eq!(r.defs().kind(list), crate::defs::DefKind::Struct);
+        assert_eq!(r.defs().module(list), &entry);
     }
 
     /// An alias names what it aliases, not itself.
