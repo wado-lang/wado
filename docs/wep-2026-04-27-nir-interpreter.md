@@ -2,24 +2,21 @@
 
 ## Context
 
-The Wado optimizer needs to reduce expressions the source made constant —
-literal arithmetic, a branch whose condition is known, a pure call with
-constant arguments — to the value they denote. `niri` ("NIR Interpreter") is
-the engine that answers what a NIR expression evaluates to at compile time.
-Constant folding is its primary consumer; branch pruning, constant
-propagation, and compile-time function evaluation reuse it.
+The optimizer needs to reduce what the source made constant — literal
+arithmetic, a branch whose condition is known, a pure call with constant
+arguments — to the value it denotes. `niri` is the engine that answers what a
+NIR expression evaluates to at compile time. Constant folding is its primary
+consumer; branch pruning, constant propagation and compile-time function
+evaluation reuse it.
 
-This WEP records the trajectory so contributors don't re-litigate the design
-each time we want to fold a richer expression. It states capabilities, not
-mechanisms: what `niri` can and cannot evaluate. How it does so is the code's
-business.
+This WEP states capabilities, not mechanisms: what `niri` can and cannot
+evaluate. How it does so is the code's business.
 
 ## Decision
 
-`niri` is a **partial evaluator** for NIR: it reduces what it can and leaves
-a residual otherwise. Beyond the in-process engine, a complementary
-**wasm-CTFE backend** runs full pure calls through a real Wasm runtime, using
-Wado's effect system as a type-checked purity gate.
+`niri` is a partial evaluator: it reduces what it can and leaves a residual
+otherwise. A complementary wasm-CTFE backend runs whole pure calls through a
+real Wasm runtime, using Wado's effect system as a type-checked purity gate.
 
 ### Why two backends
 
@@ -30,449 +27,268 @@ Wado's effect system as a type-checked purity gate.
 | Partial eval | Yes (residuals)                                    | No (whole-call)                                         |
 | Coverage     | Whatever we hand-write                             | All of Wado, for free                                   |
 
-These are complementary, not alternatives. `niri` stays cheap and
-fine-grained; wasm execution covers anything `niri` balks at.
+`niri` stays cheap and fine-grained; wasm execution covers anything it balks at.
 
 ### Scope boundary against the ValueGraph
 
-`niri` evaluates **pure values**: given an expression and what is known about
-its inputs, what does it denote. The engine's `ValueGraph` owns everything
-**flow-sensitive**: reaching definitions, branch merges, loop and heap-write
-invalidation, field store-to-load seeding.
-
-The boundary is load-bearing. `niri` once carried its own per-local map of
-known fields, with branch-merge and loop-invalidation logic; it was built and
-then retired once the `ValueGraph` covered the same ground. Anything that
-needs to know _which_ definition reaches a use belongs to the `ValueGraph`,
-and a proposal to teach `niri` about control flow between statements should be
-read as a sign the fact belongs on the other side of this line.
+`niri` evaluates pure values: what an expression denotes, given what is known
+about its inputs. Everything flow-sensitive — reaching definitions, branch
+merges, loop and heap-write invalidation, field store-to-load seeding — belongs
+to the `ValueGraph`. The boundary is load-bearing: `niri` once carried its own
+per-local field map and it was retired once the `ValueGraph` covered the same
+ground. A proposal to teach `niri` about control flow between statements is a
+sign the fact belongs on the other side of the line.
 
 What the line does not forbid is a store over the values the engine itself
-constructed. Inside a frame `niri` already executes statements in order, so a
-value built there — and reachable from nothing the frame did not build — can be
-written through and read back without asking which definition reaches a use.
-The program's heap stays the `ValueGraph`'s; the engine's own is the engine's.
+built. Inside a frame `niri` executes statements in order, so a value built
+there — reachable from nothing the frame did not build — can be written through
+and read back. The program's heap stays the `ValueGraph`'s; the engine's own is
+the engine's.
 
 ### Effects are the purity gate
 
-CTFE soundness rests on effect inference: a function admitted for
-compile-time evaluation is one the effect system called pure. A bug there
-lets an impure function be evaluated at compile time. This is the same trust
+A function admitted for compile-time evaluation is one the effect system called
+pure. A bug there lets an impure function run at compile time — the same trust
 already placed in effect checking elsewhere.
 
 ## Done
 
 Value model:
 
-- Integer, float, bool and char scalars, with the arithmetic, comparison,
-  bitwise and unary operators over them, and casts between them.
-- Structs and tuples whose every field is constant, and field reads
-  projecting back out of them — out of a literal, a local, an immutable
-  global, or a compile-time call result. An aggregate leaves the engine only
-  where it has a literal shape to be written as; otherwise what reaches the IR
-  is the scalars projected out of it.
-- An enum value, which is its discriminant, and a variant value, which is its
-  case plus the payload the case carries. Both construction forms fold and both
-  pattern kinds decide, so an `Option` / `Result` accessor exposed by inlining
-  collapses instead of leaving a residual match, and a policy enum passed to a
-  library helper — serde's `CaseStyle` — is a constant at the call it reaches. An
-  enum constant enters the pool under the enum's own type, which is an `i32` no
-  primitive names, so reading one back out is its own case; a variant has no
-  literal shape and stays inside the engine.
-- A three-state lattice — unevaluated, constant, non-constant — with a join,
-  so an unreachable branch contributes nothing to the result and a trapping
-  arm does not contaminate a fold.
+- Integer, float, bool and char scalars, with their arithmetic, comparison,
+  bitwise and unary operators and the casts between them.
+- Structs and tuples whose every field is constant, and the field reads
+  projecting back out of a literal, a local, an immutable global or a
+  compile-time call result.
+- Enums, whose discriminant is the whole value, and variants, which carry a case
+  and its payload. Both construction forms fold and both pattern kinds decide.
+- An aggregate leaves the engine only where it has a literal shape to be written
+  as. Otherwise what reaches the IR is the scalars projected out of it.
+- A three-state lattice — unevaluated, constant, non-constant — so an
+  unreachable branch contributes nothing and a trapping arm does not contaminate
+  a fold.
 
 Bindings:
 
-- Immutable locals whose initializer is constant read back as that constant.
-  Mutable and assigned locals are non-constant.
-- Immutable globals whose initializer is constant fold at every read, as do
-  the known constant fields of a global (a sequence global's length).
-- A global whose value is not in its slot but in the assignment that fills it —
-  what an extracted initializer and body globalization both leave behind —
-  reads back from that assignment. A global assigned anything that does not
-  reduce, or two disagreeing constants, stays non-constant. Reads inside module
-  initialization need no exception: initializers are ordered by dependency, so
-  a read there already follows the assignment it would fold from.
-- Nothing is read off a global something writes through. `global` without `mut`
-  forbids reassignment, not in-place mutation, so a `&mut self` method, a
-  mutable borrow, or a store to a projection of one makes both its value and
-  its known fields stale — the same discipline a local carrying an aggregate is
-  held to.
-- An aggregate constant binds to a local only when every mention of that local
-  merely reads it. `niri` models whole values, not the heap, so a local
-  another handle can write through would go stale.
-- A borrow denotes what it points at rather than operating on it, so a local
-  bound to `&CONST` carries the referent and reads project out of it.
+- Immutable locals and globals whose initializer is constant, plus a global's
+  separately known fields, such as a sequence global's length.
+- A global whose value is not in its slot but in the assignment that fills it,
+  which is what an extracted initializer and body globalization leave behind.
+  Two disagreeing assignments make it non-constant.
+- Nothing is read off a local or global something writes through: `global`
+  without `mut` forbids reassignment, not in-place mutation. An aggregate binds
+  to a local only when every mention of that local merely reads it.
+- A borrow denotes its referent, so a local bound to `&CONST` carries it. Which
+  locals those are is decided once per body over the whole arena, so a read
+  folds through a binding an in-place rewrite displaced — and an index more than
+  one binder names carries nothing, since such a scan cannot say which binding
+  governs a read.
 
 Control flow:
 
-- `if`, expression and statement form: a constant condition collapses to the
-  chosen arm; a side-effect-free condition whose arms denote the same constant
-  collapses to that constant.
-- `match`: a constant scrutinee selects the first arm that provably matches;
-  a provably exhaustive match whose every arm denotes the same constant
-  collapses to it. The exhaustiveness requirement is what keeps the implicit
-  no-match trap alive.
+- `if`: a constant condition collapses to the chosen arm, and a side-effect-free
+  condition whose arms denote the same constant collapses to it.
+- `match`: a constant scrutinee selects the first arm that provably matches, and
+  a provably exhaustive match whose arms all denote one constant collapses to
+  it. Exhaustiveness is what keeps the implicit no-match trap alive.
 - Patterns decided: wildcard, binding, integer / bool / char literal, range,
-  or-patterns, a constant-valued pattern, struct patterns, and exact-arity
-  tuple patterns. A definite field mismatch rules an arm out even when a
-  sibling field binds.
-- An arm's guard and body are evaluated with that arm's bindings in scope.
-- `match X { Enum::Case => true, _ => false }` — the shape
-  `X matches { Case }` desugars to — collapses to a discriminator comparison
-  before the match ever reaches pattern lowering.
+  or-patterns, constant-valued, struct, and exact-arity tuple. An arm's guard and
+  body are evaluated with that arm's bindings in scope.
+- `X matches { Case }` collapses to a discriminator comparison before the match
+  reaches pattern lowering.
 
 Calls:
 
-- A free call whose arguments are all constant and whose callee is pure,
-  non-async, monomorphic, and returning something runs at compile time. A call
-  that yields nothing has no value to substitute, and handing one back would
-  leave a value where the program expects none. The body executes statement
-  by statement, so a `let` sequence, assignment to a local, an `if` whose
-  condition decides, an early `return`, a labeled block completed by its
-  `break`, and a loop all reach a value. Recursion and total work are bounded.
-  A body that does not produce a constant leaves the call in place, so a
-  runtime trap inside it stays observable.
+- A free call runs at compile time when its arguments are all constant and its
+  callee is pure, non-async and monomorphic. The body executes statement by
+  statement, so `let` sequences, assignments, decided branches, early returns,
+  labeled blocks and loops all reach a value.
 - A statement counts as executed only when everything it evaluates lands on a
-  constant. Reducing an expression is not performing it: an unfolded call, a
-  global write, or an operation that would trap all leave work undone, and
-  stepping past them would drop it.
-- A loop needs no constant trip count. The work budget bounds it, so one that
-  does not finish in time abandons the evaluation rather than guessing, and
-  what an iteration derived does not survive into the next. The budget is per
-  function, so what one spends cannot decide whether the next one folds.
+  constant. An unfolded call, a global write or a would-be trap leaves work
+  undone, and stepping past it would drop it.
+- A loop needs no constant trip count: the work budget bounds it, and the budget
+  is per function. Recursion is bounded too, and a body that does not produce a
+  constant leaves the call in place, so a runtime trap inside it stays
+  observable.
+- A result that may carry the caller's storage is withheld, though the writes
+  still land. Two parameter kinds reach that storage: a `&mut` one, whose
+  referent the result may embed (`Formatter::new(&mut buf)`), and one `stores[p]`
+  declares the callee keeps, whose alias leaves inside an ordinary aggregate that
+  neither the return type nor the write targets name. Either result would stand
+  as a snapshot the next write leaves stale. A scalar embeds nothing.
 - A local the frame cannot track — one a mutable borrow, a mutable argument, a
-  method receiver, a store through a projection, or an assignment buried inside
-  a larger expression can write — carries no value, so a stale constant cannot
-  outlive the write. A shared borrow is not one of those channels.
-- A string literal's `len()` folds, as a consequence of the generic
-  struct-field projection rather than any string-specific rule.
+  receiver or an assignment buried in a larger expression can write — carries no
+  value. A shared borrow is not one of those channels.
 
 Sequences:
 
 - The array backing a `String` or a `List` is a value, built from a byte-string
-  literal or a fully-constant array literal, bounded by a maximum length past
-  which building one would cost more than any fold it enables. `String` and
-  `List` need no case of their own: each is an aggregate whose backing field is
-  a sequence and whose length field is an integer — and an array literal
-  denotes that whole container, since that is what it lowers to.
-- Whether a local may carry an aggregate is decided from the reachable body. A
-  node an earlier rewrite orphaned cannot run, so it must not disqualify one:
-  inlining `t.len()` leaves the original method call behind, and counting its
-  receiver would refuse every list the caller then reads.
-- An element or length read folds through the array builtins the read lowers
-  to, not through an index node. Both the generic builtin and the `u8`
-  specialization are recognized. A read past the end is left alone, since it
-  traps at run time.
-- A shared borrow reads as the constant it points at, which is what makes a
-  backing array reachable at all — it reaches the builtin as `&arr`. Only a
-  shared one: a write goes through a mutable borrow, which stays unmodelled.
-- A constant list's length folds, so a constant-index bounds check on it does
-  too, and so does the element that check guards — out of a local literal, and
-  out of a global, whose container the engine recovers from the assignment that
-  fills its slot. Only a scalar element reaches the IR; an aggregate one stays
-  inside the engine, as every aggregate does.
-- A prefix clone folds: `array_clone_prefix(&src, len)` — what a value copy of a
-  sequence container lowers to — is the source's first `len` elements. Without
-  it, passing a constant `String` by value hands the callee a value the engine
-  cannot see, which is where a derivation's own field reads end up.
-- An element write lands. `array_set` through a `&mut` reaching a place the
-  frame owns — a local it bound to a constant, plus the field path into it —
-  updates that local's value, so a later read sees what was written. The write
-  is performed, not folded: it only counts at statement position, where the
-  executor runs it. A place rooted anywhere else — a parameter, a global,
-  anything the frame did not build — has no current value to update and
-  abandons the evaluation rather than being stepped past.
-- A shared borrow never makes its root stale: nothing writes through one, which
-  is the same reading the aggregate-binding scan gives the node, where `&x`
-  counts as a read of `x`. A frame that refused it could not run a body whose
-  own parameter is borrowed — which every `&self` method's is, and which is what
-  a derivation walking member handles does at every step. A mutable borrow still
-  does, except where the executor performs the write itself (a sequence
-  builtin).
-- A byte-sequence container the engine knows the contents of is written back as
-  the literal the lower phase emits for a source string — a struct over a packed
-  byte array and its length. The bytes are the container's first `used`, since
-  a grown container's capacity outruns what it holds and capacity is not
-  observable. A container the frame never filled stays as the source wrote it:
-  an empty one is a reservation rather than a result, and a literal cannot
-  carry the capacity it asked for.
-- Written back wherever the write buys something, which is everywhere but two
-  shapes already holding the answer. One is the literal the rewrite itself
-  produces: refusing what was already written is what keeps the worklist
-  settling. The other is a read of a globalized constant, whose value is in a
-  shared slot precisely so it is built once — a literal in its place is that
-  constant copied back to every site. Anything else is written, including the
-  field read and the borrow operand a derived wire name would otherwise cost on
-  every call.
+  literal or a fully-constant array literal, up to a maximum length past which
+  building one costs more than any fold it enables.
+- Element and length reads fold through the array builtins they lower to, not
+  through an index node. A read past the end is left alone to trap at run time.
+- An element write lands, and a prefix clone folds — the latter being what a
+  value copy of a sequence container lowers to.
+- A write goes into the value where it lies rather than rebuilding the container
+  around it, so filling a sequence is not quadratic in its length. The backing is
+  shared until something writes it, so a value copied out beforehand keeps what
+  it was given.
+- A byte-sequence container the engine filled is written back as the literal the
+  lower phase emits for a source string, over its first `used` bytes. One the
+  frame never filled stays as the source wrote it: an empty container is a
+  reservation rather than a result.
 
 Regions:
 
-- A self-contained block runs as a frame the engine starts from scratch: one
-  that builds its value in locals of its own, reads and writes only those, and
-  yields the result is as self-contained as a call body — the difference is
-  that the caller wrote it inline. This is what folds a fully-constant string
-  template to the literal the source could have written.
-- Self-containment is decided before the run rather than during it: every
-  local the block mentions must be one it declares, and every call one a frame
-  could run. A region's frame starts empty, so a read of an outer local yields
-  nothing and an unrunnable call has no body to execute — the run abandons on
-  either. Deciding first is what keeps the attempt cheap, since the run copies
-  the whole enclosing body while the checks only walk the block. What they give
-  up is a mention on a statically dead path, which no scan can tell from a live
-  one.
-- A block yielding nothing denotes nothing, whatever its last statement
-  computed. An inlined statement call leaves the callee's result there while
-  the block stands where the program expects no value, and a constant put in
-  that position is one the surrounding type cannot hold.
-- The copy a run makes is charged to the step budget, because it is the work.
-  Uncharged, a function full of templates pays a whole-body copy per template
-  per pass and const folding turns quadratic in function size. A very large
-  function may find the budget spent before its later regions, which is the
-  trade every budgeted evaluation makes.
-- A write inside a frame goes into the value where it lies rather than
-  rebuilding the container around it. Rebuilding copies the whole backing per
-  write, which makes filling a sequence quadratic in its length. The backing is
-  shared until something writes it, so a value copied out beforehand — Wado's
-  value semantics say `let d = c` is a copy — forks at that first write and
-  keeps what it was given.
-- A `let` binding a borrow of a local place resolves to an alias inside a
-  frame rather than to a value, and so does rebinding a local that already
-  carries one: copying a reference copies the reference, so both handles name
-  the same storage. That is what carries the desugared template's
-  `let self = &mut __r` through the appends that follow.
-- An alias is resolved by a projection — a field read, an element read, a
-  deref — and by nothing else. The engine has no reference values, so handing
-  the referent back where the reference itself is read would turn a capture
-  into a copy, and a later write through the reference would land in that copy
-  while the referent kept a value it no longer holds. `Formatter { buf: &mut
-  __r }` is refused on that ground rather than by accident. An ordinary walk
-  performs nothing, so outside a frame such a binding still clobbers its
-  referent.
-- A reference is recognized by shape, not by spelling. The boxing pass redefines
-  a `&T` into `Box<T>`, so every refusal above — a reference-typed node, a
-  reference-returning callee, a reference-typed binding, region or free read —
-  asks both, and one that asked only the borrow spelling would snapshot an alias
-  a later write invalidates.
-- A cast between the same reference shape denotes its operand;
-  monomorphization leaves one over every buffer the formatting path builds. A
-  converting cast still folds only through the primitive-cast evaluator. Place
-  naming and the trackability mentions read through casts alike, so a borrow
-  reaching a builtin wrapped in one still names — and keeps trackable — the
-  local it writes.
+- A self-contained block — one that builds its value in locals of its own, reads
+  and writes only those, and yields the result — runs as a frame the engine
+  starts from scratch. This is what folds a fully-constant string template to
+  the literal the source could have written.
+- Self-containment is decided before the run, since the run copies the enclosing
+  body while the checks only walk the block. What that gives up is a mention on
+  a statically dead path, which no scan can tell from a live one.
+- A block yielding nothing denotes nothing, whatever its last statement computed.
+- An outer local the region only reads is seeded from the walker's environment
+  when it is constant there. A write position — an `Assign` target, a `&mut`
+  borrow root, or an argument the callee's signature takes by `&mut` — or a
+  reference-typed mention refuses the region instead.
+- Inside a frame, a `let` binding a borrow of a local place resolves to an alias,
+  and so does rebinding a local that already carries one: copying a reference
+  copies the reference. An alias is resolved by a projection and by nothing else,
+  so a capture never turns into a copy.
+- A reference is recognized by shape rather than by spelling, since the boxing
+  pass redefines `&T` into `Box<T>`. A cast between the same reference shape
+  denotes its operand.
 
 ## TODO
 
-### Values the engine cannot represent
+Values the engine cannot represent:
 
-- A place-valued field, so an aggregate can carry a `&mut`. Today such an
-  aggregate is simply not a constant, since a field holding the referent's
-  value would take a write meant for the referent. What the field needs to
-  hold is the place the frame already names elsewhere, which would make the
-  alias machinery reach through a struct as well as through a local.
-  `Formatter { buf: &mut __r }` is the shape waiting on this.
-- An aggregate that is not a byte sequence has no way back into the IR. A
-  `List<T>` of scalars would want the `ArrayLiteral` shape, and a plain struct
-  a `StructLiteral` over its materialized fields; both are exits to add beside
-  the byte-sequence one, each needing its own answer to "is this already the
-  literal the rewrite writes" so the worklist still settles.
-- Comparing two literal strings. A string pattern reaches the engine as a
-  guard, and deciding it means running the comparison — which is a method call
-  taking references, so it waits on the two entries below rather than on the
-  value model.
+- [ ] A place-valued field, so an aggregate can carry a reference. Today such an
+      aggregate is not a constant, since a field holding the referent's value
+      would take a write meant for the referent; what it needs to hold is the
+      place the frame already names elsewhere. `Formatter { buf: &mut __r }`
+      waits on this, and so does every result a `stores` callee hands back — and
+      that refusal is whole-value, so a scalar field naming no storage is refused
+      with the rest, which is why `Array::slice`'s computed bounds stop folding.
+- [ ] An aggregate that is not a byte sequence has no way back into the IR. A
+      `List<T>` of scalars wants the `ArrayLiteral` shape and a plain struct a
+      `StructLiteral`, each needing its own answer to "is this already the
+      literal the rewrite writes" so the worklist still settles.
+- [ ] Comparing two literal strings, which reaches the engine as a guard and
+      means running a method call over references.
 
-### Calls
+Calls:
 
-- A destructuring `let`, which binds a pattern rather than a name; a body
-  containing one is abandoned.
-- Method calls, excluded because a `&mut self` receiver mutates through the
-  call. Worth revisiting now that mod-ref and alias analysis can prove a
-  receiver is not written — and unnecessary for a receiver the frame owns, which
-  the store below can simply update.
-- A call that returns nothing. Eligibility asks for a value to substitute, which
-  is the right question for replacing a call and the wrong one for running it:
-  a call whose every write lands in a place the frame owns is executable as a
-  statement whatever it returns. Splitting the two — value-CTFE and
-  frame-executable — is what lets a builder-style helper run.
-- Closure calls: an indirect call whose closure is known at the call site is
-  never resolved to a direct call, so neither inlining nor CTFE can reach
-  through it.
-- Recursion beyond a base case. The wasm-CTFE backend below is the intended
-  answer.
+- [ ] A destructuring `let`; a body containing one is abandoned.
+- [ ] Method calls, excluded because a `&mut self` receiver mutates through the
+      call. Unnecessary for a receiver the frame owns, which the store can update.
+- [ ] A call that returns nothing but whose every write lands in a place the
+      frame owns, which is what lets a builder-style helper run.
+- [ ] Closure calls: an indirect call whose closure is known is never resolved
+      to a direct call, so neither inlining nor CTFE reaches through it.
+- [ ] Recursion beyond a base case. The wasm-CTFE backend is the intended answer.
 
-### Control flow
+Control flow:
 
-- A `switch` with a constant scrutinee is not folded, although `if` and
-  `match` are. Since a switch is formed before inlining, a scrutinee that
-  inlining makes constant survives to the end untouched.
-- Unrolling a loop in place in the caller. Distinct from running one during a
-  compile-time call, which is done: this is a code-size trade needing a cost
-  model, not an evaluation capability.
-- Guards decided when the engine is only asked what an expression denotes;
-  today an arm's bindings are only in scope on the rewriting path.
+- [ ] A `switch` with a constant scrutinee. A switch is formed before inlining,
+      so a scrutinee inlining makes constant survives untouched.
+- [ ] Unrolling a loop in the caller — a code-size trade needing a cost model,
+      not an evaluation capability.
+- [ ] Guards decided when the engine is only asked what an expression denotes.
 
-### Sequences
+Sequences:
 
-- The rest of the spine. Element and field writes land, an allocation denotes a
-  zero-filled sequence and a copy a spliced one; what remains is a `&mut`
-  argument writing back into the caller frame's place on return. Without it a
-  buffer that grows — which is what `String` does the moment it outruns its
-  capacity — still abandons the evaluation, because `grow` reshapes the
-  caller's container from a frame of its own. What will not fit even then — a
-  table past the length cap, a fill loop past the step budget — stays the
-  wasm-CTFE backend's case.
-
-### Regions
-
-- A region's frame is seeded from the walker's environment: an outer local
-  the region only reads, constant at the region's flow point, is bound in the
-  frame as a value snapshot. The write test is what keeps that sound —
-  `region_free_reads` rejects an outer local in a write position (an `Assign`
-  target, a `&mut` borrow root, or any argument the callee's signature takes
-  by `&mut` — the signature, because boxing can erase the borrow node at the
-  call site — refusing outright when a write's place no local roots), and a
-  reference-typed mention is refused, since reading a `&mut T` value hands a
-  callee the same write capability. A
-  reference-typed region result is refused for its own reason: the fold would
-  materialize a fresh value where the program yields an alias, and `ref.eq`
-  tells the two apart. A constant outer local therefore folds during the
-  loop, before globalization would hoist it — which also keeps globalization
-  from planting the hoist's `GlobalVarSet` inside the region, a write that
-  would disqualify it for good.
+- [ ] A `&mut` argument writing back into the caller frame's place on return.
+      Without it a buffer that grows still abandons the evaluation, because
+      `grow` reshapes the caller's container from a frame of its own. What will
+      not fit even then stays the wasm-CTFE backend's case.
 
 ### Compile-time string formatting
 
 A template whose interpolations are all constant still formats at run time.
 `` `n=${42}` `` reaches the end of the optimizer as a buffer allocation, two
-byte pushes, a `Formatter` literal, and a call to `i32::fmt_decimal`, paying a
-digit-count loop and a division loop per evaluation — and keeping the
-formatting code alive in the binary — for four bytes decided at compile time.
-The same string written `"n=42"` folds to a deduplicated constant global.
-Every `${}` over constants, every `to_string()` on a literal, every constant
-`assert` message, and every constant `${x:?}` pays this.
+byte pushes, a `Formatter` literal and a call to `i32::fmt_decimal` — a
+digit-count loop and a division loop per evaluation, plus the formatting code
+kept alive in the binary, for four bytes decided at compile time. Every `${}`
+over constants, every `to_string()` on a literal and every constant `assert`
+message pays it.
 
-Nothing here waits on trait dispatch: `Display::fmt` is monomorphized and
-devirtualized to a free call before the optimizer runs. The aggregate exit, the
-store, the frame-executable call, and region recognition together fold the
-region to the literal the source could have written, after which
-constant-object globalization deduplicates it and DCE drops the formatting
-functions no live call reaches. What the remaining coverage waits on is the
-value model: an interpolation that keeps its `Formatter` literal needs an enum
-value for the alignment field and a place-naming value for the `&mut` buffer
-field, so a callee's write through `f.buf` lands in the region's buffer rather
-than in a copy inside the `Formatter` aggregate.
+Nothing waits on trait dispatch: `Display::fmt` is devirtualized to a free call
+before the optimizer runs. The aggregate exit, the store, the frame-executable
+call and region recognition together fold the region to a literal, after which
+globalization deduplicates it and DCE drops the unreached formatting functions.
+What the remaining coverage waits on is the value model above: an interpolation
+keeping its `Formatter` literal needs an enum value for the alignment field and
+a place-naming value for the `&mut` buffer field.
 
 Fold the region, not the call. A region constructs its own buffer, so every
-value inside it is concrete and nothing is assumed about it.
+value inside it is concrete. The call-level fold — rewriting one `fmt` over a
+constant into `push_str(<literal>)`, which a template mixing constant and
+runtime interpolations needs — claims more than one concrete evaluation shows:
+that the callee appends the same bytes to every buffer. `#[compiler_item]` is
+where that claim comes from, as it already does for `push_str`.
 
-The call-level fold — rewriting one `fmt` over a constant into
-`push_str(<literal>)`, which is what a template mixing constant and runtime
-interpolations needs — claims more than one concrete evaluation shows: that the
-callee appends the same bytes to every buffer, not just to the one it ran
-against. `#[compiler_item]` is where that comes from, as it already does for
-`push_str` — the rewrite expanding `buf.push_str("abc")` into per-byte `push`
-is licensed by the marker, not by an analysis of either body.
-
-Mark `Formatter`'s write primitives, not `Display::fmt`. Marking the trait
-would extend the trust across every user-written impl, where nothing is
-checkable; a primitive is one small stdlib function a reader can confirm, the
-same obligation `push_str` already carries.
-
-What a marked primitive declares is a region append: everything it does to the
-buffer happens at or above the length the buffer had on entry, and what lies
-below is neither read nor moved. That is the stdlib's formatting idiom as
-written — `prepare_int_write` reserves a region the digit writers fill
-backwards, `mark` / `apply_padding` appends content and then shifts it to make
-room for alignment, and `fpfmt`'s writers reserve and slide a fractional tail
-to insert the point. A strictly-append contract, where bytes land on the end
-and are never revisited, is not the design: a padded float cannot learn its
-length before appending, so reaching it would mean formatting through an
-intermediate buffer, which costs more at run time than the contract is worth.
-Region append covers all three idioms unchanged and is still one sentence.
-
-What any particular `fmt` body does is then derived rather than declared: run it
-against a buffer the engine constructed, and admit the result when every buffer
-access either went through a marked primitive or landed inside a region one of
-them just returned. A body that reads the buffer's prior length for its own
-purposes, or reaches `f.buf` outside that, is refused — a condition the engine
-checks rather than an invariant it hopes for.
-
-The markers also keep the buffer plumbing out of the interpreter: a marked
-`push_str` is applied by its declared meaning, so `grow`'s undecidable capacity
-test and `realloc_to`'s prefix copy are never interpreted. The reserved region a
-primitive hands back is the same place the frame store hands out, so the two
-capabilities want the same representation.
-
-What is left, each red/green with the fixture first:
+Mark `Formatter`'s write primitives, not `Display::fmt`: marking the trait would
+extend the trust to every user-written impl, where nothing is checkable. What a
+marked primitive declares is a region append — everything it does to the buffer
+happens at or above the length the buffer had on entry, and what lies below is
+neither read nor moved. That covers the stdlib's three formatting idioms
+(`prepare_int_write`, `mark` / `apply_padding`, `fpfmt`'s reserving writers)
+unchanged, where a strictly-append contract would not. What a particular `fmt`
+body does is then derived: run it against a buffer the engine built, and admit
+the result when every buffer access went through a marked primitive or landed
+inside a region one just returned.
 
 - [ ] Coverage, in order of engine cost: `bool` / `char` / `String`, then
-      integers, then width / zero-pad / radix specs, then `Inspect`, then
-      floats. A `String` literal interpolation folds already — its `fmt`
-      inlines down to reserve-and-write, so no `Formatter` value survives —
-      and every other type keeps a `Formatter` literal, which waits on the
-      enum and `&mut`-field values above. Each step measures what it spends
-      against the step budget: integer formatting is two short loops and fits,
-      and `fpfmt` is the candidate for overrunning it — if it does, floats are
-      the wasm-CTFE backend's case rather than a reason to raise the budget.
-- [ ] A remark for a region that nearly folded — one runtime interpolation, or
-      an exhausted budget — so a missed fold is visible instead of silent, plus
-      a `wasm-size` and `benchmark` run to record what the whole thing bought.
-
-A template with any runtime interpolation keeps today's imperative form,
-including the loop-buffer reuse `tmpl_hoist` gives it.
+      integers, then width / zero-pad / radix specs, then `Inspect`, then floats.
+      A `String` interpolation folds already. Each step measures what it spends
+      against the step budget; if `fpfmt` overruns it, floats are the wasm-CTFE
+      backend's case rather than a reason to raise the budget.
+- [ ] A remark for a region that nearly folded — one runtime interpolation, or an
+      exhausted budget — plus a `wasm-size` and `benchmark` run to record what
+      the whole thing bought.
 
 ### wasm-CTFE backend
 
-- `wado-compiler` must compile to `wasm32-unknown-unknown`, so it cannot link
-  a Wasm runtime. Compile-time evaluation of a whole call therefore routes
-  through the compiler host, as generator execution already does. Hosts with
-  a runtime implement it; the LSP and browser hosts decline and `niri` stays
-  in-process.
-- Triggered when in-process reduction gives up on a callee that is still
-  pure by its effects; the result is used as if the in-process engine had
-  produced it.
-- Enables `compute_lookup_table(256)` and similar workloads at compile time
-  without re-implementing every NIR construct in the interpreter.
+- [ ] `wado-compiler` must compile to `wasm32-unknown-unknown`, so it cannot link
+      a Wasm runtime. Whole-call evaluation therefore routes through the compiler
+      host, as generator execution already does; hosts without a runtime decline
+      and `niri` stays in-process.
+- [ ] Triggered when in-process reduction gives up on a callee still pure by its
+      effects, with the result used as if the in-process engine produced it.
 
 ## Complexity
 
-Reduction is monotone — expressions only move toward literal form — and
-idempotent, and the optimizer's fixed-point loop is the only fixed point:
-`niri` does not iterate internally. Each extension should keep the engine's
-work bounded in the size of what it is asked about; a rule whose cost is
-quadratic in body size, or that rebuilds a large value per query, is the
-failure mode to watch for. Everything else about speed is a profiling
-question, not a design-time one.
+Reduction is monotone and idempotent, and the optimizer's fixed-point loop is
+the only fixed point: `niri` does not iterate internally. Each extension should
+keep the engine's work bounded in the size of what it is asked about; a rule
+whose cost is quadratic in body size, or that rebuilds a large value per query,
+is the failure mode to watch for.
 
 ## Determinism
 
 - Float NaN bits are nondeterministic in Wasm, so NaN-producing arithmetic is
-  never folded. This holds for both backends.
-- `v128` and relaxed-SIMD have implementation-defined corner cases; SIMD CTFE
-  is deferred to a later WEP.
-- Integer wrapping and signed `MIN / -1` semantics match Wasm. Division by
-  zero and signed `MIN / -1` are left unfolded so the runtime trap survives.
-- Float zero carries no sign distinction through a fold: `-0.0` and `+0.0`
-  are equal, so `if cond { -0.0 } else { 0.0 }` collapses to one of the two
-  and an operation that observes the sign of zero sees the chosen
-  representative. This matches IEEE 754 equality. A caller needing
-  bit-precise zeros should get a per-operation equality predicate rather than
-  a globally weakened fold.
+  never folded, on either backend.
+- `v128` and relaxed-SIMD have implementation-defined corner cases; SIMD CTFE is
+  deferred to a later WEP.
+- Integer wrapping and signed `MIN / -1` match Wasm. Division by zero and signed
+  `MIN / -1` are left unfolded so the runtime trap survives.
+- Float zero carries no sign through a fold: `-0.0` and `+0.0` are equal, so
+  `if cond { -0.0 } else { 0.0 }` collapses to one of the two. A caller needing
+  bit-precise zeros should get a per-operation equality predicate rather than a
+  globally weakened fold.
 
 ## Out of scope
 
-- User-facing CTFE syntax (`#[const_eval]`, `const fn`). Decide once real
-  demand shows up.
+- User-facing CTFE syntax (`#[const_eval]`, `const fn`). Decide once real demand
+  shows up.
 - Salsa-style demand-driven reanalysis across compiler runs.
 
 ## Open questions
 
 - Where does the wasm-CTFE module cache live — per `compile` invocation or per
-  process? Per-invocation is simpler; per-process speeds up watch-mode
-  workflows but needs eviction.
+  process? Per-invocation is simpler; per-process speeds up watch mode but needs
+  eviction.
 - Which primitives make the marked set. Every buffer touch in the formatting
-  path has to reach one, so the set is whatever `write_str`, `write_char`,
-  `pad`, `mark` / `apply_padding`, `prepare_int_write`, and `fpfmt`'s reserving
-  writers turn out to factor into.
+  path has to reach one.

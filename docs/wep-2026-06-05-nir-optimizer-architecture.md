@@ -199,8 +199,7 @@ interprocedural over-approximation.
 
 ### Standing invariants — do not reintroduce
 
-These are settled by measurement and re-derived at a cost; `wado-compiler/AGENTS.md`
-repeats them where a contributor will hit them.
+These are settled by measurement and re-derived at a cost.
 
 - No mid-pipeline rebuild of the value graph. Build-once is structural: nothing
   clears `Body::value_graph`. Maintain in place; never clear-and-rebuild.

@@ -25,8 +25,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, Operand, PatId, StmtId,
-    StmtKind, StmtNode,
+    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, Operand, PatId, PatKind,
+    StmtId, StmtKind, StmtNode,
 };
 use crate::nir_value_graph::ValueKind;
 use crate::tir::{TypeId, TypeTable};
@@ -224,9 +224,9 @@ impl EditSink for BodySink<'_> {
 /// `type_params` and `impl_type_params` empty, since CTFE runs after
 /// monomorphization.
 ///
-/// Neither `inline_hint` nor `stores` is consulted. Where a body is placed says
-/// nothing about compile-time knowability, and what a callee keeps is a
-/// snapshot that `Reached` is what holds sound.
+/// Neither `inline_hint` nor `stores` is consulted: where a body is placed says
+/// nothing about compile-time knowability, and a storing callee still runs for
+/// the writes it performs — `run_call` refuses only its result.
 #[must_use]
 pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
     func.effects.is_empty()
@@ -348,7 +348,22 @@ pub struct Interpreter<'a> {
     /// terminate without consuming budget. The `RefCell` borrow guard cannot
     /// serve this role, since it permits concurrent immutable borrows.
     call_stack: Vec<CalleeKey>,
+    /// Runs this walk abandoned. A run is a function of these three alone — a
+    /// frame starts empty and the rest is fixed for the pass — so a failed one
+    /// stays failed, and re-running it re-pays a whole-body copy for the same
+    /// refusal.
+    call_misses: Vec<CallMiss>,
 }
+
+struct CallMiss {
+    callee: CalleeKey,
+    may_write: bool,
+    args: Vec<Value>,
+}
+
+/// Ceiling on remembered misses; the list is scanned linearly. Dropping one
+/// costs a re-run, never an answer.
+const MAX_CALL_MISSES: usize = 64;
 
 fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
     let StmtKind::Let {
@@ -398,6 +413,30 @@ impl<'a> Interpreter<'a> {
             facts: ProgramFacts::default(),
             step_budget: DEFAULT_STEP_BUDGET,
             call_stack: Vec::new(),
+            call_misses: Vec::new(),
+        }
+    }
+
+    /// What is left of the CTFE work budget: a declined fold and an exhausted
+    /// budget look alike from outside.
+    #[must_use]
+    pub fn step_budget(&self) -> u32 {
+        self.step_budget
+    }
+
+    fn call_missed(&self, callee: CalleeKey, may_write: bool, args: &[Value]) -> bool {
+        self.call_misses
+            .iter()
+            .any(|miss| miss.callee == callee && miss.may_write == may_write && miss.args == args)
+    }
+
+    fn record_call_miss(&mut self, callee: CalleeKey, may_write: bool, args: Vec<Value>) {
+        if self.call_misses.len() < MAX_CALL_MISSES {
+            self.call_misses.push(CallMiss {
+                callee,
+                may_write,
+                args,
+            });
         }
     }
 
@@ -463,16 +502,36 @@ impl<'a> Interpreter<'a> {
             Trackability::outside_frame(body, self.facts).aggregate_locals;
     }
 
+    /// Record which locals a `let` bound to `&GLOBAL`.
+    ///
+    /// An index more than one binder names keeps none: the scan reads the whole
+    /// arena — which is what lets a read fold through a binding an in-place
+    /// rewrite displaced — so it cannot order two binders against each other.
+    /// Pattern bindings count, since index reuse across a `let` and a match arm
+    /// is real.
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
         self.frame.ref_global_aliases.clear();
         let mut seen: IndexSet<u32> = IndexSet::default();
+        let mut rebound: IndexSet<u32> = IndexSet::default();
+        for (_, st) in &body.stmts {
+            if let StmtKind::Let { local_index, .. } = &st.kind
+                && !seen.insert(*local_index)
+            {
+                rebound.insert(*local_index);
+            }
+        }
+        for (_, pat) in &body.pats {
+            if let PatKind::Binding { local_index, .. } = &pat.kind
+                && !seen.insert(*local_index)
+            {
+                rebound.insert(*local_index);
+            }
+        }
         for (id, st) in &body.stmts {
-            if let Some((local, key)) = let_ref_global(body, &st.kind) {
-                if seen.insert(local) {
-                    self.frame.ref_global_aliases.insert(local, (id, key));
-                } else {
-                    self.frame.ref_global_aliases.swap_remove(&local);
-                }
+            if let Some((local, key)) = let_ref_global(body, &st.kind)
+                && !rebound.contains(&local)
+            {
+                self.frame.ref_global_aliases.insert(local, (id, key));
             }
         }
     }
@@ -484,6 +543,7 @@ impl<'a> Interpreter<'a> {
     pub fn enter_function(&mut self) {
         self.step_budget = DEFAULT_STEP_BUDGET;
         self.frame = FrameState::default();
+        self.call_misses.clear();
         debug_assert!(
             self.call_stack.is_empty(),
             "niri call_stack leaked across function boundary",

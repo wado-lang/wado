@@ -718,15 +718,22 @@ impl Interpreter<'_> {
         if aliased_write_targets(&targets, &places) {
             return None;
         }
-        // A callee that writes through a `&mut` parameter may hand the
-        // parameter's storage back inside its result — `Formatter::new(&mut
-        // buf)` returns a `Formatter` holding that borrow. The engine has no
-        // reference values, so the result would stand as a snapshot of the
-        // referent and every later write through it would land in the copy
-        // while the referent went stale. A scalar embeds nothing, so only an
-        // aggregate result is refused.
-        let may_embed_a_write_target = !targets.is_empty();
+        // A result may embed a parameter's storage — `Formatter::new(&mut buf)`
+        // returns a `Formatter` holding that borrow, and `stores[p]` declares
+        // the same of a shared one. The engine has no reference values, so it
+        // would stand as a snapshot the next write to that storage leaves
+        // stale. A scalar embeds nothing.
+        let stores_a_reference = callee.params.iter().any(|p| {
+            callee.stores.contains(&p.name) && self.type_table.is_reference_shaped(p.type_id)
+        });
+        let may_embed_caller_storage = !targets.is_empty() || stores_a_reference;
 
+        // Below here is the expensive half: a whole-body copy and a
+        // trackability walk over it.
+        let args: Vec<Value> = bound.iter().map(|(_, value)| value.clone()).collect();
+        if self.call_missed(key, may_write, &args) {
+            return None;
+        }
         self.charge(1)?;
         self.call_stack.push(key);
         let mut scratch = callee_body.nodes_only_clone();
@@ -735,8 +742,11 @@ impl Interpreter<'_> {
         let run = self.exec_frame(&mut scratch, targets, returns_unit);
         self.swap_frame(caller);
         self.call_stack.pop();
+        if run.is_none() {
+            self.record_call_miss(key, may_write, args);
+        }
         run.map(|run| {
-            let embeds_storage = may_embed_a_write_target
+            let embeds_storage = may_embed_caller_storage
                 && !matches!(&run.result, Lattice::Const(v) if v.is_scalar());
             if returns_reference || embeds_storage {
                 CallRun {
