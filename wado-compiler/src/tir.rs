@@ -710,7 +710,7 @@ pub struct TypeTable {
     /// structs. `find_decl_type_by_name` scanned every interned type for these,
     /// which an instantiation now pays on the way in — see
     /// `make_generic_instance`.
-    decl_name_index: IndexMap<crate::defs::DefId, TypeId>,
+    decl_name_index: IndexMap<(String, ModuleSource), TypeId>,
     /// Canonical map: declared-type symbol → `TypeId`.
     ///
     /// Populated by the elaborator whenever it creates a decl-backed type
@@ -842,9 +842,9 @@ impl TypeTable {
     /// dispatch name is derived differently).
     pub fn generic_dispatch_components(&self, type_id: TypeId) -> Option<(String, Vec<TypeId>)> {
         match self.get(type_id) {
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => Some((name.clone(), type_args.clone())),
+            ResolvedType::GenericInstance { def, type_args } => {
+                Some((self.def_name(*def).to_string(), type_args.clone()))
+            }
             ResolvedType::BuiltinArray(elem) => {
                 Some((Self::ARRAY_TYPE_NAME.to_string(), vec![*elem]))
             }
@@ -923,7 +923,8 @@ impl TypeTable {
             self.struct_name_index.insert((rendered, module_source), id);
         }
         if let Some(def) = Self::nominal_key(&ty) {
-            self.decl_name_index.insert(def, id);
+            let key = (self.def_name(def).to_string(), self.def_module(def).clone());
+            self.decl_name_index.insert(key, id);
         }
         self.types.push(ty.clone());
         self.intern_map.insert(ty, id);
@@ -1245,16 +1246,13 @@ impl TypeTable {
         if let Some(key) = self.symbol_by_type.get(type_id) {
             return Some(*key);
         }
-        let ResolvedType::GenericInstance {
-            name,
-            module_source,
-            ..
-        } = self.get(type_id)
-        else {
+        // An instantiation records the declaration it came from, so the
+        // answer is read off the type rather than re-derived from a spelling
+        // whose base may already have been pruned.
+        let ResolvedType::GenericInstance { def, .. } = self.get(type_id) else {
             return None;
         };
-        let base = self.find_decl_type_by_name(name, module_source)?;
-        self.symbol_by_type.get(base).copied()
+        Some(self.defs.ast_id(*def))
     }
 
     /// The declaring [`AstId`](crate::ast::AstId) of the type named `name` in
@@ -1339,14 +1337,10 @@ impl TypeTable {
         }
         // Fall back to scanning GenericInstance types (for generic templates)
         for id in self.iter_type_ids() {
-            if let ResolvedType::GenericInstance {
-                name: gi_name,
-                module_source,
-                ..
-            } = self.get(id)
-                && gi_name == name
+            if let ResolvedType::GenericInstance { def, .. } = self.get(id)
+                && self.def_name(*def) == name
             {
-                return Some(module_source.clone());
+                return Some(self.def_module(*def).clone());
             }
         }
         None
@@ -1418,7 +1412,8 @@ impl TypeTable {
         for (id, ty) in self.types.iter() {
             self.intern_map.insert(ty.clone(), id);
             if let Some(def) = Self::nominal_key(ty) {
-                self.decl_name_index.insert(def, id);
+                let key = (self.def_name(def).to_string(), self.def_module(def).clone());
+                self.decl_name_index.insert(key, id);
             }
         }
         // Structs index under the spelling they render to, the way `intern`
@@ -1654,8 +1649,12 @@ impl TypeTable {
     /// does not hard-code either. Panics with a clear ICE message when
     /// the item is not registered or has the wrong kind.
     pub fn make_compiler_struct(&mut self, item: crate::compiler_item::CompilerItem) -> TypeId {
-        let (module_source, name) = self.compiler_items.struct_owned(item);
-        self.make_struct(name, module_source)
+        let decl = self
+            .compiler_items
+            .struct_decl(item)
+            .and_then(|ast| self.defs.of_ast_id(ast))
+            .unwrap_or_else(|| panic!("compiler item {item:?} is not a registered struct"));
+        self.make_struct(StructDef::Decl(decl))
     }
 
     /// Make the enum type for a registered [`CompilerItem`] variant
@@ -1751,10 +1750,8 @@ impl TypeTable {
 
     /// If `type_id` is a `AsyncCall<T>` `GenericInstance`, return `T`.
     pub fn as_async_call(&self, type_id: TypeId) -> Option<TypeId> {
-        if let ResolvedType::GenericInstance {
-            name, type_args, ..
-        } = self.get(type_id)
-            && name == "AsyncCall"
+        if let ResolvedType::GenericInstance { def, type_args } = self.get(type_id)
+            && self.def_name(*def) == "AsyncCall"
             && type_args.len() == 1
         {
             return Some(type_args[0]);
@@ -1801,9 +1798,11 @@ impl TypeTable {
             .tuple_module()
             .cloned()
             .unwrap_or_else(ModuleSource::prelude);
+        let def = self
+            .decl_named_in(Self::TUPLE_TYPE_NAME, &module_source)
+            .expect("the tuple declaration is a compiler item");
         self.intern(ResolvedType::GenericInstance {
-            name: Self::TUPLE_TYPE_NAME.to_string(),
-            module_source,
+            def,
             type_args: elements,
         })
     }
@@ -1839,10 +1838,8 @@ impl TypeTable {
 
     /// If the type is a built-in tuple, return its element types.
     pub fn as_tuple(&self, id: TypeId) -> Option<Vec<TypeId>> {
-        if let ResolvedType::GenericInstance {
-            name, type_args, ..
-        } = self.get(id)
-            && Self::is_tuple_type(name)
+        if let ResolvedType::GenericInstance { def, type_args } = self.get(id)
+            && Self::is_tuple_type(self.def_name(*def))
         {
             Some(type_args.clone())
         } else {
