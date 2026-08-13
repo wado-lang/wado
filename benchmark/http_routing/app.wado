@@ -25,10 +25,6 @@ impl Serialize for ApiResponse;
 
 struct RouteResponse {
     status: StatusCode,
-    /// A borrowed view of the serializer's own buffer, not a copy of it:
-    /// `to_bytes` already hands back a `ByteSlice`, and `write_raw` lowers a
-    /// slice straight into linear memory, so nothing between the two needs to
-    /// own the bytes.
     body: ByteSlice,
 }
 

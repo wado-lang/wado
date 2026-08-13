@@ -1,22 +1,10 @@
 // A block-bodied closure in call-argument position, inside `for … of` over a
-// `List`, used to compile to a `__call` typed `-> !`: the callee pushed
-// nothing while the caller popped a value, and the module failed core-Wasm
-// validation ("type mismatch: expected i32 but nothing on stack").
+// `List`, used to compile to a `__call` whose type ignored its `return` —
+// pushing nothing while the caller popped a value, so the module failed
+// core-Wasm validation.
 //
-// Such a body diverges — every path exits — so the returned expressions are
-// the only source of the real return type. The inference looked for them by
-// walking the body AST and reading `expression_types`, which is empty when the
-// site elaborates twice and the committed pass is not the one that recorded
-// the body. This site has no expected fn type to fall back on either, so the
-// inference fell through to the body's own (correctly divergent) `!`. It now
-// reads the body TIR, which exists whichever pass recorded what.
-//
-// The TIR walk has to cover every construct a `return` can hide in, so each
-// one gets a case here: a bare `loop`, `for … of` and `while` (both reify as a
-// labeled block around a loop), `if`, and `match`. `for … of` over a range, a
-// `let`-bound closure, and an expression-bodied closure took different paths
-// and were unaffected; they are pinned too so a future narrowing cannot
-// quietly lose them.
+// One case per construct a `return` can hide in, since the inference walks the
+// body TIR construct by construct and a missing one is an invisible `return`.
 
 fn call(f: fn() -> i32) -> i32 {
     return f();

@@ -6253,20 +6253,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // bodies (e.g. `|c| c.method()`) take their body's type as the return
         // type directly, and block bodies use the return-expression type
         // computed above.
-        // A body that exits through `return <expr>` has that expression's type
-        // as its return type, whatever value type the block itself carries —
-        // `!` when every path exits, `()` for a `loop { return x; }`.
-        // `block_return_type` finds those expressions in the AST via
-        // `expression_types`, and comes up empty when the site elaborated twice
-        // and the committed pass is not the one that recorded the body; a
-        // closure argument inside `for … of` over a `List` is such a site, and
-        // it has no `expected_type` to fall back on either. Taking the block's
-        // own type there typed `__call` as `-> !` (or `-> ()`), so it pushed
-        // nothing while the caller popped a value and the module failed
-        // core-Wasm validation.
-        //
-        // The body TIR was just built, so read the returns off that instead —
-        // it exists whichever pass recorded what.
+        // `block_return_type` reads `expression_types`, which a site that
+        // elaborated twice leaves empty for the committed pass; fall back to
+        // the body TIR, which is built by now either way.
         let return_type = declared_return
             .or(block_return_type)
             .or_else(|| tir_block_return_type(&body))
@@ -10856,24 +10845,15 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
 
 /// First `return <value>` type reachable in a reified closure body.
 ///
-/// The AST-level companion (`control_flow::find_return_type_in_block`) reads
-/// `expression_types`, which is empty for a body whose recording pass the site
-/// discarded. This one reads the TIR the caller just built, so it answers
-/// whenever a `return <value>` exists at all.
-///
-/// It walks every construct the AST companion does, and must keep doing so: a
-/// construct missing here is a body whose `return` is invisible, which is the
-/// mistyped-closure ICE all over again. `for … of` and `while` both reify as a
-/// `LabeledBlock` around a `Loop`, so those two carry most of the weight.
+/// TIR counterpart of `control_flow::find_return_type_in_block`, and must stay
+/// in step with it: a construct missing here is a `return` the closure's return
+/// type cannot see, which mistypes `__call` and fails core-Wasm validation.
 fn tir_block_return_type(body: &crate::tir::TirExpr) -> Option<crate::tir::TypeId> {
     use crate::tir::{TirExprKind, TirStmtKind};
 
     fn in_block(block: &crate::tir::TirBlock) -> Option<crate::tir::TypeId> {
         block.stmts.iter().find_map(|stmt| match &stmt.kind {
             TirStmtKind::Return { value } => value.as_ref().map(|v| v.type_id),
-            // `resume value` lowers to `return value`, mirroring the AST
-            // companion's `Expr::Resume` arm.
-            TirStmtKind::TaskReturn { value, .. } => Some(value.type_id),
             TirStmtKind::If {
                 then_block,
                 else_block,
