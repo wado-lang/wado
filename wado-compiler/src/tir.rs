@@ -346,40 +346,69 @@ impl PrimitiveType {
     }
 }
 
+/// An anonymous struct's shape, interned by its field list.
+///
+/// Minted only by [`TypeTable::intern_anon_struct`]. Two literals of the same
+/// shape reach one of these, which is why the shape is the identity and no
+/// declaration is involved.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AnonStructId(u32);
+
+impl std::fmt::Debug for AnonStructId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Anon({})", self.0)
+    }
+}
+
+/// What a struct type's head is.
+///
+/// A struct literal with no type name has no declaration and no node to
+/// identify it by — two literals of the same shape intern to one type on
+/// purpose — so the head says which of the two it is rather than carrying a
+/// `DefId` that would have to be invented for the second.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum StructDef {
+    Decl(crate::defs::DefId),
+    Anon(AnonStructId),
+}
+
+impl StructDef {
+    /// The declaration this head names, or `None` for a shape that names none.
+    #[must_use]
+    pub fn decl(self) -> Option<crate::defs::DefId> {
+        match self {
+            Self::Decl(def) => Some(def),
+            Self::Anon(_) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ResolvedType {
     Primitive(PrimitiveType),
     Unit,
     Never,
     Struct {
-        /// The declaration's own name, as source writes it — never with
-        /// arguments spelled into it.
-        ///
-        /// Every other nominal variant holds a declaration name here too, and
-        /// `GenericInstance` already keeps its arguments beside one. A
-        /// monomorphized struct used to be the exception, storing the rendered
-        /// `TreeMap<String,i32>` and a separate `base_name` to recover the head
-        /// from — which is what let its spelling pass as a declaration name
+        /// The declaration this was written from, or the shape it was built
+        /// from. Never a spelling: a monomorphized struct used to store the
+        /// rendered `TreeMap<String,i32>` and a `base_name` to recover the head
+        /// from, which is what let its spelling pass as a declaration name
         /// wherever the two were matched together.
-        decl_name: String,
-        module_source: ModuleSource,
+        def: StructDef,
         /// What this instantiation was made with; empty for a declaration
         /// written as such. The rendered spelling is derived from the two —
         /// see [`TypeTable::struct_rendered_name`].
         type_args: Vec<TypeId>,
     },
     Enum {
-        name: String,
-        module_source: ModuleSource,
+        def: crate::defs::DefId,
     },
     /// Resource type - opaque handle (i32) to a Component Model resource
     Resource {
-        name: String,
-        module_source: ModuleSource,
+        def: crate::defs::DefId,
     },
     Variant {
-        name: String,
-        module_source: ModuleSource,
+        def: crate::defs::DefId,
     },
     // NOTE: Option<T> is no longer a dedicated type variant.
     // It is represented as GenericInstance { name: "Option", module_source: types(), type_args: [T] }.
@@ -398,8 +427,7 @@ pub enum ResolvedType {
     /// Generic resource instantiation (e.g., `Future<i32>`, `Stream<String>`).
     /// Represents opaque i32 handles to Component Model resources with type parameters.
     GenericResource {
-        name: String,
-        module_source: ModuleSource,
+        def: crate::defs::DefId,
         type_args: Vec<TypeId>,
     },
     Ref(TypeId),
@@ -454,9 +482,8 @@ pub enum ResolvedType {
     /// Generic struct instantiation (e.g., `Box<i32>`)
     /// Used to track instantiation sites before monomorphization
     GenericInstance {
-        /// Base generic type name (e.g., "Box")
-        name: String,
-        module_source: ModuleSource,
+        /// The generic declaration this instantiates.
+        def: crate::defs::DefId,
         /// Concrete type arguments (e.g., [i32])
         type_args: Vec<TypeId>,
     },
@@ -488,8 +515,7 @@ pub enum ResolvedType {
     /// Created by `type T = U;` declarations.
     /// Newtypes are distinct from their base types but can be cast between them.
     Newtype {
-        name: String,
-        module_source: ModuleSource,
+        def: crate::defs::DefId,
         /// The direct base type (may be another newtype for chained newtypes)
         base_type: TypeId,
     },
@@ -497,8 +523,7 @@ pub enum ResolvedType {
     /// Created by `flags F { A, B, C }` declarations.
     /// Distinct from Newtype so flags can be detected without name-based lookup.
     Flags {
-        name: String,
-        module_source: ModuleSource,
+        def: crate::defs::DefId,
     },
     Unknown,
     Error,
@@ -750,6 +775,10 @@ pub struct TypeTable {
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
     variant_case_index: IndexMap<(String, ModuleSource), Vec<(String, u32, TypeId)>>,
+    /// Every anonymous struct shape, by [`AnonStructId`].
+    anon_structs: Vec<(ModuleSource, Vec<(String, TypeId)>)>,
+    /// Dedup for the above: the same shape in the same module is one id.
+    anon_struct_index: IndexMap<(ModuleSource, Vec<(String, TypeId)>), AnonStructId>,
     /// Every declaration in the program, for rendering a nominal type's head.
     ///
     /// A name comes out of an identity and never goes back in. Attached where
@@ -872,6 +901,8 @@ impl TypeTable {
             symbol_by_type: TypeMap::default(),
             bound_driven_synth_requests: IndexSet::default(),
             variant_case_index: IndexMap::default(),
+            anon_structs: Vec::new(),
+            anon_struct_index: IndexMap::default(),
             defs: std::sync::Arc::default(),
         };
 
@@ -1059,6 +1090,122 @@ impl TypeTable {
     #[must_use]
     pub fn def_module(&self, def: crate::defs::DefId) -> &ModuleSource {
         self.defs.module(def)
+    }
+
+    /// Intern an anonymous struct's shape. The fields are the identity, so two
+    /// literals writing the same shape in the same module reach one id.
+    pub fn intern_anon_struct(
+        &mut self,
+        module_source: ModuleSource,
+        fields: Vec<(String, TypeId)>,
+    ) -> AnonStructId {
+        let key = (module_source, fields);
+        if let Some(&id) = self.anon_struct_index.get(&key) {
+            return id;
+        }
+        let id = AnonStructId(u32::try_from(self.anon_structs.len()).expect("anon struct space"));
+        self.anon_structs.push(key.clone());
+        self.anon_struct_index.insert(key, id);
+        id
+    }
+
+    /// The fields of an anonymous struct shape.
+    #[must_use]
+    pub fn anon_struct_fields(&self, id: AnonStructId) -> &[(String, TypeId)] {
+        &self.anon_structs[id.0 as usize].1
+    }
+
+    /// The module the shape was written in.
+    #[must_use]
+    pub fn anon_struct_module(&self, id: AnonStructId) -> &ModuleSource {
+        &self.anon_structs[id.0 as usize].0
+    }
+
+    /// The spelling an anonymous struct renders to, derived from its fields —
+    /// the same `__anon_{x:i32,y:i32}` form the synthesized name used to be.
+    #[must_use]
+    pub fn anon_struct_name(&self, id: AnonStructId) -> String {
+        let parts: Vec<String> = self
+            .anon_struct_fields(id)
+            .iter()
+            .map(|(n, ty)| format!("{n}:{}", self.type_name(*ty)))
+            .collect();
+        format!("__anon_{{{}}}", parts.join(","))
+    }
+
+    /// The name a struct head renders to: the declaration's, or the shape's.
+    #[must_use]
+    pub fn struct_head_name(&self, head: StructDef) -> String {
+        match head {
+            StructDef::Decl(def) => self.def_name(def).to_string(),
+            StructDef::Anon(id) => self.anon_struct_name(id),
+        }
+    }
+
+    /// The module a struct head belongs to.
+    #[must_use]
+    pub fn struct_head_module(&self, head: StructDef) -> &ModuleSource {
+        match head {
+            StructDef::Decl(def) => self.def_module(def),
+            StructDef::Anon(id) => self.anon_struct_module(id),
+        }
+    }
+
+    /// The declaration `module` declares under `name`, read back out of the
+    /// type already interned for it.
+    ///
+    /// This is a name reaching an identity, which the design forbids
+    /// everywhere else, and it is here only for the fixed stdlib heads a
+    /// constructor spells outright — `Future`, `Stream`, `Result`, `List`.
+    /// Those spellings are what `compiler_item.rs`'s registry exists to
+    /// replace, and this goes when they ask it instead. It cannot invent one:
+    /// a declaration the table never interned answers `None`.
+    #[must_use]
+    pub fn decl_named_in(&self, name: &str, module: &ModuleSource) -> Option<crate::defs::DefId> {
+        self.decl_by_name(name, module)
+            .and_then(|ast| self.defs.of_ast_id(ast))
+    }
+
+    /// The declaration a nominal type was written from, if it names one.
+    ///
+    /// This is identity: compare these, never the names below.
+    #[must_use]
+    pub fn nominal_def(&self, id: TypeId) -> Option<crate::defs::DefId> {
+        match self.get(id) {
+            ResolvedType::Struct { def, .. } => def.decl(),
+            ResolvedType::Enum { def }
+            | ResolvedType::Variant { def }
+            | ResolvedType::Resource { def }
+            | ResolvedType::Flags { def }
+            | ResolvedType::Newtype { def, .. }
+            | ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => Some(*def),
+            _ => None,
+        }
+    }
+
+    /// What a nominal type's head renders to — for a diagnostic, a mangle, or
+    /// a consumer still keyed on the pair. A rendering out of an identity, and
+    /// never a way back to one.
+    #[must_use]
+    pub fn nominal_head(&self, id: TypeId) -> Option<(String, ModuleSource)> {
+        match self.get(id) {
+            ResolvedType::Struct { def, .. } => Some((
+                self.struct_head_name(*def),
+                self.struct_head_module(*def).clone(),
+            )),
+            ResolvedType::Enum { def }
+            | ResolvedType::Variant { def }
+            | ResolvedType::Resource { def }
+            | ResolvedType::Flags { def }
+            | ResolvedType::Newtype { def, .. }
+            | ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => Some((
+                self.def_name(*def).to_string(),
+                self.def_module(*def).clone(),
+            )),
+            _ => None,
+        }
     }
 
     pub fn register_decl_type(&mut self, key: crate::ast::AstId, type_id: TypeId) {
@@ -1600,36 +1747,44 @@ impl TypeTable {
 
     /// Create a `Future<T>` generic resource type.
     pub fn make_future(&mut self, inner: TypeId) -> TypeId {
+        let def = self
+            .decl_named_in("Future", &ModuleSource::types())
+            .expect("`Future` is declared in core:types");
         self.intern(ResolvedType::GenericResource {
-            name: "Future".to_string(),
-            module_source: ModuleSource::types(),
+            def,
             type_args: vec![inner],
         })
     }
 
     /// Create a `FutureWritable<T>` generic resource type.
     pub fn make_future_writable(&mut self, inner: TypeId) -> TypeId {
+        let def = self
+            .decl_named_in("FutureWritable", &ModuleSource::types())
+            .expect("`FutureWritable` is declared in core:types");
         self.intern(ResolvedType::GenericResource {
-            name: "FutureWritable".to_string(),
-            module_source: ModuleSource::types(),
+            def,
             type_args: vec![inner],
         })
     }
 
     /// Create a `Stream<T>` generic resource type.
     pub fn make_stream(&mut self, inner: TypeId) -> TypeId {
+        let def = self
+            .decl_named_in("Stream", &ModuleSource::types())
+            .expect("`Stream` is declared in core:types");
         self.intern(ResolvedType::GenericResource {
-            name: "Stream".to_string(),
-            module_source: ModuleSource::types(),
+            def,
             type_args: vec![inner],
         })
     }
 
     /// Create a `StreamWritable<T>` generic resource type.
     pub fn make_stream_writable(&mut self, inner: TypeId) -> TypeId {
+        let def = self
+            .decl_named_in("StreamWritable", &ModuleSource::types())
+            .expect("`StreamWritable` is declared in core:types");
         self.intern(ResolvedType::GenericResource {
-            name: "StreamWritable".to_string(),
-            module_source: ModuleSource::types(),
+            def,
             type_args: vec![inner],
         })
     }
