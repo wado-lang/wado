@@ -1,24 +1,10 @@
-//! WIR optimization — structural and peephole passes on `WirPackage`.
-//! Runs after `wir_build`, before `codegen::emit`.
-//!
-//! Each pass lives in its own module below and documents itself there; the
-//! phase sequence in [`optimize_wir`] is the only statement of what runs and in
-//! what order. [`docs/optimizer.md`](../../../docs/optimizer.md) is the
-//! reader-facing inventory.
-//!
-//! `nullable_ref` is a mandatory representation lowering, not an optimization:
-//! it runs at every `-O`. The rest are optimizations, skipped at `-O0`.
-//!
-//! Related passes live elsewhere: dead-arg/-return elim and single-field param
-//! SROA moved to NIR (`optimize::{dae,drve,sroa_param,elide_box_local}`) to join
-//! its fixed-point loop, and variant-return widening followed them
-//! (`optimize::sroa_variant_return`), leaving only the slot flattening that
-//! needs post-lowering shapes. Write-only-local elim is split —
-//! `optimize::elide_local` for TIR locals, `elide_local` here for
-//! `wir_build`-synthesised locals TIR can't see.
-//!
-//! A `#![wasm_module(...)]` core module — the allocator — runs this same list as
-//! a package of its own ([`optimize_wasm_modules`]), under its own pass names.
+//! WIR optimization — structural and peephole passes on `WirPackage`, between
+//! `wir_build` and `codegen::emit`. Each documents itself in its own module; the
+//! phase sequence in [`optimize_wir`] is the only statement of what runs in what
+//! order. `nullable_ref` is a mandatory representation lowering and runs at every
+//! `-O`; the rest are skipped at `-O0`. What is left here needs post-lowering
+//! shapes — the rest moved to NIR to join its fixed-point loop. A
+//! `#![wasm_module(…)]` core module runs the same list as its own package.
 
 pub(crate) mod array;
 mod branch_hint;
@@ -100,16 +86,11 @@ fn wir_pass(
     pass_dump::dump_wir(&name, module, Phase::After);
 }
 
-/// Run the WIR-level optimizations on the module (in-place).
-///
-/// Passes are skipped at `-O0`; only dead-item compaction runs, so the emitter
-/// never sees `dead_*_indices`.
-///
-/// `lower_nullable_refs` is the exception — a mandatory representation lowering,
-/// not an optimization, so it runs before the `-O0` gate. The frontend already
-/// emits `None` as `ref.null` (the `?`-desugar yields `TirExprKind::Null`); this
-/// picks the matching WIR repr, so skipping it miscompiles rather than just slowing
-/// code. (The frontend/WIR repr split is a known layering smell, tracked separately.)
+/// Run the WIR-level optimizations in place. At `-O0` only dead-item compaction
+/// runs, so the emitter never sees `dead_*_indices`. `lower_nullable_refs` is the
+/// exception, running before that gate: the frontend already emits `None` as
+/// `ref.null`, and this picks the matching WIR repr, so skipping it miscompiles
+/// rather than merely slowing things down.
 pub fn optimize_wir(
     module: &mut WirPackage,
     opt_level: OptLevel,
