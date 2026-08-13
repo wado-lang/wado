@@ -233,12 +233,7 @@ impl TypeBuilder {
         let struct_name = mangle_generic_name("Box", &[inner_name]);
 
         // Register under the Box definition's module source (from #[compiler_item("box")]).
-        let struct_type_id = type_table.make_monomorphized_struct(
-            struct_name.clone(),
-            self.box_module_source.clone(),
-            "Box".to_string(),
-            vec![inner_type_id],
-        );
+        let struct_type_id ={ let def = type_table.decl_named_in(&"Box".to_string(), &self.box_module_source).expect("the declaration this type names exists"); type_table.make_monomorphized_struct(struct_name.clone(), crate::tir::StructDef::Decl(def), vec![inner_type_id]) };
 
         // Create the TirStruct definition with a single `value` field
         let tir_struct = TirStruct {

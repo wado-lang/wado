@@ -1549,19 +1549,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .expect("type param registered by register_generic_params")
                     })
                     .collect();
-                scope.tysys.type_table.borrow_mut().intern(
-                    crate::tir::ResolvedType::GenericResource {
-                        name: name.to_string(),
-                        module_source: module,
-                        type_args: type_arg_ids,
-                    },
-                )
+                let mut tt = scope.tysys.type_table.borrow_mut();
+                let def = tt
+                    .decl_named_in(name, &module)
+                    .expect("the resource declaring these operations exists");
+                tt.intern(crate::tir::ResolvedType::GenericResource {
+                    def,
+                    type_args: type_arg_ids,
+                })
             } else {
-                scope
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_resource(name.to_string(), module)
+                let mut tt = scope.tysys.type_table.borrow_mut();
+                let def = tt
+                    .decl_named_in(name, &module)
+                    .expect("the resource declaring these operations exists");
+                tt.make_resource(def)
             }
         });
 

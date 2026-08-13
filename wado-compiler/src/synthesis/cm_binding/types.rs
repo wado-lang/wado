@@ -177,7 +177,12 @@ impl LiftContext<'_> {
                         .is_some()
                     {
                         let ms = self.module_source_for(&src);
-                        return tt.make_struct(n.name.clone(), ms);
+                        return {
+                            let def = tt
+                                .decl_named_in(&n.name, &ms)
+                                .expect("the declaration this type names exists");
+                            tt.make_struct(crate::tir::StructDef::Decl(def))
+                        };
                     }
                     if self
                         .cm_interface_registry
@@ -185,7 +190,12 @@ impl LiftContext<'_> {
                         .is_some()
                     {
                         let ms = self.module_source_for(&src);
-                        return tt.make_variant(n.name.clone(), ms);
+                        return {
+                            let def = tt
+                                .decl_named_in(&n.name, &ms)
+                                .expect("the declaration this type names exists");
+                            tt.make_variant(def)
+                        };
                     }
                 }
                 cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)

@@ -574,11 +574,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Create a GenericInstance type
-                    self.tysys.type_table.borrow_mut().make_generic_instance(
-                        identity_name,
-                        module_source,
-                        type_args,
-                    )
+                    let def = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .decl_named_in(&identity_name, &module_source)
+                        .expect("the generic declaration being instantiated exists");
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_generic_instance(def, type_args)
                 } else if let Some(variant_info) = self.lookup_variant_case(name).cloned() {
                     // Check if it's a generic variant (like Result<T, E>)
                     if variant_info.type_params.is_empty() {
@@ -586,11 +591,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         let type_args: Vec<TypeId> =
                             args.iter().map(|t| self.resolve_type(t)).collect();
-                        self.tysys.type_table.borrow_mut().make_generic_instance(
-                            name.to_string(),
-                            variant_info.module_source,
-                            type_args,
-                        )
+                        let def = self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .decl_named_in(name, &variant_info.module_source)
+                            .expect("the generic variant being instantiated exists");
+                        self.tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_generic_instance(def, type_args)
                     }
                 } else if let Some(gn_info) = self.lookup_generic_newtype(name).cloned() {
                     // Generic newtype instantiation: type MyArray<T> = List<T>
@@ -605,12 +615,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .map(|&tid| self.tysys.type_id_to_string(tid))
                         .collect();
-                    let display_name = format!("{}<{}>", name, arg_names.join(", "));
-                    self.tysys.type_table.borrow_mut().make_newtype(
-                        display_name,
-                        gn_info.module_source,
-                        base_type_id,
-                    )
+                    // The instantiation is named by its declaration, not by
+                    // the rendered `MyArray<i32>` its display spelling shows.
+                    let def = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .decl_named_in(name, &gn_info.module_source)
+                        .expect("the generic newtype being instantiated exists");
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_newtype(def, base_type_id)
                 } else if let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone()
                     && scope_mod != self.current_module_source
                 {

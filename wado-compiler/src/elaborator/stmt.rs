@@ -263,11 +263,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // generic struct (its own usage sites mint separate
         // `GenericInstance` TypeIds; this one exists so bare-name lookups
         // like `type_id_of_decl` have something to find).
-        let type_id = self
+        let type_id ={ let def = self
             .tysys
             .type_table
-            .borrow_mut()
-            .make_struct(mangled_name.clone(), module_source.clone());
+            .borrow_mut().decl_named_in(&mangled_name, &module_source).expect("the declaration this type names exists"); self
+            .tysys
+            .type_table
+            .borrow_mut().make_struct(crate::tir::StructDef::Decl(def)) };
         self.tysys
             .type_table
             .borrow_mut()
@@ -318,11 +320,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let module_source = self.current_module_source.clone();
         let base_type_id = self.resolve_type(&newtype_decl.ty);
         let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
-        let type_id = self.tysys.type_table.borrow_mut().make_newtype(
-            mangled_name.clone(),
-            module_source,
-            base_type_id,
-        );
+        let type_id ={ let def = self.tysys.type_table.borrow_mut().decl_named_in(&mangled_name, &module_source).expect("the declaration this type names exists"); self.tysys.type_table.borrow_mut().make_newtype(def, base_type_id) };
         self.tysys
             .type_table
             .borrow_mut()

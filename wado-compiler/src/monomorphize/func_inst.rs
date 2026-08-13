@@ -2771,11 +2771,12 @@ impl Monomorphizer {
                         } else {
                             unreachable!()
                         };
-                        type_table.make_generic_instance(
-                            name.clone(),
-                            module_source,
-                            vec![payload_expr.type_id],
-                        )
+                        {
+                            let def = type_table
+                                .decl_named_in(&name, &module_source)
+                                .expect("the declaration this type names exists");
+                            type_table.make_generic_instance(def, vec![payload_expr.type_id])
+                        }
                     };
                     *variant_type = new_id;
                     expr.type_id = new_id;

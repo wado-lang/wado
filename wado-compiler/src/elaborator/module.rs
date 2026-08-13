@@ -87,11 +87,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if newtype_decl.type_params.is_empty() {
                         // Concrete newtype: resolve immediately
                         let base_type_id = self.resolve_type(&newtype_decl.ty);
-                        let newtype_id = self.tysys.type_table.borrow_mut().make_newtype(
-                            newtype_decl.name.clone(),
-                            self.current_module_source.clone(),
-                            base_type_id,
-                        );
+                        let def = self
+                            .tysys
+                            .resolutions
+                            .defs()
+                            .of_ast_id(newtype_decl.id)
+                            .expect("a newtype declaration has an identity");
+                        let newtype_id = self
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_newtype(def, base_type_id);
                         self.tysys
                             .type_table
                             .borrow_mut()
@@ -257,11 +263,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     }
                     // Create a distinct Flags type (not a newtype over u32)
-                    let flags_type = self
+                    let def = self
                         .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_flags(flags_decl.name.clone(), self.current_module_source.clone());
+                        .resolutions
+                        .defs()
+                        .of_ast_id(flags_decl.id)
+                        .expect("a flags declaration has an identity");
+                    let flags_type = self.tysys.type_table.borrow_mut().make_flags(def);
                     self.tysys
                         .type_table
                         .borrow_mut()

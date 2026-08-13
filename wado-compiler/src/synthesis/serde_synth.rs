@@ -288,13 +288,21 @@ fn generate_field_schema(
             .compiler_method(crate::compiler_item::CompilerItem::ByteSliceGetUnchecked)
             .0
             .clone();
-        let base =
-            tt.make_generic_instance("ArraySlice".to_string(), slice_module, vec![TypeTable::U8]);
-        tt.make_newtype(
-            "ByteSlice".to_string(),
-            crate::module_source::ModuleSource::bytes(),
-            base,
-        )
+        let base = {
+            let def = tt
+                .decl_named_in(&"ArraySlice".to_string(), &slice_module)
+                .expect("the declaration this type names exists");
+            tt.make_generic_instance(def, vec![TypeTable::U8])
+        };
+        {
+            let def = tt
+                .decl_named_in(
+                    &"ByteSlice".to_string(),
+                    &crate::module_source::ModuleSource::bytes(),
+                )
+                .expect("the declaration this type names exists");
+            tt.make_newtype(def, base)
+        }
     };
     let fields: Vec<(String, String, TypeId, u32)> = struct_def
         .fields

@@ -142,12 +142,7 @@ fn register_variant_cases(flat: &FlatPackage) {
             .cases
             .iter()
             .map(|c| (c.name.clone(), c.index, c.payload))
-            .collect();
-        type_table.register_variant_cases(
-            variant.name.clone(),
-            variant.module_source.clone(),
-            cases,
-        );
+            .collect();{ let def = type_table.decl_named_in(&variant.name, &variant.module_source).expect("the declaration this type names exists"); type_table.register_variant_cases(def, cases) };
     }
 }
 
@@ -240,10 +235,13 @@ fn needs_copy_in_env(
                 // element-wise deep copy.
                 return !type_args.is_empty();
             }
-            if name == list_name {
+            if name =={ let def = list_name {
                 return true;
             }
-            if type_table.find_struct_type(name, module_source).is_some() {
+            if type_table.decl_named_in(&name, &module_source).expect("the declaration this type names exists"); list_name {
+                return true;
+            }
+            if type_table.find_struct_type(crate::tir::StructDef::Decl(def)) }.is_some() {
                 return true;
             }
             if let Some(cases) = type_table.variant_template_cases(name, module_source) {

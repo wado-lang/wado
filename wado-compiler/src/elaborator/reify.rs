@@ -1103,16 +1103,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // than re-resolving the defaults here.
         let type_params = self
             .ann_decl_type_params(variant_decl.id)
-            .expect("resolve_variant_decl records the type params for every variant reify emits");
-
-        self.tysys.type_table.borrow_mut().register_variant_cases(
-            variant_decl.name.clone(),
-            self.current_module_source.clone(),
-            cases
+            .expect("resolve_variant_decl records the type params for every variant reify emits");{ let def = self.tysys.type_table.borrow_mut().decl_named_in(&variant_decl.name, &self.current_module_source).expect("the declaration this type names exists"); self.tysys.type_table.borrow_mut().register_variant_cases(def, cases
                 .iter()
                 .map(|c| (c.name.clone(), c.index, c.payload))
-                .collect(),
-        );
+                .collect()) };
 
         TirVariantDecl {
             name: variant_decl.name.clone(),
@@ -4886,11 +4880,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         };
 
-        let struct_type = self.tysys.type_table.borrow_mut().make_generic_instance(
-            struct_name.clone(),
-            module_source,
-            vec![element_type],
-        );
+        let struct_type ={ let def = self.tysys.type_table.borrow_mut().decl_named_in(&struct_name, &module_source).expect("the declaration this type names exists"); self.tysys.type_table.borrow_mut().make_generic_instance(def, vec![element_type]) };
 
         let mut fields = vec![
             TirStructField {

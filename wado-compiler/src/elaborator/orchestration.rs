@@ -447,11 +447,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             &mut type_table.borrow_mut(),
                             &lookup,
                         );
-                        let newtype_id = type_table.borrow_mut().make_newtype(
-                            newtype_decl.name.clone(),
-                            module_source.clone(),
-                            base_type_id,
-                        );
+                        let def = resolutions
+                            .defs()
+                            .of_ast_id(newtype_decl.id)
+                            .expect("a newtype declaration has an identity");
+                        let newtype_id = type_table.borrow_mut().make_newtype(def, base_type_id);
                         type_table
                             .borrow_mut()
                             .register_decl_type(newtype_decl.id, newtype_id);
@@ -637,11 +637,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 &mut type_table.borrow_mut(),
                                 &lookup,
                             );
-                            let newtype_id = type_table.borrow_mut().make_newtype(
-                                newtype_decl.name.clone(),
-                                module_source.clone(),
-                                base_type_id,
-                            );
+                            let newtype_id ={ let def = type_table.borrow_mut().decl_named_in(&newtype_decl.name, &module_source).expect("the declaration this type names exists"); type_table.borrow_mut().make_newtype(def, base_type_id) };
                             type_table
                                 .borrow_mut()
                                 .register_decl_type(newtype_decl.id, newtype_id);
@@ -758,9 +754,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             continue;
                         }
                         // Create a distinct Flags type (not a newtype over u32)
-                        let flags_type = type_table
-                            .borrow_mut()
-                            .make_flags(flags_decl.name.clone(), module_source.clone());
+                        let flags_type ={ let def = type_table
+                            .borrow_mut().decl_named_in(&flags_decl.name, &module_source).expect("the declaration this type names exists"); type_table
+                            .borrow_mut().make_flags(def) };
                         type_table
                             .borrow_mut()
                             .register_decl_type(flags_decl.id, flags_type);
@@ -1700,16 +1696,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .and_then(|def| all_struct_fields.get(&def))
                             .map(|info| (info.name.clone(), info.module_source.clone()))
                             .unwrap_or_else(|| (struct_decl.name.clone(), module_source.clone()));
-                        let type_id = tt.make_struct(name, ms);
+                        let type_id = {
+                            let def = tt
+                                .decl_named_in(&name, &ms)
+                                .expect("the declaration this type names exists");
+                            tt.make_struct(crate::tir::StructDef::Decl(def))
+                        };
                         tt.register_decl_type(struct_decl.id, type_id);
                     }
                     Item::Enum(enum_decl) => {
-                        let type_id = tt.make_enum(enum_decl.name.clone(), module_source.clone());
+                        let type_id = {
+                            let def = tt
+                                .decl_named_in(&enum_decl.name, &module_source)
+                                .expect("the declaration this type names exists");
+                            tt.make_enum(def)
+                        };
                         tt.register_decl_type(enum_decl.id, type_id);
                     }
                     Item::Variant(variant_decl) => {
-                        let type_id =
-                            tt.make_variant(variant_decl.name.clone(), module_source.clone());
+                        let type_id = {
+                            let def = tt
+                                .decl_named_in(&variant_decl.name, &module_source)
+                                .expect("the declaration this type names exists");
+                            tt.make_variant(def)
+                        };
                         tt.register_decl_type(variant_decl.id, type_id);
                     }
                     Item::Resource(resource_decl) => {
@@ -1718,7 +1728,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .and_then(|def| all_resource_types.get(&def))
                             .map(|info| (info.name.clone(), info.module_source.clone()))
                             .unwrap_or_else(|| (resource_decl.name.clone(), module_source.clone()));
-                        let type_id = tt.make_resource(name, ms);
+                        let type_id = {
+                            let def = tt
+                                .decl_named_in(&name, &ms)
+                                .expect("the declaration this type names exists");
+                            tt.make_resource(def)
+                        };
                         tt.register_decl_type(resource_decl.id, type_id);
                     }
                     _ => {}
@@ -3282,13 +3297,33 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // must keep the self-sufficient name-based path.
                     _ => {
                         if let Some(info) = lookup.struct_fields(&named.name) {
-                            type_table.make_struct(info.name.clone(), info.module_source.clone())
+                            {
+                                let def = type_table
+                                    .decl_named_in(&info.name, &info.module_source)
+                                    .expect("the declaration this type names exists");
+                                type_table.make_struct(crate::tir::StructDef::Decl(def))
+                            }
                         } else if let Some(info) = lookup.resource_type(&named.name) {
-                            type_table.make_resource(info.name.clone(), info.module_source.clone())
+                            {
+                                let def = type_table
+                                    .decl_named_in(&info.name, &info.module_source)
+                                    .expect("the declaration this type names exists");
+                                type_table.make_resource(def)
+                            }
                         } else if let Some(info) = lookup.variant_case(&named.name) {
-                            type_table.make_variant(info.name.clone(), info.module_source.clone())
+                            {
+                                let def = type_table
+                                    .decl_named_in(&info.name, &info.module_source)
+                                    .expect("the declaration this type names exists");
+                                type_table.make_variant(def)
+                            }
                         } else if let Some(info) = lookup.enum_case(&named.name) {
-                            type_table.make_enum(info.name.clone(), info.module_source.clone())
+                            {
+                                let def = type_table
+                                    .decl_named_in(&info.name, &info.module_source)
+                                    .expect("the declaration this type names exists");
+                                type_table.make_enum(def)
+                            }
                         } else {
                             TypeTable::UNKNOWN
                         }
@@ -3352,11 +3387,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         let arg_names: Vec<String> =
                             type_args.iter().map(|&t| type_table.type_name(t)).collect();
                         let display_name = format!("{}<{}>", generic.name, arg_names.join(", "));
-                        return type_table.make_newtype(
-                            display_name,
-                            gn_info.module_source,
-                            base_type_id,
-                        );
+                        return {
+                            let def = type_table
+                                .decl_named_in(&display_name, &gn_info.module_source)
+                                .expect("the declaration this type names exists");
+                            type_table.make_newtype(def, base_type_id)
+                        };
                     }
                     // A generic resource (`Stream<u8>`, `Future<T>`) must
                     // resolve to a `GenericResource`, not a
@@ -3393,11 +3429,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .map(|info| info.module_source.clone())
                         });
                     if let Some(module_source) = module_source {
-                        type_table.make_generic_instance(
-                            generic.name.clone(),
-                            module_source,
-                            type_args,
-                        )
+                        {
+                            let def = type_table
+                                .decl_named_in(&generic.name, &module_source)
+                                .expect("the declaration this type names exists");
+                            type_table.make_generic_instance(def, type_args)
+                        }
                     } else {
                         TypeTable::UNKNOWN
                     }

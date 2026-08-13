@@ -809,11 +809,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let element = start.meet(self.synth(&range.end, scope));
         match element {
             ArgClass::Exact(t) => {
-                let range_type = self.tysys.type_table.borrow_mut().make_generic_instance(
-                    fallback.to_string(),
-                    module,
-                    vec![t],
-                );
+                let range_type ={ let def = self.tysys.type_table.borrow_mut().decl_named_in(&fallback.to_string(), &module).expect("the declaration this type names exists"); self.tysys.type_table.borrow_mut().make_generic_instance(def, vec![t]) };
                 ArgClass::Exact(range_type)
             }
             _ => ArgClass::Head(FqTypeName::of_head(&module, fallback)),
@@ -1014,11 +1010,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if generic {
             return ArgClass::Head(FqTypeName::of_head(&module, &decl));
         }
-        let found = self
+        let found ={ let def = self
             .tysys
             .type_table
-            .borrow()
-            .find_struct_type(&decl, &module);
+            .borrow().decl_named_in(&decl, &module).expect("the declaration this type names exists"); self
+            .tysys
+            .type_table
+            .borrow().find_struct_type(crate::tir::StructDef::Decl(def)) };
         if let Some(type_id) = found {
             return self.class_of_type(type_id);
         }

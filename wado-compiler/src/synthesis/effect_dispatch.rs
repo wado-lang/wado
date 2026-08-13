@@ -402,7 +402,12 @@ fn synthesize_dispatch_struct(
         label = instantiation_label(base_name, type_args, &tt);
         struct_name = crate::name::dispatch_struct_name(&label);
         global_name = crate::name::dispatch_global_name(&label);
-        struct_type_id = tt.make_struct(struct_name.clone(), entry_source.clone());
+        struct_type_id = {
+            let def = tt
+                .decl_named_in(&struct_name, &entry_source)
+                .expect("the declaration this type names exists");
+            tt.make_struct(crate::tir::StructDef::Decl(def))
+        };
         inner_ref_type_id = tt.make_ref(struct_type_id);
         nullable_ref_type_id = tt.make_option(inner_ref_type_id);
         for op in &meta.operations {
@@ -907,8 +912,7 @@ fn build_dispatch_wrapper_function(
         let string_type_id = {
             let tt = type_table.borrow();
             let (string_module, string_struct_name) =
-                tt.compiler_struct_owned(crate::compiler_item::CompilerItem::String);
-            tt.find_struct_type(&string_struct_name, &string_module)
+                tt.compiler_struct_owned(crate::compiler_item::CompilerItem::String);{ let def = tt.decl_named_in(&string_struct_name, &string_module).expect("the declaration this type names exists"); tt.find_struct_type(crate::tir::StructDef::Decl(def)) }
                 .unwrap_or_else(|| {
                     panic!(
                         "core:prelude/string.wado String type missing from \

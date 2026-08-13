@@ -69,13 +69,7 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             // declaration name, the fusion WEP 2026-08-12 removes.
             let subject = tt
                 .find_struct_by_name(&decl.name, &module_source)
-                .unwrap_or_else(|| {
-                    tt.make_monomorphized_struct(
-                        decl.name.clone(),
-                        module_source.clone(),
-                        base_name.clone(),
-                        impl_type_args.clone(),
-                    )
+                .unwrap_or_else(|| {{ let def = tt.decl_named_in(&base_name, &module_source).expect("the declaration this type names exists"); tt.make_monomorphized_struct(decl.name.clone(), crate::tir::StructDef::Decl(def), impl_type_args.clone()) }
                 });
             let ref_subject = tt.make_ref(subject);
             (subject, ref_subject)
