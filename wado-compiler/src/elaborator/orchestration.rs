@@ -3394,15 +3394,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             lookup,
                             type_params,
                         );
-                        let arg_names: Vec<String> =
-                            type_args.iter().map(|&t| type_table.type_name(t)).collect();
-                        let display_name = format!("{}<{}>", generic.name, arg_names.join(", "));
-                        return {
-                            let def = type_table
-                                .decl_named_in(&display_name, &gn_info.module_source)
-                                .expect("the declaration this type names exists");
-                            type_table.make_newtype(def, base_type_id)
+                        // The head is the declaration this reference site
+                        // resolved to, not the rendered `MyArray<i32>` a
+                        // display spelling shows; the arguments sit beside it.
+                        let Some(def) = lookup.resolutions.declared(generic.id) else {
+                            return TypeTable::UNKNOWN;
                         };
+                        return type_table.make_newtype_instance(def, type_args, base_type_id);
                     }
                     // A generic resource (`Stream<u8>`, `Future<T>`) must
                     // resolve to a `GenericResource`, not a
@@ -3411,10 +3409,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // not see the resource a signature implies, and
                     // `consume(rx: Stream<u8>)` fails with
                     // `missing resource 'Stream'`.
-                    if let Some(info) = lookup.resource_type(&generic.name) {
-                        let def = type_table
-                            .decl_named_in(&generic.name, &info.module_source)
-                            .expect("the resource being instantiated is declared");
+                    if let Some(info) = lookup.resource_type(&generic.name)
+                        && let Some(def) = lookup.resolutions.defs().of_ast_id(info.defined_at)
+                    {
                         return type_table.intern(ResolvedType::GenericResource { def, type_args });
                     }
                     // A generic application `Name<args...>` may name a
@@ -3424,26 +3421,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // enums resolve to `UNKNOWN`. `make_generic_instance`
                     // is name-based, so the same call shape works for every
                     // kind.
-                    let module_source = lookup
+                    // The declaration each of these reports is where the
+                    // identity comes from: its own declaring node. Asking the
+                    // type table for it by name would depend on the
+                    // declaration's type already being interned, which at this
+                    // point in the bootstrap it need not be.
+                    let def = lookup
                         .struct_fields(&generic.name)
-                        .map(|info| info.module_source.clone())
+                        .map(|info| info.defined_at)
                         .or_else(|| {
                             lookup
                                 .variant_case(&generic.name)
-                                .map(|info| info.module_source.clone())
+                                .map(|info| info.defined_at)
                         })
-                        .or_else(|| {
-                            lookup
-                                .enum_case(&generic.name)
-                                .map(|info| info.module_source.clone())
-                        });
-                    if let Some(module_source) = module_source {
-                        {
-                            let def = type_table
-                                .decl_named_in(&generic.name, &module_source)
-                                .expect("the declaration this type names exists");
-                            type_table.make_generic_instance(def, type_args)
-                        }
+                        .or_else(|| lookup.enum_case(&generic.name).map(|info| info.defined_at))
+                        .and_then(|at| lookup.resolutions.defs().of_ast_id(at));
+                    if let Some(def) = def {
+                        type_table.make_generic_instance(def, type_args)
                     } else {
                         TypeTable::UNKNOWN
                     }
