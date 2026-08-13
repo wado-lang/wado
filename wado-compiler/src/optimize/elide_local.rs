@@ -1,14 +1,8 @@
-//! Write-only local elimination for Wado NIR.
-//!
-//! Eliminates `let x = expr;` bindings where the local `x` is never read,
-//! never has its address taken, and never escapes via closure capture or a
-//! `stores`-aliased call. When `expr` is pure the entire statement is removed;
-//! otherwise the binding is replaced by `Expr(expr)` so the side effect still
-//! runs.
-//!
-//! NIR analog of `wir_optimize/elide_local.rs`. Running at NIR exposes the
-//! freshly dead expressions to the rest of the fixed-point loop
-//! (`copy_prop` / `const_fold` / `dce`), which the WIR-level pass cannot.
+//! Write-only local elimination for Wado NIR: a `let x = expr;` whose `x` is
+//! never read, address-taken, or escaped loses its binding — the whole statement
+//! when `expr` is pure, else a bare `Expr(expr)`. The NIR analog of
+//! `wir_optimize/elide_local.rs`; running here exposes the freshly dead
+//! expressions to the rest of the fixed-point loop, which the WIR pass cannot.
 
 use crate::hashmap::IndexSet;
 use crate::nir_arena::{BlockId, ExprId, ExprKind, Operand, StmtId, StmtKind};
@@ -36,16 +30,11 @@ pub(super) struct ElideRule<'a> {
 
 impl<'a> ElideRule<'a> {
     /// Build the rule for one function. `stores_aliased` lists params whose
-    /// reference escaped via a callee's `stores` declaration: the callee may
-    /// retain that reference past its return, so writes through the local stay
-    /// observable via the alias and the local must not be elided. It is read
-    /// off the function before its body is borrowed for the engine. The other
-    /// "kept" source — every live read of a local, including `&local` /
-    /// `&mut local` and closure-capture reads — is exactly what the engine use
-    /// index records, so the rule reads it directly via `Engine::is_local_read`
-    /// rather than a separate walk. (`address_taken_locals` is intentionally
-    /// *not* a source: it is a stale static record after `inline` / `ref_elim`,
-    /// and source-1 reads already cover every live `&local`.)
+    /// reference a callee may retain past its return, keeping writes through the
+    /// local observable, so those are never elided; it is read off the function
+    /// before the engine borrows its body. Every other live read comes from
+    /// `Engine::is_local_read`, so `address_taken_locals` — stale after `inline`
+    /// / `ref_elim` — is deliberately not consulted.
     pub(super) fn new(
         stores_aliased: &'a IndexSet<u32>,
         effects: &'a [super::mod_ref::FnEffect],

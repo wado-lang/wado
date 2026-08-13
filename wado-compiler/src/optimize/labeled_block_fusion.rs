@@ -1,10 +1,8 @@
 //! LabeledBlock-variant fusion: eliminate the intermediate `Option` / `Result`
 //! an inlined helper leaves at a variant-discriminating consumer, as one
-//! [`Rule`] with two entry points. `apply_block` does the value-discarding
-//! fusion of `let temp = LB; if VariantTest(temp) …`, turning each `break L:`
-//! into the selected arm; `apply_expr` threads the value-producing `match LB`
-//! of `x = f()?`, rewriting it in place and yielding each arm tail through
-//! `break __thread_L:`. Post-inline only, both shapes needing the copied body.
+//! [`Rule`] with two entry points. `apply_block` fuses the value-discarding
+//! `let temp = LB; if VariantTest(temp) …`; `apply_expr` threads the
+//! value-producing `match LB` of `x = f()?`. Post-inline only.
 //!
 //! `sroa_variant_return` runs just before `inline`, so the intermediate may
 //! instead be a `[tag, slots…]` tuple. Value-discarding fusion recognises that

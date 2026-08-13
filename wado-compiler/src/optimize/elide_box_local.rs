@@ -1,42 +1,9 @@
-//! Adjacent-use single-field struct local elimination for Wado NIR.
-//!
-//! NIR analog of `wir_optimize/elide_struct.rs`'s
-//! `elide_adjacent_single_use_struct_locals`. Targets the common
-//! `Box<T>` pattern produced by [`lower::translate`]'s `wrap_in_box`
-//! and exposed by the NIR `sroa_param` pass after it strips
-//! `&primitive` parameters down to scalars:
-//!
-//! ```text
-//! let snapshot = c;                           // (1) value-copy
-//! let __v0: i32 = snapshot.value;             // (2) field extracted by sroa_param
-//! let __cond = __v0 == 0;
-//! ```
-//!
-//! When a local is exactly one `Let { StructLiteral { single field } }`
-//! and has exactly one `FieldAccess` use, this pass substitutes the
-//! single-field initializer directly at the use site and drops the
-//! `Let`. The substitution is safe when every intervening sibling
-//! statement passes [`mod_ref::can_move_past`].
-//!
-//! Why at NIR (not WIR): the NIR-level alias machinery
-//! (`address_taken_locals` / `stores_aliased_locals`) feeds the
-//! identity-escape gate directly, and the substituted expressions
-//! flow back into the same fix-point loop where `copy_prop` /
-//! `const_fold` / `dce` can fold them further. The legacy WIR
-//! variant was retired once NIR `sroa_param` made the receiver
-//! `FieldAccess`-shaped at the call site (issue #1184).
-//!
-//! ## Scope
-//!
-//! - Single-field `StructLiteral` only. Multi-field elision is left
-//!   to the existing NIR `sroa` pass.
-//! - The candidate local must be defined exactly once and read
-//!   exactly once via `FieldAccess { expr: Local(idx), field_name }`.
-//! - The use must be the leftmost evaluated sub-expression of a
-//!   subsequent sibling statement. Conditional control (`If` /
-//!   `Match` / `Switch` / `LabeledBlock` / nested `Block`) blocks
-//!   substitution — those constructs may not execute the use on
-//!   every path.
+//! Adjacent-use single-field struct local elimination, for the `Box<T>` pattern
+//! `wrap_in_box` produces and `sroa_param` exposes. A local defined once as a
+//! single-field `StructLiteral` and read once through `FieldAccess` has its
+//! initializer substituted at the use and its `Let` dropped, provided every
+//! intervening sibling passes [`mod_ref::can_move_past`] and the use is the
+//! leftmost evaluated sub-expression of a later, unconditional sibling.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
@@ -47,17 +14,11 @@ use crate::nir_engine::{Engine, Rule};
 
 use super::mod_ref::{ModRef, can_move_past};
 
-/// Adjacent-use single-field struct local elimination as a rule on the unified
-/// post-inline peephole session (combine migration; formerly the standalone
-/// `nir/elide_box_local` pass). `build_elide_box_local` computes the same
-/// whole-function read/def `stats` the standalone pass did, plus the
-/// escape-safety `blacklist` (`address_taken` + `stores_aliased` locals), once
-/// per function from the pristine body. The `stats` are read-only oracles: a
-/// peephole rewrite can only remove a read, so a stale entry can only refuse an
-/// otherwise-valid elision (safe), never enable an unsound one. Each
-/// `apply_block` performs at most one elision — substitute the single-field
-/// initializer into its one `r.field` use and drop the binding `Let` via
-/// `set_block_stmts` — then the worklist re-runs for the next.
+/// Adjacent-use single-field struct local elimination, as a rule on the unified
+/// post-inline peephole session. `build_elide_box_local` computes the
+/// whole-function read/def `stats` and the escape-safety `blacklist` once per
+/// function; a rewrite can only remove a read, so a stale entry only ever
+/// refuses a valid elision. Each `apply_block` performs at most one.
 pub(super) struct ElideBoxLocalRule {
     stats: IndexMap<u32, LocalStats>,
     blacklist: IndexSet<u32>,
