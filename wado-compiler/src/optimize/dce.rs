@@ -2,7 +2,7 @@
 //! reachability set up front — functions, globals, types, plus the name-keyed
 //! views the type-retain predicate needs — so the downstream `remove_*` and
 //! filter passes are pure mutators over those sets, with no re-analysis. See
-//! [`crate::optimize::run_dce`]: analyze once, then mutate in dependency order.
+//! `crate::optimize::run_dce`: analyze once, then mutate in dependency order.
 
 use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
@@ -2239,7 +2239,7 @@ fn dead_pure_binding(
 /// after globalization can take every reader with them, leaving a global that
 /// holds its whole initializer in the binary for no observer. The
 /// `is_uninitialized` guard and a read bound to an unmentioned local do not
-/// count as observing, provided the value is a [`deletable_value`].
+/// count as observing, provided the value is a `deletable_value`.
 pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
     let descriptors = build_callee_descriptors(project);
     let effects = super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);

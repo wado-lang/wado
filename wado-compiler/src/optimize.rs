@@ -1,6 +1,6 @@
 //! Optimization passes for Wado NIR, rewriting the [`NirPackage`] in place. Each
 //! pass documents itself in its own module under `optimize/`; the sequence of
-//! [`run_pass`] calls below is the only statement of what runs in what order.
+//! `run_pass` calls below is the only statement of what runs in what order.
 //! `docs/optimizer.md` is the reader-facing inventory, and WEP 2026-06-05 covers
 //! the two-tier NIR, the rewrite engine, and the gate.
 

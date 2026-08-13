@@ -1219,7 +1219,7 @@ impl Body {
     /// Invoke `f` on every operand slot of `node`, in source order — the mutable
     /// twin of [`Body::for_each_operand`]. Non-operand `ExprId` slots and
     /// structural children are skipped. A `&mut` walk cannot filter the shared
-    /// [`Slot`] one, so the match is restated here; a debug assertion compares
+    /// `Slot` one, so the match is restated here; a debug assertion compares
     /// the two slot counts on every call.
     pub fn for_each_operand_mut(&mut self, node: NodeRef, mut f: impl FnMut(&mut Operand)) {
         #[cfg(debug_assertions)]

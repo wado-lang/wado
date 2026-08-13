@@ -1,4 +1,4 @@
-//! Per-module structural index over an [`ast::Module`], built once after
+//! Per-module structural index over an `ast::Module`, built once after
 //! parse/bind and stored on [`crate::semantics::Semantics`]. It collects the
 //! positional facts LSP queries used to rediscover with bespoke walkers, behind
 //! one [`AstVisitor`] traversal, so a new decl-bearing AST node updates this

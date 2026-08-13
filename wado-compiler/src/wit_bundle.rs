@@ -1,6 +1,6 @@
 //! Embed a `component-type` custom section into a compiled component — the
 //! producer side of WIT interoperability (WEP 2026-05-02), encoding the text
-//! [`wit_emit`](crate::wit_emit) renders. Purely additive: a Wado artifact
+//! [`crate::wit_emit`] renders. Purely additive: a Wado artifact
 //! already self-describes. The section's value is fidelity, carrying the
 //! complete upstream interfaces where the component's own type is tree-shaken.
 

@@ -2,7 +2,7 @@
 //! and monomorphize: resolve each global's override — `-D NAME=value` first,
 //! then its `from_env` variable — and replace the initializer with the converted
 //! literal. Conversion is native Rust matching `LenientFromStr`, isolated in
-//! [`convert_builtin`] so a future wasm-CTFE path replaces only that boundary.
+//! `convert_builtin` so a future wasm-CTFE path replaces only that boundary.
 
 use std::cell::RefCell;
 use std::rc::Rc;

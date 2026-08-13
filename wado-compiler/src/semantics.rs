@@ -397,7 +397,7 @@ impl Semantics {
     /// Stable public view onto the recorded method-dispatch decision:
     /// `(resolved_function_name, defining_module, self_kind_str)`, or `None` for
     /// a synthetic or short-circuited call path. In-crate consumers read the
-    /// full [`crate::elaborator::sem::types::MethodDispatch`] instead.
+    /// full `crate::elaborator::sem::types::MethodDispatch` instead.
     #[must_use]
     pub fn method_dispatch_view(&self, id: AstId) -> Option<(String, ModuleSource, String)> {
         let dispatch = self.method_dispatch.get(&id)?;
@@ -451,7 +451,7 @@ impl Semantics {
     /// `(coercion_kind_str, target_type_id)` for an expression the body walk
     /// adapted via `try_coerce`, `None` for one that already matched or was
     /// resolved without an expected type. The string is the
-    /// [`crate::elaborator::sem::types::CoercionKind`] variant, snake-cased.
+    /// `crate::elaborator::sem::types::CoercionKind` variant, snake-cased.
     #[must_use]
     pub fn coercion_view(&self, id: AstId) -> Option<(String, TypeId)> {
         use crate::elaborator::sem::types::CoercionKind;
@@ -772,7 +772,7 @@ impl Semantics {
 
     /// Span of the defining identifier alone — what go-to-definition wants,
     /// where `Symbol::span` covers the whole `fn foo() { … }`. Read from the
-    /// per-module [`AstIndex`](crate::ast_index::AstIndex), which holds one for
+    /// per-module [`AstIndex`], which holds one for
     /// every declaration node exposing a `name_span`. `None` for nodes without
     /// one: anonymous `impl` blocks, `Item::Resource`, tests.
     #[must_use]

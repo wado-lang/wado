@@ -304,13 +304,13 @@ impl<'a> Engine<'a> {
         engine
     }
 
-    /// The [`ValueId`] the per-function `ValueGraph` assigned to `expr`, built
+    /// The `ValueId` the per-function `ValueGraph` assigned to `expr`, built
     /// lazily; `None` for an impure, allocation-bearing or control-flow
     /// expression, and for any `ExprId` allocated after the build.
     ///
     /// The graph is built once and maintained in place, never rebuilt: engine
     /// edits keep the operands current and a query re-derives through them
-    /// ([`Engine::maintain_pure_node`]), a direct arena edit coarsens the region
+    /// (`Engine::maintain_pure_node`), a direct arena edit coarsens the region
     /// it touched, and a caller needing the reaching values regrows them into a
     /// scratch pool ([`Engine::scoped_const_reads`]).
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
@@ -698,7 +698,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Whether `local` is **single-assignment** — bound once, never written again
-    /// — which is what makes [`ValuePool::canonical_local`]'s one id per index
+    /// — which is what makes `ValuePool::canonical_local`'s one id per index
     /// denote one value. Holds per *execution* of the binding's scope, so a `let`
     /// in a loop body qualifies while naming its value across an iteration needs
     /// its own check (`materialise_point`'s refusal to place outside the loop).
