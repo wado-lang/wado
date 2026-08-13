@@ -410,6 +410,14 @@ is why `Monomorphizer::try_queue_function` dedupes a blanket instance reached fr
 two dispatch sites. What this step buys is that the head and the arguments become
 separately readable, not that identity changes.
 
+The table renders the head, so it has to be able to. `TypeTable::type_name` is
+what mints every mangled name, and with a `DefId` in place of the spelling it
+needs the `DefTable` to read one out — an `Arc<DefTable>` attached where
+`Resolutions` is built, and again on the snapshot restore path, whose seeded
+table hands back the same identities by construction. This is also what retires
+`mangle_local_item_name`: a local item's type is distinct because its
+declaration is, not because its spelling carries an `AstId`.
+
 ### 7. Synthesis records referents, it does not spell names
 
 A pass that synthesises a reference knows what it refers to, so it records that
@@ -454,7 +462,14 @@ Two rules survive from the structured-name work and still apply to the renderer:
   agree, rather than pinning either one's output.
 - A surviving `TypeId` must stay readable. `TypeTable::retain` closes over each
   surviving struct's `type_args` transitively, so a struct cannot survive spelling
-  itself with an id that no longer resolves.
+  itself with an id that no longer resolves. It must also re-enter each survivor
+  under the spelling `intern` entered it by — `Box` for the declaration,
+  `Box<i32>` for that instantiation. Rebuilding the index on the declaration name
+  alone put every instantiation of `Box` on one entry, so the last survivor
+  answered for the declaration and for its siblings, and
+  `find_decl_type_by_name` — documented to return declarations only — returned an
+  instantiation. That is the same defect one layer down: a rendering standing in
+  for an identity, and two things rendering the same.
 
 The rendered format is unchanged; the emitted Wasm is byte-identical.
 
@@ -559,16 +574,27 @@ compiles, passes the suite, and ends with a mechanical completion check.
 - [ ] `ResolvedType` nominal variants carry `DefId`. Done when `ResolvedType`
       holds no `(name, module_source)` pair.
 
-      The ~790 match sites are not the work, and counting them was misleading:
-      most bind `name` to render it, and those are fine until the fields go
-      last. What has to move is the smaller set that reads the pair as an
-      *identity*, and `TypeTable::decl_of_type` already answers for those — it
+      The sites that read the pair as an *identity* are the ones that change
+      an answer, and `TypeTable::decl_of_type` already serves them — it
       predates this design, and resolves a monomorphization and a
       `GenericInstance` back to the declaration they were spelled from. Each
       migration so far has been one call replacing a destructure-and-look-up,
       and each deleted the guard that existed to decide whether the pair meant
       what the caller hoped: `contains_variant(name)`, a probe of two per-kind
       indexes, `ref_name == struct_name`.
+
+      But the completion criterion is the fields, not the answers, so the
+      count that governs the work is how many sites *bind* one: **544, across
+      55 files**, of 880 patterns over the eight nominal variants (the rest
+      match with `..` and are untouched). The earlier "~790, and most of them
+      are fine" was measuring the wrong set and reading it optimistically.
+
+      The eight cannot be migrated one variant at a time. They are fused by
+      or-patterns — `Struct { decl_name: name, .. } | Variant { name, .. } |
+      Resource { name, .. } => …` binds one `name` across alternatives, so an
+      alternative whose field changed no longer binds it and the arm has to be
+      split. Flipping `Resource` alone, the smallest at 27, would split arms
+      shared with variants that have not moved. They go together.
 
       Do not trust a grep for the pair shape. It also matches
       `ExprKind::GlobalVarGet`, which is a NIR node carrying a global's name —

@@ -1267,20 +1267,36 @@ impl TypeTable {
         self.decl_name_index.clear();
         for (id, ty) in self.types.iter() {
             self.intern_map.insert(ty.clone(), id);
-            if let ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } = ty
-            {
-                self.struct_name_index
-                    .insert((name.clone(), module_source.clone()), id);
-            }
             if let Some((name, module_source)) = Self::nominal_key(ty) {
                 self.decl_name_index
                     .insert((name.to_string(), module_source.clone()), id);
             }
         }
+        // Structs index under the spelling they render to, the way `intern`
+        // enters them — `Box` for the declaration, `Box<i32>` for that
+        // instantiation. Keying the rebuild on `decl_name` alone would put
+        // every instantiation of `Box` on one entry, and whichever survived
+        // last would answer for the declaration and for its siblings.
+        // Rendered up front because deriving one reads the arguments' types.
+        let rendered: Vec<((String, ModuleSource), TypeId)> = self
+            .types
+            .iter()
+            .filter_map(|(id, ty)| match ty {
+                ResolvedType::Struct {
+                    decl_name,
+                    module_source,
+                    type_args,
+                } => Some((
+                    (
+                        self.struct_rendered_name(decl_name, type_args),
+                        module_source.clone(),
+                    ),
+                    id,
+                )),
+                _ => None,
+            })
+            .collect();
+        self.struct_name_index.extend(rendered);
     }
 
     /// The `(name, module)` a non-struct nominal declaration interns under.
@@ -5932,6 +5948,38 @@ impl TirProgram {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `intern` indexes a struct under its rendered spelling, so `retain` has
+    /// to rebuild the index the same way. Rebuilding it under the bare
+    /// declaration name instead collapses every instantiation of a generic
+    /// struct onto one entry, and the survivors then answer for each other.
+    #[test]
+    fn retaining_keeps_a_struct_findable_under_the_spelling_it_was_indexed_by() {
+        use crate::module_source::ModuleSourceInterner;
+        let mut table = TypeTable::new();
+        let mut interner = ModuleSourceInterner::new();
+        let m = interner.local("./main.wado");
+
+        let base = table.make_struct("Box".to_string(), m.clone());
+        let boxed_i32 = table.make_monomorphized_struct_from_args(
+            "Box".to_string(),
+            m.clone(),
+            vec![TypeTable::I32],
+        );
+        let boxed_i64 = table.make_monomorphized_struct_from_args(
+            "Box".to_string(),
+            m.clone(),
+            vec![TypeTable::I64],
+        );
+        assert_eq!(table.find_struct_by_name("Box<i32>", &m), Some(boxed_i32));
+
+        let keep: IndexSet<TypeId> = [base, boxed_i32, boxed_i64].into_iter().collect();
+        table.retain(&keep);
+
+        assert_eq!(table.find_struct_by_name("Box<i32>", &m), Some(boxed_i32));
+        assert_eq!(table.find_struct_by_name("Box<i64>", &m), Some(boxed_i64));
+        assert_eq!(table.find_struct_by_name("Box", &m), Some(base));
+    }
 
     #[test]
     fn test_primitive_constants() {
