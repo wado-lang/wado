@@ -231,19 +231,24 @@ Node.js and Bun, vs native-Rust [Axum](https://github.com/tokio-rs/axum), over
 Hono's official router benchmark route set driven with `oha`. See
 `http_routing/README.md` for the full route set and methodology.
 
-Throughput (requests/sec, higher is better). `wado serve h2c` is the same
-server process as `wado serve`, driven over HTTP/2 cleartext instead of
-HTTP/1.1 — see `http_routing/README.md`.
+Throughput (requests/sec, higher is better). Every row names its protocol —
+h2c is what a reverse proxy speaks to its upstream by default, so each server
+is measured over both wherever it can serve them. `Bun.serve` has no h2c
+server, so Bun is HTTP/1.1 only.
 
-| Request                                     | `wado serve` | `wado serve h2c` | Hono (Node) | Hono (Bun) | Axum (native) |
-| ------------------------------------------- | -----------: | ---------------: | ----------: | ---------: | ------------: |
-| `GET /user`                                 |       29,251 |           29,541 |      25,454 |     40,164 |        77,699 |
-| `GET /user/comments`                        |       31,535 |           28,612 |      28,306 |     40,057 |        80,316 |
-| `GET /user/lookup/username/hey`             |       29,070 |           28,226 |      24,862 |     35,807 |        80,197 |
-| `GET /event/abcd1234/comments`              |       27,239 |           27,975 |      25,089 |     35,502 |        83,187 |
-| `POST /event/abcd1234/comment`              |       28,399 |           27,871 |      16,795 |     36,113 |        81,531 |
-| `GET /very/deeply/nested/route/hello/there` |       29,887 |           29,734 |      27,519 |     39,062 |        79,578 |
-| `GET /static/index.html`                    |       28,417 |           27,498 |      24,110 |     35,486 |        81,208 |
+| Request                                     | wado h1 | wado h2c | Node h1 | Node h2c | Bun h1 | Axum h1 | Axum h2c |
+| ------------------------------------------- | ------: | -------: | ------: | -------: | -----: | ------: | -------: |
+| `GET /user`                                 |  30,469 |   27,932 |  21,020 |    8,461 | 39,182 |  78,411 |   54,794 |
+| `GET /user/comments`                        |  31,621 |   29,823 |  24,775 |    8,827 | 39,716 |  78,583 |   53,249 |
+| `GET /user/lookup/username/hey`             |  25,355 |   25,974 |  20,549 |    8,017 | 32,394 |  77,892 |   51,259 |
+| `GET /event/abcd1234/comments`              |  27,718 |   26,236 |  19,253 |    8,376 | 34,315 |  75,316 |   47,549 |
+| `POST /event/abcd1234/comment`              |  28,149 |   25,730 |  16,035 |    8,359 | 35,570 |  76,412 |   49,054 |
+| `GET /very/deeply/nested/route/hello/there` |  30,180 |   28,164 |  20,185 |    8,766 | 36,856 |  76,774 |   50,582 |
+| `GET /static/index.html`                    |  27,535 |   27,082 |  18,990 |    8,187 | 34,108 |  77,874 |   52,747 |
+
+What h2c costs each server is the sharpest difference in the table: 2-9% for
+`wado serve`, 30-37% for Axum, and 57-64% for Hono on Node. Over HTTP/1.1
+`wado serve` is ~1.5x Node; over h2c it is ~3.2x.
 
 HTTP routing needs `oha` and Bun, and is measured separately
 (`SLICE=4 ROUNDS=5 CONNECTIONS=50 mise run benchmark-http-routing`).
