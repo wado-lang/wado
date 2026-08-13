@@ -2629,20 +2629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Mirrors `try_null_as_none_pattern`: returns the `None` case name when the
     /// scrutinee is a variant type that has a `None` case.
     fn exh_null_none_case(&self, scrutinee_type: TypeId) -> Option<()> {
-        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-        let (variant_name, variant_module) = match &resolved {
-            ResolvedType::Variant {
-                name,
-                module_source,
-            } => Some((name.clone(), module_source.clone())),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } if self.contains_variant(name) => Some((name.clone(), module_source.clone())),
-            _ => None,
-        }?;
-        let variant_info = self.lookup_variant_case_in(&variant_name, &variant_module)?;
+        let variant_info = self.variant_of_type(scrutinee_type)?;
         let none_case_name = self
             .tysys
             .type_table

@@ -542,6 +542,18 @@ impl TypeSystem {
         self.resolutions.defs().of_ast_id(decl)
     }
 
+    /// The declaration `type_id` is an instance of.
+    ///
+    /// A nominal type already knows its declaring node, and `Node<i32>` and
+    /// `Node<String>` know the one `Node` they were spelled from — so a caller
+    /// holding a type has an identity without reading the `(name, module)` pair
+    /// off it and resolving that again. This is what the pair stops being a key
+    /// for.
+    pub(crate) fn type_def(&self, type_id: TypeId) -> Option<DefId> {
+        let decl = self.type_table.borrow().decl_of_type(type_id)?;
+        self.resolutions.defs().of_ast_id(decl)
+    }
+
     /// Whether `type_id` implements the trait `trait_` declares.
     ///
     /// The trait is an identity and nothing else. There is no name beside it to

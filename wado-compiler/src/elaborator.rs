@@ -1257,6 +1257,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().variant_case_in(name, module_source)
     }
 
+    /// The variant `type_id` is an instance of, or `None` when it is not one.
+    ///
+    /// Asks the type for its declaration instead of reading a `(name, module)`
+    /// pair off it: an instantiated `Option<i32>` answers with the `Option` it
+    /// was spelled from, so there is no separate generic arm and no
+    /// `contains_variant` spelling check deciding whether the pair means a
+    /// variant at all.
+    pub(super) fn variant_of_type(&self, type_id: TypeId) -> Option<&VariantInfo> {
+        let def = self.tysys.type_def(type_id)?;
+        self.tysys.all_variant_cases.get(&def)
+    }
+
     pub(super) fn lookup_enum_case_in(
         &self,
         name: &str,

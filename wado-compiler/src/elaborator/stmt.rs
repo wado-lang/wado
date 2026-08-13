@@ -1591,22 +1591,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Record use->def for the variant case name in the pattern
                 // (e.g., `Some` in `Some(x)`). Points at the case declaration's
                 // span so LSP jump-to-def from the pattern lands on the case decl.
-                let variant_type_name: Option<(String, ModuleSource)> = match &resolved_type {
-                    ResolvedType::Variant {
-                        name,
-                        module_source,
-                    } => Some((name.clone(), module_source.clone())),
-                    ResolvedType::GenericInstance {
-                        name,
-                        module_source,
-                        ..
-                    } if self.contains_variant(name) => Some((name.clone(), module_source.clone())),
-                    _ => None,
-                };
                 if let Some(id) = name_id
-                    && let Some((type_name, type_module)) = variant_type_name.as_ref()
-                    && let Some(variant_info) =
-                        self.lookup_variant_case_in(type_name, type_module).cloned()
+                    && let Some(variant_info) = self.variant_of_type(scrutinee_type).cloned()
                     && let Some(case_data) = variant_info
                         .cases
                         .iter()
@@ -1884,20 +1870,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// nothing). Reify rebuilds the actual `None` pattern; the combined walk
     /// only needs the yes/no answer for its binding/fact walk.
     fn try_null_as_none_pattern(&self, scrutinee_type: TypeId) -> bool {
-        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-        let (variant_name, variant_module) = match &resolved {
-            ResolvedType::Variant {
-                name,
-                module_source,
-            } => (name.clone(), module_source.clone()),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } if self.contains_variant(name) => (name.clone(), module_source.clone()),
-            _ => return false,
-        };
-        let Some(variant_info) = self.lookup_variant_case_in(&variant_name, &variant_module) else {
+        let Some(variant_info) = self.variant_of_type(scrutinee_type) else {
             return false;
         };
         let none_case_name = self
