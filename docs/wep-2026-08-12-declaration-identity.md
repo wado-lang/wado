@@ -395,13 +395,35 @@ special: `i32`, `()` and `!` are `internal type` declarations in
 `core:prelude/primitive.wado` and get `DefId`s like anything else.
 
 An anonymous struct is such a shape and is *not* already its own variant, which
-is the one place this rule has to be applied rather than observed. A struct
+is the one place this rule needs a decision rather than an application. A struct
 literal with no type name interns as a `Struct` today, under a spelling
 synthesized from its fields, and two literals of the same shape deliberately
 reach one type — so there is no declaration to identify and no node to identify
-it by. It becomes a structural variant holding its field list, and the
-synthesized spelling goes with it: that name exists only to key the interner,
-and the fields are the key.
+it by.
+
+It does not become a ninth variant. Measured: adding one breaks twelve exhaustive
+matches, and that number is the trap — an anonymous struct rides the `Struct`
+path through field access, layout and codegen at every one of the 121 sites that
+match `Struct` today, and those sites would stop matching it *silently*. The
+compiler would report the twelve it can see and none of the rest, which is the
+opposite of what this design asks of a migration.
+
+So the head splits instead of the variant:
+
+```rust
+Struct { def: StructDef, type_args: Vec<TypeId> },
+
+enum StructDef {
+    Decl(DefId),
+    /// A shape, interned by its fields. Not forgeable from a name either.
+    Anon(AnonStructId),
+}
+```
+
+Every site that matches `Struct` keeps matching it; every site that reads the
+head has to say which case it means, and the compiler lists them. The
+synthesized `__anon_{…}` spelling goes: it exists only to key the interner, and
+the fields are the key.
 
 Interning identity does not change. `TypeTable` keys an interned type by its
 rendered spelling, because holding argument `TypeId`s as identity would mint two
@@ -624,7 +646,7 @@ compiles, passes the suite, and ends with a mechanical completion check.
         until it is: every consumer that stops reading `(name, module_source)`
         off a type starts depending on `decl_of_type` instead.
 
-  - [ ] An anonymous struct is its own shape, not a nameless declaration.
+  - [ ] An anonymous struct is a shape, not a nameless declaration.
         `ResolvedType::Struct` is reached two ways: from a `struct`
         declaration, and from a struct literal with no type name, which
         `resolve_struct_literal` interns under a synthesized `__anon_{…}`
@@ -632,12 +654,11 @@ compiles, passes the suite, and ends with a mechanical completion check.
         and can get no `DefId` — the literal is not a declaration site either,
         since two literals of the same shape intern to one type by design.
 
-        So this step cannot flip `Struct` alone: it splits first, into a
-        nominal variant carrying a `DefId` and a structural variant carrying
-        its fields, which is what the rule "a shape no declaration names has no
-        `DefId` and needs none" already says for tuples and function types. The
-        synthesized spelling goes with it — it exists only to give the interner
-        a key, and a field list is the key.
+        `Struct`'s *head* becomes `StructDef::Decl(DefId) | Anon(AnonStructId)`
+        rather than the variant splitting in two. See the `Types carry DefId`
+        section for the measurement that decides it: a ninth variant breaks
+        twelve exhaustive matches and silently orphans the anonymous struct at
+        the other 121 sites that match `Struct` today.
 
   - [ ] TIR declarations carry identity. This is the part that is structural
         rather than mechanical. `Lowering` keys its variant-case and
