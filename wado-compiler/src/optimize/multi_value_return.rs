@@ -1,23 +1,8 @@
-//! Multi-value return ABI classification (NIR-level).
-//!
-//! Decides which aggregate-returning user functions should use the
-//! multi-value Wasm return ABI (each tuple element / struct field a separate
-//! Wasm result) instead of the default heap-struct ABI. The decision is
-//! recorded on [`NirFunction.return_abi`] and consumed by `wir_build`.
-//!
-//! ## Eligibility
-//!
-//! A function `f` is a candidate when its return type is a tuple or user
-//! struct of 2..=[`MAX_RESULTS`] fields (all field types eligible), every
-//! `Return` produces a fresh aggregate literal of that shape, and every call
-//! site binds it as `let __tmp = Call(f); …` — directly, or at the tail of a
-//! block that hoists the receiver first — whose only uses of `__tmp` are
-//! `FieldAccess(Local(__tmp), name)`. See the per-function comments below for
-//! the exact gates.
-//!
-//! A pure classification pass over the arena `Body` (see
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`): every body walk is
-//! read-only and the only mutation sets `return_abi`.
+//! Multi-value return ABI classification: which aggregate-returning functions
+//! take the multi-value Wasm ABI, one result per field, instead of a heap
+//! struct. A candidate returns a 2..=[`MAX_RESULTS`]-field tuple or struct from
+//! fresh literals, and every call site binds it as `let __tmp = Call(f)` whose
+//! only uses are field accesses. The one mutation is `return_abi`.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirFunction, NirStruct, ReturnAbi};
@@ -40,19 +25,10 @@ struct CandidateInfo {
 }
 
 /// A direct call in tail position: its callee, the call's own type, and the
-/// node. Looks through a block tail, the shape `let_block_flatten` leaves when
-/// it hoists a receiver in front of the call — and hands back the statements
-/// the block runs first.
-///
-/// Those statements are ordinary code and the caller has to deal with them: a
-/// `return` validates them, `wir_build` emits them ahead of the bind. Skipping
-/// them let a whole-aggregate use in the prefix pass unseen, so its callee took
-/// the multi-value ABI while the use still read a local the split had left
-/// unassigned.
-///
-/// `wir_build::translate::try_emit_multi_value_let` shares this recogniser, so
-/// the shape this pass accepts at a `let` is by construction the shape the
-/// lowering can split.
+/// node. Looks through the block tail `let_block_flatten` leaves when it hoists
+/// a receiver, handing back the statements the block runs first — the caller
+/// must handle them, or a whole-aggregate use in the prefix passes unseen.
+/// `wir_build::translate::try_emit_multi_value_let` shares this recogniser.
 pub(crate) fn block_tail_call(
     body: &Body,
     op: Operand,
@@ -178,16 +154,10 @@ fn collect_candidates(
 }
 
 /// The candidates some call site refutes, over every function body and every
-/// global initializer — the latter carry arena bodies too, and are scanned with
-/// the same let-tracking as `dae` and `drve` do.
-///
-/// A `return g(x)` is only a pass-through when the enclosing function has the
-/// same N results to pass it through; otherwise the call has no aggregate to
-/// bind and stays an escape. That reads `tail_ok`, never this round's candidate
-/// set: a candidate can still be invalidated later in the same round, and
-/// sparing `g` on behalf of a caller that then does not take the ABI leaves the
-/// caller pushing N results through a one-ref signature. At the fixed point
-/// `tail_ok` is exactly the surviving set, so the two sides of the rule agree.
+/// global initializer. A `return g(x)` passes through only when the enclosing
+/// function has the same N results, judged against `tail_ok` rather than this
+/// round's candidate set — sparing `g` for a caller that then declines the ABI
+/// would push N results through a one-ref signature. The two agree at fixpoint.
 fn refute_candidates(
     project: &NirPackage,
     candidates: &IndexMap<usize, CandidateInfo>,

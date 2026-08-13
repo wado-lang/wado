@@ -1,16 +1,8 @@
-//! Import-side CM adapter synthesis.
-//!
-//! Generates a `__cm_binding__<iface>_<method>` TIR function for every WASI
-//! import the program references. The body lowers Wado-typed args to the
-//! flat CM ABI shape, performs the `cm_raw_call`, and (for sync imports)
-//! lifts the result back. Truly async imports return an `AsyncCall<T>`
-//! struct holding the subtask handle and outptr; the caller is responsible
-//! for `wait()`-ing on it.
-//!
-//! Entry points used by the driver: [`binding_func_name`] for the synthesized
-//! function name and [`synthesize_adapter`] for the body. The adapter shares
-//! [`make_binding_function`] with export-side synthesis, hence its
-//! `pub(super)` visibility.
+//! Import-side CM adapter synthesis: a `__cm_binding__<iface>_<method>` TIR
+//! function per referenced WASI import, lowering Wado-typed args to the flat CM
+//! ABI, performing the `cm_raw_call`, and lifting the result back for a sync
+//! import. An async one returns an `AsyncCall<T>` the caller `wait()`s on. The
+//! driver enters at [`binding_func_name`] and [`synthesize_adapter`].
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -63,17 +55,10 @@ pub(super) struct AdapterArtifacts {
 }
 
 /// Synthesize lifting of a flat Result discriminant into a GC variant struct.
-///
-/// Only reached for a Result that flattens to a bare discriminant (one flat
-/// slot) — i.e. `Result<(), ()>`: disc==0 → Ok, disc==1 → Err, neither
-/// carrying a payload. Any payload-bearing Result flattens to >1 slot and is
-/// lifted through the outptr return path instead, so it never arrives here.
-/// (The non-unit Err branch below therefore stays defensive — see the
-/// `debug_assert!` on `ok_is_unit`.)
-///
-/// `result_type_id` is the resolved `Result<T, E>` `TypeId` shared with
-/// the caller's `result_local`; the emitted `VariantConstruct` exprs use
-/// it directly so no `TypeTable::I32` placeholder leaks downstream.
+/// Only reached for a `Result<(), ()>`, which flattens to a bare discriminant;
+/// any payload-bearing Result takes >1 slot and lifts through the outptr path,
+/// so the non-unit Err branch is defensive. `result_type_id` is the resolved
+/// `Result<T, E>` id, used directly so no `TypeTable::I32` placeholder leaks.
 fn synthesize_lift_flat_result(
     ty: &Type,
     disc_expr: TirExpr,
@@ -553,22 +538,11 @@ fn lift_flat_struct_return(
     lifted
 }
 
-/// Synthesize a CM binding function for a WASI import.
-///
-/// The binding function:
-/// 1. Accepts the same parameter types as the WASI function
-/// 2. Lowers parameters to flat CM ABI (String → ptr/len, etc.)
-/// 3. Calls the lowered WASI function via `CmRawCall`
-/// 4. Lifts the result from flat CM ABI back to Wado types
-/// 5. Returns the Wado-typed result
-///
-/// The binding's Wado-level return type matches the WASI function declaration.
-/// All return types are lifted inline using `synthesize_lift` — no per-type
-/// converter functions are needed.
-///
-/// For async imports the adapter additionally emits a sibling
-/// [`synthesize_async_lift_function`]; both are returned via
-/// [`AdapterArtifacts`].
+/// Synthesize a CM binding function for a WASI import: it takes the WASI
+/// function's parameter types, lowers them to the flat CM ABI, calls through
+/// `CmRawCall`, and lifts the result back with `synthesize_lift` — inline, so no
+/// per-type converters exist. An async import also gets a sibling
+/// [`synthesize_async_lift_function`]; both come back in [`AdapterArtifacts`].
 pub(super) fn synthesize_adapter(
     func_info: &CmFunctionInfo,
     cm_interface_registry: &CmInterfaceRegistry,
@@ -1438,22 +1412,11 @@ impl<'a> AdapterBuilder<'a> {
         Some(OutptrBuffer { local, size, align })
     }
 
-    /// Async result strategy.
-    ///
-    /// WASI P3 async calling convention: the lowered function returns a
-    /// packed subtask handle/status `(subtask_handle << 4) | status`. The
-    /// result (if any) is written to the async outptr buffer when the
-    /// subtask eventually reaches `Status::Returned`.
-    ///
-    /// For Wado-level `async fn foo(...) -> AsyncCall<T>` imports, the
-    /// adapter does NOT wait for the subtask or lift the result here.
-    /// Instead it packages `(packed_handle, outptr, size, align,
-    /// __cm_lift_fn)` into an `AsyncCall<T>` struct and returns it
-    /// immediately, letting the caller interleave stream-parameter
-    /// writes with the host subtask before explicitly `.wait()`-ing.
-    /// `AsyncCall<T>::wait` then performs the wait + free; the lift
-    /// itself runs in the per-import `__cm_lift__*` function emitted
-    /// alongside this adapter and reached through `__cm_lift`.
+    /// Async result strategy. The WASI P3 lowered function returns a packed
+    /// `(subtask_handle << 4) | status`, its result reaching the outptr buffer
+    /// only at `Status::Returned`. The adapter neither waits nor lifts: it
+    /// packages `(packed_handle, outptr, size, align, __cm_lift_fn)` into an
+    /// `AsyncCall<T>`, leaving `wait()` to do both.
     fn emit_async_result(
         &mut self,
         raw_call: TirExpr,

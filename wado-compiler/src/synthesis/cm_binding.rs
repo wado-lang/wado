@@ -1,14 +1,8 @@
-//! CM Binding Synthesis phase.
-//!
-//! Generates TIR binding functions for Component Model boundary crossing.
-//! Each binding handles lifting Wado values to CM flat ABI (lowering params)
-//! and lifting CM flat ABI values back to Wado types (lifting results).
-//!
-//! Pipeline position: after `effect_check`, before monomorphize.
-//! This ensures binding functions go through monomorphization, lowering,
-//! and optimization.
-//!
-//! See `docs/wep-2026-02-15-cm-binding-synthesis.md` for design details.
+//! CM Binding Synthesis: TIR binding functions for Component Model boundary
+//! crossing, each lowering Wado values to the CM flat ABI and lifting flat
+//! results back. Runs after `effect_check` and before monomorphize, so the
+//! bindings go through monomorphization, lowering and optimization like any
+//! other function. Design: `docs/wep-2026-02-15-cm-binding-synthesis.md`.
 
 mod cm_free;
 mod export_adapter;
@@ -127,18 +121,10 @@ mod record_payload_validation {
     pub(in crate::synthesis::cm_binding) struct RecordPayloadsValidated(());
 
     /// Reject a user record used as a `future`/`stream` payload when its fields
-    /// are not registered in the CM interface registry. Such a record has no CM
-    /// type to lower against, so the lower would silently mis-treat it as an i32
-    /// handle and emit an invalid component. Records are registered only for
-    /// `--lib` components (under the package default interface); in any other
-    /// world a user record has no CM home, so `get_struct_fields` returns `None`
-    /// and the use is rejected.
-    ///
-    /// The scan is scoped to functions reachable from the active world's export
-    /// bindings — the resolvability condition, not the world, decides — so a
-    /// record future in code the world drops (e.g. the non-`test` exports of a
-    /// library-shaped source like `cm_catalog.wado` compiled for the test world)
-    /// is never reached and never flagged.
+    /// are not registered in the CM interface registry: with no CM type to lower
+    /// against, the lower would mis-treat it as an i32 handle and emit an invalid
+    /// component. Records are registered only for `--lib` components. Scoped to
+    /// functions reachable from the active world's export bindings.
     pub(in crate::synthesis::cm_binding) fn reject_unresolvable_record_payloads(
         project: &Package,
     ) -> Result<RecordPayloadsValidated, String> {
@@ -1010,16 +996,11 @@ fn sync_wasi_export_strategy(
     ExportReturnStrategy::SyncReturn
 }
 
-/// Record the flattened task-return params on the `Package` for
-/// `optimize_dce` to type the shared `task_return` NIR import (the builtin
-/// `task_return` takes a single i32, but a Result-returning export passes its
-/// full flattened result). Sync-lift lib exports never call task.return, so
-/// lib worlds are skipped — except the kiln generator, which routes through
-/// the async task-return result binding.
-///
-/// The NIR import is a single shared symbol, so every returning export must
-/// flatten to the same signature; a disagreement cannot be represented and is
-/// an ICE.
+/// Record the flattened task-return params on the `Package` for `optimize_dce`
+/// to type the shared `task_return` NIR import — the builtin takes one i32, but
+/// a Result-returning export passes its full flattened result. Lib worlds are
+/// skipped, bar the kiln generator. The import is one shared symbol, so a
+/// disagreement between returning exports cannot be represented and is an ICE.
 fn record_task_return_flat_params(project: &mut Package) {
     let Some(world_info) = project.active_world_info().cloned() else {
         return;
@@ -1159,21 +1140,11 @@ fn strip_unexpanded_task_returns(project: &Package) {
     }
 }
 
-/// Synthesize binding functions for the async CM primitives —
-/// `Stream<T>.read()` on WASI record types, `Future<T>::read()`,
-/// `FutureWritable<T>::write()`, scalar / structural
-/// `StreamWritable<T>::write()` and `StreamReadable<T>::read()` — then
-/// rewrite `#[cm("...")]` resource method calls to target internal/builtin
-/// binding functions. The synthesis calls must all run before
-/// `rewrite_cm_resource_methods` so the functions it rewrites call sites to
-/// already exist. Rewriting here (instead of inline WIR emission in
-/// `wir_build/translate.rs`) sends the bindings through the normal
-/// pre-monomorphization pipeline.
-///
-/// Consumes the [`RecordPayloadsValidated`] witness: these rewrites destroy
-/// the pristine `future-new`/`stream-new` call shape that
-/// [`reject_unresolvable_record_payloads`] scans, so the validation must
-/// already have run.
+/// Synthesize binding functions for the async CM primitives — the `Stream<T>` /
+/// `Future<T>` read and write families — then rewrite `#[cm("...")]` resource
+/// method calls onto them, which requires they exist first. Consumes the
+/// [`RecordPayloadsValidated`] witness: the rewrites destroy the pristine
+/// `future-new` / `stream-new` shape that validation scans.
 fn rewrite_async_primitives(project: &mut Package, _validated: RecordPayloadsValidated) {
     synthesize_record_stream_reads(project);
     synthesize_future_reads(project);

@@ -1,14 +1,8 @@
-//! TIR synthesis phase.
-//!
-//! Generates synthetic TIR functions that cannot be expressed in user code:
-//! 1. **Enum traits** — auto-derived `Eq` and `Ord` for enum types
-//! 2. **Inspect/Display impls** — auto-generated `Inspect` and `Display` fallback impls
-//! 3. **Template expansion** — expands `TemplateString` TIR nodes into formatting code
-//! 4. **CM bindings** — Component Model boundary adapters for imports/exports
-//!
-//! All synthesis runs pre-monomorphize. Template expansion emits trait method calls
-//! (`Display::fmt`, `Inspect::inspect`) that the monomorphizer resolves to concrete
-//! implementations.
+//! TIR synthesis: the functions user code cannot express — auto-derived `Eq` /
+//! `Ord` for enums, `Inspect` / `Display` fallback impls, `TemplateString`
+//! expansion into formatting code, and Component Model import / export adapters.
+//! All of it runs pre-monomorphize, so the trait calls template expansion emits
+//! resolve to concrete implementations there.
 
 pub mod cm_binding;
 pub mod common;
@@ -84,19 +78,11 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
         template::expand_templates(module, &tt, &trait_env);
     }
 
-    // Effect-dispatch wrapper synthesis + call-site rewriting must
-    // run BEFORE cm_binding so that user resource calls (like
-    // `tx.write(payload)` on a `StreamWritable<u8>`) get intercepted
-    // at their pre-cm_binding shape — a call with
-    // `func.method_info.cm_name` set — and routed to the per-
-    // monomorphisation dispatch wrapper. The wrapper bodies' fallback
-    // paths emit the same cm_name-tagged placeholder shape that user
-    // code emits, so cm_binding rewrites both uniformly afterward
-    // (turning `stream-write` placeholders into `cm_stream_write_u8`
-    // internal calls, etc.). The `WithHandler` desugaring stays late
-    // (in `compile_after_load`'s phase 8c) because effect-check needs
-    // the original `WithHandler` shape to know which effects are
-    // satisfied locally.
+    // Effect-dispatch wrapper synthesis and call-site rewriting run before
+    // cm_binding, so a user resource call is intercepted at its pre-cm_binding
+    // `cm_name`-tagged shape and routed to the dispatch wrapper, whose fallback
+    // emits that same shape for cm_binding to rewrite uniformly. `WithHandler`
+    // desugaring stays late: effect-check reads the original shape.
     let project = effect_dispatch::synthesize_pre_cm_binding(project)?;
 
     // Insert `resource.drop` for every owned Component Model resource that is
@@ -109,30 +95,11 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
     Ok(project)
 }
 
-/// Collect every `(type_name, trait_name) -> ModuleSource` triple that the
-/// synthesis phase added to TIR, regardless of which sub-pass produced it
-/// (auto-derives, `from_synth`, `serde_synth`). Walks `module.functions`,
-/// which holds every function in the module — reify flattens impl-block
-/// methods into it alongside free functions and synthesized wrappers.
-///
-/// User-written impls already live in the AST layer, so they are excluded here
-/// to keep the synthesis layer a genuine "delta" on top of the AST.
-///
-/// Concrete-ness is propagated alongside each entry so that the
-/// monomorphizer can later distinguish "the impl is fully resolved (use the
-/// impl block's module)" from "the impl is generic (fall back to the
-/// receiver type's module so `call_rewrite`'s path-2alt mismatches the
-/// queueing convention exactly the way the legacy `trait_method_locations`
-/// did)". An impl is concrete here when the synthesized function carries
-/// no impl-level type parameters.
-///
-/// Per-module synthesis stubs are deliberately *not* recorded: every
-/// module that uses a closure of a given `Fn<arity, Ret>` shape (or an
-/// opaque resource handle like `Stream<u8>`, `Future<i32>`, …) gets its
-/// own independent stub, and a project-wide `(base, trait)` entry would
-/// mis-route calls between modules. The decision is made from the impl's
-/// receiver type via [`receiver_is_per_module_synth`]; template expansion
-/// handles their dispatch via its own per-`ResolvedType` fallback.
+/// Collect every `(type_name, trait_name) -> ModuleSource` triple TIR carries,
+/// by walking `module.functions` — reify flattens impl-block methods into it.
+/// Each entry records whether the impl is concrete (no impl-level type params),
+/// which is how the monomorphizer picks the impl block's module over the
+/// receiver's. Per-module stubs are excluded via [`receiver_is_per_module_synth`].
 fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
     let mut impls = SynthesisedImpls::default();
     let mut instantiations: Vec<(String, String, ModuleSource)> = Vec::new();
@@ -180,20 +147,11 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
     impls
 }
 
-/// Decide whether a synthesised trait-method impl whose `&self` parameter
-/// is `receiver_type_id` should be skipped from the project-wide synthesis
-/// layer because it is a *per-module* dispatch stub.
-///
-/// Strips `&` / `&mut` and consults the underlying `ResolvedType`:
-///
-/// - [`ResolvedType::Function`] / [`ResolvedType::GenericResource`] are
-///   anonymous parameterized types with no source-level definition; every
-///   module that uses them synthesises its own dispatch stub, so a
-///   project-wide entry would mis-route cross-module calls.
-/// - All other resolved types — `Struct`, `Enum`, `Variant`, `Newtype`,
-///   `Flags`, `Primitive`, generic instances, and tuple instances — name
-///   a single defining module, and any auto-derived impl for them is
-///   project-wide.
+/// Whether an impl on `receiver_type_id` is a *per-module* dispatch stub, to be
+/// kept out of the project-wide synthesis layer. Strips `&` / `&mut`:
+/// [`ResolvedType::Function`] and [`ResolvedType::GenericResource`] are
+/// anonymous, each using module synthesising its own stub, so a project-wide
+/// entry would mis-route. Every other type names one defining module.
 fn receiver_is_per_module_synth(
     receiver_type_id: crate::tir::TypeId,
     tt: &crate::tir::TypeTable,

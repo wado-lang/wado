@@ -1,19 +1,8 @@
 //! Extraction: materialize pure values from the live `ValueGraph` back into the
-//! `SkelTree`.
-//!
-//! In the live-ValueGraph design (see
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) an expression's value is a
-//! hash-consed [`ValueId`]; the extractor walks the skeleton and lowers each
-//! pure operand to that value's concrete form.
-//!
-//! This is the literal case: an expression whose value is a constant (`Int` /
-//! `Float` / `Bool` / `Char`) is replaced by that literal. The share-vs-duplicate
-//! cost model for non-literal multi-use values is a later step; constants are
-//! always cheaper to rematerialize than to share, so they need no cost decision.
-//!
-//! [`extract_const`] is the shared materialization primitive, used in
-//! production by `store_load_forward`. [`ExtractLiteralRule`] (the worklist
-//! rule form) is a test-only vehicle exercising the same primitive.
+//! `SkelTree`, walking the skeleton and lowering each pure operand to its
+//! hash-consed [`ValueId`]'s concrete form. Constants are always cheaper to
+//! rematerialize than to share, so they need no cost decision.
+//! [`extract_const`] is the shared primitive, used by `store_load_forward`.
 
 use crate::nir_arena::{ExprId, ExprKind, NodeRef, StmtKind};
 use crate::nir_engine::Engine;
@@ -124,17 +113,11 @@ fn is_loop_body(e: &Engine, b: crate::nir_arena::BlockId) -> bool {
     )
 }
 
-/// The statement before which a `let _av = <value>` materialising the uses
-/// `ids` can be inserted so it **dominates all of them**: the nearest common
-/// dominator block (the deepest enclosing block common to every use) with the
-/// insertion taken at the earliest statement any use descends through there.
-///
-/// Soundness rests on structured control flow: a block runs its statements in
-/// order, so a statement at or before every use's leading statement in their
-/// common ancestor block precedes (dominates) each use. The uses share one
-/// `ValueId`, so no heap bump separates them — the field/value is constant
-/// across the span, and a load pinned at this point reproduces it for all.
-/// `None` if any use lacks a path.
+/// The statement before which a `let _av = <value>` materialising the uses `ids`
+/// can be inserted so it **dominates all of them**: their deepest common
+/// enclosing block, at the earliest statement any use descends through.
+/// Structured control flow makes that a dominator, and the shared `ValueId`
+/// means no heap bump separates the uses. `None` if any use lacks a path.
 fn materialise_point(
     e: &Engine,
     ids: &[ExprId],
@@ -473,18 +456,11 @@ fn classify_candidate(
     if engine.is_assign_target(id) || is_let_value(engine, id) {
         return None;
     }
-    // Constant-leaf promotion (early only, clean graph). A value-position
+    // Constant-leaf promotion (early only, clean graph): a value-position
     // `Local` / `FieldAccess` read whose graph value is a constant literal is
-    // frozen to that literal: context-free, width-correct (the kind carries its
-    // own `TypeId`), and — born before any pass — never re-contextualized.
-    // `is_place_read` excludes lvalue positions (`&mut x`, a `.field` / method
-    // receiver, an assign target) where the storage, not the value, is needed.
-    // The root local must not be `mut_escaped`: a write through a retained `&mut`
-    // (ref_1's `set_bool(&mut c, …)`) makes the constant point-specific in a way
-    // the build-once graph cannot keep across the structural passes (over-merge
-    // vs a fresh build). An *immutable*-`&`-escaped root (licm's `&config`) is
-    // stable — the callee cannot write through `&Config` — so its field constant
-    // freezes soundly; that is the in-loop `FieldAccess` recovery.
+    // frozen to it. `is_place_read` excludes lvalue positions, where the storage
+    // is wanted. The root must not be `mut_escaped` — a write through a retained
+    // `&mut` makes the constant point-specific — but `&`-escaped is stable.
     let leaf_root_stable = match &engine.body.exprs[id].kind {
         ExprKind::Local { index, .. } => !ctx.mut_escaped_leaf.contains(index),
         ExprKind::FieldAccess { .. } => super::arena_query::storage_root(engine.body, id)
@@ -698,14 +674,9 @@ fn worth_materialising(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> 
 
 /// Apply strategy for a non-`FieldAccess` (pure-arith / constant) representative.
 /// A value used by several slots whose leaves are all available at a common
-/// dominator is **materialised once** — a single `let _av = <value>` all uses
-/// read via `local.get _av` — at that point, the same placement
-/// [`apply_field_materialise`] uses. Every other case redirects each use to the
-/// pooled representative inline.
-///
-/// Availability says where the value *can* be computed, not that it should be:
-/// a trapping value is refused, the point is the nearest common dominator
-/// rather than entry, and a value too cheap to share stays re-emitted.
+/// dominator is **materialised once** into a `let _av = <value>`, the placement
+/// [`apply_field_materialise`] uses; everything else redirects each use inline.
+/// A trapping value is refused, and one too cheap to share stays re-emitted.
 fn apply_value_freeze(
     engine: &mut Engine,
     rep: ValueId,
