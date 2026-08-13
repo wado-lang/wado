@@ -220,18 +220,32 @@ Two more things settled:
   collections run constantly and a pre-sized heap would amortize them. Measured
   at 16 MB and 64 MB against an unset default, interleaved: every delta inside
   noise. Not applied.
-- **A field's wire name was rebuilt on every serialize.** `wire_name` fed
-  `apply_case` unconditionally; with a constant `policy` the optimizer folds the
-  call's _result_ to a constant but cannot delete the call, because `apply_case`
-  allocates through bounds-checked writes and so carries `may_trap`. The
-  leftover call re-allocated its `String` argument per field of every serialized
-  struct. `wire_name` now tests `Identity` at the call site so a constant policy
-  prunes the branch. This is a `core:serde` fix, not a benchmark one.
+- **A field's wire name is rebuilt on every serialize, and the source-level fix
+  costs more than it saves.** `wire_name` feeds `apply_case` unconditionally;
+  with a constant `policy` the optimizer folds the call's _result_ to a constant
+  but cannot delete the call, because `apply_case` allocates through
+  bounds-checked writes and so carries `may_trap`. The leftover call
+  re-allocates its `String` argument per field of every serialized struct — four
+  dead objects per request on this benchmark's two-field response, and worth 25%
+  of `to_bytes` on a small value. Testing `Identity` at the call site prunes it,
+  but the extra branch pushes `wire_name` past the inline threshold, so `policy`
+  stays a runtime parameter and the _deserialize_ side loses its compile-time
+  name folding — an array clone plus a live `apply_case` per lookup, which
+  `reflect_wire_name_folds` pins against. Removing the dead call belongs to the
+  optimizer, not to `core:serde`.
 
 Where the guest cost sits, measured in a CLI loop (release JIT, per request):
 route match 1.03 µs, JSON body build 2.70 µs, both plus handler dispatch
-4.24 µs. `json::to_bytes` on a pre-built value is 0.87 µs of that, against
-0.27 µs for a bare `String::with_capacity(128)` plus a `push_str` of the same
-47 bytes — so roughly 0.6 µs per request is serializer machinery over what
-writing the bytes costs. That, and the router's per-hit allocations, are what
-the next round should take.
+4.24 µs. Serializing this 47-byte body costs 2.9x hand-writing the same bytes
+through `String` pushes (0.658 µs against 0.229 µs), and a guest profile of that
+loop splits the serializer's own time roughly 32% buffer allocation, 32%
+`write_escaped_string`, 17% capacity checks.
+
+The buffer share is the actionable one. `SERIALIZE_BUFFER_CAPACITY` is 128 to
+match `serde_json`'s `to_vec` pre-sizing, but the two cost models differ:
+`Vec::with_capacity` reserves without touching memory, while WasmGC's
+`array.new_default` must zero every byte it creates. Pre-sizing past the
+expected output is therefore a real per-call cost here, and sizing that constant
+is the next measurement to take — a naive sweep does not answer it, because a
+constant capacity lets CTFE fold the whole build away. That, and the router's
+per-hit allocations, are what the next round should take.
