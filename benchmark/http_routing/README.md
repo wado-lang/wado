@@ -47,30 +47,45 @@ ratios between servers within one run are.
 
 The four servers span four runtimes:
 
-- **`wado serve`** — a `wasi:http/service` component on wasmtime,
-  dispatched through `core:router`, with pooled instance reuse +
-  periodic recycling.
-- **Hono (Node)** — JavaScript on Node.js (`@hono/node-server`), default
+- **`wado`** — a `wasi:http/service` component on wasmtime, dispatched
+  through `core:router`, with pooled instance reuse + periodic recycling.
+- **Node** — Hono on Node.js (`@hono/node-server`), default
   `SmartRouter`.
-- **Hono (Bun)** — the same Hono app on Bun (`Bun.serve`); the
-  fastest-JS reference point.
+- **Bun** — the same Hono app on Bun (`Bun.serve`); the fastest-JS
+  reference point.
 - **Axum** — native Rust on Tokio; the native-compiled reference point.
 
-`wado serve` also gets a second row, **`wado serve h2c`**. It is the same
-server process, not a fifth runtime: `wado serve` sniffs the connection
-preface and speaks HTTP/1.1 or h2c accordingly, so the row only differs
-in that `oha` is given `--http2`. Every other row stays on HTTP/1.1, and
-the two `wado serve` rows are measured in different slices, so they never
-load the process at the same time. It is its own row rather than folded
-into the HTTP/1.1 number because the protocols are not interchangeable
-here: h2c pays framing and flow-control per request that HTTP/1.1 does
-not, which a single-stream-per-connection load pattern cannot amortize.
+### Protocols
+
+Every row names its protocol, and each server is measured over both
+HTTP/1.1 and h2c wherever it can serve them. h2c is not a curiosity
+here: a reverse proxy talks h2c to its upstream by default, so it is the
+shape these servers are usually deployed in. The two are kept as
+separate rows rather than folded together because they are not
+interchangeable at this response size — h2c pays framing and
+flow control per request that a single-stream-per-connection load
+pattern never amortizes.
+
+How a server gets its h2c row differs by runtime:
+
+- `wado` and Axum sniff the connection preface, so one process answers
+  both rows on one port. (Axum needs its `http2` feature, which is off
+  by default.)
+- Node's `node:http` and `node:http2` are separate servers with no
+  upgrade path between them, so Hono on Node needs a second process on
+  its own port (`app.h2c.js`), and that row does not answer HTTP/1.1 at
+  all.
+- `Bun.serve` has no h2c server, so Bun is HTTP/1.1 only.
+
+Rows rotate slice by slice, so two rows sharing a process never load it
+at the same time.
 
 ## Files
 
 - `app.wado` — Wado `wasi:http/service` world server.
 - `app.routes.js` — shared Hono route definitions.
 - `app.js` — Hono server entry point for Node.js (`@hono/node-server`).
+- `app.h2c.js` — the same, over `node:http2` (h2c).
 - `app.bun.js` — Hono server entry point for Bun (`Bun.serve`).
 - `axum_server.rs` + `Cargo.toml` — Axum server (native Rust).
 - `bench.sh` — driver: builds, starts each server, runs `oha`.
