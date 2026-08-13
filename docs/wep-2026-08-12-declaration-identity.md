@@ -482,14 +482,16 @@ compiles, passes the suite, and ends with a mechanical completion check.
         `fn_local_*` map that tracks the annotate walk's position, and a durable
         `local_*` map keyed by a mangled storage name no declaration carries. It
         needs a `DefId` scoped to its declaring function.
+- [x] `Resolutions::get` made total. The `Option` is gone, so no consumer has a
+      "no answer" case to write a fallback for.
 - [ ] `ast::Type::Resolved(DefId)`; synthesis stops spelling names. Done when no
-      synthesis site builds a `NamedType` from a `&str`. This has to come before
-      the table can be total: a synthesised reference carries an `AstId::fresh`
-      the walk never saw, so every consumer must keep tolerating a missing
-      answer while the remaining site exists.
-- [ ] `Resolutions::get` made total, once nothing mints an unwalked site. Done
-      when the `Option` is gone from the signature — four call sites read it
-      today, two of them only to assert the walk reached the site.
+      synthesis site builds a `NamedType` from a `&str`. This was written as
+      gating the step above, on the theory that a synthesised reference carries
+      an `AstId::fresh` the walk never saw and every consumer must therefore
+      tolerate a missing answer. It does not: the one production site pairs each
+      bound with the identity it stands for before handing it on, so the fresh
+      id never reaches the table. The step stands on its own — a spelling minted
+      beside an identity is still a spelling — but nothing waits on it.
 - [ ] `ResolvedType` nominal variants carry `DefId`. Done when `ResolvedType`
       holds no `(name, module_source)` pair. The nominal variants are matched at
       ~790 sites, 188 of them in or-patterns that bind one `name` across
@@ -578,7 +580,7 @@ The numbers this design is aimed at, measured over `wado-compiler/src`:
 | name-keyed per-module declaration registries        | 7            | 0       |
 | `type_implements_trait` callers passing no identity | 16 of 30     | 0 of 30 |
 | spelling comparisons in trait dispatch              | 2            | 0       |
-| synthesised reference sites absent from the table   | 2            | 1       |
+| synthesised references a consumer re-resolves       | 2            | 0       |
 | mangled-name parsing functions                      | 7            | 7       |
 | `decl_key_or_local` occurrences — the fabrication   | 26           | 26      |
 
@@ -587,10 +589,19 @@ step lands. A row that stops falling means a step was declared done while a bypa
 survived it, which is what happened to the earlier `trait_name: &str` count, and
 the reason this document measures the bypass rather than the parameter.
 
-Three rows are closed. The query takes a `DefId` and nothing else, so there is no
+Four rows are closed. The query takes a `DefId` and nothing else, so there is no
 `None` left to pass; trait dispatch compares declarations at both ends, with no
-spelling comparison left in the path; and no declaration's contents are reached
-by a name and a module any more, which took `TypeLookup`'s scope walk with it.
+spelling comparison left in the path; no declaration's contents are reached by a
+name and a module any more, which took `TypeLookup`'s scope walk with it; and the
+resolution table is total, so a consumer has no missing answer to fall back from.
+
+The synthesis row closed without the step that was supposed to close it, which is
+worth recording because the estimate was wrong in a useful direction. Two suite
+runs — one removing the fresh-id escape from the call-site assertions, one moving
+the assertion inside `get` so `declared`'s callers were covered — showed the
+escape answering for nothing. The measurement that mattered was never "how many
+sites mint a fresh id" but "how many of them a consumer resolves", and the answer
+had already reached zero.
 
 The scope row is at two: `Scopes`, and `SymbolTable`'s own lookups, which the
 resolve pass is built on top of rather than beside. `module_import_scope` and
