@@ -306,7 +306,7 @@ pub enum Resolution {
 pub struct Resolutions { /* AstId -> Resolution */ }
 
 impl Resolutions {
-    pub fn at(&self, site: AstId) -> Resolution;   // total, not Option
+    pub fn get(&self, site: AstId) -> Resolution;  // total, not Option
 }
 ```
 
@@ -316,7 +316,7 @@ answer for every one; `ast.rs`'s
 a name-bearing node with no id unless `NAMED_WITHOUT_ID` registers the reason it
 needs none.
 
-`at` is total. A site the walk missed is a bug in the walk, not an absent answer a
+`get` is total. A site the walk missed is a bug in the walk, not an absent answer a
 consumer improvises around, so it panics rather than returning `None`. The three
 cases stay distinct on purpose: reading `Unresolved` as `Binder` loses the
 diagnostic a name that reaches nothing deserves.
@@ -496,7 +496,7 @@ Each mechanism states what it makes impossible, not what it discourages.
   A pass cannot turn a name into an identity. Enforced by the absence of the API.
 - Identity parameters are non-`Option` and are not accompanied by their own name.
   A caller without an identity does not compile. Enforced by the type checker.
-- `Resolutions::at` is total and panics on a missing site, so a coverage hole in
+- `Resolutions::get` is total and panics on a missing site, so a coverage hole in
   the walk fails on the first fixture that reaches it instead of degrading to a
   name comparison.
 - `every_reference_bearing_node_carries_an_ast_id` fails on a new name-bearing AST
