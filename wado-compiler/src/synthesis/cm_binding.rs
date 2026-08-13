@@ -1179,12 +1179,33 @@ mod tests {
     /// these up when the stdlib elaborator visits `core:prelude`.
     fn register_option_result_for_tests(tt: &mut TypeTable) {
         use crate::compiler_item::{CompilerItem, Resolved};
+        // A compiler item names a declaration, so each one gets a declaring
+        // node with its base type bound to it. Registering a node nothing is
+        // bound to leaves the identity reads this fixture exists for — 
+        // `is_result`, `as_option`, `is_string`, `is_list` — answering no
+        // rather than wrong, which is the harder failure to notice.
+        let bind_variant = |tt: &mut TypeTable, name: &str, module: ModuleSource| {
+            let decl = crate::ast::AstId::fresh();
+            let ty = tt.make_variant(name.to_string(), module);
+            tt.register_decl_type(decl, ty);
+            decl
+        };
+        let bind_struct = |tt: &mut TypeTable, name: &str, module: ModuleSource| {
+            let decl = crate::ast::AstId::fresh();
+            let ty = tt.make_struct(name.to_string(), module);
+            tt.register_decl_type(decl, ty);
+            decl
+        };
+        let option_decl = bind_variant(tt, "Option", ModuleSource::prelude());
+        let result_decl = bind_variant(tt, "Result", ModuleSource::prelude());
+        let string_decl = bind_struct(tt, "String", ModuleSource::string());
+        let list_decl = bind_struct(tt, "List", ModuleSource::list());
         let _ = tt.compiler_items_mut().register(
             CompilerItem::Option,
             Resolved::Variant {
                 module_source: ModuleSource::prelude(),
                 name: "Option".to_string(),
-                decl: crate::ast::AstId::fresh(),
+                decl: option_decl,
             },
         );
         let _ = tt.compiler_items_mut().register(
@@ -1210,7 +1231,7 @@ mod tests {
             Resolved::Variant {
                 module_source: ModuleSource::prelude(),
                 name: "Result".to_string(),
-                decl: crate::ast::AstId::fresh(),
+                decl: result_decl,
             },
         );
         let _ = tt.compiler_items_mut().register(
@@ -1236,7 +1257,7 @@ mod tests {
             Resolved::Struct {
                 module_source: ModuleSource::string(),
                 name: "String".to_string(),
-                decl: crate::ast::AstId::fresh(),
+                decl: string_decl,
             },
         );
         let _ = tt.compiler_items_mut().register(
@@ -1244,7 +1265,7 @@ mod tests {
             Resolved::Struct {
                 module_source: ModuleSource::list(),
                 name: "List".to_string(),
-                decl: crate::ast::AstId::fresh(),
+                decl: list_decl,
             },
         );
     }
