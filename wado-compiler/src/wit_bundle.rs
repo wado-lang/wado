@@ -1,19 +1,8 @@
-//! Embed a `component-type` custom section into a compiled component.
-//!
-//! Producer-side embedding step of WIT interoperability (WEP
-//! `wep-2026-05-02-wit-interoperability.md`). [`wit_emit`](crate::wit_emit)
-//! renders the WIT *text*; this module encodes it to the binary `component-type`
-//! section and appends it to the component codegen emitted.
-//!
-//! The section is *additive*: a Wado artifact is already a self-describing
-//! component, so `wasm-tools component wit` (`wit_parser::decode`) recovers WIT
-//! from the component's own types and does not read this section (it consults a
-//! `component-type` payload only for a WIT-package blob / core module). The
-//! section's value is full fidelity — the component's own type is tree-shaken to
-//! the used surface, whereas the encoded payload carries the complete upstream
-//! interfaces, exact versions, and a `producers` record (the
-//! `wit_component::metadata::encode` convention `wkg` / `wasm-tools metadata`
-//! consume).
+//! Embed a `component-type` custom section into a compiled component — the
+//! producer side of WIT interoperability (WEP 2026-05-02), encoding the text
+//! [`wit_emit`](crate::wit_emit) renders. Purely additive: a Wado artifact
+//! already self-describes. The section's value is fidelity, carrying the
+//! complete upstream interfaces where the component's own type is tree-shaken.
 
 use std::borrow::Cow;
 
@@ -24,17 +13,10 @@ use crate::semantics::Semantics;
 use crate::wit_emit::{self, WitEmitError, WitEmitInput, WitEmitOptions, WitScope};
 
 /// Append a `component-type` custom section to `component_bytes`, derived from
-/// the WIT text [`wit_emit::emit_wit_text`] renders for `sem` under `opts`.
-///
-/// The embedded section is always self-contained: `metadata::encode` types the
-/// world against a fully-resolved [`wit_parser::Resolve`], which requires every
-/// referenced upstream package's body to be present. `opts.scope` is therefore
-/// ignored here and the full interface closure is always emitted — a `local`
-/// (registry-referencing) document does not re-parse standalone. `local` scope
-/// remains meaningful only for `wado wit` *text*. The returned bytes are the
-/// original component with one extra custom section — the component's own type
-/// structure (what `wasm-tools component wit` reads) is untouched, so the
-/// artifact still decodes as a `Component`.
+/// the WIT text [`wit_emit::emit_wit_text`] renders for `sem`. The section is
+/// always self-contained — `metadata::encode` needs a fully-resolved
+/// `Resolve` — so `opts.scope` is ignored and the whole interface closure is
+/// emitted. The component's own type structure is untouched.
 pub fn embed_component_type(
     component_bytes: &[u8],
     sem: &Semantics,
