@@ -463,9 +463,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 // resolve `name` at an id the walk never saw.
                                 resolved: b
                                     .canonical()
-                                    .and_then(|(m, n)| {
-                                        self.tysys.resolutions.declared_in(&m, &n)
-                                    }),
+                                    .and_then(|(m, n)| self.tysys.resolutions.declared_in(&m, &n)),
                             }
                         })
                         .collect();

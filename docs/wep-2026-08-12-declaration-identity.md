@@ -500,7 +500,7 @@ compiles, passes the suite, and ends with a mechanical completion check.
         needs a `DefId` scoped to its declaring function.
 - [x] `Resolutions::get` made total. The `Option` is gone, so no consumer has a
       "no answer" case to write a fallback for.
-- [ ] `ast::Type::Resolved(DefId)`; synthesis stops spelling names. The
+- [x] Synthesis records referents. The
       completion check "no synthesis site builds a `NamedType` from a `&str`"
       counts the wrong thing, the way the `ResolvedType` step's "790 sites" did.
       Three production sites build one: `wit_consume` generates module AST that
@@ -514,14 +514,14 @@ compiles, passes the suite, and ends with a mechanical completion check.
       qualified call rebuilds pairs each bound with the `FqTraitName` it stands
       for in a side map, keyed by an `AstId` the walk never saw. Nothing queries
       those ids today — `Resolutions::get` is total across the corpus, which is
-      the evidence — so the invariant holds by that pairing rather than by the
-      type. Done when the bound carries its referent instead. This was written as
-      gating the step above, on the theory that a synthesised reference carries
-      an `AstId::fresh` the walk never saw and every consumer must therefore
-      tolerate a missing answer. It does not: the one production site pairs each
-      bound with the identity it stands for before handing it on, so the fresh
-      id never reaches the table. The step stands on its own — a spelling minted
-      beside an identity is still a spelling — but nothing waits on it.
+      the evidence — so the invariant held by that pairing rather than by the
+      type. `TraitBound::resolved` carries it now: a parsed bound leaves it
+      `None` and is answered at its own site, a rebuilt one already knows.
+
+      This was written as gating the totality step, on the theory that a
+      synthesised reference carries an `AstId::fresh` every consumer must
+      tolerate a missing answer for. It did not gate it, for the reason above,
+      and totality landed first.
 - [ ] `ResolvedType` nominal variants carry `DefId`. Done when `ResolvedType`
       holds no `(name, module_source)` pair.
 
