@@ -922,12 +922,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
-        let decl_id = self
+        // `resource_module` is the declaring module, so this asks it about its
+        // own declarations rather than asking what the name means from here.
+        let def = self
             .tysys
-            .all_resource_types
-            .get(resource_module)?
-            .get(struct_name)?
-            .defined_at;
+            .resolutions
+            .declared_in(resource_module, struct_name)?;
+        let decl_id = self.tysys.all_resource_types.get(&def)?.defined_at;
         let sig = self
             .tysys
             .signatures

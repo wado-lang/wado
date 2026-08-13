@@ -56,13 +56,12 @@ pub(crate) struct TypeSystem {
     /// resolves type names against these without cloning into per-module
     /// flat maps.
     pub(crate) all_newtypes: Rc<IndexMap<crate::defs::DefId, TypeId>>,
-    pub(crate) all_generic_newtypes:
-        Rc<IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>>>,
+    pub(crate) all_generic_newtypes: Rc<IndexMap<crate::defs::DefId, GenericNewtypeInfo>>,
     pub(crate) all_struct_fields: Rc<IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>>,
     pub(crate) all_variant_cases: Rc<IndexMap<ModuleSource, IndexMap<String, VariantInfo>>>,
     pub(crate) all_enum_cases: Rc<IndexMap<ModuleSource, IndexMap<String, EnumInfo>>>,
     pub(crate) all_flags_cases: Rc<IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>>,
-    pub(crate) all_resource_types: Rc<IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>>,
+    pub(crate) all_resource_types: Rc<IndexMap<crate::defs::DefId, ResourceInfo>>,
 
     /// What every type/trait reference site in the program refers to, resolved
     /// once from the module that wrote it. The single producer of declaration

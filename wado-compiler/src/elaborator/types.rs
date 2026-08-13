@@ -2129,9 +2129,8 @@ pub(crate) struct TypeLookup<'a> {
     pub(crate) all_variant_cases: &'a IndexMap<ModuleSource, IndexMap<String, VariantInfo>>,
     pub(crate) all_enum_cases: &'a IndexMap<ModuleSource, IndexMap<String, EnumInfo>>,
     pub(crate) all_flags_cases: &'a IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>,
-    pub(crate) all_resource_types: &'a IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>,
-    pub(crate) all_generic_newtypes:
-        &'a IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>>,
+    pub(crate) all_resource_types: &'a IndexMap<crate::defs::DefId, ResourceInfo>,
+    pub(crate) all_generic_newtypes: &'a IndexMap<crate::defs::DefId, GenericNewtypeInfo>,
     pub(crate) local_struct_fields: &'a IndexMap<String, StructFieldInfo>,
     pub(crate) local_newtypes: &'a IndexMap<String, TypeId>,
     pub(crate) local_enum_cases: &'a IndexMap<String, EnumInfo>,
@@ -2370,15 +2369,14 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn resource_type(&self, name: &str) -> Option<&'a ResourceInfo> {
-        self.lookup_ref(name, None, self.all_resource_types)
+        self.all_resource_types.get(&self.declaration(name)?)
     }
 
     pub(super) fn generic_newtype(&self, name: &str) -> Option<&'a GenericNewtypeInfo> {
-        self.lookup_ref(
-            name,
-            Some(self.local_generic_newtypes),
-            self.all_generic_newtypes,
-        )
+        if let Some(info) = self.local_generic_newtypes.get(name) {
+            return Some(info);
+        }
+        self.all_generic_newtypes.get(&self.declaration(name)?)
     }
 
     /// The newtype (or `flags` type) `name` names here.

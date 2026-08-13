@@ -166,7 +166,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut all_newtypes: IndexMap<crate::defs::DefId, TypeId> = snapshot_state
             .map(|s| (*s.tysys.all_newtypes).clone())
             .unwrap_or_default();
-        let mut all_generic_newtypes: IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>> =
+        let mut all_generic_newtypes: IndexMap<crate::defs::DefId, GenericNewtypeInfo> =
             snapshot_state
                 .map(|s| (*s.tysys.all_generic_newtypes).clone())
                 .unwrap_or_default();
@@ -185,7 +185,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             snapshot_state
                 .map(|s| (*s.tysys.all_flags_cases).clone())
                 .unwrap_or_default();
-        let mut all_resource_types: IndexMap<ModuleSource, IndexMap<String, ResourceInfo>> =
+        let mut all_resource_types: IndexMap<crate::defs::DefId, ResourceInfo> =
             snapshot_state
                 .map(|s| (*s.tysys.all_resource_types).clone())
                 .unwrap_or_default();
@@ -321,17 +321,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                     }
                     Item::Resource(resource_decl) => {
-                        all_resource_types
-                            .entry(module_source.clone())
-                            .or_default()
-                            .insert(
-                                resource_decl.name.clone(),
+                        if let Some(def) = resolutions.defs().of_ast_id(resource_decl.id) {
+                            all_resource_types.insert(
+                                def,
                                 ResourceInfo {
                                     name: resource_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     defined_at: resource_decl.id,
                                 },
                             );
+                        }
                     }
                     Item::Trait(trait_decl) => {
                         super::item::register_trait_compiler_item(
@@ -461,26 +460,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             all_newtypes.insert(def, newtype_id);
                         }
                         newly_resolved = true;
-                    } else if !all_generic_newtypes
-                        .get(module_source)
-                        .is_some_and(|m| m.contains_key(&newtype_decl.name))
+                    } else if !resolutions
+                        .defs()
+                        .of_ast_id(newtype_decl.id)
+                        .is_some_and(|def| all_generic_newtypes.contains_key(&def))
                     {
                         let type_params = newtype_decl
                             .type_params
                             .iter()
                             .map(|p| p.name.clone())
                             .collect();
-                        all_generic_newtypes
-                            .entry(module_source.clone())
-                            .or_default()
-                            .insert(
-                                newtype_decl.name.clone(),
+                        if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
+                            all_generic_newtypes.insert(
+                                def,
                                 GenericNewtypeInfo {
                                     module_source: module_source.clone(),
                                     type_params,
                                     base_type_ast: newtype_decl.ty.clone(),
                                 },
                             );
+                        }
                         newly_resolved = true;
                     }
                 }
@@ -662,10 +661,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
                             };
-                            all_generic_newtypes
-                                .entry(module_source.clone())
-                                .or_default()
-                                .insert(newtype_decl.name.clone(), info);
+                            if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
+                                all_generic_newtypes.insert(def, info);
+                            }
                         }
                     }
                     Item::Variant(variant_decl) => {
@@ -982,10 +980,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for def in all_newtypes.keys() {
                 cache.insert(resolutions.defs().name(*def).to_string());
             }
-            for m in all_generic_newtypes.values() {
-                for name in m.keys() {
-                    cache.insert(name.clone());
-                }
+            for def in all_generic_newtypes.keys() {
+                cache.insert(resolutions.defs().name(*def).to_string());
             }
             for name in crate::tir::PrimitiveType::all_primitive_names() {
                 cache.insert(name.to_string());
@@ -1027,7 +1023,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .or_default()
                     .insert(defs.name(*def).to_string());
             }
-            collect(&all_generic_newtypes, &mut local);
+            for def in all_generic_newtypes.keys() {
+                let defs = resolutions.defs();
+                local
+                    .entry(defs.module(*def).clone())
+                    .or_default()
+                    .insert(defs.name(*def).to_string());
+            }
 
             // The prelude is auto-imported into every module, so its types are
             // visible everywhere.
@@ -1087,7 +1089,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // inference (e.g., `impl Request { ... }` would stop recognizing Request's methods).
         let resource_type_names: IndexSet<String> = all_resource_types
             .values()
-            .flat_map(|m| m.keys().cloned())
+            .map(|info| info.name.clone())
             .collect();
         Self::validate_type_definitions(
             modules,
@@ -1122,6 +1124,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             modules,
             &all_struct_fields,
             &all_resource_types,
+            resolutions.defs(),
             &type_table,
             &stdlib_set,
         );
@@ -1676,7 +1679,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn intern_all_decl_types(
         modules: &IndexMap<ModuleSource, Module>,
         all_struct_fields: &IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
-        all_resource_types: &IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>,
+        all_resource_types: &IndexMap<crate::defs::DefId, ResourceInfo>,
+        defs: &crate::defs::DefTable,
         type_table: &Rc<RefCell<TypeTable>>,
         stdlib_set: &IndexSet<ModuleSource>,
     ) {
@@ -1709,9 +1713,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         tt.register_decl_type(variant_decl.id, type_id);
                     }
                     Item::Resource(resource_decl) => {
-                        let (name, ms) = all_resource_types
-                            .get(module_source)
-                            .and_then(|m| m.get(&resource_decl.name))
+                        let (name, ms) = defs
+                            .of_ast_id(resource_decl.id)
+                            .and_then(|def| all_resource_types.get(&def))
                             .map(|info| (info.name.clone(), info.module_source.clone()))
                             .unwrap_or_else(|| (resource_decl.name.clone(), module_source.clone()));
                         let type_id = tt.make_resource(name, ms);
