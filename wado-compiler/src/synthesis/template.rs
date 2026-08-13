@@ -984,16 +984,16 @@ fn peel_transparent_newtype(
             let tt = ctx.tt.borrow();
             match tt.get(tid) {
                 ResolvedType::Newtype {
-                    name,
-                    base_type,
-                    module_source,
-                    ..
+                    def, base_type, ..
                 } if ctx
                     .trait_env
                     .trait_def_of_fq(trait_name)
                     .is_none_or(|trait_| {
                         !ctx.trait_env.has_any_methodful_impl_by_receiver(
-                            &Receiver::Type(FqTypeName::of_head(module_source, name)),
+                            &Receiver::Type(FqTypeName::of_head(
+                                tt.def_module(*def),
+                                tt.def_name(*def),
+                            )),
                             trait_,
                         )
                     }) =>
@@ -1170,15 +1170,13 @@ fn reflect_kind_of(type_id: TypeId, tt: &TypeTable) -> Option<CompilerItem> {
         ResolvedType::Variant { .. } => Some(CompilerItem::ReflectVariant),
         ResolvedType::Enum { .. } => Some(CompilerItem::ReflectEnum),
         ResolvedType::Flags { .. } => Some(CompilerItem::ReflectFlags),
-        ResolvedType::GenericInstance {
-            name,
-            module_source,
-            ..
-        } => {
+        ResolvedType::GenericInstance { def, .. } => {
+            let name = &tt.def_name(*def).to_string();
+            let module_source = &tt.def_module(*def).clone();
             // A variant is asked first: a variant declaration also registers a
             // struct-shaped payload layout under its own name, so the struct
             // lookup answers for both kinds.
-            if tt.find_variant_type(name, module_source).is_some() {
+            if tt.find_variant_type(*def).is_some() {
                 Some(CompilerItem::ReflectVariant)
             } else if tt.find_struct_by_name(name, module_source).is_some() {
                 Some(CompilerItem::ReflectStruct)
@@ -1234,16 +1232,7 @@ pub(crate) fn receiver_satisfies_blanket_bounds(
 /// The module of a struct-like `type_id`, used as the disambiguation hint for
 /// trait-impl lookups.
 fn type_module_hint_tt(type_id: TypeId, tt: &TypeTable) -> Option<ModuleSource> {
-    match tt.get(type_id) {
-        ResolvedType::Struct { module_source, .. }
-        | ResolvedType::Enum { module_source, .. }
-        | ResolvedType::Variant { module_source, .. }
-        | ResolvedType::Newtype { module_source, .. }
-        | ResolvedType::Flags { module_source, .. }
-        | ResolvedType::GenericInstance { module_source, .. }
-        | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
-        _ => None,
-    }
+    tt.nominal_head(type_id).map(|(_, m)| m)
 }
 
 /// Resolve a `type_id.trait::method()` dispatch to a blanket impl when no
@@ -1417,16 +1406,7 @@ fn trait_impl_module(
     // module lets the lookup pick the candidate that actually corresponds
     // to this `type_id`.
     let resolved = ctx.tt.borrow().get(type_id).clone();
-    let type_module = match &resolved {
-        ResolvedType::Struct { module_source, .. }
-        | ResolvedType::Enum { module_source, .. }
-        | ResolvedType::Variant { module_source, .. }
-        | ResolvedType::Newtype { module_source, .. }
-        | ResolvedType::Flags { module_source, .. }
-        | ResolvedType::GenericInstance { module_source, .. }
-        | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
-        _ => None,
-    };
+    let type_module = ctx.tt.borrow().nominal_head(type_id).map(|(_, m)| m);
 
     // Preferred path: consult the elaborator's `TraitEnv`, which knows where
     // every user-written `impl Trait for Type` block lives. This handles

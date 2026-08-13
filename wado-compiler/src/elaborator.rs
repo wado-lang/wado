@@ -1032,17 +1032,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             target_type_id,
             trait_name,
         ) {
-            let module_source = match self.tysys.type_table.borrow().get(target_type_id) {
-                tir::ResolvedType::Struct { module_source, .. }
-                | tir::ResolvedType::Enum { module_source, .. }
-                | tir::ResolvedType::Variant { module_source, .. }
-                | tir::ResolvedType::Newtype { module_source, .. }
-                | tir::ResolvedType::Flags { module_source, .. }
-                | tir::ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
-                other => unreachable!(
-                    "explicit derive marker validated for non-nominal type `{other:?}`"
-                ),
-            };
+            let module_source = self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_head(target_type_id)
+                .map(|(_, m)| m)
+                .unwrap_or_else(|| {
+                    unreachable!("explicit derive marker validated for a non-nominal type")
+                });
             // The marker's own site says which trait it names; the request is
             // keyed by that declaration, not by the spelling.
             if let Some(key) = self.fq_trait_name(trait_type).canonical() {
@@ -1423,50 +1421,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return Some(self.decl_key_or_local(&name));
         }
         let tt = self.tysys.type_table.borrow();
+        // A nominal type's head is the declaration it carries; a newtype's
+        // arguments live beside it, so nothing here truncates a spelling at
+        // its first `<` to recover one.
         match tt.get(tt.peel_refs(type_id)) {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
+            ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::GenericResource { .. } => {
+                tt.nominal_head(tt.peel_refs(type_id)).map(|(n, m)| (m, n))
             }
-            | ResolvedType::Enum {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Flags {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Resource {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Newtype {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::GenericResource {
-                name,
-                module_source,
-                ..
-            } => Some((
-                module_source.clone(),
-                crate::name::split_base_name(name).to_string(),
-            )),
             _ => None,
         }
     }
