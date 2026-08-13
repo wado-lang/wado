@@ -1,33 +1,14 @@
-//! LabeledBlock-variant fusion.
+//! LabeledBlock-variant fusion: eliminate the intermediate `Option` / `Result`
+//! an inlined helper leaves at a variant-discriminating consumer, as one
+//! [`Rule`] with two entry points. `apply_block` does the value-discarding
+//! fusion of `let temp = LB; if VariantTest(temp) …`, turning each `break L:`
+//! into the selected arm; `apply_expr` threads the value-producing `match LB`
+//! of `x = f()?`, rewriting it in place and yielding each arm tail through
+//! `break __thread_L:`. Post-inline only, both shapes needing the copied body.
 //!
-//! Eliminates the intermediate `Option<T>` / `Result<T, E>` an inlined helper
-//! leaves at a variant-discriminating consumer, in either shape `inline`
-//! produces — one [`Rule`] with two entry points:
-//!
-//! - `apply_block`: value-discarding fusion of `let temp = LB; if
-//!   VariantTest(temp) …` / two-arm `match temp`. Each `break L:` becomes the
-//!   selected arm; the fused block ends with a value-less `break __fused_L;`.
-//! - `apply_expr`: value-producing threading of `match LB { … }` (the `x =
-//!   f()?` shape). The `Match` is rewritten in place to the labeled block,
-//!   retyped to the match result, each `break L:` yielding its arm tail via
-//!   `break __thread_L: tail;`. Position-independent, so chained `?` resolves
-//!   bottom-up on the post-order worklist.
-//!
-//! The threading half handles guard-free `Variant` / `Wildcard` arms with a
-//! `VariantConstruct` at every exit; a `null` / value-less break (the `Option`
-//! `None`) bails, leaving Option `?` to the value-discarding half.
-//!
-//! Post-inline only: both shapes exist after `inline` copies the helper body in.
-//!
-//! # The scalarized shape
-//!
-//! `sroa_variant_return` runs just before `inline` and rewrites the same
-//! helpers' returns to `[tag, slots…]`, so the intermediate reaching the
-//! consumer is a tuple, not a variant: breaks carry a tuple literal and the
-//! consumer reads `temp.0` / `temp.k`. Value-discarding fusion recognises that
-//! shape too — [`FusedValue`] is the one axis the two differ on, and the
-//! transform is shared. Recognising only the variant form left the tuple
-//! allocated once per call, which is worse than the variant it replaced.
+//! `sroa_variant_return` runs just before `inline`, so the intermediate may
+//! instead be a `[tag, slots…]` tuple. Value-discarding fusion recognises that
+//! too — [`FusedValue`] is the only axis the two differ on.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirLiteralPattern, NirLocal};
@@ -710,20 +691,11 @@ fn arm_body_operand_into_block(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Shared label-exit walk
-// ---------------------------------------------------------------------------
-//
-// One traversal drives the two full-coverage exit checks — the value-discarding
-// break check ([`BreakChecker`]) and the threading exit validator
-// ([`ExitValidator`]) — whose former hand-rolled twins diverged and caused the
-// P0 fusion miscompiles. `walk_exits` visits each exit, honouring label
-// shadowing (a nested `LabeledBlock` rebinding the label hides its exits), and
-// hands it to an [`ExitSink`] encoding the per-check policy. `walk_exit_operand`
-// accepts a promoted `Operand::Value` vacuously (`is_none_or`): it carries no
-// skeleton subtree, hence no break, so it can never invalidate a check.
-// (`find_break_case_index_for_name` deliberately stays off this walk; see its
-// note below.)
+// Shared label-exit walk: one traversal drives both exit checks, whose former
+// hand-rolled twins diverged and caused the P0 fusion miscompiles. `walk_exits`
+// visits each exit honouring label shadowing and hands it to an [`ExitSink`]
+// encoding the per-check policy. A promoted `Operand::Value` is accepted
+// vacuously, carrying no skeleton subtree and hence no break.
 
 /// Per-exit policy for the shared [`walk_exits`] traversal.
 trait ExitSink {

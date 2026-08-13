@@ -1,34 +1,13 @@
-//! `value_copy_demote` — demote a deep `$value_copy$T` of an `List<E>` to a
-//! shallow spine copy when the binding's elements are provably never mutated
-//! through it (nor through the source the copy reads from).
+//! Demote a deep `$value_copy$T` of a `List<E>` to a shallow spine copy when the
+//! binding's elements are provably never mutated through it. Such a copy is one
+//! the lower phase could not drop, its binding not being fully read-only; but a
+//! binding only *spine*-mutated (`sort`, `push`) can share the element objects,
+//! so the call is rewritten to a sibling helper using `array_clone_shallow`.
 //!
-//! A `$value_copy$T` reaching the optimizer is one the lower-phase ownership
-//! analysis could not prove unnecessary — its binding is not fully read-only, so
-//! it cannot be dropped. But when the binding is only *spine*-mutated (`sort`,
-//! `push`, …) and never mutates an element, a shallow copy is still safe: the
-//! binding gets its own `repr` spine while sharing the
-//! (immutable-through-this-handle) element objects. This pass proves the
-//! element-immutability precondition and rewrites the call to a synthesized
-//! shallow sibling helper that uses `array_clone_shallow`.
-//!
-//! The element-immutability analysis (`fn`s prefixed `analyze_`/`verify_`) is
-//! shape-compatible with what `container_sroa` needs but currently kept
-//! private to this module.
-//!
-//! TODO(optimizer): expose the element-immutability analysis so
-//! `container_sroa` can replace its hardcoded method-shape whitelist
-//! with this richer query, and so nested-`List<List<T>>` demotion can
-//! reuse the recursive immutability proof. The recursion guard at
-//! `is_element_immutable_method` returns `false` for any recursive
-//! call site, suppressing self-recursive and mutually-recursive helpers.
-//!
-//! ## Arena traversal
-//!
-//! The pass reads and mutates the arena [`Body`] directly. The two
-//! soundness-critical analyses (`ElementClean`, `ElementImmutable`) are
-//! recursive arena walks over [`Body::for_each_child`], so every nested node —
-//! including match-arm and destructure patterns, and `ConstantValue` pattern
-//! sub-expressions — is covered exactly as the canonical tree visitor was.
+//! TODO(optimizer): expose the element-immutability analysis so `container_sroa`
+//! can replace its method-shape whitelist with it, and nested `List<List<T>>`
+//! demotion can reuse the recursive proof. The recursion guard currently answers
+//! `false` at any recursive call site.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -903,22 +882,10 @@ impl ElementClean<'_, '_> {
 }
 
 /// Element-immutability proof for a `&mut self` method: whether calling it can
-/// mutate any element of `self`. Threads the analysis state as fields:
-///
-/// - `tainted` — locals that alias `self`'s storage (local 0 is `self`). The
-///   set grows in statement order: a `let x = <self-derived>` (or assignment)
-///   taints `x` for every *later* statement, so the order-sensitive update
-///   lives in the `visit_stmt` override, after the value is visited.
-/// - `visiting` — the recursion guard shared with [`Analyzer::verify`], so a
-///   self-derived `&mut self` call recurses into the callee's own proof.
-/// - `clean` — the running verdict; once falsified every visit short-circuits.
-///
-/// Only the storage-escaping shapes (`&mut` of self-derived, element
-/// field/index writes, unsafe calls on self-derived receivers/args, indirect
-/// calls of self-capturing closures) are special-cased; everything else
-/// recurses through the arena `for_each_child` walk, which descends into
-/// match-arm and destructure patterns *and* threads taint through
-/// expression-position blocks.
+/// mutate any element of `self`. `tainted` holds the locals aliasing `self`'s
+/// storage and grows in statement order, `visiting` is the recursion guard
+/// shared with [`Analyzer::verify`], and `clean` is the running verdict. Only
+/// the storage-escaping shapes are special-cased; the rest recurses.
 struct ElementImmutable<'a, 'b, 'c> {
     analyzer: &'b mut Analyzer<'a>,
     tainted: IndexSet<u32>,

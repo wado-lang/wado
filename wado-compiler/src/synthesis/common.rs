@@ -538,17 +538,11 @@ pub fn make_synthetic_free_function(
     }
 }
 
-/// Build a `f.write_str(&"text")` statement using Formatter's `write_str`
-/// method. `Formatter::write_str` takes `&String`, so the literal is
-/// wrapped in an explicit `Ref`; `ref_string_type` is the cached `&String`
-/// type id the caller already produced from `string_type`.
-///
-/// `formatter_name` is the resolved [`CompilerItem::Formatter`] struct
-/// name. Every caller already snapshotted it (either via
-/// [`super::traits::TraitsStdlibNames`] on `SynthesisCtx`, or by reading
-/// it directly off `tt.compiler_items()`), so threading it through this
-/// helper avoids a fresh registry lookup per call without re-introducing
-/// the `"Formatter"` literal here.
+/// Build a `f.write_str(&"text")` statement. `Formatter::write_str` takes
+/// `&String`, so the literal is wrapped in an explicit `Ref` using the caller's
+/// cached `ref_string_type`. `formatter_name` is the resolved
+/// [`CompilerItem::Formatter`] struct name, threaded in from the caller's own
+/// snapshot rather than looked up again here.
 pub fn write_str_stmt(
     text: impl Into<String>,
     fmt: TirExpr,
@@ -665,15 +659,10 @@ pub fn field_access(
 }
 
 /// Relocate the locals of an expression reified in another context — a struct
-/// field's default — into the synthesized function embedding it.
-///
-/// A default expression is reified in the struct's own context (a fresh
-/// `FunctionContext` numbered from 0), so e.g. a `List` literal desugars to a
-/// `SequenceLiteralBuilder` block whose `__b` local takes index 0 — which
-/// aliases the embedding function's first parameter or another field's default.
-/// The aliasing produces a core-Wasm type mismatch. Re-allocate each `Let`-bound
-/// local with a fresh index (via `alloc_named_local`, keeping
-/// `next_local`/`locals` in sync) and rewrite every reference to it.
+/// field's default — into the synthesized function embedding it. A default is
+/// reified in a fresh `FunctionContext` numbered from 0, so its locals alias the
+/// embedding function's parameters and produce a core-Wasm type mismatch. Each
+/// `Let`-bound local is re-allocated fresh and every reference rewritten.
 pub fn relocate_synthetic_locals(
     expr: &mut TirExpr,
     next_local: &mut u32,

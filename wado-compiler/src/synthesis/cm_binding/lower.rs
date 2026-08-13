@@ -1,16 +1,8 @@
-//! CM ABI lower: store a Wado value into linear memory or flatten it to flat args.
-//!
-//! Two output shapes:
-//!
-//! - [`synthesize_lower`] / [`synthesize_lower_tuple`] /
-//!   [`synthesize_lower_wasi_type_to_memory`] /
-//!   [`synthesize_lower_wasi_variant_to_memory`] /
-//!   [`synthesize_lower_option_to_memory`] write to linear memory at a
-//!   given address (used for outptr returns and indirect param buffers).
-//! - [`synthesize_flatten_value_to_flat_args`] /
-//!   [`synthesize_flatten_option_to_flat_args`] flatten a GC value into
-//!   a `Vec<TirExpr>` of i32 / i64 / f32 / f64 args (used for direct
-//!   imports that take their params on the operand stack).
+//! CM ABI lower, in two output shapes: the `synthesize_lower*_to_memory` family
+//! writes a Wado value into linear memory at a given address, for outptr returns
+//! and indirect param buffers, while the `synthesize_flatten_*_to_flat_args`
+//! family flattens a GC value into a `Vec<TirExpr>` of scalar args, for a direct
+//! import taking its params on the operand stack.
 
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
@@ -1580,17 +1572,11 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
     let resolved = ctx.cm_interface_registry.resolve_type(ty);
     match &resolved {
         Type::Named(n) => {
-            // CM record lowering: store each field at its offset, keyed on
-            // the exact source interface the Named reference was resolved
-            // to. Accepts both `wasi:*` and `core:kiln/*` sources so the
-            // kiln generator's record surface (input-file, output-file,
-            // response, raw-request) lowers through the same path as WASI
-            // records. Callers (e.g. the `List<T>` element lower)
-            // populate `source_interface` via `type_id_to_ast_type` so
-            // this lookup does not need a fallback path.
-            // Resolve via the registry so lib-local records (no
-            // `source_interface` on the nested type) are found by name under
-            // their package's default-interface FQ, like WASI/kiln records.
+            // CM record lowering: store each field at its offset, keyed on the
+            // source interface the Named reference resolved to, so `wasi:*` and
+            // `core:kiln/*` records share one path. Resolution goes through the
+            // registry, which also finds a lib-local record — carrying no
+            // `source_interface` — under its package's default-interface FQ.
             let source = ctx
                 .cm_interface_registry
                 .resolve_cm_source_for(n, Some(ctx.wasi_package));
