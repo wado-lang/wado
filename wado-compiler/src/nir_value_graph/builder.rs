@@ -1,9 +1,8 @@
 //! Per-function `ValueGraph` builder: one walk of the `Body` assigning a
 //! [`ValueId`] to every pure [`ExprId`], leaving impure and allocation-bearing
 //! expressions out of `value_of`. Locals carry their RHS's value forward, and
-//! anything a branch, loop, or `break` path can disagree on goes `Opaque` — an
-//! `If` hash-conses a [`ValueKind::Select`] where it can. Consumed lazily by
-//! [`crate::nir_engine::Engine::value`]; see WEP 2026-06-05.
+//! anything a branch, loop, or `break` path can disagree on goes `Opaque`.
+//! Consumed lazily by [`crate::nir_engine::Engine::value`]; see WEP 2026-06-05.
 
 use crate::const_eval;
 use crate::hashmap::IndexMap;
@@ -16,11 +15,9 @@ use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
 
 /// Per-function heap-version tracker: every node that may write the heap bumps
 /// the covering generation, and a read's effective version is the max over all
-/// of them ([`HeapState::version_of`]), so a stale seed becomes unreachable.
-/// Granularity runs from `per_slot[(root, field)]` for a direct store on a
-/// non-aliased local, through `per_local` and `field_global` for aliased or
-/// projected receivers, to `default_version` for a truly opaque write. Branch
-/// endpoints join per arm instead of bumping ([`Builder::join_heap`]).
+/// of them ([`HeapState::version_of`]). Granularity runs from
+/// `per_slot[(root, field)]` through `per_local` / `field_global` to
+/// `default_version`. Branch endpoints join instead ([`Builder::join_heap`]).
 struct HeapState {
     /// Next fresh version to hand out.
     next: HeapVersion,
@@ -180,13 +177,10 @@ pub struct ValueGraphBuild {
 }
 
 /// Build the `ValueGraph` for one function body. Each parameter in
-/// `param_locals` seeds a fresh `Opaque` up front — an unseeded local's first
-/// read mints an equivalent one, but only seeding makes parameters visible in
-/// the loop-entry snapshots, taken before any in-loop read. An `aliased` local's
-/// fields are invalidated through the conservative generations rather than
-/// `per_slot`, and `untrackable` ones are never seeded at all. `mut_escaped`
-/// narrows `aliased` to what a call may actually mutate, so a local escaping
-/// only through an immutable `&v` keeps its forwarded fields.
+/// `param_locals` seeds a fresh `Opaque` up front, which is what makes them
+/// visible in the loop-entry snapshots taken before any in-loop read. An
+/// `aliased` local invalidates through the coarse generations, `untrackable`
+/// ones are never seeded, and `mut_escaped` narrows `aliased` to real mutation.
 #[allow(clippy::too_many_arguments)]
 pub fn build(
     body: &mut Body,
@@ -216,13 +210,10 @@ pub fn build(
 }
 
 /// Scoped re-valuation of one inlined block, seeded with the call site's
-/// `param → value` map and walked over a fresh heap, so it never touches the
-/// caller's remainder. Returns only constant-literal entries: a scoped walk's
-/// non-constant values carry walk-local context — a `FieldAccess`'s versions
-/// come from the fresh heap and would over-merge — while a constant equals what
-/// a fresh build assigns. The walk stamps types on what it interns, so it runs
-/// in `scratch` (cloned once from `body.values`, ids preserved) rather than
-/// perturbing the values the main graph shares.
+/// `param → value` map and walked over a fresh heap. Returns only
+/// constant-literal entries: a scoped walk's non-constant values carry
+/// walk-local heap versions and would over-merge. Runs in `scratch`, cloned from
+/// `body.values` with ids preserved, so the shared graph is not perturbed.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_scoped(
     body: &mut Body,
@@ -353,10 +344,9 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
 
 /// Re-intern a [`build_scoped`] scratch value into `live`, when every leaf is an
 /// id below `live_base` and so already shared. Such a value is a constant or a
-/// tree over the call-site arguments, carrying the caller's heap version, so it
-/// equals what a fresh whole-function build would assign the spliced node.
-/// `None` for a walk-local `Opaque` or a `LoopPhi`, which mean nothing in the
-/// caller pool.
+/// tree over the call-site arguments, so it equals what a fresh whole-function
+/// build would assign the spliced node. `None` for a walk-local `Opaque` or
+/// `LoopPhi`, which mean nothing in the caller pool.
 fn reintern_live_rooted(
     scratch: &ValuePool,
     live: &mut ValuePool,
@@ -514,8 +504,7 @@ impl<'a> Builder<'a> {
     /// ([`crate::const_eval::eval_binary`]) and intern the resulting literal.
     /// Each operand's `PrimitiveType` comes from its own NIR type, so integer
     /// wrapping matches the runtime width and a mixed-prim op is not folded.
-    /// `None` — a non-constant operand, a missing type, or an unfoldable op —
-    /// leaves the caller to build the structural `Binary` node.
+    /// `None` leaves the caller to build the structural `Binary` node.
     fn fold_binary_const(
         &mut self,
         op: NirBinaryOp,
@@ -678,8 +667,7 @@ impl<'a> Builder<'a> {
     /// ([`BuildConfig::pure_calls`]) bumps only the `untrackable` locals any call
     /// can reach; otherwise every `mut_escaped` local is bumped — not just this
     /// call's arguments, since a mutable reference that escaped earlier may have
-    /// been retained. Skipping the bump for a pure accessor keeps a receiver's
-    /// field version stable across it.
+    /// been retained.
     fn bump_call_effects(&mut self, call: ExprId) {
         let pure = self.pure_calls.contains(&call);
         // Iterate ascending local index, not `mut_escaped`'s insertion order:
@@ -1576,8 +1564,7 @@ impl<'a> Builder<'a> {
     /// pre-branch version iff every fall-through arm left it unchanged, else
     /// bumps fresh. Arms terminated by `break` / `return` / `continue` are
     /// excluded, their writes never reaching past the branch; with none left the
-    /// post-state is `pre`. Each overlay joins independently, and since
-    /// `version_of` maxes them, a too-coarse join only raises a read's version.
+    /// post-state is `pre`. Each overlay joins independently.
     fn join_heap(&mut self, pre: &HeapSnapshot, arms: &[(HeapSnapshot, bool)]) {
         let live: Vec<&HeapSnapshot> = arms
             .iter()
@@ -1817,9 +1804,8 @@ impl<'a> Builder<'a> {
     /// Invalidate the heap generations a loop body may write: a written
     /// `local.field` bumps `per_slot`, or `field_global` when aliased; a borrow
     /// bumps `per_local`; an external write invalidates every `mut_escaped`
-    /// local. Untouched fields survive. Keyed on `mut_escaped` to agree with the
-    /// per-call [`Builder::bump_call_effects`] — the wider `aliased` here lost
-    /// the forward for an immutable reference read across a loop call.
+    /// local. Keyed on `mut_escaped` to agree with the per-call
+    /// [`Builder::bump_call_effects`]; untouched fields survive.
     fn apply_loop_heap_effects(&mut self, eff: &LoopHeapEffects) {
         for &(local, field) in &eff.written_fields {
             if self.aliased.contains(&local) {

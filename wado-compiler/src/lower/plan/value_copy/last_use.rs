@@ -1,42 +1,22 @@
-//! TIR-level move-eligibility for the value-copy fold (WEP 2026-05-21).
+//! TIR-level move-eligibility for the value-copy fold (WEP 2026-05-21). A local
+//! may be *moved* rather than copied when that is provably unobservable: every
+//! read is a final use, and its storage traces back — through locals themselves
+//! dead at the hand-off — to a fresh allocation nothing else references. This
+//! reaches the *synthesized* bodies the source-level last-use pass cannot see,
+//! whose temporaries are the fold's remaining hot copies; the two sets are
+//! unioned there.
 //!
-//! A local qualifies to be *moved* rather than copied when moving its storage
-//! is provably unobservable: every read of it is a final use, and its storage
-//! traces back — through other locals that are themselves dead at the hand-off
-//! — to a fresh allocation (an owned call, a construction, a literal) that
-//! nothing else still references. This reaches *synthesized* function bodies —
-//! serde `deserialize`, `Default` / `Clone` derives — which have no AST and are
-//! invisible to the source-level last-use pass (`elaborator::liveness`) that
-//! feeds `moved_local_spans`. Their temporaries (a field parsed into a local,
-//! carried through an `Ok`-binding into the returned struct) are the fold's
-//! remaining hot copies. The two are unioned at the fold.
+//! One backward liveness pass yields both facts. A *final read* is one after
+//! which the local is dead on every live path — divergent `match` arms
+//! contribute to live-in but not live-out, and a loop body reaches a fixpoint. *No
+//! live alias* means nothing the value derives from is still live at the binding,
+//! checked against live-out, so a once-consumed temporary passes while a re-read
+//! scrutinee does not. Owned storage is then a least fixpoint over the two.
 //!
-//! # Two facts, one backward liveness pass
-//!
-//! - *final read* — a read after which the local is dead on every live path. A
-//!   local all of whose reads are final can be moved at each without a later
-//!   observation. Backward liveness computes this precisely: divergent `match`
-//!   arms (`… => return Err(e)`) contribute to a local's live-*in* but not its
-//!   live-*out*, and a loop body reaches a fixpoint, so a value produced and
-//!   consumed within one iteration is dead across the back-edge.
-//! - *no live alias* — at the point a local is bound, none of the locals its
-//!   value derives from are still live. A match-arm binding
-//!   (`if let Some(s) = opt`) aliases its scrutinee's interior; if `opt` is
-//!   read again, moving `s` would corrupt it, so the de-aliasing copy must
-//!   stay. Checked against the live set *after* the binding (live-out), which
-//!   excludes reads that only happen on divergent arms — so a once-consumed
-//!   deserialize temporary passes while a re-read `opt` does not.
-//!
-//! Owned storage is then a least fixpoint: a local exclusively owns fresh
-//! storage when it has no live alias and every source is owned given the locals
-//! proven so far (`is_owned_value` resolves a `Local` reference through that
-//! set). A function containing a closure, effect handler, or `resume` is
-//! skipped wholesale — a captured local or a resumed continuation can
-//! re-observe a local this pass does not model.
-//!
-//! Soundness rests on `live` being an over-approximation of the true live set
-//! everywhere: an unknown control target keeps every local live (never a spurious
-//! final read), so at worst a copy is kept.
+//! A function containing a closure, effect handler, or `resume` is skipped
+//! wholesale, since either can re-observe a local this pass does not model.
+//! Soundness rests on `live` over-approximating everywhere: an unknown control
+//! target keeps every local live, so at worst a copy is kept.
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
@@ -1511,12 +1491,6 @@ impl Analyzer<'_> {
     }
 }
 
-/// The local whose storage this expression's *result* shares, if any. A
-/// whole-value `Local` or a projection of one (`.field`, `[i]`, `*ref`, a
-/// transparent cast) aliases that root local; a fresh allocation — a call, a
-/// construction, a literal, an arithmetic result — aliases nothing observable,
-/// so returns `None`. Errs toward `Some` for unmodelled projection-like nodes
-/// (over-flagging only keeps a copy).
 /// The top-level field a borrow place reaches off its root local: `Some(f)` for a
 /// clean projection `local.f…`, `None` for a whole-local (`local`) or an
 /// imprecise place (through an index / deref / cast / variant payload), which
@@ -1538,6 +1512,11 @@ fn borrow_top_field(place: &TirExpr) -> Option<u32> {
     }
 }
 
+/// The local whose storage this expression's *result* shares, if any: a
+/// whole-value `Local` or a projection of one aliases that root, while a fresh
+/// allocation — a call, a construction, a literal, an arithmetic result —
+/// aliases nothing observable and gives `None`. Errs toward `Some` for an
+/// unmodelled projection-like node, where over-flagging only keeps a copy.
 pub(crate) fn alias_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),

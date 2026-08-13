@@ -413,12 +413,6 @@ pub fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Ve
     out
 }
 
-/// Synthesize a library [`WorldInfo`] (`--lib`) from the entry module's
-/// `export fn` signatures: one direct world export per exported function.
-///
-/// Milestone 2 is functions-only and primitives-only, so each export is a
-/// direct world function (`from_interface_fq = None`). Parameter and return
-/// types are taken straight from the AST signature.
 /// The interface FQ a `core:kiln/generator` component's synthesized world uses
 /// for `generate` and its options record (Kiln WEP revision 3). A generator's
 /// `generate` is grouped into this interface (it references the local `Options`
@@ -508,6 +502,9 @@ fn lib_type_decl_name(item: &ast::Item) -> Option<String> {
     }
 }
 
+/// Synthesize a `--lib` [`WorldInfo`] from the entry module's `export fn`
+/// signatures, one direct world export per exported function with parameter and
+/// return types taken straight from the AST.
 fn synthesize_lib_world_info(
     registry: &component_model::CmInterfaceRegistry,
     fq: &str,

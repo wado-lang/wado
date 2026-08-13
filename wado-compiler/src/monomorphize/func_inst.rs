@@ -140,11 +140,9 @@ struct SubstitutedCall {
 
 /// The impl args a pack-projecting blanket dispatch instantiates under, or
 /// `None`. `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` instantiates under
-/// `[T, T::Assoc, …]` where the call site supplies `[T]`, so the queueing and
-/// rewrite sides would key one instance two ways. Asked as a single question —
-/// can this receiver supply every pack? — because splitting it let the halves
-/// disagree. The blanket is picked by receiver, as the emit side picks it: a
-/// trait may carry several disjoint value blankets.
+/// `[T, T::Assoc, …]` where the call site supplies `[T]`, so queueing and
+/// rewrite would key one instance two ways. Answered as a single question, and
+/// by receiver as the emit side picks it — a trait may carry disjoint blankets.
 pub(super) fn blanket_pack_dispatch_args(
     args: &[TypeId],
     trait_env: &TraitEnv,
@@ -230,9 +228,7 @@ fn blanket_receiver_satisfies(
 /// call site's module — and falling back to `TraitEnv::impl_module_for` for a
 /// cross-module trait impl, or to `type_module_hint` for an inherent method,
 /// which lives with its receiver type. Returns the template alone, not its
-/// module: the caller decides where the concrete copy lands, and decoupling the
-/// two is what keeps the variadic-tuple guard and ref-blanket dispatch working
-/// under `(ModuleSource, String)` template keying.
+/// module: the caller decides where the concrete copy lands.
 fn lookup_template_with_trait_fallback<'a, V>(
     generic_functions: &'a IndexMap<(ModuleSource, String), V>,
     trait_env: &TraitEnv,
@@ -425,10 +421,9 @@ impl TirMutVisitor for LocalIndexRewriter {
 
 /// Collects every local index a `let` or pattern binding introduces in the
 /// *current function's* frame, so variadic for-of expansion knows which body
-/// locals to retype or reallocate per cloned iteration. Rides the shared
-/// `TirRefVisitor` so no node kind can silently drop one, but stops at `Closure`
-/// boundaries — those allocate in a separate index namespace, and collecting
-/// them would let the reallocation loop corrupt closure-scoped slots.
+/// locals to retype or reallocate per cloned iteration. Stops at `Closure`
+/// boundaries: those allocate in a separate index namespace, and collecting them
+/// would let the reallocation loop corrupt closure-scoped slots.
 struct LocalCollector {
     locals: Vec<u32>,
 }
@@ -528,12 +523,10 @@ fn expr_reads_local(expr: &TirExpr, index: u32) -> bool {
 }
 
 /// Fill in method-level `type_args` left empty because `T` came from a
-/// `TypePack` element and only turns concrete after variadic expansion. Stops at
-/// `Closure` boundaries, which are monomorphized as their own functions. Both
-/// gates are needed: the argument must read the loop binding — the one shape the
+/// `TypePack` element and only turns concrete after variadic expansion. Both
+/// gates matter: the argument must read the loop binding — the one shape the
 /// elaborator could not pin — and the callee must declare a method type param,
-/// or the instance is named after an ordinary parameter's type and no call site
-/// spells it that way. The callee's template decides which is which.
+/// or the instance is named after an ordinary parameter's type instead.
 struct MethodTypeArgInferer<'a> {
     type_table: &'a TypeTable,
     binding_local: u32,
@@ -1086,11 +1079,10 @@ impl Monomorphizer {
                             let generic_func = generic_func_rc.borrow();
                             // A true ref blanket (`impl<T> Inspect for &T`) needs
                             // the ref's whole inner type — `[List<i32>]` for
-                            // `&List<i32>`, not `[i32]` — while a specific ref
-                            // impl (`for &List<T>`) wants what
-                            // `get_struct_info_from_type` already gave. The self
-                            // param tells them apart: `&&TypeParam` is the
-                            // blanket, `&&GenericInstance` the specific one.
+                            // `&List<i32>` — while a specific ref impl (`for
+                            // &List<T>`) wants what `get_struct_info_from_type`
+                            // gave. `&&TypeParam` is the blanket, not
+                            // `&&GenericInstance`.
                             let effective_impl_type_args = if is_ref_blanket_impl
                                 && generic_method_name == &names_to_try[0]
                             {
@@ -1650,10 +1642,9 @@ impl Monomorphizer {
             }),
             // Mangle through `mangle_type_arg_for_generic` so the definition-side
             // struct name matches what call-site rewrites produce. With
-            // `mangle_type_name` the definition said `Node<String>` while the
-            // call site said `Node<core:prelude/string.wado/String>`, and the
-            // inliner could no longer link a self-call to its own definition —
-            // `-O3` then recursed into a stack overflow.
+            // `mangle_type_name` the definition said `Node<String>` and the call
+            // site `Node<core:prelude/string.wado/String>`; the inliner then lost
+            // the self-call link and `-O3` recursed into a stack overflow.
             method_info: generic.method_info.as_ref().map(|info| {
                 let impl_type_arg_names: Vec<FqTypeName> = key
                     .impl_type_args
@@ -1983,11 +1974,9 @@ impl Monomorphizer {
 
                     // Each branch is gated on its own precondition, not on
                     // whether the mangled name changed. A type-param receiver
-                    // needs queueing exactly when it resolved to a concrete type
-                    // — the name stays `S^…` when a user struct is literally
-                    // named `S`, and skipping it there leaves the instance
-                    // unresolved at WIR build. A non-type-param call encodes its
-                    // type args in the name, so an unchanged name is a no-op.
+                    // needs queueing exactly when it resolved concretely — the
+                    // name stays `S^…` for a user struct named `S`, and skipping
+                    // it there leaves the instance unresolved at WIR build.
                     let receiver_tid = self
                         .receiver_substitution_tid(&info, substitution)
                         .map(|tid| self.type_param_dispatch_tid(tid, &info, type_table));
@@ -2007,10 +1996,8 @@ impl Monomorphizer {
                             // Consult `concrete_impl_module_for` only: letting a
                             // generic `impl<T> Trait for Foo<T>` in would route
                             // `&List<i32>^Inspect` to List's impl instead of the
-                            // ref blanket's, dropping the leading `&` at codegen
-                            // (inspect_ref_array_field.wado). With no concrete
-                            // impl, a generic one lives in the receiver's own
-                            // module; only a blanket lives in its own.
+                            // ref blanket's, dropping the leading `&` at codegen.
+                            // A generic impl lives in the receiver's own module.
                             let trait_name_for_blanket = new_info.base_trait_name();
                             let generic_or_concrete =
                                 self.functions.generic_or_concrete_impl_module(
@@ -2862,9 +2849,8 @@ impl Monomorphizer {
     /// Resolve a method call in a generic body to its concrete target after
     /// substitution, delegating by receiver kind: a reference type-param to
     /// [`Self::try_ref_blanket_shortcut`], a type-param (`T^Ord::cmp` →
-    /// `i32^Ord::cmp`) to [`Self::resolve_type_param_dispatch`], and a generic or
-    /// concrete one (`List<T>::len` → `List<i32>::len`) to
-    /// [`Self::resolve_generic_dispatch`].
+    /// `i32^Ord::cmp`) to [`Self::resolve_type_param_dispatch`], anything else
+    /// (`List<T>::len` → `List<i32>::len`) to [`Self::resolve_generic_dispatch`].
     fn resolve_method_call_substitution(
         &self,
         method_func: &mut FunctionRef,
@@ -3068,10 +3054,9 @@ impl Monomorphizer {
         };
         // Consult `concrete_impl_module_for` only: a broader `impl_module_for`
         // would route `&List<i32>^Inspect` to List's generic impl instead of the
-        // ref blanket's, dropping the leading `&` at codegen
-        // (inspect_ref_array_field.wado). With no concrete impl, a generic one
-        // lives in the receiver type's own module — which is also how newtype
-        // inheritance reuses it — and only a blanket lives in `blanket_impls`.
+        // ref blanket's, dropping the leading `&` at codegen. With no concrete
+        // impl, a generic one lives in the receiver type's own module — how
+        // newtype inheritance reuses it — and only a blanket in `blanket_impls`.
         let trait_name_for_blanket = new_info.base_trait_name();
         let generic_or_concrete = self
             .functions
@@ -3278,13 +3263,11 @@ impl Monomorphizer {
             method_type_args: final_method_ta,
             is_blanket: existing_is_blanket,
         });
-        // Peeling a newtype on the receiver leaves `module_source` pointing at
-        // the newtype's module, not the body's home, so re-resolve through
-        // `TraitEnv` for the post-substitution name — the same query
-        // `synthesis::traits` uses, so the result matches a freshly-produced
-        // `FunctionRef`. Hint it with the receiver's inner-type module: ref impls
-        // all key under "&", so an unhinted lookup takes the first registered
-        // one and routes a `&List<i32>` call to `&Array`'s template.
+        // Peeling a newtype on the receiver leaves `module_source` at the
+        // newtype's module, so re-resolve through `TraitEnv` — the same query
+        // `synthesis::traits` uses, so the result matches a fresh `FunctionRef`.
+        // Hint with the inner-type module: ref impls all key under "&", and an
+        // unhinted lookup routes a `&List<i32>` call to `&Array`'s template.
         let receiver_hint = {
             let inner = type_table.peel_refs(receiver_type_id);
             super::module_source_for_trait_impl(type_table, inner)
@@ -3780,14 +3763,10 @@ impl Monomorphizer {
     }
 
     /// Reconcile one unrolled iteration's locals against those already emitted,
-    /// so heterogeneous elements never share a slot. A `let` in the body is
-    /// typed once in the generic template, so the first iteration's `locals`
-    /// entry must be retyped to the concrete element type — codegen would
-    /// otherwise declare the slot generic while the body stores something else —
-    /// and later iterations, which reuse the index, must move to fresh locals.
-    /// Retyping comes after reallocation, or a later element clobbers the type
-    /// an earlier iteration still depends on. Ordinary instantiation is immune:
-    /// `instantiate_function` substitutes a fresh `locals` table up front.
+    /// so heterogeneous elements never share a slot: the first iteration retypes
+    /// the template's generic `let` to the concrete element type, later ones
+    /// move to fresh locals. Retyping comes after reallocation, or a later
+    /// element clobbers the type an earlier iteration still depends on.
     fn reconcile_unrolled_body_locals(
         &self,
         body: &mut TirBlock,

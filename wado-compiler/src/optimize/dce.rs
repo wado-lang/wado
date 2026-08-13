@@ -94,10 +94,9 @@ pub struct DceAnalysis {
 impl DceAnalysis {
     /// Whether `s` survives the sweep — the one predicate, read both by the walk
     /// that pulls a struct's field types into the reachable set and by the retain
-    /// that drops the rest. Two spellings would keep a struct whose fields were
-    /// never walked, outliving the ids they name. A struct's stored `name`
-    /// predates newtype / flags erasure while the reachable set renders after it
-    /// (`FlagsBit<Perms>` against `FlagsBit<u32>`), so both spellings count.
+    /// that drops the rest. A struct's stored `name` predates newtype / flags
+    /// erasure while the reachable set renders after it (`FlagsBit<Perms>`
+    /// against `FlagsBit<u32>`), so both spellings count.
     fn keeps_struct(&self, s: &crate::nir::NirStruct, type_table: &TypeTable) -> bool {
         let Some(mono) = &s.monomorph_info else {
             return self
@@ -278,10 +277,8 @@ fn extend_reachable_for_optimizer_passes(
     // Keep `String::push` reachable only while a `nir/string_push` rewrite could
     // still fire — it turns a short constant `push_str` into per-byte `push`
     // calls, so the target must survive the pre-loop DCE. Gating on a surviving
-    // candidate makes the virtual edge self-limiting: present pre-loop, gone at
-    // the final DCE, where re-seeding would be pure bloat. The `$value_copy$`
-    // half below is not gated — WIR build names those helpers after the final
-    // DCE, so both invocations must seed them.
+    // candidate makes the edge self-limiting. The `$value_copy$` half is not
+    // gated: WIR build names those helpers after the final DCE.
     if let (Some((str_id, str_func_id)), Some(char_id)) = (push_str, push_char_id)
         && reachable.contains(&str_id)
         && !reachable.contains(&char_id)
@@ -656,9 +653,8 @@ pub fn filter_string_literals(project: &mut NirPackage) {
 /// Retain only the bytes literals surviving functions reference. Unlike string
 /// literals there is no per-function map, so this scans every surviving body for
 /// `ExprKind::PackedArray` nodes. String `repr`s are `PackedArray` too, making
-/// the scanned set a superset — but since it only ever drops entries, a string
-/// payload equal to an unused bytes literal costs one extra entry, which dedups
-/// into the same segment anyway.
+/// the scanned set a superset — harmless, since a shared payload dedups into the
+/// same segment anyway.
 pub fn filter_bytes_literals(project: &mut NirPackage) {
     let mut used_bytes: IndexSet<Vec<u8>> = IndexSet::default();
 
@@ -861,9 +857,8 @@ fn apply_inspect_edges(
 /// Every `(arity, return_type)` signature receiving a `Fn<…>^Inspect` or
 /// `^InspectAlt` call. Gates the per-functor root marking from
 /// `ClosureToCanonical`: with no real caller those impls cannot be invoked
-/// indirectly, so keeping them is waste. The two methods are tracked separately
-/// so a program formatting closures only with `:?` does not keep every
-/// `__Closure_N^InspectAlt` impl and its source-string constant alive.
+/// indirectly. The two methods are tracked separately, so formatting closures
+/// only with `:?` keeps no `__Closure_N^InspectAlt` impl alive.
 #[derive(Default)]
 struct InspectableSignatures {
     inspect: IndexSet<(usize, TypeId)>,
@@ -1705,10 +1700,9 @@ impl DceAnalysis {
 /// Variant declarations that outlive their uses, both for
 /// `optimize::sroa_variant_return`: `Option`, whose slots the pass mints after
 /// the early DCE, and any variant a function was scalarized *from* — scalarizing
-/// every use away is exactly what makes a declaration look unreachable, and the
-/// pass re-derives its layout to recognise its own earlier work. A kept
-/// declaration keeps its payload types too, or `register_mono_variants` panics
-/// substituting them. Keeping one costs nothing: WIR registers instances.
+/// every use away is what makes a declaration look unreachable, and the pass
+/// re-derives its layout to recognise its own earlier work. A kept declaration
+/// keeps its payload types too, or `register_mono_variants` panics.
 fn variant_decls_kept_past_use(
     project: &NirPackage,
     type_table: &TypeTable,
@@ -1743,8 +1737,7 @@ fn variant_decls_kept_past_use(
 /// reachable from any reachable function's signature, locals or expressions, or
 /// any reachable global's initializer, closed transitively over struct fields
 /// and variant payloads. Reads `analysis.functions` and `analysis.globals`, so
-/// both must be populated first, and runs pre-pruning so every DCE analysis
-/// stays in [`analyze_dce`].
+/// both must be populated first.
 fn populate_type_reachability(
     project: &NirPackage,
     descriptors: &[FunctionRef],
@@ -1814,9 +1807,8 @@ fn populate_type_reachability(
         // A reachable `__call` keeps its functor's struct / ref types live:
         // `register_closure_wrappers` reads `ref_type_id` for the wrapper's
         // `ref.cast`, and DAE can drop every other NIR-side mention by removing
-        // the env `self`, leaving the `ClosureFunctor` record as the only one.
-        // Compare by pointer identity — `functor.call_method` and the matching
-        // `project.functions[i]` are the same `Rc`.
+        // the env `self`. Compare by pointer identity — `functor.call_method`
+        // and the matching `project.functions[i]` are the same `Rc`.
         let surviving_ptrs: IndexSet<*const _> = project
             .functions
             .iter()
@@ -2245,12 +2237,9 @@ fn dead_pure_binding(
 
 /// Un-hoist a constant globalization hoisted for nobody: the folds that run
 /// after globalization can take every reader with them, leaving a global that
-/// holds its whole initializer in the binary for no observer. Two reads do not
-/// count as observing — the `is_uninitialized` guard, which decides the store
-/// rather than using it, and a read bound to a local nothing mentions — both
-/// only when the value is one this pass may delete ([`deletable_value`]), since
-/// a trap is observed like any other effect. What is left loses its guard,
-/// store, and bindings, and then has no reads for the census below to find.
+/// holds its whole initializer in the binary for no observer. The
+/// `is_uninitialized` guard and a read bound to an unmentioned local do not
+/// count as observing, provided the value is a [`deletable_value`].
 pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
     let descriptors = build_callee_descriptors(project);
     let effects = super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);

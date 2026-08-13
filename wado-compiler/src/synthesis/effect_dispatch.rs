@@ -707,9 +707,8 @@ fn build_dispatch_wrapper_function(
     // Else-branch: fallback. Synthesised before `cm_binding::generate_adapters`
     // runs, so it emits the same pre-adapter shape user code would — an
     // effect-like `Call` for effects, a `cm_name`-tagged one for resources —
-    // and cm_binding rewrites both uniformly when it walks these bodies. A
-    // user-defined effect has no `cm_name` and is unreachable here: effect-check
-    // insists on a handler at every call site.
+    // and cm_binding rewrites both uniformly. A user-defined effect never gets
+    // here: effect-check insists on a handler at every call site.
     let mut else_stmts: Vec<TirStmt> = Vec::new();
     if is_resource {
         let placeholder_call = build_resource_fallback_call(
@@ -872,9 +871,8 @@ fn build_dispatch_wrapper_function(
         // A wrapper declares no effects, so calling one — which now happens at
         // every effect / resource call site — propagates nothing to the caller.
         // The wrapper is what satisfies the effect: its `if let Some(d)` branch
-        // dispatches into the installed handler and its `else` branch emits the
-        // placeholder cm_binding rewrites. `__cm_binding__*` adapters carry
-        // `effects: vec![]` for the same reason.
+        // dispatches into the installed handler, its `else` branch emits the
+        // placeholder cm_binding rewrites. `__cm_binding__*` adapters likewise.
         effects: vec![],
         stores: vec![],
         body: Some(body),
@@ -1391,8 +1389,7 @@ impl crate::tir_visitor::TirRefVisitor for MaxLocalIndex {
 /// protocol: per binding, in source order, bind the handler, save the global,
 /// build a `__Dispatch_<E>` whose `outer` is the saved value and whose op fields
 /// forward to the handler's methods, and install it — then restore in reverse
-/// order after the body. A binding with an unresolved effect or no matching plan
-/// is skipped; the elaborator should have rejected it earlier.
+/// order after the body. A binding with no matching plan is skipped.
 fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCtx) {
     let span = expr.span;
     let result_type = expr.type_id;
@@ -1744,8 +1741,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
 /// body and would otherwise skip the fall-through restore: any `Return`, and a
 /// `Break`/`Continue` whose target is not open inside the body. A value-carrying
 /// jump binds its value to `__early_jump_<n>` first, so `return Counter::next()`
-/// evaluates under the do-block's handler rather than the restored outer one.
-/// `Closure` bodies are not descended into — their jumps target the closure.
+/// evaluates under the do-block's handler. `Closure` bodies are skipped.
 struct RestoreInjector<'a, 'b> {
     /// The restore statements to splice in front of every exit, in
     /// the exact order they should appear (reverse install order —
@@ -2085,9 +2081,8 @@ fn wrap_async_result(
 /// Build the `op_<n>` closure `|<op_params>| __h_<E>.<E>::<op>(<op_params>)` for
 /// one (effect, op, handler-impl) triple. The receiver is a `Capture { index: 0 }`
 /// holding whatever `__h_<E>` holds, which the lower-phase closure pass turns
-/// into a field access on the functor struct. The closure is typed at the
-/// call-site type, so an async operation wraps the result in
-/// `__cm_wrap_async__<E>__<op>`.
+/// into a field access on the functor struct. Typed at the call-site type, so an
+/// async operation wraps the result in `__cm_wrap_async__<E>__<op>`.
 fn build_handler_op_closure(
     op: &TirEffectOp,
     impl_info: &HandlerImplInfo,
@@ -2310,9 +2305,8 @@ fn build_forward_closure(
 /// Rewrite every effect-operation call site to route through a dispatch wrapper.
 /// Runs before `cm_binding`, so it matches the two pre-adapter shapes the
 /// elaborator emits: a `Call` in `ModuleSource::Local { path: "<E>" }` for
-/// `Effect::op(…)`, and a call with `func.method_info.cm_name` set for a
-/// resource op. Calls inside `__effect_dispatch__*` are left alone — rewriting
-/// them would short-circuit the wrapper's own fallback.
+/// `Effect::op(…)`, and one with `func.method_info.cm_name` set for a resource
+/// op. Calls inside `__effect_dispatch__*` are left alone.
 fn rewrite_call_sites_to_wrappers(
     project: &mut Package,
     plans: &IndexMap<InstantiationKey, DispatchPlan>,
@@ -2321,10 +2315,9 @@ fn rewrite_call_sites_to_wrappers(
 
     // Pre-build one lookup map per call shape. An effect op resolves to a
     // `Local { path: "<EffectName>" }` call even when it carries `#[cm(…)]`, so
-    // `user_to_wrapper` keys on `(interface_name, op_name)` — unambiguous, since
-    // effects have a single instantiation. A resource method resolves against
-    // its declaring module with `method_info.cm_name` set, so `cm_to_wrappers`
-    // keys on `(decl_module, base_name, cm_name)` and narrows by type args.
+    // `user_to_wrapper` keys on `(interface_name, op_name)`. A resource method
+    // resolves against its declaring module with `method_info.cm_name` set, so
+    // `cm_to_wrappers` keys on `(decl_module, base_name, cm_name)` plus type args.
     let effect_index = build_effect_index(project);
     let mut user_to_wrapper: IndexMap<(String, String), String> = IndexMap::default();
     let mut cm_to_wrappers: IndexMap<(ModuleSource, String, String), Vec<(Vec<TypeId>, String)>> =
@@ -2780,9 +2773,8 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
 /// **Early phase** — synthesise the dispatch infrastructure and rewrite call
 /// sites to route through it, before `cm_binding::generate_adapters`. That
 /// ordering catches resource calls at their pre-adapter `cm_name`-tagged shape
-/// and lets the wrapper fallbacks emit that same shape, so `cm_binding` picks
-/// each op's route without this pass duplicating it. `Resume` rewriting rides
-/// along; `WithHandler` desugaring waits for [`synthesize_post_check`].
+/// and lets the wrapper fallbacks emit that same shape. `WithHandler`
+/// desugaring waits for [`synthesize_post_check`].
 pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String> {
     lower_resume_in_handler_methods(&mut project);
 
@@ -2850,8 +2842,7 @@ fn open_boundary_effects(project: &Package) -> IndexSet<(ModuleSource, String)> 
 /// `effect_check` and `stores_check`, both of which read the original shape:
 /// one for which effects are satisfied locally, the other for reference flow
 /// through handler installs. Takes the `dispatch_plans`
-/// [`synthesize_pre_cm_binding`] left on the `Package` — neither check mutates
-/// them.
+/// [`synthesize_pre_cm_binding`] left on the `Package`.
 pub fn synthesize_post_check(mut project: Package) -> Result<Package, String> {
     let plans = std::mem::take(&mut project.dispatch_plans);
     if plans.is_empty() {
@@ -2866,9 +2857,8 @@ pub fn synthesize_post_check(mut project: Package) -> Result<Package, String> {
 /// Synthesise one dispatch struct + global + per-op wrapper triple per entry in
 /// `active_instantiations`, substituting the template operations from
 /// `effect_index` with that instantiation's type args, and return the
-/// [`DispatchPlan`] map the lowering and rewriting passes consume. `(R, [u8])`
-/// and `(R, [i32])` thus get separate infrastructure, which is what the WIR
-/// layer's canonical-closure-type invariant demands.
+/// [`DispatchPlan`] map the later passes consume. `(R, [u8])` and `(R, [i32])`
+/// thus get separate infrastructure, as WIR's canonical closure types demand.
 fn synthesize_dispatch_infrastructure(
     project: &mut Package,
     effect_index: &IndexMap<EffectKey, EffectMeta>,

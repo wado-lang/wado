@@ -428,20 +428,6 @@ fn resolve_or_reject(
     InvocationPath::normalize(raw)
 }
 
-/// Lower an inline `module: "<specifier>"` value to a [`GeneratorModule`].
-///
-/// Accepted shapes mirror the `<source>` slot of a regular `use ... from
-/// "<source>"` clause:
-///
-/// - `./...` / `../...` — relative path resolved against the file that
-///   carries the inline clause (`module_path`). This matches what the
-///   loader does for the `from` slot two lines above.
-/// - `<ns>:<name>[@<ver>]` — registry / stdlib namespace identifier.
-///   Stored verbatim as a [`GeneratorModule::Spec`] string until the
-///   build-dependency elaborator lands.
-///
-/// A bare relative name without `./` is rejected with a hint to add the
-/// prefix — the same diagnostic regular `use` clauses produce.
 /// Read an optional string field (`version` / `registry`) from the inline
 /// `generator` object. Absent → `None`; a non-string value pushes a diagnostic
 /// and yields `None`.
@@ -470,6 +456,12 @@ fn optional_source_string(
     }
 }
 
+/// Lower an inline `module: "<specifier>"` to a [`GeneratorModule`], accepting
+/// the same shapes as a regular `use … from "<source>"`: a `./` or `../` path,
+/// resolved against the file carrying the clause exactly as the loader resolves
+/// `from`, or a `<ns>:<name>[@<ver>]` identifier, stored verbatim as a
+/// [`GeneratorModule::Spec`] until the build-dependency elaborator lands. A bare
+/// relative name without `./` is rejected with the same hint `use` gives.
 fn lower_module_specifier(
     module_path: &str,
     use_decl: &UseDecl,

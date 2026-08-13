@@ -183,10 +183,8 @@ use crate::symbol::SymbolTable;
 /// Pick a `ModuleSource` from the AST and synthesised candidate lists: a
 /// `prefer` hint wins wherever it appears, else the first AST entry, else the
 /// first synthesised one. AST-first is load-bearing — where a type has both a
-/// written `impl` and generated code, the written block is the answer. Taking
-/// the union keeps one layer from masking the other on a shared key, which is
-/// where core's variadic `impl<..T> Inspect for [..T]` and a user `Tuple`'s
-/// auto-derived impl collide.
+/// written `impl` and generated code, the written block is the answer — and the
+/// union keeps one layer from masking the other on a shared key.
 fn pick_module_union<'a>(
     ast: Option<&'a Vec<ModuleSource>>,
     syn: Option<&'a Vec<ModuleSource>>,
@@ -449,9 +447,7 @@ pub(crate) enum BlanketParamSource {
 /// by the blanket's `(module, ast_id)`. `None` is the receiver, filled by the
 /// call site; `Some((trait, associated type))` is one a predicate fixes. Order
 /// is the point — type arguments are consumed positionally, so a receiver
-/// written after another parameter sits at a slot "receiver first, projections
-/// after" never fills. The bound keys by its own reference site, so it names the
-/// trait declaration rather than the spelling.
+/// written after another parameter sits at a slot the caller never fills.
 fn blanket_param_sources(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
     blanket_impls: &IndexMap<String, Vec<BlanketImpl>>,
@@ -683,10 +679,9 @@ pub(super) type ResourceStaticMethodIndex =
 
 /// `(type_name, trait_name)` → modules holding that `impl` block. Keyed by bare
 /// names rather than [`DeclKey`]: the multi-value `Vec` plus the caller's
-/// `type_module` hint already routes two modules' same-named receivers apart,
-/// and canonical keying would need import resolution `TraitEnv::build` has not
-/// plumbed through. Value blanket impls are excluded — they apply structurally,
-/// with no concrete receiver name — and live in `blanket_impls` instead.
+/// `type_module` hint already routes two modules' same-named receivers apart.
+/// Value blanket impls apply structurally, with no concrete receiver name, and
+/// live in `blanket_impls` instead.
 pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), Vec<ModuleSource>>;
 
 /// Where each `impl <trait> for <type>` lives, reachable from both receiver
@@ -773,9 +768,7 @@ fn push_module(
 /// off the headers' resolved identities rather than the heads they wrote.
 /// `concrete_only` keeps just the parameterless blocks: the monomorphizer sends
 /// a substituted call to a concrete impl's own module, while a generic impl's
-/// instance is materialised in the receiver type's. A value blanket has no
-/// per-type home and keys as [`ImplTargetKey::TypeParam`], which is what
-/// excludes it.
+/// instance is materialised in the receiver type's.
 fn index_impl_modules(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
     concrete_only: bool,
@@ -812,9 +805,8 @@ fn index_impl_modules(
 /// Immutable global knowledge base for trait resolution: pre-built indices over
 /// trait impls, declarations, and blanket impls, built once before resolution
 /// and shared by `Arc` across every module elaborator. Intentionally not
-/// `Clone` — the only legitimate mutation is [`Self::extend_with_synthesised`],
-/// which moves out of a uniquely-owned `Arc`, so accidental sharing surfaces as
-/// a compile error instead of a silent deep clone of every index.
+/// `Clone` — the only mutation is [`Self::extend_with_synthesised`], which moves
+/// out of a uniquely-owned `Arc`, so sharing errors instead of deep-cloning.
 #[derive(Debug)]
 pub struct TraitEnv {
     /// Type name → impl blocks that implement traits for that type.
@@ -978,8 +970,7 @@ impl TraitEnv {
     /// resolution begins, and check the orphan rule on local impl blocks. Every
     /// receiver-type and trait-name reference in an `impl` header is
     /// canonicalised through `symbols` against that module's own import context,
-    /// so two modules' same-named traits produce distinct [`DeclKey`]s. The
-    /// symbol table comes from `analyze`, which runs first.
+    /// so two modules' same-named traits produce distinct [`DeclKey`]s.
     pub(super) fn build(
         modules: &IndexMap<ModuleSource, Module>,
         symbols: &SymbolTable,
@@ -1816,9 +1807,8 @@ impl TraitEnv {
     /// Produce a new `TraitEnv` carrying the synthesis-layer impls — every
     /// `(type_name, trait_name) -> ModuleSource` found in TIR once synthesis has
     /// added its auto-derived impls. Called once per pipeline run; calling again
-    /// replaces the layer. `prev` must be the unique owner: since `TraitEnv` is
-    /// not `Clone`, extension can only move out of the `Arc`, swap a field, and
-    /// re-wrap — so a shared `Arc` panics.
+    /// replaces the layer. `prev` must be the unique owner: extension moves out
+    /// of the `Arc`, swaps a field and re-wraps, so a shared `Arc` panics.
     pub fn extend_with_synthesised(prev: Arc<Self>, synth_impls: SynthesisedImpls) -> Arc<Self> {
         let Ok(mut env) = Arc::try_unwrap(prev) else {
             panic!("extend_with_synthesised: TraitEnv Arc must be uniquely owned")
@@ -1831,10 +1821,8 @@ impl TraitEnv {
 /// Which namespace an impl-module query spells its receiver in. The two are not
 /// interchangeable — a mangled fq receiver picks out one declaration, a declared
 /// name picks out any declaration spelling itself that way — and each has its
-/// own storage, written from one receiver identity, so a query cannot land in
-/// the wrong one. [`Self::Of`] carries the identity and derives both spellings;
-/// the others are for callers holding only one. A bare `&str` cannot claim to be
-/// mangled.
+/// own storage. [`Self::Of`] carries the identity and derives both spellings;
+/// the others are for callers holding only one.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ImplReceiver<'a> {
     /// The receiver itself. Both spellings are derived from it here, so the
@@ -1921,9 +1909,8 @@ fn impl_target_key_at(
 /// The one trait declaration named `name`, else the one effect or resource —
 /// per-family and in that order, so a `trait Encode` beside another module's
 /// `interface Encode` is one trait rather than an ambiguity. Declines when a
-/// single family holds two. Not yet identical to `decl_key_or_local`, which
-/// consults its struct-like index first; the fix is a trait-position entry point
-/// on the elaborator, not a struct-first order here.
+/// single family holds two. Differs from `decl_key_or_local`, which consults its
+/// struct-like index first.
 fn unique_declared_trait<L, E, R>(
     name: &str,
     decls: &IndexMap<DeclKey, L>,
@@ -2392,10 +2379,8 @@ impl VariadicImpl<'_> {
 /// Coherence Rule 2 (WEP 2026-03-14 §5): two variadic impls of one trait accept
 /// the same tuples, and a pack's bounds resolve only at monomorphization, so
 /// nothing separates them at selection — reject the later one where it is
-/// written. A stdlib impl is considered but never reported, being unfixable by
-/// the user. Grouping is by trait *declaration*, so two modules may each keep
-/// their own. The same walk refuses a target the compiler does not implement,
-/// which would otherwise miscompile or trip the WIR validator.
+/// written. Grouping is by trait *declaration*, so two modules may each keep
+/// their own. The same walk refuses a target the compiler cannot implement.
 fn check_variadic_impl_overlap(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
 ) -> Vec<(ModuleSource, TypeError)> {

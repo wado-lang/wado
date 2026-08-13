@@ -725,11 +725,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Reflexive `T::from(T_val)`: the outer Call evaporates, so
                     // tag it `NewtypeFromCollapse` or reify emits a `Call` the
-                    // elaborator never built. Matched by canonical decl identity
-                    // — two modules' `Instant` share a bare name, and matching on
-                    // that would collapse a real conversion into an identity.
-                    // Generic instances still compare by name: a decl key drops
-                    // type args and cannot tell `Foo<A>` from `Foo<B>`.
+                    // elaborator never built. Matched by canonical decl identity,
+                    // since two modules' `Instant` share a bare name. Generic
+                    // instances compare by name: a decl key drops type args.
                     let arg_is_generic = {
                         let tt = self.tysys.type_table.borrow();
                         matches!(
@@ -1731,8 +1729,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// resolving each in the caller's context. A default may name an earlier
     /// parameter (`fn rect(w, h = w)`), so param-name idents in its cloned AST
     /// are substituted with the caller's argument AST before resolution. A
-    /// position with no declared default is left alone for the arity check to
-    /// report.
+    /// position with no declared default is left for the arity check.
     pub(super) fn pad_args_with_defaults(
         &mut self,
         callee: &Expr,
@@ -1869,9 +1866,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Infer a generic call's type arguments from its actual argument types, in
     /// three [`InferCtx`] tiers: typed arguments first, numeric literals second
     /// so a literal's default cannot clobber a typed neighbour's binding, then
-    /// the declared return type against `expected_type` to reach a parameter no
-    /// argument mentioned. Returns declaration order, or empty if any parameter
-    /// is left unbound — plain function calls stay strictly all-or-nothing.
+    /// the declared return type against `expected_type`. Returns declaration
+    /// order, or empty if any parameter is left unbound — all-or-nothing.
     pub(super) fn infer_fn_type_args(
         &mut self,
         callee: &CalleeRef,
@@ -2022,8 +2018,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// associated-type-equality bound (`fn f<T, I: Iterator<Item = T>>`), which
     /// [`Self::infer_fn_type_args`] leaves unbound since it is in no parameter
     /// type. For each `Owner: Trait<Assoc = Target>` with `Owner` already
-    /// concrete, project its `Assoc` to bind `Target`, iterating to a fixpoint
-    /// for chained bounds. Otherwise `T` survives to trap codegen.
+    /// concrete, project its `Assoc` to bind `Target`, iterating to a fixpoint.
     fn infer_type_args_from_assoc_bounds(
         &mut self,
         callee: &CalleeRef,
@@ -2057,11 +2052,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report "cannot infer type parameter" at the call site rather than letting
-    /// an unsubstituted `TypeParam` reach codegen and trap. Only a genuinely
-    /// unresolvable parameter is flagged: effect parameters are handled
-    /// elsewhere, `fn`-bound ones are constrained structurally rather than by
-    /// inference, defaulted ones are filled later, and one bound to an
-    /// outer-scope `TypeParam` is the caller forwarding its own generics.
+    /// an unsubstituted `TypeParam` reach codegen and trap. Effect parameters,
+    /// `fn`-bound ones (constrained structurally), defaulted ones (filled
+    /// later), and ones bound to an outer-scope `TypeParam` (the caller
+    /// forwarding its own generics) are all excluded.
     fn report_uninferred_fn_type_args(
         &mut self,
         callee: &CalleeRef,
@@ -2195,11 +2189,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Substitute a declared default (`fn f<T = Fallback>`) into any dense
     /// type-arg slot call-site inference left unbound, seeding an empty
-    /// `type_args` first so an omitted turbofish is covered. A non-defaulted slot
-    /// keeps its `TypeParam` for the defer/report step. Each default resolves
-    /// with the callee's params in scope, so `<T, U = T>` picks up `T`'s inferred
-    /// type, and with `default_scope_module` at the callee, so a default may name
-    /// a type private to it.
+    /// `type_args` first so an omitted turbofish is covered. Each default
+    /// resolves with the callee's params in scope (`<T, U = T>` picks up `T`)
+    /// and at `default_scope_module`, so it may name a type private to it.
     fn fill_defaulted_fn_type_args(&mut self, callee: &CalleeRef, type_args: &mut Vec<TypeId>) {
         let params = self.lookup_function_type_params(callee);
         let space: Vec<ast::GenericParam> = params
@@ -2374,8 +2366,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// method paths: for each already-concrete parameter, read its bounds'
     /// `Trait<Assoc = Target>` bindings and, where `Target` names a still-unbound
     /// parameter, project the owner's `Assoc` to bind it. `params` and `args`
-    /// share an index space; iterates to a fixpoint so chained bounds resolve
-    /// whatever the declaration order.
+    /// share an index space; iterates to a fixpoint for chained bounds.
     pub(super) fn resolve_assoc_bound_args(
         &mut self,
         params: &[ast::GenericParam],
@@ -2533,8 +2524,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`InferCtx`] model with [`Self::infer_fn_type_args`]. Returns
     /// `(declaring_args, method_args)` — the first from `impl Container<T>`, the
     /// second from `fn make<U>()` — either possibly empty. Reads the signature's
-    /// canonical types directly: it is solving *for* the arguments an
-    /// instantiation would need.
+    /// canonical types directly, solving *for* an instantiation's arguments.
     fn infer_static_method_type_args(
         &mut self,
         struct_name: &str,

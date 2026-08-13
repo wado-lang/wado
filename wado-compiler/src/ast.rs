@@ -7,9 +7,7 @@ use crate::token::Span;
 /// [`crate::parser::Parser`] draws a fresh one from a process-global counter and
 /// stamps it into every id, so a full [`AstId`] is globally unique while
 /// [`AstId::local`] stays dense per module; sub-parsers continue an existing
-/// space. It identifies a *parse*, not a `ModuleSource`, and nothing relies on
-/// ids surviving a re-parse: stdlib ASTs are parsed once per process and shared,
-/// and user-module facts never outlive their parse.
+/// space. Ids identify a *parse* and never survive a re-parse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AstIdSpace(u32);
 
@@ -30,12 +28,10 @@ impl AstIdSpace {
 }
 
 /// Globally-unique identifier for a semantically-significant AST node: an
-/// [`AstIdSpace`] plus a module-local dense index assigned in DFS order. Every
-/// node has a real id, with no sentinel, and builtins are parsed like any module.
-/// The space differs per module, so nodes from different ones can never collide
-/// and a per-node fact map keys by bare `AstId` even under a wrong perspective.
-/// Ordering is `(space, local)`, so ids within a module order by allocation —
-/// what parser rollback and [`crate::comment::TriviaMap`] rely on.
+/// [`AstIdSpace`] plus a module-local dense index assigned in DFS order. Spaces
+/// differ per module, so a per-node fact map keys by bare `AstId` without
+/// collision. Ordering is `(space, local)` — ids within a module order by
+/// allocation, which parser rollback and [`crate::comment::TriviaMap`] rely on.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AstId {
     space: AstIdSpace,
@@ -262,11 +258,10 @@ impl Module {
     }
 
     /// Allocate a fresh dense [`AstId`] at the end of this module's range, for
-    /// post-parse synthesis injecting a node into [`Self::items`] that needs a
-    /// symbol-coordinate-compatible id. Never collides with a parser-allocated
-    /// one. Prefer it over [`AstId::fresh`] for anything entering a module tree:
-    /// that mints into the reserved transient space, outside this dense range,
-    /// where machinery keyed on the range cannot find it.
+    /// post-parse synthesis injecting a node into [`Self::items`]. Prefer it
+    /// over [`AstId::fresh`] for anything entering a module tree: that mints
+    /// into the reserved transient space, outside this dense range, where
+    /// machinery keyed on the range cannot find it.
     #[must_use]
     pub fn alloc_ast_id(&mut self) -> AstId {
         let id = AstId::new(self.ast_id_space, self.ast_id_count);
@@ -370,8 +365,7 @@ fn span_byte_len(span: Span) -> usize {
 /// checks) and scope-aware analyses. Every `visit_*` defaults to its free
 /// `walk_*`, which recurses through the visitor's own methods, so an implementer
 /// overrides only where its behaviour differs from plain traversal. `visit_id`
-/// sees every [`AstId`] / [`Span`] pair — containers and the leaf id-bearing
-/// nodes with no `visit_*` of their own alike.
+/// sees every [`AstId`] / [`Span`] pair, containers and leaves alike.
 pub trait AstVisitor: Sized {
     /// Invoked for every [`AstId`] emitted during traversal.
     ///
@@ -1269,10 +1263,9 @@ impl Attribute {
 
 /// Which Component Model boundary a `#[cm(…)]` / `#[canonical(…)]` declaration
 /// crosses: `Canonical` lowers to a CM canonical built-in such as
-/// `canon.task.return` rather than an interface import, `Import` resolves to a
-/// real import from `namespace:package/interface[@version][#function]`, and
-/// `Name` is a bare CM-side identifier naming a field, case or method, with no
-/// interface attached.
+/// `canon.task.return`, `Import` resolves to a real import from
+/// `namespace:package/interface[@version][#function]`, and `Name` is a bare
+/// CM-side identifier naming a field, case or method.
 #[derive(Debug, Clone)]
 pub enum CmBoundary {
     Canonical {
@@ -2375,8 +2368,7 @@ impl Expr {
     /// the mapped expression — how default-argument expansion rewrites a
     /// reference to an earlier parameter (`fn make_rect(w, h = w)`) into the
     /// caller's value. Traverses only the forms a simple, pure default may
-    /// contain; blocks, closures and match/if are left alone, being unable to
-    /// appear in one.
+    /// contain; blocks, closures and match/if cannot appear in one.
     pub fn substitute_idents(&mut self, subs: &crate::hashmap::IndexMap<String, Expr>) {
         match self {
             Expr::Ident(ident) => {

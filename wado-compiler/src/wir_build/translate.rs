@@ -122,10 +122,8 @@ fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> Inde
 /// Register one wrapper per `CanonicalClosure_K` vtable slot for each reachable
 /// functor — `__closure_wrapper_N` forwarding to `__call`, plus
 /// `__closure_inspect_wrapper_N` / `_alt_` forwarding to the per-functor
-/// `^Inspect` / `^InspectAlt` impls — each refcasting its args first. A
-/// non-inspectable signature takes the slim `{ env, func }` schema and gets only
-/// the call wrapper. Must run before `translate_function_bodies`, which resolves
-/// `ClosureToCanonical` references against these.
+/// `^Inspect` impls — each refcasting its args first. Must run before
+/// `translate_function_bodies`, which resolves `ClosureToCanonical` against it.
 pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
     use crate::wir::WirType;
 
@@ -451,10 +449,9 @@ fn register_call_wrapper(
 
 /// Build an inspect / `inspect_alt` wrapper for a functor. Its external
 /// signature is fixed at `(env, formatter)` by the canonical callback type, so
-/// the function-table slot stays stable across DAE shrinkage on the impl:
-/// internally only the impl's surviving params are forwarded, and a refcast is
-/// skipped where its param was dropped. A DCE'd impl leaves an `Unreachable`
-/// body — the slot stays populated so the canonical schema holds.
+/// the function-table slot stays stable across DAE shrinkage on the impl: only
+/// surviving params are forwarded. A DCE'd impl leaves an `Unreachable` body,
+/// keeping the slot populated so the canonical schema holds.
 #[allow(clippy::too_many_arguments)]
 fn register_inspect_wrapper(
     ctx: &mut WirContext<'_>,
@@ -631,9 +628,7 @@ fn register_inspect_wrapper(
 /// `self` to the shared `$canonical_inspectable_base`, then
 /// `call_ref (struct.get base $slot self) (self.env, f)`. The cast targets the
 /// shared base rather than one `CanonicalClosure_K`, so a single stub serves
-/// every parameter shape with that signature instead of trapping on the others.
-/// `None` when no inspectable canonical struct exists — the stub is then
-/// unreachable, and the bodyless TIR placeholder can stay.
+/// every parameter shape. `None` when no inspectable canonical struct exists.
 #[allow(clippy::needless_pass_by_value)] // signature mirrors the param-name plumbing in translate_function_bodies
 fn build_fn_canonical_dispatch_body(
     ctx: &mut WirContext<'_>,
@@ -778,9 +773,7 @@ fn else_is_empty(else_body: &Option<Vec<WirInstr>>) -> bool {
 /// entries by wrapping the enclosing condition in [`WirInstr::BranchHint`]. Two
 /// shapes: a marker inside an `if` branch hints that branch unlikely, and an
 /// else-less `if cond { <diverges> }` whose fall-through reaches a marker hints
-/// the condition likely — the guard-clause idiom
-/// `if ok { return v } cold_path(); return err`. The marker itself emits
-/// nothing, and the pass runs regardless of optimization level.
+/// the condition likely. The marker itself emits nothing.
 fn apply_cold_path_hints(instrs: &mut [WirInstr]) {
     for instr in instrs.iter_mut() {
         apply_cold_path_hints_instr(instr);
@@ -792,8 +785,7 @@ fn apply_cold_path_hints(instrs: &mut [WirInstr]) {
 /// whether the path just *after* this slice reaches a `cold_path()` marker
 /// before any non-cold divergence; the return value says the same for the path
 /// *before* it. A guard in front of a cold path gets its taken branch hinted
-/// likely. The walk descends transparent `Seq`/`Block` tails, so a guard inside
-/// an `if let` / `while let` desugaring still finds its enclosing-block marker.
+/// likely. Descends transparent `Seq`/`Block` tails, so desugarings still match.
 fn hint_guard_fall_through(instrs: &mut [WirInstr], mut reaches_cold: bool) -> bool {
     for i in (0..instrs.len()).rev() {
         if reaches_cold
@@ -1256,8 +1248,7 @@ impl FunctionTranslator<'_, '_> {
     /// `struct.new List<T> { repr: array.new_fixed<T>(e0, …), used: N }`,
     /// mirroring `translate_string_literal`'s structurally identical
     /// `String { repr, used }`. The element type is read off the struct's `repr`
-    /// field rather than tracked again on the NIR node, and the resulting
-    /// `ArrayNewFixed` is what `wir_optimize::array` already consumes.
+    /// field rather than tracked again on the NIR node.
     fn build_array_literal(
         &mut self,
         array_type_id: crate::tir::TypeId,
@@ -1779,9 +1770,7 @@ impl FunctionTranslator<'_, '_> {
                             // nested control flow. `lift_struct_new_to_seq`
                             // turns each leaf `StructNew` into its own
                             // `Return { Seq(fields) }`, so the lifted expression
-                            // replaces the whole `Return` — re-wrapping it would
-                            // hand the validator an empty stack in the
-                            // control-flow case.
+                            // replaces the whole `Return` rather than nesting.
                             mut other @ (WirInstr::Seq(_)
                             | WirInstr::Block { .. }
                             | WirInstr::If { .. }) => {
@@ -1937,8 +1926,7 @@ impl FunctionTranslator<'_, '_> {
     /// Translate a call's operands, receiver first, erasing unit-typed
     /// parameters while preserving every argument's evaluation and its
     /// left-to-right order: a unit argument that still evaluates joins the
-    /// prelude, and every non-unit argument to its left spills to a temp so it
-    /// goes first. One with no evaluation of its own is dropped. Returns
+    /// prelude, and every non-unit argument to its left spills to a temp. Returns
     /// `(prelude, call_args)` — wrap with [`Self::wrap_call_with_prelude`].
     pub(super) fn translate_args_erasing_unit(
         &mut self,
@@ -2799,8 +2787,6 @@ impl FunctionTranslator<'_, '_> {
 /// `ReturnAbi::MultiValue` function. Recurses into a `Seq` tail, both `If`
 /// branch tails (clearing the `If`'s `result`, since branches now transfer
 /// control themselves), and each `StructNew; Br depth` exit of a `match` block.
-/// `wrap_in_return` is false only at the outer call, whose caller supplies the
-/// `Return`.
 fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
     match expr {
         WirInstr::StructNew { .. } => {

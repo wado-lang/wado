@@ -1,9 +1,7 @@
 //! [`TypeAnnotations`] — the per-[`crate::ast::AstId`] *decisions* the body walk
 //! made and [`super::super::reify`] reads in lieu of re-running inference:
 //! resolved types, dispatch targets, coercions, desugar tags, generic
-//! instantiations, capture tables. A bare `AstId` keys them because ids are
-//! globally unique, so cross-module inlined AST cannot collide with its
-//! consumer's. Facts derivable from the AST alone belong on
+//! instantiations, capture tables. Facts derivable from the AST alone belong on
 //! [`crate::ast_index::AstIndex`], decl-level ones on [`super::decls::ModuleDecls`].
 
 use crate::ast::{self, AstId};
@@ -14,9 +12,8 @@ use crate::tir::{FunctionRef, TypeId};
 /// Method-dispatch decision for a [`crate::ast::MethodCallExpr`]:
 /// `function_ref` is the resolved target, so reify emits the call without
 /// re-running trait lookup or mangling, and `self_kind` plus `is_ref_impl` are
-/// what `adjust_receiver_for_self_kind` needs — an `impl Trait for &T` takes an
-/// extra `&`. Short-circuiting paths leave no entry: they rewrite the call into
-/// a shape reify recognises from the receiver type alone.
+/// what `adjust_receiver_for_self_kind` needs. Short-circuiting paths leave no
+/// entry: they rewrite the call into a shape reify reads off the receiver type.
 #[derive(Clone)]
 pub(crate) struct MethodDispatch {
     pub(crate) function_ref: FunctionRef,
@@ -47,8 +44,7 @@ pub(crate) struct MethodDispatch {
     /// inference-recovered alike; the monomorphizer keys off this to queue
     /// `Struct^Trait::method<Args>` instances. Kept separate from
     /// `function_ref.monomorph_info.method_type_args`, which the blanket-impl
-    /// branch leaves empty even for a turbofish call — reify needs an un-zeroed
-    /// copy rather than re-resolving the AST list against the current scope.
+    /// branch leaves empty even for a turbofish call.
     pub(crate) method_type_args: Vec<TypeId>,
     /// True when the method takes its receiver `self` by value, so the call
     /// transfers ownership of the receiver. The resource move check reads this
@@ -99,8 +95,7 @@ pub(crate) struct TypeAnnotations {
     /// and recorded alongside `local_symbols`. LSP inlay hints read it so
     /// `let x = 1` renders `: i32` without reaching into TIR. Part of
     /// [`ElementOverlay`]: a tuple-`for-of` body rebinds one pattern `AstId` to
-    /// a different type per iteration, so each iteration's value stays pinned to
-    /// its own overlay instead of overwriting the base map.
+    /// a different type per iteration.
     pub(crate) local_types: IndexMap<AstId, TypeId>,
     /// Resolved [`TypeId`] for every expression visited by
     /// [`super::super::Elaborator::resolve_expr`], keyed by the
@@ -203,9 +198,7 @@ pub(crate) struct TypeAnnotations {
     /// `SequenceLiteralBuilder` coercion data for a tuple literal coerced into a
     /// `List<T>` or user-defined sequence, keyed by the `Expr::TupleLiteral`'s
     /// [`AstId`]. The desugar block `try_coerce_tuple_to_sequence` produces
-    /// depends on impl-lookup decisions reify cannot redo from the AST; the
-    /// resolved trait info here is what makes its `__b` local land at the same
-    /// `FunctionContext` index.
+    /// depends on impl-lookup decisions reify cannot redo from the AST alone.
     pub(crate) sequence_coercions: IndexMap<AstId, SequenceCoercionFacts>,
     /// `KeyValueLiteralBuilder` coercion data for an anonymous
     /// struct literal coerced into a map-style type. Keyed by the
@@ -223,17 +216,15 @@ pub(crate) struct TypeAnnotations {
     pub(crate) from_call_facts: IndexMap<AstId, FromCallFacts>,
     /// `IndexAssign` dispatch for `arr[i] = v` and `arr[i] OP= v`, keyed by the
     /// *inner* [`crate::ast::IndexExpr`]'s [`AstId`] and recorded in
-    /// `assign_to_target` so both shapes feed one map.
-    /// [`Self::operator_dispatch`] cohabits under the same key with the
-    /// read-side `IndexValue` / `Index` dispatch: an `Expr::Index` is read in
-    /// `let x = arr[i]` and written in `arr[i] = v`, via different traits.
+    /// `assign_to_target` so both shapes feed one map. The read-side
+    /// `IndexValue` / `Index` dispatch cohabits under the same key in
+    /// [`Self::operator_dispatch`], via different traits.
     pub(crate) index_assign_dispatch: IndexMap<AstId, OperatorDispatch>,
     /// Per-element annotation overlays for compile-time-unrolled tuple `for-of`
     /// loops: one outer entry per *instantiation* in walk order (a nested for-of
     /// is instantiated once per outer element), one inner [`ElementOverlay`] per
-    /// tuple element. The body is a single sub-tree with fixed `AstId`s resolved
-    /// once per element in a different type context, so without the overlay only
-    /// the last element's facts would survive.
+    /// tuple element. The body has fixed `AstId`s resolved once per element, so
+    /// without the overlay only the last element's facts would survive.
     pub(crate) tuple_overlays: IndexMap<AstId, Vec<Vec<ElementOverlay>>>,
     /// Impl-level type parameters as `Elaborator::resolve_method` (the
     /// battle-tested original path) computed them, keyed per impl-method
@@ -273,8 +264,7 @@ pub(crate) struct TypeAnnotations {
     /// `AstId`. A simple binding also has it in `local_types`, but a
     /// destructuring pattern's binding ids carry per-element types, leaving the
     /// whole-pattern annotation nowhere else to land. Part of [`ElementOverlay`]
-    /// for the same reason as `local_types`: one `LetStmt` id is shared across
-    /// every iteration of a tuple-`for-of` unrolling.
+    /// for the same reason as `local_types`.
     pub(crate) let_annotated_types: IndexMap<AstId, TypeId>,
     /// Resolved field types per struct decl `AstId`, in declaration order, as
     /// `resolve_struct` produced them with the type-param scope in place. Reify
@@ -287,8 +277,7 @@ pub(crate) struct TypeAnnotations {
     /// `&mut`-deref-capture, or global — so `assign_to_target` can validate
     /// l-values and global mutability without reading the now-placeholder
     /// resolved `target.kind`. An ident resolving to a function, variant, enum,
-    /// flags or constant leaves no entry and is not an l-value. No overlay
-    /// needed: a place kind does not depend on a for-of element type.
+    /// flags or constant leaves no entry and is not an l-value.
     pub(crate) assign_places: IndexMap<AstId, AssignPlace>,
 }
 

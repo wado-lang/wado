@@ -1,10 +1,8 @@
 //! Compiler-recognized stdlib items — Wado's analogue of rustc's lang items.
 //! Each names a stdlib symbol the Rust side references directly, bound by a
 //! `#[compiler_item("…")]` attribute on the Wado declaration and looked up
-//! through the [`CompilerItems`] registry instead of by string. So a stdlib
-//! rename is invisible here, while renaming the `compiler_item` value breaks the
-//! compiler's own build at [`CompilerItem::from_attr_name`]. The attribute is
-//! meaningful only inside `core::*`; the elaborator rejects it on user code.
+//! through the [`CompilerItems`] registry, so a stdlib rename is invisible here.
+//! The attribute is meaningful only inside `core::*`.
 
 use std::fmt;
 
@@ -51,8 +49,7 @@ impl SeqField {
 /// [`CompilerItem::attr_name`] must match the `#[compiler_item("…")]` argument
 /// on the Wado declaration. Names are flat `snake_case`: `<type>_<method>` for a
 /// method, the lowercase name for a type or trait, `<variant>_<case>` for a
-/// case. The parser only checks the argument names a known variant, so the
-/// convention itself is enforced socially.
+/// case.
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum CompilerItem {
     // ── Types (structs / generic structs) ────────────────────────────
@@ -750,13 +747,10 @@ impl CompilerItem {
     }
 
     /// Whether the registry must hold this item for `world` to compile. A
-    /// `core::prelude` item always is — the prelude is auto-loaded and underpins
-    /// the type system — while one from a world the user did not opt into is
-    /// required only when that module is actually loaded, which keeps the
+    /// `core::prelude` item always is; one from a world the user did not opt
+    /// into is required only once that module is loaded, which keeps the
     /// validator from failing a CLI build that pulls in neither kiln nor serde.
-    /// It scans every [`Self::ALL`] variant after `annotate_modules`, so a
-    /// missing stdlib annotation is a compile-time error rather than a surprise
-    /// at the first synthesis call.
+    /// The scan runs after `annotate_modules`, ahead of any synthesis call.
     pub fn is_required(self, world: &str) -> bool {
         match self {
             // Always loaded — `core:prelude` is auto-imported.
@@ -1107,9 +1101,8 @@ impl fmt::Display for CompilerItemKind {
 /// One associated type declared on a registered trait, carrying its source-side
 /// name and those of its bounds — `type SeqSerializer: SerializeSeq;` becomes
 /// `{ name: "SeqSerializer", bound_names: ["SerializeSeq"] }`. The bound list is
-/// what makes [`CompilerItems::trait_assoc_type_by_bound`] rename-stable: the
-/// synthesiser asks which assoc type `SerializeSeq` bounds, not whether one is
-/// named `SeqSerializer`.
+/// what makes [`CompilerItems::trait_assoc_type_by_bound`] rename-stable: it
+/// asks which assoc type `SerializeSeq` bounds, not for one named by spelling.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TraitAssocType {
     pub name: String,
@@ -1149,19 +1142,15 @@ pub enum Resolved {
         decl: crate::ast::AstId,
         /// Primary method name of a **single-method** trait, captured when the
         /// elaborator registers its annotation; `None` for a multi-method trait
-        /// such as `Serializer`. The format family (`Display`, `Inspect`, and
-        /// their `Alt` / radix siblings) all have exactly one method by design,
-        /// so the synthesiser reads the name from the registration rather than
-        /// hard-coding `"fmt"` at each call site. Read via
+        /// such as `Serializer`. Lets the synthesiser read the name of a format
+        /// trait's one method rather than hard-coding `"fmt"`. Read via
         /// [`CompilerItems::trait_method_name`].
         method_name: Option<String>,
         /// The trait's associated types in source order, each a
         /// [`TraitAssocType`], captured when the elaborator registers the
         /// annotation. The serde synthesiser identifies one by its *bound* trait
-        /// — itself registry-resolved — rather than its spelling, so renaming
-        /// either end keeps flowing through the registry instead of panicking on
-        /// a missing name. Read via
-        /// [`CompilerItems::trait_assoc_type_by_bound`].
+        /// rather than its spelling, so renaming either end keeps resolving. Read
+        /// via [`CompilerItems::trait_assoc_type_by_bound`].
         assoc_types: Vec<TraitAssocType>,
     },
     Method {

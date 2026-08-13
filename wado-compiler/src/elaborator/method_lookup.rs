@@ -434,19 +434,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// Return `Some(struct_type)` when `struct_name` is a non-generic struct
-    /// whose fields all carry a declared default expression, making it
-    /// eligible for auto-derived `Default::default()` synthesis.
-    ///
-    /// Returns `None` when:
-    /// - the name is unknown (only visible structs are considered, matching
-    ///   Eq/Ord auto-derive eligibility),
-    /// - any field is required (no `= expr`),
-    /// - the struct has no fields (empty structs opt out),
-    /// - the struct is generic (left for a follow-up).
-    ///
-    /// Does not check whether the user wrote their own `impl Default`;
-    /// callers should consult this only as a fallback after the regular
+    /// `Some(struct_type)` when `struct_name` is a non-generic struct whose
+    /// fields all declare a default, making it eligible for auto-derived
+    /// `Default::default()`. `None` for an unknown name, a required field, no
+    /// fields at all, or a generic struct. Does not check for a user-written
+    /// `impl Default`, so consult it only as a fallback after the regular
     /// impl-lookup paths.
     pub(super) fn auto_derive_default_struct_type(
         &self,
@@ -1037,24 +1029,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Infer method-level type arguments for an instance method call using
-    /// the method's already-resolved parameter and return types.
-    ///
-    /// `param_types` and `decl_return_type` must come from a method lookup
-    /// (`lookup_method_info` / `find_trait_method_for_type`), so the slots
-    /// they mention are the ones that lookup reported and the caller binds.
-    ///
-    /// This intentionally does **not** re-resolve the method's AST: doing so
-    /// in a fresh scope would emit spurious errors for references like
-    /// `Self::Item` that depend on assoc-type bindings the outer elaborator
-    /// context has but that `infer_method_type_args` cannot easily
-    /// reconstruct.
-    ///
-    /// Returns a vector sized to the method's own non-effect type parameters
-    /// in declaration order. Unbound parameters fall back to their original
-    /// `TypeParam` ids; an empty vector is returned when there is nothing to
-    /// infer (no method type params, or the receiver is not a struct /
-    /// generic instance).
+    /// Infer an instance call's method-level type arguments from the method's
+    /// already-resolved parameter and return types, which must come from a method
+    /// lookup so their slots are the ones the caller binds. Deliberately does not
+    /// re-resolve the method's AST: a fresh scope would report spurious errors for
+    /// a `Self::Item` depending on assoc-type bindings only the outer context has.
+    /// Sized to the method's non-effect type params in declaration order, with an
+    /// unbound one keeping its `TypeParam` id and nothing to infer giving empty.
     pub(super) fn infer_method_type_args(
         &mut self,
         input: MethodInferenceInput<'_>,
@@ -1629,16 +1610,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Whether a concrete `impl Trait for <NamedType>` actually targets the
-    /// receiver. The bare-name check in `candidate_matches_receiver` accepts
-    /// every same-named impl, so two `impl Describe for Data` in different
-    /// modules both reach here; resolve the impl's receiver in its own module
-    /// and compare `TypeId`s (each module's `Data` interns distinctly), walking
-    /// the receiver's newtype chain. Widely-applicable receivers — blanket,
-    /// ref-shape, and *parametric* generic impls (`impl<V> X for Bag<V>`) — are
-    /// exempt (`true`), since their `ty` is `TypeParam`-bearing; a fully
-    /// concrete generic impl (`impl X for List<u8>`) interns concretely and is
-    /// checked (else it would also match `List<i32>`).
+    /// Whether a concrete `impl Trait for <NamedType>` really targets the
+    /// receiver. `candidate_matches_receiver`'s bare-name check accepts every
+    /// same-named impl, so two modules' `impl Describe for Data` both arrive
+    /// here; resolve each impl's receiver in its own module and compare `TypeId`s
+    /// along the newtype chain. A blanket, ref-shape, or parametric generic impl
+    /// is exempt, its `ty` being `TypeParam`-bearing — but a fully concrete
+    /// `impl X for List<u8>` is checked, or it would also match `List<i32>`.
     fn concrete_impl_matches_receiver(
         &mut self,
         impl_ref: &ImplBlockRef,
@@ -2364,19 +2342,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits.into_iter().next()
     }
 
-    /// One trait implemented for this receiver at two argument lists
-    /// (`impl Take<A> for bool` beside `impl Take<B> for bool`) leaves the
-    /// method name pointing at two signatures. Nothing downstream can choose:
+    /// One trait implemented for a receiver at two argument lists leaves the
+    /// method name pointing at two signatures, and nothing downstream can choose:
     /// arguments are elaborated *against* the chosen signature, and Wado has no
-    /// qualified call form to name one.
-    ///
-    /// Operators do not come through here — [`Self::find_indexing_trait_impl`]
-    /// and friends pick by operand type, which is why `List<T>` can carry
-    /// `IndexValue<i32>` alongside `IndexValue<RangeExclusive<i32>>`.
-    ///
-    /// `classes` is what each argument contributed, so the message can say
-    /// which one gave selection nothing to work with — after synthesis the
-    /// residual failures are exactly those.
+    /// qualified call form to name one. Operators do not come through here —
+    /// [`Self::find_indexing_trait_impl`] and friends pick by operand type, which
+    /// is how `List<T>` carries two `IndexValue` impls. `classes` is what each
+    /// argument contributed, so the message can name the one that gave selection
+    /// nothing to work with.
     fn report_trait_argument_ambiguity(
         &self,
         found_traits: &[super::types::TraitMethodMatch],
@@ -3285,16 +3258,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )),
         };
 
-        // WEP 2026-05-26: the IndexMut rewrite is the only
-        // path that builds the user-visible method-call TIR without going
-        // through `resolve_method_call_with`. Record dispatch here so
-        // `m["k"].push(1)` and friends leave the same annotation as the
-        // ordinary path.
-        //
-        // The call's AstId is additionally tagged with
-        // `DesugarKind::IndexMutMethodCall` so reify knows to follow the
-        // IndexMut expansion path (synthesise `__index_mut_val`) instead
-        // of the plain method-call path.
+        // The IndexMut rewrite is the only path building user-visible
+        // method-call TIR without going through `resolve_method_call_with`, so
+        // record dispatch here and let `m["k"].push(1)` leave the same annotation
+        // as an ordinary call. The `AstId` is also tagged
+        // `DesugarKind::IndexMutMethodCall`, so reify takes the expansion path
+        // and synthesises `__index_mut_val` rather than a plain method call.
         self.record_method_dispatch(
             Some(method_call.id),
             &func,
@@ -3320,23 +3289,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(placeholder(return_type, method_call.span))
     }
 
-    /// Sole elaborator-side constructor of a method call: a
-    /// [`TirExprKind::Call`] whose receiver heads its `args`.
-    ///
-    /// Centralizing construction here establishes a single audit point for
-    /// the invariant "every elaborator-emitted method call has been
-    /// typechecked against the callee's declared parameter types before
-    /// it flows into TIR".  Typecheck is the caller's responsibility —
-    /// the helper exists so that any future machine-enforced invariant
-    /// (e.g. privatizing the enum variant's fields, adding a debug
-    /// assertion, wiring a `LocalMethodName` witness type) can plug in
-    /// here without having to chase down scattered `Call { … }` literals.
-    ///
-    /// Post-resolve phases (monomorphize / lower / optimize / codegen)
-    /// rebuild method-call nodes from already-checked
-    /// expressions and legitimately bypass this helper; they operate on
-    /// TIR that is guaranteed to have been produced through this path
-    /// originally.
+    /// The sole elaborator-side constructor of a method call — a
+    /// [`TirExprKind::Call`] whose receiver heads its `args`. Centralising it
+    /// gives one audit point for "every elaborator-emitted method call was
+    /// typechecked against the callee's declared parameter types", so a future
+    /// machine-enforced version of that invariant can plug in here rather than
+    /// chasing scattered `Call { … }` literals. Typechecking itself stays the
+    /// caller's job. Post-resolve phases rebuild such nodes from already-checked
+    /// expressions and legitimately bypass this.
     pub(super) fn build_tir_method_call(
         receiver: TirExpr,
         func: FunctionRef,
