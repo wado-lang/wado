@@ -608,9 +608,15 @@ fn generate_struct_reflect_methods(
         let mut tt = type_table.borrow_mut();
         let struct_type = if is_generic {
             let param_ids = make_type_param_ids(type_params, &mut tt);
-            tt.make_generic_instance(name.clone(), module_source.clone(), param_ids)
+            let def = tt
+                .decl_named_in(name, module_source)
+                .expect("the struct being reflected is declared");
+            tt.make_generic_instance(def, param_ids)
         } else {
-            tt.make_struct(name.clone(), module_source.clone())
+            let def = tt
+                .decl_named_in(name, module_source)
+                .expect("the struct being reflected is declared");
+            tt.make_struct(crate::tir::StructDef::Decl(def))
         };
         let ref_struct_type = tt.make_ref(struct_type);
         let fields_tuple_type = tt.make_tuple(fields.iter().map(|f| f.type_id).collect());
@@ -619,11 +625,10 @@ fn generate_struct_reflect_methods(
         let member_types: Vec<TypeId> = fields
             .iter()
             .map(|f| {
-                tt.make_generic_instance(
-                    env.member_struct_name.clone(),
-                    env.member_struct_module.clone(),
-                    vec![struct_type, f.type_id],
-                )
+                let def = tt
+                    .decl_named_in(&env.member_struct_name, &env.member_struct_module)
+                    .expect("the Member compiler item is declared");
+                tt.make_generic_instance(def, vec![struct_type, f.type_id])
             })
             .collect();
         let members_tuple_type = tt.make_tuple(member_types.clone());
@@ -1566,20 +1571,25 @@ fn generate_variant_reflect_methods(
         let mut tt = type_table.borrow_mut();
         let variant_type = if is_generic {
             let param_ids = make_type_param_ids(&target.type_params, &mut tt);
-            tt.make_generic_instance(target.name.clone(), module_source.clone(), param_ids)
+            let def = tt
+                .decl_named_in(&target.name, &module_source)
+                .expect("the variant being reflected is declared");
+            tt.make_generic_instance(def, param_ids)
         } else {
-            tt.make_variant(target.name.clone(), module_source.clone())
+            let def = tt
+                .decl_named_in(&target.name, &module_source)
+                .expect("the variant being reflected is declared");
+            tt.make_variant(def)
         };
         let ref_variant_type = tt.make_ref(variant_type);
         let member_types: Vec<TypeId> = target
             .cases
             .iter()
             .map(|(_, _, payload, _)| {
-                tt.make_generic_instance(
-                    env.member_struct_name.clone(),
-                    env.member_struct_module.clone(),
-                    vec![variant_type, *payload],
-                )
+                let def = tt
+                    .decl_named_in(&env.member_struct_name, &env.member_struct_module)
+                    .expect("the Member compiler item is declared");
+                tt.make_generic_instance(def, vec![variant_type, *payload])
             })
             .collect();
         let members_tuple_type = tt.make_tuple(member_types.clone());
@@ -2257,14 +2267,18 @@ fn generate_enum_reflect_methods(
 
     let (enum_type, ref_enum_type, option_enum_type, member_type, members_tuple_type) = {
         let mut tt = type_table.borrow_mut();
-        let enum_type = tt.make_enum(target.name.clone(), module_source.clone());
+        let enum_def = tt
+            .decl_named_in(&target.name, &module_source)
+            .expect("the enum being reflected is declared");
+        let enum_type = tt.make_enum(enum_def);
         let ref_enum_type = tt.make_ref(enum_type);
         let option_enum_type = tt.make_option(enum_type);
-        let member_type = tt.make_generic_instance(
-            env.member_struct_name.clone(),
-            env.member_struct_module.clone(),
-            vec![enum_type],
-        );
+        let member_type = {
+            let def = tt
+                .decl_named_in(&env.member_struct_name, &env.member_struct_module)
+                .expect("the Member compiler item is declared");
+            tt.make_generic_instance(def, vec![enum_type])
+        };
         let members_tuple_type =
             tt.make_tuple(std::iter::repeat_n(member_type, target.cases.len()).collect());
         let reflect_enum = tt.compiler_items().require_trait(CompilerItem::ReflectEnum);
@@ -2589,7 +2603,8 @@ fn generate_flags_reflect_impls(
             let flags_type = module
                 .type_table
                 .borrow()
-                .find_flags_type(&f.name, &module_source)?;
+                .decl_named_in(&f.name, &module_source)
+                .and_then(|def| module.type_table.borrow().find_flags_type(def))?;
             Some(ReflectFlagsTarget {
                 name: f.name.clone(),
                 flags_type,
@@ -2706,11 +2721,12 @@ fn generate_flags_reflect_methods(
         let mut tt = type_table.borrow_mut();
         let ref_flags_type = tt.make_ref(target.flags_type);
         let option_flags_type = tt.make_option(target.flags_type);
-        let member_type = tt.make_generic_instance(
-            env.member_struct_name.clone(),
-            env.member_struct_module.clone(),
-            vec![target.flags_type],
-        );
+        let member_type = {
+            let def = tt
+                .decl_named_in(&env.member_struct_name, &env.member_struct_module)
+                .expect("the Member compiler item is declared");
+            tt.make_generic_instance(def, vec![target.flags_type])
+        };
         let members_tuple_type =
             tt.make_tuple(std::iter::repeat_n(member_type, target.members.len()).collect());
         let reflect_flags = tt
@@ -3166,10 +3182,11 @@ enum ImplScope {
 
 /// The module declaring a shape's base (`Stream` for `Stream<u8>`), which names
 /// its synthesized impls. `None` for a shape with no declaration to point at.
-fn shape_declaring_module(resolved: &ResolvedType) -> Option<ModuleSource> {
+fn shape_declaring_module(tt: &TypeTable, resolved: &ResolvedType) -> Option<ModuleSource> {
     match resolved {
-        ResolvedType::GenericInstance { module_source, .. }
-        | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
+        ResolvedType::GenericInstance { def, .. } | ResolvedType::GenericResource { def, .. } => {
+            Some(tt.def_module(*def).clone())
+        }
         _ => None,
     }
 }
@@ -3329,7 +3346,12 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
 
     for (enum_name, span) in &enum_infos {
         let mut type_table = module.type_table.borrow_mut();
-        let enum_type = type_table.make_enum(enum_name.clone(), module_source.clone());
+        let enum_type = {
+            let def = type_table
+                .decl_named_in(&enum_name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            type_table.make_enum(def)
+        };
         let ref_enum_type = type_table.make_ref(enum_type);
 
         if ctx.should_synthesize(enum_name, &eq_trait_name.canonical().expect(KEYED)) {
@@ -3394,7 +3416,12 @@ fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
 
     for (flags_name, span) in &flags_infos {
         let mut type_table = module.type_table.borrow_mut();
-        let flags_type = type_table.make_flags(flags_name.clone(), module_source.clone());
+        let flags_type = {
+            let def = type_table
+                .decl_named_in(&flags_name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            type_table.make_flags(def)
+        };
         let ref_flags_type = type_table.make_ref(flags_type);
 
         if ctx.should_synthesize(flags_name, &eq_trait_name.canonical().expect(KEYED)) {
@@ -3458,7 +3485,12 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
 
     let struct_infos = collect_struct_fields(module);
     for (name, fields, span) in &struct_infos {
-        let struct_type = tt.make_struct(name.clone(), module_source.clone());
+        let struct_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_struct(crate::tir::StructDef::Decl(def))
+        };
         let ref_struct_type = tt.make_ref(struct_type);
 
         if ctx.should_synthesize(name, &eq_trait_name.canonical().expect(KEYED)) {
@@ -3500,8 +3532,12 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
     let generic_struct_infos = collect_generic_struct_fields(module);
     for (name, type_params, fields, span) in &generic_struct_infos {
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let struct_type =
-            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let struct_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_generic_instance(def, type_param_ids)
+        };
         let ref_struct_type = tt.make_ref(struct_type);
 
         if ctx.should_synthesize(name, &eq_trait_name.canonical().expect(KEYED)) {
@@ -3596,7 +3632,12 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
         if !ctx.should_synthesize(name, &default_trait_name.canonical().expect(KEYED)) {
             continue;
         }
-        let struct_type = tt.make_struct(name.clone(), module_source.clone());
+        let struct_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_struct(crate::tir::StructDef::Decl(def))
+        };
         let func = generate_struct_default_fn(
             &module_source,
             name,
@@ -3690,7 +3731,12 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         if !ctx.should_synthesize(name, &eq_trait_name.canonical().expect(KEYED)) {
             continue;
         }
-        let variant_type = tt.make_variant(name.clone(), module_source.clone());
+        let variant_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_variant(def)
+        };
         let ref_variant_type = tt.make_ref(variant_type);
         let func = generate_variant_eq_fn(
             name,
@@ -3713,8 +3759,12 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let variant_type =
-            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let variant_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_generic_instance(def, type_param_ids)
+        };
         let ref_variant_type = tt.make_ref(variant_type);
         let func = generate_variant_eq_fn(
             name,
@@ -3760,7 +3810,12 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         .collect();
 
     let mut tt = module.type_table.borrow_mut();
-    let formatter_type = tt.make_struct(formatter_name, ModuleSource::format());
+    let formatter_type = {
+        let def = tt
+            .decl_named_in(&formatter_name, &ModuleSource::format())
+            .expect("the declaration being synthesised for exists");
+        tt.make_struct(crate::tir::StructDef::Decl(def))
+    };
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
@@ -3824,11 +3879,9 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
         match resolved {
-            ResolvedType::GenericInstance {
-                ref name,
-                ref module_source,
-                ..
-            } if TypeTable::is_tuple_type(name) => {
+            ResolvedType::GenericInstance { def, .. }
+                if TypeTable::is_tuple_type(tt.def_name(def)) =>
+            {
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
             _ => {
@@ -3837,7 +3890,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
                 // A shape with no declaration (a tuple, a reference, a `Fn`)
                 // has no module to be named by, so it keeps a copy per using
                 // module — the same reason the `Fn` arm below does.
-                let shape_module = match shape_declaring_module(&resolved) {
+                let shape_module = match shape_declaring_module(&tt, &resolved) {
                     Some(m) if m != module_source => continue,
                     Some(m) => m,
                     None => module_source.clone(),
@@ -3870,7 +3923,12 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         if ctx.has_methodful_impl_anywhere(name, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
-        let resource_type = tt.make_resource(name.clone(), module_source.clone());
+        let resource_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_resource(def)
+        };
         let ref_type = tt.make_ref(resource_type);
         generated.push(Rc::new(RefCell::new(generate_opaque_inspect_fn(
             name,
@@ -3943,7 +4001,12 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
         .collect();
 
     let mut tt = module.type_table.borrow_mut();
-    let formatter_type = tt.make_struct(formatter_name, ModuleSource::format());
+    let formatter_type = {
+        let def = tt
+            .decl_named_in(&formatter_name, &ModuleSource::format())
+            .expect("the declaration being synthesised for exists");
+        tt.make_struct(crate::tir::StructDef::Decl(def))
+    };
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
@@ -3953,7 +4016,12 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
         if ctx.has_methodful_impl_anywhere(name, &display_fq.canonical().expect(KEYED)) {
             continue;
         }
-        let enum_type = tt.make_enum(name.clone(), module_source.clone());
+        let enum_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_enum(def)
+        };
         let ref_type = tt.make_ref(enum_type);
         generated.push(Rc::new(RefCell::new(generate_enum_display_fn(
             &module_source,
@@ -4311,7 +4379,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let mut generated = Vec::new();
 
     let mut tt = module.type_table.borrow_mut();
-    let formatter_type = tt.make_struct(formatter_name.clone(), ModuleSource::format());
+    let formatter_type = {
+        let def = tt
+            .decl_named_in(&formatter_name, &ModuleSource::format())
+            .expect("the declaration being synthesised for exists");
+        tt.make_struct(crate::tir::StructDef::Decl(def))
+    };
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
@@ -4359,7 +4432,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         if ctx.has_methodful_impl_anywhere(&name, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
-        let enum_type = tt.make_enum(name.clone(), module_source.clone());
+        let enum_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_enum(def)
+        };
         if !has_inspect(&name, enum_type, ctx, &mut tt) {
             continue;
         }
@@ -4391,7 +4469,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         if ctx.has_methodful_impl_anywhere(name, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
-        let struct_type = tt.make_struct(name.clone(), module_source.clone());
+        let struct_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_struct(crate::tir::StructDef::Decl(def))
+        };
         let ref_type = tt.make_ref(struct_type);
         generated.push(Rc::new(RefCell::new(generate_struct_inspect_alt_fn(
             name,
@@ -4419,8 +4502,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let struct_type =
-            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let struct_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_generic_instance(def, type_param_ids)
+        };
         let ref_type = tt.make_ref(struct_type);
         generated.push(Rc::new(RefCell::new(generate_struct_inspect_alt_fn(
             name,
@@ -4447,7 +4534,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         if ctx.has_methodful_impl_anywhere(name, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
-        let variant_type = tt.make_variant(name.clone(), module_source.clone());
+        let variant_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_variant(def)
+        };
         let ref_type = tt.make_ref(variant_type);
         generated.push(Rc::new(RefCell::new(generate_variant_inspect_alt_fn(
             name,
@@ -4475,8 +4567,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let variant_type =
-            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let variant_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_generic_instance(def, type_param_ids)
+        };
         let ref_type = tt.make_ref(variant_type);
         generated.push(Rc::new(RefCell::new(generate_variant_inspect_alt_fn(
             name,
@@ -4568,12 +4664,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             continue;
         }
         let resolved = tt.get(type_id).clone();
-        if matches!(resolved, ResolvedType::GenericInstance { ref name, ref module_source, .. } if TypeTable::is_tuple_type(name))
+        if matches!(resolved, ResolvedType::GenericInstance { def, .. } if TypeTable::is_tuple_type(tt.def_name(def)))
         {
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
             continue;
         }
-        let shape_module = match shape_declaring_module(&resolved) {
+        let shape_module = match shape_declaring_module(&tt, &resolved) {
             Some(m) if m != module_source => continue,
             Some(m) => m,
             None => module_source.clone(),
@@ -5259,7 +5355,12 @@ fn generate_fallback_impls(
         tt.compiler_struct_name(CompilerItem::Formatter).to_string()
     };
     let mut tt = module.type_table.borrow_mut();
-    let formatter_type = tt.make_struct(formatter_struct_name.clone(), ModuleSource::format());
+    let formatter_type = {
+        let def = tt
+            .decl_named_in(&formatter_struct_name, &ModuleSource::format())
+            .expect("the declaration being synthesised for exists");
+        tt.make_struct(crate::tir::StructDef::Decl(def))
+    };
     let fmt_type = tt.make_mut_ref(formatter_type);
 
     let needs_fallback = |name: &str, ctx: &SynthesisCtx<'_, '_, '_>| -> bool {
@@ -5320,7 +5421,12 @@ fn generate_fallback_impls(
         if !needs_fallback(name, ctx) {
             continue;
         }
-        let enum_type = tt.make_enum(name.clone(), module_source.clone());
+        let enum_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_enum(def)
+        };
         let ref_type = tt.make_ref(enum_type);
         generated.push(make_fallback(name, ref_type, enum_type, vec![], &mut tt));
         ctx.record_impl(name, &pair.target_trait.canonical().expect(KEYED));
@@ -5339,7 +5445,12 @@ fn generate_fallback_impls(
         if !needs_fallback(name, ctx) {
             continue;
         }
-        let struct_type = tt.make_struct(name.clone(), module_source.clone());
+        let struct_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_struct(crate::tir::StructDef::Decl(def))
+        };
         let ref_type = tt.make_ref(struct_type);
         generated.push(make_fallback(name, ref_type, struct_type, vec![], &mut tt));
         ctx.record_impl(name, &pair.target_trait.canonical().expect(KEYED));
@@ -5359,8 +5470,12 @@ fn generate_fallback_impls(
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let struct_type =
-            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let struct_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_generic_instance(def, type_param_ids)
+        };
         let ref_type = tt.make_ref(struct_type);
         generated.push(make_fallback(
             name,
@@ -5382,7 +5497,12 @@ fn generate_fallback_impls(
         if !needs_fallback(name, ctx) {
             continue;
         }
-        let variant_type = tt.make_variant(name.clone(), module_source.clone());
+        let variant_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_variant(def)
+        };
         let ref_type = tt.make_ref(variant_type);
         generated.push(make_fallback(name, ref_type, variant_type, vec![], &mut tt));
         ctx.record_impl(name, &pair.target_trait.canonical().expect(KEYED));
@@ -5399,8 +5519,12 @@ fn generate_fallback_impls(
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let variant_type =
-            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let variant_type = {
+            let def = tt
+                .decl_named_in(&name, &module_source)
+                .expect("the declaration being synthesised for exists");
+            tt.make_generic_instance(def, type_param_ids)
+        };
         let ref_type = tt.make_ref(variant_type);
         generated.push(make_fallback(
             name,
@@ -5699,27 +5823,25 @@ fn resolve_impl_module_via_env(
         }
         ResolvedType::Primitive(p) => Some(p.as_str().to_string()),
         ResolvedType::Unit => Some(TypeTable::UNIT_TYPE_NAME.to_string()),
-        ResolvedType::Struct {
-            decl_name: name, ..
-        }
-        | ResolvedType::Enum { name, .. }
-        | ResolvedType::Variant { name, .. }
-        | ResolvedType::Newtype { name, .. }
-        | ResolvedType::Flags { name, .. }
-        | ResolvedType::GenericInstance { name, .. }
-        | ResolvedType::GenericResource { name, .. } => Some(name.clone()),
+        ResolvedType::Struct { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::Newtype { .. }
+        | ResolvedType::Flags { .. }
+        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::GenericResource { .. } => tt.nominal_head(type_id).map(|(n, _)| n),
         ResolvedType::BuiltinArray(_) => Some(TypeTable::ARRAY_TYPE_NAME.to_string()),
         _ => None,
     };
 
     let type_module: Option<ModuleSource> = match &resolved {
-        ResolvedType::Struct { module_source, .. }
-        | ResolvedType::Enum { module_source, .. }
-        | ResolvedType::Variant { module_source, .. }
-        | ResolvedType::Newtype { module_source, .. }
-        | ResolvedType::Flags { module_source, .. }
-        | ResolvedType::GenericInstance { module_source, .. }
-        | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
+        ResolvedType::Struct { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::Newtype { .. }
+        | ResolvedType::Flags { .. }
+        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::GenericResource { .. } => tt.nominal_head(type_id).map(|(_, m)| m),
         ResolvedType::Primitive(_) | ResolvedType::Unit => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
         _ => None,
@@ -5756,26 +5878,21 @@ fn resolve_impl_module_via_env(
 fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<FqTypeName>)> {
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
-            ResolvedType::GenericInstance {
-                name,
-                type_args,
-                module_source,
-                ..
-            } if TypeTable::is_tuple_type(name) => {
+            ResolvedType::GenericInstance { def, type_args }
+                if TypeTable::is_tuple_type(tt.def_name(*def)) =>
+            {
                 if !type_args.iter().all(|e| tt.is_concrete(*e)) {
                     return None;
                 }
                 let args = type_args.iter().map(|e| tt.fq_type_name(*e)).collect();
                 Some((id, TypeTable::TUPLE_TYPE_NAME.to_string(), args))
             }
-            ResolvedType::GenericResource {
-                name, type_args, ..
-            } => {
+            ResolvedType::GenericResource { def, type_args } => {
                 if !type_args.iter().all(|t| tt.is_concrete(*t)) {
                     return None;
                 }
                 let args = type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
-                Some((id, name.clone(), args))
+                Some((id, tt.def_name(*def).to_string(), args))
             }
             _ => None,
         })
