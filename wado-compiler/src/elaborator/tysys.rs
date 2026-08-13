@@ -155,9 +155,11 @@ impl TypeSystem {
             ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
             ResolvedType::Struct { .. } => self.struct_field_type_ids_of(base).unwrap_or_default(),
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } if name == "Result" => type_args,
+            ResolvedType::GenericInstance { type_args, .. }
+                if self.type_table.borrow().is_result(base) =>
+            {
+                type_args
+            }
             _ => self.type_table.borrow().as_tuple(base).unwrap_or_default(),
         };
         children

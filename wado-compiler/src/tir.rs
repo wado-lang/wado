@@ -1401,12 +1401,17 @@ impl TypeTable {
     }
 
     /// Whether `id` resolves to an instance of the compiler `Result` variant.
+    ///
+    /// Compares declarations. The spelling alone answered yes for any module's
+    /// `Result`, which is the mis-identification this table exists to prevent.
     pub fn is_result(&self, id: TypeId) -> bool {
-        matches!(
-            self.get(id),
-            ResolvedType::GenericInstance { name, .. }
-                if *name == self.compiler_variant_name(crate::compiler_item::CompilerItem::Result)
-        )
+        let Some(decl) = self
+            .compiler_items
+            .variant_decl(crate::compiler_item::CompilerItem::Result)
+        else {
+            return false;
+        };
+        self.decl_of_type(id) == Some(decl)
     }
 
     pub fn compiler_enum_name(&self, item: crate::compiler_item::CompilerItem) -> &str {

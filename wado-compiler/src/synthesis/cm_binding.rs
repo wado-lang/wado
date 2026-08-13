@@ -1184,6 +1184,7 @@ mod tests {
             Resolved::Variant {
                 module_source: ModuleSource::prelude(),
                 name: "Option".to_string(),
+                decl: crate::ast::AstId::fresh(),
             },
         );
         let _ = tt.compiler_items_mut().register(
@@ -1209,6 +1210,7 @@ mod tests {
             Resolved::Variant {
                 module_source: ModuleSource::prelude(),
                 name: "Result".to_string(),
+                decl: crate::ast::AstId::fresh(),
             },
         );
         let _ = tt.compiler_items_mut().register(

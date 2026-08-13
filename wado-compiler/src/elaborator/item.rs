@@ -188,6 +188,7 @@ pub(super) fn register_struct_compiler_item<H: CompilerHost>(
 pub(super) fn register_variant_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -203,6 +204,7 @@ pub(super) fn register_variant_compiler_item<H: CompilerHost>(
     let resolved = Resolved::Variant {
         module_source: module_source.clone(),
         name: name.to_string(),
+        decl,
     };
     if let Err(err) = type_table
         .borrow_mut()
@@ -1786,6 +1788,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         register_variant_compiler_item(
             &self.tysys.type_table,
             &variant_decl.attrs,
+            variant_decl.id,
             &variant_decl.name,
             &self.current_module_source,
             variant_decl.span,

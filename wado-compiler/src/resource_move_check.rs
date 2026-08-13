@@ -29,9 +29,9 @@ fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<Typ
         ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
         ResolvedType::Struct { .. } => sem.struct_field_type_ids_of(base).unwrap_or_default(),
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } if name == "Result" => type_args.clone(),
+        ResolvedType::GenericInstance { type_args, .. } if sem.types.is_result(base) => {
+            type_args.clone()
+        }
         _ => sem.types.as_tuple(base).unwrap_or_default(),
     };
     children

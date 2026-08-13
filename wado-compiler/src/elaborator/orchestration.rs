@@ -261,6 +261,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_variant_compiler_item(
                             &type_table,
                             &variant_decl.attrs,
+                            variant_decl.id,
                             &variant_decl.name,
                             module_source,
                             variant_decl.span,

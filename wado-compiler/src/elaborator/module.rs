@@ -178,6 +178,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     super::item::register_variant_compiler_item(
                         &scope.tysys.type_table,
                         &variant_decl.attrs,
+                        variant_decl.id,
                         &variant_decl.name,
                         &module_source,
                         variant_decl.span,

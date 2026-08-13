@@ -1197,6 +1197,10 @@ pub enum Resolved {
     Variant {
         module_source: ModuleSource,
         name: String,
+        /// The declaring node, so "is this type the compiler's `Result`" is a
+        /// question about a declaration rather than about a spelling that
+        /// another module's `Result` answers just as well.
+        decl: crate::ast::AstId,
     },
     Enum {
         module_source: ModuleSource,
@@ -1466,6 +1470,7 @@ impl CompilerItems {
             Resolved::Variant {
                 module_source,
                 name,
+                ..
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Variant", other),
         }
@@ -1562,6 +1567,14 @@ impl CompilerItems {
     pub fn trait_decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
         match self.get(item)? {
             Resolved::Trait { decl, .. } => Some(*decl),
+            _ => None,
+        }
+    }
+
+    /// The declaring node of a [`CompilerItemKind::Variant`] item.
+    pub fn variant_decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
+        match self.get(item)? {
+            Resolved::Variant { decl, .. } => Some(*decl),
             _ => None,
         }
     }
@@ -1898,10 +1911,12 @@ mod tests {
         let first = Resolved::Variant {
             module_source: ModuleSource::types(),
             name: "Option".into(),
+            decl: crate::ast::AstId::fresh(),
         };
         let second = Resolved::Variant {
             module_source: ModuleSource::prelude(),
             name: "Option".into(),
+            decl: crate::ast::AstId::fresh(),
         };
         reg.register(CompilerItem::Option, first).unwrap();
         let err = reg.register(CompilerItem::Option, second).unwrap_err();
@@ -1914,6 +1929,7 @@ mod tests {
         let resolved = Resolved::Variant {
             module_source: ModuleSource::types(),
             name: "Option".into(),
+            decl: crate::ast::AstId::fresh(),
         };
         reg.register(CompilerItem::Option, resolved.clone())
             .unwrap();
