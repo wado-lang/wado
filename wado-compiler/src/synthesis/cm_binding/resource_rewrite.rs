@@ -313,21 +313,16 @@ pub(super) fn synthesize_stream_writes(project: &mut Package) {
     );
 }
 
-/// The AST type a `future<T>` / `stream<T>` payload lays out as.
-///
-/// A newtype is a WIT type alias with no representation of its own, so the
-/// payload's size, alignment, and load / store ops are its base's — at every
-/// level, and by the same rule the payload classifier applies, so the layout
-/// and the classified payload describe one type.
+/// The AST type a payload lays out as: a newtype has no representation of its
+/// own, so its base's, at every level.
 fn payload_ast_type(
     payload: TypeId,
     tt: &TypeTable,
     registry: &CmInterfaceRegistry,
 ) -> crate::ast::Type {
     let id = crate::component_model::peel_newtypes(tt, payload);
-    // Peeled here rather than on the produced AST, which would miss a lib-local
-    // alias: the `NamedType` synthesis mints for one carries no source
-    // interface to look the newtype up by.
+    // Peeled off the TypeId, not the produced AST: a lib-local alias's
+    // synthesized `NamedType` carries no source interface to look it up by.
     if let ResolvedType::GenericInstance {
         name, type_args, ..
     } = tt.get(id)
@@ -350,11 +345,9 @@ fn payload_ast_type(
     type_id_to_ast_type(id, tt, registry)
 }
 
-/// Whether `elem` takes the value-payload stream path: it has a general CM
-/// payload type, and is not the `u8` default that has a path of its own.
-///
-/// Asked directly rather than through `classify_stream_payload`, which has to
-/// name some type to answer at all.
+/// Whether `elem` takes the value-payload stream path, rather than the `u8`
+/// default or the record path. Asked directly rather than through
+/// `classify_stream_payload`, which panics instead of answering `false`.
 fn has_value_payload(tt: &TypeTable, elem: TypeId) -> bool {
     !matches!(
         tt.get(elem),
@@ -1580,10 +1573,6 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ti
 }
 
 /// Dispatch target for a rewritten CM resource method call.
-///
-/// Each variant carries what it dispatches to, so no site has to pair a target
-/// with a separately-computed name — a canonical built-in travels as its
-/// [`CanonicalIntrinsic`] rather than as a rendered string.
 #[derive(Clone)]
 enum BindingTarget {
     /// Direct `CmRawCall` to the canonical Wasm import (simple operations).
@@ -1594,14 +1583,11 @@ enum BindingTarget {
     Entry(String),
 }
 
-/// Determine the binding target for a CM resource method, or `None` if not
-/// handled here (falls through to WIR translate).
+/// `None` for a method not handled here — it falls through to WIR translate.
 fn cm_binding_function(cm_name: &str) -> Option<BindingTarget> {
     use BindingTarget::{Canonical, Internal};
     use CanonicalIntrinsic as C;
-    // The `u8` payload is the default stream these entries bind: a non-u8
-    // element is parameterized by `parameterize_stream_cm_name` before it
-    // reaches here.
+    // A non-u8 element is parameterized before it reaches here.
     let u8_stream = CmStreamPayload::U8;
     Some(match cm_name {
         // Simple drops → direct CmRawCall (non-parameterized)
@@ -1764,9 +1750,8 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
                 return;
             }
         }
-        // Stream ops on a non-u8 element, and future drop / cancel: the
-        // intrinsic is parameterized by the receiver's payload, so it is
-        // rewritten to a canonical call directly.
+        // Stream ops on a non-u8 element, and future drop / cancel: parameterized
+        // by the receiver's payload, so they go straight to a canonical call.
         let parameterized =
             parameterize_stream_cm_name(&cm_name, expr, self.tt, self.cm_interface_registry)
                 .or_else(|| parameterize_future_cm_name(&cm_name, expr, self.tt));
@@ -1863,15 +1848,13 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
 }
 
 /// The future drop / cancel intrinsic for `cm_name`, parameterized by the
-/// receiver's payload. Returns `None` if `cm_name` is not a future drop/cancel
-/// op or the receiver is not a `Future<T>` / `FutureWritable<T>` method call.
+/// receiver's payload.
 fn parameterize_future_cm_name(
     cm_name: &str,
     expr: &TirExpr,
     tt: &TypeTable,
 ) -> Option<CanonicalIntrinsic> {
-    // Match the op first so the canonical-name list lives in exactly one place
-    // and non-future-handle methods skip the receiver classification below.
+    // Matched first so a non-future method skips the receiver classification.
     let make = match cm_name {
         "future-drop-readable" => CanonicalIntrinsic::FutureDropReadable,
         "future-drop-writable" => CanonicalIntrinsic::FutureDropWritable,
@@ -1904,8 +1887,7 @@ fn parameterize_stream_cm_name(
     tt: &TypeTable,
     cm_interface_registry: &CmInterfaceRegistry,
 ) -> Option<CanonicalIntrinsic> {
-    // Match the op first so the canonical list lives in one place, as the
-    // future path above does.
+    // Matched first so a non-stream method skips the receiver classification.
     let make = match cm_name {
         "stream-drop-readable" => CanonicalIntrinsic::StreamDropReadable,
         "stream-drop-writable" => CanonicalIntrinsic::StreamDropWritable,
@@ -1913,22 +1895,16 @@ fn parameterize_stream_cm_name(
         "stream-cancel-write" => CanonicalIntrinsic::StreamCancelWrite,
         _ => return None,
     };
-    // Get the receiver's type from the method call
     let (receiver, _, _) = expr.kind.as_method_call()?;
-    let receiver_type_id = receiver.type_id;
-    // Resolve through references: &Stream<T> → Stream<T>
-    let mut type_id = receiver_type_id;
+    let mut type_id = receiver.type_id;
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
         type_id = *inner;
     }
-    // Extract element type from Stream<T>
     if let Some(type_args) = tt.generic_type_args(type_id)
         && let Some(&elem) = type_args.first()
     {
         let elem_name = tt.base_type_name(elem);
         if elem_name != "u8" {
-            // Scalar / structural elements use the general `val-` payload name,
-            // matching `CmStreamPayload::Value`; named records keep their CM name.
             if let Some(payload) = crate::component_model::cm_payload_type_from_type_id(tt, elem) {
                 return Some(make(CmStreamPayload::Value(payload)));
             }

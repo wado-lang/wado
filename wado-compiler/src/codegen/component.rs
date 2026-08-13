@@ -964,9 +964,8 @@ fn build_transmission_future_type_for(
     )
 }
 
-/// Alias at outer component scope every resource in `needed_resources` that
-/// `interface_info` declares itself, so `resource.drop` — which resolves
-/// against outer scope — can name it.
+/// Alias at outer scope the resources `interface_info` declares itself, where
+/// `resource.drop` resolves.
 fn expose_self_owned_resources(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1399,14 +1398,12 @@ fn payload_type_to_cm_key(payload: &CmPayloadType, ctx: &ComponentModelContext) 
                 .collect(),
         ),
         CmPayloadType::Named(name) => CmTypeKey::Leaf(ctx.type_idx(name)),
-        // A resource travels as an owned handle.
         CmPayloadType::Resource(cm_name) => CmTypeKey::Own(Box::new(CmTypeKey::Leaf(
             ctx.type_idx(&format!("resource:{cm_name}")),
         ))),
     }
 }
 
-/// Collect the CM (kebab) names of every `Named` type nested in a payload.
 fn collect_named_payload_names(payload: &CmPayloadType, out: &mut Vec<String>) {
     match payload {
         CmPayloadType::Named(name) => {
@@ -1430,23 +1427,12 @@ fn collect_named_payload_names(payload: &CmPayloadType, out: &mut Vec<String>) {
                 collect_named_payload_names(e, out);
             }
         }
-        // A resource is aliased from its defining interface, not defined here.
         CmPayloadType::Scalar(_) | CmPayloadType::String | CmPayloadType::Resource(_) => {}
     }
 }
 
-/// Define the named types (record / variant / enum / flags) referenced by
-/// `Value(Named)` future/stream payloads, before the `future<T>` / `stream<T>`
-/// types that wrap them are built. Each is defined top-level through the shared
-/// `lib_type_gen` (so the export-signature type and the canonical type are one
-/// type) and bound by its CM name in `ctx`, so `payload_type_to_cm_key`'s
-/// `type_idx` lookup resolves it.
-/// Import the interface defining every resource a `Value(Resource)` future /
-/// stream payload names, so `own<r>` has a resource type to point at.
-///
-/// A payload resource is otherwise aliased only when some imported function's
-/// signature names it, which a guest-created `Future::<Error>::new()` does
-/// not.
+/// Import the interface defining every resource a payload names, so `own<r>`
+/// has a type to point at. Nothing else does for a guest-created future.
 fn prebuild_resource_payload_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1477,7 +1463,6 @@ fn prebuild_resource_payload_types(
     }
 }
 
-/// Collect the CM (kebab) names of every resource nested in a payload.
 fn collect_resource_payload_names(payload: &CmPayloadType, out: &mut Vec<String>) {
     match payload {
         CmPayloadType::Resource(name) => {
@@ -1502,6 +1487,9 @@ fn collect_resource_payload_names(payload: &CmPayloadType, out: &mut Vec<String>
     }
 }
 
+/// Define the named types a `Value(Named)` payload references, before the
+/// `future<T>` / `stream<T>` wrapping them. Going through the shared
+/// `lib_type_gen` keeps the export-signature type and the canonical type one.
 fn prebuild_value_named_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1527,9 +1515,8 @@ fn prebuild_value_named_types(
         if ctx.has_type(&cm_name) {
             continue;
         }
-        // The library's own interface first: the registry also holds every
-        // bundled WASI interface, so a lib-local name colliding with a WASI one
-        // is ambiguous unqualified.
+        // The library's own interface first: every bundled WASI interface is
+        // in the registry too, so a colliding name is ambiguous unqualified.
         let registry = &project.cm_interface_registry;
         let Some(wado_name) = interface_hint
             .as_deref()
@@ -4092,13 +4079,9 @@ fn import_resource_using_interfaces(
             wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
         );
 
-        // Expose the resources this interface defines itself at outer component
-        // scope, as the resource-defining phase does. They were declared inline
-        // in the instance type above because the CM spec puts `[constructor]X` /
-        // `[method]X.foo` in the instance exporting `X`, but that leaves them
-        // unreachable from outer scope — and `resource.drop` resolves there, so
-        // without this an interface that both defines a resource and uses one
-        // from elsewhere could not drop its own.
+        // Declared inline in the instance type above, as the CM spec requires
+        // for `[constructor]X` / `[method]X.foo`; `resource.drop` needs them at
+        // outer scope too.
         expose_self_owned_resources(builder, ctx, project, &interface_info, &needed_resources);
 
         for func in &supported_functions {

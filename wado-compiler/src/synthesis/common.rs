@@ -266,9 +266,7 @@ pub fn cm_raw_call(local_name: &str, args: Vec<TirExpr>, return_type: TypeId) ->
 }
 
 /// Create a `CmRawCall` expression targeting a Component Model canonical
-/// built-in. Prefer this over passing [`CanonicalIntrinsic::import_name`] to
-/// [`cm_raw_call`]: the intrinsic's payload type reaches WIR intact instead of
-/// being recovered from its rendered name.
+/// built-in, so its payload type reaches WIR intact.
 pub fn cm_canonical_call(
     intrinsic: CanonicalIntrinsic,
     args: Vec<TirExpr>,

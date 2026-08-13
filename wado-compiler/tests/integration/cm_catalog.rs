@@ -290,9 +290,8 @@ fn cases() -> Vec<Case> {
                 Val::Tuple(vec![point(), Val::U32(2)]),
             ]),
         ),
-        // Flags in memory rather than a flat i32 slot: three labels are one CM
-        // byte, so a stride or offset taken as u32 shows up here and nowhere in
-        // the bare `id-flags` case above.
+        // Flags in memory rather than a flat i32 slot: three labels are one
+        // CM byte, and only these read a stride or an offset.
         case("id-option-flags", Val::Option(b(flags(&["write"])))),
         case("id-option-flags", Val::Option(None)),
         case(
@@ -1307,8 +1306,7 @@ fn cm_stream_record_identity_o2() {
     run_record_stream_identity(OptLevel::O2);
 }
 
-/// Host mirrors of the catalog's named non-record types. The `#[component]`
-/// names are the CM kebab names the Wado declarations lower to.
+/// Host mirrors; the `#[component]` names are the CM kebab names.
 #[derive(
     wasmtime::component::ComponentType,
     wasmtime::component::Lower,
@@ -1359,10 +1357,8 @@ wasmtime::component::flags! {
     }
 }
 
-/// `future<T>` / `stream<T>` where `T` is a named non-record shape (`enum`,
-/// `variant`, `flags`). Unlike a record, these carry a discriminant — and for
-/// `variant`, a per-case payload union — so the payload copy exercises the
-/// discriminant store/load in the CM buffer, not just field offsets.
+/// `future<T>` / `stream<T>` over the named non-record shapes, which carry a
+/// discriminant — and, for `variant`, a per-case payload union.
 const NAMED_ASYNC_SOURCE: &str = r#"
 enum Color {
     Red,
@@ -1479,8 +1475,7 @@ fn run_named_future_identity(opt_level: OptLevel) {
                 }
             };
         }
-        // Every case of each shape: a discriminant dropped or widened wrongly
-        // survives one case but not all of them.
+        // Every case: a wrong discriminant survives one but not all.
         for color in [Color::Red, Color::Green, Color::Blue] {
             check!(future_round_trip(
                 &mut store,
@@ -1490,8 +1485,7 @@ fn run_named_future_identity(opt_level: OptLevel) {
                 color
             ));
         }
-        // Includes an empty case and two payload shapes, so a payload read at
-        // the wrong offset cannot pass.
+
         for shape in [Shape::Circle(2.5), Shape::Rect((1.5, -2.5)), Shape::Nothing] {
             check!(future_round_trip(
                 &mut store,
@@ -1529,10 +1523,8 @@ fn cm_future_named_identity_o2() {
     run_named_future_identity(OptLevel::O2);
 }
 
-/// `stream<T>` over the same named non-record shapes. A stream copies elements
-/// through a shared buffer, so the element stride — not just the layout of one
-/// value — has to be right; each batch mixes cases to catch a stride taken from
-/// a single case's payload instead of the whole union.
+/// The same shapes over `stream<T>`, where the element stride matters too.
+/// Each batch mixes cases, to catch a stride taken from one case's payload.
 fn run_named_stream_identity(opt_level: OptLevel) {
     let wasm = compile_lib_source(NAMED_ASYNC_SOURCE, opt_level);
     let engine = crate::common::engine();
@@ -1725,10 +1717,8 @@ fn try_compile_lib(source: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// A payload the classifier cannot name a `future<T>` / `stream<T>` for is
-/// reported, not panicked on. Being a representable boundary *value* is not
-/// enough — `()` is, and has no payload type — so the boundary check asks the
-/// classifier the same question codegen will.
+/// An unnameable payload is reported, not panicked on. Being a representable
+/// boundary *value* is not enough: `()` is one, with no payload type.
 #[test]
 fn cm_lib_rejects_an_unclassifiable_future_payload() {
     let err =
@@ -1740,12 +1730,10 @@ fn cm_lib_rejects_an_unclassifiable_future_payload() {
     );
 }
 
-/// The same, reached through `Future::<T>::new()` in a body rather than through
-/// an export signature — the other way a payload gets picked.
+/// The same through `Future::<T>::new()` rather than an export signature.
 #[test]
 fn cm_lib_rejects_an_unclassifiable_future_new() {
-    // The `Future<u32>` parameter is what brings the `Future` resource into the
-    // world; the rejected payload is the one `new` picks.
+    // The parameter brings the `Future` resource into the world.
     let err = try_compile_lib(
         "export fn make(v: Future<u32>) -> u32 {\n    \
          v.drop();\n    \
@@ -1759,9 +1747,7 @@ fn cm_lib_rejects_an_unclassifiable_future_new() {
     );
 }
 
-/// A newtype is a WIT type alias, so its payload is its base's — at every
-/// level. The AST classifier's `resolve_type` peels aliases throughout, so the
-/// TIR side has to as well or the two describe different component types.
+/// A newtype is a WIT type alias, so its payload is its base's, at every level.
 #[test]
 fn cm_lib_accepts_newtype_future_payloads() {
     for ty in ["Meters", "Option<Meters>", "List<Meters>", "[Meters, u32]"] {
@@ -1777,9 +1763,8 @@ fn cm_lib_accepts_newtype_future_payloads() {
     }
 }
 
-/// A lib-local type whose CM name collides with a bundled WASI one must still
-/// be built: the registry holds every WASI interface, so the reverse lookup is
-/// ambiguous unless it is scoped to the library's own interface.
+/// A lib-local type whose CM name collides with a bundled WASI one: the
+/// reverse lookup must be scoped to the library's own interface.
 #[test]
 fn cm_lib_builds_a_type_whose_cm_name_collides_with_wasi() {
     try_compile_lib(

@@ -244,9 +244,8 @@ impl TirRefVisitor for CalleeCollector {
 struct NamedPayloadFinder<'a> {
     tt: &'a TypeTable,
     registry: &'a crate::component_model::CmInterfaceRegistry,
-    /// Whether to reject an unresolvable record — only where the world keeps
-    /// the code, since a record's resolvability depends on the world.
-    /// Classifiability does not, and is always checked.
+    /// Only where the world keeps the code: a record's resolvability depends on
+    /// the world, unlike classifiability, which is always checked.
     check_records: bool,
     found: Option<String>,
 }
@@ -277,11 +276,6 @@ impl TirRefVisitor for NamedPayloadFinder<'_> {
 
 /// Why the `Future<T>` / `Stream<T>` payload at `expr` cannot be lowered, or
 /// `None` if it can.
-///
-/// Two ways to fail: a named record with no CM type to lower against (asked
-/// only when `check_records`, see [`NamedPayloadFinder`]), and a payload the
-/// classifier cannot name at all, such as `()`. A resource is not one of them —
-/// it travels as `own<r>`.
 fn unresolvable_future_stream_payload(
     tt: &TypeTable,
     registry: &crate::component_model::CmInterfaceRegistry,
@@ -298,17 +292,14 @@ fn unresolvable_future_stream_payload(
     if is_future {
         return crate::component_model::future_payload_rejection(tt, payload);
     }
-    // A CM-owned record element has no general payload type but does take the
-    // registry-driven `Record` stream path, so it is not unlowerable.
     if crate::component_model::is_cm_record_stream_element(tt, payload) {
         return None;
     }
     crate::component_model::stream_payload_rejection(tt, payload)
 }
 
-/// The payload type an expression names, and whether it is a future's, for the
-/// two shapes that reach the classifier: a `Future::<T>::new()` /
-/// `Stream::<T>::new()` static call, and a CM method on a handle.
+/// The payload an expression names, and whether it is a future's. Two shapes
+/// name one: a `new()` static call, and a CM method on a handle.
 fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId, bool)> {
     let TirExprKind::Call { func, .. } = &expr.kind else {
         return None;
@@ -330,7 +321,6 @@ fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId,
             .copied()?;
         return Some((payload, is_future));
     }
-    // A CM method on a handle: the receiver is the `Future<T>` / `Stream<T>`.
     let is_future = if cm.starts_with("future-") {
         true
     } else if cm.starts_with("stream-") {
@@ -346,16 +336,10 @@ fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId,
     Some((*tt.generic_type_args(type_id)?.first()?, is_future))
 }
 
-/// The Wado name of the first user-named type (record / variant / enum /
-/// flags) nested anywhere in a CM payload type (`Future<Point>`,
-/// `Future<List<Point>>`, `Future<[Point, u32]>`, …) that is not registered
-/// under its own module source — i.e. has no CM type to lower against. `None`
-/// if every named type in the payload resolves.
-///
-/// Resolvability is keyed on the declaration's own `module_source`, never its
-/// bare name: a user type that happens to share a name with an imported WASI/
-/// dependency declaration must still be rejected, since the homonym lives under
-/// a different source and carries a different shape.
+/// The first named type nested anywhere in a CM payload that is not registered
+/// under its own module source. Keyed on `module_source`, never the bare name:
+/// a homonym of an imported WASI or dependency declaration lives under a
+/// different source and carries a different shape.
 fn unresolvable_record_in_payload(
     tt: &TypeTable,
     registry: &crate::component_model::CmInterfaceRegistry,
@@ -370,9 +354,7 @@ fn unresolvable_record_in_payload(
     {
         return Some(name.clone());
     }
-    // Through a newtype too: `cm_payload_type_from_type_id` peels aliases, so a
-    // `type Alias = Point` payload reaches codegen as `point` and must be
-    // checked as one.
+    // Codegen peels aliases, so check through them here too.
     if let ResolvedType::Newtype { base_type, .. } = tt.get(type_id) {
         return unresolvable_record_in_payload(tt, registry, *base_type);
     }
@@ -397,8 +379,7 @@ fn unresolvable_record_in_payload(
     None
 }
 
-/// The declaration name and module source of a nominal type that can lower to a
-/// `CmPayloadType::Named` — a record, variant, enum, or flags.
+/// The name and module source of a type that lowers to `CmPayloadType::Named`.
 fn named_decl_of(ty: &ResolvedType) -> Option<(&String, &ModuleSource)> {
     match ty {
         ResolvedType::Struct {
@@ -1843,8 +1824,6 @@ mod tests {
         }
     }
 
-    /// A canonical built-in reaches WIR as its own identity: the payload type is
-    /// carried, not recovered from the rendered import name.
     #[test]
     fn helpers_cm_canonical_call_carries_the_payload() {
         use crate::canonical::{CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType};

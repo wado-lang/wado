@@ -624,12 +624,9 @@ fn check_cm_boundary_representable_inner(
             R::Primitive(_) | R::Unit | R::Enum { .. } | R::Flags { .. } | R::Resource { .. } => {
                 Ok(())
             }
-            // Stream/Future handles are themselves i32, but their payload is
-            // lifted/lowered by value on read/write, so it must be
-            // representable (and non-recursive) too — and classifiable into a
-            // component-level `future<T>` / `stream<T>`, which representable
-            // alone does not give: `()` is a fine boundary value with no
-            // payload type.
+            // The handle is an i32, but its payload is lifted and lowered by
+            // value, so it must be classifiable too — `()` is representable
+            // yet has no payload type.
             R::GenericResource {
                 name, type_args, ..
             } => {
@@ -1420,8 +1417,7 @@ pub(super) fn type_id_to_ast_type(
             name,
             module_source,
         } => cm_named(name, module_source),
-        // A CM `flags` is 1 byte at ≤8 labels, so it keeps its declaration
-        // identity rather than standing in as a four-byte `i32`.
+        // Its own CM type, 1 byte at ≤8 labels, not a four-byte `i32`.
         ResolvedType::Flags {
             name,
             module_source,
@@ -1477,8 +1473,6 @@ pub(super) fn type_id_to_ast_type(
             type_table,
             cm_interface_registry,
         ))),
-        // No CM surface. Standing one of these in as `i32` would silently
-        // mis-size it rather than report that it cannot cross the boundary.
         ResolvedType::Never
         | ResolvedType::Function { .. }
         | ResolvedType::Reactive(_)

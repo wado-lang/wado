@@ -38,8 +38,7 @@ use super::types::{
 /// Expand `TaskReturn` stmts in an `export async fn` user function into inline CM calls.
 ///
 /// Walks the function body and replaces each `TirStmtKind::TaskReturn { value }` with
-/// the flat lowering + `cm_canonical_call(task_return, flat_args)` sequence,
-/// where `task_return` is this export's own `task.return` canonical.
+/// the flat lowering + `cm_canonical_call(task_return, flat_args)` sequence.
 /// New locals are appended to the function's `locals` and `local_count` is updated.
 pub(super) fn expand_task_returns_in_func(
     user_func: &Rc<RefCell<TirFunction>>,
@@ -98,7 +97,6 @@ struct TaskReturnExpander<'a> {
     /// The world-declared result, whose flattening defines the slots.
     return_type: &'a Type,
     flat_return_types: &'a [cm_abi::CmValType],
-    /// The `task.return` canonical for this export, keyed by its name.
     task_return: &'a CanonicalIntrinsic,
     next_local: u32,
     extra_locals: Vec<TirLocal>,

@@ -11,9 +11,9 @@
 //! that exact handle — `cm_catalog.rs` round-trips it functionally rather than
 //! by handle equality, since the handle is single-use.
 //!
-//! Still TODO in this catalog: an `own`/`borrow` resource identity export,
-//! whose non-duplicable boundary semantics differ from the value types above.
-//! The catalog declares no resource of its own to write one against.
+//! Still TODO: an `own`/`borrow` resource identity export, whose non-duplicable
+//! boundary semantics differ from the value types above. The catalog declares
+//! no resource of its own to write one against.
 //!
 //! This file is the published package source, reused verbatim as a compiler
 //! test fixture (`wado-compiler/tests/fixtures/cm_catalog.wado` must stay
@@ -229,10 +229,8 @@ export fn id_list_tuple_record(v: List<[Point, u32]>) -> List<[Point, u32]> {
 }
 
 // --- Flags nested in aggregates ---
-// `flags` is the one named shape whose CM memory width is narrower than the
-// u32 the guest holds it in (three labels → one byte), so only a composite —
-// where the ABI reads a stride or an offset rather than a flat i32 slot — can
-// catch a lowering that sizes it four bytes wide.
+// Three labels lower to one CM byte, not the u32 the guest holds, and only a
+// composite reads a stride or an offset.
 export fn id_option_flags(v: Option<Perms>) -> Option<Perms> {
     return v;
 }
@@ -385,9 +383,8 @@ export async fn id_future_result(v: Future<Result<u32, String>>) -> Future<Resul
         tx.write(x);
     }
 }
-// A unit Ok arm is also the shape of the WASI transmission future
-// (`future<result<_, error-code>>`). Only a WASI error-code makes it one; with
-// any other Err type this is an ordinary `result<_, E>` payload.
+// A unit Ok arm is also the WASI transmission shape; only a WASI error-code
+// on the Err side makes it one.
 export async fn id_future_result_err(v: Future<Result<(), String>>) -> Future<Result<(), String>> {
     let value = v.read();
     v.drop();
@@ -538,8 +535,7 @@ export async fn id_stream_variant(v: Stream<Shape>) -> Stream<Shape> {
     v.drop();
     tx.drop();
 }
-// The element whose CM width differs from its Wado one, so the stride is what
-// this checks.
+// The element whose CM width differs from its Wado one: checks the stride.
 export async fn id_stream_flags(v: Stream<Perms>) -> Stream<Perms> {
     let [rx, tx] = Stream::<Perms>::new();
     task return rx;

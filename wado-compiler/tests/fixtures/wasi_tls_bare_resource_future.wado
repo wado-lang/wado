@@ -1,13 +1,7 @@
-// Test: a guest-created future whose payload is a resource — `future<option<own<error>>>`.
-//
-// A payload resource's component type is aliased at outer scope only when some
-// imported function's signature names it. `Connector::send` does; a future the
-// guest creates itself names none, so its defining interface has to be imported
-// for the payload's sake.
-//
-// `option<own<error>>` rather than a bare `own<error>` so the writable end has
-// a value to send: dropping an unwritten one traps, and there is no way to
-// construct an `Error` from the guest.
+// A guest-created `future<option<own<error>>>`: no imported signature names the
+// payload resource, so nothing else pulls its interface in. Wrapped in `option`
+// because the guest cannot construct an `Error`, and dropping an unwritten
+// writable end traps.
 use { println, Stdout } from "core:cli";
 use { Connector, Error } from "wasi:tls";
 

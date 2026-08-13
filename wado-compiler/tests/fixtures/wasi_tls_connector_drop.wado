@@ -1,14 +1,6 @@
-// Test: dropping a resource whose defining interface also uses one from another
-// interface.
-//
-// `Connector::send` names `wasi:tls/types#error`, which makes `wasi:tls/client`
-// a resource *using* interface. That path declares the resources it defines
-// itself inline in its instance type — the CM spec puts `[constructor]X` /
-// `[method]X.foo` in the instance exporting `X` — and must also alias them at
-// outer component scope, where `resource.drop` resolves.
-//
-// `wasi_tls_mock_recv.wado` calls `send` too, but hands the connector to
-// `Connector::connect`, which consumes it, so no drop is emitted there.
+// Dropping a resource whose defining interface also uses one from another
+// interface. `resource.drop` resolves against outer component scope, but the CM
+// spec puts `[constructor]X` / `[method]X.foo` in the instance exporting `X`.
 use { println, Stdout } from "core:cli";
 use { Connector, Error } from "wasi:tls";
 

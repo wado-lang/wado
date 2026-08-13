@@ -1,18 +1,13 @@
-//! Component Model canonical built-ins and the payload types that parameterize
-//! them.
+//! Component Model canonical built-ins and their payload types.
 //!
-//! `canon future.read` and its siblings are typed — the Component Model
-//! instantiates one per `future<T>` — so the core module needs a distinct
-//! import per payload type. [`CanonicalIntrinsic`] is that identity, carried
-//! structurally from synthesis through TIR and NIR into WIR.
-//! [`CanonicalIntrinsic::import_name`] renders it at the end of that path;
-//! nothing parses the name back, so it only has to be injective.
+//! `canon future.read` and its siblings are typed — one per `future<T>` — so
+//! the core module needs a distinct import per payload. [`CanonicalIntrinsic`]
+//! is that identity, carried from synthesis through TIR and NIR into WIR;
+//! [`CanonicalIntrinsic::import_name`] renders it at the end of that path.
 
 use std::borrow::Cow;
 use std::fmt;
 
-/// The scalar element of a `future<T>` / `stream<T>`. Maps 1:1 to
-/// `wasm_encoder::PrimitiveValType` in codegen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CmScalarType {
     S8,
@@ -49,7 +44,6 @@ impl fmt::Display for CmScalarType {
 }
 
 impl CmScalarType {
-    /// Parse the kebab-case CM scalar name produced by `Display` (the inverse).
     pub fn from_cm_name(name: &str) -> Option<Self> {
         Some(match name {
             "s8" => Self::S8,
@@ -70,30 +64,26 @@ impl CmScalarType {
 }
 
 /// A Component Model value type carried as a `future<T>` / `stream<T>` payload.
-/// Self-contained — built from the type table, no registry needed — so it is
-/// both a dedup key and the descriptor codegen turns into a component type.
-/// A named type is referenced by its CM kebab name, which codegen defines or
-/// aliases before the `future<T>` / `stream<T>` that wraps it.
+/// Self-contained — no registry needed — so it doubles as a dedup key.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmPayloadType {
     Scalar(CmScalarType),
     String,
     List(Box<CmPayloadType>),
     Option(Box<CmPayloadType>),
-    /// `result<ok?, err?>` — either arm absent (`None`) for the unit case.
+    /// Either arm absent (`None`) for the unit case.
     Result(Option<Box<CmPayloadType>>, Option<Box<CmPayloadType>>),
     Tuple(Vec<CmPayloadType>),
-    /// A named CM type by kebab name (record / variant / enum / flags).
+    /// A record / variant / enum / flags, by CM kebab name.
     Named(String),
-    /// An owned resource handle (`own<r>`), by the resource's CM kebab name.
-    /// Separate from [`Self::Named`]: its component type is keyed differently
-    /// and wrapped in `own` at the use site.
+    /// An owned resource handle, by the resource's CM kebab name. Separate from
+    /// [`Self::Named`]: its component type is keyed differently and wrapped in
+    /// `own` at the use site.
     Resource(String),
 }
 
 impl CmPayloadType {
-    /// The kebab suffix used in the core import name and the component type's
-    /// debug name. Injective, so distinct CM types get distinct imports.
+    /// Injective, so distinct CM types get distinct imports.
     pub fn name_suffix(&self) -> String {
         match self {
             Self::Scalar(s) => s.to_string(),
@@ -118,7 +108,6 @@ impl CmPayloadType {
         }
     }
 
-    /// Parse the kebab suffix produced by [`Self::name_suffix`].
     pub fn parse_suffix(s: &str) -> Option<Self> {
         let s = s.trim();
         if let Some(inner) = s.strip_prefix("list<").and_then(|r| r.strip_suffix('>')) {
@@ -157,7 +146,6 @@ impl CmPayloadType {
         if let Some(scalar) = CmScalarType::from_cm_name(s) {
             return Some(Self::Scalar(scalar));
         }
-        // A bare kebab identifier names a record / variant / enum / flags.
         if !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
             return Some(Self::Named(s.to_string()));
         }
@@ -186,30 +174,26 @@ fn split_top_level(s: &str) -> Vec<String> {
     parts
 }
 
-/// The element type of a CM `stream<T>` canonical intrinsic.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmStreamPayload {
     /// The default `stream<u8>` — file I/O, stdin/stdout.
     U8,
-    /// A CM record element, by its kebab name (e.g. `directory-entry`).
+    /// A CM record element, by its kebab name.
     Record(String),
     Value(CmPayloadType),
 }
 
-/// The payload of a CM `future<T>` canonical intrinsic.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmFuturePayload {
-    /// The HTTP body trailers: `future<result<option<trailers>, error-code>>`.
+    /// `future<result<option<trailers>, error-code>>`.
     Trailers,
     /// `future<result<_, error-code>>`, keyed by the WASI package defining the
-    /// error-code (`"cli"`, `"filesystem"`, …). Each is a distinct CM type, so
-    /// each needs its own component-level definition.
+    /// error-code (`"cli"`, `"filesystem"`, …) — each is a distinct CM type.
     Transmission(String),
     Scalar(CmScalarType),
     Value(CmPayloadType),
 }
 
-/// A canonical intrinsic needed by the compiled module.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CanonicalIntrinsic {
     StreamNew(CmStreamPayload),
@@ -236,17 +220,15 @@ pub enum CanonicalIntrinsic {
     ErrorContextNew,
     ErrorContextDebugMessage,
     ErrorContextDrop,
-    /// `task.return` for an `async` world export, keyed by the export's name: a
-    /// `--lib` world may carry several with distinct result types, and one
-    /// shared canon could not type them all.
+    /// Keyed by the export's name: a `--lib` world may carry several with
+    /// distinct result types, which one shared canon could not type.
     TaskReturn(String),
-    /// `resource.drop` for an imported CM resource, by its CM name.
+    /// By the resource's CM name.
     ResourceDrop(String),
 }
 
 impl CanonicalIntrinsic {
-    /// The import name used in the core Wasm module — a type suffix for a
-    /// parameterized intrinsic, as in `"future-new:s32"`.
+    /// The core-module import name, as in `"future-new:s32"`.
     pub fn import_name(&self) -> String {
         match self {
             Self::StreamNew(p) => format_stream_name("stream-new", p),
@@ -279,10 +261,9 @@ impl CanonicalIntrinsic {
         }
     }
 
-    /// Parse a canonical intrinsic from a `#[canonical("wasi", "...")]`
-    /// annotation's name, for the TIR-level WASI imports registered before WIR
-    /// translation. Partial inverse of [`Self::import_name`]: a name that
-    /// states no payload does not parse.
+    /// Parse the name a `#[canonical("wasi", "...")]` annotation spells. Only a
+    /// partial inverse of [`Self::import_name`]: a name stating no payload does
+    /// not parse.
     pub fn from_import_name(name: &str) -> Option<Self> {
         Some(match name {
             _ if name.starts_with("stream-") => {
@@ -312,7 +293,6 @@ impl CanonicalIntrinsic {
         })
     }
 
-    /// Extract the future payload type, if this is a future intrinsic.
     pub fn future_payload(&self) -> Option<CmFuturePayload> {
         match self {
             Self::FutureNew(p)
@@ -326,7 +306,6 @@ impl CanonicalIntrinsic {
         }
     }
 
-    /// Extract the stream payload type, if this is a stream intrinsic.
     pub fn stream_payload(&self) -> Option<CmStreamPayload> {
         match self {
             Self::StreamNew(p)
@@ -341,8 +320,6 @@ impl CanonicalIntrinsic {
     }
 }
 
-/// Inverse of `format_stream_name`: `"stream-read:directory-entry"` →
-/// `StreamRead(Record(…))`, a suffix-less name → the default `U8` stream.
 fn parse_stream_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
     let (base, payload) = if let Some((b, suffix)) = name.split_once(':') {
         let payload = if let Some(val) = suffix.strip_prefix("val-") {
@@ -366,9 +343,8 @@ fn parse_stream_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
     })
 }
 
-/// Partial inverse of `format_future_name`. A suffix-less name carries no
-/// payload, so it does not parse: it is what a `#[canonical("wasi",
-/// "future-read")]` annotation spells, a template the call site parameterizes.
+/// A suffix-less name carries no payload, so it does not parse — unlike the
+/// stream side, where it is the default `stream<u8>`.
 fn parse_future_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
     let (base, payload) = match name.split_once(':') {
         None => return None,
@@ -411,20 +387,17 @@ fn format_future_name(base: &str, payload: CmFuturePayload) -> String {
         CmFuturePayload::Value(ref t) => format!("{base}:val-{}", t.name_suffix()),
     }
 }
-/// What a `CmRawCall` invokes. Synthesis knows which of the two it emits, so it
-/// says so here rather than encoding it into a name a later phase parses back —
-/// [`CanonicalIntrinsic::import_name`] is not invertible.
+
+/// What a `CmRawCall` invokes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmCallTarget {
     /// A lowered WASI import, by its local alias name
-    /// (e.g. `"wasi:cli/stdout@0.3.0/write-via-stream"`).
+    /// (`"wasi:cli/stdout@0.3.0/write-via-stream"`).
     WasiAlias(String),
-    /// A Component Model canonical built-in, carried by identity.
     Canonical(CanonicalIntrinsic),
 }
 
 impl CmCallTarget {
-    /// The core-module import name this target resolves to.
     pub fn import_name(&self) -> Cow<'_, str> {
         match self {
             Self::WasiAlias(name) => Cow::Borrowed(name),
@@ -432,7 +405,6 @@ impl CmCallTarget {
         }
     }
 
-    /// The canonical intrinsic this target invokes, if it is one.
     pub fn canonical(&self) -> Option<&CanonicalIntrinsic> {
         match self {
             Self::WasiAlias(_) => None,
@@ -454,9 +426,6 @@ mod intrinsic_name_tests {
         );
     }
 
-    /// The trailers future renders to the bare base name, and so does a
-    /// payload-parameterized `#[canonical]` annotation. Neither may parse back
-    /// to a payload.
     #[test]
     fn a_bare_future_name_does_not_parse_to_a_payload() {
         for name in [
@@ -476,8 +445,8 @@ mod intrinsic_name_tests {
         }
     }
 
-    /// Every payload-carrying name round-trips. `Trailers` is deliberately
-    /// absent: it renders to the bare name, which no longer parses back.
+    /// `Trailers` is deliberately absent: it renders to the bare name, which
+    /// the test above pins as unparsable.
     #[test]
     fn future_intrinsics_round_trip() {
         for base in [
