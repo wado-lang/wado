@@ -350,7 +350,37 @@ pub struct Interpreter<'a> {
     /// terminate without consuming budget. The `RefCell` borrow guard cannot
     /// serve this role, since it permits concurrent immutable borrows.
     call_stack: Vec<CalleeKey>,
+    /// Runs this function's walk already made and abandoned: the callee, whether
+    /// the caller promised to apply write-backs, and the values its parameters
+    /// bound. A run is a function of exactly those — a frame starts empty and
+    /// everything else it reads is fixed for the pass — so a failed one stays
+    /// failed, and re-running it re-pays a whole-body copy and a trackability
+    /// walk for the same refusal. The budget only falls, so a run it cut short
+    /// stays cut short too.
+    ///
+    /// Keyed by what the run consumed rather than by the node that spelled it.
+    /// An `ExprId` names a slot whose content a rewrite replaces, and the answer
+    /// belongs to the call, not to the site: two sites naming one callee with
+    /// one argument list share it, and the same site inside a loop does not,
+    /// since each iteration binds its own values.
+    ///
+    /// The region path memoizes its misses per frame instead
+    /// ([`FrameState::region_misses`]): a region is a block of the body being
+    /// walked, so it has no callee and no arguments to be keyed by.
+    call_misses: Vec<CallMiss>,
 }
+
+/// A run the engine abandoned, as [`Interpreter::call_misses`] remembers it.
+struct CallMiss {
+    callee: CalleeKey,
+    may_write: bool,
+    args: Vec<Value>,
+}
+
+/// Ceiling on remembered misses. The list is scanned linearly, and a loop whose
+/// call binds fresh values each iteration would otherwise grow it without ever
+/// hitting it. Dropping a miss costs a re-run, never an answer.
+const MAX_CALL_MISSES: usize = 64;
 
 fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
     let StmtKind::Let {
@@ -400,6 +430,33 @@ impl<'a> Interpreter<'a> {
             facts: ProgramFacts::default(),
             step_budget: DEFAULT_STEP_BUDGET,
             call_stack: Vec::new(),
+            call_misses: Vec::new(),
+        }
+    }
+
+    /// What is left of the CTFE work budget. A fold the engine declined and a
+    /// budget at zero are the same refusal from the outside, so this is what
+    /// tells them apart.
+    #[must_use]
+    pub fn step_budget(&self) -> u32 {
+        self.step_budget
+    }
+
+    /// Whether this walk already ran and abandoned the same call.
+    pub(crate) fn call_missed(&self, callee: CalleeKey, may_write: bool, args: &[Value]) -> bool {
+        self.call_misses.iter().any(|miss| {
+            miss.callee == callee && miss.may_write == may_write && miss.args == args
+        })
+    }
+
+    /// Remember an abandoned run, up to [`MAX_CALL_MISSES`].
+    pub(crate) fn record_call_miss(&mut self, callee: CalleeKey, may_write: bool, args: Vec<Value>) {
+        if self.call_misses.len() < MAX_CALL_MISSES {
+            self.call_misses.push(CallMiss {
+                callee,
+                may_write,
+                args,
+            });
         }
     }
 
@@ -514,6 +571,9 @@ impl<'a> Interpreter<'a> {
     pub fn enter_function(&mut self) {
         self.step_budget = DEFAULT_STEP_BUDGET;
         self.frame = FrameState::default();
+        // A miss the budget cut short is a miss only under the budget that cut
+        // it, and the reset hands the next function a fresh one.
+        self.call_misses.clear();
         debug_assert!(
             self.call_stack.is_empty(),
             "niri call_stack leaked across function boundary",

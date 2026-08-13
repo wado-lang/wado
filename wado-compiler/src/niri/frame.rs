@@ -736,6 +736,13 @@ impl Interpreter<'_> {
         });
         let may_embed_caller_storage = !targets.is_empty() || stores_a_reference;
 
+        // Everything below is the expensive half — a whole-body copy and a
+        // trackability walk over it — and it answers the same way for the same
+        // callee and arguments, so a run already abandoned is not re-paid.
+        let args: Vec<Value> = bound.iter().map(|(_, value)| value.clone()).collect();
+        if self.call_missed(key, may_write, &args) {
+            return None;
+        }
         self.charge(1)?;
         self.call_stack.push(key);
         let mut scratch = callee_body.nodes_only_clone();
@@ -744,6 +751,9 @@ impl Interpreter<'_> {
         let run = self.exec_frame(&mut scratch, targets, returns_unit);
         self.swap_frame(caller);
         self.call_stack.pop();
+        if run.is_none() {
+            self.record_call_miss(key, may_write, args);
+        }
         run.map(|run| {
             let embeds_storage = may_embed_caller_storage
                 && !matches!(&run.result, Lattice::Const(v) if v.is_scalar());

@@ -8380,3 +8380,102 @@ fn an_orphaned_ref_global_binding_does_not_vouch_for_a_live_local() {
         "an orphaned binding must not vouch for the live one that replaced it",
     );
 }
+
+#[test]
+fn a_run_the_engine_abandoned_is_not_paid_for_twice() {
+    // A call is visited more than once per pass — the reducer asks at the node,
+    // and a projecting parent asks again — and running one copies the whole
+    // callee body and walks it for trackability before anything can refuse it.
+    // A refusal is a function of the callee and the arguments alone, so the
+    // second visit must answer from the first rather than re-pay for it. The
+    // budget is what tells the two apart: both answer `Unevaluated`.
+    let table = TypeTable::new();
+    // Statements the frame performs, then one it cannot: local 9 is bound
+    // nowhere, so the return value never lands on a constant and the run is
+    // abandoned — after the budget has been charged for everything before it.
+    let waster = make_pure_fn_stmts(
+        "waster",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
+            let_stmt_b("b", 1, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            let_stmt_b("c", 2, TypeTable::I32, int_lit(3, TypeTable::I32, "3")),
+            return_stmt(local_expr(9, TypeTable::I32)),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&waster));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.enter_function();
+    let (mut body, e) = into_body_expr(&call_expr(&waster, vec![]));
+
+    let before = interp.step_budget();
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut body, e),
+        Lattice::Unevaluated
+    );
+    let after_first = interp.step_budget();
+    assert!(
+        after_first < before,
+        "the first run must have been charged, or this proves nothing",
+    );
+
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut body, e),
+        Lattice::Unevaluated
+    );
+    assert_eq!(
+        interp.step_budget(),
+        after_first,
+        "an abandoned run must not be re-paid at the next visit",
+    );
+}
+
+#[test]
+fn an_abandoned_run_is_remembered_per_argument_list() {
+    // The memo keys on what the run consumed, so a second call to the same
+    // callee with different arguments is a different run and must still be
+    // attempted — a callee that folds for one argument and not another would
+    // otherwise be refused for both.
+    let table = TypeTable::new();
+    // `fn only_zero(x) { let g = 1 / x; return g; }` — folds at x = 1, and at
+    // x = 0 the division would trap, so the run is abandoned.
+    let only_zero = make_pure_fn(
+        "only_zero",
+        vec![("x", TypeTable::I32)],
+        TypeTable::I32,
+        return_stmt(binary(
+            NirBinaryOp::Div,
+            int_lit(6, TypeTable::I32, "6"),
+            local_expr(0, TypeTable::I32),
+            TypeTable::I32,
+        )),
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&only_zero));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.enter_function();
+
+    let (mut trapping, t) = into_body_expr(&call_expr(
+        &only_zero,
+        vec![int_lit(0, TypeTable::I32, "0")],
+    ));
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut trapping, t),
+        Lattice::Unevaluated,
+        "dividing by zero traps at run time, so the call stays",
+    );
+
+    let (mut folding, f) = into_body_expr(&call_expr(
+        &only_zero,
+        vec![int_lit(3, TypeTable::I32, "3")],
+    ));
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut folding, f),
+        Lattice::Const(int(2)),
+        "a different argument list is a different run",
+    );
+}
