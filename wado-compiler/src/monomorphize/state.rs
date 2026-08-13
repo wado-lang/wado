@@ -491,28 +491,24 @@ impl Monomorphizer {
         match type_table.get(type_id) {
             // The identity a method name is built from, so the rendered
             // spelling: `ArraySlice<u8>::internal_repr`, not `ArraySlice`.
-            ResolvedType::Struct {
-                decl_name,
-                type_args,
-                ..
-            } => Some(type_table.struct_rendered_name(decl_name, type_args)),
-            ResolvedType::Enum { name, .. }
-            | ResolvedType::Variant { name, .. }
-            | ResolvedType::Flags { name, .. } => Some(name.clone()),
+            ResolvedType::Struct { def, type_args } => {
+                Some(type_table.struct_rendered_name(*def, type_args))
+            }
+            ResolvedType::Enum { def }
+            | ResolvedType::Variant { def }
+            | ResolvedType::Flags { def } => Some(type_table.def_name(*def).to_string()),
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
             // `()` names its impls under the same spelling the source writes
             // (`impl Trait for ()`), so a unit receiver finds them like a
             // primitive does.
             ResolvedType::Unit => Some(TypeTable::UNIT_TYPE_NAME.to_string()),
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
                 // Return the mangled name with type args (e.g., "List<i32>", "Box<String>")
                 let args: Vec<String> = type_args
                     .iter()
                     .map(|arg| type_table.mangle_type_arg_for_generic(*arg))
                     .collect();
-                Some(mangle_generic_name(name, &args))
+                Some(mangle_generic_name(type_table.def_name(*def), &args))
             }
             ResolvedType::BuiltinArray(elem) => {
                 let arg = type_table.mangle_type_name(*elem);
@@ -601,18 +597,12 @@ impl Monomorphizer {
         loop {
             match type_table.get_unerased(tid) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
-                ResolvedType::Newtype {
-                    base_type,
-                    name,
-                    module_source,
-                    ..
-                } => {
+                ResolvedType::Newtype { base_type, def, .. } => {
                     let base = *base_type;
-                    // A generic newtype's stored name bakes its arguments into
-                    // the head; every consumer of this wants the declaration an
-                    // `impl` header writes.
+                    // The head an `impl` header writes: the declaration, with
+                    // any arguments left beside it rather than fused in.
                     let own =
-                        FqTypeName::declared(module_source, crate::name::split_base_name(name));
+                        FqTypeName::declared(type_table.def_module(*def), type_table.def_name(*def));
                     if has_own_impl(&own, tid) {
                         return Some(own);
                     }
@@ -732,11 +722,9 @@ impl Monomorphizer {
             return Some(info);
         }
         match type_table.get(type_id) {
-            ResolvedType::Struct {
-                decl_name,
-                type_args,
-                ..
-            } => Some((decl_name.clone(), type_args.clone())),
+            ResolvedType::Struct { def, type_args } => {
+                Some((type_table.struct_head_name(*def), type_args.clone()))
+            }
             // Newtypes are transparent — unwrap to base type for struct info lookup
             ResolvedType::Newtype { base_type, .. } => {
                 self.get_struct_info_from_type(*base_type, type_table)

@@ -190,11 +190,10 @@ fn dispatch_receiver_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
 /// impls on a `flags` type are written against the flags name.
 fn dispatch_receiver_identity(tt: &TypeTable, type_id: TypeId) -> Option<crate::name::FqTypeName> {
     match tt.get_unerased(type_id) {
-        ResolvedType::Flags {
-            name,
-            module_source,
-            ..
-        } => Some(crate::name::FqTypeName::declared(module_source, name)),
+        ResolvedType::Flags { def } => Some(crate::name::FqTypeName::declared(
+            tt.def_module(*def),
+            tt.def_name(*def),
+        )),
         _ => None,
     }
 }
@@ -227,12 +226,12 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
         // lookup they are.
         ResolvedType::Primitive(_) | ResolvedType::Unit => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
-        ResolvedType::Struct { module_source, .. }
-        | ResolvedType::GenericInstance { module_source, .. }
-        | ResolvedType::Enum { module_source, .. }
-        | ResolvedType::Flags { module_source, .. }
-        | ResolvedType::Resource { module_source, .. }
-        | ResolvedType::Variant { module_source, .. } => Some(module_source.clone()),
+        ResolvedType::Struct { .. }
+        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Flags { .. }
+        | ResolvedType::Resource { .. }
+        | ResolvedType::Variant { .. } => type_table.nominal_head(type_id).map(|(_, m)| m),
         // Newtypes inherit their base type's impls (`type Foo = List<u8>`
         // gets List's methods); the body of the inherited generic
         // instantiation lives in the base type's module by convention, so
