@@ -1389,7 +1389,8 @@ impl crate::tir_visitor::TirRefVisitor for MaxLocalIndex {
 /// protocol: per binding, in source order, bind the handler, save the global,
 /// build a `__Dispatch_<E>` whose `outer` is the saved value and whose op fields
 /// forward to the handler's methods, and install it — then restore in reverse
-/// order after the body. A binding with no matching plan is skipped.
+/// order after the body. A binding with no matching plan panics: annotate and
+/// this pass are out of sync.
 fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCtx) {
     let span = expr.span;
     let result_type = expr.type_id;

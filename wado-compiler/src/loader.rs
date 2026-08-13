@@ -447,7 +447,7 @@ pub fn wasm_asset_kind_from_attrs(
 
 /// Resolve a wasm asset import against the importing module's directory:
 /// `./libm.wat` from `core:prelude/x.wado` gives `core:prelude/libm.wat`, from
-/// `./sub/entry.wado` gives `./sub/foo.wat`. Only relative paths are accepted —
+/// `./sub/entry.wado` gives `./sub/libm.wat`. Only relative paths are accepted —
 /// an absolute namespace-qualified target is unsupported from user code, and the
 /// stdlib does not need one, its prelude importing siblings via `./`.
 pub fn resolve_wasm_asset_path(

@@ -2091,9 +2091,9 @@ pub(super) struct TraitMethodMatch {
 
 /// Read-only view resolving a type name from a module's perspective without
 /// cloning per-module maps. Precedence, highest first: local additions found
-/// during resolution, the current module's own definitions, its imports (with
-/// `use { Foo as Bar }` aliasing), then any module defining the name. All fields
-/// are borrowed, so a call site constructs one without allocating.
+/// during resolution, the current module's own definitions, then its imports
+/// (with `use { Foo as Bar }` aliasing) — no global scan beyond that (#1416).
+/// All fields are borrowed, so a call site constructs one without allocating.
 pub(crate) struct TypeLookup<'a> {
     pub(crate) current_module_source: &'a ModuleSource,
     pub(crate) imported_type_sources: &'a IndexMap<String, ModuleSource>,

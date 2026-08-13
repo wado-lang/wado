@@ -1246,8 +1246,8 @@ impl FunctionTranslator<'_, '_> {
 
     /// Lower an `ArrayLiteral` to
     /// `struct.new List<T> { repr: array.new_fixed<T>(e0, …), used: N }`,
-    /// mirroring `translate_string_literal`'s structurally identical
-    /// `String { repr, used }`. The element type is read off the struct's `repr`
+    /// mirroring the structurally identical `String { repr, used }` that
+    /// `seq_literal` builds. The element type is read off the struct's `repr`
     /// field rather than tracked again on the NIR node.
     fn build_array_literal(
         &mut self,

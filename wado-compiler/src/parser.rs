@@ -414,7 +414,7 @@ impl Parser {
     /// function body (`Stmt::Item`). Excludes the never-local keywords and any
     /// visibility prefix — a local item is always private, so a prefixed form
     /// falls through to the "probably a missing `}`" recovery. `flags` and `type`
-    /// are contextual, so only `flags <IDENT>` counts.
+    /// are contextual, so only `flags <IDENT>` / `type <IDENT>` count.
     fn at_local_item_start(&self) -> bool {
         match self.peek_kind() {
             T::Struct | T::Enum | T::Variant | T::Impl | T::Trait => true,

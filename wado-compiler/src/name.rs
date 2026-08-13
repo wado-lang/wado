@@ -1,6 +1,6 @@
 //! Every naming and mangling decision in the compiler. A method mangles as
 //! `{module}/{struct}^{trait}::{method}` (the trait half optional), a struct as
-//! `{module}::{name}`, a WASI name as `wasi:{package}/{interface}::{function}`.
+//! `{module}/{name}`, a WASI name as `wasi:{package}/{interface}::{function}`.
 //! Module paths are filesystem representations, not URIs: normalized lexically
 //! ([`crate::path::normalize`]), never percent-encoded, and project-root-relative.
 

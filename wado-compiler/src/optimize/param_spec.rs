@@ -2,7 +2,8 @@
 //! compile-time constants, clone `g`, substitute those reads, and retarget the
 //! call — `const_fold` folds the clone next iteration. Legality: no callee writes
 //! the field ([`summarize_params`]), every caller write stores the same constant
-//! ([`collect_roots`]). TODO: demand a decidable branch; TODO: make it gate-aware.
+//! ([`collect_roots`]). Not gate-aware: a summary taken before a callee gained a
+//! write would license an unsound substitution. TODO: demand a decidable branch.
 
 use std::cell::RefCell;
 use std::rc::Rc;

@@ -3735,7 +3735,7 @@ impl Monomorphizer {
                 Self::rewrite_local_index_in_stmt(s, binding_local_idx, iter_binding);
             }
 
-            // Must run here, after reallocation: every cloned iteration
+            // Per iteration, after the index rewrite: every cloned iteration
             // substitutes against the same shared `locals` table.
             self.reconcile_unrolled_body_locals(&mut elem_body, local_count, locals);
 

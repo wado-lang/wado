@@ -1869,7 +1869,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // (`impl Future<i32>` → `[i32]`), resolved in the
             // impl's type-param scope so generic impls
             // round-trip their `TypeParam` ids. Mirrors
-            // `resolve_impl_block`.
+            // `record_impl_sig`.
             let trait_type_args: Vec<crate::tir::TypeId> = match &impl_block.trait_type {
                 Some(ast::Type::Generic(generic)) => generic
                     .args

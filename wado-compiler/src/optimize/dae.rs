@@ -59,8 +59,8 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
     true
 }
 
-/// Closure-functor methods whose receiver-position deadness is honoured and
-/// whose trait-method pin is lifted: `__Closure_N::__call` and the
+/// Closure-functor methods whose `is_closure_call` pin is lifted:
+/// `__Closure_N::__call` and the
 /// `^Inspect` / `^InspectAlt` impls. Each is reached only through a synthesised
 /// function-table wrapper, and `register_closure_wrappers` /
 /// `register_inspect_wrapper` adapt that wrapper to the shrunken signature.

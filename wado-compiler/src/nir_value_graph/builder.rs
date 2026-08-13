@@ -210,10 +210,11 @@ pub fn build(
 }
 
 /// Scoped re-valuation of one inlined block, seeded with the call site's
-/// `param → value` map and walked over a fresh heap. Returns only
-/// constant-literal entries: a scoped walk's non-constant values carry
-/// walk-local heap versions and would over-merge. Runs in `scratch`, cloned from
-/// `body.values` with ids preserved, so the shared graph is not perturbed.
+/// `param → value` map and a heap seeded from `heap_seed` — a fresh one would
+/// over-merge. Returns every caller-rooted re-emittable value (constants, plus
+/// arithmetic / field reads over the call-site args); the caller filters. Runs in
+/// `scratch`, cloned from `body.values` with ids preserved, so the shared graph
+/// is not perturbed.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_scoped(
     body: &mut Body,

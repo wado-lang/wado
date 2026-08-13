@@ -371,7 +371,7 @@ pub enum ResolvedType {
     },
     // `Option<T>` is a `GenericInstance`, not a variant here — see
     // `TypeTable::as_option`. `Future<T>` / `Stream<T>` and their writable twins
-    // are `GenericResource`, see `make_future` / `as_future`.
+    // are `GenericResource`, built by `make_future` / `make_future_writable`.
     //
     // TODO: represent `Option<T>` as `ref null T` when `T` is a non-nullable
     // reference, dropping the discriminant struct. `Option<Option<T>>` must not
@@ -4554,7 +4554,7 @@ impl TirBlock {
 }
 
 /// Value-yielding type of a block: the last statement decides, except that a
-/// two-branch `If` / `IfLet` needs its branches to agree (or one to be `Never`)
+/// two-branch `If` needs its branches to agree (or one to be `Never`)
 /// and falls back to `Unit`, and a diverging `Return` / `Break` / `Continue`
 /// yields `Never`. The elaborator enforces the agreement rule while typing the
 /// surrounding expression, so a mismatch here is already reported.

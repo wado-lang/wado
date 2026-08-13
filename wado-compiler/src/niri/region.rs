@@ -79,9 +79,10 @@ pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&s
 
 /// The outer locals `block` only reads — the seeds a region frame needs — or
 /// `None` for anything that disqualifies it: an unrunnable call, a global write,
-/// an outer local in a write position, or a reference-typed one. A write
-/// position is an `Assign` target, a `&mut` borrow, or an argument the callee's
-/// signature takes by `&mut` — the signature being the only reliable witness.
+/// a reference-typed outer local, or a write whose place is an outer local or
+/// roots in no local at all (unaccountable, not absent). A write is an `Assign`
+/// target, a `&mut` borrow, or a `&mut` parameter per the callee's signature —
+/// the signature being the only reliable witness.
 pub(super) fn region_free_reads(
     body: &Body,
     block: BlockId,

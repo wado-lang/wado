@@ -5963,9 +5963,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Step 3: add closure parameters. Their types come from `local_types`,
         // which `resolve_closure` populated per param `AstId` — reify is a pure
-        // read here. The expected fn type is still peeled through newtypes so a
-        // closure coerced to `type Reducer = fn(..)` sees the underlying
-        // signature.
+        // read here. The expected fn type, peeled through newtypes so a closure
+        // coerced to `type Reducer = fn(..)` sees the underlying signature,
+        // feeds the return type only (Step 4).
         let expected_fn_type = expected_type.map(|t| {
             let table = self.tysys.type_table.borrow();
             table.get_ultimate_base_type(table.peel_refs(t))

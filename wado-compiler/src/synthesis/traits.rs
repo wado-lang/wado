@@ -1,7 +1,8 @@
-//! Trait synthesis: auto-derives the `Eq` / `Ord` impls for enums and variants
-//! (discriminant, then payload), `Inspect` for debug formatting, `Display` for
-//! an enum's bare case name, and the `DisplayAlt` / `InspectAlt` fallbacks that
-//! delegate to their plain halves. Runs before monomorphize.
+//! Trait synthesis: auto-derives `Eq` / `Ord` for structs and enums and `Eq` for
+//! variants (discriminant, then payload), `Default` for structs, `Inspect` for
+//! debug formatting, `Display` for an enum's bare case name, and the
+//! `DisplayAlt` / `InspectAlt` fallbacks that delegate to their plain halves.
+//! Runs before monomorphize.
 
 use std::cell::RefCell;
 use std::rc::Rc;

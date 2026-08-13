@@ -1,8 +1,9 @@
-//! TIR-level move-eligibility for the value-copy fold (WEP 2026-05-21), over the
-//! *synthesized* bodies the source-level pass cannot see. One backward liveness
-//! pass yields both facts a move needs: every read is a final use, and nothing
-//! the value derives from is still live at the binding. A function containing a
-//! closure, handler or `resume` is skipped, either being able to re-observe.
+//! TIR-level move-eligibility for the value-copy fold (WEP 2026-05-21), run over
+//! every body and unioned with the source-level pass's `moved_local_spans`. One
+//! backward liveness pass yields both facts a move needs: every read is a final
+//! use, and nothing the value derives from is still live at the binding. A
+//! function containing a closure, handler or `resume` is skipped, either being
+//! able to re-observe.
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;

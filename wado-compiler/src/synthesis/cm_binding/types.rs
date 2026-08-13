@@ -1456,9 +1456,9 @@ pub(super) fn compute_export_flat_param_types(
 
 /// Whether a parameter needs CM flat-ABI lifting at the export boundary — that
 /// is, whether its flat representation is anything but a single-slot passthrough
-/// of the same Wasm value type. A primitive or handle-shaped type travels as one
-/// scalar at both layers and needs none; everything else expands to a different
-/// type or to several values, and must be reconstructed Wado-side.
+/// of the same Wasm value type. Handle-shaped types (resource, enum, flags) and
+/// every primitive but `bool` travel as one scalar at both layers and need none;
+/// `bool`, `Unit`, and everything else must be reconstructed Wado-side.
 pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
     match tt.get(type_id) {
         ResolvedType::Primitive(prim) => matches!(prim, PrimitiveType::Bool),

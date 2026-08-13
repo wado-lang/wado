@@ -2053,8 +2053,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report "cannot infer type parameter" at the call site rather than letting
     /// an unsubstituted `TypeParam` reach codegen and trap. Effect parameters,
-    /// `fn`-bound ones (constrained structurally), defaulted ones (filled
-    /// later), and ones bound to an outer-scope `TypeParam` (the caller
+    /// `fn`-bound ones (constrained structurally), defaulted ones (already
+    /// filled), and ones bound to an outer-scope `TypeParam` (the caller
     /// forwarding its own generics) are all excluded.
     fn report_uninferred_fn_type_args(
         &mut self,

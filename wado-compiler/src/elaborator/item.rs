@@ -1981,9 +1981,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve parameters. A default expression resolves in the callee's
         // lexical scope with only the earlier parameters visible, so it reaches
-        // the definition module's private items. A function crossing the
-        // Component Model boundary takes neither a default nor a closure in its
-        // signature: the ABI requires every parameter.
+        // the definition module's private items. An `export fn` takes no
+        // parameter default, and nothing crossing the Component Model boundary
+        // takes a closure: the ABI represents neither.
         let is_cm_import =
             func.body.is_none() && func.attrs.iter().any(|a| a.cm_boundary.is_some());
         let crosses_cm_boundary = func.is_export || is_cm_import;

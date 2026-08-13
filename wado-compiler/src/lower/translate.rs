@@ -1184,7 +1184,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::CharLiteral(c) => Some(ValueKind::Char(*c)),
             // Pure constants whose WIR depends only on type/bytes (read back
             // from the pool by the extractor): `Null` → `None`/`ref.null`,
-            // string → `translate_string_literal`, unit → no runtime value.
+            // string → `seq_literal`, unit → no runtime value.
             TirExprKind::Null => Some(ValueKind::Null),
             // String / bytes literals are no longer atomic pool values; they
             // lower to a `StructLiteral` over a packed `Array<u8>` repr in

@@ -299,8 +299,9 @@ pub enum ModuleSource {
     },
     /// Wasm asset imported via
     /// `use … from "<path>" with { type: "wat"|"wasm" }`. `path` is the canonical
-    /// identifier `resolve_import` computed — `core:libm.wat` for a bundled
-    /// asset, else an entry-relative path. Loaded as raw bytes; the resulting
+    /// identifier `resolve_import` computed — `core:` / `wasi:`-prefixed for a
+    /// stdlib importer, else relative to the importing module. Loaded as raw
+    /// bytes; the resulting
     /// Wado module exposes one extern fn per requested export.
     Wasm {
         /// Canonical path identifier (used as the unique module key and
