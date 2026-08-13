@@ -1,6 +1,7 @@
 # wado-compiler
 
-The Wado compiler crate: frontend, IR pipeline, optimizer, and codegen.
+The Wado compiler crate: frontend, IR pipeline, optimizer, and codegen. The NIR
+optimizer has its own guide: [`docs/optimizer.md`](../docs/optimizer.md).
 
 ## Rules
 
@@ -12,19 +13,6 @@ The Wado compiler crate: frontend, IR pipeline, optimizer, and codegen.
   the `on-task-done` skill only when finishing a task.
 - This crate must compile for `wasm32-unknown-unknown` (a CI build check). Keep
   OS-dependent `std` modules out of production code.
-
-## NIR Optimize
-
-Design and soundness invariants:
-[`docs/wep-2026-06-05-nir-optimizer-architecture.md`](../docs/wep-2026-06-05-nir-optimizer-architecture.md).
-
-- Never clear-and-rebuild the value graph, and never key a cache by `ExprId`.
-  Key a memo by what the work consumed.
-- Write operands through `Engine`, never through `engine.body`, and have a new
-  mutating edit report itself (`census_note_*`). The promoted-read census is
-  memoized and holds only on that.
-- Do not narrow niri's trackability read-position whitelist to the reachable
-  tree: two attempts each lost the string-builder folds.
 
 ## Standard Libraries
 
