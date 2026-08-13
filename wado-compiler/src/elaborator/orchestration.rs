@@ -637,13 +637,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 &mut type_table.borrow_mut(),
                                 &lookup,
                             );
-                            let newtype_id = {
-                                let def = type_table
-                                    .borrow_mut()
-                                    .decl_named_in(&newtype_decl.name, &module_source)
-                                    .expect("the declaration this type names exists");
-                                type_table.borrow_mut().make_newtype(def, base_type_id)
+                            let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) else {
+                                continue;
                             };
+                            let newtype_id =
+                                type_table.borrow_mut().make_newtype(def, base_type_id);
                             type_table
                                 .borrow_mut()
                                 .register_decl_type(newtype_decl.id, newtype_id);
@@ -760,13 +758,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             continue;
                         }
                         // Create a distinct Flags type (not a newtype over u32)
-                        let flags_type = {
-                            let def = type_table
-                                .borrow_mut()
-                                .decl_named_in(&flags_decl.name, &module_source)
-                                .expect("the declaration this type names exists");
-                            type_table.borrow_mut().make_flags(def)
+                        let Some(def) = resolutions.defs().of_ast_id(flags_decl.id) else {
+                            continue;
                         };
+                        let flags_type = type_table.borrow_mut().make_flags(def);
                         type_table
                             .borrow_mut()
                             .register_decl_type(flags_decl.id, flags_type);
@@ -1706,30 +1701,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .and_then(|def| all_struct_fields.get(&def))
                             .map(|info| (info.name.clone(), info.module_source.clone()))
                             .unwrap_or_else(|| (struct_decl.name.clone(), module_source.clone()));
-                        let type_id = {
-                            let def = tt
-                                .decl_named_in(&name, &ms)
-                                .expect("the declaration this type names exists");
-                            tt.make_struct(crate::tir::StructDef::Decl(def))
+                        let (_, _) = (&name, &ms);
+                        let Some(def) = defs.of_ast_id(struct_decl.id) else {
+                            continue;
                         };
+                        let type_id = tt.make_struct(crate::tir::StructDef::Decl(def));
                         tt.register_decl_type(struct_decl.id, type_id);
                     }
                     Item::Enum(enum_decl) => {
-                        let type_id = {
-                            let def = tt
-                                .decl_named_in(&enum_decl.name, &module_source)
-                                .expect("the declaration this type names exists");
-                            tt.make_enum(def)
+                        let Some(def) = defs.of_ast_id(enum_decl.id) else {
+                            continue;
                         };
+                        let type_id = tt.make_enum(def);
                         tt.register_decl_type(enum_decl.id, type_id);
                     }
                     Item::Variant(variant_decl) => {
-                        let type_id = {
-                            let def = tt
-                                .decl_named_in(&variant_decl.name, &module_source)
-                                .expect("the declaration this type names exists");
-                            tt.make_variant(def)
+                        let Some(def) = defs.of_ast_id(variant_decl.id) else {
+                            continue;
                         };
+                        let type_id = tt.make_variant(def);
                         tt.register_decl_type(variant_decl.id, type_id);
                     }
                     Item::Resource(resource_decl) => {
@@ -1738,12 +1728,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .and_then(|def| all_resource_types.get(&def))
                             .map(|info| (info.name.clone(), info.module_source.clone()))
                             .unwrap_or_else(|| (resource_decl.name.clone(), module_source.clone()));
-                        let type_id = {
-                            let def = tt
-                                .decl_named_in(&name, &ms)
-                                .expect("the declaration this type names exists");
-                            tt.make_resource(def)
+                        let (_, _) = (&name, &ms);
+                        let Some(def) = defs.of_ast_id(resource_decl.id) else {
+                            continue;
                         };
+                        let type_id = tt.make_resource(def);
                         tt.register_decl_type(resource_decl.id, type_id);
                     }
                     _ => {}
@@ -3300,40 +3289,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // elaborator instance exists — including the newtype
                     // pre-pass (`annotate_modules`), which resolves newtype
                     // base types *before* `intern_all_decl_types` mints and
-                    // registers struct/variant/enum/resource `TypeId`s. So,
-                    // unlike the elaborator-instance-method reference sites
-                    // (which only ever run after `collect_types`), this one
-                    // cannot assume `register_decl_type` has already run and
-                    // must keep the self-sufficient name-based path.
+                    // registers struct/variant/enum/resource `TypeId`s. So
+                    // this one cannot reach an identity through a type that
+                    // may not be interned yet: it reads the declaring node
+                    // each registry entry already carries, which is the same
+                    // answer at every point in the bootstrap.
                     _ => {
+                        let defs = lookup.resolutions.defs();
                         if let Some(info) = lookup.struct_fields(&named.name) {
-                            {
-                                let def = type_table
-                                    .decl_named_in(&info.name, &info.module_source)
-                                    .expect("the declaration this type names exists");
-                                type_table.make_struct(crate::tir::StructDef::Decl(def))
-                            }
+                            defs.of_ast_id(info.defined_at)
+                                .map_or(TypeTable::UNKNOWN, |def| {
+                                    type_table.make_struct(crate::tir::StructDef::Decl(def))
+                                })
                         } else if let Some(info) = lookup.resource_type(&named.name) {
-                            {
-                                let def = type_table
-                                    .decl_named_in(&info.name, &info.module_source)
-                                    .expect("the declaration this type names exists");
-                                type_table.make_resource(def)
-                            }
+                            defs.of_ast_id(info.defined_at)
+                                .map_or(TypeTable::UNKNOWN, |def| type_table.make_resource(def))
                         } else if let Some(info) = lookup.variant_case(&named.name) {
-                            {
-                                let def = type_table
-                                    .decl_named_in(&info.name, &info.module_source)
-                                    .expect("the declaration this type names exists");
-                                type_table.make_variant(def)
-                            }
+                            defs.of_ast_id(info.defined_at)
+                                .map_or(TypeTable::UNKNOWN, |def| type_table.make_variant(def))
                         } else if let Some(info) = lookup.enum_case(&named.name) {
-                            {
-                                let def = type_table
-                                    .decl_named_in(&info.name, &info.module_source)
-                                    .expect("the declaration this type names exists");
-                                type_table.make_enum(def)
-                            }
+                            defs.of_ast_id(info.defined_at)
+                                .map_or(TypeTable::UNKNOWN, |def| type_table.make_enum(def))
                         } else {
                             TypeTable::UNKNOWN
                         }

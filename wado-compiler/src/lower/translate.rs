@@ -843,7 +843,6 @@ impl FunctionTranslator<'_, '_> {
         let inner_resolved = self.base.type_table.borrow().get(inner_type_id).clone();
         let fields: Vec<(String, u32, tir::TypeId)> =
             if let crate::tir::ResolvedType::Struct { def, type_args } = inner_resolved {
-                let decl_name = self.base.type_table.borrow().struct_head_name(def);
                 let module_source = self
                     .base
                     .type_table

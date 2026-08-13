@@ -307,7 +307,6 @@ pub(super) fn aggregate_field_info(
     }
     let resolved = type_table.get(return_type);
     if let ResolvedType::Struct { def, type_args } = resolved
-        && let decl_name = &type_table.struct_head_name(*def)
         && let module_source = &type_table.struct_head_module(*def).clone()
     {
         let name = type_table.struct_rendered_name(*def, type_args);

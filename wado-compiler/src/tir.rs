@@ -757,6 +757,10 @@ pub struct TypeTable {
     anon_structs: Vec<(ModuleSource, Vec<(String, TypeId)>)>,
     /// Dedup for the above: the same shape in the same module is one id.
     anon_struct_index: IndexMap<(ModuleSource, Vec<(String, TypeId)>), AnonStructId>,
+    /// `(name, module)` of each type declaration, for [`Self::decl_named_in`].
+    /// Built with [`Self::attach_defs`], so it answers at any point in the
+    /// pipeline rather than only after a declaration's type is interned.
+    decl_index: IndexMap<(String, ModuleSource), crate::defs::DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
     ///
     /// A name comes out of an identity and never goes back in. Attached where
@@ -881,6 +885,7 @@ impl TypeTable {
             variant_case_index: IndexMap::default(),
             anon_structs: Vec::new(),
             anon_struct_index: IndexMap::default(),
+            decl_index: IndexMap::default(),
             defs: std::sync::Arc::default(),
         };
 
@@ -1048,6 +1053,18 @@ impl TypeTable {
     /// Attach the program's declarations, so a nominal type can render its
     /// head once it carries one instead of a spelling.
     pub fn attach_defs(&mut self, defs: std::sync::Arc<crate::defs::DefTable>) {
+        // A module-level declaration is entered first and kept: a
+        // function-local item shares its module, and a spelling that reaches
+        // both means the module-level one everywhere this index is consulted.
+        self.decl_index = IndexMap::default();
+        for def in defs.iter() {
+            if !defs.kind(def).is_type() {
+                continue;
+            }
+            self.decl_index
+                .entry((defs.name(def).to_string(), defs.module(def).clone()))
+                .or_insert(def);
+        }
         self.defs = defs;
     }
 
@@ -1141,19 +1158,36 @@ impl TypeTable {
         std::sync::Arc::make_mut(&mut self.defs).declare_for_test(&module, name, kind)
     }
 
-    /// The declaration `module` declares under `name`, read back out of the
-    /// type already interned for it.
+    /// The declaration a compiler item names.
+    ///
+    /// The registry records the declaring node, so this answers at any point
+    /// in the pipeline — unlike [`Self::decl_named_in`], which needs the
+    /// declaration's own type to be interned already.
+    #[must_use]
+    pub fn compiler_item_def(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> Option<crate::defs::DefId> {
+        self.compiler_items
+            .variant_decl(item)
+            .or_else(|| self.compiler_items.struct_decl(item))
+            .and_then(|ast| self.defs.of_ast_id(ast))
+    }
+
+    /// The declaration `module` declares under `name`.
     ///
     /// This is a name reaching an identity, which the design forbids
-    /// everywhere else, and it is here only for the fixed stdlib heads a
-    /// constructor spells outright — `Future`, `Stream`, `Result`, `List`.
-    /// Those spellings are what `compiler_item.rs`'s registry exists to
-    /// replace, and this goes when they ask it instead. It cannot invent one:
-    /// a declaration the table never interned answers `None`.
+    /// everywhere else, and it is here only for the consumers that still hold
+    /// a spelling and nothing else — synthesis targets built from TIR
+    /// declarations, and the stdlib heads a constructor spells outright. Both
+    /// go when what they hold carries an identity; `compiler_item.rs`'s
+    /// registry is what replaces the second. It cannot invent one: a name that
+    /// declares nothing answers `None`.
     #[must_use]
     pub fn decl_named_in(&self, name: &str, module: &ModuleSource) -> Option<crate::defs::DefId> {
-        self.decl_by_name(name, module)
-            .and_then(|ast| self.defs.of_ast_id(ast))
+        self.decl_index
+            .get(&(name.to_string(), module.clone()))
+            .copied()
     }
 
     /// The declaration a nominal type was written from, if it names one.
@@ -1698,9 +1732,10 @@ impl TypeTable {
                 "Option module source not registered; missing \
                  #[compiler_item(\"option\")] on the Option variant",
             );
+        let _ = module_source;
         let def = self
-            .decl_named_in("Option", &module_source)
-            .expect("the Option declaration is a compiler item");
+            .compiler_item_def(crate::compiler_item::CompilerItem::Option)
+            .expect("the Option declaration is a registered compiler item");
         self.make_generic_instance(def, vec![inner])
     }
 
@@ -1715,9 +1750,10 @@ impl TypeTable {
                 "Result module source not registered; missing \
                  #[compiler_item(\"result\")] on the Result variant",
             );
+        let _ = module_source;
         let def = self
-            .decl_named_in("Result", &module_source)
-            .expect("the Result declaration is a compiler item");
+            .compiler_item_def(crate::compiler_item::CompilerItem::Result)
+            .expect("the Result declaration is a registered compiler item");
         self.make_generic_instance(def, vec![ok, err])
     }
 
@@ -2985,8 +3021,8 @@ impl TypeTable {
     /// Create an List<T> type (`GenericInstance` { name: "List", ... })
     pub fn make_list(&mut self, element: TypeId) -> TypeId {
         let def = self
-            .decl_named_in("List", &ModuleSource::list())
-            .expect("`List` is declared in core:prelude/list");
+            .compiler_item_def(crate::compiler_item::CompilerItem::List)
+            .expect("the List declaration is a registered compiler item");
         self.make_generic_instance(def, vec![element])
     }
 

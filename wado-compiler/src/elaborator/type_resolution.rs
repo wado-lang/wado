@@ -611,10 +611,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Build a display name like "MyArray<i32>"
                     let resolved_args: Vec<TypeId> =
                         args.iter().map(|t| self.resolve_type(t)).collect();
-                    let arg_names: Vec<String> = resolved_args
-                        .iter()
-                        .map(|&tid| self.tysys.type_id_to_string(tid))
-                        .collect();
                     // The instantiation is named by its declaration and keeps
                     // its arguments beside it, not fused into a rendered
                     // `MyArray<i32>` head no `impl` header writes.

@@ -431,7 +431,6 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
             None => Vec::new(),
         },
         ResolvedType::Struct { def, type_args } => {
-            let decl_name = cx.tt.struct_head_name(def);
             let module_source = cx.tt.struct_head_module(def).clone();
             let fields = cx
                 .struct_fields
