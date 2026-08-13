@@ -162,22 +162,38 @@ pub(crate) struct ModuleDecls {
     pub(crate) local_flags_cases: IndexMap<String, FlagsInfo>,
     pub(crate) local_variant_cases: IndexMap<String, VariantInfo>,
 
-    /// Function-local item declarations (`Stmt::Item` — a `struct`/`enum`/
-    /// `variant`/`flags`/`type` declared inside a function body). Distinct
-    /// from `local_struct_fields` et al above, which are module-scoped
-    /// (anonymous struct literals, in-progress module decls): these are
-    /// scoped to a single function, populated sequentially by
-    /// `Elaborator::resolve_stmt` as it walks the body (no hoisting — a
-    /// local item is visible only after its own declaration statement,
-    /// matching `let`), and cleared at the start of every
-    /// `Elaborator::resolve_function` call so sibling functions never see
-    /// each other's local items. Consulted by `TypeLookup` with the highest
-    /// precedence, ahead of `local_struct_fields` et al.
-    pub(crate) fn_local_struct_fields: IndexMap<String, StructFieldInfo>,
-    pub(crate) fn_local_newtypes: IndexMap<String, TypeId>,
-    pub(crate) fn_local_enum_cases: IndexMap<String, EnumInfo>,
-    pub(crate) fn_local_flags_cases: IndexMap<String, FlagsInfo>,
-    pub(crate) fn_local_variant_cases: IndexMap<String, VariantInfo>,
+    /// Function-local item declarations (`Stmt::Item` — a `struct` or `type`
+    /// declared inside a function body), by their own identity. Distinct from
+    /// `local_struct_fields` et al above, which are module-scoped (anonymous
+    /// struct literals, in-progress module decls).
+    ///
+    /// Two functions declaring the same spelling declare two of them, and
+    /// these maps say so, because a local item is a declaration with a
+    /// [`crate::defs::DefId`] like any other rather than a mangled storage
+    /// name standing in for one.
+    pub(crate) local_item_struct_fields: IndexMap<crate::defs::DefId, StructFieldInfo>,
+    pub(crate) local_item_newtypes: IndexMap<crate::defs::DefId, TypeId>,
+
+    /// The spelling a local item's *type* renders to, back to the declaration.
+    ///
+    /// A local item's type is interned under `{name}@{AstId}` so two functions'
+    /// same-named structs stay distinct types, and a consumer that destructured
+    /// a `ResolvedType` arrives holding that spelling rather than the identity
+    /// the type came from. This index is the one place that spelling is turned
+    /// back into a declaration, and it goes when `ResolvedType` carries the
+    /// declaration itself — at which point nothing renders a name to ask with.
+    pub(crate) local_item_renders: IndexMap<(String, ModuleSource), crate::defs::DefId>,
+
+    /// The local items in scope at the walk's current position, by the name
+    /// written in source. Filled as `Elaborator::resolve_stmt` passes each
+    /// declaration (no hoisting — a local item is visible only after its own
+    /// statement, matching `let`) and cleared at the start of every function
+    /// body walk, so sibling functions never see each other's local items.
+    ///
+    /// It answers with an identity rather than a declaration's contents: what
+    /// the identity carries is read out of the two maps above, which is what
+    /// keeps this the walk's position rather than a second scope.
+    pub(crate) fn_local_items: IndexMap<String, crate::defs::DefId>,
 }
 
 impl ModuleDecls {
@@ -201,17 +217,13 @@ impl ModuleDecls {
             })
     }
 
-    /// Clear the function-scoped local-item registries (`fn_local_*`).
+    /// Forget the local items the previous function body brought into scope.
     /// Called at the top of every function-body-walk entry point —
     /// `resolve_function`, `resolve_method`, `resolve_test_decl` — so a
     /// local item declared in one function body never leaks into the next
     /// one's resolution. A single shared call makes it impossible for a new
     /// entry point to forget this.
     pub(crate) fn clear_fn_local_items(&mut self) {
-        self.fn_local_struct_fields.clear();
-        self.fn_local_newtypes.clear();
-        self.fn_local_enum_cases.clear();
-        self.fn_local_flags_cases.clear();
-        self.fn_local_variant_cases.clear();
+        self.fn_local_items.clear();
     }
 }

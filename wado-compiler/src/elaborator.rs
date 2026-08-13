@@ -227,6 +227,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.logger.error_in(&self.current_module_source, err)
     }
 
+    /// The symbol `name` reaches from `module`.
+    ///
+    /// One scope answers, and it is the resolve pass's: the identity comes from
+    /// [`crate::resolve::Resolutions`] and the symbol row is read back off the
+    /// declaring node. Nothing here walks a module's imports a second time.
+    pub(crate) fn symbol_named(
+        &self,
+        module: &ModuleSource,
+        name: &str,
+    ) -> Option<&'a crate::symbol::Symbol> {
+        let def = self.tysys.resolutions.declaration_named(module, name)?;
+        self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
+    }
+
     /// Construct a [`TypeLookup`] view over the elaborator's current import
     /// context and shared `all_*` tables. Use this for any type-name
     /// resolution; never reach into `all_*` directly.
@@ -248,11 +262,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             local_flags_cases: &self.sem.decls.local_flags_cases,
             local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
             local_variant_cases: &self.sem.decls.local_variant_cases,
-            fn_local_struct_fields: &self.sem.decls.fn_local_struct_fields,
-            fn_local_newtypes: &self.sem.decls.fn_local_newtypes,
-            fn_local_enum_cases: &self.sem.decls.fn_local_enum_cases,
-            fn_local_flags_cases: &self.sem.decls.fn_local_flags_cases,
-            fn_local_variant_cases: &self.sem.decls.fn_local_variant_cases,
+            local_item_struct_fields: &self.sem.decls.local_item_struct_fields,
+            local_item_newtypes: &self.sem.decls.local_item_newtypes,
+            local_item_renders: &self.sem.decls.local_item_renders,
+            fn_local_items: &self.sem.decls.fn_local_items,
         }
     }
 
@@ -402,11 +415,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// namespace member, etc.). Looks up the defining [`AstId`](crate::ast::AstId) through
     /// the symbol table; no-op if the name is not declared.
     pub(super) fn record_item_reference_by_name(&mut self, use_id: crate::ast::AstId, name: &str) {
-        let Some(sym) = self
-            .symbols
-            .lookup_in_module(&self.current_module_source, name)
-            .or_else(|| self.symbols.lookup(&self.current_module_source, name))
-        else {
+        let Some(sym) = self.symbol_named(&self.current_module_source, name) else {
             return;
         };
         let def_id = sym.defined_at;
@@ -1540,8 +1549,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // current module. Falls through to `current_module_source`
                     // only when no symbol exists (genuinely-local declaration).
                     let canonical = self
-                        .symbols
-                        .lookup(&self.current_module_source, name)
+                        .symbol_named(&self.current_module_source, name)
                         .map(|sym| {
                             if let Some(use_id) = use_id {
                                 self.record_reference_to_def(use_id, sym.defined_at);

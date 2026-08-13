@@ -219,6 +219,13 @@ impl DefTable {
         }
         for (module, ast) in modules {
             table.declare_members(module, ast);
+            let mut locals = LocalItems {
+                table: &mut table,
+                module,
+            };
+            for item in &ast.items {
+                crate::ast::walk_item(&mut locals, item);
+            }
         }
         table
     }
@@ -241,88 +248,122 @@ impl DefTable {
     /// Nothing gets two.
     fn declare_members(&mut self, module: &ModuleSource, ast: &Module) {
         for item in &ast.items {
-            let (owner, members) = match item {
-                Item::Struct(s) => (
-                    s.id,
-                    members(
-                        DefKind::Field,
-                        s.fields
-                            .iter()
-                            .map(|f| (f.id, &f.name, Some(f.visibility), f.span)),
-                    ),
+            self.declare_item_members(module, item);
+        }
+    }
+
+    /// Identify a function-local item (`Stmt::Item`) and its members.
+    ///
+    /// A local `struct` is a declaration like any other — two functions writing
+    /// the same spelling declare two of them — so it gets an identity rather
+    /// than a mangled storage name standing in for one.
+    fn declare_local_item(&mut self, module: &ModuleSource, item: &Item) {
+        let (kind, name) = match item {
+            Item::Struct(d) => (DefKind::Struct, &d.name),
+            Item::Enum(d) => (DefKind::Enum, &d.name),
+            Item::Variant(d) => (DefKind::Variant, &d.name),
+            Item::Flags(d) => (DefKind::Flags, &d.name),
+            Item::Newtype(d) => (DefKind::Newtype, &d.name),
+            Item::Trait(d) => (DefKind::Trait, &d.name),
+            _ => return,
+        };
+        if self.by_ast_id.contains_key(&item.id()) {
+            return;
+        }
+        self.declare(Def {
+            ast_id: item.id(),
+            module: module.clone(),
+            name: name.clone(),
+            kind,
+            visibility: item.visibility().unwrap_or(Visibility::Private),
+            span: Some(item.span()),
+            parent: None,
+            members: Vec::new(),
+        });
+        self.declare_item_members(module, item);
+    }
+
+    fn declare_item_members(&mut self, module: &ModuleSource, item: &Item) {
+        let (owner, members) = match item {
+            Item::Struct(s) => (
+                s.id,
+                members(
+                    DefKind::Field,
+                    s.fields
+                        .iter()
+                        .map(|f| (f.id, &f.name, Some(f.visibility), f.span)),
                 ),
-                Item::Enum(e) => (
-                    e.id,
-                    members(
-                        DefKind::EnumCase,
-                        e.cases.iter().map(|c| (c.id, &c.name, None, c.span)),
-                    ),
+            ),
+            Item::Enum(e) => (
+                e.id,
+                members(
+                    DefKind::EnumCase,
+                    e.cases.iter().map(|c| (c.id, &c.name, None, c.span)),
                 ),
-                Item::Variant(v) => (
-                    v.id,
-                    members(
-                        DefKind::VariantCase,
-                        v.cases.iter().map(|c| (c.id, &c.name, None, c.span)),
-                    ),
+            ),
+            Item::Variant(v) => (
+                v.id,
+                members(
+                    DefKind::VariantCase,
+                    v.cases.iter().map(|c| (c.id, &c.name, None, c.span)),
                 ),
-                Item::Flags(f) => (
-                    f.id,
-                    members(
-                        DefKind::FlagsMember,
-                        f.flags.iter().map(|m| (m.id, &m.name, None, m.span)),
-                    ),
+            ),
+            Item::Flags(f) => (
+                f.id,
+                members(
+                    DefKind::FlagsMember,
+                    f.flags.iter().map(|m| (m.id, &m.name, None, m.span)),
                 ),
-                Item::Trait(t) => (
-                    t.id,
-                    members(
-                        DefKind::Method,
-                        t.methods
-                            .iter()
-                            .map(|m| (m.id, &m.name, Some(m.visibility), m.span)),
-                    ),
+            ),
+            Item::Trait(t) => (
+                t.id,
+                members(
+                    DefKind::Method,
+                    t.methods
+                        .iter()
+                        .map(|m| (m.id, &m.name, Some(m.visibility), m.span)),
                 ),
-                Item::Resource(r) => (
-                    r.id,
-                    members(
-                        DefKind::Method,
-                        r.methods.iter().map(|m| (m.id, &m.name, None, m.span)),
-                    ),
+            ),
+            Item::Resource(r) => (
+                r.id,
+                members(
+                    DefKind::Method,
+                    r.methods.iter().map(|m| (m.id, &m.name, None, m.span)),
                 ),
-                Item::Interface(i) => (
-                    i.id,
-                    members(
-                        DefKind::Method,
-                        i.methods.iter().map(|m| (m.id, &m.name, None, m.span)),
-                    ),
+            ),
+            Item::Interface(i) => (
+                i.id,
+                members(
+                    DefKind::Method,
+                    i.methods.iter().map(|m| (m.id, &m.name, None, m.span)),
                 ),
-                _ => continue,
-            };
-            let Some(owner) = self.of_ast_id(owner) else {
+            ),
+            _ => return,
+        };
+        let Some(owner) = self.of_ast_id(owner) else {
+            return;
+        };
+        let owner_visibility = self.visibility(owner);
+        for member in members {
+            // A seed already linked this member to this owner; linking again
+            // would list it twice under the owner.
+            if self.of_ast_id(member.ast_id).map(|id| self.get(id).parent) == Some(Some(owner)) {
                 continue;
-            };
-            let owner_visibility = self.visibility(owner);
-            for member in members {
-                // A seed already linked this member to this owner; linking again
-                // would list it twice under the owner.
-                if self.of_ast_id(member.ast_id).map(|id| self.get(id).parent) == Some(Some(owner))
-                {
-                    continue;
-                }
-                let id = self.of_ast_id(member.ast_id).unwrap_or_else(|| {
-                    self.declare(Def {
-                        ast_id: member.ast_id,
-                        module: module.clone(),
-                        name: member.name,
-                        kind: member.kind,
-                        visibility: member.visibility.unwrap_or(owner_visibility),
-                        span: Some(member.span),
-                        parent: Some(owner),
-                        members: Vec::new(),
-                    })
-                });
-                self.defs[id.0 as usize].parent = Some(owner);
-                self.defs[owner.0 as usize].members.push(id);
             }
+            let id = self.of_ast_id(member.ast_id).unwrap_or_else(|| {
+                self.declare(Def {
+                    ast_id: member.ast_id,
+                    module: module.clone(),
+                    name: member.name,
+                    kind: member.kind,
+                    visibility: member.visibility.unwrap_or(owner_visibility),
+                    span: Some(member.span),
+                    parent: Some(owner),
+                    members: Vec::new(),
+                })
+            });
+            self.defs[id.0 as usize].parent = Some(owner);
+            self.defs[owner.0 as usize].members.push(id);
         }
     }
 
@@ -400,6 +441,22 @@ impl DefTable {
     /// Every declaration, in collect order.
     pub fn iter(&self) -> impl Iterator<Item = DefId> + '_ {
         (0..self.defs.len()).map(|i| DefId(i as u32))
+    }
+}
+
+/// Reaches the items declared inside function bodies, which the symbol table —
+/// which collects module-level declarations only — never saw.
+struct LocalItems<'a> {
+    table: &'a mut DefTable,
+    module: &'a ModuleSource,
+}
+
+impl crate::ast::AstVisitor for LocalItems<'_> {
+    fn visit_stmt(&mut self, stmt: &crate::ast::Stmt) {
+        if let crate::ast::Stmt::Item(item) = stmt {
+            self.table.declare_local_item(self.module, item);
+        }
+        crate::ast::walk_stmt(self, stmt);
     }
 }
 
@@ -537,6 +594,31 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    /// A `struct` written inside a function body is a declaration, so two
+    /// functions writing the same spelling declare two of them.
+    #[test]
+    fn a_function_local_item_is_a_declaration_of_its_own() {
+        let source = r#"
+            pub fn here() -> i32 {
+                struct Widget { a: i32 }
+                return 1;
+            }
+            pub fn there() -> i32 {
+                struct Widget { b: i32 }
+                return 2;
+            }
+        "#;
+        let (defs, _) = build_from_source(source);
+        let widgets: Vec<DefId> = defs.iter().filter(|d| defs.name(*d) == "Widget").collect();
+        assert_eq!(widgets.len(), 2);
+        assert_ne!(widgets[0], widgets[1]);
+        assert_eq!(defs.kind(widgets[0]), DefKind::Struct);
+        let field_names =
+            |d: DefId| -> Vec<&str> { defs.members(d).iter().map(|m| defs.name(*m)).collect() };
+        assert_eq!(field_names(widgets[0]), ["a"]);
+        assert_eq!(field_names(widgets[1]), ["b"]);
     }
 
     /// A cached declaration fact carries a [`DefId`], so a later compile that

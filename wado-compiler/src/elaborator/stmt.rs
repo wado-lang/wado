@@ -274,7 +274,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .register_decl_type(struct_decl.id, type_id);
 
         let info = super::types::StructFieldInfo {
-            name: mangled_name.clone(),
+            name: mangled_name,
             module_source,
             defined_at: struct_decl.id,
             fields,
@@ -283,14 +283,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_param_bounds,
             type_param_type_ids,
         };
+        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
+            return;
+        };
         self.sem
             .decls
-            .local_struct_fields
-            .insert(mangled_name, info.clone());
+            .local_item_renders
+            .insert((info.name.clone(), info.module_source.clone()), def);
+        self.sem.decls.local_item_struct_fields.insert(def, info);
         self.sem
             .decls
-            .fn_local_struct_fields
-            .insert(struct_decl.name.clone(), info);
+            .fn_local_items
+            .insert(struct_decl.name.clone(), def);
         // Local structs have no `Item::Struct` entry in `module.items` for
         // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
         // statement handling (`reify_local_struct`) is what discovers and
@@ -323,18 +327,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .register_decl_type(newtype_decl.id, type_id);
-        // Durable (mangled-name) entry: some trait-bound synthesis (e.g. the
-        // auto-derived `Display` a template string needs) re-resolves a
-        // newtype's base type by name rather than reading `ResolvedType`
-        // directly, so it must be discoverable post-declaration the same way
-        // struct field info is (see `resolve_local_struct`).
-        self.sem.decls.local_newtypes.insert(mangled_name, type_id);
-        // Ephemeral (bare-name) entry — visible only for the remainder of
-        // this function's own annotate walk.
+        // Durable entry: some trait-bound synthesis (e.g. the auto-derived
+        // `Display` a template string needs) re-resolves a newtype's base type
+        // rather than reading `ResolvedType` directly, so it must be
+        // discoverable post-declaration the same way struct field info is
+        // (see `resolve_local_struct`).
+        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
+            return;
+        };
         self.sem
             .decls
-            .fn_local_newtypes
-            .insert(newtype_decl.name.clone(), type_id);
+            .local_item_renders
+            .insert((mangled_name, self.current_module_source.clone()), def);
+        self.sem.decls.local_item_newtypes.insert(def, type_id);
+        // The walk's position — visible only for the remainder of this
+        // function's own annotate walk.
+        self.sem
+            .decls
+            .fn_local_items
+            .insert(newtype_decl.name.clone(), def);
         // Local newtypes have no `Item::Newtype` entry in `module.items` for
         // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
         // handling (`reify_local_newtype`) discovers and builds this

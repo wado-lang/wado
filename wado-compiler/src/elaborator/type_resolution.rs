@@ -431,8 +431,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Verify Option variant exists in symbol table (declared in prelude)
                 // First check local imports, then fall back to prelude module
                 let found_as_variant = self
-                    .symbols
-                    .lookup(&self.current_module_source, "Option")
+                    .symbol_named(&self.current_module_source, "Option")
                     .or_else(|| self.symbols.lookup_in_module(&prelude_source, "Option"))
                     .is_some_and(|s| matches!(s.kind, SymbolKind::Variant(_)));
 

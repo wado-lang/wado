@@ -2138,24 +2138,30 @@ pub(crate) struct TypeLookup<'a> {
     pub(crate) local_flags_cases: &'a IndexMap<String, FlagsInfo>,
     pub(crate) local_generic_newtypes: &'a IndexMap<String, GenericNewtypeInfo>,
     pub(crate) local_variant_cases: &'a IndexMap<String, VariantInfo>,
-    /// Function-local item declarations (`Stmt::Item`), highest precedence.
-    /// See `ModuleDecls::fn_local_struct_fields` for the scoping rationale.
-    pub(crate) fn_local_struct_fields: &'a IndexMap<String, StructFieldInfo>,
-    pub(crate) fn_local_newtypes: &'a IndexMap<String, TypeId>,
-    pub(crate) fn_local_enum_cases: &'a IndexMap<String, EnumInfo>,
-    pub(crate) fn_local_flags_cases: &'a IndexMap<String, FlagsInfo>,
-    pub(crate) fn_local_variant_cases: &'a IndexMap<String, VariantInfo>,
+    /// Function-local item declarations (`Stmt::Item`), by identity. See
+    /// `ModuleDecls::local_item_struct_fields` for the scoping rationale.
+    pub(crate) local_item_struct_fields: &'a IndexMap<crate::defs::DefId, StructFieldInfo>,
+    pub(crate) local_item_newtypes: &'a IndexMap<crate::defs::DefId, TypeId>,
+    /// See `ModuleDecls::local_item_renders`.
+    pub(crate) local_item_renders: &'a IndexMap<(String, ModuleSource), crate::defs::DefId>,
+    /// The local items in scope at the walk's position, highest precedence.
+    pub(crate) fn_local_items: &'a IndexMap<String, crate::defs::DefId>,
 }
 
 impl<'a> TypeLookup<'a> {
     pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
-        if let Some(info) = self.fn_local_struct_fields.get(name) {
+        let def = self.declaration(name).or_else(|| {
+            self.local_item_renders
+                .get(&(name.to_string(), self.current_module_source.clone()))
+                .copied()
+        });
+        if let Some(info) = def.and_then(|d| self.local_item_struct_fields.get(&d)) {
             return Some(info);
         }
         if let Some(info) = self.local_struct_fields.get(name) {
             return Some(info);
         }
-        self.all_struct_fields.get(&self.declaration(name)?)
+        self.all_struct_fields.get(&def?)
     }
 
     /// Resolve `(name, module_source)` — an already-known type identity,
@@ -2166,6 +2172,13 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a StructFieldInfo> {
+        if let Some(info) = self
+            .local_item_renders
+            .get(&(name.to_string(), module_source.clone()))
+            .and_then(|def| self.local_item_struct_fields.get(def))
+        {
+            return Some(info);
+        }
         if let Some(info) = self
             .local_struct_fields
             .get(name)
@@ -2187,16 +2200,14 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a StructFieldInfo> {
-        self.fn_local_struct_fields
+        self.fn_local_items
             .get(name)
+            .and_then(|def| self.local_item_struct_fields.get(def))
             .filter(|info| info.module_source == *module_source)
             .or_else(|| self.struct_fields_in(name, module_source))
     }
 
     pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
-        if let Some(info) = self.fn_local_variant_cases.get(name) {
-            return Some(info);
-        }
         if let Some(info) = self.local_variant_cases.get(name) {
             return Some(info);
         }
@@ -2220,9 +2231,6 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn enum_case(&self, name: &str) -> Option<&'a EnumInfo> {
-        if let Some(info) = self.fn_local_enum_cases.get(name) {
-            return Some(info);
-        }
         if let Some(info) = self.local_enum_cases.get(name) {
             return Some(info);
         }
@@ -2246,9 +2254,6 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {
-        if let Some(info) = self.fn_local_flags_cases.get(name) {
-            return Some(info);
-        }
         if let Some(info) = self.local_flags_cases.get(name) {
             return Some(info);
         }
@@ -2283,30 +2288,36 @@ impl<'a> TypeLookup<'a> {
     }
 
     /// The newtype (or `flags` type) `name` names here.
-    ///
-    /// Function-local items have no identity yet, so they keep their two
-    /// name-keyed tiers; a module-level one is reached through
-    /// [`Self::declaration`], which is the resolve pass's answer rather than a
-    /// second scope walk.
     pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
-        if let Some(id) = self.fn_local_newtypes.get(name) {
+        let def = self.declaration(name).or_else(|| {
+            self.local_item_renders
+                .get(&(name.to_string(), self.current_module_source.clone()))
+                .copied()
+        });
+        if let Some(id) = def.and_then(|d| self.local_item_newtypes.get(&d)) {
             return Some(*id);
         }
         if let Some(id) = self.local_newtypes.get(name) {
             return Some(*id);
         }
-        self.all_newtypes.get(&self.declaration(name)?).copied()
+        self.all_newtypes.get(&def?).copied()
     }
 
     /// Which declaration `name` reaches from the module this view stands in.
     ///
     /// The one place a `TypeLookup` turns a spelling into an identity, and it
     /// does not do the turning: [`crate::resolve::Resolutions`] answered it
-    /// once, in the module that wrote the name.
+    /// once, in the module that wrote the name. The function-local items ahead
+    /// of it are the walk's own position — a local item is visible only after
+    /// its declaration statement, which no whole-program table records.
     pub(super) fn declaration(&self, name: &str) -> Option<crate::defs::DefId> {
         let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
+        let name = canon.as_deref().unwrap_or(name);
+        if let Some(def) = self.fn_local_items.get(name) {
+            return Some(*def);
+        }
         self.resolutions
-            .declaration_named(self.current_module_source, canon.as_deref().unwrap_or(name))
+            .declaration_named(self.current_module_source, name)
     }
 }
 

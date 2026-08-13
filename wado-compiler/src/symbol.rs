@@ -436,27 +436,6 @@ impl SymbolTable {
             .and_then(|key| self.symbols.get(key))
     }
 
-    /// Look up a name as it resolves when referenced from `module`: the
-    /// module's own explicit imports first, then the implicit prelude.
-    ///
-    /// The prelude (`core:prelude`) is in scope in every module without an
-    /// explicit `use`, so its public exports are consulted as a fallback. This
-    /// keeps `List`, `Option`, … resolvable everywhere while confining all
-    /// other imports to the module that declared them — a name imported by one
-    /// module never leaks into another (issue #1298). The prelude
-    /// implementation files (`core:prelude*`) resolve only their own imports;
-    /// they would otherwise recurse into themselves through this fallback.
-    pub fn lookup(&self, module: &ModuleSource, name: &str) -> Option<&Symbol> {
-        if let Some(symbol) = self.imported(module, name) {
-            return Some(symbol);
-        }
-        let prelude = ModuleSource::prelude();
-        if module != &prelude {
-            return self.lookup_in_module(&prelude, name);
-        }
-        None
-    }
-
     /// Look up a symbol in a specific module
     ///
     /// This resolves re-exports transparently, following re-export chains
@@ -632,13 +611,13 @@ mod tests {
 
         table.register_import(&importer, "println", key);
 
-        let symbol = table.lookup(&importer, "println");
+        let symbol = table.imported(&importer, "println");
         assert!(symbol.is_some());
         assert_eq!(symbol.unwrap().name, "println");
 
         // The import is scoped to `importer`; another module does not see it.
         let other = interner.local("./other.wado");
-        assert!(table.lookup(&other, "println").is_none());
+        assert!(table.imported(&other, "println").is_none());
     }
 
     #[test]

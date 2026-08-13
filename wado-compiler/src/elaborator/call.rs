@@ -1307,10 +1307,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and the `CalleeRef` come from the same resolution — this is
         // the single place the alias→defining-name translation happens.
         else if self.sem.decls.imported_functions.contains(effective_name) {
-            if let Some(symbol) = self
-                .symbols
-                .lookup(&self.current_module_source, effective_name)
-            {
+            if let Some(symbol) = self.symbol_named(&self.current_module_source, effective_name) {
                 self.record_reference_to_def(ident.id, symbol.defined_at);
                 (
                     Some(CalleeRef::from_imported_symbol(symbol)),
@@ -1725,7 +1722,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Imported functions: the canonical signature resolved in the
         // definition module's perspective, so same-named types from
         // different modules can't be confused.
-        if let Some(symbol) = self.symbols.lookup(&self.current_module_source, name) {
+        if let Some(symbol) = self.symbol_named(&self.current_module_source, name) {
             let src = symbol.module_source().clone();
             let sym_name = symbol.name.clone();
             if let Some(sig) = self.tysys.signatures.function_sig(&src, &sym_name) {
@@ -1840,10 +1837,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(self.current_module_source.clone()),
             );
         }
-        if let Some(symbol) = self
-            .symbols
-            .lookup(&self.current_module_source, &ident.name)
-        {
+        if let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(sig) = self.tysys.signatures.function_sig(&src, &name) {
@@ -1877,10 +1871,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Imported function
-        if let Some(symbol) = self
-            .symbols
-            .lookup(&self.current_module_source, &ident.name)
-        {
+        if let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(sig) = self.tysys.signatures.function_sig(&src, &name) {
@@ -2697,10 +2688,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(sig) => sig.decl.param_types.clone(),
                 None => return Vec::new(),
             }
-        } else if let Some(symbol) = self
-            .symbols
-            .lookup(&self.current_module_source, &ident.name)
-        {
+        } else if let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             match self.tysys.signatures.function_sig(&src, &name) {

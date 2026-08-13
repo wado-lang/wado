@@ -394,6 +394,15 @@ no `DefId` and needs none; each is already its own variant. Primitives are not
 special: `i32`, `()` and `!` are `internal type` declarations in
 `core:prelude/primitive.wado` and get `DefId`s like anything else.
 
+An anonymous struct is such a shape and is *not* already its own variant, which
+is the one place this rule has to be applied rather than observed. A struct
+literal with no type name interns as a `Struct` today, under a spelling
+synthesized from its fields, and two literals of the same shape deliberately
+reach one type — so there is no declaration to identify and no node to identify
+it by. It becomes a structural variant holding its field list, and the
+synthesized spelling goes with it: that name exists only to key the interner,
+and the fields are the key.
+
 Interning identity does not change. `TypeTable` keys an interned type by its
 rendered spelling, because holding argument `TypeId`s as identity would mint two
 types where equivalent-but-distinct ids meet — such ids demonstrably exist, which
@@ -490,17 +499,39 @@ compiles, passes the suite, and ends with a mechanical completion check.
 - [x] Declaration data keyed by `DefId`. All seven registries key on the
       declaration, and `TypeLookup`'s `lookup_ref` / `lookup_ref_in` /
       `fn_local_first` are deleted with them.
-- [ ] `Scope` — one implementation of what a name means in a module. The
-      per-name import maps are deleted and nothing outside `Scopes` answers what
-      a name means. What is left is `SymbolTable`'s own lookups, which the
-      resolve pass is built on rather than beside, so folding them in means
-      building `Scopes` during analysis instead of after it.
-  - [ ] Function-local items (`Stmt::Item`). The symbol table collects only
-        module-level declarations, so a local `struct` has no identity, and the
-        registries keep two name-keyed tiers above them for it: an ephemeral
-        `fn_local_*` map that tracks the annotate walk's position, and a durable
-        `local_*` map keyed by a mangled storage name no declaration carries. It
-        needs a `DefId` scoped to its declaring function.
+- [x] `Scope` — one implementation of what a name means in a module. The
+      per-name import maps are deleted, `SymbolTable::lookup` is deleted, and
+      nothing outside `Scopes` answers what a name means. The symbol table
+      keeps `lookup_in_module`, which asks a module what it *declares* rather
+      than what a spelling means from some vantage — the question
+      `Resolutions::declared_in` exposes, and the one `Scopes` is built out of.
+      A caller that wants the declaration's symbol row reaches it through the
+      identity: `Elaborator::symbol_named` resolves the name once and reads the
+      row off the declaring node.
+  - [x] Function-local items (`Stmt::Item`). The symbol table collects only
+        module-level declarations, so a local `struct` had no identity, and the
+        registries kept two name-keyed tiers above them for it: an ephemeral
+        `fn_local_*` map that tracked the annotate walk's position, and a
+        durable `local_*` map keyed by a mangled storage name no declaration
+        carries. `DefTable` now walks function bodies for `Stmt::Item`, so a
+        local item is a declaration like any other and the two tiers are one
+        `DefId`-keyed map plus the walk's own position.
+
+        The resolve pass records the shadowing at each site: a local item
+        enters scope at its own declaration statement and leaves it with the
+        block, so `fn a` and `fn b` writing the same spelling resolve to two
+        declarations and neither reaches the other's.
+
+        One index survives and says exactly what is left to do. A local item's
+        *type* still interns under `{name}@{AstId}`, so the two same-named
+        structs stay two types, and a consumer that destructured a
+        `ResolvedType` arrives holding that spelling instead of the identity
+        the type came from. `local_item_renders` turns it back, in one place,
+        and goes when `ResolvedType` carries the declaration — there is then no
+        rendered name to ask with. The suite found this rather than review:
+        `core:args`'s own test declares a local `Options` and
+        `impl Deserialize for Options;`, and the bound stopped holding the
+        moment the mangled entry went.
 - [x] `Resolutions::get` made total. The `Option` is gone, so no consumer has a
       "no answer" case to write a fallback for.
 - [x] Synthesis records referents. The
@@ -543,7 +574,7 @@ compiles, passes the suite, and ends with a mechanical completion check.
       `ExprKind::GlobalVarGet`, which is a NIR node carrying a global's name —
       a real problem, and a different one. Read each candidate.
 
-  - [ ] An instantiation records the declaration it came from.
+  - [x] An instantiation records the declaration it came from.
         `TypeTable::decl_of_type` answers for a nominal type out of
         `symbol_by_type`, but for a `GenericInstance` it _derives_ the answer at
         query time: `find_decl_type_by_name(name, module)` scans for the base
@@ -566,6 +597,21 @@ compiles, passes the suite, and ends with a mechanical completion check.
         spelling that outlives what it names. Nothing else in this step is safe
         until it is: every consumer that stops reading `(name, module_source)`
         off a type starts depending on `decl_of_type` instead.
+
+  - [ ] An anonymous struct is its own shape, not a nameless declaration.
+        `ResolvedType::Struct` is reached two ways: from a `struct`
+        declaration, and from a struct literal with no type name, which
+        `resolve_struct_literal` interns under a synthesized `__anon_{…}`
+        spelling built from its own field list. The second has no declaration
+        and can get no `DefId` — the literal is not a declaration site either,
+        since two literals of the same shape intern to one type by design.
+
+        So this step cannot flip `Struct` alone: it splits first, into a
+        nominal variant carrying a `DefId` and a structural variant carrying
+        its fields, which is what the rule "a shape no declaration names has no
+        `DefId` and needs none" already says for tuples and function types. The
+        synthesized spelling goes with it — it exists only to give the interner
+        a key, and a field list is the key.
 
   - [ ] TIR declarations carry identity. This is the part that is structural
         rather than mechanical. `Lowering` keys its variant-case and
@@ -651,26 +697,27 @@ The numbers this design is aimed at, measured over `wado-compiler/src`:
 
 | quantity                                            | at the start | now     |
 | --------------------------------------------------- | ------------ | ------- |
-| `*name: &str` parameters                            | 867          | 888     |
+| `*name: &str` parameters                            | 867          | 880     |
 | independent walks over the `use` declarations       | 3            | 1       |
-| implementations of "what does this name mean in M"  | 5            | 2       |
+| implementations of "what does this name mean in M"  | 5            | 1       |
 | name-keyed per-module declaration registries        | 7            | 0       |
 | `type_implements_trait` callers passing no identity | 16 of 30     | 0 of 30 |
 | spelling comparisons in trait dispatch              | 2            | 0       |
 | synthesised references a consumer re-resolves       | 2            | 0       |
-| mangled-name parsing functions                      | 7            | 7       |
-| `decl_key_or_local` occurrences — the fabrication   | 26           | 26      |
+| mangled-name parsing functions                      | 7            | 6       |
+| `decl_key_or_local` occurrences — the fabrication   | 26           | 30      |
 
 Each row reaches zero — or one, for the rows counting implementations — when its
 step lands. A row that stops falling means a step was declared done while a bypass
 survived it, which is what happened to the earlier `trait_name: &str` count, and
 the reason this document measures the bypass rather than the parameter.
 
-Four rows are closed. The query takes a `DefId` and nothing else, so there is no
+Five rows are closed. The query takes a `DefId` and nothing else, so there is no
 `None` left to pass; trait dispatch compares declarations at both ends, with no
 spelling comparison left in the path; no declaration's contents are reached by a
-name and a module any more, which took `TypeLookup`'s scope walk with it; and the
-resolution table is total, so a consumer has no missing answer to fall back from.
+name and a module any more, which took `TypeLookup`'s scope walk with it; the
+resolution table is total, so a consumer has no missing answer to fall back from;
+and one implementation answers what a name means in a module.
 
 The synthesis row closed without the step that was supposed to close it, which is
 worth recording because the estimate was wrong in a useful direction. Two suite
@@ -680,20 +727,20 @@ escape answering for nothing. The measurement that mattered was never "how many
 sites mint a fresh id" but "how many of them a consumer resolves", and the answer
 had already reached zero.
 
-The scope row is at two: `Scopes`, and `SymbolTable`'s own lookups, which the
-resolve pass is built on top of rather than beside. `module_import_scope` and
-`ModuleImports` no longer answer what a name means — the per-name import maps are
-deleted — though the former still computes a set of visible spellings for
-`module_visible_types`, which is a heuristic rather than a resolution and does not
-belong to this design.
+The scope row is at one. `module_import_scope` and `ModuleImports` no longer
+answer what a name means — the per-name import maps are deleted — though the
+former still computes a set of visible spellings for `module_visible_types`,
+which is a heuristic rather than a resolution and does not belong to this
+design. `SymbolTable::lookup` was the last one and is deleted; what remains
+there is `lookup_in_module`, which answers what a module declares, not what a
+spelling means from a vantage.
 
-Two rows have not moved, and both say the same thing. `decl_key_or_local` sat at
+Two rows have gone _up_, and both say the same thing. `decl_key_or_local` sat at
 24 for one commit, when a qualified call's required trait was made a `DefId`, and
-came back to 26 when that turned out to be wrong: the required trait can name a
-type-parameter binder or a name that reaches no declaration at all, and a `DefId`
-cannot stand for either. `RequiredTrait` becomes an identity when it carries a
-`Resolution` — `Def` or `Binder` — not before, and that waits on its comparison
-partners carrying one too. The `*name: &str` row has gone _up_ for the same kind
-of reason: the parameters counted there are what the name-keyed registries force,
-and the identity work so far has added a few renderings on the way to them. Both
-rows move when the storage moves.
+came back — now 30 — when that turned out to be wrong: the required trait can
+name a type-parameter binder or a name that reaches no declaration at all, and a
+`DefId` cannot stand for either. `RequiredTrait` carries a `Resolution` now, and
+the row still climbed, because what it counts is the pair a consumer *renders*
+to reach a name-keyed neighbour, and those neighbours are in `ResolvedType`. The
+`*name: &str` row moves for the same reason. Both rows fall when the types carry
+identity, not before, and neither is evidence about the steps that have landed.

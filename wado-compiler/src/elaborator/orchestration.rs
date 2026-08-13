@@ -398,6 +398,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
                 let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
                 let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
+                let empty_local_struct: IndexMap<crate::defs::DefId, StructFieldInfo> =
+                    IndexMap::default();
+                let empty_local_newtype: IndexMap<crate::defs::DefId, TypeId> = IndexMap::default();
+                let empty_local_items: IndexMap<String, crate::defs::DefId> = IndexMap::default();
+                let empty_local_renders: IndexMap<(String, ModuleSource), crate::defs::DefId> =
+                    IndexMap::default();
                 for item in &module.items {
                     let Item::Newtype(newtype_decl) = item else {
                         continue;
@@ -428,11 +434,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             local_flags_cases: &empty_flags,
                             local_generic_newtypes: &empty_gnt,
                             local_variant_cases: &empty_variant,
-                            fn_local_struct_fields: &empty_struct,
-                            fn_local_newtypes: &empty_newtype,
-                            fn_local_enum_cases: &empty_enum,
-                            fn_local_flags_cases: &empty_flags,
-                            fn_local_variant_cases: &empty_variant,
+                            local_item_struct_fields: &empty_local_struct,
+                            local_item_newtypes: &empty_local_newtype,
+                            local_item_renders: &empty_local_renders,
+                            fn_local_items: &empty_local_items,
                         };
                         let base_type_id = Self::resolve_type_static(
                             &newtype_decl.ty,
@@ -508,6 +513,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
             let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
             let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
+            let empty_local_struct: IndexMap<crate::defs::DefId, StructFieldInfo> =
+                IndexMap::default();
+            let empty_local_newtype: IndexMap<crate::defs::DefId, TypeId> = IndexMap::default();
+            let empty_local_items: IndexMap<String, crate::defs::DefId> = IndexMap::default();
+            let empty_local_renders: IndexMap<(String, ModuleSource), crate::defs::DefId> =
+                IndexMap::default();
 
             for item in &module.items {
                 let lookup = TypeLookup {
@@ -527,11 +538,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     local_flags_cases: &empty_flags,
                     local_generic_newtypes: &empty_gnt,
                     local_variant_cases: &empty_variant,
-                    fn_local_struct_fields: &empty_struct,
-                    fn_local_newtypes: &empty_newtype,
-                    fn_local_enum_cases: &empty_enum,
-                    fn_local_flags_cases: &empty_flags,
-                    fn_local_variant_cases: &empty_variant,
+                    local_item_struct_fields: &empty_local_struct,
+                    local_item_newtypes: &empty_local_newtype,
+                    local_item_renders: &empty_local_renders,
+                    fn_local_items: &empty_local_items,
                 };
                 match item {
                     Item::Struct(struct_decl) => {

@@ -327,6 +327,19 @@ pub(crate) struct CallSiteLocation {
 }
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
+    /// The symbol `name` reaches from `module` — see
+    /// [`super::Elaborator::symbol_named`], which answers the same way from the
+    /// same table, so annotate and reify cannot disagree about what a name
+    /// means.
+    pub(crate) fn symbol_named(
+        &self,
+        module: &ModuleSource,
+        name: &str,
+    ) -> Option<&'a crate::symbol::Symbol> {
+        let def = self.tysys.resolutions.declaration_named(module, name)?;
+        self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
+    }
+
     /// Look up an impl-associated constant by its use-site `Type::NAME`
     /// spelling, canonicalized the same way as
     /// `Elaborator::lookup_associated_constant` so both walkers resolve a
@@ -498,11 +511,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // recovered from `recorded_type` — see `reify_struct_literal`),
             // not through this per-function ephemeral tier, which annotate
             // clears between functions and reify never repopulates.
-            fn_local_struct_fields: &self.sem.decls.fn_local_struct_fields,
-            fn_local_newtypes: &self.sem.decls.fn_local_newtypes,
-            fn_local_enum_cases: &self.sem.decls.fn_local_enum_cases,
-            fn_local_flags_cases: &self.sem.decls.fn_local_flags_cases,
-            fn_local_variant_cases: &self.sem.decls.fn_local_variant_cases,
+            local_item_struct_fields: &self.sem.decls.local_item_struct_fields,
+            local_item_newtypes: &self.sem.decls.local_item_newtypes,
+            local_item_renders: &self.sem.decls.local_item_renders,
+            fn_local_items: &self.sem.decls.fn_local_items,
         }
     }
 
@@ -533,8 +545,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                 } else {
                     let canonical = self
-                        .symbols
-                        .lookup(&self.current_module_source, name)
+                        .symbol_named(&self.current_module_source, name)
                         .map(|sym| sym.module_source().clone())
                         .unwrap_or_else(|| self.current_module_source.clone());
                     crate::tir::EffectRef::Concrete {
@@ -953,19 +964,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Field types and type-param bounds come from `sem.decls.local_struct_fields`
-    /// — the durable, mangled-name-keyed fact `resolve_local_struct` recorded.
+    /// Field types and type-param bounds come from
+    /// `sem.decls.local_item_struct_fields` — the durable fact
+    /// `resolve_local_struct` recorded under this declaration's own identity.
     /// Field attributes (`#[wire(...)]`, `#[secret]`) and default-value
     /// expressions are read straight from the AST here, exactly matching
     /// `reify_struct`'s handling for a top-level struct — `StructFieldInfo`
     /// doesn't carry attributes, only `(name, type, visibility)`.
     fn reify_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let mangled_name = crate::name::mangle_local_item_name(&struct_decl.name, struct_decl.id);
         let Some(info) = self
-            .sem
-            .decls
-            .local_struct_fields
-            .get(&mangled_name)
+            .tysys
+            .resolutions
+            .defs()
+            .of_ast_id(struct_decl.id)
+            .and_then(|def| self.sem.decls.local_item_struct_fields.get(&def))
             .cloned()
         else {
             // `resolve_local_struct` inserts this unconditionally for every
@@ -1020,7 +1032,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
         self.pending_local_structs.push(TirStruct {
-            name: mangled_name,
+            name: info.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: ast::Visibility::Private,
             type_params,
@@ -1031,19 +1043,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         });
     }
 
-    /// The base type comes from `sem.decls.local_newtypes` — the durable,
-    /// mangled-name-keyed fact `resolve_local_newtype` recorded.
+    /// The base type comes from `sem.decls.local_item_newtypes` — the durable
+    /// fact `resolve_local_newtype` recorded under this declaration's own
+    /// identity.
     fn reify_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
         if !newtype_decl.type_params.is_empty() {
             // Generic local newtypes are unresolved (see `resolve_local_newtype`).
             return;
         }
-        let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
-        let Some(&type_id) = self.sem.decls.local_newtypes.get(&mangled_name) else {
+        let Some(&type_id) = self
+            .tysys
+            .resolutions
+            .defs()
+            .of_ast_id(newtype_decl.id)
+            .and_then(|def| self.sem.decls.local_item_newtypes.get(&def))
+        else {
             return;
         };
         self.pending_local_newtypes.push(TirNewtype {
-            name: mangled_name,
+            name: crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id),
             module_source: self.current_module_source.clone(),
             visibility: ast::Visibility::Private,
             type_id,
@@ -9107,9 +9125,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //     `resolve_func_ref_ident` → `lookup_func_ast_for_ref` and emits a
         //     `FuncRef` keyed by the function's defining module + original name.
         if self.sem.decls.imported_functions.contains(&ident.name)
-            && let Some(symbol) = self
-                .symbols
-                .lookup(&self.current_module_source, &ident.name)
+            && let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name)
             && matches!(symbol.kind, crate::symbol::SymbolKind::Function(_))
         {
             let type_args = self

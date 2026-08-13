@@ -197,6 +197,7 @@ impl Resolutions {
                 symbols,
                 defs: &defs,
                 binders: Vec::new(),
+                locals: Vec::new(),
                 scopes: &scopes,
                 refs: &mut refs,
             };
@@ -347,6 +348,11 @@ struct Resolver<'a> {
     /// Binders in scope, innermost last. A name found here is the enclosing
     /// item's parameter and no module scope is consulted for it.
     binders: Vec<IndexMap<String, AstId>>,
+    /// Items declared inside the function body being walked, innermost block
+    /// last. Filled as the walk passes each declaration, because a local item
+    /// is visible only after it — like a `let`, and unlike a module-level
+    /// declaration.
+    locals: Vec<IndexMap<String, DefId>>,
     scopes: &'a Scopes,
     refs: &'a mut IndexMap<AstId, Resolution>,
 }
@@ -374,6 +380,14 @@ impl Resolver<'_> {
     fn resolve_name(&self, name: &str) -> Resolution {
         if let Some(id) = self.binder(name) {
             return Resolution::Binder(id);
+        }
+        if let Some(def) = self
+            .locals
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).copied())
+        {
+            return Resolution::Def(def);
         }
         self.scopes
             .resolve(self.module, name)
@@ -446,6 +460,27 @@ impl AstVisitor for Resolver<'_> {
 
     fn visit_function(&mut self, func: &ast::Function) {
         self.in_scope(&func.type_params, None, |s| ast::walk_function(s, func));
+    }
+
+    /// A block scopes the items declared in it.
+    fn visit_block(&mut self, block: &ast::Block) {
+        self.locals.push(IndexMap::default());
+        ast::walk_block(self, block);
+        self.locals.pop();
+    }
+
+    /// A local item comes into scope at its own declaration, so it is recorded
+    /// before the rest of the block is walked and after everything before it.
+    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+        if let ast::Stmt::Item(item) = stmt
+            && let Some(def) = self.defs.of_ast_id(item.id())
+        {
+            let name = self.defs.name(def).to_string();
+            if let Some(scope) = self.locals.last_mut() {
+                scope.insert(name, def);
+            }
+        }
+        ast::walk_stmt(self, stmt);
     }
 
     fn visit_generic_params(&mut self, params: &[GenericParam]) {
@@ -694,6 +729,51 @@ mod tests {
     }
 
     /// An alias names what it aliases, not itself.
+    /// A `struct` declared in a function body shadows a module-level one of
+    /// the same name for the rest of that body, and nowhere else.
+    #[test]
+    fn a_function_local_item_shadows_only_inside_its_body() {
+        let source = r#"
+            pub struct Widget { a: i32 }
+            pub fn local() -> i32 {
+                struct Widget { b: i32 }
+                let w: Widget = Widget { b: 1 };
+                return w.b;
+            }
+            pub fn outer(w: Widget) -> i32 { return w.a; }
+        "#;
+        let (r, entry, _, modules) = resolve_with_ast(source, "");
+        let defs = r.defs();
+        let module_level = r.declared_in(&entry, "Widget").unwrap();
+
+        let mut sites = Vec::new();
+        for item in &modules[&entry].items {
+            let Item::Function(f) = item else { continue };
+            let named = |ty: &Type| head_site(ty).map(|s| (f.name.clone(), r.get(s)));
+            sites.extend(f.params.iter().filter_map(|p| named(&p.ty)));
+            if let Some(body) = &f.body {
+                for stmt in &body.stmts {
+                    if let ast::Stmt::Let(l) = stmt
+                        && let Some(ty) = &l.ty
+                    {
+                        sites.extend(named(ty));
+                    }
+                }
+            }
+        }
+        let answer = |func: &str| sites.iter().find(|(n, _)| n == func).map(|(_, a)| *a);
+
+        let Some(Resolution::Def(inner)) = answer("local") else {
+            panic!(
+                "the local `Widget` annotation resolved to {:?}",
+                answer("local")
+            );
+        };
+        assert_ne!(inner, module_level);
+        assert_eq!(defs.name(inner), "Widget");
+        assert_eq!(answer("outer"), Some(Resolution::Def(module_level)));
+    }
+
     #[test]
     fn an_alias_resolves_to_the_declaration_it_aliases() {
         let (r, entry, other) = resolve(

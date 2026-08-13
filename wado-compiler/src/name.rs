@@ -512,24 +512,6 @@ impl fmt::Display for MethodName {
     }
 }
 
-/// Extract the local part of a potentially module-qualified name.
-///
-/// Given a name like `module/path/LocalName`, returns `LocalName`.
-/// If there's no module path, returns the original string.
-///
-/// Examples:
-/// - `"./main.wado/Point::sum"` → `"Point::sum"`
-/// - `"core/string/String::len"` → `"String::len"`
-/// - `"Point::sum"` → `"Point::sum"`
-pub fn extract_local_name(name: &str) -> &str {
-    // Find the last '/' which separates module path from local name
-    if let Some(slash_pos) = name.rfind('/') {
-        &name[slash_pos + 1..]
-    } else {
-        name
-    }
-}
-
 /// Parsed components of a local method name (without module path).
 ///
 /// This is used to extract struct/trait/method info from names like:

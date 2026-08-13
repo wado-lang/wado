@@ -713,7 +713,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.lookup_struct_fields_in(name, &fallback).is_some() {
             return Some((name.to_string(), fallback));
         }
-        if let Some(symbol) = self.symbols.lookup(&fallback, name)
+        if let Some(symbol) = self.symbol_named(&fallback, name)
             && let crate::symbol::SymbolKind::Struct(_) = &symbol.kind
         {
             return Some((symbol.name.clone(), symbol.module_source().clone()));
@@ -1067,7 +1067,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name.to_string(),
             ));
         }
-        let symbol = self.symbols.lookup(&self.current_module_source, name)?;
+        let symbol = self.symbol_named(&self.current_module_source, name)?;
         let src = symbol.module_source().clone();
         let original = symbol.name.clone();
         let sig = self.tysys.signatures.function_sig(&src, &original)?.clone();
@@ -3284,7 +3284,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .is_some()
         {
             (name.clone(), self.current_module_source.clone())
-        } else if let Some(symbol) = self.symbols.lookup(&self.current_module_source, name) {
+        } else if let Some(symbol) = self.symbol_named(&self.current_module_source, name) {
             if let crate::symbol::SymbolKind::Struct(_) = &symbol.kind {
                 (symbol.name.clone(), symbol.module_source().clone())
             } else {

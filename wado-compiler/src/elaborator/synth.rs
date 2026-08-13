@@ -652,7 +652,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.sem.decls.function_return_types.contains_key(name) {
             return Some(CalleeRef::local(&self.current_module_source, name));
         }
-        let symbol = self.symbols.lookup(&self.current_module_source, name)?;
+        let symbol = self.symbol_named(&self.current_module_source, name)?;
         matches!(symbol.kind, crate::symbol::SymbolKind::Function(_))
             .then(|| CalleeRef::from_imported_symbol(symbol))
     }
