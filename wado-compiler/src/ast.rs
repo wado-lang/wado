@@ -3277,6 +3277,12 @@ pub struct TraitBound {
     /// Carries the parsed closure signature so the elaborator can constrain the
     /// generic parameter to that exact function type at use sites.
     pub fn_signature: Option<Box<FunctionType>>,
+    /// The declaration this bound names, when it was synthesised rather than
+    /// written. A bound the parser produced leaves this `None` and is answered
+    /// at its own site by the resolve pass; a bound the compiler rebuilds
+    /// already knows its referent, and recording it here is what keeps that
+    /// referent from being re-derived out of `name`.
+    pub resolved: Option<crate::defs::DefId>,
 }
 
 /// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Builder<Output = T>>`

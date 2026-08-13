@@ -1690,9 +1690,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let keyed: Vec<(ast::TraitBound, super::trait_env::DeclKey)> = bounds
             .iter()
             .map(|b| {
-                let key = known
-                    .get(&b.id)
-                    .and_then(crate::name::FqTraitName::canonical)
+                // A synthesised bound carries its referent, so it is read off
+                // the bound rather than looked up by an id the walk never saw.
+                let key = b
+                    .resolved
+                    .map(|def| self.tysys.resolutions.decl_key(def))
+                    .or_else(|| {
+                        known
+                            .get(&b.id)
+                            .and_then(crate::name::FqTraitName::canonical)
+                    })
                     .unwrap_or_else(|| self.trait_decl_at(b.id, &b.name));
                 (b.clone(), key)
             })

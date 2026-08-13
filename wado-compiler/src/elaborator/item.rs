@@ -1411,6 +1411,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 assoc_types: Vec::new(),
                 span: trait_decl.span,
                 fn_signature: None,
+                resolved: None,
             }],
         );
         scope.annotate_ctx.trait_ctx.self_type = Some(self_slot);
