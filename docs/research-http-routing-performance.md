@@ -184,3 +184,54 @@ map; take timing from ablation A/Bs.
    in the common case.
 2. Host side, separately: the 68 µs floor against Axum's 40 µs is `wado serve`'s
    own per-request path, not guest code.
+
+# Follow-up, 2026-08-13
+
+Same method, same host shape. Re-run of the `base` / `floor` ablation with Hono
+on Bun as a fourth row, so the guest handler's cost is read against the
+reference we are actually chasing rather than against Axum.
+
+| Request                         |   base | byteslice |  floor |    Bun |
+| ------------------------------- | -----: | --------: | -----: | -----: |
+| `GET /user`                     | 13,910 |    14,325 | 19,849 | 18,419 |
+| `GET /user/lookup/username/hey` | 13,147 |    13,379 | 20,556 | 18,336 |
+| `GET /event/abcd1234/comments`  | 13,054 |    14,055 | 19,944 | 17,069 |
+| `POST /event/abcd1234/comment`  | 12,419 |    12,990 | 20,573 | 17,294 |
+| `GET /static/index.html`        | 13,403 |    14,247 | 19,053 | 16,508 |
+
+Four servers share three cores here, so the absolute numbers sit well under a
+run that hosts one server; only the ratios within the run mean anything.
+
+**The floor is 8-19% _above_ Bun, and `base` is 20-28% below it.** The whole gap
+to Bun is the guest handler — route match, JSON body, parameter capture — not
+`wado serve`'s HTTP path. That reverses the priority the section above set:
+until the guest handler is cheaper, host-side work on the 68 µs floor cannot
+close anything, because the floor already wins.
+
+`byteslice` is `base` with the response body kept as the `ByteSlice` that
+`json::to_bytes` returns instead of `to_list()`-copied into a `List<u8>`
+(applied to `app.wado`): faster on all five shapes, +1.8% to +7.7%.
+
+Two more things settled:
+
+- **`Config::gc_heap_initial_size` is not the lever.** The copying collector's
+  semi-space stays small because growth only triggers when the post-GC live set
+  crowds the heap, and this workload's live set is tiny — so the theory was that
+  collections run constantly and a pre-sized heap would amortize them. Measured
+  at 16 MB and 64 MB against an unset default, interleaved: every delta inside
+  noise. Not applied.
+- **A field's wire name was rebuilt on every serialize.** `wire_name` fed
+  `apply_case` unconditionally; with a constant `policy` the optimizer folds the
+  call's *result* to a constant but cannot delete the call, because `apply_case`
+  allocates through bounds-checked writes and so carries `may_trap`. The
+  leftover call re-allocated its `String` argument per field of every serialized
+  struct. `wire_name` now tests `Identity` at the call site so a constant policy
+  prunes the branch. This is a `core:serde` fix, not a benchmark one.
+
+Where the guest cost sits, measured in a CLI loop (release JIT, per request):
+route match 1.03 µs, JSON body build 2.70 µs, both plus handler dispatch
+4.24 µs. `json::to_bytes` on a pre-built value is 0.87 µs of that, against
+0.27 µs for a bare `String::with_capacity(128)` plus a `push_str` of the same
+47 bytes — so roughly 0.6 µs per request is serializer machinery over what
+writing the bytes costs. That, and the router's per-hit allocations, are what
+the next round should take.
