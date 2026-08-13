@@ -224,11 +224,9 @@ impl EditSink for BodySink<'_> {
 /// `type_params` and `impl_type_params` empty, since CTFE runs after
 /// monomorphization.
 ///
-/// `inline_hint` is not consulted: where a body is placed says nothing about
-/// compile-time knowability. Nor is `stores`, which bears on whether the value
-/// a run produces may be substituted rather than on whether the body may run —
-/// a frame runs a storing callee for the writes it performs, and refuses only
-/// its result (see `run_call`).
+/// Neither `inline_hint` nor `stores` is consulted: where a body is placed says
+/// nothing about compile-time knowability, and a storing callee still runs for
+/// the writes it performs — `run_call` refuses only its result.
 #[must_use]
 pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
     func.effects.is_empty()
@@ -350,36 +348,21 @@ pub struct Interpreter<'a> {
     /// terminate without consuming budget. The `RefCell` borrow guard cannot
     /// serve this role, since it permits concurrent immutable borrows.
     call_stack: Vec<CalleeKey>,
-    /// Runs this function's walk already made and abandoned: the callee, whether
-    /// the caller promised to apply write-backs, and the values its parameters
-    /// bound. A run is a function of exactly those — a frame starts empty and
-    /// everything else it reads is fixed for the pass — so a failed one stays
-    /// failed, and re-running it re-pays a whole-body copy and a trackability
-    /// walk for the same refusal. The budget only falls, so a run it cut short
-    /// stays cut short too.
-    ///
-    /// Keyed by what the run consumed rather than by the node that spelled it.
-    /// An `ExprId` names a slot whose content a rewrite replaces, and the answer
-    /// belongs to the call, not to the site: two sites naming one callee with
-    /// one argument list share it, and the same site inside a loop does not,
-    /// since each iteration binds its own values.
-    ///
-    /// The region path memoizes its misses per frame instead
-    /// ([`FrameState::region_misses`]): a region is a block of the body being
-    /// walked, so it has no callee and no arguments to be keyed by.
+    /// Runs this walk abandoned. A run is a function of these three alone — a
+    /// frame starts empty and the rest is fixed for the pass — so a failed one
+    /// stays failed, and re-running it re-pays a whole-body copy for the same
+    /// refusal.
     call_misses: Vec<CallMiss>,
 }
 
-/// A run the engine abandoned, as [`Interpreter::call_misses`] remembers it.
 struct CallMiss {
     callee: CalleeKey,
     may_write: bool,
     args: Vec<Value>,
 }
 
-/// Ceiling on remembered misses. The list is scanned linearly, and a loop whose
-/// call binds fresh values each iteration would otherwise grow it without ever
-/// hitting it. Dropping a miss costs a re-run, never an answer.
+/// Ceiling on remembered misses; the list is scanned linearly. Dropping one
+/// costs a re-run, never an answer.
 const MAX_CALL_MISSES: usize = 64;
 
 fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
@@ -434,23 +417,20 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// What is left of the CTFE work budget. A fold the engine declined and a
-    /// budget at zero are the same refusal from the outside, so this is what
-    /// tells them apart.
+    /// What is left of the CTFE work budget: a declined fold and an exhausted
+    /// budget look alike from outside.
     #[must_use]
     pub fn step_budget(&self) -> u32 {
         self.step_budget
     }
 
-    /// Whether this walk already ran and abandoned the same call.
-    pub(crate) fn call_missed(&self, callee: CalleeKey, may_write: bool, args: &[Value]) -> bool {
-        self.call_misses.iter().any(|miss| {
-            miss.callee == callee && miss.may_write == may_write && miss.args == args
-        })
+    fn call_missed(&self, callee: CalleeKey, may_write: bool, args: &[Value]) -> bool {
+        self.call_misses
+            .iter()
+            .any(|miss| miss.callee == callee && miss.may_write == may_write && miss.args == args)
     }
 
-    /// Remember an abandoned run, up to [`MAX_CALL_MISSES`].
-    pub(crate) fn record_call_miss(&mut self, callee: CalleeKey, may_write: bool, args: Vec<Value>) {
+    fn record_call_miss(&mut self, callee: CalleeKey, may_write: bool, args: Vec<Value>) {
         if self.call_misses.len() < MAX_CALL_MISSES {
             self.call_misses.push(CallMiss {
                 callee,
@@ -522,21 +502,13 @@ impl<'a> Interpreter<'a> {
             Trackability::outside_frame(body, self.facts).aggregate_locals;
     }
 
-    /// Record which locals a `let` bound to `&GLOBAL`, so a read through one
-    /// resolves against the global it borrows.
+    /// Record which locals a `let` bound to `&GLOBAL`.
     ///
-    /// An index more than one binder names keeps no alias, whatever the other
-    /// binders say. The scan is flow-insensitive and reads the whole arena —
-    /// which is what lets a read still fold through a binding an in-place
-    /// rewrite has since displaced — so a second binder is one it cannot order
-    /// against the first: an orphaned `let x = &GLOBAL` must not speak for the
-    /// live binding that replaced it, and a live rebinding must not inherit the
-    /// alias its predecessor left. Both directions cost a fold and neither
-    /// costs a wrong one.
-    ///
-    /// Every binder counts, not only a `let`: a destructuring `let` and a match
-    /// arm bind through a pattern, and index reuse across the two is real.
-    /// Reading them off `body.pats` catches both without a walk.
+    /// An index more than one binder names keeps none: the scan reads the whole
+    /// arena — which is what lets a read fold through a binding an in-place
+    /// rewrite displaced — so it cannot order two binders against each other.
+    /// Pattern bindings count, since index reuse across a `let` and a match arm
+    /// is real.
     pub fn record_ref_global_aliases(&mut self, body: &Body) {
         self.frame.ref_global_aliases.clear();
         let mut seen: IndexSet<u32> = IndexSet::default();
@@ -571,8 +543,6 @@ impl<'a> Interpreter<'a> {
     pub fn enter_function(&mut self) {
         self.step_budget = DEFAULT_STEP_BUDGET;
         self.frame = FrameState::default();
-        // A miss the budget cut short is a miss only under the budget that cut
-        // it, and the reset hands the next function a fresh one.
         self.call_misses.clear();
         debug_assert!(
             self.call_stack.is_empty(),

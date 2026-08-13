@@ -105,12 +105,10 @@ Bindings:
   another handle can write through would go stale.
 - A borrow denotes what it points at rather than operating on it, so a local
   bound to `&CONST` carries the referent and reads project out of it. Which
-  locals those are is decided once per body and flow-insensitively, which is
-  what lets a read still fold through a binding an in-place rewrite has since
-  displaced. An index more than one binder names therefore carries nothing: a
-  scan that cannot order two bindings cannot say which one a read is governed
-  by, and an orphaned `let x = &GLOBAL` would otherwise speak for the live
-  binding that replaced it.
+  locals those are is decided once per body over the whole arena, so a read
+  folds through a binding an in-place rewrite displaced — and an index more than
+  one binder names therefore carries nothing, since such a scan cannot say which
+  binding governs a read.
 
 Control flow:
 
@@ -141,14 +139,12 @@ Calls:
   `break`, and a loop all reach a value. Recursion and total work are bounded.
   A body that does not produce a constant leaves the call in place, so a
   runtime trap inside it stays observable.
-- A call whose result may carry the caller's own storage runs for its writes but
-  yields no value. Two parameter kinds reach that storage — a `&mut` one, whose
-  referent the result may embed (`Formatter::new(&mut buf)`), and one the callee
-  declares it keeps past the call (`stores[p]`), whose alias leaves inside an
-  ordinary aggregate that neither the return type nor the write targets name.
-  The engine has no reference values, so either result would stand as a snapshot
-  the next write to that storage leaves stale. A scalar embeds nothing and is
-  handed back as usual.
+- A call whose result may carry the caller's storage runs for its writes but
+  yields no value: it would stand as a snapshot the next write to that storage
+  leaves stale. Two parameter kinds reach there — a `&mut` one, whose referent
+  the result may embed (`Formatter::new(&mut buf)`), and one `stores[p]` declares
+  the callee keeps, whose alias leaves inside an ordinary aggregate that neither
+  the return type nor the write targets name. A scalar embeds nothing.
 - A statement counts as executed only when everything it evaluates lands on a
   constant. Reducing an expression is not performing it: an unfolded call, a
   global write, or an operation that would trap all leave work undone, and
@@ -289,12 +285,10 @@ Regions:
   `Formatter { buf: &mut __r }` is the shape waiting on this, and so is every
   result a `stores` callee hands back.
 
-  The refusal is whole-value, which costs more than the alias it protects: a
-  scalar field cannot name storage, so the scalars such a result carries are
-  safe to project and are refused anyway. `Array::slice` is where that shows —
-  it returns the backing it was given alongside two bounds it computed itself,
-  and the bounds stop folding because the backing shares their aggregate.
-  Naming the place per field is what separates them.
+  The refusal is whole-value, so it costs more than the alias it protects: a
+  scalar field names no storage yet is refused with the rest. `Array::slice`
+  shows it — the two bounds it computes stop folding because the backing it was
+  handed shares their aggregate.
 - An aggregate that is not a byte sequence has no way back into the IR. A
   `List<T>` of scalars would want the `ArrayLiteral` shape, and a plain struct
   a `StructLiteral` over its materialized fields; both are exits to add beside

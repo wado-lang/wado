@@ -718,27 +718,18 @@ impl Interpreter<'_> {
         if aliased_write_targets(&targets, &places) {
             return None;
         }
-        // A callee may hand a parameter's storage back inside its result —
-        // `Formatter::new(&mut buf)` returns a `Formatter` holding that borrow.
-        // The engine has no reference values, so the result would stand as a
-        // snapshot of the referent and every later write to that storage would
-        // land beside the copy while the referent went stale. A scalar embeds
-        // nothing, so only an aggregate result is refused.
-        //
-        // Two parameter kinds reach the caller's storage. A `&mut` one is
-        // whatever this site borrows. A stored one is the source's own
-        // declaration that the callee keeps the reference past the call, which
-        // is what `stores[p]` says and what no analysis of the caller can see —
-        // the alias leaves inside an ordinary aggregate, so neither
-        // `returns_reference` nor the write targets name it.
+        // A result may embed a parameter's storage — `Formatter::new(&mut buf)`
+        // returns a `Formatter` holding that borrow, and `stores[p]` declares
+        // the same of a shared one. The engine has no reference values, so it
+        // would stand as a snapshot the next write to that storage leaves
+        // stale. A scalar embeds nothing.
         let stores_a_reference = callee.params.iter().any(|p| {
             callee.stores.contains(&p.name) && self.type_table.is_reference_shaped(p.type_id)
         });
         let may_embed_caller_storage = !targets.is_empty() || stores_a_reference;
 
-        // Everything below is the expensive half — a whole-body copy and a
-        // trackability walk over it — and it answers the same way for the same
-        // callee and arguments, so a run already abandoned is not re-paid.
+        // Below here is the expensive half: a whole-body copy and a
+        // trackability walk over it.
         let args: Vec<Value> = bound.iter().map(|(_, value)| value.clone()).collect();
         if self.call_missed(key, may_write, &args) {
             return None;

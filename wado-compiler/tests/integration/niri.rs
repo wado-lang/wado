@@ -8214,11 +8214,8 @@ fn a_stored_reference_parameter_does_not_fold_into_a_snapshot() {
     //     p.x = 9;
     //     return h.inner.x;
     // }
-    // `stores[p]` declares that the callee keeps the reference past the call,
-    // so at run time `h.inner` aliases `p` and scenario() == 9. The alias
-    // escapes inside an aggregate rather than as the return type, which is
-    // what `a_ref_returning_callee_does_not_fold_through_the_lost_alias`
-    // covers — a frame that bound the result as a value snapshot answers 7.
+    // `h.inner` aliases `p`, so scenario() == 9. The alias escapes inside an
+    // aggregate rather than as the return type, which the sibling test covers.
     let mut table = TypeTable::new();
     let inner_ty = table.make_struct("Inner".to_string(), ModuleSource::default());
     let holder_ty = table.make_struct("Holder".to_string(), ModuleSource::default());
@@ -8284,10 +8281,8 @@ fn a_stored_reference_parameter_does_not_fold_into_a_snapshot() {
 
 #[test]
 fn a_ref_global_alias_rebound_by_a_later_let_does_not_vouch_for_it() {
-    // `let cfg = &CONFIG; let cfg = Cfg { width: 1 };` — one index, two
-    // bindings. The alias scan is flow-insensitive and reads the whole arena,
-    // so without noticing the second binding it answers `CONFIG` for every
-    // mention of the index, including the ones the rebinding governs.
+    // One index, two bindings: the flow-insensitive scan cannot say which one
+    // governs the read.
     let mut table = TypeTable::new();
     let cfg_ty = table.make_struct("Cfg".to_string(), ModuleSource::default());
     let module = ModuleSource::default();
@@ -8334,10 +8329,8 @@ fn a_ref_global_alias_rebound_by_a_later_let_does_not_vouch_for_it() {
 
 #[test]
 fn an_orphaned_ref_global_binding_does_not_vouch_for_a_live_local() {
-    // The arena keeps every statement an in-place rewrite displaced, and the
-    // alias scan walks the arena rather than the reachable body. A `let cfg =
-    // &CONFIG` no block refers to any more cannot run, so it must not speak
-    // for the binding that replaced it.
+    // A displaced `let cfg = &CONFIG` stays in the arena and cannot run, so it
+    // must not speak for the binding that replaced it.
     let mut table = TypeTable::new();
     let cfg_ty = table.make_struct("Cfg".to_string(), ModuleSource::default());
     let module = ModuleSource::default();
@@ -8383,16 +8376,12 @@ fn an_orphaned_ref_global_binding_does_not_vouch_for_a_live_local() {
 
 #[test]
 fn a_run_the_engine_abandoned_is_not_paid_for_twice() {
-    // A call is visited more than once per pass — the reducer asks at the node,
-    // and a projecting parent asks again — and running one copies the whole
-    // callee body and walks it for trackability before anything can refuse it.
-    // A refusal is a function of the callee and the arguments alone, so the
-    // second visit must answer from the first rather than re-pay for it. The
-    // budget is what tells the two apart: both answer `Unevaluated`.
+    // Running a call copies the whole callee body before anything can refuse
+    // it, and a call is visited more than once per pass. Both visits answer
+    // `Unevaluated`, so the budget is what shows the second was free.
     let table = TypeTable::new();
-    // Statements the frame performs, then one it cannot: local 9 is bound
-    // nowhere, so the return value never lands on a constant and the run is
-    // abandoned — after the budget has been charged for everything before it.
+    // Local 9 is bound nowhere, so the run is abandoned after the statements
+    // before it were charged for.
     let waster = make_pure_fn_stmts(
         "waster",
         vec![],
@@ -8435,13 +8424,11 @@ fn a_run_the_engine_abandoned_is_not_paid_for_twice() {
 
 #[test]
 fn an_abandoned_run_is_remembered_per_argument_list() {
-    // The memo keys on what the run consumed, so a second call to the same
-    // callee with different arguments is a different run and must still be
-    // attempted — a callee that folds for one argument and not another would
-    // otherwise be refused for both.
+    // The memo keys on the arguments too, or a callee that folds for one
+    // argument and not another would be refused for both.
     let table = TypeTable::new();
-    // `fn only_zero(x) { let g = 1 / x; return g; }` — folds at x = 1, and at
-    // x = 0 the division would trap, so the run is abandoned.
+    // `fn only_zero(x) { return 6 / x; }` — at x = 0 the division would trap,
+    // so the run is abandoned; at x = 3 it folds to 2.
     let only_zero = make_pure_fn(
         "only_zero",
         vec![("x", TypeTable::I32)],
