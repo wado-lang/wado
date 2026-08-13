@@ -303,10 +303,8 @@ impl TypeSystem {
             Type::Generic(g) => {
                 let resolved = type_table.get(concrete_id).clone();
                 match resolved {
-                    ResolvedType::GenericInstance {
-                        name, type_args, ..
-                    } => {
-                        if name != g.name {
+                    ResolvedType::GenericInstance { def, type_args } => {
+                        if type_table.def_name(def) != g.name {
                             return false;
                         }
                         for (i, inner) in g.args.iter().enumerate() {
@@ -861,35 +859,22 @@ impl TypeSystem {
             ResolvedType::Enum { .. } => Some(true),
             // A bitmask has no members to recurse into, like a plain `enum`.
             ResolvedType::Flags { .. } => Some(true),
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => {
-                let info = scope.struct_fields_in(name, module_source)?;
+            ResolvedType::Struct { def, .. } => {
+                let info = scope.struct_fields_of(def.decl()?)?;
                 Some(walk_struct(info, &[], visit))
             }
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => {
+            ResolvedType::Variant { def } => {
                 if tr == OnBoundTrait::Ord {
                     return None;
                 }
-                let info = scope.variant_case_in(name, module_source)?;
+                let info = scope.variant_cases_of(*def)?;
                 Some(walk_variant(info, &[], visit))
             }
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => {
-                if let Some(info) = scope.struct_fields_in(name, module_source) {
+            ResolvedType::GenericInstance { def, type_args } => {
+                if let Some(info) = scope.struct_fields_of(*def) {
                     Some(walk_struct(info, type_args, visit))
                 } else if tr != OnBoundTrait::Ord
-                    && let Some(info) = scope.variant_case_in(name, module_source)
+                    && let Some(info) = scope.variant_cases_of(*def)
                 {
                     Some(walk_variant(info, type_args, visit))
                 } else {
@@ -990,12 +975,8 @@ impl TypeSystem {
     pub(super) fn is_ref_mut_identity(&self, scope: &TypeLookup, resolved: &ResolvedType) -> bool {
         match resolved {
             ResolvedType::Variant { .. } | ResolvedType::Function { .. } => false,
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => {
-                if scope.variant_case_in(name, module_source).is_some() {
+            ResolvedType::GenericInstance { def, .. } => {
+                if scope.variant_cases_of(*def).is_some() {
                     false
                 } else {
                     self.is_ref_identity(resolved)
@@ -1078,37 +1059,13 @@ impl TypeSystem {
 
         if let Some(tr) = on_bound
             && tr.is_field_recursive()
-            && let ResolvedType::Enum {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Flags {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } = resolved
+            && let Some((name, module_source)) = self.type_table.borrow().nominal_head(type_id)
         {
             let serde_blocked = tr.is_serde()
                 && self.has_real_trait_impl_for_type(
                     ctx,
                     scope,
-                    &Receiver::Type(FqTypeName::of_head(module_source, name)),
+                    &Receiver::Type(FqTypeName::of_head(&module_source, &name)),
                     trait_,
                 );
             if !serde_blocked
@@ -1119,24 +1076,22 @@ impl TypeSystem {
                 if let Some(key) = self.synth_trait_key(tr) {
                     self.type_table
                         .borrow_mut()
-                        .record_bound_driven_synth_request(name, module_source, &key);
+                        .record_bound_driven_synth_request(&name, &module_source, &key);
                 }
                 return true;
             }
         }
 
-        if let ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } = &resolved
+        if let ResolvedType::Struct { def, .. } = &resolved
             && on_bound == Some(OnBoundTrait::Default)
-            && self.auto_derive_default_struct_type(scope, name).is_some()
+            && let Some(name) = def.decl().map(|d| self.type_table.borrow().def_name(d).to_string())
+            && self.auto_derive_default_struct_type(scope, &name).is_some()
         {
             if let Some(key) = on_bound.and_then(|t| self.synth_trait_key(t)) {
+                let module_source = self.type_table.borrow().def_module(def.decl().unwrap()).clone();
                 self.type_table
                     .borrow_mut()
-                    .record_bound_driven_synth_request(name, module_source, &key);
+                    .record_bound_driven_synth_request(&name, &module_source, &key);
             }
             return true;
         }
@@ -1145,27 +1100,16 @@ impl TypeSystem {
         // shared eligibility predicate accepts it, so nothing needs recording
         // for synthesis to find later.
         let plain_reflect_subject = match (&resolved, on_bound) {
-            (
-                ResolvedType::Struct {
-                    decl_name: name,
-                    module_source,
-                    ..
-                },
-                Some(OnBoundTrait::ReflectStruct),
-            ) => scope
-                .struct_fields_in(name, module_source)
+            (ResolvedType::Struct { def, .. }, Some(OnBoundTrait::ReflectStruct)) => def
+                .decl()
+                .and_then(|d| scope.struct_fields_of(d))
                 .is_some_and(|info| self.has_visible_fields(scope, info)),
             // Kinds are disjoint, so a variant never satisfies `ReflectStruct` —
             // its payload layout registers struct-shaped fields under its own
             // name and would otherwise answer the struct query too.
-            (
-                ResolvedType::Variant {
-                    name,
-                    module_source,
-                    ..
-                },
-                Some(OnBoundTrait::ReflectVariant),
-            ) => scope.variant_case_in(name, module_source).is_some(),
+            (ResolvedType::Variant { def }, Some(OnBoundTrait::ReflectVariant)) => {
+                scope.variant_cases_of(*def).is_some()
+            }
             (ResolvedType::Enum { .. }, Some(OnBoundTrait::ReflectEnum))
             | (ResolvedType::Flags { .. }, Some(OnBoundTrait::ReflectFlags)) => true,
             _ => false,
@@ -1177,54 +1121,50 @@ impl TypeSystem {
         // A generic instance reflects through its base declaration:
         // `Pair<String>` is a struct because `Pair` is, and inherits the
         // declaration's impl by substitution.
-        if let ResolvedType::GenericInstance {
-            name,
-            module_source,
-            ..
-        } = &resolved
+        if let ResolvedType::GenericInstance { def, .. } = &resolved
             && match on_bound {
                 Some(OnBoundTrait::ReflectStruct) => {
                     // Kinds are disjoint: a generic variant instance registers
                     // struct-shaped fields for its payload under the same name,
                     // so the struct query alone would claim it.
-                    scope.variant_case_in(name, module_source).is_none()
+                    scope.variant_cases_of(*def).is_none()
                         && scope
-                            .struct_fields_in(name, module_source)
+                            .struct_fields_of(*def)
                             .is_some_and(|info| self.has_visible_fields(scope, info))
                         && self.is_reflect_eligible(type_id)
                 }
                 Some(OnBoundTrait::ReflectVariant) => {
-                    scope.variant_case_in(name, module_source).is_some()
+                    scope.variant_cases_of(*def).is_some()
                         && self.is_reflect_eligible(type_id)
                 }
                 _ => false,
             }
         {
             if let Some(key) = on_bound.and_then(|t| self.synth_trait_key(t)) {
+                let (name, module_source) = self
+                    .type_table
+                    .borrow()
+                    .nominal_head(type_id)
+                    .expect("a generic instance names a declaration");
                 self.type_table
                     .borrow_mut()
-                    .record_bound_driven_synth_request(name, module_source, &key);
+                    .record_bound_driven_synth_request(&name, &module_source, &key);
             }
             return true;
         }
 
         // Get the type name and type args for looking up implementations
         let (type_name, type_args) = match &resolved {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
+            ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. } => {
+                let (name, module_source) = self
+                    .type_table
+                    .borrow()
+                    .nominal_head(type_id)
+                    .expect("a nominal type names a declaration");
+                (FqTypeName::of_head(&module_source, &name), None)
             }
-            | ResolvedType::Enum {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => (FqTypeName::of_head(module_source, name), None),
             // The raw GC array `Array<T>` carries its element as a single type
             // arg, so trait impls (`impl IntoIterator for Array<T>`) resolve
             // under the canonical name "Array".
@@ -1232,19 +1172,21 @@ impl TypeSystem {
                 FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME),
                 Some(vec![*elem]),
             ),
-            ResolvedType::GenericInstance {
-                name,
-                type_args,
-                module_source,
-                ..
-            } => (
-                FqTypeName::of_head(module_source, name),
-                if type_args.is_empty() {
-                    None
-                } else {
-                    Some(type_args.clone())
-                },
-            ),
+            ResolvedType::GenericInstance { type_args, .. } => {
+                let (name, module_source) = self
+                    .type_table
+                    .borrow()
+                    .nominal_head(type_id)
+                    .expect("a generic instance names a declaration");
+                (
+                    FqTypeName::of_head(&module_source, &name),
+                    if type_args.is_empty() {
+                        None
+                    } else {
+                        Some(type_args.clone())
+                    },
+                )
+            }
             ResolvedType::Ref(inner) => {
                 // References always implement Eq via ref.eq (identity comparison)
                 if is_eq {
@@ -1286,17 +1228,17 @@ impl TypeSystem {
                 // e.g., I::Iter: Iterator when IntoIterator::Iter: Iterator
                 return bounds.iter().any(|b| b.base_name() == trait_name);
             }
-            ResolvedType::Newtype {
-                name,
-                base_type,
-                module_source,
-                ..
-            } => {
+            ResolvedType::Newtype { base_type, .. } => {
+                let (name, module_source) = self
+                    .type_table
+                    .borrow()
+                    .nominal_head(type_id)
+                    .expect("a newtype names a declaration");
                 // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
                 if self.find_trait_impl_for_type(
                     ctx,
                     scope,
-                    &Receiver::Type(FqTypeName::of_head(module_source, name)),
+                    &Receiver::Type(FqTypeName::of_head(&module_source, &name)),
                     trait_,
                 ) {
                     return true;
@@ -1308,15 +1250,16 @@ impl TypeSystem {
             // `()` names no declaring module, so an `impl Trait for ()` is
             // indexed under the builtin spelling the unit type mangles as.
             ResolvedType::Unit => (FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME), None),
-            ResolvedType::Flags {
-                name,
-                module_source,
-                ..
-            } => {
+            ResolvedType::Flags { .. } => {
+                let (name, module_source) = self
+                    .type_table
+                    .borrow()
+                    .nominal_head(type_id)
+                    .expect("a flags type names a declaration");
                 if self.find_trait_impl_for_type(
                     ctx,
                     scope,
-                    &Receiver::Type(FqTypeName::of_head(module_source, name)),
+                    &Receiver::Type(FqTypeName::of_head(&module_source, &name)),
                     trait_,
                 ) {
                     return true;
@@ -1826,9 +1769,11 @@ impl TypeSystem {
     /// bound is checked element-wise. A non-tuple argument is a pack of one.
     pub(super) fn pack_elements(&self, type_arg: TypeId) -> Vec<TypeId> {
         match self.type_table.borrow().get(type_arg) {
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } if TypeTable::is_tuple_type(name) => type_args.clone(),
+            ResolvedType::GenericInstance { def, type_args }
+                if TypeTable::is_tuple_type(self.type_table.borrow().def_name(*def)) =>
+            {
+                type_args.clone()
+            }
             _ => vec![type_arg],
         }
     }

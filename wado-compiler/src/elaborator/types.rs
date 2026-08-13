@@ -2303,6 +2303,25 @@ impl<'a> TypeLookup<'a> {
         self.all_newtypes.get(&def?).copied()
     }
 
+    /// The fields of the struct `def` declares.
+    ///
+    /// The declaration is the key: nothing here re-resolves a spelling, so a
+    /// caller that reached `def` off a type cannot land on another module's
+    /// same-named struct.
+    pub(super) fn struct_fields_of(
+        &self,
+        def: crate::defs::DefId,
+    ) -> Option<&'a StructFieldInfo> {
+        self.local_item_struct_fields
+            .get(&def)
+            .or_else(|| self.all_struct_fields.get(&def))
+    }
+
+    /// The cases of the variant `def` declares.
+    pub(super) fn variant_cases_of(&self, def: crate::defs::DefId) -> Option<&'a VariantInfo> {
+        self.all_variant_cases.get(&def)
+    }
+
     /// Which declaration `name` reaches from the module this view stands in.
     ///
     /// The one place a `TypeLookup` turns a spelling into an identity, and it
