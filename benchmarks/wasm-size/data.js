@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786545865271,
+  "lastUpdate": 1786617351975,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47533,6 +47533,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/842f4ecbddad6be2037700ac1704903d431f9a87"
         },
         "date": 1786545864772,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265490,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7209fe075fb61e56028d400e7866d5b491ce111f",
+          "message": "Merge pull request #1798 from wado-lang/claude/http-router-performance-5wgqvh\n\nfix(elaborate): type a closure by its `return`, wherever the `return` nests",
+          "timestamp": "2026-08-13T19:23:57+09:00",
+          "tree_id": "2d9976f2f4d75f48ae8c0d0b78fca70dcb587c3d",
+          "url": "https://github.com/wado-lang/wado/commit/7209fe075fb61e56028d400e7866d5b491ce111f"
+        },
+        "date": 1786617351425,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
