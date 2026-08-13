@@ -222,7 +222,7 @@ Two more things settled:
   noise. Not applied.
 - **A field's wire name was rebuilt on every serialize.** `wire_name` fed
   `apply_case` unconditionally; with a constant `policy` the optimizer folds the
-  call's *result* to a constant but cannot delete the call, because `apply_case`
+  call's _result_ to a constant but cannot delete the call, because `apply_case`
   allocates through bounds-checked writes and so carries `may_trap`. The
   leftover call re-allocated its `String` argument per field of every serialized
   struct. `wire_name` now tests `Identity` at the call site so a constant policy
