@@ -4951,8 +4951,8 @@ fn try_lower_comparison(
         let receiver = make_ref(left, type_table);
         let arg_ref = make_ref(right, type_table);
         let ordering_def = type_table
-            .decl_named_in("Ordering", &ModuleSource::prelude())
-            .expect("`Ordering` is declared in the prelude");
+            .compiler_item_def(crate::compiler_item::CompilerItem::Ordering)
+            .expect("`Ordering` is a registered compiler item");
         let ordering_type_id = type_table.intern(ResolvedType::Enum { def: ordering_def });
         let method_info =
             LocalMethodName::new(base_struct_name, Some(ord_trait), "cmp".to_string())

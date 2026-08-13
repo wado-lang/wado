@@ -1168,10 +1168,25 @@ impl TypeTable {
         &self,
         item: crate::compiler_item::CompilerItem,
     ) -> Option<crate::defs::DefId> {
-        self.compiler_items
+        if let Some(def) = self
+            .compiler_items
             .variant_decl(item)
             .or_else(|| self.compiler_items.struct_decl(item))
             .and_then(|ast| self.defs.of_ast_id(ast))
+        {
+            return Some(def);
+        }
+        // An enum item records `(module, name)` rather than its declaring
+        // node, so its identity comes from the module the registry knows —
+        // not from a module a caller guessed.
+        let (module, name) = match self.compiler_items.get(item)? {
+            crate::compiler_item::Resolved::Enum {
+                module_source,
+                name,
+            } => (module_source.clone(), name.clone()),
+            _ => return None,
+        };
+        self.decl_named_in(&name, &module)
     }
 
     /// The declaration `module` declares under `name`.
