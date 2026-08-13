@@ -510,6 +510,30 @@ compiles, passes the suite, and ends with a mechanical completion check.
       `ExprKind::GlobalVarGet`, which is a NIR node carrying a global's name —
       a real problem, and a different one. Read each candidate.
 
+  - [ ] An instantiation records the declaration it came from.
+        `TypeTable::decl_of_type` answers for a nominal type out of
+        `symbol_by_type`, but for a `GenericInstance` it _derives_ the answer at
+        query time: `find_decl_type_by_name(name, module)` scans for the base
+        declaration's own type, then reads that. So the identity of `Option<i32>`
+        depends on the bare `Option` type still being in the table — and
+        `TypeTable::prune` keeps only what is reachable, which after
+        monomorphization is the instances, not the base.
+
+        This is not hypothetical. Rewriting `as_option` to compare declarations
+        instead of the literal `"Option"` passed every unit and fixture test and
+        broke `package-gale` at WIR validation with
+        `type mismatch: expected (ref $type), found nullref` — codegen reads
+        `as_option` to decide a nullable representation, and got `None` for a
+        value that is an `Option`. `is_result` took the same fix and passed,
+        which is what makes the gap easy to miss.
+
+        The fix is that interning an instantiation registers it against its base
+        declaration, the way `register_mono_type` already does for
+        monomorphizations, so the answer is stored rather than re-derived from a
+        spelling that outlives what it names. Nothing else in this step is safe
+        until it is: every consumer that stops reading `(name, module_source)`
+        off a type starts depending on `decl_of_type` instead.
+
   - [ ] TIR declarations carry identity. This is the part that is structural
         rather than mechanical. `Lowering` keys its variant-case and
         struct-field maps by `TirVariant` / `TirStruct`'s own
