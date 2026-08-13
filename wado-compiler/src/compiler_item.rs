@@ -1193,6 +1193,8 @@ pub enum Resolved {
     Struct {
         module_source: ModuleSource,
         name: String,
+        /// The declaring node — see [`Self::Variant`]'s.
+        decl: crate::ast::AstId,
     },
     Variant {
         module_source: ModuleSource,
@@ -1438,6 +1440,7 @@ impl CompilerItems {
             Resolved::Struct {
                 module_source,
                 name,
+                ..
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Struct", other),
         }
@@ -1458,6 +1461,7 @@ impl CompilerItems {
             Resolved::Struct {
                 module_source,
                 name,
+                ..
             } => Some((module_source.clone(), name.clone())),
             _ => None,
         }
@@ -1575,6 +1579,14 @@ impl CompilerItems {
     pub fn variant_decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
         match self.get(item)? {
             Resolved::Variant { decl, .. } => Some(*decl),
+            _ => None,
+        }
+    }
+
+    /// The declaring node of a [`CompilerItemKind::Struct`] item.
+    pub fn struct_decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
+        match self.get(item)? {
+            Resolved::Struct { decl, .. } => Some(*decl),
             _ => None,
         }
     }

@@ -232,6 +232,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_struct_compiler_item(
                             &type_table,
                             &struct_decl.attrs,
+                            struct_decl.id,
                             &struct_decl.name,
                             module_source,
                             struct_decl.span,

@@ -98,9 +98,9 @@ pub fn cm_payload_type_from_type_id(
     }
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => primitive_to_cm_scalar(prim).map(CmPayloadType::Scalar),
-        ResolvedType::Struct {
-            decl_name: name, ..
-        } if name == "String" => Some(CmPayloadType::String),
+        ResolvedType::Struct { .. } if type_table.is_string(type_id) => {
+            Some(CmPayloadType::String)
+        }
         ResolvedType::GenericInstance { type_args, .. }
             if type_table.is_result(type_id) && type_args.len() == 2 =>
         {

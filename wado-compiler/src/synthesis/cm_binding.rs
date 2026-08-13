@@ -1236,6 +1236,7 @@ mod tests {
             Resolved::Struct {
                 module_source: ModuleSource::string(),
                 name: "String".to_string(),
+                decl: crate::ast::AstId::fresh(),
             },
         );
         let _ = tt.compiler_items_mut().register(
@@ -1243,6 +1244,7 @@ mod tests {
             Resolved::Struct {
                 module_source: ModuleSource::list(),
                 name: "List".to_string(),
+                decl: crate::ast::AstId::fresh(),
             },
         );
     }

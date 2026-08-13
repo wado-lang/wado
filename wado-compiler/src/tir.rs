@@ -1432,6 +1432,20 @@ impl TypeTable {
         self.decl_of_type(id) == Some(decl)
     }
 
+    /// Whether `id` is the compiler's `String` struct.
+    ///
+    /// Compares declarations; `name == "String"` answered yes for any module's
+    /// own `String`.
+    pub fn is_string(&self, id: TypeId) -> bool {
+        let Some(decl) = self
+            .compiler_items
+            .struct_decl(crate::compiler_item::CompilerItem::String)
+        else {
+            return false;
+        };
+        self.decl_of_type(id) == Some(decl)
+    }
+
     pub fn compiler_enum_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
         self.compiler_items.enum_name(item)
     }

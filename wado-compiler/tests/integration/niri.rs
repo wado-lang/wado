@@ -3682,6 +3682,7 @@ fn register_seq_containers(table: &mut TypeTable) {
                 wado_compiler::compiler_item::Resolved::Struct {
                     module_source: ModuleSource::default(),
                     name: name.to_string(),
+                    decl: wado_compiler::ast::AstId::fresh(),
                 },
             )
             .expect("a struct item takes a struct");
