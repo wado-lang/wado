@@ -209,7 +209,7 @@ fn collect_node_spans(module: &Module) -> Vec<(AstId, Span)> {
 
 /// Repatriate same-line trailing comments out of `leading[*]` and
 /// `dangling` into `trailing[owner]`, using the
-/// [`NodeLookup::trailing_owner`] rule. Idempotent: a second call is
+/// `NodeLookup::trailing_owner` rule. Idempotent: a second call is
 /// a no-op because the surviving `leading`/`dangling` entries by
 /// definition have no trailing owner.
 pub fn populate_trailing(trivia: &mut TriviaMap, module: &Module) {

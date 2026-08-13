@@ -285,7 +285,7 @@ pub enum ModuleSource {
     },
     /// Entry point module (the main file being compiled)
     EntryPoint {
-        /// Filename of the entry point (e.g., "hello.wado", "<stdin>", "<entry>")
+        /// Filename of the entry point (e.g., `"hello.wado"`, `"<stdin>"`, `"<entry>"`)
         filename: InternedStr,
     },
     /// Module loaded through a Kiln invocation redirect, created when an import

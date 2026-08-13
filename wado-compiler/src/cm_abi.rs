@@ -187,7 +187,7 @@ fn cm_align_result(ok: &Type, err: &Type) -> u32 {
     1_u32.max(cm_align(ok)).max(cm_align(err))
 }
 
-/// Layout for option<T>: discriminant offset + payload offset.
+/// Layout for `option<T>`: discriminant offset + payload offset.
 pub fn layout_option(inner: &Type) -> CmLayout {
     let payload_align = cm_align(inner);
     let payload_size = cm_size(inner);
@@ -222,7 +222,7 @@ pub fn layout_result(ok: &Type, err: &Type) -> CmLayout {
     }
 }
 
-/// Registry-aware layout for option<T>.
+/// Registry-aware layout for `option<T>`.
 pub fn layout_option_with_registry(
     inner: &Type,
     registry: &crate::component_model::CmInterfaceRegistry,
@@ -230,7 +230,7 @@ pub fn layout_option_with_registry(
     layout_option_with_registry_scoped(inner, registry, None)
 }
 
-/// Package-scoped registry-aware layout for option<T>.
+/// Package-scoped registry-aware layout for `option<T>`.
 pub fn layout_option_with_registry_scoped(
     inner: &Type,
     registry: &crate::component_model::CmInterfaceRegistry,

@@ -65,7 +65,7 @@ impl Interpreter<'_> {
     /// Reduce `e` to its flow-sensitive constant value or collapse a constant
     /// branch, committing every edit through `sink`. Both value sources — the
     /// flow-sensitive candidate and a self-contained region run — land through
-    /// [`Self::commit_fold`], so what is promoted, materialized, memoized, and
+    /// `Self::commit_fold`, so what is promoted, materialized, memoized, and
     /// refused is decided in one place.
     pub fn reduce_local<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
         if let Some(value) = self.flow_fold_candidate(sink.body(), e)

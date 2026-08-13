@@ -389,7 +389,7 @@ fn named_decl_of(ty: &ResolvedType) -> Option<(&String, &ModuleSource)> {
 ///
 /// Ordered pipeline: import adapters, export adapters, the shared task-return
 /// signature, test-world bindings, payload validation (producing the
-/// [`RecordPayloadsValidated`] witness), task-return stripping, and finally
+/// `RecordPayloadsValidated` witness), task-return stripping, and finally
 /// the async/resource primitive rewrites (consuming the witness).
 ///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen

@@ -376,7 +376,7 @@ use crate::compiler_host::LogLevel;
 
 /// Build a `kiln:` URI from a filesystem path, normalizing and percent-encoding
 /// it so the result is valid even for URI-unsafe paths (e.g. spaces);
-/// [`strip_kiln_scheme`] reverses it losslessly. The single producer — the CLI
+/// `strip_kiln_scheme` reverses it losslessly. The single producer — the CLI
 /// and LSP both call it, so their redirect URIs match.
 ///
 /// `kiln:` (not `file://`) avoids a spurious `//`, which the qualified-name

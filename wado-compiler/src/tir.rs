@@ -89,7 +89,7 @@ impl TypeParamId {
 /// and a partially concrete target leaves gaps no positional list can express.
 /// Keying by position asks the caller to reconstruct that, which it cannot;
 /// `impl<T, ..F> Emit for T` is enough to break the reconstruction.
-/// [`MethodSig::instantiate_call`] takes the same view.
+/// `instantiate_call` takes the same view.
 #[derive(Debug, Clone, Default)]
 pub struct SubstitutionContext {
     substitutions: IndexMap<TypeId, TypeId>,
@@ -458,7 +458,7 @@ pub enum ResolvedType {
         assoc_type_bindings: Vec<(String, TypeId)>,
     },
     /// Raw GC array intrinsic (`Array<T>`)
-    /// This is the underlying storage type for String and List<T> structs
+    /// This is the underlying storage type for `String` and `List<T>` structs
     BuiltinArray(TypeId),
     /// Newtype: a distinct type wrapping a base type with the same representation.
     /// Created by `type T = U;` declarations.
@@ -481,7 +481,7 @@ pub enum ResolvedType {
 }
 
 impl ResolvedType {
-    /// Get the module path as a Vec<String> for backwards compatibility.
+    /// Get the module path as a `Vec<String>` for backwards compatibility.
     /// This is a transitional helper during the migration to `ModuleSource`.
     #[must_use]
     pub fn module_path(&self) -> Vec<String> {
@@ -1283,9 +1283,9 @@ impl TypeTable {
     }
 
     /// Canonical name of a registered struct / trait / variant / enum
-    /// [`CompilerItem`], forwarded from the registry so call sites read
-    /// `tt.compiler_struct_name(item)` instead of chaining through
-    /// `compiler_items()`.
+    /// [`CompilerItem`](crate::compiler_item::CompilerItem), forwarded from the
+    /// registry so call sites read `tt.compiler_struct_name(item)` instead of
+    /// chaining through `compiler_items()`.
     pub fn compiler_struct_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
         self.compiler_items.struct_name(item)
     }
@@ -1346,7 +1346,7 @@ impl TypeTable {
     }
 
     /// Owned `(module, name)` for a registered struct / enum item — forwards
-    /// the registry's [`CompilerItems::struct_owned`] so single-expression
+    /// the registry's `CompilerItems::struct_owned` so single-expression
     /// callers query the table directly instead of through `compiler_items()`.
     pub fn compiler_struct_owned(
         &self,
@@ -1394,14 +1394,14 @@ impl TypeTable {
 
     /// Get the module source where the `Default` trait is defined, if
     /// the stdlib has registered it. Thin wrapper around
-    /// [`CompilerItems::trait_module`].
+    /// `CompilerItems::trait_module`.
     pub fn default_trait_module_source(&self) -> Option<&ModuleSource> {
         self.compiler_items
             .trait_module(crate::compiler_item::CompilerItem::Default)
     }
 
-    /// Make the struct type for a registered [`CompilerItem`] variant
-    /// of kind [`CompilerItemKind::Struct`]. Reads both the module
+    /// Make the struct type for a registered `CompilerItem` variant
+    /// of kind `CompilerItemKind::Struct`. Reads both the module
     /// source and the struct name from the registry so the call site
     /// does not hard-code either. Panics with a clear ICE message when
     /// the item is not registered or has the wrong kind.
@@ -1410,8 +1410,8 @@ impl TypeTable {
         self.make_struct(name, module_source)
     }
 
-    /// Make the enum type for a registered [`CompilerItem`] variant
-    /// of kind [`CompilerItemKind::Enum`] (currently `Ordering`).
+    /// Make the enum type for a registered `CompilerItem` variant
+    /// of kind `CompilerItemKind::Enum` (currently `Ordering`).
     /// Same shape as [`Self::make_compiler_struct`]: routes both name
     /// and module through the registry.
     pub fn make_compiler_enum(&mut self, item: crate::compiler_item::CompilerItem) -> TypeId {
@@ -1638,7 +1638,7 @@ impl TypeTable {
         crate::name::mangle_generic_name(decl_name, &args)
     }
 
-    /// Create a monomorphized struct type (e.g., "Box<i32>")
+    /// Create a monomorphized struct type (e.g., `"Box<i32>"`)
     ///
     /// - `name`: The fully mangled name (e.g., "`TreeMap`<String,i32>")
     /// - `base_name`: The original generic struct name (e.g., "`TreeMap`")
@@ -2758,7 +2758,7 @@ impl TypeTable {
         })
     }
 
-    /// Create an List<T> type (`GenericInstance` { name: "List", ... })
+    /// Create a `List<T>` type (`GenericInstance` { name: "List", ... })
     pub fn make_list(&mut self, element: TypeId) -> TypeId {
         self.make_generic_instance("List".to_string(), ModuleSource::list(), vec![element])
     }
@@ -2857,7 +2857,7 @@ impl TypeTable {
         self.get_ultimate_base_type(a) == self.get_ultimate_base_type(b)
     }
 
-    /// Check if a type is List<T> and return the element type if so.
+    /// Check if a type is `List<T>` and return the element type if so.
     /// Also unwraps Ref/MutRef types to check the inner type.
     pub fn as_list(&self, id: TypeId) -> Option<TypeId> {
         match self.get(id) {
@@ -4102,7 +4102,7 @@ pub enum TirExprKind {
         /// `args[0]`, so `args[i]` maps to `params[i]` for every call shape.
         args: Vec<CallArg>,
         /// Whether `args[0]` is the receiver of an instance method, set by
-        /// [`TirExprKind::method_call`] alone — so it marks dot syntax. A
+        /// `TirExprKind::method_call` alone — so it marks dot syntax. A
         /// trait-qualified (UFCS) call carries its receiver in `args[0]` too but
         /// leaves this `false`: it spells the receiver's mode itself
         /// (`Trait::m(&mut x, …)`), so the receiver is already reference-typed
@@ -4734,7 +4734,8 @@ pub fn method_param_offset(impl_type_params: &[TirTypeParam]) -> u32 {
 /// Information about monomorphization origin for instantiated items
 #[derive(Debug, Clone)]
 pub struct MonomorphInfo {
-    /// Original generic name (e.g., "Box" for "Box<i32>", or "`BTreeNode`<`K,V>::insert`" for methods)
+    /// Original generic name: `"Box"` for `"Box<i32>"`, or
+    /// `"BTreeNode<K,V>::insert"` for methods.
     pub generic_name: String,
     /// Impl-level type arguments (from the struct/type, e.g. `[i32]` for `List<i32>`)
     pub impl_type_args: Vec<TypeId>,

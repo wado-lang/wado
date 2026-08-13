@@ -30,7 +30,7 @@ pub const GENERATOR_HOST_INTERFACE: &str = "KilnHost";
 /// World exports take two AST shapes (`export Foo;` interface form and
 /// `export fn name(...);` function form). Both are normalized into this
 /// flat struct: an `export Foo;` is expanded by the registry into one
-/// `WorldExportInfo` per interface method, with [`from_interface_fq`]
+/// `WorldExportInfo` per interface method, with `from_interface_fq`
 /// populated. Bare function exports leave `from_interface_fq` as `None`.
 #[derive(Debug, Clone)]
 pub struct WorldExportInfo {

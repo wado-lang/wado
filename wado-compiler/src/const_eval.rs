@@ -352,8 +352,9 @@ impl Value {
         }
     }
 
-    /// Project an [`Operand`] to the constant it denotes. Constants live in
-    /// the `ValuePool`, so only `Operand::Value` can be one.
+    /// Project an [`Operand`](crate::nir_arena::Operand) to the constant it
+    /// denotes. Constants live in the `ValuePool`, so only `Operand::Value`
+    /// can be one.
     #[must_use]
     pub fn from_operand(
         body: &Body,

@@ -1117,7 +1117,7 @@ pub struct TraitAssocType {
 ///
 /// Consumers should generally not match on `Resolved` directly; use
 /// the kind-checked accessors on [`CompilerItems`]
-/// (e.g. [`CompilerItems::require_trait_module`]) instead.
+/// (e.g. `CompilerItems::require_trait_module`) instead.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Resolved {
     Struct {

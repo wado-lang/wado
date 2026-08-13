@@ -1403,7 +1403,7 @@ impl Body {
     /// structural children (blocks, patterns) are not operands and are skipped.
     ///
     /// This and [`Body::for_each_child`] filter one description of the node
-    /// structure ([`Slot`]), so a variant added to the arena cannot be seen by
+    /// structure (`Slot`), so a variant added to the arena cannot be seen by
     /// one and missed by the other.
     pub fn for_each_operand(&self, node: NodeRef, mut f: impl FnMut(Operand)) {
         self.for_each_slot(node, &mut |slot| {

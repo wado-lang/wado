@@ -52,7 +52,7 @@ pub struct WorldExportPlan {
     /// Raw Wado parameter types `(name, type)` for `--lib` exports; empty for
     /// the WASI worlds (which use [`Self::cm_params`]). The lib export path
     /// defines its own CM value types top-level from these, so it never goes
-    /// through the WASI-only [`resolve_cm_export_type`].
+    /// through the WASI-only `resolve_cm_export_type`.
     pub param_types: Vec<(String, Type)>,
     /// Raw Wado return type for `--lib` exports; `None` for the WASI worlds.
     pub result_type: Option<Type>,

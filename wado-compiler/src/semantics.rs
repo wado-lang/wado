@@ -69,8 +69,8 @@ pub struct Semantics {
     /// symbol. Empty when resolve did not run or bailed early.
     pub(crate) locals: IndexMap<AstId, Symbol>,
     /// Inferred [`TypeId`] for each local binding (let / param / closure
-    /// param), keyed by the binding's defining [`AstId`](crate::ast::AstId). Populated
-    /// alongside [`Self::locals`] from the elaborator. Consumed by LSP
+    /// param), keyed by the binding's defining [`AstId`]. Populated
+    /// alongside `Self::locals` from the elaborator. Consumed by LSP
     /// inlay-hint queries via [`Semantics::local_type_name`] to render
     /// the inferred type on bindings without explicit annotation. Empty
     /// when resolve did not run or bailed before recording any bindings.
@@ -279,7 +279,7 @@ impl Semantics {
     /// Innermost AST node containing the given `(line, column)` in `module`.
     ///
     /// Returns `None` if the module is unknown or no node covers the position.
-    /// Answered from the per-module [`AstIndex`](crate::ast_index::AstIndex);
+    /// Answered from the per-module [`AstIndex`];
     /// no AST traversal happens at query time.
     #[must_use]
     pub fn ast_id_at(&self, module: &ModuleSource, line: usize, column: usize) -> Option<AstId> {
@@ -294,7 +294,7 @@ impl Semantics {
         self.symbols.get(&id).or_else(|| self.locals.get(&id))
     }
 
-    /// Resolve a use-site `AstId` (typically an [`IdentExpr`] id) to the
+    /// Resolve a use-site `AstId` (typically an [`IdentExpr`](crate::ast::IdentExpr) id) to the
     /// `AstId` of its defining binding. Returns `None` if the key does
     /// not appear in the reference map — in which case the caller should
     /// fall back to name-based lookup via the symbol table.
@@ -318,7 +318,7 @@ impl Semantics {
 
     /// Iterate every recorded use-site `(use_key, def_key)` edge.
     ///
-    /// Each `use_key` is typically an [`IdentExpr`] id; `def_key` is the
+    /// Each `use_key` is typically an [`IdentExpr`](crate::ast::IdentExpr) id; `def_key` is the
     /// binding's defining [`AstId`]. Use sites of locals, parameters,
     /// item-level definitions (functions, types, globals) and imported items
     /// are all recorded here.
@@ -331,9 +331,9 @@ impl Semantics {
     /// Find every use-site `AstId` whose definition is `def_id`.
     ///
     /// Walks [`Self::iter_references`] and collects matches. The returned keys
-    /// can be passed to [`Self::span_of_key`] for source ranges. The defining
+    /// can be passed to [`Self::span_of_id`] for source ranges. The defining
     /// occurrence itself is **not** included — callers that want it should add
-    /// it via [`Self::name_span_of`] / [`Self::span_of_key`].
+    /// it via [`Self::name_span_of`] / [`Self::span_of_id`].
     #[must_use]
     pub fn references_to(&self, def_id: AstId) -> Vec<AstId> {
         self.iter_references()
@@ -482,7 +482,7 @@ impl Semantics {
     /// rewrite site (`assert`, `matches`, comparison chain, for-of,
     /// `while`, compound assignment) or `None` for nodes that did not
     /// take a desugar path. See
-    /// [`crate::elaborator::sem::types::DesugarKind`] for the full
+    /// `crate::elaborator::sem::types::DesugarKind` for the full
     /// variant set.
     #[must_use]
     pub fn desugar_view(&self, id: AstId) -> Option<String> {

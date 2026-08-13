@@ -1912,7 +1912,7 @@ impl CmInterfaceRegistry {
     }
 
     /// Register a component dependency's binding module via the stdlib's
-    /// [`Self::register_module_decls`] path, recording each interface FQ as a
+    /// `Self::register_module_decls` path, recording each interface FQ as a
     /// component import for [`crate::wir::ImportKind::Component`] classification.
     pub fn register_component_decls(
         &mut self,

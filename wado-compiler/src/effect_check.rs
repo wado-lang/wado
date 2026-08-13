@@ -272,7 +272,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
 }
 
 /// All three Design-B semantic diagnostics, computed in one pass that builds the
-/// shared [`OwnedEffectData`] once. Used by the batch driver and the LSP so
+/// shared `OwnedEffectData` once. Used by the batch driver and the LSP so
 /// effect / stores / purity stay in lockstep across both.
 #[must_use]
 pub fn check_semantics(

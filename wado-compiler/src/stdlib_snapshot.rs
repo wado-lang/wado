@@ -72,7 +72,7 @@ pub(crate) fn get_or_init_snapshot() -> Option<Rc<Semantics>> {
 /// the cost on each worker's first compile.
 ///
 /// No-op if the snapshot is already built on this thread, or if
-/// called re-entrantly from inside [`build_snapshot`].
+/// called re-entrantly from inside `build_snapshot`.
 pub fn prewarm() {
     let _ = get_or_init_snapshot();
 }

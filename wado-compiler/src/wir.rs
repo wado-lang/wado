@@ -331,7 +331,7 @@ impl fmt::Display for WirName {
 /// - `fq`: fully-qualified name shared via `Rc<str>` for Debug output
 ///
 /// `Eq` and `Hash` use `index` only (O(1) integer operations).
-/// `Debug` prints the fq name (e.g., "core:prelude//List<i32>").
+/// `Debug` prints the fq name (e.g., `"core:prelude//List<i32>"`).
 /// `Clone` is O(1) — Rc refcount increment (non-atomic, near zero cost).
 #[derive(Clone)]
 pub struct WirTypeId {

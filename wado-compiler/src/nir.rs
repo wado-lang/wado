@@ -217,7 +217,8 @@ pub struct NirTypeParam {
 /// Information about monomorphization origin for instantiated items
 #[derive(Debug, Clone)]
 pub struct MonomorphInfo {
-    /// Original generic name (e.g., "Box" for "Box<i32>", or "`BTreeNode`<`K,V>::insert`" for methods)
+    /// Original generic name: `"Box"` for `"Box<i32>"`, or
+    /// `"BTreeNode<K,V>::insert"` for methods.
     pub generic_name: String,
     /// Impl-level type arguments (from the struct/type, e.g. `[i32]` for `List<i32>`)
     pub impl_type_args: Vec<TypeId>,

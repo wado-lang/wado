@@ -534,7 +534,7 @@ pub struct LocalMethodName {
     pub struct_type_args: Vec<FqTypeName>,
     /// The method name (e.g., "sum" or "fmt")
     pub method_name: String,
-    /// Method-level type args (e.g., ["i64"] for transform<i64>)
+    /// Method-level type args (e.g., `["i64"]` for `transform<i64>`)
     pub method_type_args: Vec<String>,
     /// Whether the struct name is a type parameter that should be substituted directly
     /// during monomorphization (e.g., `T^Ord::cmp` where T should become i32).
@@ -1036,7 +1036,8 @@ impl LocalMethodName {
 
     /// Create a version of this `LocalMethodName` with type args applied.
     ///
-    /// `impl_type_args` are applied to the struct name (e.g., "List" + ["i32"] → "List<i32>").
+    /// `impl_type_args` are applied to the struct name
+    /// (e.g., `"List"` + `["i32"]` → `"List<i32>"`).
     /// `method_type_args` are stored separately (not embedded in `method_name`).
     /// The base struct name and the trait are preserved (not changed by type
     /// args).
@@ -1110,7 +1111,7 @@ impl LocalMethodName {
         }
     }
 
-    /// Get the full method name including type args (e.g., "transform<i64>")
+    /// Get the full method name including type args (e.g., `"transform<i64>"`)
     #[must_use]
     pub fn full_method_name(&self) -> String {
         if self.method_type_args.is_empty() {
@@ -1597,7 +1598,7 @@ pub enum TypeNameInfo {
     Generic { name: String, args: Vec<String> },
     /// A built-in tuple `[T1, T2, …]` with element names already resolved
     Tuple(Vec<String>),
-    /// Option<T> with inner type name
+    /// `Option<T>` with inner type name
     Option(String),
     /// A function type with param count and return type name
     Function {
@@ -1606,7 +1607,7 @@ pub enum TypeNameInfo {
     },
     /// `Array<T>` (raw Wasm GC array, NOT the user-facing `List<T>` struct)
     BuiltinArray(String),
-    /// Reactive<T> with inner type name
+    /// `Reactive<T>` with inner type name
     Reactive(String),
     /// A reference type - formats as inner type (references stripped)
     Ref(String),

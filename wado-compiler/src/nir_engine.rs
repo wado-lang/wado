@@ -272,7 +272,7 @@ pub struct Engine<'a> {
 impl<'a> Engine<'a> {
     /// Build a session over `body`, reusing the caller-owned `buf`: one O(n)
     /// walk populates the parent map and use index and seeds the worklist in
-    /// post-order (see [`Engine::build_indices`]). `locals` is the owning
+    /// post-order (see `Engine::build_indices`). `locals` is the owning
     /// function's local list (see [`Engine::alloc_local`]).
     pub fn new(
         body: &'a mut Body,
@@ -368,8 +368,8 @@ impl<'a> Engine<'a> {
         Some(v)
     }
 
-    /// The [`ValueId`] of an operand: the promoted value directly, or the
-    /// skeleton expr's value from the graph.
+    /// The [`ValueId`](crate::nir_value_graph::ValueId) of an operand: the
+    /// promoted value directly, or the skeleton expr's value from the graph.
     pub fn operand_value(&mut self, op: Operand) -> Option<crate::nir_value_graph::ValueId> {
         match op {
             Operand::Value(v) => Some(v),
@@ -635,7 +635,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Supply the pure-builtin callee ids so the value-graph build classifies a
-    /// call's heap effect by `func_id`. See [`Engine::pure_builtin_callees`].
+    /// call's heap effect by `func_id`. See `Engine::pure_builtin_callees`.
     /// Must be set before the first value query to take effect (the graph is
     /// built once and reused).
     pub fn set_pure_builtin_callees(&mut self, ids: &'a IndexSet<crate::nir::FuncId>) {

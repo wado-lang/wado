@@ -3,6 +3,10 @@
 //! dataflow walker tracks which side is canonical (`Both` / `ScalarOnly` /
 //! `FieldOnly`) and emits write-back / re-read sync only at transitions: calls
 //! reaching the field, branch joins, escape paths, and loop back-edges.
+//!
+//! TODO(optimizer): the "unresolved callee → all fields" fallback writes back
+//! every field on every opaque call; a "writes no field" summary propagated up
+//! the call graph would remove that cliff for thin forwarding wrappers.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirFunction, NirLocal, NirUnaryOp};

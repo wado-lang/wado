@@ -347,8 +347,8 @@ impl Parser {
     /// Parse the token stream into a [`Module`]. Always succeeds: syntax
     /// errors are recovered and collected into `self.errors`, drained by
     /// [`Parser::take_errors`]. An unparsable item becomes an [`Item::Error`]
-    /// node (see [`Parser::recover_item`]); a broken statement inside a block
-    /// becomes a [`Stmt::Error`] placeholder (see [`Parser::error_stmt`]).
+    /// node (see `Parser::recover_item`); a broken statement inside a block
+    /// becomes a [`Stmt::Error`] placeholder (see `Parser::error_stmt`).
     pub fn parse(&mut self) -> Module {
         // `parse_inner_attributes` records each attribute as it parses, so a
         // malformed one only loses itself; the rest stay in the module.

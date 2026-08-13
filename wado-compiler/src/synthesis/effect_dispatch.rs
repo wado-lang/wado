@@ -712,7 +712,6 @@ fn build_dispatch_wrapper_function(
     let mut else_stmts: Vec<TirStmt> = Vec::new();
     if is_resource {
         let placeholder_call = build_resource_fallback_call(
-            entry_source,
             effect_module,
             base_name,
             label,
@@ -900,9 +899,8 @@ fn build_dispatch_wrapper_function(
 /// pre-cm_binding shape user code emits — a method call for instance ops, `Call`
 /// for static ones — with `method_info` carrying the original `cm_name`, which
 /// is what lets `rewrite_cm_resource_methods` route it afterwards.
-#[allow(dead_code, clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn build_resource_fallback_call(
-    _entry_source: &ModuleSource,
     effect_module: &ModuleSource,
     base_name: &str,
     label: &str,

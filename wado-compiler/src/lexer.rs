@@ -12,7 +12,7 @@ use crate::compiler_host::{Code, DiagnosticSpan, Severity};
 use crate::token::{Span, TemplateTokenPart, Token, TokenKind};
 
 /// Check if a string is a valid Wado identifier.
-/// Valid identifiers match the pattern /^[a-zA-Z_][a-zA-Z0-9_]*$/
+/// Valid identifiers match the pattern `/^[a-zA-Z_][a-zA-Z0-9_]*$/`
 pub fn is_valid_ident(s: &str) -> bool {
     let mut chars = s.chars();
     match chars.next() {

@@ -205,7 +205,7 @@ impl<'a> Unparser<'a> {
         Self::default()
     }
 
-    /// Attach a parser-populated [`TriviaMap`]. Builder-style so the
+    /// Attach a parser-populated [`TriviaMap`](crate::comment::TriviaMap). Builder-style so the
     /// formatter pipeline can opt in with
     /// `Unparser::new().with_trivia(&trivia)`, while paths that don't
     /// care about comments (e.g. AST dump) just call `Unparser::new()`.

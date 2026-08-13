@@ -3,6 +3,10 @@
 //! the lower phase could not drop, its binding not being fully read-only; but a
 //! binding only *spine*-mutated (`sort`, `push`) can share the element objects,
 //! so the call is rewritten to a sibling helper using `array_clone_shallow`.
+//!
+//! TODO(optimizer): expose the element-immutability analysis for
+//! `container_sroa`'s whitelist and nested-`List<List<T>>` demotion. Its
+//! recursion guard reports `false` at any recursive call site.
 
 use std::cell::RefCell;
 use std::rc::Rc;

@@ -154,7 +154,7 @@ pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
 ///
 /// Each entry is `(canonical_path, bytes)` matching the canonical
 /// `wasm:`-style path that the loader assigns to
-/// [`ModuleSource::Wasm`].
+/// [`ModuleSource::Wasm`](crate::module_source::ModuleSource::Wasm).
 pub const ALL_CORE_WASM_ASSETS: &[(&str, &[u8])] = &[("core:libm.wat", CORE_LIBM_WAT)];
 
 /// All WASI interface statics, used for registry building.

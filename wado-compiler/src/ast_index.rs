@@ -24,7 +24,7 @@ pub(crate) enum FunctionLocation {
     Method { item_idx: usize, method_idx: usize },
 }
 
-/// Structural facts about an [`ast::Module`].
+/// Structural facts about an [`crate::ast::Module`].
 #[derive(Debug, Default, Clone)]
 pub struct AstIndex {
     /// Span attached to every id-bearing AST node, exactly as the

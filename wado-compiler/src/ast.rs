@@ -78,7 +78,7 @@ impl AstId {
     /// A globally-unique `AstId` for a transient node never owned by a
     /// [`Module`] — synthesized `Type::Named` / `Type::Generic` operands for
     /// type-query functions, and test fixtures. It lives in the reserved
-    /// [`AstIdSpace::FRESH`] space, so it never collides with a
+    /// `AstIdSpace::FRESH` space, so it never collides with a
     /// parser-allocated id (and must never become a fact / symbol key).
     #[must_use]
     pub fn fresh() -> Self {
@@ -1954,7 +1954,7 @@ pub struct ForStmt {
 }
 
 /// For-of loop: `for let item of array { body }`
-/// Iterates over elements of an List<T>
+/// Iterates over elements of a `List<T>`
 #[derive(Debug, Clone)]
 pub struct ForOfStmt {
     pub id: AstId,
@@ -2549,7 +2549,7 @@ pub struct StructLiteralField {
 
 /// Tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`
 /// This uses bracket syntax following TypeScript conventions.
-/// Can be coerced to List<T> when all elements have the same type.
+/// Can be coerced to `List<T>` when all elements have the same type.
 #[derive(Debug, Clone)]
 pub struct TupleLiteralExpr {
     pub id: AstId,

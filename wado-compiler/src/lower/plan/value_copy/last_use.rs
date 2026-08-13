@@ -1533,7 +1533,7 @@ fn as_materialize(expr: &TirExpr) -> Option<(u32, Option<u32>)> {
 /// A newtype shares its base type's runtime representation (WEP 2026-01-29), so
 /// `bytes as ByteArray` hands over the same storage the local holds — it is the
 /// same materialization, not a new value. Freshness already reads through a cast
-/// ([`super::analyze::is_owned_value`]); the move side has to agree, or a
+/// (`super::analyze::is_owned_value`); the move side has to agree, or a
 /// conversion as thin as `String { repr: bytes as ByteArray, used: len }` forces
 /// a deep copy of what the caller just built.
 pub fn strip_casts(mut expr: &TirExpr) -> &TirExpr {

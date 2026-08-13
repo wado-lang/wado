@@ -3,6 +3,10 @@
 //! Uses are recognized by signature shape ([`ListMethodKind`]), never by method
 //! name, and an unclassified method makes the candidate escape. Runs before
 //! `inline`, which would expand those calls.
+//!
+//! TODO(optimizer): nested-container decomposition (`List<List<T>>`), and
+//! replacing the shape whitelist with `value_copy_demote`'s element-immutability
+//! query so any element-immutable method counts as a SROA-safe use.
 
 use std::cell::Cell;
 
