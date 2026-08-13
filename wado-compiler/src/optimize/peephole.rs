@@ -6,9 +6,8 @@
 //!
 //! Invoked twice per fixed-point iteration: before `inline`, where `string_push`
 //! can still see a `push_str` call, and after, where `array_literal` sees the
-//! exposed `array_new + push` window and the ref / box rules clean up what
-//! inlining left. Each rule no-ops in the run that is not its own, bailing on the
-//! first non-matching node. See WEP 2026-06-05.
+//! exposed `array_new + push` window. Each rule no-ops in the run that is not
+//! its own, bailing on the first non-matching node. See WEP 2026-06-05.
 
 use cranelift_entity::EntityRef;
 
