@@ -140,15 +140,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name,
                     module_source,
                 } => {
-                    // `EffectRef::Concrete` already carries the canonicalised
-                    // module source resolved in `resolve_effects`; build the
-                    // decl-index key from it directly rather than walking the
-                    // import graph a second time via `canonical_decl_key`.
-                    let key = (module_source.clone(), name.clone());
-                    let is_known_effect = self.tysys.trait_env.effect_decl_index.contains_key(&key);
-                    let is_known_resource =
-                        self.tysys.trait_env.resource_decl_index.contains_key(&key);
-                    if !is_known_effect && !is_known_resource {
+                    // `EffectRef::Concrete` already carries the module that
+                    // declares it, so this asks that module about its own
+                    // declaration and then asks the declaration what it is —
+                    // rather than building a key and probing two indexes to
+                    // find out which kind it belongs to.
+                    let handles = self
+                        .tysys
+                        .resolutions
+                        .declared_in(module_source, name)
+                        .is_some_and(|def| {
+                            matches!(
+                                self.tysys.resolutions.defs().kind(def),
+                                crate::defs::DefKind::Effect | crate::defs::DefKind::Resource
+                            )
+                        });
+                    if !handles {
                         let _ = self.emit(TypeError::NotAnEffect {
                             name: name.clone(),
                             span: effect_ty.span(),
