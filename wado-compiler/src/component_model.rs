@@ -31,9 +31,9 @@ pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFu
                 return CmFuturePayload::Scalar(scalar);
             }
         }
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } if name == "Result" && type_args.len() >= 2 => {
+        ResolvedType::GenericInstance { type_args, .. }
+            if type_table.is_result(type_arg) && type_args.len() >= 2 =>
+        {
             if matches!(type_table.get(type_args[0]), ResolvedType::Unit) {
                 return CmFuturePayload::Transmission(error_code_source(type_table, type_args[1]));
             }
@@ -101,9 +101,9 @@ pub fn cm_payload_type_from_type_id(
         ResolvedType::Struct {
             decl_name: name, ..
         } if name == "String" => Some(CmPayloadType::String),
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } if name == "Result" && type_args.len() == 2 => {
+        ResolvedType::GenericInstance { type_args, .. }
+            if type_table.is_result(type_id) && type_args.len() == 2 =>
+        {
             let arm = |id: TypeId| -> Option<Option<Box<CmPayloadType>>> {
                 if matches!(type_table.get(id), ResolvedType::Unit) {
                     Some(None)
