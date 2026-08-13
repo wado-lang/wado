@@ -1057,9 +1057,13 @@ impl TypeSystem {
             );
         }
 
+        // Read the head out before the block: a `borrow()` held in a
+        // `let`-chain lives for the whole body, and the body borrows mutably
+        // to record the synthesis request.
+        let nominal = self.type_table.borrow().nominal_head(type_id);
         if let Some(tr) = on_bound
             && tr.is_field_recursive()
-            && let Some((name, module_source)) = self.type_table.borrow().nominal_head(type_id)
+            && let Some((name, module_source)) = nominal
         {
             let serde_blocked = tr.is_serde()
                 && self.has_real_trait_impl_for_type(

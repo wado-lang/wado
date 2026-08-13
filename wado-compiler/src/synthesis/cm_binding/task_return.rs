@@ -318,9 +318,11 @@ fn generate_inline_task_return(
             i32_const(1),
         )));
         let err_resolved = type_table.borrow().get(err_type_id).clone();
-        if let ResolvedType::Variant { def } = &err_resolved
-            && let name = &type_table.borrow().def_name(*def).to_string()
-        {
+        let err_variant_name = match &err_resolved {
+            ResolvedType::Variant { def } => Some(type_table.borrow().def_name(*def).to_string()),
+            _ => None,
+        };
+        if let Some(name) = &err_variant_name {
             if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
                 synthesize_variant_lower_to_flat(
                     err_payload_local,
