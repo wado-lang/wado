@@ -2645,7 +2645,7 @@ fn walk_inline_block(
 
 /// Walk a labeled block, accounting for labeled breaks that bypass the sync
 /// emitted inside it. `walk_stmt` only records each break site (committing on
-/// every one over-syncs); here the fall-through and break states are `JOINed` and
+/// every one over-syncs); here the fall-through and break states are joined and
 /// convergence sync spliced into each path whose exit diverges, so post-block
 /// code never trusts a side that is stale on some runtime path.
 fn walk_labeled_block(
