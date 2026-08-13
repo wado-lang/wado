@@ -1594,16 +1594,22 @@ impl TypeTable {
     }
 
     /// Check if a type is `Option<T>`, returning the inner type if so.
+    ///
+    /// The instantiation is identified by the declaration it was interned
+    /// against, not by the spelling: `name == "Option"` answered yes for any
+    /// module's `Option`, and for a user type that merely shares the name.
     pub fn as_option(&self, type_id: TypeId) -> Option<TypeId> {
-        if let ResolvedType::GenericInstance {
-            name, type_args, ..
-        } = self.get(type_id)
-            && name == "Option"
-            && type_args.len() == 1
-        {
-            return Some(type_args[0]);
+        let ResolvedType::GenericInstance { type_args, .. } = self.get(type_id) else {
+            return None;
+        };
+        if type_args.len() != 1 {
+            return None;
         }
-        None
+        let inner = type_args[0];
+        let decl = self
+            .compiler_items
+            .variant_decl(crate::compiler_item::CompilerItem::Option)?;
+        (self.decl_of_type(type_id) == Some(decl)).then_some(inner)
     }
 
     pub fn make_tuple(&mut self, elements: Vec<TypeId>) -> TypeId {
