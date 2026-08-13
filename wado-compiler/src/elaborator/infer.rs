@@ -1,45 +1,19 @@
-//! Unified type-argument inference engine for generic functions, methods,
-//! structs, and variants.
-//!
-//! The elaborator has historically carried several near-duplicate inference
-//! routines — one each for function calls, static-method calls, struct
-//! literals, variant constructors, and instance method calls — plus a
-//! weaker re-inference pass in the monomorphizer. Each copy made slightly
-//! different choices about literal-number handling, expected-type driven
-//! back-inference, and phantom type-parameter preservation, so bugs were
-//! fixed in one place but not the others.
-//!
-//! This module is the single home of the inference logic those callers
-//! share. Phase 0 of the refactor only moves the core structural
-//! unifier here — later phases add a richer [`InferCtx`] that owns the
-//! whole solve (two-phase literal deferral, expected-type back-inference,
-//! phantom parameter preservation) so every caller just builds a set of
-//! constraints and asks this module to resolve them.
+//! Unified type-argument inference for generic functions, methods, structs, and
+//! variants — the single home of logic that was once duplicated per caller, each
+//! copy diverging on literal-number handling, expected-type back-inference, and
+//! phantom parameter preservation. A caller builds constraints and asks
+//! [`InferCtx`] to solve them.
 
 use std::cell::RefCell;
 
 use crate::hashmap::IndexMap;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-/// Recursively unify an `expected` type (which may contain `TypeParam` /
-/// `TypePack` holes) with an `actual` concrete type, extending `bindings`
-/// with `TypeParam TypeId -> concrete TypeId` mappings discovered along
-/// the way.
-///
-/// This is a best-effort, non-failing unifier: mismatches that cannot be
-/// bridged are silently ignored so that the caller can try a different
-/// argument or fall through to a fallback. The `or_insert` policy ensures
-/// that an earlier (higher-confidence) binding is never overwritten by a
-/// later weaker one.
-///
-/// Supported cases:
-/// * Direct `TypeParam` on the expected side (binds the type parameter)
-/// * Tuple types containing a `TypePack` element (variadic splice)
-/// * Same-named `GenericInstance` recursively on type arguments
-/// * `List<K>` matched against a homogeneous tuple literal type
-/// * `BuiltinArray<T>` matched against `BuiltinArray<U>`
-/// * `Ref<T>` / `MutRef<T>` matched against the same shape
-/// * `Function` types matched parameter-by-parameter plus return type
+/// Recursively unify an `expected` type, possibly holding `TypeParam` /
+/// `TypePack` holes, against a concrete `actual`, extending `bindings` with what
+/// it learns. Best-effort and non-failing: an unbridgeable mismatch is ignored
+/// so the caller can try another argument, and `or_insert` keeps an earlier,
+/// higher-confidence binding from being overwritten by a weaker one.
 pub(super) fn unify(
     type_table: &RefCell<TypeTable>,
     expected: TypeId,
@@ -194,37 +168,15 @@ pub(super) fn unify(
     }
 }
 
-/// A reusable solver for one generic-inference problem.
+/// A reusable solver for one generic-inference problem, collecting constraints
+/// in three confidence tiers and resolving them in order: argument-derived
+/// ([`add`]), the declared return against the caller's expected type
+/// ([`add_expected_return`]), then queued numeric literals ([`add_deferred`]).
+/// `or_insert` keeps a literal from clobbering a typed neighbour.
 ///
-/// `InferCtx` collects unification constraints in three confidence tiers
-/// and resolves them in order so that higher-confidence information always
-/// wins:
-///
-/// 1. **Strong (argument-derived)** constraints — added via [`add`]. These
-///    are unified immediately into the shared bindings map, so the first
-///    typed argument to mention a type parameter pins its binding.
-/// 2. **Medium (expected-return)** constraints — added via
-///    [`add_expected_return`]. The declaration's return type is unified
-///    against the caller's expected type after every strong argument
-///    constraint has run. An LHS type annotation
-///    (`let x: List<u16> = List::filled(n, 0)`) is more precise than
-///    the default type of a numeric literal argument, so it is processed
-///    before the literal-deferred pass and pins type parameters that no
-///    typed argument constrains.
-/// 3. **Weak (literal-number)** constraints — added via [`add_deferred`].
-///    These are queued and only unified after both stronger tiers have
-///    run. Because [`unify`] uses `or_insert`, a literal `0` cannot
-///    clobber a binding already produced from a neighbouring typed
-///    argument or an LHS annotation. This preserves the
-///    `fn two<T>(x: T, y: T); two(1, 2 as u8)` ⇒ `T = u8` behaviour
-///    historically only supported for plain function calls and only kicks
-///    in when nothing stronger pinned the parameter.
-///
-/// Use [`solve`](Self::solve) to get the final type arguments in
-/// declaration order. A slot nothing bound comes back as whatever was
-/// registered for it — a use site registers the inference variable it minted,
-/// so "unsolved" is `answer == var`, which is what `record_instantiation` and
-/// `blame_unsolved` test.
+/// [`solve`](Self::solve) returns the type arguments in declaration order. An
+/// unbound slot comes back as the inference variable the use site registered, so
+/// "unsolved" is `answer == var`.
 pub(super) struct InferCtx<'a> {
     type_table: &'a RefCell<TypeTable>,
     /// What this solve is trying to bind, in declaration order: a use site's

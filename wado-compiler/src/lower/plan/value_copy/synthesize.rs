@@ -1,24 +1,8 @@
-//! Generate `$value_copy$` helper functions for every type that the
-//! fold needs at a wrap site, plus the transitive closure of nested
-//! value-typed fields. The seed comes from [`super::analyze::collect_seed_types`];
-//! the loop in [`synthesize_helpers`] iterates until no new types appear
-//! in newly-generated helper bodies.
-//!
-//! For struct types the body is a `StructLiteral` with field-by-field
-//! shallow projections, plus `builtin::array_clone::<T>` for raw
-//! `Array<T>` fields (`array_clone_prefix` for the `List<T>` / `String`
-//! backing, right-sized to `used`). For variant types it is a `match`
-//! re-constructing the matched case with a copied payload. Fall-through
-//! types (references, resources) keep `return v;` (identity). Nested
-//! copies are calls to the nested type's own helper, so the helpers are
-//! mutually recursive.
-//!
-//! Synthesized helper bodies contain `builtin::copy_value::<NestedT>(x)`
-//! markers for nested value-typed fields. The translator rewrites those
-//! markers via [`crate::lower::translate`]'s `convert_call` arm. User
-//! function bodies, in contrast, get the wrap call emitted directly by
-//! the fold — they carry no markers after Phase A of WEP 2026-05-11
-//! Step 5.
+//! Generate a `$value_copy$` helper per type the fold wraps, closed over nested
+//! value-typed fields until [`synthesize_helpers`] finds no new ones. A struct
+//! becomes a field-by-field `StructLiteral`, a variant a `match` rebuilding the
+//! matched case, a reference or resource the identity. Nested copies appear as
+//! `builtin::copy_value::<NestedT>(x)` markers the translator rewrites.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -424,16 +408,11 @@ fn build_copy_return_expr(
             right_size_backing,
         ));
     }
-    // `GenericInstance` whose monomorphized struct didn't get
-    // materialised in `project.structs` is an unresolved-at-WIR-level
-    // shape — its `type_id` resolves to `AbstractRef(Struct)` rather
-    // than a concrete `WirType::Ref`, which the WIR-build
-    // `StructLiteral` arm rejects with a hard panic. Falling through
-    // here without a non-identity body keeps every reachable
-    // `array_clone::<T>` generation safe even when a stray reachable
-    // type in the closure happens to be a non-monomorphized template
-    // wrapper. The shape that *does* need a non-identity copy
-    // (List<T> / tuple) is recovered by the explicit checks below.
+    // A `GenericInstance` whose monomorphized struct never reached
+    // `project.structs` resolves to `AbstractRef(Struct)`, which the WIR-build
+    // `StructLiteral` arm rejects with a hard panic. Falling through to identity
+    // keeps a stray non-monomorphized template wrapper safe; the shapes that do
+    // need a real copy (`List<T>`, tuples) are recovered by the checks below.
     let list_name = type_table
         .borrow()
         .compiler_struct_name(crate::compiler_item::CompilerItem::List)
@@ -498,17 +477,11 @@ fn lookup_struct<'a>(
     }
 }
 
-/// `List<T>`'s wrapper-struct deep-copy emits a `StructLiteral`
-/// whose `type_id` is `List<T>`. WIR-level resolution of that
-/// `type_id` becomes `AbstractRef(Struct)` whenever `T` is a shape
-/// that the WIR struct registry never materialises a concrete entry
-/// for — resources, function/closure types, and unmaterialised
-/// generic instances. The downstream `StructLiteral` translation
-/// only knows how to handle a concrete `WirType::Ref`, so we skip
-/// the non-identity body and fall through to identity for those `T`s.
-/// Built-in primitives, ordinary structs, variants, and known wrapper
-/// shapes (`List<T>`, `String`, tuples) all have concrete WIR
-/// registrations and are passed through.
+/// `List<T>`'s deep-copy emits a `StructLiteral` typed `List<T>`, which resolves
+/// to `AbstractRef(Struct)` whenever `T` is a shape the WIR struct registry
+/// never materialises — a resource, a function type, an unmaterialised generic
+/// instance. Downstream only handles a concrete `WirType::Ref`, so those `T`s
+/// fall through to identity; everything with a WIR registration is copied.
 fn is_synth_safe_element(
     elem_type: TypeId,
     type_table: &Rc<RefCell<TypeTable>>,

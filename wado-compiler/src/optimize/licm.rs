@@ -2262,8 +2262,7 @@ fn cse_operand_in_scope(
 }
 
 /// Common-subexpression elimination inside a loop body: hash-consing dedups a
-/// repeated pure subexpression to one `ValueId` but cannot *materialise* it, a
-/// loop-carried local's value not being reemittable at an arbitrary slot, so
+/// repeated pure subexpression to one `ValueId` but cannot *materialise* it, so
 /// each occurrence is still re-emitted. This restores the one-computation
 /// `__cse_N` shape — bind a clone to a temp before the earliest top-level
 /// statement holding an occurrence, and redirect them all to read it.

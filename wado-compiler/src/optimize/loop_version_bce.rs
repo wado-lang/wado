@@ -1,9 +1,8 @@
 //! Loop-versioned bounds-check elimination, for the checks
 //! `condition_implication` cannot statically prove: the loop becomes
 //! `if H < B { <clone, checks deleted> } else { <original> }`, sound by
-//! per-iteration transitivity from the guard's `i <= H` and the residual's
-//! `H < B`. All three locals must share one integer type, so the comparisons
-//! agree on signedness, and the slow arm keeps assert timing bit-identical.
+//! per-iteration transitivity from the guard's `i <= H`. All three locals must
+//! share one integer type, and the slow arm keeps assert timing identical.
 //!
 //! A fast arm that is exactly `a[i] = CONST; i += 1` then collapses to one
 //! `builtin::array_fill` ([`try_fill_idiom`]), the residual also proving
