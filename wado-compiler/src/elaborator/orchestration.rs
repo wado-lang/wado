@@ -3237,7 +3237,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .collect();
                     // A generic newtype (`type MyArray<T> = List<T>`)
                     // resolves to a `Newtype` over the instantiated base,
-                    // mirroring `type_resolution.rs:418`. Without this it
+                    // mirroring `type_resolution`. Without this it
                     // falls through to `UNKNOWN`, the newtype's inherited
                     // base methods (`MyArray<i32>::len` → `List<i32>::len`)
                     // never resolve, and monomorphization can't reach them.
@@ -3397,7 +3397,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             // A variadic type-pack spread `..T` resolves to a `TypePack`
             // keyed by the param's positional index, mirroring the instance
-            // resolver's `trait_ctx.type_params` lookup (type_resolution.rs:103).
+            // resolver's `trait_ctx.type_params` lookup.
             // Without this arm a `[..T]` parameter resolves its element to
             // `UNKNOWN`, so a generic tuple method (`Tuple<..T>^Eq::eq`)
             // monomorphizes against `Tuple<unknown>` and never registers at

@@ -640,7 +640,7 @@ pub(crate) struct GenericInstantiation {
 }
 
 /// A single mutating outer-binding captured by a closure. The closure
-/// pre-pass at `closure.rs:140–193` materialises a
+/// pre-pass materialises a
 /// `let __ref_<var_name> = &mut <var_name>;` in the outer scope before
 /// opening the closure body; reify replays the same `add_local` at the
 /// same point. The fields below carry every value the replay needs.
@@ -742,7 +742,7 @@ pub(crate) struct HandlerBindingFacts {
 /// One effect a handler binding installs. Mirrors the per-effect
 /// component the elaborator computes inside
 /// `resolve_explicit_handler_binding` /
-/// `resolve_bundled_handler_binding` (handlers.rs:108+, 236+).
+/// `resolve_bundled_handler_binding`.
 #[derive(Clone)]
 pub(crate) struct HandlerEffectEntry {
     pub(crate) name: String,

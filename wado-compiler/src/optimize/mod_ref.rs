@@ -353,10 +353,9 @@ impl ModRef {
             // VariantPayload lowers to `ref.cast` + `struct.get` on the
             // case-specific payload subtype. VariantTag and VariantTest
             // both touch the variant's discriminant field via
-            // `struct.get $variant_base discriminant`
-            // (wir_build/translate.rs:2032). All three are heap reads on
-            // a possibly-null receiver, so each carries `heap.reads`
-            // and `may_trap`.
+            // `struct.get $variant_base discriminant`. All three are heap
+            // reads on a possibly-null receiver, so each carries
+            // `heap.reads` and `may_trap`.
             ExprKind::VariantPayload { expr, .. } => {
                 self.heap.reads = true;
                 self.may_trap = true; // null receiver + case mismatch
@@ -1553,9 +1552,9 @@ mod tests {
 
     #[test]
     fn variant_tag_is_heap_read_and_may_trap() {
-        // VariantTag lowers to `struct.get $variant_base discriminant`
-        // (wir_build/translate.rs:2032) — a heap read on a possibly-null
-        // receiver. Must surface both `heap.reads` and `may_trap`.
+        // VariantTag lowers to `struct.get $variant_base discriminant` — a heap
+        // read on a possibly-null receiver. Must surface both `heap.reads` and
+        // `may_trap`.
         let mr = mr_expr(|b| {
             let l = local(b, 0);
             variant_tag(b, l)
