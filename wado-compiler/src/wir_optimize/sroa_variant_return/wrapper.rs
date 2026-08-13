@@ -4,20 +4,10 @@
 use crate::wir::WirInstr;
 
 /// Resolve the value-producing leaf of a call-site RHS through `Block` / `Seq`
-/// wrappers, verifying that stripping the wrappers is sound.
-///
-/// Soundness of stripping requires:
-/// - No prefix statement may branch to *any* `Block` frame being stripped
-///   — not just the innermost one: a `BrIf { depth: 1 }` in a nested
-///   block's prefix targeting the outer block would dangle once both
-///   wrappers are removed.
-/// - A break-with-value `Br` must target the block it exits (`depth == 0`);
-///   a deeper target carries the value elsewhere.
-/// - A trailing `Unreachable` after a break-with-value (appended by
-///   `translate_stmts_as_value` so the Wasm validator sees no fallthrough
-///   value) is dead code — skipped in `Block` bodies only; a `Seq` has no
-///   such emitter convention, so its trailing `Unreachable` means "then
-///   trap" and blocks unwrapping.
+/// wrappers, verifying the strip is sound: no prefix statement may branch to
+/// *any* stripped frame, not just the innermost, or the branch dangles; a
+/// break-with-value must target the block it exits. A trailing `Unreachable` is
+/// the emitter's dead filler in a `Block`, but means "then trap" in a `Seq`.
 fn resolve_wrapped_result(instr: &WirInstr, stripped_blocks: u32) -> Option<&WirInstr> {
     match instr {
         WirInstr::Seq(body) => {

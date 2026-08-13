@@ -168,19 +168,11 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
     )
 }
 
-/// True if `instr` (or any descendant) can trap at runtime on some inputs.
-///
-/// Used to keep `Drop(value)` instructions whose `value` is otherwise
-/// `is_side_effect_free` but would trap on certain inputs — the Wado
-/// language requires those traps to be observable even when the read
-/// value is discarded (`let _ = arr[-1]` must trap). Distinct from
-/// [`is_root_observable`] which the WIR optimizer deliberately keeps lax
-/// to enable CSE / dead-load elimination of trapping operations whose
-/// result IS used.
-///
-/// A receiver's nullability comes from the [`Nullability`] oracle, not the read
-/// site's `result_ty` (inlining can leave that stale-nullable). Rewriting
-/// `result_ty` instead would cost a codegen `ref.as_non_null` per read.
+/// True if `instr` or any descendant can trap at runtime, which keeps a
+/// `Drop(value)` whose value is otherwise side-effect-free: Wado requires the
+/// trap of `let _ = arr[-1]` to be observable. Distinct from
+/// [`is_root_observable`], kept lax so CSE can still touch a trapping operation
+/// whose result *is* used. Nullability comes from the [`Nullability`] oracle.
 pub(super) fn may_trap_in(instr: &WirInstr, null: &Nullability) -> bool {
     // Operand-dependent: `ref.as_non_null(inner)` only traps when `inner`
     // could itself produce null.

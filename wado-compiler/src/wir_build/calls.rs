@@ -1274,16 +1274,11 @@ impl FunctionTranslator<'_, '_> {
             );
         };
 
-        // Build `CanonicalClosure_K`. Field order must match the struct
-        // declaration in `WirContext::get_or_create_canonical_closure_type`:
-        //
-        // - Inspectable layout: `{ env, inspect, inspect_alt, func }` —
-        //   the env + vtable prefix is the layout of the shared
-        //   `$canonical_inspectable_base` supertype, and the typed `func`
-        //   slot comes last (per-signature).
-        // - Slim layout: `{ env, func }` — no shared supertype, no
-        //   inspect slots. Production builds that never inspect closures
-        //   stay on this shape.
+        // Build `CanonicalClosure_K`, field order matching
+        // `WirContext::get_or_create_canonical_closure_type`: the inspectable
+        // layout `{ env, inspect, inspect_alt, func }`, whose prefix is the
+        // shared `$canonical_inspectable_base`, or the slim `{ env, func }` a
+        // build that never inspects a closure stays on.
         let mut fields = vec![functor_instr];
         if is_inspectable {
             let inspect_id = wrappers

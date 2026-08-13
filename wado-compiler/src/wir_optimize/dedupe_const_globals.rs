@@ -1,44 +1,14 @@
-//! Deduplicate identical immutable constant globals.
+//! Deduplicate identical immutable constant globals, which `const_global`
+//! promotes one apiece however many share a value. Such a global has no
+//! observable identity under Wado's value semantics — reads copy out, `==` is
+//! structural — so two with byte-identical inits and slot metadata are
+//! interchangeable, and each group collapses to one canonical global.
 //!
-//! `const_global` promotes each constant aggregate global to an eager,
-//! immutable Wasm constant — but identical const aggregates (two `[10, 20, 30]`
-//! hoisted by `const_object_globalization`, two equal user const globals, two
-//! `"hi"` short-string globals, duplicate Gale grammar tables, …) each get
-//! their own global. An immutable, const-expressible, value-typed global has no
-//! observable identity under Wado's value semantics — reads copy out and `==`
-//! is structural — so two with byte-identical inits and identical slot metadata
-//! are interchangeable. This pass merges each such group to one canonical
-//! global, rewrites every reference, and marks the rest dead.
-//!
-//! ## Soundness
-//!
-//! - **Reference identity.** The one way to observe that two equal-value
-//!   references are distinct objects is `==` on two `&T` operands, which the
-//!   elaborator lowers to `ref.eq` (`reify.rs`; `GlobalGet` of a value-typed
-//!   global is never itself a `ref.eq` operand, but `&GLOBAL` is). Tracing
-//!   which globals can reach a `ref.eq` through locals is flow-sensitive; since
-//!   `ref.eq` is absent from ordinary programs (it needs an explicit
-//!   `&a == &b`), the pass simply **bails entirely if the module contains any
-//!   `ref.eq`**. Conservative and cheap.
-//! - **Slot metadata.** Slot nullability decides whether codegen narrows a
-//!   `global.get` with `ref.as_non_null`, so two globals are merged only when
-//!   their `lazy_init`, `is`-nullable type, and `wado_mutable` all match —
-//!   folded into the group key alongside the structural `(ty, init)`.
-//! - **Exports.** An exported global is never merged away (its export names it).
-//!
-//! ## Removal
-//!
-//! Globals are removed by recording their indices in `dead_global_indices` —
-//! the same channel the `#![wasm_module]` extractor uses — so
-//! phase-8 `compact_globals` drops them in one pass. Removing them here with
-//! `Vec::retain` would shift indices out from under that position-keyed set and
-//! corrupt it; deferring keeps every index in one space. All references to a
-//! merged-away global (`GlobalGet`/`GlobalSet` in function bodies, global
-//! inits, and data/element segment offsets) are rewritten to the canonical
-//! first, so the dead globals are unreferenced when `compact_globals` runs.
-//!
-//! Runs in phase 7, right after `promote_const_global_inits` makes the
-//! candidates immutable.
+//! Identity *is* observable through `ref.eq` on two `&T` operands, so the pass
+//! bails outright on a module containing any. Slot metadata joins the group key,
+//! nullability deciding codegen's `ref.as_non_null`, and an exported global is
+//! never merged away. Removal defers to `compact_globals`, a `Vec::retain` here
+//! shifting its position-keyed index set.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirExportDesc, WirFuncId, WirInstr, WirPackage, WirType, WirTypeId};

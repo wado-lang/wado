@@ -350,19 +350,11 @@ pub(super) fn replace_variant_accesses(
     });
 }
 
-/// Check that every reference to `local_name` is a shape the call-site
-/// rewriter (`replace_variant_accesses` / `collect_refcast_aliases`)
-/// replaces:
-/// - `RefTest { type_id ∈ case_types, expr: LocalGet(name) }` — discriminant test
-/// - `StructGet { expr: RefCast { type_id ∈ case_types, expr: LocalGet(name) } }` — payload access
-/// - `LocalSet(alias, RefCast { type_id ∈ case_types, expr: LocalGet(name) })` —
-///   cast-alias binding, provided the alias is single-def and read only via
-///   `StructGet(LocalGet(alias))`.
-///
-/// The type-id constraint matters: the rewriter's `case_disc_values` /
-/// `field_to_local` maps are keyed by the candidate's payload-bearing case
-/// types, so an access naming any other type would survive the rewrite and
-/// read the deleted temp.
+/// Check that every reference to `local_name` is a shape the call-site rewriter
+/// replaces: a `RefTest` discriminant test, a `StructGet` payload access through
+/// a `RefCast`, or a cast-alias `LocalSet` whose alias is single-def and read
+/// only through `StructGet`. The `type_id ∈ case_types` constraint matters: an
+/// access naming any other type survives the rewrite and reads a deleted temp.
 pub(super) fn all_uses_are_variant_access(
     instrs: &[WirInstr],
     local_name: &str,
