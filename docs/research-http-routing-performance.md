@@ -184,3 +184,68 @@ map; take timing from ablation A/Bs.
    in the common case.
 2. Host side, separately: the 68 µs floor against Axum's 40 µs is `wado serve`'s
    own per-request path, not guest code.
+
+# Follow-up, 2026-08-13
+
+Same method, same host shape. Re-run of the `base` / `floor` ablation with Hono
+on Bun as a fourth row, so the guest handler's cost is read against the
+reference we are actually chasing rather than against Axum.
+
+| Request                         |   base | byteslice |  floor |    Bun |
+| ------------------------------- | -----: | --------: | -----: | -----: |
+| `GET /user`                     | 13,910 |    14,325 | 19,849 | 18,419 |
+| `GET /user/lookup/username/hey` | 13,147 |    13,379 | 20,556 | 18,336 |
+| `GET /event/abcd1234/comments`  | 13,054 |    14,055 | 19,944 | 17,069 |
+| `POST /event/abcd1234/comment`  | 12,419 |    12,990 | 20,573 | 17,294 |
+| `GET /static/index.html`        | 13,403 |    14,247 | 19,053 | 16,508 |
+
+Four servers share three cores here, so the absolute numbers sit well under a
+run that hosts one server; only the ratios within the run mean anything.
+
+**The floor is 8-19% _above_ Bun, and `base` is 20-28% below it.** The whole gap
+to Bun is the guest handler — route match, JSON body, parameter capture — not
+`wado serve`'s HTTP path. That reverses the priority the section above set:
+until the guest handler is cheaper, host-side work on the 68 µs floor cannot
+close anything, because the floor already wins.
+
+`byteslice` is `base` with the response body kept as the `ByteSlice` that
+`json::to_bytes` returns instead of `to_list()`-copied into a `List<u8>`
+(applied to `app.wado`): faster on all five shapes, +1.8% to +7.7%.
+
+Two more things settled:
+
+- **`Config::gc_heap_initial_size` is not the lever.** The copying collector's
+  semi-space stays small because growth only triggers when the post-GC live set
+  crowds the heap, and this workload's live set is tiny — so the theory was that
+  collections run constantly and a pre-sized heap would amortize them. Measured
+  at 16 MB and 64 MB against an unset default, interleaved: every delta inside
+  noise. Not applied.
+- **A field's wire name is rebuilt on every serialize, and the source-level fix
+  costs more than it saves.** `wire_name` feeds `apply_case` unconditionally;
+  with a constant `policy` the optimizer folds the call's _result_ to a constant
+  but cannot delete the call, because `apply_case` allocates through
+  bounds-checked writes and so carries `may_trap`. The leftover call
+  re-allocates its `String` argument per field of every serialized struct — four
+  dead objects per request on this benchmark's two-field response, and worth 25%
+  of `to_bytes` on a small value. Testing `Identity` at the call site prunes it,
+  but the extra branch pushes `wire_name` past the inline threshold, so `policy`
+  stays a runtime parameter and the _deserialize_ side loses its compile-time
+  name folding — an array clone plus a live `apply_case` per lookup, which
+  `reflect_wire_name_folds` pins against. Removing the dead call belongs to the
+  optimizer, not to `core:serde`.
+
+Where the guest cost sits, measured in a CLI loop (release JIT, per request):
+route match 1.03 µs, JSON body build 2.70 µs, both plus handler dispatch
+4.24 µs. Serializing this 47-byte body costs 2.9x hand-writing the same bytes
+through `String` pushes (0.658 µs against 0.229 µs), and a guest profile of that
+loop splits the serializer's own time roughly 32% buffer allocation, 32%
+`write_escaped_string`, 17% capacity checks.
+
+The buffer share is the actionable one. `SERIALIZE_BUFFER_CAPACITY` is 128 to
+match `serde_json`'s `to_vec` pre-sizing, but the two cost models differ:
+`Vec::with_capacity` reserves without touching memory, while WasmGC's
+`array.new_default` must zero every byte it creates. Pre-sizing past the
+expected output is therefore a real per-call cost here, and sizing that constant
+is the next measurement to take — a naive sweep does not answer it, because a
+constant capacity lets CTFE fold the whole build away. That, and the router's
+per-hit allocations, are what the next round should take.

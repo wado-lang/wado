@@ -6253,8 +6253,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // bodies (e.g. `|c| c.method()`) take their body's type as the return
         // type directly, and block bodies use the return-expression type
         // computed above.
+        // `block_return_type` reads `expression_types`, which a site that
+        // elaborated twice leaves empty for the committed pass; fall back to
+        // the body TIR, which is built by now either way.
         let return_type = declared_return
             .or(block_return_type)
+            .or_else(|| tir_block_return_type(&body))
             .unwrap_or(body.type_id);
 
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
@@ -10837,4 +10841,47 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
             None
         }
     })
+}
+
+/// First `return <value>` type reachable in a reified closure body.
+///
+/// TIR counterpart of `control_flow::find_return_type_in_block`, and must stay
+/// in step with it: a construct missing here is a `return` the closure's return
+/// type cannot see, which mistypes `__call` and fails core-Wasm validation.
+fn tir_block_return_type(body: &crate::tir::TirExpr) -> Option<crate::tir::TypeId> {
+    use crate::tir::{TirExprKind, TirStmtKind};
+
+    fn in_block(block: &crate::tir::TirBlock) -> Option<crate::tir::TypeId> {
+        block.stmts.iter().find_map(|stmt| match &stmt.kind {
+            TirStmtKind::Return { value } => value.as_ref().map(|v| v.type_id),
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => in_block(then_block).or_else(|| else_block.as_ref().and_then(in_block)),
+            TirStmtKind::Loop { body, .. } => in_block(body),
+            TirStmtKind::LabeledBlock { block, .. } => in_block(block),
+            TirStmtKind::VariadicForOf { body, .. } => in_block(body),
+            TirStmtKind::Let { value, .. } => in_expr(value),
+            TirStmtKind::Expr(e) => in_expr(e),
+            _ => None,
+        })
+    }
+
+    fn in_expr(expr: &crate::tir::TirExpr) -> Option<crate::tir::TypeId> {
+        match &expr.kind {
+            TirExprKind::Block(block) => in_block(block),
+            TirExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => in_block(then_branch).or_else(|| else_branch.as_ref().and_then(in_block)),
+            TirExprKind::Match { arms, .. } => arms.iter().find_map(|arm| in_expr(&arm.body)),
+            TirExprKind::WithHandler { body, .. } => in_block(body),
+            TirExprKind::Resume { value } => Some(value.type_id),
+            _ => None,
+        }
+    }
+
+    in_expr(body)
 }

@@ -1,0 +1,150 @@
+// A block-bodied closure in call-argument position, inside `for … of` over a
+// `List`, used to compile to a `__call` whose type ignored its `return` —
+// pushing nothing while the caller popped a value, so the module failed
+// core-Wasm validation.
+//
+// One case per construct a `return` can hide in, since the inference walks the
+// body TIR construct by construct and a missing one is an invisible `return`.
+
+fn call(f: fn() -> i32) -> i32 {
+    return f();
+}
+
+fn call_mut<T>(mut f: fn mut() -> T) -> T {
+    f();
+    return f();
+}
+
+test "block-bodied closure argument inside for-of over a list" {
+    let mut total = 0;
+    for let i of [1, 2, 3] {
+        total += call(|| {
+            let doubled = i * 2;
+            return doubled;
+        });
+    }
+    assert total == 12;
+}
+
+test "same, over a list held in a binding" {
+    let xs = [10, 20];
+    let mut total = 0;
+    for let x of xs {
+        total += call(|| {
+            return x + 1;
+        });
+    }
+    assert total == 32;
+}
+
+test "same, through a generic `fn mut` parameter" {
+    let mut total = 0;
+    for let i of [4, 5] {
+        total += call_mut(|| {
+            let n = i;
+            return n;
+        });
+    }
+    assert total == 9;
+}
+
+test "a closure body that only diverges still types as its context" {
+    let mut seen = 0;
+    for let i of [1] {
+        seen += call(|| {
+            if i > 0 {
+                return 7;
+            }
+            panic("unreachable");
+        });
+    }
+    assert seen == 7;
+}
+
+test "shapes that already worked" {
+    let mut total = 0;
+    for let i of 0..<3 {
+        total += call(|| {
+            return i;
+        });
+    }
+    assert total == 3;
+
+    for let i of [1, 2] {
+        total += call(|| i);
+        let f = || {
+            return i;
+        };
+        total += call(f);
+    }
+    assert total == 9;
+}
+
+test "the only return sits inside a bare loop" {
+    let mut total = 0;
+    for let i of [1, 2] {
+        total += call(|| {
+            loop {
+                return i * 10;
+            }
+        });
+    }
+    assert total == 30;
+}
+
+test "the only return sits inside a nested for-of" {
+    let mut total = 0;
+    for let i of [1, 2] {
+        total += call(|| {
+            for let k of [5] {
+                return k + i;
+            }
+            panic("the inner loop always returns");
+        });
+    }
+    assert total == 13;
+}
+
+test "the only return sits inside a while" {
+    let mut total = 0;
+    for let i of [3, 4] {
+        total += call(|| {
+            while true {
+                return i;
+            }
+            panic("the while always returns");
+        });
+    }
+    assert total == 7;
+}
+
+test "the only return sits inside a match arm" {
+    let mut total = 0;
+    for let i of [1, 2] {
+        total += call(|| {
+            match i {
+                1 => {
+                    return 100;
+                },
+                _ => {
+                    return 200;
+                },
+            }
+        });
+    }
+    assert total == 300;
+}
+
+test "the only return sits inside an if/else" {
+    let mut total = 0;
+    for let i of [1, 2] {
+        total += call(|| {
+            if i == 1 {
+                return 7;
+            } else {
+                return 9;
+            }
+        });
+    }
+    assert total == 16;
+}
