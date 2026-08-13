@@ -637,16 +637,10 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 }
 
                 // A tuple is a generic instance, so its elements are type
-                // arguments and must be mangled with the module-qualified form.
-                // The non-type-arg mangler qualifies inconsistently — a
-                // monomorphized `Struct` element keeps its short stored name
-                // while the equivalent `GenericInstance` element comes out
-                // qualified (the substitution-boundary flip) — so the same
-                // logical tuple (e.g. `[String, TreeMap<String,i32>]`) would
-                // register under two different fqs, yielding two distinct WIR
-                // struct types and a `ref`/`ref null` validation mismatch where
-                // they meet (e.g. iterating a `TreeMap`-valued map's entries).
-                // Newtypes still resolve to their base so they share the type.
+                // arguments and take the module-qualified mangling. The
+                // non-type-arg mangler qualifies inconsistently across the
+                // substitution boundary, so one logical tuple would register
+                // under two fqs and hit a `ref`/`ref null` validation mismatch.
                 let elem_names: Vec<String> = elements
                     .iter()
                     .map(|&e| type_table.mangle_type_arg_for_generic_resolving_newtypes(e))
@@ -1142,17 +1136,11 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Register List<T> wrapper structs for all `GenericInstance("List", [T])` types
-/// found in any module's type table.
-///
-/// In the TIR, `List<T>` is `GenericInstance { name: "List", type_args: [T] }`,
-/// not a struct definition. We create wrapper structs here to provide the
-/// underlying GC array types that the WIR emitter needs.
-///
-/// Types are processed in dependency order: if `T` is itself `List<U>`,
-/// `List<U>` is fully registered (raw array + wrapper struct) before
-/// `List<List<U>>` so that the backing array gets a concrete element type
-/// instead of abstract `structref`.
+/// Register a `List<T>` wrapper struct for every `GenericInstance("List", [T])`
+/// in any module's type table, TIR carrying no struct definition of its own to
+/// supply the GC array type the emitter needs. Processed in dependency order, so
+/// a nested `List<U>` is registered before `List<List<U>>` and the backing array
+/// gets a concrete element type rather than an abstract `structref`.
 fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
     use crate::tir::ResolvedType;
 

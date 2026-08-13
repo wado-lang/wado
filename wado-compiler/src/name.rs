@@ -1,36 +1,8 @@
-//! Name mangling utilities for Wado compiler
-//!
-//! This module centralizes all naming/mangling logic for methods, effects, and other symbols.
-//!
-//! # Naming Conventions
-//!
-//! ## Method Names
-//! - Simple: `{struct_name}::{method_name}` (e.g., `Point::sum`)
-//! - Full: `{filename}/{struct_name}::{method_name}` (e.g., `./geometry.wado/Point::sum`)
-//! - With trait: `{filename}/{struct_name}^{trait_name}::{method_name}` (e.g., `./geometry.wado/Point^Display::fmt`)
-//!
-//! ## Effect Operation Names
-//! - Qualified: `{interface_name}::{operation_name}` (e.g., `Stdout::write_via_stream`)
-//!
-//! ## WASI Names
-//! - Full: `wasi:{package}/{interface}::{function}` (e.g., `wasi:cli/stdout::write-via-stream`)
-//!
-//! ## Module-Qualified Names
-//! - Function: `{module_path}/{function_name}` (e.g., `./utils.wado/helper`)
-//! - Struct: `{module_path}::{struct_name}` (e.g., `./geometry.wado::Point`)
-//!
-//! # Module Path Canonicalization
-//!
-//! Module paths are filesystem representations, not URIs: they are canonicalized
-//! by lexical normalization (`crate::path::normalize`, RFC 3986 §5.2.4
-//! dot-segment semantics) — never percent-encoded — to ensure:
-//! - Same file imported via different paths resolves to same identity
-//! - Always uses `/` separator (platform-agnostic, even on Windows)
-//! - Resolves `.` and `..` segments
-//!
-//! Canonical paths are project-root-relative:
-//! - For projects with `wado.toml`: relative to the directory containing `wado.toml`
-//! - For standalone scripts: relative to the entry point's directory
+//! Every naming and mangling decision in the compiler. A method mangles as
+//! `{module}/{struct}^{trait}::{method}` (the trait half optional), a struct as
+//! `{module}/{name}`, a WASI name as `wasi:{package}/{interface}::{function}`.
+//! Module paths are filesystem representations, not URIs: normalized lexically
+//! ([`crate::path::normalize`]), never percent-encoded, and project-root-relative.
 
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use std::fmt;
@@ -71,16 +43,10 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
 pub const LOCAL_ITEM_ID_SEP: char = '@';
 
 /// Build the internal storage name for a local item declaration: the declared
-/// name plus the `AstId`'s module-local index, unique per declaration site so
-/// same-named local items in different functions never collide in the
-/// module-wide storage tables they're interned into.
-///
-/// Only the `local` index is encoded — never the `AstIdSpace`. The space is a
-/// process-global counter whose value depends on unrelated parse history
-/// (e.g. how many fixtures a parallel golden run compiled first), so encoding
-/// it would leak into mangled WIR names and make compiler output
-/// non-deterministic. The `local` index is dense per module and the module
-/// source already qualifies the name across modules, so it alone suffices.
+/// name plus the `AstId`'s module-local index, so same-named local items in
+/// different functions do not collide in the module-wide storage tables.
+/// Only `local` is encoded, never the `AstIdSpace` — that is a process-global
+/// counter, and encoding it would make mangled WIR names non-deterministic.
 pub fn mangle_local_item_name(name: &str, id: crate::ast::AstId) -> String {
     format!("{name}{LOCAL_ITEM_ID_SEP}{}", id.local())
 }
@@ -568,7 +534,7 @@ pub struct LocalMethodName {
     pub struct_type_args: Vec<FqTypeName>,
     /// The method name (e.g., "sum" or "fmt")
     pub method_name: String,
-    /// Method-level type args (e.g., ["i64"] for transform<i64>)
+    /// Method-level type args (e.g., `["i64"]` for `transform<i64>`)
     pub method_type_args: Vec<String>,
     /// Whether the struct name is a type parameter that should be substituted directly
     /// during monomorphization (e.g., `T^Ord::cmp` where T should become i32).
@@ -583,16 +549,9 @@ pub struct LocalMethodName {
     pub cm_name: Option<String>,
 }
 
-/// Derive the bare base name from a possibly-mangled type/trait name.
-///
-/// `Receiver::mangle` and friends produce names like `Stream<u8>` or
-/// `From<i32>` by appending the type-arg list to the base name; the
-/// reverse — recovering the base by truncating at the first `<` — is
-/// the canonical inverse and lives here so other components stay
-/// agnostic to name-format details (per the wado-compiler CLAUDE
-/// rules: "Use utilities in name.rs to handle name mangling and
-/// monomorphization. Other components must not know the details of
-/// name formats.").
+/// Derive the bare base name from a possibly-mangled type/trait name
+/// (`Stream<u8>` → `Stream`). The canonical inverse of appending a type-arg
+/// list, kept here so no other component has to know the name format.
 pub(crate) fn split_base_name(name: &str) -> &str {
     match name.find('<') {
         Some(i) => &name[..i],
@@ -842,16 +801,11 @@ pub fn display_type_name(mangled: &str) -> String {
     )
 }
 
-/// Decompose a local method mangle into `(receiver, trait, method)`.
-///
-/// - `Point::sum` → `("Point", None, "sum")`
-/// - `Point^Display::fmt` → `("Point", Some("Display"), "fmt")`
-/// - `Stdout::write_via_stream` → `("Stdout", None, "write_via_stream")`
-///
-/// Returns `None` when there is no `::` method separator (a bare
-/// free-function name). The receiver / trait may still carry type-argument
-/// mangling (`Box<i32>^Ord::cmp`); this splits only on the `^` and `::`
-/// separators and does not strip type args.
+/// Decompose a local method mangle into `(receiver, trait, method)`:
+/// `Point^Display::fmt` → `("Point", Some("Display"), "fmt")`. `None` when there
+/// is no `::` separator (a bare free-function name). Splits only on `^` and
+/// `::`, so a receiver or trait keeps its type-argument mangling
+/// (`Box<i32>^Ord::cmp`).
 pub fn split_local_method_name(name: &str) -> Option<(&str, Option<&str>, &str)> {
     let sep = name.find("::")?;
     let (prefix, method) = (&name[..sep], &name[sep + 2..]);
@@ -1082,7 +1036,8 @@ impl LocalMethodName {
 
     /// Create a version of this `LocalMethodName` with type args applied.
     ///
-    /// `impl_type_args` are applied to the struct name (e.g., "List" + ["i32"] → "List<i32>").
+    /// `impl_type_args` are applied to the struct name
+    /// (e.g., `"List"` + `["i32"]` → `"List<i32>"`).
     /// `method_type_args` are stored separately (not embedded in `method_name`).
     /// The base struct name and the trait are preserved (not changed by type
     /// args).
@@ -1156,7 +1111,7 @@ impl LocalMethodName {
         }
     }
 
-    /// Get the full method name including type args (e.g., "transform<i64>")
+    /// Get the full method name including type args (e.g., `"transform<i64>"`)
     #[must_use]
     pub fn full_method_name(&self) -> String {
         if self.method_type_args.is_empty() {
@@ -1209,16 +1164,11 @@ impl LocalMethodName {
         self.trait_name.is_some()
     }
 
-    /// Returns true if this is the synthesized `__call` method on a
-    /// `__Closure_N` functor struct.
-    ///
-    /// Closure functor `__call` methods are inherent methods syntactically
-    /// (`trait_name` is `None`), but they participate in vtable dispatch
-    /// through the `Fn<arity, ret>` canonical type whose Wasm signature is
-    /// fixed. Treating them as ordinary inherent methods (e.g. for ABI
-    /// reshaping like multi-value return) would skew the signature against
-    /// the vtable slot they're installed into, so callers that reshape
-    /// ABIs need to filter them out.
+    /// True for the synthesized `__call` on a `__Closure_N` functor struct.
+    /// Syntactically these are inherent methods, but they dispatch through the
+    /// `Fn<arity, ret>` canonical type, whose Wasm signature is fixed — so a
+    /// caller that reshapes ABIs must filter them out or the signature will no
+    /// longer match the vtable slot they are installed into.
     pub fn is_closure_call(&self) -> bool {
         self.method_name == CLOSURE_CALL_METHOD
             && self
@@ -1257,16 +1207,8 @@ impl From<MethodName> for FunctionId {
     }
 }
 
-/// A qualified struct type name.
-///
-/// Format: `{module_path}/{name}`
-///
-/// Examples:
-/// - `./geometry.wado/Point`
-/// - `core/rt/SomeType`
-///
-/// Note: When traits are added to Wado, this may need to evolve into a more
-/// general `TypeId` enum (similar to `FunctionId`) to handle trait types.
+/// A qualified struct type name, `{module_path}/{name}` — e.g.
+/// `./geometry.wado/Point`, `core/rt/SomeType`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructName {
     /// The module where the struct is defined
@@ -1362,23 +1304,11 @@ fn has_special_prefix(path: &str) -> bool {
         || path.starts_with("http://")
 }
 
-/// Normalize a module path.
-///
-/// A module path is a filesystem representation, not a URI: it is normalized
-/// lexically via [`crate::path::normalize`] (resolve `.`/`..`, collapse
-/// duplicate slashes, unify separators to `/`) and never percent-encoded, so
-/// URI-unsafe characters such as spaces survive intact. Special prefixes
-/// (`core:` / `wasi:` / `http://` / `https://`) are opaque identifiers and are
-/// returned verbatim.
-///
-/// This function is infallible: every filesystem path normalizes.
-///
-/// Examples:
-/// - `./geometry.wado` → `./geometry.wado`
-/// - `./sub/../geometry.wado` → `./geometry.wado`
-/// - `./sub/./nested/../file.wado` → `./sub/file.wado`
-/// - `foo//bar.wado` → `foo/bar.wado`
-/// - `/home/user/My Project/x.wado` → `/home/user/My Project/x.wado`
+/// Normalize a module path lexically via [`crate::path::normalize`] — resolve
+/// `.`/`..`, collapse duplicate slashes, unify separators to `/`. Never
+/// percent-encoded, so a space survives intact. Special prefixes (`core:`,
+/// `wasi:`, `http://`, `https://`) are opaque and returned verbatim. Infallible:
+/// every filesystem path normalizes.
 pub fn normalize_module_path(path: &str) -> String {
     if has_special_prefix(path) {
         return path.to_string();
@@ -1395,16 +1325,9 @@ pub fn try_normalize_module_path(path: &str) -> Result<String, String> {
     Ok(normalize_module_path(path))
 }
 
-/// Resolve a relative module path against a base module path.
-///
-/// This function resolves import paths relative to the importing module's path,
-/// producing a canonical path from the project root.
-///
-/// Examples:
-/// - base: `./main.wado`, relative: `./geometry.wado` → `./geometry.wado`
-/// - base: `./sub/main.wado`, relative: `./utils.wado` → `./sub/utils.wado`
-/// - base: `./sub/main.wado`, relative: `../lib.wado` → `./lib.wado`
-/// - base: `./a/b/main.wado`, relative: `../../c.wado` → `./c.wado`
+/// Resolve an import path against the importing module's path, producing a path
+/// canonical from the project root — base `./sub/main.wado` with relative
+/// `../lib.wado` gives `./lib.wado`.
 pub fn resolve_module_path(base: &str, relative: &str) -> String {
     // Handle special module prefixes - they don't need resolution
     if relative.starts_with("core:")
@@ -1436,16 +1359,11 @@ pub fn resolve_module_path(base: &str, relative: &str) -> String {
     normalize_module_path(&joined)
 }
 
-/// Canonicalize a resolved local module identity to the unique minimal form
-/// for its physical file, relative to the entry directory `entry_dir`.
-///
-/// Composing relative steps from the importer ([`resolve_module_path`]) is not
-/// canonical: a path that climbs *above* `entry_dir` and re-enters spells the
-/// same file non-minimally (`../src/gen/p.wado` vs `./gen/p.wado`), which
-/// lexical normalization cannot fold. Re-anchoring under `entry_dir` gives one
-/// identity per file on every import path, so the loader interns each once
-/// (#1423). Empty `entry_dir` (no entry context) returns the input normalized
-/// and otherwise unchanged, so such callers never regress.
+/// Canonicalize a resolved local module identity to the unique minimal form for
+/// its physical file, relative to `entry_dir`. Composing relative steps from the
+/// importer is not canonical — a path climbing above `entry_dir` and re-entering
+/// spells the same file two ways — so re-anchoring is what lets the loader intern
+/// each file once. Empty `entry_dir` just normalizes.
 #[must_use]
 pub fn canonical_local_path(entry_dir: &str, resolved: &str) -> String {
     if entry_dir.is_empty() {
@@ -1495,16 +1413,8 @@ pub fn resolve_local_identity(entry_dir: &str, from_path: &str, import_source: &
     canonical_local_path(entry_dir, &resolve_module_path(from_path, import_source))
 }
 
-/// Resolve an import source to a `ModuleSource`.
-///
-/// This is the primary function for resolving import paths to module identifiers.
-///
-/// # Arguments
-/// * `from_module` - The `ModuleSource` of the importing module
-/// * `import_source` - The import source string (e.g., `"./geometry.wado"` or `"core:cli"`)
-///
-/// # Returns
-/// The resolved `ModuleSource`.
+/// Resolve an import source (`"./geometry.wado"`, `"core:cli"`) against the
+/// importing module.
 pub fn resolve_import(
     interner: &mut ModuleSourceInterner,
     from_module: &ModuleSource,
@@ -1514,16 +1424,10 @@ pub fn resolve_import(
 }
 
 /// Resolve an import source, consulting a Kiln [`crate::kiln::InvocationIndex`]
-/// first.
-///
-/// When the `(from_module, import_source)` pair matches a recorded invocation,
-/// the returned [`ModuleSource`] points at the invocation's generated entry
-/// module (under `build/kiln/…`). Otherwise falls back to
-/// [`resolve_import_with_entry`] unchanged.
-///
-/// Call this in place of [`resolve_import`] wherever an `InvocationIndex` is
-/// available — typically the CLI and LSP compile entry points, after the
-/// Kiln pipeline has populated the index.
+/// first: a recorded `(from_module, import_source)` pair resolves to the
+/// invocation's generated entry module under `build/kiln/…`, everything else
+/// falls through to [`resolve_import_with_entry`]. Use this in place of
+/// [`resolve_import`] wherever an index is available.
 pub fn resolve_import_with_invocations(
     interner: &mut ModuleSourceInterner,
     from_module: &ModuleSource,
@@ -1642,20 +1546,10 @@ pub fn canonicalize_entry_point(filename: &str) -> String {
     format!("./{name}")
 }
 
-/// Convert a filesystem path to a canonical module path.
-///
-/// This function:
-/// - Converts backslashes to forward slashes (Windows compatibility)
-/// - Makes the path relative to project root (removes absolute prefix)
-/// - Ensures the path starts with `./`
-///
-/// The `project_root` is the absolute path to the project root directory.
-/// The `file_path` is the absolute path to the module file.
-///
-/// Example:
-/// - `project_root`: `/home/user/project`
-/// - `file_path`: `/home/user/project/src/lib.wado`
-/// - result: `./src/lib.wado`
+/// Convert an absolute filesystem path to a canonical module path: separators
+/// unified to `/`, the absolute `project_root` prefix stripped, and a leading
+/// `./` ensured. `/home/user/project` + `/home/user/project/src/lib.wado` gives
+/// `./src/lib.wado`.
 pub fn filesystem_to_module_path(project_root: &str, file_path: &str) -> Option<String> {
     // Normalize separators to forward slashes
     let root = project_root.replace('\\', "/");
@@ -1704,7 +1598,7 @@ pub enum TypeNameInfo {
     Generic { name: String, args: Vec<String> },
     /// A built-in tuple `[T1, T2, …]` with element names already resolved
     Tuple(Vec<String>),
-    /// Option<T> with inner type name
+    /// `Option<T>` with inner type name
     Option(String),
     /// A function type with param count and return type name
     Function {
@@ -1713,7 +1607,7 @@ pub enum TypeNameInfo {
     },
     /// `Array<T>` (raw Wasm GC array, NOT the user-facing `List<T>` struct)
     BuiltinArray(String),
-    /// Reactive<T> with inner type name
+    /// `Reactive<T>` with inner type name
     Reactive(String),
     /// A reference type - formats as inner type (references stripped)
     Ref(String),
@@ -1745,16 +1639,10 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
     }
 }
 
-/// Build a monomorphized type name from base name and type arguments.
-///
-/// The tuple head is spelled `[a,b]`, not `[]<a,b>` — the one spelling
+/// Build a monomorphized type name: `("Box", ["i32"])` → `"Box<i32>"`. The tuple
+/// head is spelled `[i32,i32]`, not `[]<i32,i32>` — the one spelling
 /// [`FqTypeName::to_mangled`] gives it, so an instantiated tuple receiver and a
-/// concrete tuple impl (`impl Trait for [i32, i32]`) name the same function.
-///
-/// Examples:
-/// - `mangle_generic_name("Box", &["i32"])` → `"Box<i32>"`
-/// - `mangle_generic_name("Map", &["String", "i32"])` → `"Map<String,i32>"`
-/// - `mangle_generic_name("[]", &["i32", "i32"])` → `"[i32,i32]"`
+/// concrete `impl Trait for [i32, i32]` name the same function.
 pub fn mangle_generic_name(base_name: &str, type_args: &[String]) -> String {
     if type_args.is_empty() {
         base_name.to_string()
@@ -1775,17 +1663,10 @@ pub fn mangle_tuple_type(elems: &[String]) -> String {
 pub const TUPLE_TYPE_NAME: &str = "[]";
 
 /// A name in the *declaration* namespace: what source writes, what an `impl`
-/// header spells, and what every by-name declaration lookup keys on — module
-/// scope (`struct_fields`, `enum_case`, …), the CM interface registry,
-/// go-to-definition.
-///
-/// Distinct from a mangled name, which carries the declaring module and which
-/// no declaration lookup stores. Every naming defect in WEP 2026-07-28 was one
-/// substituted for the other, and both being `String` is what let that compile.
-/// So this deliberately has no `Deref<Target = str>`, no `AsRef<str>` and no
-/// `From<String>`: it is minted by the authorities that know the namespace —
-/// [`FqTypeName`], [`Receiver`], [`crate::tir::TypeTable`] — and read back only
-/// through [`Self::as_decl_str`], which names what it is handing out.
+/// header spells, what every by-name declaration lookup keys on — as opposed to
+/// a mangled name, which carries the declaring module and which no such lookup
+/// stores. Deliberately no `Deref`, `AsRef<str>` or `From<String>`: substituting
+/// one namespace for the other is the defect this type exists to stop compiling.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DeclName(String);
 
@@ -2097,22 +1978,11 @@ pub fn cm_wrap_async_func_name(interface_name: &str, method_name: &str) -> Strin
     format!("__cm_wrap_async__{interface_name}_{method_name}")
 }
 
-/// Convert a user-facing `test "name"` string into the snake-case segment used
-/// in the internal test function name (`__test_{index}_{snake}`).
-///
-/// Only **ASCII** alphanumerics survive verbatim (lowercased); every other
-/// character — including non-ASCII letters such as `é` or `日` — collapses to
-/// `_`. This is deliberate: the segment must downgrade losslessly into a
-/// Component Model kebab-case export name (`[a-z0-9-]+`) via
-/// `sanitize_kebab_export_name`. Using Unicode-aware `char::is_alphanumeric`
-/// here would let multibyte letters through and produce an invalid extern name,
-/// crashing Wasm validation. The original (lossless) name is preserved
-/// separately for display and filtering — see the test-name custom section.
-///
-/// Examples:
-/// - `test_name_to_snake("Hello, World!")` → `"hello__world_"`
-/// - `test_name_to_snake("café résumé")` → `"caf__r_sum_"`
-/// - `test_name_to_snake("日本語のテスト ok")` → `"________ok"`
+/// Convert a `test "name"` string into the snake-case segment of the internal
+/// test function name: `"café résumé"` → `"caf__r_sum_"`. Only ASCII
+/// alphanumerics survive — Unicode-aware `is_alphanumeric` would let multibyte
+/// letters through and produce an extern name Wasm validation rejects. The
+/// lossless name is kept separately in the test-name custom section.
 pub fn test_name_to_snake(name: &str) -> String {
     name.chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
@@ -2120,17 +1990,11 @@ pub fn test_name_to_snake(name: &str) -> String {
         .to_lowercase()
 }
 
-/// Build the exported function name for a test block. The prefix encodes the
-/// test's attributes, the index disambiguates anonymous tests, and `name` (when
-/// present) is appended as an ASCII snake-case segment via [`test_name_to_snake`].
-///
-/// - `__test_{index}` / `__test_{index}_{snake}` — plain
-/// - `__test_trap_…` — `#[expect_trap]`
-/// - `__test_todo_…` — `#[TODO]` (or module-level `#[TODO]`)
-/// - `__test_tm{ms}_…` — `#[timeout_ms(ms)]` (combines: `__test_trap_tm{ms}_…`)
-///
-/// The single source of this format: both the annotate walk and reify call here
-/// so the two never drift.
+/// Build a test block's exported name: `__test_{index}[_{snake}]`, with the
+/// prefix encoding attributes — `__test_trap_…` for `#[expect_trap]`,
+/// `__test_todo_…` for `#[TODO]`, `__test_tm{ms}_…` for `#[timeout_ms]`, and
+/// combinations such as `__test_trap_tm{ms}_…`. Both the annotate walk and reify
+/// call here, so the two cannot drift.
 pub fn test_function_name(
     meta: &crate::ast::TestMetadata,
     test_index: usize,
@@ -2642,26 +2506,10 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
         )
 }
 
-/// A receiver name in the form a mangled name may embed.
-///
-/// An fq name names its subject by the module that declares it, so a receiver
-/// written into `Type::method` / `Type^Trait::method` must already carry that
-/// module. The type exists to make the rule unforgeable: a bare `&str` read off
-/// source text or off a `ResolvedType`'s `name` field cannot become a mangled
-/// name by accident — it has to pass through one of the constructors below,
-/// each of which states why its input is already fq.
-///
-/// The mangled spelling is a *rendering* ([`Self::to_mangled`]), produced on
-/// demand and never parsed back. Every question a caller used to answer by
-/// splitting the string — the declaring module, the declaration name, the type
-/// arguments — is a field access here.
-///
-/// Splitting a rendered name apart is what this type exists to prevent. A
-/// `ModuleSource` may itself contain `/` and `<`, and a type argument carries
-/// its own module path, so no split on `/`, `<` or `,` is correct in general.
-/// A rendered name is also not reversible: `ModuleSource` cannot be rebuilt
-/// without the interner, so there is deliberately no constructor from a
-/// mangled string.
+/// A receiver name in the form a mangled name may embed, carrying the declaring
+/// module — a bare `&str` cannot become one by accident. The mangled spelling is
+/// a rendering ([`Self::to_mangled`]), never parsed back: a `ModuleSource` may
+/// itself contain `/` and `<`, so no split is correct in general. Ask the fields.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FqTypeName {
     /// Outermost `&` / `&mut`, when the receiver is a reference shape.
@@ -2898,18 +2746,11 @@ impl std::fmt::Display for FqTypeName {
     }
 }
 
-/// The trait half of a `Type^Trait::method` mangle.
-///
-/// The receiver half already names its subject by the module that declares it;
-/// the trait half has to answer the same question or two same-named traits
-/// implemented for one type mangle to one name and one impl overwrites the
-/// other. So the head is the trait's *declaration* — never the spelling a use
-/// site wrote, which an alias or another module's import can change — and the
-/// declaring module travels with it.
-///
-/// Type arguments (`Stream<u8>`) are carried already-mangled: they make a
-/// generic trait's per-instantiation method names distinct and are never read
-/// back apart.
+/// The trait half of a `Type^Trait::method` mangle. The head is the trait's
+/// *declaration*, with its declaring module — never the spelling a use site
+/// wrote, which an alias or another module's import can change — or two
+/// same-named traits implemented for one type would mangle alike and one impl
+/// would overwrite the other. Type arguments are carried already-mangled.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FqTraitName {
     head: TypeHead,

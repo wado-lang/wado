@@ -1,15 +1,8 @@
-//! Deferred type-argument inference via inference holes.
-//!
-//! When a generic call's type parameter appears only in its return type and the
-//! call site has no expected type yet (e.g. `p.get()` in `p.get().unwrap()`),
-//! the elaborator mints an *inference hole* and lets the holey type flow up
-//! until a concrete expected type solves it. The module-end sweep substitutes
-//! solved holes into recorded facts; an unsolved hole raises "cannot infer" and
-//! is pinned to `error`.
-//!
-//! A hole is a [`ResolvedType::InferVar`] — a *flexible* variable, distinct
-//! from the *rigid* `TypeParam` it stands in for. A name already mangled from
-//! one is rebuilt from the swept type arguments, not patched.
+//! Deferred type-argument inference via inference holes. Where a generic call's
+//! type parameter appears only in its return type and the call site has no
+//! expected type yet — `p.get()` in `p.get().unwrap()` — the elaborator mints a
+//! *flexible* [`ResolvedType::InferVar`] and lets the holey type flow up until
+//! one solves it; the module-end sweep substitutes it or errors.
 
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};

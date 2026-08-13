@@ -1,13 +1,8 @@
-//! Annotation pass for closure expressions.
-//!
-//! The body walk still allocates the synthetic `__ref_<var>` locals,
-//! address-takes their outer bindings, walks the body so its
-//! `ModuleSemantics` lands, projects the closure's `fn(...)` / `fn mut(...)`
-//! type (so the caller's typecheck sees the right `expression_types`), and
-//! records [`super::sem::types::ClosureCaptureInfo`]. Reify rebuilds the
-//! `let __ref_* = &mut <var>;` materialisation, the
-//! `TirExprKind::Closure { params, body, captures, … }`, and the optional
-//! enclosing `Block` wrapper from the AST + that record.
+//! Annotation pass for closure expressions. The body walk allocates the
+//! synthetic `__ref_<var>` locals, address-takes their outer bindings, walks the
+//! body so its `ModuleSemantics` lands, projects the closure's `fn(…)` type for
+//! the caller's typecheck, and records the
+//! [`super::sem::types::ClosureCaptureInfo`] reify rebuilds from.
 
 use crate::hashmap::IndexSet;
 

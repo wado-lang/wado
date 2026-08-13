@@ -31,16 +31,11 @@ impl BoxPlan {
     }
 }
 
-/// Prepare the type table for boxing: a type-table-only pass.
-///
-/// It mints a `Box<T>` struct type for every `&primitive` / `&variant`
-/// / `&fn` reference in the program, redefines the corresponding
-/// `Ref` / `MutRef` `TypeIds` to those struct types (so composite types
-/// that transitively contain a boxed reference follow automatically),
-/// and appends the generated struct definitions to `flat.structs`.
-///
-/// It does not touch any function body — body lowering is driven
-/// separately from the returned [`BoxPlan`].
+/// Prepare the type table for boxing, touching no function body: mint a `Box<T>`
+/// struct for every `&primitive` / `&variant` / `&fn` in the program, redefine
+/// the matching `Ref` / `MutRef` `TypeId`s to it — so composites containing one
+/// follow automatically — and append the definitions to `flat.structs`. Body
+/// lowering runs separately off the returned [`BoxPlan`].
 pub fn prepare_types(flat: &mut FlatPackage) -> BoxPlan {
     let box_module_source = flat
         .type_table
@@ -288,22 +283,11 @@ impl TypeBuilder {
 
     /// Scan the type table to find which primitives need Box types.
     fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
-        // Collect base TypeIds that need boxing, plus newtypes.
-        // Boxing is required for:
-        // - Primitives (except i128/u128 which are already GC types)
-        // - Standalone enums (plain i32 discriminants — scalar-backed
-        //   exactly like primitives, so `&mut EnumType` needs the same
-        //   stable heap slot; without it a deref-assignment through the
-        //   reference is lost). A variant's payload-less case subset is
-        //   also a `ResolvedType::Enum` but carries the variant's name and
-        //   its values are GC refs into the variant hierarchy — those go
-        //   through the variant representation, not boxing.
-        // - Variant types (subtype hierarchy prevents field-by-field deref assignment)
-        // - Function types (the local holds a `ref struct` value; `&mut fn`
-        //   needs a stable heap slot for deref-assignment, and we box `&fn`
-        //   for the same shape so reference semantics stay uniform across
-        //   all `&T` / `&mut T` types — the optimizer can elide read-only
-        //   wrappers later).
+        // Collect the base TypeIds needing boxing, plus newtypes: primitives
+        // (bar the already-GC i128/u128), standalone enums (scalar-backed, so a
+        // deref-assignment needs the same stable heap slot), variants (whose
+        // subtype hierarchy blocks field-by-field assignment), and function
+        // types. A variant's case subset is GC-backed and goes elsewhere.
         let mut needs_box_base: IndexSet<TypeId> = IndexSet::default();
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {

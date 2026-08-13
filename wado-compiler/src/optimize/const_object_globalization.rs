@@ -1,47 +1,8 @@
-//! Body globalization — hoist a constant, read-only aggregate `let` binding
-//! out of a function body into a shared immutable module global.
-//!
-//! A constant-shaped aggregate bound by a `let` and only ever read is rebuilt
-//! on every call (or loop iteration) — pure waste, since Wasm 3.0 GC can build
-//! it once at instantiation. This pass detects such a binding and hoists it:
-//!
-//! ```text
-//! fn f() { let xs = [10, 20, 30]; … xs.repr … }   // rebuilt per call
-//!   ⇒
-//! global __const_obj_0 = <lazy>;                   // built once
-//! fn f() { __const_obj_0 = [10, 20, 30]; … global:__const_obj_0.repr … }
-//! ```
-//!
-//! The hoisted global mirrors what `lower::plan::globals::extract` produces for
-//! a non-const user global: a Wasm-mutable, Wado-immutable slot with a `null`
-//! placeholder init, assigned once by an inline `GlobalVarSet`. The existing
-//! [`crate::wir_optimize::const_global`] pass classifies it eager/lazy.
-//!
-//! ## Soundness
-//!
-//! Two independent gates, both load-bearing:
-//!
-//! - **Closed const aggregate** ([`is_globalizable_const`]). The initializer
-//!   must be a side-effect-free constant with no free locals.
-//! - **Read-only** ([`is_readonly_body`]). Every use of the binding must be a
-//!   borrowing / reading position; any `&mut`, any `&mut self` method, any
-//!   assignment to it or a projection, and any by-value consuming use
-//!   disqualify it. See the per-arm comments in [`expr_readonly`].
-//!
-//! A constant handed to a call *by value* ([`CandidateKind::ValueArg`]) runs the
-//! read-only gate over the *callee's* parameter instead
-//! ([`Gate::callee_param_readonly`]): the value crosses into the callee
-//! uncopied — the value-copy planner skipped the copy because the literal is
-//! fresh — so the callee is the only party that could write the shared object.
-//! Being read-only is not enough there: a by-value parameter is the callee's
-//! own copy, so it may legitimately hand a *projection* of it back
-//! (`return s.data`), which the return-convention fixpoint calls owned and the
-//! caller then mutates. [`param_storage_escapes`] rules that out.
-//!
-//! A project-level pass over the arena `Body` (see
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`): the analysis (read-only
-//! gate, const check) is a read-only walk and the mutation (read rewrite,
-//! `let` → `GlobalVarSet`) edits the body in place.
+//! Body globalization — hoist a constant, read-only aggregate `let` into a
+//! shared module global, so Wasm 3.0 GC builds it once at instantiation. Two
+//! gates carry the soundness: the initializer must be a side-effect-free
+//! constant with no free locals, and every use a reading position — including
+//! the callee's parameter, a by-value constant crossing uncopied.
 
 use cranelift_entity::EntityRef;
 use std::cell::RefCell;
@@ -999,16 +960,11 @@ impl Gate<'_> {
     }
 
     /// Whether a value of `ty` owns heap storage worth building only once.
-    ///
-    /// Hoisting is not free: it costs a global, a guard branch, and an object
-    /// that stays live for the whole program. That only pays when rebuilding
-    /// the value would re-allocate — i.e. when it (transitively) owns a GC
-    /// array, as `String` and `List` do.
-    ///
-    /// A small aggregate of scalars owns nothing: `multi_value_return` already
-    /// lifts such a return into Wasm multi-values and allocates *nothing*, so
-    /// hoisting it is strictly worse. This is the existing "skip scalars"
-    /// rationale one level up — skip whatever the backend can keep in registers.
+    /// Hoisting costs a global, a guard branch, and an object live for the whole
+    /// program, which only pays when rebuilding would re-allocate — when the
+    /// value transitively owns a GC array, as `String` and `List` do. A small
+    /// aggregate of scalars owns nothing and is strictly worse hoisted:
+    /// `multi_value_return` already lifts one into Wasm multi-values.
     fn owns_heap_storage(&self, ty: TypeId) -> bool {
         let mut seen = IndexSet::default();
         self.owns_heap_storage_inner(ty, &mut seen)
@@ -1156,20 +1112,11 @@ fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     block_readonly(body, body.root, idx, gate)
 }
 
-/// Whether the callee hands the *storage* of by-value parameter `idx` back out
-/// — returning `s.data`, stashing it in a global, or passing it on by value.
-///
-/// [`is_readonly_body`] does not cover this: reading a field of the parameter is
-/// a read, and a by-value parameter is the callee's own copy, so returning that
-/// field is legitimate — the return-convention fixpoint even calls it *owned*,
-/// which is what lets the caller skip a defensive copy of the result. Hoisting
-/// the argument invalidates the premise: the "owned" value handed back is the
-/// shared global's storage, and the first mutation corrupts the constant.
-/// Passing the storage on by value hands the same problem to the next callee.
-///
-/// A borrow (`&s.data`) is not an escape — the callee's own read-only gate
-/// already bounds what the borrow can do — and a scalar projection copies its
-/// value outright.
+/// Whether the callee hands the *storage* of by-value parameter `idx` back out,
+/// by returning a projection of it, stashing it, or passing it on by value.
+/// [`is_readonly_body`] does not cover this: returning a field of the callee's
+/// own copy is legitimate and even counts as owned, a premise hoisting
+/// invalidates. A borrow or a scalar projection is not an escape.
 fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     let roots = projection_alias_roots(body, idx, gate);
     let escapes = |op: Operand| delivers_projection_operand(body, op, &roots, gate);
@@ -1237,17 +1184,11 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     false
 }
 
-/// `idx` plus every local *bound* from something that can yield one of their
-/// storages: a `let` (`let r = s.data;`, which LICM also produces), a
-/// destructuring `let`, or a `match` arm pattern over such a scrutinee
-/// (`match s.inner { Inner { blob } => …`). They all name the same storage, so
-/// an escape through any of them is an escape of the parameter.
-///
-/// The source only has to *contain* a reference-typed projection of a root —
-/// `let r = if c { s.a } else { s.b };` binds one of two projections, and
-/// neither the branch shape nor the pattern says which. Over-approximating a
-/// binding as an alias only makes the escape check stricter: a scalar binding
-/// can never carry a reference-typed projection of itself, so it is inert.
+/// `idx` plus every local bound from something that can yield one of their
+/// storages — a `let`, a destructuring `let`, or a `match` arm over such a
+/// scrutinee. All name the same storage, so an escape through any is an escape of
+/// the parameter. The source need only *contain* a reference-typed projection:
+/// `let r = if c { s.a } else { s.b };` binds one of two and nothing says which.
 fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
     let mut roots = vec![idx];
     let mut i = 0;
@@ -1803,17 +1744,11 @@ fn inline_sibling_lets(
 }
 
 /// True when `expr` cannot end as a Wasm constant instruction, so
-/// `wir_optimize::const_global` cannot delete the assignment and the
-/// candidate needs the lazy-init guard. Four shapes qualify:
-///
-/// - a call, never const-expressible;
-/// - a `PackedArray` outside the eager `array.new_fixed` bound
-///   ([`crate::wir_build::packed_array_is_eager`], the same choice
-///   `translate_packed_array` makes);
-/// - an `ArrayLiteral` past `ARRAY_NEW_FIXED_LIMIT`, whatever its elements,
-///   which `split_large_array_literals` rewrites into a build sequence;
-/// - an `ArrayLiteral` `promote_constant_arrays_to_data` will rewrite to
-///   `array.new_data` (see [`array_literal_promotes_to_data`]).
+/// `wir_optimize::const_global` cannot delete the assignment and the candidate
+/// needs a lazy-init guard. Four shapes qualify: a call, never const-expressible;
+/// a `PackedArray` outside the eager `array.new_fixed` bound; an `ArrayLiteral`
+/// past `ARRAY_NEW_FIXED_LIMIT`, which becomes a build sequence; and one
+/// `promote_constant_arrays_to_data` will rewrite to `array.new_data`.
 fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {
     let mut stack = vec![NodeRef::Expr(expr)];
     while let Some(node) = stack.pop() {
@@ -1909,17 +1844,11 @@ fn stmt_needs_lazy_guard(body: &Body, stmt: StmtId, gate: &Gate<'_>, prefer_fixe
 }
 
 /// Wrap a hoisted `GlobalVarSet` in `if builtin::is_uninitialized(<global>)`.
-///
-/// The unguarded form is correct only because `wir_optimize::const_global`
-/// promotes a Wasm-const-expressible initializer into the global's eager
-/// `init` and deletes the assignment. An initializer [`needs_lazy_guard`]
-/// classes non-promotable survives — and an unguarded one re-runs on every
-/// activation, which is the opposite of hoisting.
-///
-/// The guard also pins the semantics: initialization happens at the first
-/// execution of the expression it replaced, so a callee that traps or diverges
-/// still does so, at the same point. Moving the work to module-init instead
-/// would drag both to instantiation time.
+/// The unguarded form is only correct because `wir_optimize::const_global`
+/// promotes a const-expressible initializer into the eager `init` and deletes
+/// the assignment; one [`needs_lazy_guard`] calls non-promotable would re-run on
+/// every activation. The guard also pins the semantics to the first execution of
+/// the expression it replaced, so a trapping callee still traps there.
 fn guard_set_on_uninit(
     body: &mut Body,
     set: ExprId,

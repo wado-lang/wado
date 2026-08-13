@@ -1,14 +1,10 @@
 //! Fine-grained codegen feature flags.
 //!
-//! These toggle individual codegen strategies that we want to be able to
-//! switch on and off without rebuilding the toolchain — primarily so we can
-//! A/B them under the benchmark suite. The CLI exposes them through the
-//! generic `-f <flag>` option (see `wado-cli`), which forwards the raw flag
-//! strings to [`CompilerOptions::codegen_flags`](crate::CompilerOptions); the
-//! compiler then parses them into this typed struct via [`CodegenFlags::parse`].
-//!
-//! Each flag is a plain boolean. A leading `no-` on the flag name inverts it,
-//! so a flag that is on by default can be turned off with `-f no-<flag>`.
+//! These toggle individual codegen strategies without rebuilding the toolchain,
+//! primarily to A/B them under the benchmark suite. The CLI's `-f <flag>`
+//! forwards raw strings to [`CompilerOptions::codegen_flags`](crate::CompilerOptions),
+//! which [`CodegenFlags::parse`] reads into this struct. Each flag is a boolean,
+//! and a leading `no-` inverts it.
 
 /// Codegen feature flags toggled from the CLI via `-f <flag>`.
 ///
@@ -19,45 +15,24 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CodegenFlags {
     /// Lower `builtin::array_copy` to the native Wasm `array.copy` instruction
-    /// (the default) instead of an open-coded element-wise loop.
-    ///
-    /// We originally defaulted to the loop because wasmtime's `array.copy`
-    /// runtime path was markedly slower than an inlined loop for short copies.
-    /// After a wasmtime patch improved that path, benchmarking showed the
-    /// native instruction wins big on copy-heavy workloads (zlib decompress
-    /// ~+41%, syntax-highlight ~+10%) and is neutral elsewhere (compress,
-    /// JSON parsing, float formatting all within noise), so the native
-    /// instruction is now the default. Pass `-f no-array-copy` to restore the
-    /// open-coded loop. See the `WirInstr::ArrayCopy` emitter in
-    /// `codegen/emit.rs`.
+    /// (the default) instead of an open-coded element-wise loop. The loop was
+    /// once faster for short copies; since a wasmtime patch, the instruction
+    /// wins big on copy-heavy workloads (zlib decompress ~+41%,
+    /// syntax-highlight ~+10%) and is neutral elsewhere.
     pub array_copy: bool,
 
-    /// Emit `metadata.code.branch_hint` entries (the default). Pass
-    /// `-f no-branch-hinting` to benchmark without them: `builtin::cold_path()`
-    /// then lowers to a plain no-op in `wir_build` (so no marker reaches WIR
-    /// and `apply_cold_path_hints` finds nothing) and the WIR-level trap-based
-    /// hint inference is skipped. The markers are dropped at WIR build — not
-    /// at NIR — so the NIR inliner's cold-path cost exclusion behaves
-    /// identically in both configurations and the A/B isolates the hints
-    /// themselves. `br_if` selection is unaffected by this flag — it is
-    /// instruction selection, not hinting (it runs at `-O1+`, gated by the
-    /// optimization level like any other rewrite).
+    /// Emit `metadata.code.branch_hint` entries (the default);
+    /// `-f no-branch-hinting` benchmarks without them, lowering
+    /// `builtin::cold_path()` to a no-op and skipping trap-based inference. The
+    /// markers are dropped at WIR build, not NIR, so the inliner's cold-path
+    /// cost exclusion is unchanged and the A/B isolates the hints themselves.
     pub branch_hinting: bool,
 
-    /// Lower an assertion failure to a bare `unreachable` trap
-    /// (`if !cond { unreachable() }`) instead of the power-assert diagnostic.
-    ///
-    /// An `assert` always keeps checking and trapping — only the failure
-    /// *message* is dropped. The diagnostic formats the operands through the
-    /// whole `Formatter` / `Inspect` / `String` stack, which any program that
-    /// merely indexes a `List` (`list[i]` lowers to `assert i < used`) then
-    /// drags in. `-f bare-asserts` strips it, shrinking size-sensitive builds:
-    /// `lower::bare_asserts` replaces the `assert_failed(..)` cold block with a
-    /// trap and the now-dead formatting falls out at DCE.
-    ///
-    /// Off at `-O0`/`-O1`/`-O2`/`-O3`, **on by default at `-Os`** (see
-    /// [`CodegenFlags::for_opt_level`]); `-f no-bare-asserts` restores the
-    /// diagnostic, `-f bare-asserts` forces it at any level.
+    /// Lower an assertion failure to a bare `unreachable` trap instead of the
+    /// power-assert diagnostic. The check and trap always stay; only the
+    /// *message* goes, taking with it the `Formatter` / `Inspect` / `String`
+    /// stack that even a `list[i]` drags in. Off at `-O0`…`-O3`, **on at `-Os`**
+    /// (see [`CodegenFlags::for_opt_level`]).
     pub bare_asserts: bool,
 
     /// Emit native Wasm wide-arithmetic (`i64.mul_wide_u/s`, `i64.add128`,

@@ -94,16 +94,11 @@ pub(super) struct FnSignature {
     pub(super) return_type: TypeId,
 }
 
-/// Classification of an `Ident`-form call callee after resolving any
-/// `Self::` / `T::` prefix that needs to be substituted before
-/// `resolve_call` does its parameter-type lookup and argument resolution.
-///
-/// Hoisting this classification to the top of `resolve_call` lets the
-/// argument resolution run once with the correct expected-type hints
-/// (issue #1181). The previous implementation re-entered `resolve_call`
-/// with a freshly built synthetic `CallExpr`, which made the assert
-/// capture hook fire twice on each scanner-flagged sub-expression and
-/// caused `let __vK = ...` bindings to be emitted twice.
+/// Classification of an `Ident`-form call callee, with any `Self::` / `T::`
+/// prefix already substituted, so `resolve_call` can look up parameter types and
+/// resolve arguments once with the right expected-type hints. Re-entering
+/// `resolve_call` with a synthetic `CallExpr` instead fired the assert-capture
+/// hook twice per sub-expression, emitting each `let __vK = …` binding twice.
 enum CalleeIdentKind<'a> {
     /// No prefix substitution needed. Covers plain ident calls
     /// (`foo(x)`), already-concrete qualified calls (`Type::method(x)`,
@@ -701,16 +696,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let holes = turbofish_holes(&call.type_args);
                     merge_turbofish_type_args(&mut method_type_args, &holes, &method_args);
                 }
-                // WEP 2026-05-26: record the combined
-                // `(impl_args, method_args)` for the static-method call
-                // site. Reify needs both halves to reconstruct the
-                // mangled `__<Type>__<method>` name with the same type
-                // arg shape annotate computed. The combined order is
-                // `[impl_args, method_args]` — same as
-                // `lookup_static_method_param_types`'s substitution
-                // input below. Instance type is UNKNOWN: a static-method
-                // call has no decl-anchored `GenericInstance`; reify
-                // reads `expression_types[call.id]` for the result type.
+                // Record `[impl_args, method_args]` — the same order
+                // `lookup_static_method_param_types` substitutes in — since reify
+                // needs both halves to rebuild the mangled `__<Type>__<method>`.
+                // The instance type is UNKNOWN: a static call anchors no
+                // `GenericInstance`, so reify reads `expression_types` instead.
                 {
                     let mut combined = impl_type_args_inferred.clone();
                     combined.extend_from_slice(&method_type_args);
@@ -733,21 +723,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let arg_type = args[0].type_id;
                     let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
 
-                    // Reflexive: T::from(T_val) — identity conversion. The
-                    // outer Call AstId evaporates, so tag it with
-                    // `NewtypeFromCollapse` for reify to recognise — otherwise
-                    // reify would emit a `TirExprKind::Call` the elaborator
-                    // never built. The inner argument's `expression_types`
-                    // entry survives because it was recorded by the
-                    // `resolve_expr` wrapper for the argument itself.
-                    //
-                    // Match by canonical decl identity, not bare name: two types
-                    // from different modules can share a name
-                    // (`core:temporal::Instant` vs `wasi:clocks::Instant`) and a
-                    // bare-name match would collapse a real conversion into an
-                    // identity. Generic instances keep the name compare — a decl
-                    // key drops type args, so it cannot tell `Foo<A>` from
-                    // `Foo<B>`.
+                    // Reflexive `T::from(T_val)`: the outer Call evaporates, so
+                    // tag it `NewtypeFromCollapse` or reify emits a `Call` the
+                    // elaborator never built. Matched by canonical decl identity,
+                    // since two modules' `Instant` share a bare name. Generic
+                    // instances compare by name: a decl key drops type args.
                     let arg_is_generic = {
                         let tt = self.tysys.type_table.borrow();
                         matches!(
@@ -1745,19 +1725,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (Vec::new(), Vec::new())
     }
 
-    /// Fill missing trailing arguments with the callee's declared default
-    /// expressions, resolving each default in the caller's function context.
-    ///
-    /// A default may reference earlier parameters by name (e.g. `fn rect(w, h = w)`).
-    /// To make the caller's supplied value visible to the default expression,
-    /// we textually substitute param-name [`Expr::Ident`] occurrences inside
-    /// the default's cloned AST with the corresponding argument's AST before
-    /// resolving it. The elaborator then type-checks the result against the
-    /// declared parameter type.
-    ///
-    /// Appends newly-synthesized arguments to `args`. Leaves `args` unchanged
-    /// for positions without a declared default; the caller's arity check
-    /// reports the remaining shortfall as a mismatch.
+    /// Fill missing trailing arguments from the callee's declared defaults,
+    /// resolving each in the caller's context. A default may name an earlier
+    /// parameter (`fn rect(w, h = w)`), so param-name idents in its cloned AST
+    /// are substituted with the caller's argument AST before resolution. A
+    /// position with no declared default is left for the arity check.
     pub(super) fn pad_args_with_defaults(
         &mut self,
         callee: &Expr,
@@ -1891,23 +1863,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Vec::new()
     }
 
-    /// Infer type arguments for a generic function call from the actual argument types.
-    ///
-    /// Uses pre-resolved param types from the current-module cache when available,
-    /// otherwise falls back to looking up imported functions in loaded modules and
-    /// resolving their param types in a temporary type-param scope.
-    ///
-    /// Inference runs in three tiers via [`InferCtx`]:
-    /// 1. Typed (non-literal) argument types are unified first.
-    /// 2. Numeric-literal argument types are unified after, so a literal's
-    ///    default type cannot clobber a stronger binding from a typed neighbour.
-    /// 3. If `expected_type` is supplied (e.g. `let x: i32 = foo()`), the
-    ///    declaration's return type is unified against it to fill any
-    ///    parameters that never appeared in the argument list.
-    ///
-    /// Returns the inferred type args in declaration order, or empty vec if
-    /// any parameter remains unbound (legacy strict all-or-nothing behaviour
-    /// preserved for plain function calls).
+    /// Infer a generic call's type arguments from its actual argument types, in
+    /// three [`InferCtx`] tiers: typed arguments first, numeric literals second
+    /// so a literal's default cannot clobber a typed neighbour's binding, then
+    /// the declared return type against `expected_type`. Returns declaration
+    /// order, or empty if any parameter is left unbound — all-or-nothing.
     pub(super) fn infer_fn_type_args(
         &mut self,
         callee: &CalleeRef,
@@ -2054,16 +2014,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         inferred
     }
 
-    /// Resolve type parameters that appear only inside another parameter's
-    /// associated-type-equality bound, e.g. `fn f<T, I: Iterator<Item = T>>`.
-    ///
-    /// [`Self::infer_fn_type_args`] binds `I` from the argument but leaves `T`
-    /// unbound, because `T` never appears in a parameter type. For each bound
-    /// `Owner: Trait<Assoc = Target>` whose `Owner` is already inferred to a
-    /// concrete type, project that type's `Assoc` to bind `Target`. Without
-    /// this, `T` would survive monomorphization and trap codegen as an
-    /// unsubstituted type parameter. Iterates to a fixpoint so chained
-    /// bounds resolve regardless of declaration order.
+    /// Resolve a type parameter appearing only inside another's
+    /// associated-type-equality bound (`fn f<T, I: Iterator<Item = T>>`), which
+    /// [`Self::infer_fn_type_args`] leaves unbound since it is in no parameter
+    /// type. For each `Owner: Trait<Assoc = Target>` with `Owner` already
+    /// concrete, project its `Assoc` to bind `Target`, iterating to a fixpoint.
     fn infer_type_args_from_assoc_bounds(
         &mut self,
         callee: &CalleeRef,
@@ -2096,19 +2051,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_assoc_bound_args(&params, type_args);
     }
 
-    /// Report a clean "cannot infer type parameter" diagnostic when a generic
-    /// function call leaves one of its declared type parameters unbound, so it
-    /// fails at the call site instead of reaching codegen as an unsubstituted
-    /// `TypeParam` (which traps). Mirrors the method-call path in
-    /// `infer_method_type_args`.
-    ///
-    /// A parameter is only flagged when it is genuinely unresolvable:
-    /// - effect parameters are skipped (handled separately);
-    /// - `fn`-bound parameters (`<F: fn(...) -> ...>`) are skipped — they are
-    ///   constrained structurally by the bound, not by call-site inference;
-    /// - parameters with a declared default are skipped;
-    /// - a parameter bound to an outer-scope `TypeParam` (the caller forwarding
-    ///   its own generics) is fine and left for monomorphization.
+    /// Report "cannot infer type parameter" at the call site rather than letting
+    /// an unsubstituted `TypeParam` reach codegen and trap. Effect parameters,
+    /// `fn`-bound ones (constrained structurally), defaulted ones (already
+    /// filled), and ones bound to an outer-scope `TypeParam` (the caller
+    /// forwarding its own generics) are all excluded.
     fn report_uninferred_fn_type_args(
         &mut self,
         callee: &CalleeRef,
@@ -2240,21 +2187,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// Substitute the declared default type (`fn f<T = Fallback>`) into any
-    /// dense type-arg slot still left unbound by call-site inference. The
-    /// dense index space matches [`Self::defer_or_report_uninferred_fn_type_args`]
-    /// (non-effect, non-`fn`-bound params in declaration order). Seeds an
-    /// empty `type_args` first so a fully-omitted turbofish is handled too;
-    /// non-defaulted slots keep their unbound `TypeParam`, leaving the
-    /// defer/report step to handle them.
-    ///
-    /// Each default type is resolved with the callee's type params in scope, so
-    /// a param-referencing default (`<T, U = T>`) resolves `T` to the callee's
-    /// own `TypeParam` and then picks up `T`'s inferred type via
-    /// [`Self::substitute_type_params`]. `default_scope_module` is pointed at
-    /// the callee so a default naming a type private to the callee's module
-    /// (`<T = Priv>`, `Priv` private) resolves through the fallback in
-    /// [`Self::resolve_named_type`].
+    /// Substitute a declared default (`fn f<T = Fallback>`) into any dense
+    /// type-arg slot call-site inference left unbound, seeding an empty
+    /// `type_args` first so an omitted turbofish is covered. Each default
+    /// resolves with the callee's params in scope (`<T, U = T>` picks up `T`)
+    /// and at `default_scope_module`, so it may name a type private to it.
     fn fill_defaulted_fn_type_args(&mut self, callee: &CalleeRef, type_args: &mut Vec<TypeId>) {
         let params = self.lookup_function_type_params(callee);
         let space: Vec<ast::GenericParam> = params
@@ -2425,16 +2362,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         *type_args = new_args;
     }
 
-    /// Shared core of bound-driven inference: for each generic parameter in
-    /// `params` already inferred to a concrete type, look at its trait bounds'
-    /// associated-type-equality bindings (`Trait<Assoc = Target>`); when
-    /// `Target` names another, still-unbound parameter, project the owner's
-    /// `Assoc` and bind it. `params` and `args` are parallel (same index
-    /// space). Iterates to a fixpoint so chained bounds resolve regardless of
-    /// declaration order.
-    ///
-    /// Used by both free-function calls ([`Self::infer_type_args_from_assoc_bounds`])
-    /// and method calls (`infer_method_type_args`).
+    /// Shared core of bound-driven inference, used by both the free-function and
+    /// method paths: for each already-concrete parameter, read its bounds'
+    /// `Trait<Assoc = Target>` bindings and, where `Target` names a still-unbound
+    /// parameter, project the owner's `Assoc` to bind it. `params` and `args`
+    /// share an index space; iterates to a fixpoint for chained bounds.
     pub(super) fn resolve_assoc_bound_args(
         &mut self,
         params: &[ast::GenericParam],
@@ -2588,18 +2520,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.infer_static_method_type_args(prefix, suffix, raw_args, args, expected_type)
     }
 
-    /// Infer the declaring block's and the method's own type arguments for a
-    /// generic static method.
-    ///
-    /// Shares the three-tier constraint model with [`Self::infer_fn_type_args`]
-    /// via [`InferCtx`]: typed args, then literal-number args, then
-    /// expected-return back-inference.
-    ///
-    /// Returns `(declaring_args, method_args)` — the first from
-    /// `impl Container<T>` / `resource Stream<T>`, the second from
-    /// `fn make<U>()`. Either may be empty if nothing on that level was
-    /// inferable. Inference reads the signature's canonical types directly:
-    /// it is solving *for* the arguments an instantiation would need.
+    /// Infer a generic static method's type arguments, sharing the three-tier
+    /// [`InferCtx`] model with [`Self::infer_fn_type_args`]. Returns
+    /// `(declaring_args, method_args)` — the first from `impl Container<T>`, the
+    /// second from `fn make<U>()` — either possibly empty. Reads the signature's
+    /// canonical types directly, solving *for* an instantiation's arguments.
     fn infer_static_method_type_args(
         &mut self,
         struct_name: &str,

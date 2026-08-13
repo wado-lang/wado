@@ -1,28 +1,14 @@
-//! Deterministic, host-independent lexical path normalization.
-//!
-//! A Wado module path is a filesystem representation, not a URI: a space stays
-//! a space and a literal `%` stays a `%`. Normalization here is purely lexical
-//! — it folds `.`/`..` and redundant separators without touching the
-//! filesystem (so it is `wasm32-unknown-unknown`-safe) and without consulting
-//! the host platform's path parser (so a module identity is byte-identical on
-//! every host). It follows the RFC 3986 §5.2.4 dot-segment semantics, extended
-//! to preserve an absolute root (POSIX `/` or a Windows drive prefix), which a
-//! `..` segment can never escape.
+//! Deterministic, host-independent lexical path normalization. A Wado module
+//! path is a filesystem representation, not a URI, so a space and a literal `%`
+//! stay as written. Folding `.`/`..` and redundant separators touches neither
+//! the filesystem nor the host's path parser, keeping it `wasm32`-safe and
+//! byte-identical everywhere. Follows RFC 3986 §5.2.4, plus an inescapable root.
 
-/// Normalize a filesystem-style path lexically.
-///
-/// - `\` is treated as `/` (Windows separators are unified).
-/// - `.` segments are dropped; `..` pops the preceding real segment.
-/// - An absolute root (`/` or `C:`) is preserved and `..` cannot escape it.
-/// - A relative path keeps its leading `./` marker and any leading `..`.
-/// - The content is never percent-encoded, decoded, or otherwise rewritten,
-///   so the round-trip back to a filesystem path is the identity function.
-///
-/// Examples:
-/// - `./sub/../geometry.wado` → `./geometry.wado`
-/// - `/abs/a/../b.wado` → `/abs/b.wado`
-/// - `/home/user/My Project/x.wado` → `/home/user/My Project/x.wado`
-/// - `C:\proj\main.wado` → `C:/proj/main.wado`
+/// Normalize a filesystem-style path lexically: `\` unifies to `/`, `.` segments
+/// drop, `..` pops the preceding real segment without escaping an absolute root
+/// (`/` or `C:`), and a relative path keeps its leading `./` and any leading
+/// `..`. Content is never percent-encoded or otherwise rewritten, so the
+/// round-trip back to a filesystem path is the identity.
 #[must_use]
 pub fn normalize(path: &str) -> String {
     let unified = path.replace('\\', "/");
@@ -89,20 +75,11 @@ fn split_root(path: &str) -> (String, &str) {
     (String::new(), path)
 }
 
-/// Express `target` as a path relative to the directory `base`, lexically.
-///
-/// Both arguments are normalized first ([`normalize`]). The result is the
-/// minimal `./`- or `../`-prefixed path that, joined with `base` and
-/// normalized, yields `target` again — the unique spelling of `target` as seen
-/// from `base`. Purely lexical (no filesystem, `wasm32`-safe).
-///
-/// `base` and `target` must share rootedness (both relative, or both absolute
-/// under the same root); a mismatch returns `normalize(target)` unchanged.
-///
-/// Examples:
-/// - base `/p/src`, target `/p/src/gen/x.wado` → `./gen/x.wado`
-/// - base `/p/src`, target `/p/shared/h.wado` → `../shared/h.wado`
-/// - base `.`, target `./x.wado` → `./x.wado`
+/// Express `target` as a path relative to the directory `base`, lexically: after
+/// [`normalize`]ing both, the minimal `./`- or `../`-prefixed path that rejoins
+/// with `base` to give `target` back. `base` and `target` must share rootedness;
+/// a mismatch returns `normalize(target)` unchanged. Base `/p/src` and target
+/// `/p/shared/h.wado` give `../shared/h.wado`.
 #[must_use]
 pub fn relative_path(base: &str, target: &str) -> String {
     let base = normalize(base);

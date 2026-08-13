@@ -1,15 +1,8 @@
-//! Semantic analysis — the shared frontend entry point.
-//!
-//! [`semantics`] drives the compilation pipeline up through name resolution
-//! and type resolution (the elaborator's annotate phase), then stops. The
-//! resulting [`Semantics`] bundles every semantic fact needed to answer
-//! editor queries (hover, go-to-definition, diagnostics) without paying for
-//! monomorphize / lower / codegen.
-//!
-//! The pipeline used here is the same one that `compile_with_options` runs
-//! in its early phases: lex → parse → bind → load → analyze → resolve.
-//! Everything downstream of resolve is only needed to emit Wasm bytes, so
-//! LSP-style consumers skip it.
+//! Semantic analysis — the shared frontend entry point. [`semantics`] runs the
+//! same lex → parse → bind → load → analyze → resolve pipeline
+//! `compile_with_options` does, then stops: everything downstream exists only to
+//! emit Wasm bytes. The resulting [`Semantics`] carries every fact an editor
+//! query needs without paying for monomorphize / lower / codegen.
 
 use crate::analyze::Analyzer;
 use crate::ast::{AstId, Module};
@@ -41,40 +34,23 @@ pub struct Semantics {
     pub modules: IndexMap<ModuleSource, Module>,
     pub symbols: SymbolTable,
     pub types: TypeTable,
-    /// `ModuleSource` interner shared with the analyze + resolve phases.
-    /// LSP queries (definition / hover / references) borrow this when
-    /// they need to resolve an import path the user clicked into a
-    /// `ModuleSource`.
+    /// `ModuleSource` interner shared with the analyze + resolve phases; an LSP
+    /// query borrows it to resolve a clicked import path.
     ///
-    /// Re-entrancy: only single-threaded callers, and only one
-    /// `borrow_mut` at a time. Do not hold a [`std::cell::RefMut`]
-    /// across calls into other [`Semantics`] / [`crate::Elaborator`]
-    /// methods — a nested `borrow_mut` will panic. The intended
-    /// pattern is `sem.interner.borrow_mut().<one method call>`, dropping
-    /// the borrow at the statement boundary.
+    /// Single-threaded, one `borrow_mut` at a time: never hold a `RefMut` across
+    /// a call into [`Semantics`] or [`crate::Elaborator`], or the nested borrow
+    /// panics. Write `sem.interner.borrow_mut().<one call>` and let it drop.
     pub interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
     /// Per-module structural index (name spans, write targets, span lookup).
     /// Built once per [`Module`] in [`semantics_of`]. LSP queries (and
     /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this
     /// instead of re-walking the AST on every request.
     pub(crate) ast_indices: IndexMap<ModuleSource, AstIndex>,
-    /// Shared elaborator state produced by [`Elaborator::annotate_modules`].
-    ///
-    /// `None` when analyze or [`Elaborator::annotate_modules`] bailed before
-    /// the state could be built. `Some(_)` once resolve completed — even
-    /// if a later [`Elaborator::build_tir_from_state`] bail set
-    /// [`Self::is_complete`] to `false`. The pair `(state, is_complete)`
-    /// therefore has three distinguishable states:
-    ///
-    /// - `(None, false)` — analyze or resolve bailed; the snapshot has
-    ///   only `symbols` + `ast_indices`.
-    /// - `(Some(_), false)` — annotate completed but `build_tir` bailed; the
-    ///   snapshot has everything except `tir_modules` (which is empty).
-    /// - `(Some(_), true)` — full success.
-    ///
-    /// Batch compilation rejects every non-`true` case via
-    /// [`Semantics::is_complete`], so the `expect` in `compile_with_options`
-    /// is safe. LSP queries do not inspect `state` directly.
+    /// Shared elaborator state from [`Elaborator::annotate_modules`], paired with
+    /// `is_complete` to distinguish three outcomes: `(None, false)` — analyze or
+    /// resolve bailed, leaving only `symbols` + `ast_indices`; `(Some(_), false)`
+    /// — annotate finished but `build_tir` bailed; `(Some(_), true)` — full
+    /// success. Batch compilation rejects all but the last.
     pub(crate) state: Option<AnnotateState>,
     /// `AstIdSpace → ModuleSource` registry over the loaded modules: which
     /// module's parse minted each id space. Lets bare-`AstId` facts be
@@ -93,8 +69,8 @@ pub struct Semantics {
     /// symbol. Empty when resolve did not run or bailed early.
     pub(crate) locals: IndexMap<AstId, Symbol>,
     /// Inferred [`TypeId`] for each local binding (let / param / closure
-    /// param), keyed by the binding's defining [`AstId`](crate::ast::AstId). Populated
-    /// alongside [`Self::locals`] from the elaborator. Consumed by LSP
+    /// param), keyed by the binding's defining [`AstId`]. Populated
+    /// alongside `Self::locals` from the elaborator. Consumed by LSP
     /// inlay-hint queries via [`Semantics::local_type_name`] to render
     /// the inferred type on bindings without explicit annotation. Empty
     /// when resolve did not run or bailed before recording any bindings.
@@ -230,36 +206,20 @@ impl Semantics {
             .map(|s| std::sync::Arc::clone(&s.world_registry))
     }
 
-    /// Component Model world registry produced during annotate.
-    ///
-    /// Carries every `world` declaration the frontend has seen — stdlib
-    /// (`wasi:cli/command`, `wasi:http/service`, `core:kiln/generator`,
-    /// …) plus any user-declared worlds. Keyed by fully-qualified name.
-    ///
-    /// Returns `None` when no elaborator state was built — that is, when
-    /// parse, load, analyze, or annotate bailed before constructing
-    /// `AnnotateState`. Batch compilation refuses to continue in any of
-    /// those cases via [`Self::is_complete`]; LSP queries proceed
-    /// without world data.
-    ///
-    /// Consumed by the WIT producer (`wado wit` /
-    /// `wado compile --embed-wit=…`) and by world-shape decisions in
-    /// codegen / DCE (see [`crate::flat_package::FlatPackage`]).
+    /// Component Model world registry produced during annotate: every `world`
+    /// declaration the frontend saw, stdlib and user-declared alike, keyed by
+    /// fully-qualified name. Consumed by the WIT producer and by world-shape
+    /// decisions in codegen / DCE. `None` when no elaborator state was built —
+    /// an LSP query proceeds without world data, batch compilation does not.
     #[must_use]
     pub fn world_registry(&self) -> Option<&WorldRegistry> {
         self.state.as_ref().map(|s| &*s.world_registry)
     }
 
-    /// Component Model interface registry produced during annotate.
-    ///
-    /// Carries the resolved `#[cm(...)]` / `#[cm_import(...)]` view of
-    /// every CM interface the frontend has seen — `wasi:*`,
-    /// `core:kiln/*`, and any future user-declared interfaces (under the
-    /// post-unification `interface` block syntax). Powers CM binding
-    /// synthesis, lift/lower, and WIT producer-side emission.
-    ///
-    /// Returns `None` under the same conditions as
-    /// [`Self::world_registry`].
+    /// Component Model interface registry produced during annotate: the resolved
+    /// `#[cm(…)]` / `#[cm_import(…)]` view of every CM interface the frontend
+    /// saw, powering binding synthesis, lift/lower, and WIT emission. `None`
+    /// under the same conditions as [`Self::world_registry`].
     #[must_use]
     pub fn cm_interface_registry(&self) -> Option<&CmInterfaceRegistry> {
         self.state.as_ref().map(|s| &*s.tysys.cm_interface_registry)
@@ -319,7 +279,7 @@ impl Semantics {
     /// Innermost AST node containing the given `(line, column)` in `module`.
     ///
     /// Returns `None` if the module is unknown or no node covers the position.
-    /// Answered from the per-module [`AstIndex`](crate::ast_index::AstIndex);
+    /// Answered from the per-module [`AstIndex`];
     /// no AST traversal happens at query time.
     #[must_use]
     pub fn ast_id_at(&self, module: &ModuleSource, line: usize, column: usize) -> Option<AstId> {
@@ -334,7 +294,7 @@ impl Semantics {
         self.symbols.get(&id).or_else(|| self.locals.get(&id))
     }
 
-    /// Resolve a use-site `AstId` (typically an [`IdentExpr`] id) to the
+    /// Resolve a use-site `AstId` (typically an [`IdentExpr`](crate::ast::IdentExpr) id) to the
     /// `AstId` of its defining binding. Returns `None` if the key does
     /// not appear in the reference map — in which case the caller should
     /// fall back to name-based lookup via the symbol table.
@@ -358,7 +318,7 @@ impl Semantics {
 
     /// Iterate every recorded use-site `(use_key, def_key)` edge.
     ///
-    /// Each `use_key` is typically an [`IdentExpr`] id; `def_key` is the
+    /// Each `use_key` is typically an [`IdentExpr`](crate::ast::IdentExpr) id; `def_key` is the
     /// binding's defining [`AstId`]. Use sites of locals, parameters,
     /// item-level definitions (functions, types, globals) and imported items
     /// are all recorded here.
@@ -371,9 +331,9 @@ impl Semantics {
     /// Find every use-site `AstId` whose definition is `def_id`.
     ///
     /// Walks [`Self::iter_references`] and collects matches. The returned keys
-    /// can be passed to [`Self::span_of_key`] for source ranges. The defining
+    /// can be passed to [`Self::span_of_id`] for source ranges. The defining
     /// occurrence itself is **not** included — callers that want it should add
-    /// it via [`Self::name_span_of`] / [`Self::span_of_key`].
+    /// it via [`Self::name_span_of`] / [`Self::span_of_id`].
     #[must_use]
     pub fn references_to(&self, def_id: AstId) -> Vec<AstId> {
         self.iter_references()
@@ -434,16 +394,10 @@ impl Semantics {
         self.method_dispatch.get(&id)
     }
 
-    /// WEP 2026-05-26: stable public view onto the recorded
-    /// method-dispatch decision at `key`.
-    ///
-    /// Returns `(resolved_function_name, defining_module, self_kind_str)`
-    /// for a `MethodCallExpr` whose dispatch was recorded by the body
-    /// walk, or `None` for synthetic / short-circuited call paths (see
-    /// [`crate::elaborator::sem::types::MethodDispatch`]). Used today as a
-    /// reachability probe in tests; the future `reify` pass / LSP hover
-    /// path consumes the full [`crate::elaborator::sem::types::MethodDispatch`]
-    /// via `pub(crate)` access from inside the crate.
+    /// Stable public view onto the recorded method-dispatch decision:
+    /// `(resolved_function_name, defining_module, self_kind_str)`, or `None` for
+    /// a synthetic or short-circuited call path. In-crate consumers read the
+    /// full `crate::elaborator::sem::types::MethodDispatch` instead.
     #[must_use]
     pub fn method_dispatch_view(&self, id: AstId) -> Option<(String, ModuleSource, String)> {
         let dispatch = self.method_dispatch.get(&id)?;
@@ -493,16 +447,11 @@ impl Semantics {
         self.method_dispatch.keys().copied()
     }
 
-    /// WEP 2026-05-26: stable public view onto the recorded
-    /// coercion choice at `key`.
-    ///
-    /// Returns `(coercion_kind_str, target_type_id)` for an expression
-    /// that the body walk adapted via `try_coerce`, or `None` for
-    /// expressions whose resolved type already matched the expected
-    /// type (or that were resolved without an expected type). See
-    /// [`crate::elaborator::sem::types::CoercionKind`] for the full
-    /// variant set; the returned string mirrors the variant name in
-    /// lowercase-with-underscores form.
+    /// Stable public view onto the recorded coercion choice:
+    /// `(coercion_kind_str, target_type_id)` for an expression the body walk
+    /// adapted via `try_coerce`, `None` for one that already matched or was
+    /// resolved without an expected type. The string is the
+    /// `crate::elaborator::sem::types::CoercionKind` variant, snake-cased.
     #[must_use]
     pub fn coercion_view(&self, id: AstId) -> Option<(String, TypeId)> {
         use crate::elaborator::sem::types::CoercionKind;
@@ -533,7 +482,7 @@ impl Semantics {
     /// rewrite site (`assert`, `matches`, comparison chain, for-of,
     /// `while`, compound assignment) or `None` for nodes that did not
     /// take a desugar path. See
-    /// [`crate::elaborator::sem::types::DesugarKind`] for the full
+    /// `crate::elaborator::sem::types::DesugarKind` for the full
     /// variant set.
     #[must_use]
     pub fn desugar_view(&self, id: AstId) -> Option<String> {
@@ -575,16 +524,11 @@ impl Semantics {
         if uri.is_empty() { None } else { Some(uri) }
     }
 
-    /// AST [`Function`](crate::ast::Function) node declaring `key`. Covers
-    /// top-level free functions and methods inside `Item::Impl` /
-    /// `Item::Trait` blocks, all of which share the `Function` AST shape.
-    /// Interface and resource methods carry a different AST shape
-    /// (`InterfaceMethod`) and are reached through the symbol table
-    /// instead — this accessor returns `None` for them.
-    ///
-    /// Resolution is O(1): the per-module [`AstIndex`] stores each
-    /// function's `(item_idx, [method_idx])` address, so no AST scan
-    /// happens at query time.
+    /// AST [`Function`](crate::ast::Function) node declaring `key` — free
+    /// functions and `impl` / `trait` methods, which share that AST shape.
+    /// `None` for interface and resource methods, which are `InterfaceMethod`
+    /// nodes reached through the symbol table. O(1): the per-module [`AstIndex`]
+    /// holds each function's address, so nothing scans the AST at query time.
     #[must_use]
     pub fn function_at(&self, id: AstId) -> Option<&crate::ast::Function> {
         use crate::ast_index::FunctionLocation;
@@ -625,16 +569,10 @@ impl Semantics {
     }
 
     /// Resolve a parsed [`SymbolNotation`](crate::symbol_notation::SymbolNotation)
-    /// to a [`Definition`] within this analysis.
-    ///
-    /// The notation's module is resolved against the entry module (so relative
-    /// paths anchor at the entry's directory; `core:` / `wasi:` are
-    /// location-independent) and must already be loaded in this `Semantics`.
-    ///
-    /// - A free notation (`mod#name`) resolves a module-level symbol.
-    /// - A receiver notation (`mod#Type::m`, `mod#Type.m`, `mod#Type^Trait::m`)
-    ///   resolves a method or associated constant on `Type` — scanning the
-    ///   `impl` blocks (and `trait` declaration for `Trait::m`) in the module.
+    /// to a [`Definition`]. A free notation (`mod#name`) resolves a module-level
+    /// symbol; a receiver notation (`mod#Type::m`) a method or associated
+    /// constant. The module is resolved against the entry — relative paths
+    /// anchor at its directory — and must already be loaded here.
     pub fn resolve_symbol_notation(
         &self,
         notation: &crate::symbol_notation::SymbolNotation,
@@ -660,16 +598,11 @@ impl Semantics {
         self.resolve_member(&module, receiver, &notation.member)
     }
 
-    /// Resolve `Type::member` / `Type.member` / `Type^Trait::member` to the
-    /// method or associated constant's definition, scanning `impl` blocks and
-    /// (for `Trait::member`) the `trait` declaration in `module`.
-    ///
-    /// Limitation: the receiver type is matched by **base name only** — generic
-    /// arguments in the notation (`List<String>`) are parsed but not used to
-    /// disambiguate. If a type has several instantiation-specific inherent
-    /// impls that each define `member` (`impl Foo<i32>` and `impl Foo<bool>`),
-    /// the first textual match wins. Trait disambiguation via `^Trait` is
-    /// honored; per-instantiation disambiguation is not yet supported.
+    /// Resolve `Type::member` / `Type.member` / `Type^Trait::member` against the
+    /// `impl` blocks — and, for `Trait::member`, the `trait` declaration — in
+    /// `module`. The receiver matches by base name only: `^Trait` disambiguates,
+    /// but generic arguments are parsed and ignored, so with both
+    /// `impl Foo<i32>` and `impl Foo<bool>` defining `member` the first wins.
     fn resolve_member(
         &self,
         module: &ModuleSource,
@@ -837,16 +770,11 @@ impl Semantics {
         self.ast_indices.get(self.module_of_id(id)?)?.span_of(id)
     }
 
-    /// Span of the defining identifier for the symbol at `key`.
-    ///
-    /// The `Symbol::span` field covers the whole declaring item — e.g. the
-    /// entire `fn foo() { ... }` block. LSP go-to-definition wants the
-    /// identifier alone (`foo`), which is carried on the AST item as
-    /// `name_span`. The lookup goes through the per-module
-    /// [`AstIndex`](crate::ast_index::AstIndex), which is populated for every
-    /// declaration node that exposes a `name_span` field. Returns `None` for
-    /// nodes without a dedicated name span (e.g. anonymous `impl` blocks,
-    /// `Item::Resource`, tests).
+    /// Span of the defining identifier alone — what go-to-definition wants,
+    /// where `Symbol::span` covers the whole `fn foo() { … }`. Read from the
+    /// per-module [`AstIndex`], which holds one for
+    /// every declaration node exposing a `name_span`. `None` for nodes without
+    /// one: anonymous `impl` blocks, `Item::Resource`, tests.
     #[must_use]
     pub fn name_span_of(&self, id: AstId) -> Option<Span> {
         self.ast_indices
@@ -986,18 +914,11 @@ impl<'a> Cursor<'a> {
     }
 }
 
-/// Convenience: run the full compiler frontend (parse → load →
-/// `semantics_of`) over `source` with no kiln invocations and default
-/// log level.
-///
-/// Callers that need to inspect the parsed entry between stages (LSP,
-/// kiln-aware drivers) compose the three primitives directly. Callers
-/// that need a custom log level or kiln redirects do the same.
-///
-/// Always returns a [`Semantics`]; on lex/parse/load failure
-/// [`Semantics::is_complete`] is `false` and the unreachable downstream
-/// fields are empty. Diagnostics are emitted through `host` as the
-/// phases run.
+/// Run the full frontend (parse → load → [`semantics_of`]) over `source` with no
+/// kiln invocations and the default log level. Callers needing to inspect the
+/// parsed entry between stages, or a custom log level, compose the three
+/// primitives instead. Always returns a [`Semantics`]: on failure
+/// [`Semantics::is_complete`] is `false` and the downstream fields are empty.
 pub async fn semantics<H: CompilerHost>(
     source: &str,
     host: &H,
@@ -1118,20 +1039,13 @@ pub fn lex_error_diagnostic(
 }
 
 impl Semantics {
-    /// Construct an empty [`Semantics`] with no modules at all. Used when
-    /// an upstream phase fails outright (parse error on the entry, load
-    /// failure) and callers still want to treat the result uniformly —
-    /// every query returns the natural empty answer.
+    /// An empty [`Semantics`], for when an upstream phase fails outright and
+    /// callers still want every query to return its natural empty answer.
     ///
-    /// **Latent caveat**: `entry_module_source` is set to
-    /// [`ModuleSource::entry_point_uninitialized`], whose `PartialEq`
-    /// equates to any other [`ModuleSource::EntryPoint`] regardless of
-    /// filename. Today this is masked because `modules` is empty, so
-    /// position lookups bail before reaching helpers that compare the
-    /// entry source by equality (e.g. `module_uri`'s
-    /// `module == entry` short-circuit). Future changes that populate
-    /// partial state into an `empty()` result must not rely on that
-    /// equality producing a meaningful distinction.
+    /// Caveat: `entry_module_source` is [`ModuleSource::entry_point_uninitialized`],
+    /// which compares equal to any other `EntryPoint` regardless of filename.
+    /// Empty `modules` masks it today; do not populate partial state and rely on
+    /// that equality meaning anything.
     #[must_use]
     pub fn empty() -> Self {
         let interner = std::rc::Rc::new(std::cell::RefCell::new(ModuleSourceInterner::new()));
@@ -1155,19 +1069,11 @@ impl Semantics {
     }
 }
 
-/// Stage 3 of the compiler frontend: run analyze + resolve on a pre-loaded
-/// module set and return the resulting [`Semantics`].
-///
-/// Pair with [`crate::parse`] (stage 1) and [`crate::load`] (stage 2). The
-/// convenience [`semantics`] wraps all three for callers that don't need
-/// to inspect the parsed entry between stages.
-///
-/// Always returns a [`Semantics`]; on phase bail, downstream fields are
-/// empty and [`Semantics::is_complete`] returns `false`.
-/// Build `Semantics` from an already-loaded module set. `build_tir` controls
-/// whether reify runs: the LSP engine passes `false` (facts only — it never
-/// reads TIR), while the general `semantics()` entry and any consumer that
-/// reads `Semantics::tir_modules` (e.g. kiln options extraction) pass `true`.
+/// Stage 3 of the frontend: analyze + resolve over an already-loaded module set.
+/// Pairs with [`crate::parse`] and [`crate::load`]; [`semantics`] wraps all
+/// three. `build_tir` decides whether reify runs — the LSP engine passes `false`
+/// since it reads facts and never TIR. Always returns a [`Semantics`]: on bail
+/// the downstream fields are empty and [`Semantics::is_complete`] is `false`.
 pub fn semantics_of<H: CompilerHost>(
     loaded: loader::LoadResult,
     host: &H,
@@ -1291,19 +1197,11 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         );
     };
 
-    // Run the full body-level resolve pass so each module's
-    // `ModuleSemantics::bindings` is populated by the real elaborator. This
-    // is the single source of truth for use→def edges — LSP and batch
-    // compilation both consume what the elaborator recorded here, with no
-    // separate lexical re-scan to drift out of sync.
-    //
-    // On Bail we still drain the partial reference / local maps so the LSP
-    // can answer cursor queries against whatever bodies the elaborator did
-    // reach before bailing.
-    //
-    // `build_tir == false` (the LSP path) runs only the body fact-walk
-    // (`annotate_bodies`); reify is skipped and `tir_modules` stays empty —
-    // the LSP never reads TIR. The batch path passes `true`.
+    // Run the full body-level resolve pass, the single source of truth for
+    // use→def edges: LSP and batch compilation both read what the elaborator
+    // recorded, with no second lexical scan to drift out of sync. On Bail the
+    // partial maps are still drained so cursor queries work against whatever
+    // bodies were reached. `build_tir == false` stops after `annotate_bodies`.
     let (tir_modules, lower_ok) = {
         let _span = logger.span("elaborate/build_tir");
         match Elaborator::build_tir_from_state(

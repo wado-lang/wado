@@ -249,17 +249,11 @@ impl NirPackage {
             .collect()
     }
 
-    /// Check whether the active world declares an
-    /// `import {interface_name} { ... }` block.
-    ///
-    /// Drives world-shape decisions in codegen / lowering / DCE that used to
-    /// hinge on `target_world == "core:kiln/generator"` string matches —
-    /// `imports_interface("KilnHost")` is true for the kiln generator world and
-    /// any future world that imports the same interface, so adding a new
-    /// generator-shaped world no longer needs new branches.
-    ///
-    /// Returns `false` for the synthetic test world and for unknown worlds
-    /// (both have no entry in the registry).
+    /// Whether the active world declares an `import {interface_name} { … }`
+    /// block. Drives the world-shape decisions in codegen, lowering and DCE that
+    /// once matched on `target_world` strings, so a new generator-shaped world
+    /// needs no new branches. `false` for the synthetic test world and any
+    /// unknown one, neither having a registry entry.
     pub fn world_imports_interface(&self, interface_name: &str) -> bool {
         self.world_registry
             .get(&self.target_world)

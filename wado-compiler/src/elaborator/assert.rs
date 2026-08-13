@@ -1,14 +1,8 @@
-//! Annotation pass for `assert`.
-//!
-//! Power-assert capture-slot discovery still runs here: the read-only AST
-//! scanner picks which sub-expressions deserve a `let __vK = …;` binding, the
-//! capture hook on [`Elaborator::resolve_expr`] flags each as `emitted` once
-//! it actually fires during body resolution, and the recorded
-//! [`super::sem::types::AssertCaptureInfo`] carries the result to reify.
-//!
-//! Reify rebuilds the expansion shape (`__assert_N` labeled block, `let
-//! __cond = …`, `if !__cond { panic(<template>); }`, the per-slot
-//! interpolation lines) from the AST + the recorded slot table.
+//! Annotation pass for `assert`, where power-assert capture-slot discovery runs:
+//! a read-only AST scanner picks the sub-expressions deserving a `let __vK = …`,
+//! the capture hook on [`Elaborator::resolve_expr`] marks each `emitted` when it
+//! fires, and the recorded [`super::sem::types::AssertCaptureInfo`] carries that
+//! to reify, which rebuilds the whole expansion from the AST and the slot table.
 
 use crate::ast::{AssertStmt, AstId, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
@@ -178,17 +172,11 @@ impl AssertCaptureContext {
     }
 }
 
-/// Read-only AST scanner: decides which sub-expressions of the assert
-/// condition deserve a `__vK` capture and records each capture's
-/// originating [`AstId`] so the elaborator hook in `resolve_expr` can find
-/// it.
-///
-/// One slot per capturable `Expr` — no source-text deduplication. Two
-/// syntactically identical sub-terms (e.g. `f() == f()`) each get their
-/// own `__vK` and evaluate independently, matching the source as
-/// written. Such code is degenerate anyway; the dedup logic the old
-/// AST-substitution `CaptureFolder` ran for it isn't worth the
-/// complexity in the new hook.
+/// Read-only AST scanner deciding which sub-expressions of the assert condition
+/// deserve a `__vK` capture, recording each one's originating [`AstId`] for the
+/// `resolve_expr` hook to find. One slot per capturable `Expr`, with no
+/// source-text dedup: two identical sub-terms (`f() == f()`) each get their own
+/// slot and evaluate independently, matching the source as written.
 struct CaptureScanner {
     slots: Vec<Capture>,
     /// `AstId` of each captureable sub-expression → its capture slot

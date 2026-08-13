@@ -691,18 +691,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// What `bounds` say the bounded type's own associated types are, as this
-    /// frame knows them: `type Iter: Iterator<Item = Self::Item>` on a receiver
-    /// `I` asks what `I::Item` is, and `I: IntoIterator<Item = u8>` answers.
-    ///
-    /// `Self` inside a bound names the bounded type, so a `Self::X` right-hand
-    /// side asks about `base`, not about the frame's own `Self`. Only a
-    /// right-hand side the frame can answer produces a binding; the rest stay
-    /// abstract. Resolving one instead — rebinding `Self` to `base` and
-    /// resolving what it denotes — reintroduces two defects: the frame's
-    /// `assoc_type_bindings` shadow the rebound `Self`, so an unrelated
-    /// `impl`'s `type Item = …` answers for a type parameter's, and recursion
-    /// through a bound's own right-hand side has no fixpoint
-    /// (`type A: Iterator<Item = Self::B>` against `type B: Iterator<Item = Self::A>`).
+    /// frame knows them: `I: IntoIterator<Item = u8>` answers what `I::Item` is.
+    /// `Self` inside a bound names the bounded type, so only a right-hand side
+    /// the frame can answer binds and the rest stay abstract — rebinding `Self`
+    /// and resolving instead lets the frame's own bindings shadow it, and
+    /// recursion through a bound's right-hand side has no fixpoint.
     pub(super) fn frame_assoc_bindings(
         &mut self,
         base: TypeId,

@@ -788,13 +788,6 @@ pub enum TypeError {
     },
 }
 
-/// Render the human-readable body of an [`TypeError::OperatorNotApplicable`].
-///
-/// Shared by the `Display` impl and the `From<TypeError> for Diagnostic`
-/// conversion so both surfaces phrase operator errors identically. The
-/// message names one operand type when `operands` has a single entry and
-/// both when it has two, keeping the wording symmetric regardless of which
-/// operand triggered the error.
 /// Append a trait-bound reason chain as indented `note:` lines beneath a
 /// headline message. Shared by the `Display` impl and the `Diagnostic`
 /// conversion so the chain renders identically on every surface.
@@ -2096,18 +2089,11 @@ pub(super) struct TraitMethodMatch {
     pub(super) is_variadic_impl: bool,
 }
 
-/// Read-only view that resolves a type name from a given module's perspective
-/// without cloning per-module flat maps.
-///
-/// Three-layer precedence (highest first):
-///   1. Local additions discovered during resolution (anonymous structs, in-progress
-///      newtypes/enums declared in the current module's body).
-///   2. The current module's own definitions.
-///   3. Imports of the current module (with `use { Foo as Bar }` aliasing).
-///   4. Any module that defines the name (legacy fallback for prelude-style visibility).
-///
-/// Constructed cheaply at each call site from the `Elaborator`'s context. All
-/// fields are borrowed; no heap allocation.
+/// Read-only view resolving a type name from a module's perspective without
+/// cloning per-module maps. Precedence, highest first: local additions found
+/// during resolution, the current module's own definitions, then its imports
+/// (with `use { Foo as Bar }` aliasing) — no global scan beyond that (#1416).
+/// All fields are borrowed, so a call site constructs one without allocating.
 pub(crate) struct TypeLookup<'a> {
     pub(crate) current_module_source: &'a ModuleSource,
     pub(crate) imported_type_sources: &'a IndexMap<String, ModuleSource>,
@@ -2222,24 +2208,11 @@ impl<'a> TypeLookup<'a> {
             .or_else(|| all_per_module.get(module_source).and_then(|m| m.get(name)))
     }
 
-    /// Resolve a *source-written* bare `name` with function-local
-    /// precedence: the current function's own local items (`fn_local`, see
-    /// `ModuleDecls::fn_local_struct_fields`) shadow everything else, ahead
-    /// of `lookup_ref`'s (local → current module → imports → any) chain.
-    /// Consolidates the identical wrapper every bare-name accessor below
-    /// used to duplicate by hand.
-    ///
-    /// Only for resolving a name as *written in source* — an already-known
-    /// `(name, module_source)` identity recovered from a resolved `TypeId`
-    /// (e.g. reify's `recorded_type`) must use [`Self::lookup_ref_in`]
-    /// directly (via the `_in` accessors below) and *not* this tier: the
-    /// function-local table is a flat, unordered map mutated in place as
-    /// annotate walks the function sequentially, so by the time a later,
-    /// independent pass (reify) looks up a name, it reflects the *end* of
-    /// that function's local declarations, not the position-appropriate
-    /// state — consulting it for an already-resolved identity risks
-    /// resolving to an unrelated later-declared local item that happens to
-    /// share the same bare name as an outer, non-local type.
+    /// Resolve a *source-written* bare `name` with function-local precedence:
+    /// the current function's own local items shadow everything, ahead of
+    /// `lookup_ref`'s chain. An already-resolved `(name, module_source)` identity
+    /// must use [`Self::lookup_ref_in`] instead — the flat fn-local table
+    /// reflects the *end* of the function and could resolve to a later item.
     fn fn_local_first<V>(
         &self,
         name: &str,
@@ -2459,14 +2432,10 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) rhs_type: Option<TypeId>,
 }
 
-/// Complete, Self-substituted description of a trait method lookup.
-///
-/// Produced by [`Elaborator::resolve_trait_method_for_op`][rtq] and consumed
-/// by [`Elaborator::build_trait_op_method_call_on_resolved`][bop]. Having a
-/// single, always-populated data type for trait-method dispatch eliminates
-/// the `param_types: vec![]` anti-pattern that previously caused codegen
-/// ICEs when operator dispatch built a method call without any
-/// argument-type check.
+/// Complete, Self-substituted description of a trait method lookup, produced by
+/// [`Elaborator::resolve_trait_method_for_op`][rtq] and consumed by
+/// [`Elaborator::build_trait_op_method_call_on_resolved`][bop]. Always populated,
+/// so operator dispatch cannot build a method call without argument types.
 ///
 /// [rtq]: crate::elaborator::Elaborator::resolve_trait_method_for_op
 /// [bop]: crate::elaborator::Elaborator::build_trait_op_method_call_on_resolved

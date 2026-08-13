@@ -1,17 +1,8 @@
-//! Pre-fold planning. Mutations are confined to the type table,
-//! additive synthesis (`flat.{structs,functions,globals}` growth),
-//! and per-function declaration-shape edits in
-//! [`boxing::shadow_params`] / [`lift_mut`]. Every
-//! expression-shape rewrite lives in
-//! [`crate::lower::translate`].
-//!
-//! Sub-pass ordering is dictated by what the next pass reads:
-//! `boxing::prepare_types` mutates the type table before any
-//! analysis that consults resolved types; `lift_mut` runs before
-//! `value_copy::plan`'s seed walker so the lifted `Let mut`
-//! statements are visible.
-//!
-//! See `docs/wep-2026-05-11-nir.md`.
+//! Pre-fold planning (WEP 2026-05-11). Mutations stay confined to the type
+//! table, additive synthesis, and the declaration-shape edits in
+//! [`boxing::shadow_params`] / [`lift_mut`]; every expression-shape rewrite
+//! lives in [`crate::lower::translate`]. Sub-pass order follows what the next
+//! pass reads: the type table is mutated before any analysis consults it.
 
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};

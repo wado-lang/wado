@@ -1,29 +1,8 @@
-//! Single-field parameter SROA for Wado NIR.
-//!
-//! Rewrites internal functions whose parameter type is
-//! `&S` / `&mut S` for some single-field struct `S` (with `Box<T>`
-//! the canonical case) to take the inner scalar `T` directly. At call sites, the
-//! corresponding `StructLiteral S { field: val }` allocation is replaced with
-//! `val`, eliminating heap traffic.
-//!
-//! Eligibility (Phase 1): a parameter is a candidate when its type is
-//! `Ref(struct_id)` / `MutRef(struct_id)` / bare `Struct` and the referenced
-//! struct has exactly one field. The function must not be pinned. Address-taken
-//! / stores-aliased / `stores`-declared params are excluded.
-//!
-//! Validation (Phase 2): every read of the param local must be either a
-//! `FieldAccess(Local(idx), field)` (the scalar read) or an argument at a call
-//! position whose callee is ALSO a candidate at that position.
-//! Iterates to a fix-point so cascades settle.
-//!
-//! Rewrite (Phase 3): callee bodies turn `FieldAccess(Local, field)` into the
-//! scalar `Local`; call sites unwrap `StructLiteral { field: val }` to `val`
-//! (or extract via `FieldAccess`); scalarizing a receiver clears the call's
-//! `has_receiver`.
-//!
-//! The validation walk and both rewrite phases read and mutate the arena `Body`
-//! directly. Global initializers are arena bodies too, so the call-site rewrite
-//! runs on them as well.
+//! Single-field parameter SROA: an internal function taking `&S` / `&mut S` for
+//! a one-field struct — canonically `Box<T>` — is rewritten to take the inner
+//! scalar, collapsing the call site's `StructLiteral` allocation to the value.
+//! Every read of a candidate param must be the scalar `FieldAccess` or an
+//! argument to another candidate position, iterated to a fixpoint.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -238,26 +217,11 @@ fn reference_param_struct_key(
     }
 }
 
-/// Reject a reference candidate whose call-time value snapshot could be
-/// invalidated during the callee's execution — because some other access path
-/// the callee holds can mutate the pointee `*p`:
-///
-/// - `aliasing_write` — a write the walk cannot rule out: an aliasing global, or
-///   anything behind an unresolved indirect call, or
-/// - a sibling param from which a write can *reach* the wrapper. The sibling
-///   need not be the handle itself, only carry one: `f(&s.m, &mut s)` where
-///   `S { m: M }`, or `f(&x, Holder { r: &mut x })` where the `&mut` hides in a
-///   by-value struct field.
-///
-/// A genuine by-value struct candidate is already a copy, so it is never
-/// affected. A *boxed* reference is not one: `boxing::prepare_types` collapses
-/// `&T` / `&mut T` onto a by-value `Box<T>`, and `&x` of an address-taken local
-/// lowers to a read of that one box, so `f(&mut x, &x)` hands the same box to
-/// both params and the snapshot must be refused.
-///
-/// The split is load-bearing: a `fn mut()` sibling is covered only by the first
-/// clause, because the walk cannot see its captures — see
-/// [`ReachableWrites::Opaque`].
+/// Reject a reference candidate whose call-time snapshot the callee could
+/// invalidate through another access path: an `aliasing_write` the walk cannot
+/// rule out, or a sibling param a write can *reach* the wrapper through —
+/// `f(&s.m, &mut s)`, or a `&mut` hidden in a by-value field. A boxed reference
+/// counts, `&x` of an address-taken local lowering to a read of the one box.
 fn param_snapshot_unsound(
     func: &NirFunction,
     pi: usize,
@@ -934,17 +898,10 @@ fn rewrite_arg(
 // -----------------------------------------------------------------------
 
 /// Pinning rules, shared with DAE via [`super::dae::is_dae_sroa_eligible`].
-/// `relax_closure_call = false` keeps closure `__call` functors pinned (their
-/// function-table wrapper snapshots the signature); unlike DAE there is no
-/// relaxation here. `sroa_param` adds one pin the shared predicate does not
-/// carry — a `$value_copy$T` helper is never a rewrite target.
-///
-/// Concrete trait-impl methods are eligible: after monomorphization every call
-/// site carries a resolved `func_id` and `rewrite_call_sites` rewrites them all,
-/// so scalarizing a single-field-struct parameter (and its call-site
-/// allocation) is sound. This unwraps the `Box<Scalar>` that `&T` reference
-/// parameters box the value into — e.g. every scalar `serde` field / element
-/// (`SerializeStruct::field<i32>`, `SerializeSeq::element<f64>`).
+/// `relax_closure_call = false` keeps closure `__call` functors pinned, their
+/// function-table wrapper having snapshotted the signature, and one pin is added
+/// here: a `$value_copy$T` helper is never a rewrite target. A concrete
+/// trait-impl method is eligible, every post-mono call site being resolved.
 fn is_eligible(func: &NirFunction) -> bool {
     super::dae::is_dae_sroa_eligible(func, false) && !func.is_value_copy()
 }

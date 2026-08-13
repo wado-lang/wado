@@ -1,76 +1,12 @@
-//! Container SROA (P0a) — `AoS` → `SoA` transformation for `List<Tuple<...>>` locals.
+//! Container SROA — `AoS` → `SoA` for `List<Tuple<…>>` / `List<UserStruct>`
+//! locals: one `List<T_k>` per field, so the per-element `struct.new` goes away.
+//! Uses are recognized by signature shape ([`ListMethodKind`]), never by method
+//! name, and an unclassified method makes the candidate escape. Runs before
+//! `inline`, which would expand those calls.
 //!
-//! This pass decomposes local variables of type `List<[T_0, T_1, ..., T_n]>` into
-//! N parallel `List<T_k>` locals, eliminating the per-element `struct.new` for
-//! tuple payloads. After decomposition, operations on the original array are
-//! rewritten as parallel operations on the new per-field arrays:
-//!
-//! ```text
-//! let mut v: List<[i32, i32]> = [];        →   let mut v_0: List<i32> = [];
-//! v.push([a, b]);                                let mut v_1: List<i32> = [];
-//! let sum = v[i].0 + v[i].1;                    v_0.push(a); v_1.push(b);
-//!                                                let sum = v_0[i] + v_1[i];
-//! ```
-//!
-//! P0a scope covers `List<Tuple<...>>` and `List<UserStruct>` locals (both have
-//! the same `WasmGC` struct representation). Nested arrays are not yet decomposed.
-//! Only method-call usage is handled; direct indexing is expected to have been
-//! desugared already into `index_value`/`index_assign` trait calls by lowering.
-//!
-//! TODO(optimizer): nested-container decomposition (`List<List<T>>`,
-//! `List<UserStruct { List<T>, ... }>`). The recursion into nested element
-//! types is a clean extension of `decompose_local`; the harder problem is the
-//! recursive element-immutability proof, which `value_copy_demote.rs` already
-//! solves and could be lifted out for reuse here.
-//!
-//! TODO(optimizer): replace the hardcoded method-shape whitelist
-//! (`ElementWriter` / `IndexReader` / `IndexWriter` / `Constructor`) with a
-//! query against `value_copy_demote`'s element-immutability analysis so any
-//! element-immutable `&self`/`&mut self` method becomes a SROA-safe use,
-//! not just `push` / `index_value` / `index_assign` / `len` / `is_empty`.
-//!
-//! # List method identification
-//!
-//! Rather than hardcoding method names (`"push"`, `"len"`, `"index_value"`, …),
-//! this pass identifies relevant List methods by **signature shape**:
-//!
-//! | Kind             | Signature                                         | stdlib method  |
-//! |------------------|---------------------------------------------------|----------------|
-//! | `ElementWriter`  | `fn(&mut List<T>, T) -> ()`                      | `push`         |
-//! | `IndexReader`    | `fn(&List<T>, i32) -> T`                         | `index_value`  |
-//! | `IndexWriter`    | `fn(&mut List<T>, i32, T) -> ()`                 | `index_assign` |
-//! | `Constructor`    | `fn(i32) -> List<T>` (static)                    | `with_capacity`|
-//! | `Query`          | `fn(&List<T>) -> i32 \| bool` (length-invariant) | `len`, `is_empty`, `capacity` |
-//!
-//! Classification happens once when the `MethodCatalog` is built, and every
-//! whitelist and rewrite decision is driven by looking up the call's classified
-//! `ListMethodKind`. Unclassified List methods cause the candidate to escape,
-//! so adding a new stdlib method that doesn't match any kind is safe by default.
-//! Adding a new method that *does* match a kind (e.g., `push_back`) is
-//! automatically handled — no optimizer change required.
-//!
-//! # Pipeline position
-//!
-//! Runs *first* in each fixed-point iteration, before `inline`. The pass
-//! relies on every `List<T>` access being a method call (`push`,
-//! `index_value`, `index_assign`, `len`, ...), but `inline` expands those
-//! thin wrappers into raw `builtin::array_get`/`array_set` + field-access
-//! pairs, after which the method-call shape is gone. Running before inline
-//! preserves the call structure that `list_method_kind` classifies.
-//!
-//! Running inside each loop iteration (rather than only once up front) also
-//! lets container SROA pick up new `List<Tuple<...>>` locals exposed by
-//! earlier-iteration inlining of helper functions.
-//!
-//! Runs on the worklist rewrite engine
-//! (`docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a [`Rule`]: a
-//! per-function standalone engine session whose `apply_block` fires once at
-//! the body root and performs the whole-function rewrite in one shot. The
-//! analysis phases (candidate collection, escape / used-kinds) stay read-only
-//! walks over `engine.body`; the rewrite routes every mutation through the
-//! engine edit API (`set_block_stmts`, `replace_expr_kind`, `become_expr`,
-//! `alloc_stmt`, `alloc_expr`, `alloc_local`, `clone_expr`) so the parent map
-//! and use index stay coherent.
+//! TODO(optimizer): nested-container decomposition (`List<List<T>>`), and
+//! replacing the shape whitelist with `value_copy_demote`'s element-immutability
+//! query so any element-immutable method counts as a SROA-safe use.
 
 use std::cell::Cell;
 
@@ -133,15 +69,10 @@ enum ListMethodKind {
     /// `List<T_k>` with the same capacity.
     Constructor,
     /// `fn(&List<T>) -> i32 | bool` — length-invariant query with no element
-    /// argument (e.g., `len`, `is_empty`, `capacity`).
-    ///
-    /// Rewrite: dispatch to field 0's corresponding method. Since push, slot
-    /// assign, and constructor-with-capacity all keep per-field arrays in
-    /// lockstep, field 0 is representative.
-    ///
-    /// We restrict the return type to `i32`/`bool` so that only true
-    /// length-invariant queries qualify — a hypothetical `hash_code() -> u64`
-    /// that depends on element contents would not match.
+    /// argument (e.g. `len`, `is_empty`, `capacity`). Rewritten to field 0's
+    /// method: every rewrite keeps the per-field arrays in lockstep. The
+    /// `i32`/`bool` return bound is what excludes a content-dependent query
+    /// such as a hypothetical `hash_code() -> u64`.
     Query,
 }
 
@@ -749,21 +680,11 @@ fn peel_value_copy(
     cur
 }
 
-/// Recognize the supported initializer form for container-SROA candidates.
-///
-/// Two equivalent shapes are accepted, both matched purely *structurally*
-/// (no hardcoded label or method names):
-///
-/// 1. A direct `Call` classified as `Constructor` by signature — e.g.
-///    `List::<T>::with_capacity(cap)` written by the user directly. The
-///    argument must be side-effect-free so it can be cloned once per field.
-/// 2. The `SequenceLiteralBuilder` desugaring for empty array literals
-///    (`[]`), which lowers to
-///    `{ let __b = <Constructor call>; break label: __b.<build>(); }`.
-///    We structurally unwrap the labeled block, look through the `Let`, and
-///    fall through to form (1) on the inner constructor call. Neither the
-///    label string nor the builder method name is inspected — only the
-///    shape of the wrapper.
+/// Recognize the supported initializer form, matched structurally: a direct
+/// `Constructor` call whose argument is side-effect-free (so it can be cloned
+/// per field), or the `SequenceLiteralBuilder` desugaring of `[]`, whose labeled
+/// block and `Let` are unwrapped down to that same constructor call. No label
+/// string or builder method name is inspected.
 fn recognize_init(
     body: &Body,
     value: ExprId,

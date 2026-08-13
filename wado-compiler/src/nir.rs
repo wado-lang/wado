@@ -1,16 +1,8 @@
-//! Normalized Intermediate Representation (NIR) for Wado.
-//!
-//! NIR is the post-lower body IR consumed by `optimize` and `wir_build`. The
-//! body itself lives in the skeleton arena (`crate::nir_arena`); this module
-//! holds the surrounding NIR metadata — functions, globals, parameters,
-//! locals, captures, function references, and the shared leaf enums
-//! (`NirBinaryOp` / `NirUnaryOp` / `NirLiteralPattern`) the arena nodes
-//! reference.
-//!
-//! Type identity (`TypeId`, `TypeTable`, `ResolvedType`, …) and effect
-//! references (`EffectRef`) are shared with TIR.
-//!
-//! See `docs/wep-2026-05-11-nir.md` for the full rationale.
+//! Normalized Intermediate Representation (NIR): the post-lower body IR
+//! `optimize` and `wir_build` consume. Bodies live in the skeleton arena
+//! (`crate::nir_arena`); this module holds the metadata around them — functions,
+//! globals, params, locals, captures, refs, and the shared leaf enums. Type
+//! identity and `EffectRef` are shared with TIR. See WEP 2026-05-11.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -225,7 +217,8 @@ pub struct NirTypeParam {
 /// Information about monomorphization origin for instantiated items
 #[derive(Debug, Clone)]
 pub struct MonomorphInfo {
-    /// Original generic name (e.g., "Box" for "Box<i32>", or "`BTreeNode`<`K,V>::insert`" for methods)
+    /// Original generic name: `"Box"` for `"Box<i32>"`, or
+    /// `"BTreeNode<K,V>::insert"` for methods.
     pub generic_name: String,
     /// Impl-level type arguments (from the struct/type, e.g. `[i32]` for `List<i32>`)
     pub impl_type_args: Vec<TypeId>,
@@ -450,20 +443,11 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
-    /// Auto-derived `Fn<arity, return_type>^Inspect::inspect` (or
-    /// `^InspectAlt::inspect_alt`) dispatch stub.
-    ///
-    /// The NIR body is `unreachable()` — a placeholder that exists
-    /// only so the function is registered and the call is resolvable
-    /// from templates and from user code. WIR build recognises this
-    /// kind and supplies the real body: a `call_ref` through the
-    /// matching `CanonicalClosure_K`'s `inspect` / `inspect_alt`
-    /// vtable slot. Carries `(arity, return_type)` as structured
-    /// fields so neither WIR build nor DCE has to recover them by
-    /// parsing the mangled function name.
-    ///
-    /// See WEP: Inspect (Debug Output) > Closure Inspect via Runtime
-    /// Dispatch.
+    /// Auto-derived `Fn<arity, return_type>^Inspect::inspect` dispatch stub. Its
+    /// NIR body is `unreachable()`, a placeholder making the call resolvable;
+    /// WIR build recognises the kind and supplies a `call_ref` through the
+    /// matching `CanonicalClosure_K` vtable slot. `(arity, return_type)` are
+    /// structured fields so nothing has to parse the mangled name.
     FnCanonicalDispatch {
         trait_kind: FnDispatchTrait,
         arity: usize,
@@ -596,21 +580,11 @@ impl NirFunction {
     }
 }
 
-/// A resolved local-slot entry in a function, global initializer, or
-/// closure scope, identified by its declaration / order in the surrounding
-/// local environment.
-///
-/// `FunctionContext::add_local` records every local — source-level
-/// parameters, `let` bindings, destructure bindings, and elaborator-generated
-/// temporaries — as a `NirLocal`. The single source of truth for the local
-/// namespace is `FunctionContext::locals: Vec<NirLocal>`; from there it is
-/// projected onto:
-///
-/// * `NirFunction::locals` and `NirGlobal::locals` — the function/global's
-///   absolute local table, keyed by Wasm local index.
-/// * A closure's `params + body_locals` — pattern lowering reconstructs the
-///   closure-scope local table from these while descending into a closure
-///   body (params are not duplicated in `body_locals`).
+/// A resolved local-slot entry in a function, global initializer, or closure
+/// scope, identified by its order in the surrounding local environment.
+/// `FunctionContext::locals` is the single source of truth, projected onto
+/// `NirFunction::locals` / `NirGlobal::locals` (keyed by Wasm local index) and
+/// onto a closure's `params + body_locals`, which do not overlap.
 #[derive(Debug, Clone)]
 pub struct NirLocal {
     /// Source-level name of the binding (or a synthesised `__name` for
@@ -872,16 +846,11 @@ pub struct ClosureFunctor {
     pub call_method: Rc<RefCell<NirFunction>>,
     /// Captures from the original closure
     pub captures: Vec<NirCapture>,
-    /// Canonical user-declared (name, type) pairs of the closure literal —
-    /// `[]` for `|| ...`, `[("x", i32)]` for `|x: i32| ...`. Captured at
-    /// functor creation and never mutated. `wir_build`'s
-    /// `register_closure_wrappers` uses this list to choose the wrapper's
-    /// external signature: the function-table type the closure was coerced
-    /// to is `fn(env, canonical_user_params...) -> canonical_return`,
-    /// independent of any DAE shrinkage that happens later on
-    /// `call_method.params`. Without this snapshot, dropping a "dead" param
-    /// from `__call` would also shrink the wrapper signature and
-    /// desynchronise it from the typed-fn callers.
+    /// Canonical user-declared (name, type) pairs of the closure literal,
+    /// captured at functor creation and never mutated.
+    /// `register_closure_wrappers` reads it for the wrapper's external signature
+    /// `fn(env, canonical_user_params...) -> canonical_return`, so later DAE
+    /// shrinkage on `call_method.params` cannot desynchronise typed-fn callers.
     pub canonical_user_params: Vec<(String, TypeId)>,
     /// Canonical return type of the closure literal. Same role as
     /// `canonical_user_params` — drives the wrapper external signature.

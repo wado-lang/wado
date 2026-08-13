@@ -1,36 +1,8 @@
-//! Scalar Replacement of Aggregates (SROA) optimization for Wado NIR
-//!
-//! Eliminates struct and tuple allocations when the aggregate is only used for
-//! field access. After inlining exposes:
-//!
-//! ```text
-//! let s = MyStruct { x: expr1, y: expr2 };
-//! let a = s.x;
-//! let b = s.y;
-//! ```
-//!
-//! SROA decomposes the struct into individual scalar locals:
-//!
-//! ```text
-//! let __sroa_s_x = expr1;
-//! let __sroa_s_y = expr2;
-//! let a = __sroa_s_x;
-//! let b = __sroa_s_y;
-//! ```
-//!
-//! Copy propagation then eliminates the trivial copies.
-//!
-//! Runs on the worklist rewrite engine
-//! (`docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a [`Rule`]: a
-//! per-function standalone engine session whose `apply_block` fires once at
-//! the function root and performs the whole-function decomposition in one
-//! shot. The analysis phases (candidate collection, escape / soft-escape) read
-//! `engine.body` directly; the rewrite routes every mutation through the
-//! engine edit API (`set_block_stmts`, `replace_expr_kind`, `alloc_stmt`,
-//! `alloc_expr`, `alloc_local`) so the parent map and use index stay
-//! coherent. Locals discovered to be `&local`-aliased by a decomposed field
-//! flow back into `func.stores_aliased_locals` via a `RefCell` the driver
-//! merges after `engine.run` returns.
+//! Scalar Replacement of Aggregates: a struct or tuple used only for field
+//! access — `let s = S { x: e1, y: e2 }; let a = s.x;` — is decomposed into
+//! per-field `__sroa_s_x` locals, and copy propagation then removes the trivial
+//! copies. A local found `&local`-aliased by a decomposed field flows back into
+//! `func.stores_aliased_locals` through a `RefCell` the driver merges after.
 
 use std::cell::{Cell, RefCell};
 

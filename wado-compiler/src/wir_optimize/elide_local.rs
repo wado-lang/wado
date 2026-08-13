@@ -1,33 +1,8 @@
-//! Write-only local elimination pass for WIR.
-//!
-//! The TIR-level `optimize::elide_local` covers locals that originate at
-//! TIR (user `let`, SROA / variant-lowering shadow temps, etc.). It can't
-//! see locals that the WIR builder synthesises during lowering — match
-//! scrutinee temps (`__match_scrut_N`), multi-value temps, the
-//! `__pair_temp_N` pair Future / Stream `new` returns into, and so on —
-//! because those names don't exist at TIR. Once `wir_build` runs, those
-//! locals can become write-only when the surrounding lowering shape
-//! turns out not to need their value (e.g. every match arm has a
-//! wildcard / binding pattern, so nothing reads `__match_scrut_N`).
-//!
-//! This pass cleans those up after `wir_build`. For each `LocalSet(x,
-//! v)` whose `x` is never read in the function body — reads inside this
-//! store's own `v` don't count, so a self-referencing dead store
-//! `x = x + 1` with no other reads still elides — the assignment is
-//! rewritten:
-//!
-//! - `v` has no observable side effects → drop the whole `LocalSet`.
-//! - `v` has observable side effects → replace with `Drop(v)` so the
-//!   side effects still run, but the dead store is gone.
-//!
-//! Recurses to a fixed point so that eliding one write doesn't strand a
-//! second write that was only kept alive by a (now-eliminated) read of
-//! the first. The matching `DeclareLocal` is taken out by the
-//! subsequent `cleanup` pass.
-//!
-//! Locals that *are* read remain untouched — this pass deliberately does
-//! not subsume copy propagation or constant propagation; it's a narrow
-//! cleanup pass for write-only locals only.
+//! Write-only local elimination for the locals `wir_build` synthesises, whose
+//! names do not exist at TIR for `optimize::elide_local` to see. A
+//! `LocalSet(x, v)` whose `x` is never read elsewhere loses its store: the whole
+//! statement when `v` is side-effect-free, else a bare `Drop(v)`. Runs to a
+//! fixed point, since eliding one write can strand another.
 
 use crate::hashmap::IndexMap;
 use crate::wir::{WirInstr, WirPackage};
@@ -110,19 +85,11 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
             self.changed = true;
             return;
         }
-        // `drop(side_effect_free_expr)` is dead — the dropped value is
-        // discarded by definition, so a sub-tree with no observable
-        // effect contributes nothing. Catches the
-        // `Expr(struct.new T { ... })` /
-        // `Expr(self.field)` shapes the TIR-level `elide_local` cannot
-        // remove in stmt position (those Exprs may have started life as
-        // `Expr(Call(...))` or labeled-block remnants of a
-        // `stores`-annotated call, and the TIR pass conservatively
-        // leaves them be — see the `stores_optimize_mixed_calls`
-        // regression test). At WIR level, every effect the call ever
-        // had is already in the WIR shape (`Call` / `LocalSet` /
-        // `StructSet` / ...), so a residual `Drop` whose sub-tree
-        // satisfies `is_side_effect_free` is genuinely dead.
+        // `drop(side_effect_free_expr)` is dead — the value is discarded by
+        // definition. Catches the statement-position `Expr(struct.new …)` /
+        // `Expr(self.field)` shapes the TIR pass leaves alone, not knowing what
+        // they were before lowering. At WIR level every effect a call had is
+        // already its own node, so a `is_side_effect_free` sub-tree is dead.
         if let WirInstr::Drop(value) = instr
             && is_side_effect_free(value)
             && !may_trap_in(value, self.null)

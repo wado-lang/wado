@@ -1,15 +1,7 @@
-//! Local name binding for Wado
-//!
-//! The bind phase performs local name resolution within function bodies:
-//! - Tracks variable scopes (blocks, if/while/for)
-//! - Detects use-before-define errors
-//! - Detects duplicate definitions within the same scope
-//! - Records variable mutability and reactivity
-//!
-//! This phase does NOT:
-//! - Load modules or resolve imports (that's the analyzer's job)
-//! - Resolve cross-module references (that's the resolve phase)
-//! - Perform type checking (that's the resolve phase)
+//! Local name binding: resolution *within* function bodies. It tracks variable
+//! scopes, detects use-before-define and duplicate definitions, and records
+//! mutability and reactivity. Imports belong to the analyzer, and cross-module
+//! references and type checking to the resolve phase.
 
 use crate::hashmap::IndexSet;
 

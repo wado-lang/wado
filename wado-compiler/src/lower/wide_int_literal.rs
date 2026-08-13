@@ -1,27 +1,8 @@
-//! Shared TIR builders for `i128` / `u128` literal expressions.
-//!
-//! Lives at the `lower::` top level because it has two callers across
-//! the planner / translator boundary:
-//!
-//! - `lower::plan::globals` — synthesizes default values for lazy-
-//!   initialized i128 / u128 globals.
-//! - `lower::translate::wide_int` — synthesizes the literal side of
-//!   `i128^Eq::eq` / `u128^Eq::eq` calls when rewriting wide-int
-//!   `Match` arms into an if-else chain.
-//!
-//! Both callers must produce identical `Call` shapes because the
-//! optimizer and `wir_build` pattern-match on them.
-//!
-//! Values that fit `i64` / `u64` are emitted as
-//! `i128::from_i64(v)` / `u128::from_u64(v)`. Values outside that
-//! range are emitted as `i128::from_pair(lo, hi)` /
-//! `u128::from_pair(lo, hi)` so the full 128 bits round-trip — same
-//! split the elaborator uses for source-level literals (see
-//! `elaborator::util::unpack_i128`, `elaborator::coercion::build_int128_from_pair`).
-//!
-//! The struct, module source, and method names are all resolved
-//! through the `CompilerItem` registry so a stdlib rename of `i128`,
-//! `u128`, or any of their `from_*` constructors stays transparent.
+//! Shared TIR builders for `i128` / `u128` literals, at the `lower::` top level
+//! for its two callers either side of the planner / translator boundary, which
+//! must produce identical `Call` shapes for the optimizer and `wir_build` to
+//! match on. A value fitting 64 bits emits `from_i64` / `from_u64`, anything
+//! wider `from_pair(lo, hi)` — the elaborator's own split for source literals.
 
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;

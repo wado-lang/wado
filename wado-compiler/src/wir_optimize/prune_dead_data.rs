@@ -1,14 +1,8 @@
-//! Removes passive data segments with no surviving `array.new_data` reference.
-//!
-//! `register_literal_data` conservatively registers a segment for every
-//! string/bytes literal whose payload exceeds `string_inline_max_bytes`,
-//! before later per-occurrence decisions (a bounded force-eager override for
-//! `const_object_globalization`-hoisted globals, dead-store elimination in
-//! `promote_const_global_inits`) settle whether any occurrence of that
-//! payload actually ends up reading the segment. A payload that ends up
-//! wholly represented via `array.new_fixed` leaves its registered segment
-//! referenced by nothing. This pass finds those and drops them, then
-//! compacts and remaps the surviving `data_index`s.
+//! Remove passive data segments with no surviving `array.new_data` reference.
+//! `register_literal_data` registers one per over-long literal payload before
+//! the later per-occurrence decisions settle whether anything reads it, so a
+//! payload that ends up wholly `array.new_fixed` leaves its segment orphaned.
+//! This drops those, then compacts and remaps the surviving `data_index`es.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage};

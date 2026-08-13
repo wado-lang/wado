@@ -1,63 +1,8 @@
 //! Reify — AST + [`super::sem::ModuleSemantics`] → [`crate::tir::TirModule`].
-//!
-//! Introduced by [`wep-2026-05-26-elaborator-rearchitecture.md`].
-//! The reify pass is the mechanical half of the annotate/reify split:
-//! every TIR-shaping decision is already recorded on `ModuleSemantics`
-//! during `annotate_bodies`; this walker reads those annotations and emits
-//! the corresponding TIR nodes. It never re-runs type inference, name
-//! resolution, or method dispatch.
-//!
-//! # Surface
-//!
-//! `reify_module(module, tysys, sem, …) → TirModule` mirrors
-//! [`super::Elaborator::resolve_module`]'s per-Item dispatch shape. Each
-//! `Item::*` arm calls a `reify_*` helper; decl-only items (`Enum`,
-//! `Flags`, `Newtype`, `Variant`, `Effect`, `Resource`, `Struct`) read
-//! decl-interned types from `TypeSystem.all_*` and produce TIR without
-//! consulting `TypeAnnotations`; function / impl-method / test / global
-//! bodies build a fresh [`super::types::FunctionContext`] and walk the
-//! AST via `reify_block` / `reify_stmt` / `reify_expr` / `reify_pattern`.
-//!
-//! # What reify reads
-//!
-//! - `ModuleSemantics.types.expression_types[id]` → `TirExpr::type_id`
-//! - `ModuleSemantics.types.method_dispatch[id]` → dispatch target +
-//!   `self_kind` + `is_ref_impl`
-//! - `ModuleSemantics.types.coercions[id]` → coercion wrapper to emit
-//!   around the raw expression
-//! - `ModuleSemantics.types.desugars[id]` → which expansion path to take
-//!   (assert / matches / for-of / while / compound-assign / comparison
-//!   chain / `IndexMut` method call / newtype-from collapse)
-//! - `ModuleSemantics.types.generic_instantiations[id]` → `type_args`
-//!   for call / struct / variant constructions
-//! - `ModuleSemantics.types.closure_captures[id]` → closure capture list
-//!   and `__ref_*` materialisation
-//! - `ModuleSemantics.types.assert_captures[id]` → assert slot map
-//! - `ModuleSemantics.types.for_of_iterator[id]` → for-of iterator
-//!   dispatch target
-//! - `ModuleSemantics.bindings.references` / `bindings.local_symbols` →
-//!   identifier resolution
-//! - `ModuleSemantics.imports.*` → name lookups
-//! - `ModuleSemantics.decls.*` → function return types, generic
-//!   parameter tables, anonymous-struct registry
-//!
-//! # What reify mutates
-//!
-//! Reify takes `&mut TypeSystem` because monomorphic struct / variant
-//! instances reached for the first time at reify time must intern through
-//! the shared [`crate::tir::TypeTable`]. Reify does **not** mutate
-//! `TraitEnv` or any impl tables — those are read-only inputs.
-//!
-//! # `FunctionContext` walk-order invariant
-//!
-//! Reify maintains its own [`super::types::FunctionContext`] per function
-//! body. Local indices, capture indices, and synthetic-local counters
-//! (`next_assert_id`, `next_loop_id`, the `__ref_*` ordering) must match
-//! what `annotate_bodies` produced. The contract is documented at
-//! [`wep-2026-05-26-elaborator-rearchitecture.md`] §`Reify — mechanical`.
-//! The unit
-//! test contract: for every function `f`, the `Vec<TirLocal>` annotate
-//! emitted equals the `Vec<TirLocal>` reify emits.
+//! The mechanical half of the annotate/reify split (WEP 2026-05-26): every
+//! TIR-shaping decision is already recorded on `ModuleSemantics`, so this walker
+//! only reads them — never re-running inference, resolution, or dispatch. Its
+//! `FunctionContext` must land the same locals, at the same indices, annotate did.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -280,16 +225,11 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// the liveness pass found unreachable from the export boundary, which
     /// downstream phases would discard anyway. `None` reifies everything.
     pub(crate) live_items: Option<&'a IndexSet<crate::ast::AstId>>,
-    /// Active parameter-name → already-reified-argument substitutions for
-    /// the default-argument expression currently being reified. A
-    /// cross-module default is reified under the *callee's* module
-    /// perspective (so its own items resolve), but a default may reference
-    /// an earlier parameter, whose substituted value is the *caller's*
-    /// argument expression — already reified under the caller's
-    /// perspective in the surrounding call. `reify_ident` returns the
-    /// pre-reified TIR for such names instead of re-resolving the spliced
-    /// caller AST under the wrong perspective. Empty outside a default
-    /// walk. See [`Self::reify_pad_args_with_defaults`].
+    /// Active parameter-name → already-reified-argument substitutions for the
+    /// default-argument expression being reified. A default resolves under the
+    /// *callee's* perspective, but a reference to an earlier parameter is the
+    /// *caller's* argument, already reified under the caller's — so `reify_ident`
+    /// returns the pre-reified TIR instead of re-resolving the spliced AST.
     pub(crate) default_arg_overrides: IndexMap<String, TirExpr>,
     /// Active `AstId` → already-reified-`Local` substitutions for the
     /// side-effecting sub-pieces of a compound-assign target, bound once to
@@ -344,19 +284,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .cloned()
     }
 
-    /// Construct a per-module `Reify` for the orchestration driver.
-    /// The `tysys` clone is the shallow Rc/Arc copy
-    /// [`TypeSystem`] supports; per-module state (`sem`,
-    /// `current_module_*`) is borrowed from
-    /// [`crate::elaborator::orchestration::AnnotateState`] for the
-    /// duration of the reify walk.
-    ///
-    /// `current_module_source` / `current_module_items` are
-    /// placeholders at construction time — the driver overwrites them
-    /// inside [`Self::reify_module`]. Keeping them on the struct
-    /// matches the elaborator's shape (avoids threading them through
-    /// every method signature) and keeps the walk-order invariant
-    /// tractable.
+    /// Construct a per-module `Reify` for the orchestration driver. The `tysys`
+    /// clone is the shallow one [`TypeSystem`] supports. `current_module_source`
+    /// / `current_module_items` are placeholders here — [`Self::reify_module`]
+    /// overwrites them; keeping them on the struct saves threading them through
+    /// every method signature.
     pub(crate) fn new(
         tysys: TypeSystem,
         sem: &'a ModuleSemantics,
@@ -391,19 +323,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    // Per-element annotation accessors (`ann_*`) that honour active tuple
-    // `for-of` overlays.
-    //
-    // A tuple for-of's body is a single source sub-tree resolved once per
-    // element by annotate; to keep each element's distinct facts, annotate
-    // moved them out of the base `sem.types` maps into per-element
-    // `ElementOverlay`s (and *truncated* the base maps — so for body
-    // `AstId`s the fact lives ONLY in the overlay). Every reify read of one
-    // of those maps must therefore go through the matching `ann_*`
-    // accessor, which walks `tuple_overlay_stack` innermost-first and falls
-    // back to `sem.types`. Outside a tuple for-of the stack is empty and
-    // the accessor is just the base-map lookup. The macro keeps the 14-map
-    // list in one place, mirroring `TypeAnnotations::split_off_overlay`.
+    // Annotation accessors that honour active tuple `for-of` overlays. A tuple
+    // for-of body is resolved once per element, and annotate moved each
+    // element's facts out of the base `sem.types` maps into an `ElementOverlay`,
+    // truncating the base — so every read of one of these maps must go through
+    // its `ann_*` accessor, which walks the overlay stack innermost-first.
     reify_annotation_accessors! {
         ann_local_type => local_types: crate::tir::TypeId,
         ann_let_annotated_type => let_annotated_types: crate::tir::TypeId,
@@ -445,17 +369,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    // Decl/signature facts the combined walk records once per decl (the
-    // single source of truth), read straight from `sem.types` with no overlay
-    // walk:
-    //   - `method_impl_type_params`: the impl-type-param scheme
-    //     `resolve_method` recorded per impl-method `AstId`.
-    //   - `fn_param_types` / `fn_return_types`: a function/method's resolved
-    //     param types (declaration order, receiver included) and
-    //     post-async-erasure return type.
-    //   - `effect_ops`: an effect/resource decl's resolved op signatures.
-    //   - `decl_type_params`: TIR type params per decl (function, method,
-    //     struct, variant), defaults resolved with the scope alive.
+    // Decl/signature facts the combined walk records once per decl, read
+    // straight from `sem.types` with no overlay walk.
     reify_annotation_accessors! {
         base {
             ann_method_impl_type_params => method_impl_type_params: Vec<crate::tir::TirTypeParam>,
@@ -510,9 +425,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Resolve an effect-name list into [`crate::tir::EffectRef`]s
     /// for a function signature. Mirrors
-    /// [`super::Elaborator::resolve_effects`] (elaborator.rs:948+)
-    /// without the use→def recording side-effect (annotate already
-    /// recorded the edges).
+    /// [`super::Elaborator::resolve_effects`] without the use→def
+    /// recording side-effect (annotate already recorded the edges).
     fn reify_effects(&self, effects: &[String]) -> Vec<crate::tir::EffectRef> {
         effects
             .iter()
@@ -630,22 +544,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Reify one module: emit a [`TirModule`] from the AST + the
-    /// `ModuleSemantics` `annotate_bodies` populated.
-    ///
-    /// The flow mirrors [`super::Elaborator::resolve_module`] item by
-    /// item; only the per-Item dispatch shape is reproduced here, the
-    /// body of each branch is delegated to a `reify_*` helper.
-    /// True when liveness gating is active and `(module, id)` is a
-    /// user-authored free function unreachable from the export boundary. Skips
-    /// dead free functions so they never reach monomorphization (WEP
-    /// 2026-05-16, reify gating). Globals are intentionally not gated here.
-    ///
-    /// Only user-authored modules are gated. Stdlib functions can be reached
-    /// solely through compiler synthesis (e.g. `memory_to_gc_string` from CM
-    /// bindings), which the source-level call graph cannot see; gating them
-    /// would drop a live function and trap WIR build. The optimize-time DCE
-    /// removes their dead ones instead.
+    /// True when liveness gating is active and `(module, id)` is a user-authored
+    /// free function unreachable from the export boundary, so it never reaches
+    /// monomorphization. Only user-authored modules are gated: a stdlib function
+    /// can be reached by compiler synthesis alone, which the source-level call
+    /// graph cannot see, so optimize-time DCE removes the dead ones instead.
     fn is_dead_item(&self, module: &ModuleSource, id: crate::ast::AstId) -> bool {
         super::liveness::is_user_authored(module)
             && self.live_items.is_some_and(|live| !live.contains(&id))
@@ -883,9 +786,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Field-default expressions resolve in a per-struct
         // `FunctionContext` keyed `struct:<name>` (no self, no other
-        // fields in scope), matching `Elaborator::resolve_struct` at
-        // item.rs:461 byte-for-byte so the synthesized purity check
-        // and reify see identical TIR.
+        // fields in scope), matching `Elaborator::resolve_struct`
+        // byte-for-byte so the synthesized purity check and reify see
+        // identical TIR.
         let mut field_ctx = FunctionContext::new(
             crate::tir::TypeTable::UNIT,
             format!("struct:{}", struct_decl.name),
@@ -1354,22 +1257,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
-    /// Reify every method on an `impl` block. Reads the impl-block
-    /// resolution facts annotate recorded
-    /// (`sem.types.impl_facts[impl_block.id]`) and threads
-    /// them into [`Self::reify_method`] per AST `Function`.
+    /// Reify every method on an `impl` block, threading
+    /// `sem.types.impl_facts[impl_block.id]` into [`Self::reify_method`].
     ///
-    /// Synthesis-request impls (`impl Trait for Type;`) emit no
-    /// methods — the request itself lives on
-    /// `sem.decls.pending_synthesis_requests` and is forwarded to
-    /// `TirModule::synthesis_requests` at [`Self::reify_module`].
-    ///
-    /// Default-method synthesis is also out of scope here: the
-    /// synthesised `TirFunction`s live on
-    /// `sem.decls.pending_default_methods` and forward through the
-    /// per-module path. This keeps the responsibility split clean
-    /// (per-impl-block code in `reify_impl`, per-module aggregation
-    /// in `reify_module`).
+    /// Synthesis requests and default-method synthesis are out of scope here:
+    /// both live on `sem.decls` and are aggregated by [`Self::reify_module`].
     fn reify_impl(&mut self, impl_block: &ast::ImplBlock) -> Vec<TirFunction> {
         if impl_block.is_synthesize_request {
             return Vec::new();
@@ -1395,24 +1287,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect()
     }
 
-    /// Synthesise the trait default-method `TirFunction`s for `impl_block`.
-    ///
-    /// Mirrors the combined walk's default-method loop in
-    /// `elaborator.rs`'s `Item::Impl` arm: for each default method on the
-    /// impl's trait that the impl does not override, build a `TirFunction`
-    /// keyed `Struct^Trait::method`. Reify reads the per-impl body-walk
-    /// facts from `sem.default_method_semantics[(impl_block.id,
-    /// default_method.id)]` (recorded by the combined walk) — each entry
-    /// is a full `ModuleSemantics` cloned with the trait module's facts in
-    /// its `types` / `bindings` and the impl module's `decls` / `imports`
-    /// so [`Self::reify_method`] sees both.
-    ///
-    /// The swap pattern is identical to
-    /// [`Self::with_const_module_perspective`]: `self.sem`,
-    /// `self.current_module_source`, and `self.current_module_items` are
-    /// replaced with the trait module's view for the duration of the body
-    /// walk so the `ann_*` accessors' `AstId`s name the trait module
-    /// (where the facts were keyed).
+    /// Synthesise a `Struct^Trait::method` `TirFunction` for each default method
+    /// the impl does not override, reading the body-walk facts from
+    /// `sem.default_method_semantics[(impl_block.id, default_method.id)]`. The
+    /// module perspective is swapped to the trait module for the walk, since the
+    /// facts are keyed by `AstId`s that name it.
     fn reify_impl_default_methods(&mut self, impl_block: &ast::ImplBlock) -> Vec<TirFunction> {
         use crate::name::MethodName;
 
@@ -1549,19 +1428,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                  impl method reify emits",
             );
 
-        // Type-param scope for resolving the method's own param/return
-        // types. Every impl-self-type arg occupies its positional slot —
-        // including concrete / known-named args (`String` in
-        // `TreeMap<String, V>`) — exactly as the elaborator's
-        // `resolve_method` registers them (item.rs). They are NOT excluded:
-        // doing so was a reify-only divergence that disagreed with the
-        // battle-tested original path; the elaborator treats such an arg as a
-        // positional param and monomorph substitutes it back to the concrete
-        // type by identity. Method-level params continue after the impl param
-        // count, matching `resolve_method`'s `next_idx = impl_type_params.len()`
-        // — the same base the monomorphizer uses
-        // (`impl_type_params.len() + param.index` in
-        // `func_inst::instantiate_function`).
+        // Type-param scope for the method's own param/return types. Every
+        // impl-self-type arg occupies its positional slot, concrete ones
+        // (`String` in `TreeMap<String, V>`) included — monomorph substitutes
+        // those back by identity. Method-level params continue after the impl
+        // param count, the same base `func_inst::instantiate_function` uses.
         let mut type_param_names: Vec<String> = Vec::new();
         for p in &impl_type_params {
             let idx = p.index as usize;
@@ -1615,7 +1486,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (recorded on `ImplFacts::struct_name`). Reconstructing it from
         // `facts.self_type` would need the `&` / `&mut` / tuple
         // special-cases and the `&T`-blanket "bare `&`" carve-out that
-        // `get_type_name` (module.rs:581) already encodes — exactly the
+        // `get_type_name` already encodes — exactly the
         // parity-bug class WEP 2026-05-26 §"Reify — mechanical" calls out.
         let _base_struct_name = facts.struct_name.clone();
         // Mangled / display names — read straight off the per-method facts
@@ -1635,8 +1506,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             info.is_ref_impl = facts.is_ref_impl;
             // Carry the impl's trait type args (`impl Future<i32> for …`
             // → `[i32]`). The effect-dispatch synthesis keys its handler
-            // index on `(struct, effect_module, base_trait, trait_type_args)`
-            // (effect_dispatch.rs:2984); without the args a generic-effect
+            // index on `(struct, effect_module, base_trait, trait_type_args)`;
+            // without the args a generic-effect
             // handler is keyed `Future<>` and the `Future<i32>` binding
             // finds no `DispatchPlan`.
             info.trait_type_args.clone_from(&facts.trait_type_args);
@@ -1791,7 +1662,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a `test "…" { … }` block. Returns the synthesised
     /// `TirFunction` plus the `TirTest` metadata. Mirrors
-    /// `Elaborator::resolve_test_decl` (item.rs:1233+): the function
+    /// `Elaborator::resolve_test_decl`: the function
     /// name encodes `test_index` + attributes (`expect_trap`, `TODO`,
     /// `timeout_ms`); the body reifies into a unit-returning
     /// no-parameter function.
@@ -2234,8 +2105,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // Inside a C-style `for`, `continue` must break to the
                 // body label so the `update` expression runs before the
                 // next iteration; only while/loop bodies use a plain
-                // `Continue`. Mirror `Elaborator::resolve_continue`
-                // (stmt.rs:251), keyed off `ctx.for_continue_labels`.
+                // `Continue`. Mirror `Elaborator::resolve_continue`,
+                // keyed off `ctx.for_continue_labels`.
                 let stmt_kind = if let Some(body_label) = ctx.for_continue_labels.last() {
                     TirStmtKind::Break {
                         label: Some(body_label.clone()),
@@ -2268,7 +2139,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Stmt::Loop(loop_stmt) => {
                 // `loop { … }` — direct lowering. The
                 // `for_continue_labels` save/restore mirrors
-                // `Elaborator::resolve_loop` (stmt.rs:2092–2101).
+                // `Elaborator::resolve_loop`.
                 let saved = std::mem::take(&mut ctx.for_continue_labels);
                 let body = self.reify_block(&loop_stmt.body, ctx, None);
                 ctx.for_continue_labels = saved;
@@ -2276,7 +2147,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Stmt::LabeledBlock(labeled_block) => {
                 // `LABEL: { … }` stmt — mirrors
-                // `Elaborator::resolve_labeled_block` (stmt.rs:116+).
+                // `Elaborator::resolve_labeled_block`.
                 // Push the label onto `active_labels` so a nested
                 // `break LABEL` lowers against this frame, walk the
                 // inner block, pop. The block result is dropped at
@@ -2588,19 +2459,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(tir) = self.try_reify_int128_cast(cast, target_type, ctx) {
                     return tir;
                 }
-                // `expr as Ty` — emit `Cast` with the recorded target
-                // type. Numeric vs newtype-cast handling is downstream;
-                // reify just produces the shape.
-                //
-                // Re-type a numeric-literal operand (possibly negated) to
-                // the cast's target width. annotate propagates the target
-                // type to a *direct* literal cast operand (`9e15 as i64`
-                // types the literal `i64`) but not through a `Neg`
-                // (`-9e15 as i64` leaves the inner literal `i32`), so at
-                // codegen an `i32.const` truncates a value > `i32::MAX`
-                // (`2^53 mod 2^32 == 0`) before the cast widens it. Mirror
-                // the production resolver, which types the operand at the
-                // target width in this position.
+                // `expr as Ty` — emit `Cast` with the recorded target type, and
+                // re-type a numeric-literal operand to the target width.
+                // annotate propagates the target to a *direct* literal operand
+                // but not through a `Neg`, so `-9e15 as i64` would otherwise
+                // emit an `i32.const` that truncates before the cast widens.
                 let target_is_int = self.tysys.type_table.borrow().is_integer(target_type);
                 let is_number_lit = |e: &ast::Expr| matches!(e, ast::Expr::Literal(l) if matches!(l.value, ast::Literal::Number(_)));
                 let inner = if target_is_int && is_number_lit(&cast.expr) {
@@ -2677,7 +2540,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     );
                 }
                 // Constant-fold `-literal` into a negative literal, exactly
-                // as `Elaborator::resolve_unary` (operators.rs:949-1004).
+                // as `Elaborator::resolve_unary`.
                 // Without this reify emits `Unary { Neg, <pos literal> }`,
                 // which lowers to `i32.sub (const 0) …` / `f64.neg …` and
                 // can produce invalid modules (e.g. a negated literal that
@@ -2733,7 +2596,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Track address-taken locals for `&x` / `&mut x`, mirroring
-                // `Elaborator::resolve_unary` (operators.rs:834). The
+                // `Elaborator::resolve_unary`. The
                 // boxing pass (`lower::plan::boxing`) reads
                 // `TirFunction::address_taken_locals` to retag a borrowed
                 // local's declaration to its box type, so that mutation
@@ -2787,8 +2650,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
-                // (matches `Elaborator::resolve_resume` at
-                // handlers.rs:445), then emit `TirExprKind::Resume`.
+                // (matches `Elaborator::resolve_resume`), then emit
+                // `TirExprKind::Resume`.
                 let expected = if ctx.in_handler_method {
                     Some(ctx.return_type)
                 } else {
@@ -2805,7 +2668,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::LabeledBlock(lb) => self.with_defaults_suppressed(|s| {
                 // Match `Elaborator::resolve_expr`'s `LabeledBlock`
-                // arm (expr.rs:234–305): push a `LabeledBlockTarget`
+                // arm: push a `LabeledBlockTarget`
                 // so any `break label: expr` inside lowers via this
                 // frame, walk the inner block, pop the frame, emit
                 // `TirExprKind::LabeledBlock`. The result type is the
@@ -2883,7 +2746,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let value = self.reify_expr(&assign.value, ctx, Some(target.type_id));
                 // Global-var write: `g = v` lowers to `GlobalVarSet` so
                 // codegen actually mutates the global. The production
-                // `assign_to_target` rewrites here too (operators.rs:1192+).
+                // `assign_to_target` rewrites here too.
                 if let TirExprKind::GlobalVarGet {
                     module_source,
                     name,
@@ -2940,7 +2803,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a `while cond { body }` statement. Mirrors
     /// `Elaborator::resolve_while`'s `Condition::Expr` arm
-    /// (stmt.rs:2982+): the loop lowers into
+    /// the loop lowers into
     /// `Loop { if !cond { break; } body }`, which is the desugar
     /// `DesugarKind::While` tags. `for_continue_labels` is saved /
     /// restored around the body walk so naked `continue` inside
@@ -2988,9 +2851,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 elements,
                 span: cond_span,
             } => {
-                // Mirror `Elaborator::resolve_while`'s LetChain
-                // arm (stmt.rs:3016+): the else-branch
-                // unconditionally `break`s out of the loop.
+                // Mirror `Elaborator::resolve_while`'s LetChain arm:
+                // the else-branch unconditionally `break`s out of the loop.
                 let break_stmt = TirStmt::new(
                     TirStmtKind::Break {
                         label: None,
@@ -3027,8 +2889,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// the sub-tree under an `in_progress` guard, allocates `__vK`,
     /// pushes the `let __vK = …;` onto the capture context, and
     /// returns `Local(__vK)` for the surrounding reify to splice in.
-    /// Mirrors [`super::Elaborator::resolve_with_assert_capture`]
-    /// (assert.rs:373+).
+    /// Mirrors [`super::Elaborator::resolve_with_assert_capture`].
     fn reify_with_assert_capture(
         &mut self,
         slot_idx: usize,
@@ -3098,7 +2959,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify `assert cond[, msg];` into the power-assert expansion.
-    /// Mirrors [`super::Elaborator::desugar_assert`] (assert.rs:65+).
+    /// Mirrors [`super::Elaborator::desugar_assert`].
     /// Capture slots come from the recorded
     /// [`super::sem::types::AssertCaptureInfo`] (annotate's
     /// `CaptureScanner` already chose them); the hook in `reify_expr`
@@ -3162,7 +3023,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // `expected_type = None`: a `Bool` expectation propagates into
         // `If`/`Match` branches inside the condition and rejects
-        // non-bool arm bodies. Mirrors assert.rs:108.
+        // non-bool arm bodies.
         let cond_tir = self.reify_expr(&assert_stmt.condition, ctx, None);
 
         let actx = ctx
@@ -3206,8 +3067,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
 
-        // Panic template, mirroring `build_assert_panic_template`
-        // (assert.rs:239+): header + `condition: <source>` + one
+        // Panic template, mirroring `build_assert_panic_template`:
+        // header + `condition: <source>` + one
         // `<label>: {__vK:?}` line per emitted slot.
         let string_type = self
             .tysys
@@ -3348,20 +3209,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )]
     }
 
-    /// Reify a `for x of expr { body }` loop. Reads the
-    /// `DesugarKind` tag (`ForOfTuple` / `ForOfVariadic` /
-    /// `ForOfIterator`) annotate placed on `for_of.id` to pick the
-    /// expansion path.
-    ///
-    /// - `ForOfIterator` consumes the
-    ///   `for_of_iterator` record and emits
-    ///   `match next() { Some(v) => body, _ => break }`.
-    /// - `ForOfTuple` compile-time-unrolls into per-element
-    ///   labelled blocks (mirrors `resolve_tuple_for_of`),
-    ///   handling the `.enumerate()` unwrap.
-    /// - `ForOfVariadic` emits a deferred `VariadicForOf` TIR
-    ///   node the monomorphizer expands after `TypePack`
-    ///   substitution.
+    /// Reify a `for x of expr { body }` loop, picking the expansion path from
+    /// the `DesugarKind` tag on `for_of.id`: `ForOfIterator` emits
+    /// `match next() { Some(v) => body, _ => break }`, `ForOfTuple`
+    /// compile-time-unrolls into per-element labelled blocks, and
+    /// `ForOfVariadic` defers to the monomorphizer via a `VariadicForOf` node.
     fn reify_for_of(&mut self, for_of: &ast::ForOfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
 
@@ -3563,7 +3415,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Compile-time-unroll a tuple for-of into per-element
     /// labelled blocks. Mirrors `Elaborator::resolve_tuple_for_of`
-    /// (stmt.rs:2361+). Handles `.enumerate()` unwrap on the AST
+    /// Handles `.enumerate()` unwrap on the AST
     /// receiver so each iteration sees `[i, element]`.
     fn reify_tuple_for_of(
         &mut self,
@@ -3769,7 +3621,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Emit a deferred `VariadicForOf` TIR node for tuples whose
     /// element types contain `TypePack`. The monomorphizer expands
     /// this after `TypePack` substitution. Mirrors
-    /// `Elaborator::resolve_variadic_for_of` (stmt.rs:2223+).
+    /// `Elaborator::resolve_variadic_for_of`.
     fn reify_variadic_for_of(
         &mut self,
         for_of: &ast::ForOfStmt,
@@ -3844,7 +3696,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Destructured binding (`for let [a, b] of …`): bind each inner
         // pattern variable to its element type and prepend a field-access
         // `Let` reading it from the synthetic pair temp, mirroring
-        // `resolve_variadic_for_of` (stmt.rs:2259+). Without this the inner
+        // `resolve_variadic_for_of`. Without this the inner
         // names (`a`, `b`) never enter scope, so the body resolves them to
         // `Unknown` — e.g. `a != b` in the variadic `Eq for [..T]` impl
         // dispatches to a nonexistent `unknown^Eq::eq`.
@@ -4036,7 +3888,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a C-style `for init; cond; update { body }` loop into
-    /// the shape `Elaborator::resolve_for` produces (stmt.rs:3095+).
+    /// the shape `Elaborator::resolve_for` produces.
     fn reify_for(&mut self, f: &ast::ForStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         use crate::tir::{TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable};
 
@@ -4097,7 +3949,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }) => {
                 // For-let-chain is restricted to a single Let
                 // element (the parser enforces this; mirror
-                // `Elaborator::resolve_for` stmt.rs:3164+). The
+                // `Elaborator::resolve_for`). The
                 // expansion shape is a single Match: the pattern
                 // arm's body is the labeled-body + update; the
                 // wildcard arm breaks.
@@ -4195,7 +4047,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify the for-loop body wrapped in `__for_N_body:` so naked
     /// `continue` lowers as `break __for_N_body` (letting the
     /// `update` expression run before the next iteration). Mirrors
-    /// `Elaborator::resolve_for_labeled_body` (stmt.rs:3280+).
+    /// `Elaborator::resolve_for_labeled_body`.
     fn reify_for_labeled_body(
         &mut self,
         body_label: &str,
@@ -4219,7 +4071,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify the for-loop's optional `update` expression as a single
     /// stmt-list (empty when absent). Mirrors
-    /// `Elaborator::resolve_for_update` (stmt.rs:3302+).
+    /// `Elaborator::resolve_for_update`.
     fn reify_for_update(
         &mut self,
         update: Option<&ast::Expr>,
@@ -4233,19 +4085,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .unwrap_or_default()
     }
 
-    /// Reify a let-chain (`if let PAT = e [&& BOOL]* { … }`) into
-    /// nested Match / If stmts. Mirrors
-    /// `Elaborator::resolve_let_chain_stmts` (stmt.rs:1099+).
-    /// Shared by the `LetChain` branches of `reify_if_expr`,
-    /// `reify_if_stmt`, and `reify_while`.
-    ///
-    /// Each `Let` element becomes a two-arm Match: the recorded
-    /// pattern arm continues the chain via recursion, the
-    /// wildcard arm falls back to the chain's `else_block`. Each
-    /// `Expr` element becomes a single-branch `If` whose body is
-    /// the recursive continuation. The recursion terminates at
-    /// an empty element list, where the `then_block` is reified
-    /// directly.
+    /// Reify a let-chain (`if let PAT = e [&& BOOL]* { … }`) into nested Match /
+    /// If stmts, shared by `reify_if_expr` / `reify_if_stmt` / `reify_while`.
+    /// A `Let` element becomes a two-arm Match (pattern arm recurses, wildcard
+    /// falls back to `else_block`), an `Expr` element a single-branch `If`; the
+    /// recursion bottoms out on the empty list by reifying `then_block`.
     fn reify_let_chain_stmts(
         &mut self,
         elements: &[ast::ConditionElement],
@@ -4284,7 +4128,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 );
                 let inner_block = TirBlock::new(inner_stmts, span);
                 // Use the shared `block_result_type` (mirroring
-                // `resolve_let_chain_stmts` stmt.rs:1140) so a then/else
+                // `resolve_let_chain_stmts`) so a then/else
                 // block ending in a value `If` / `Match` / nested chain
                 // contributes its real result type. A hand-rolled
                 // "last stmt is Expr" check would mis-classify those
@@ -4358,7 +4202,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a trailing stmt-position `if` whose value flows out as the
     /// enclosing block's result. Mirrors
-    /// `Elaborator::resolve_if_stmt_with_expected` (stmt.rs:1042): the
+    /// `Elaborator::resolve_if_stmt_with_expected`: the
     /// `LetChain` arm reuses the let-chain lowering with `expected_type`
     /// threaded through so the chain's then/else blocks stay
     /// value-producing; the `Expr` arm emits an `If` *expression*
@@ -4450,7 +4294,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Condition::LetChain { elements, .. } => {
                 // Mirror `Elaborator::resolve_if_stmt`'s
-                // `Condition::LetChain` arm (stmt.rs:1014+): the
+                // `Condition::LetChain` arm: the
                 // chain elements lower into nested Match / If
                 // stmts via the shared `reify_let_chain_stmts`.
                 // Else-branch resolves in the outer scope (chain
@@ -4478,8 +4322,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify an `if cond { … } else { … }` expression. `Condition::LetChain`
     /// dispatches through the `IfLetChain` desugar, whose tag annotate
-    /// records on `sem.types.desugars` (`Elaborator::resolve_if_expr` at
-    /// expr.rs:1860).
+    /// records on `sem.types.desugars` (`Elaborator::resolve_if_expr`).
     fn reify_if_expr(
         &mut self,
         if_expr: &ast::IfExpr,
@@ -4487,24 +4330,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expected_type: Option<TypeId>,
         recorded_type: TypeId,
     ) -> TirExpr {
-        // When no expected type propagated from the use site (e.g. an
-        // unannotated `let x = if cond { Option::Some(v) } else { null };`),
-        // fall back to the if-expression's own already-unified `recorded_type`
-        // (computed by `Elaborator::resolve_if_expr`'s branch-agreement logic,
-        // expr.rs:1829-1858) so a bare `null` branch reifies with a concrete
-        // `Option<T>` type instead of `UNKNOWN` (`ann_expression_types`,
-        // reify.rs:317-329, discards UNKNOWN-containing recorded types and
-        // falls back to `expected_type` — which was `None` here without this).
-        // An inconsistency between the `If` node's own type and an untyped
-        // branch produces invalid Wasm at codegen (mismatched block/branch
-        // types). Mirrors the same fallback already used for labeled-block
-        // break values (reify.rs:2374-2381, `LabeledBlockTarget`).
+        // With no expected type from the use site (`let x = if c { Some(v) }
+        // else { null };`), fall back to the if-expression's own unified
+        // `recorded_type` so the bare `null` branch reifies as `Option<T>`
+        // rather than UNKNOWN — a branch type disagreeing with the `If` node's
+        // own produces invalid Wasm. Same fallback as `LabeledBlockTarget`.
         let branch_expected = expected_type.or(Some(recorded_type));
         let cond_expr = match &if_expr.condition {
             ast::Condition::Expr(e) => e,
             ast::Condition::LetChain { elements, .. } => {
                 // Mirror `Elaborator::resolve_if_expr`'s
-                // `Condition::LetChain` arm (expr.rs:1867+): the
+                // `Condition::LetChain` arm: the
                 // chain reduces to a `Block` of nested Match /
                 // If stmts via `reify_let_chain_stmts`. The
                 // overall block's result type is the recorded
@@ -4565,7 +4401,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{CallArg, ResolvedType, TirBinaryOp, TirExprKind, TirUnaryOp, TypeTable};
 
-        // Mirror `resolve_binary_operands_with_coercion` (operators.rs:80):
+        // Mirror `resolve_binary_operands_with_coercion`:
         // a numeric-literal operand is typed from the *other* operand (or,
         // when both are literals, from the expression's recorded type). This
         // matters for inlined associated-const bodies like
@@ -4626,8 +4462,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Reference equality: when both operands are references, the
         // elaborator emits `RefEq` / `RefNotEq` (identity comparison)
         // rather than dispatching to `Eq` — and records no operator
-        // dispatch. The decision is from operand types alone
-        // (operators.rs:150), so reify reproduces it here.
+        // dispatch. The decision is from operand types alone, so reify
+        // reproduces it here.
         if matches!(binary.op, ast::BinaryOp::Eq | ast::BinaryOp::NotEq) {
             let both_refs = {
                 let tt = self.tysys.type_table.borrow();
@@ -4748,16 +4584,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a template string `"…{expr}…"`. Mirrors
-    /// `Elaborator::resolve_template_string` (template.rs:16+):
-    /// - Constant fast path: no interpolations → concatenate the
-    ///   string parts at reify time and emit a `StringLiteral`.
-    /// - Single-`String`-typed interpolation with no format spec →
-    ///   forward the resolved expression unchanged.
-    /// - General case: build a `Vec<TirTemplatePart>` where each
-    ///   `Interpolation` part carries an optional
-    ///   [`crate::tir::TemplateFormatSpec`] parsed by
-    ///   [`super::template::parse_format_spec`].
+    /// Reify a template string `"…{expr}…"`: no interpolations concatenates to a
+    /// `StringLiteral` at reify time, a lone `String` interpolation with no
+    /// format spec forwards its expression unchanged, and everything else builds
+    /// `Vec<TirTemplatePart>` with specs from
+    /// [`super::template::parse_format_spec`].
     fn reify_template_string(
         &mut self,
         template: &ast::TemplateStringExpr,
@@ -4828,7 +4659,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a `a..<b` / `a..=b` range expression. The elaborator
     /// lowers ranges into the prelude's `RangeExclusive` /
-    /// `RangeInclusive` struct literals (expr.rs:4397+); reify
+    /// `RangeInclusive` struct literals; reify
     /// produces the same shape by reading the element type from
     /// the reified `start` expression and interning the
     /// `GenericInstance` via `make_generic_instance`.
@@ -5363,15 +5194,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a compound assignment `x += y` as `x = x op y`, evaluating each
-    /// target sub-expression once: impure value operands are bound to `let
-    /// __caN` and replayed through an `AstId` override while the place skeleton
-    /// stays inline and writes back. Pure targets bind nothing.
-    ///
-    /// Residual: an intermediate `Index` read in a nested index's *receiver*
-    /// (`m.index(i)` in `m[i][j] += 1`) is still duplicated — harmless for pure
-    /// builtin reads, but a side-effecting custom `Index::index` runs twice.
-    /// Binding the reference can't fix it under value semantics (the `let`
-    /// would copy the referent) and there is no `IndexMut` to borrow.
+    /// target sub-expression once: impure value operands bind to `let __caN`
+    /// while the place skeleton stays inline. Residual: a nested index's
+    /// receiver (`m.index(i)` in `m[i][j] += 1`) is still duplicated, so a
+    /// side-effecting custom `Index::index` runs twice.
     fn reify_compound_assign(
         &mut self,
         compound: &ast::CompoundAssignExpr,
@@ -5485,16 +5311,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.wrap_prelude(prelude, write, span)
     }
 
-    /// Reify the `?` postfix operator. The elaborator desugars
-    /// `expr?` based on the operand's type:
-    /// - `Option<T>`: `match expr { Some(v) => v, None => return null }`
-    /// - `Result<T, E>`: `match expr { Ok(v) => v, Err(e) =>
-    ///   return Err(From::from(e)) }`
-    ///
-    /// The annotate-side validation (operand is `Option` / `Result`,
-    /// function return type is compatible) has already fired, so
-    /// reify trusts the recorded shape and produces the matching
-    /// `Match` TIR.
+    /// Reify the `?` postfix operator into the `Match` its operand type calls
+    /// for: `match expr { Some(v) => v, None => return null }` for `Option<T>`,
+    /// `match expr { Ok(v) => v, Err(e) => return Err(From::from(e)) }` for
+    /// `Result<T, E>`. Annotate has already validated both the operand and the
+    /// function's return type.
     fn reify_question_mark(
         &mut self,
         qm: &ast::TryOpExpr,
@@ -5528,7 +5349,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// `Option<T>`'s `?`-op desugar — mirrors
-    /// `Elaborator::resolve_question_mark_option` (expr.rs:4000+).
+    /// `Elaborator::resolve_question_mark_option`.
     fn reify_question_mark_option(
         &mut self,
         inner: TirExpr,
@@ -5622,7 +5443,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// `Result<T, E>`'s `?`-op desugar — mirrors
-    /// `Elaborator::resolve_question_mark_result` (expr.rs:4087+).
+    /// `Elaborator::resolve_question_mark_result`.
     fn reify_question_mark_result(
         &mut self,
         inner: TirExpr,
@@ -5650,7 +5471,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // When inner and outer error types differ, synthesise a
         // `<OuterErr>::from(<InnerErr>_val)` call. Mirrors
-        // `Elaborator::resolve_from_call` (expr.rs:4263+); the
+        // `Elaborator::resolve_from_call`; the
         // module source for the impl is looked up via the same
         // search annotate runs (walk impl blocks across loaded
         // modules to find a matching `impl From<InnerErr> for
@@ -5761,17 +5582,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a comparison chain `a < b < c …`. Mirrors
-    /// `Elaborator::desugar_comparison_chain` (operators.rs:1313+):
-    /// each middle term `m_k` binds to a `__m{k}` local so it is
-    /// not re-evaluated, and the chain reduces to
-    /// `(a < m_0) && (m_0 < m_1) && … && (m_{n-1} < tail)` wrapped
-    /// in a block that holds the `__mK` bindings.
-    ///
-    /// Primitive comparisons emit `TirExprKind::Binary` directly;
-    /// non-primitive operands dispatch through the `operator_dispatch`
-    /// record annotate left on the chain's own `AstId` (the synthesised
-    /// inner comparisons have no source id of their own).
+    /// Reify a comparison chain `a < b < c …` into
+    /// `(a < m_0) && (m_0 < m_1) && …` inside a block holding one `__mK` binding
+    /// per middle term, so no term is re-evaluated. Non-primitive operands
+    /// dispatch through the `operator_dispatch` record on the chain's own
+    /// `AstId` — the synthesised inner comparisons have no source id.
     fn reify_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -5800,8 +5615,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 };
 
             // Non-primitive comparison dispatches through `Eq::eq` /
-            // `Ord::cmp`; the recording fires on `chain.id` at
-            // operators.rs:1346.
+            // `Ord::cmp`; the recording fires on `chain.id`.
             if let Some(dispatch) = self.ann_operator_dispatch(chain.id) {
                 let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
                     left,
@@ -5986,18 +5800,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify an `expr[idx]` index expression.
-    ///
-    /// Three shapes per `Elaborator::resolve_index` (expr.rs:1659+):
-    /// - Tuple constant index → `TirExprKind::FieldAccess` with the
-    ///   constant index as `field_index` / `field_name`.
-    /// - `Index` trait dispatch → `*receiver.index(idx)` wrapped in
-    ///   `Unary { Deref }`; the `operator_dispatch[index.id]` record
-    ///   carries the dispatch target. The `Ref(Output)`
-    ///   `return_type` on the record is the signal that the outer
-    ///   `Deref` wrap is needed.
-    /// - `IndexValue` trait dispatch → `receiver.index_value(idx)`
-    ///   returns the value by copy; no outer wrap.
+    /// Reify an `expr[idx]` index expression into one of three shapes: a tuple
+    /// constant index becomes a `FieldAccess`, an `Index` dispatch becomes
+    /// `*receiver.index(idx)` (the record's `Ref(Output)` return type is what
+    /// signals the `Deref` wrap), and an `IndexValue` dispatch becomes
+    /// `receiver.index_value(idx)` with no wrap.
     fn reify_index(
         &mut self,
         index: &ast::IndexExpr,
@@ -6011,7 +5818,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Tuple constant-index path: detect via the receiver's
         // resolved type + the index being a constant integer
         // literal. Matches `Elaborator::resolve_index`'s tuple
-        // branch (expr.rs:1674+).
+        // branch.
         let tuple_elems: Option<Vec<TypeId>> = {
             let tt = self.tysys.type_table.borrow();
             let base = receiver.type_id;
@@ -6083,20 +5890,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, index.span)
     }
 
-    /// Reify a closure expression. The
-    /// `sem.types.closure_captures[closure.id]` record carries the
-    /// capture-analysis result annotate computed:
-    /// - `mut_captures`: outer mut-locals to materialise as
-    ///   `let __ref_v = &mut v;` before the closure body opens, in
-    ///   declaration order.
-    /// - `captures`: the closure's final capture list (name +
-    ///   outer-index + type + mut flag).
-    /// - `is_mutating`: drives the `fn mut(...)` vs `fn(...)` tag on
-    ///   the closure type.
-    ///
-    /// Mirror `Elaborator::resolve_closure` (closure.rs:127+) step
-    /// by step so the walk-order invariant lands the same locals at the
-    /// same indices.
+    /// Reify a closure expression from the capture analysis in
+    /// `sem.types.closure_captures[closure.id]`: `mut_captures` materialise as
+    /// `let __ref_v = &mut v;` ahead of the body in declaration order, `captures`
+    /// is the final capture list, and `is_mutating` picks `fn mut(…)`. Follows
+    /// `resolve_closure` step by step so the walk-order invariant holds.
     fn reify_closure(
         &mut self,
         closure: &ast::ClosureExpr,
@@ -6163,20 +5961,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             FunctionContext::new_closure(TypeTable::UNKNOWN, ctx, &self.tysys.type_table);
         closure_ctx.deref_overrides = deref_overrides;
 
-        // Step 3: add closure parameters. Param types come from the
-        // AST (resolved via the outer scope's type-param view); if
-        // the expected fn type is available, prefer its param types
-        // for cases where the closure has no explicit annotation.
-        // Peel newtypes so a closure coerced to a `type Reducer = fn(..)`
-        // newtype still sees the underlying function signature; otherwise
-        // unannotated closure params (`|a, b| ...`) resolve to UNKNOWN and
-        // the functor signature diverges from the call site, leaving the
-        // `__call` method unreachable. Mirrors production's coercion-aware
-        // param inference.
-        // Closure param types come from `local_types`, which
-        // `resolve_closure` populated via `record_local_symbol(p.id, …,
-        // type_id)`. Reify is a pure read; the prior fallback over
-        // `resolve_type(ty)` + the expected-fn-type peeling is gone.
+        // Step 3: add closure parameters. Their types come from `local_types`,
+        // which `resolve_closure` populated per param `AstId` — reify is a pure
+        // read here. The expected fn type, peeled through newtypes so a closure
+        // coerced to `type Reducer = fn(..)` sees the underlying signature,
+        // feeds the return type only (Step 4).
         let expected_fn_type = expected_type.map(|t| {
             let table = self.tysys.type_table.borrow();
             table.get_ultimate_base_type(table.peel_refs(t))
@@ -6316,19 +6105,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Synthesise a `<TargetType>::from(<value>)` call for the `?`
-    /// operator's error-conversion path. Mirrors
-    /// `Elaborator::resolve_from_call` (expr.rs:4263+): builds a
-    /// mangled `__<Target>__From<From>__from` method name with the
-    /// `LocalMethodName` carrying the canonical From-impl
-    /// Reify a tuple-to-sequence coercion (`[1, 2, 3]: List<i32>`).
-    /// Mirrors `try_coerce_tuple_to_sequence_inner`'s desugar block
-    /// shape (`__seq_lit: { let __b = Builder::new_literal(N); __b.push_literal(...); ...; break __seq_lit: __b.build(); }`).
-    /// The walk-order invariant keeps the `__b` local at the same
-    /// `FunctionContext` index reify reserves for it.
     /// True when `type_id` is a `TypePack` or a tuple whose elements
-    /// transitively contain a `TypePack`. Mirrors
-    /// `Elaborator::type_contains_pack` (expr.rs:3752).
+    /// transitively contain one.
     fn type_contains_pack(&self, type_id: TypeId) -> bool {
         use crate::tir::{ResolvedType, TypeTable};
         let ty = self.tysys.type_table.borrow().get(type_id).clone();
@@ -6376,19 +6154,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Reify a tuple literal, handling spread elements (`[..rest, b]`,
-    /// `[a, ..middle, b]`). Mirrors `Elaborator::resolve_tuple_literal`
-    /// (expr.rs:3768): the tuple `TypeId` is built bottom-up from the
-    /// resolved element types via `make_tuple` so a nested tuple's element
-    /// type is the identical interned id as the inner literal's own type
-    /// (avoiding the `nir/sroa` `TypeId`-identity divergence at `-O2`).
-    /// Spread elements expand per `type_contains_pack`:
-    /// - a direct `TypePack` → `TypePackExpansion`,
-    /// - a mapped pack (`..F::method()`, pack-independent return) → the same,
-    ///   with the plain pack driving the per-element rewrite,
-    /// - a tuple containing a pack → `TupleSpread` (monomorphize expands),
-    /// - a concrete tuple → inline `FieldAccess` per element (binding
-    ///   non-trivial spread operands to a `__spread_N` temporary).
+    /// Reify a tuple literal, handling spread elements. The tuple `TypeId` is
+    /// built bottom-up via `make_tuple` so a nested tuple's element type is the
+    /// same interned id as the inner literal's, which `nir/sroa` relies on. A
+    /// spread expands per `type_contains_pack`: a pack to `TypePackExpansion`, a
+    /// tuple containing one to `TupleSpread`, a concrete one to `FieldAccess`es.
     fn reify_tuple_literal(
         &mut self,
         tuple_lit: &ast::TupleLiteralExpr,
@@ -7025,7 +6795,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a `with E => h, … do { body }` effect handler block.
-    /// Mirrors `Elaborator::resolve_with_handler` (handlers.rs:37+).
+    /// Mirrors `Elaborator::resolve_with_handler`.
     ///
     /// Both binding forms — explicit `Effect => handler_expr` and bundled
     /// `handler_expr` — read their effect list off
@@ -7091,8 +6861,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a `matches!`-style expression: `scrutinee matches { PAT
     /// [if guard] }`. Desugars (tagged `DesugarKind::Matches` at
     /// annotate time) into a two-arm match: pattern → true, wildcard
-    /// → false. Mirror `Elaborator::desugar_matches_expr`
-    /// (matches.rs:25+).
+    /// → false. Mirror `Elaborator::desugar_matches_expr`.
     fn reify_matches(&mut self, m: &ast::MatchesExpr, ctx: &mut FunctionContext) -> TirExpr {
         use crate::tir::{TirExprKind, TirMatchArm, TirPattern, TypeTable};
 
@@ -7387,18 +7156,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a `StaticMethodCallExpr` (AST shape:
-    /// `Type::method(args)` with the type parsed as a `Type` node
-    /// rather than a `Call { callee: Ident("Type::method") }`).
-    /// Used for fully-qualified static method calls like
-    /// `Stream<u8>::new()` where the target carries type args.
-    ///
-    /// Reify follows the same shape as the qualified-callee
-    /// branch of `reify_call`: resolve the target type, derive the
-    /// impl module from the resolved struct's `module_source`,
-    /// build the mangled `__Type__method` `FunctionRef`. Type
-    /// args come from the call's turbofish, else from the
-    /// `generic_instantiations` record.
+    /// Reify a `StaticMethodCallExpr` — a fully-qualified static call like
+    /// `Stream<u8>::new()`, whose target parses as a `Type` node rather than an
+    /// `Ident` callee. Same shape as `reify_call`'s qualified-callee branch:
+    /// resolve the target type, take the impl module from the resolved struct,
+    /// and build the mangled `__Type__method` `FunctionRef`.
     fn reify_static_method_call(
         &mut self,
         static_call: &ast::StaticMethodCallExpr,
@@ -7559,7 +7321,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Pad missing trailing positional args with the callee's
     /// declared defaults. Mirrors `Elaborator::pad_args_with_defaults`
-    /// (call.rs:1853+); only bare-ident free functions have defaults.
+    /// Only bare-ident free functions have defaults.
     fn reify_pad_args_with_defaults(
         &mut self,
         callee: &ast::Expr,
@@ -7634,17 +7396,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
 
-        // A default expression otherwise resolves in the *callee's*
-        // lexical scope: it may reference items private to the callee
-        // module that the caller cannot see (`paint(c = DEFAULT_VALUE)`
-        // where `DEFAULT_VALUE` is a callee-module-private global).
-        // Production routes this through `default_scope_module`, consulted
-        // during ident resolution (expr.rs:914). Reify reads recorded
-        // facts keyed by `AstId` from `self.sem`, so swap the module
-        // triple to the callee around the default walk when the callee is
-        // a different, loaded module. The caller's `ctx` (locals) stays so
-        // any earlier-param substitutions resolved above keep their
-        // bindings.
+        // A default expression otherwise resolves in the *callee's* lexical
+        // scope and may name items the caller cannot see, so swap the module
+        // triple to the callee around the walk. The caller's `ctx` stays, so
+        // earlier-param substitutions keep their bindings.
         let loaded = self.loaded_modules;
         let all_sem = self.all_module_semantics;
         let callee_ctx: Option<(&[Item], &ModuleSemantics)> =
@@ -7719,7 +7474,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a `CallExpr`, mirroring `Elaborator::resolve_call`
-    /// (call.rs:200+). The arms below are ordered by precedence and each
+    /// The arms below are ordered by precedence and each
     /// documents the recorded fact it reads; nothing here re-resolves a
     /// callee.
     fn reify_call(
@@ -7734,7 +7489,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Variant-ctor (`Variant::Case(payload)`) must beat the
         // `static_method_dispatch` arm: annotate also records the
-        // ctor at call.rs:1146+, but that shape would lower to a
+        // ctor there too, but that shape would lower to a
         // `Call` against a function that doesn't exist.
         if let ast::Expr::Ident(ident) = &call.callee
             && let Some(pos) = ident.name.find("::")
@@ -7828,16 +7583,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // impl lookup, mangled-name construction, or monomorph-info
         // shaping (none of which are tractable from the AST alone).
         if let Some(dispatch) = self.ann_static_method_dispatch(call.id) {
-            // Forward per-argument expected types for closure args that have
-            // an unannotated param, so `|a, b| ...` coerced to a `fn`-typed
-            // (or `fn`-newtype) param infers its params; otherwise the
-            // closure's params stay UNKNOWN and its functor `__call` is
-            // generated with `unknown` param types and dropped before codegen.
-            // Restricted to unannotated-param closures so we never override the
-            // body-inferred effects of an effect-polymorphic closure (an
-            // expected `fn() with E` whose `E` is a generic effect param would
-            // otherwise pin `declared_effects` to the param instead of the
-            // closure's actual effects).
+            // Forward per-argument expected types to closure args with an
+            // unannotated param, or their params stay UNKNOWN and the functor's
+            // `__call` is dropped before codegen. Restricted to those closures
+            // so an effect-polymorphic one keeps its body-inferred effects
+            // instead of being pinned to a generic effect param.
             let call_param_types = self.ann_call_param_types(call.id);
             let mut arg_exprs: Vec<CallArg> = call
                 .args
@@ -7902,7 +7652,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // `Type::from(x)` with no explicit `From` impl — reflexive and
         // newtype conversions. Production's `resolve_call` handles these
-        // inline (call.rs:514-569) and records no `static_method_dispatch`,
+        // inline and records no `static_method_dispatch`,
         // tagging the reflexive case with `NewtypeFromCollapse`; reify must
         // reproduce the same three shapes (otherwise it falls through to an
         // unresolvable `Type::from` `Call`). Only reached when a user `From`
@@ -7919,8 +7669,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let arg_type = arg.type_id;
 
             // Bodyless `impl From<X> for Type;` marker impl — production
-            // synthesizes a `From::from` call inline (call.rs:768 →
-            // expr.rs:resolve_from_call) and records `FromCallFacts`
+            // synthesizes a `From::from` call inline via
+            // `resolve_from_call` and records `FromCallFacts`
             // under `call.id`. Reify reuses `reify_from_call` so both the
             // ?-op path and this static-call path emit identical TIR.
             let from_facts_key = call.id;
@@ -7953,8 +7703,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 );
             }
 
-            // Base→Newtype: `Newtype::from(Base_val)` where `Newtype` is a
-            // newtype over the arg's type — lower to a `Cast` (call.rs:549).
             // Base→Newtype: `Newtype::from(Base_val)`. Annotate records
             // `NewtypeFromWrap` on the call and lowers to a `Cast` to the
             // newtype; reify replays the shape using the recorded
@@ -8089,7 +7837,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // whose type resolves to a function (e.g. `arr[i](x)`,
         // `(foo.bar)(x)`, `(get_fn())(x)`, `(|x| x)(1)`). Mirrors
         // `Elaborator::resolve_call`'s non-ident-callee path
-        // (call.rs:248+).
         if !matches!(&call.callee, ast::Expr::Ident(_)) {
             let callee_expr = self.reify_expr(&call.callee, ctx, None);
             let is_fn = {
@@ -8304,21 +8051,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, span)
     }
 
-    /// Reify the `container[i].method(args)` `IndexMut` rewrite. Mirrors
-    /// `Elaborator::try_resolve_index_mut_method_call`
-    /// (`method_lookup.rs:3390`+).
-    ///
-    /// Two dispatch records drive the shape:
-    /// - The inner `IndexMut::index_mut(idx)` call lives on
-    ///   `sem.types.operator_dispatch[index_expr.id]`, recorded
-    ///   alongside the desugar tag.
-    /// - The outer method call's dispatch lives on
-    ///   `sem.types.method_dispatch[method_call.id]`.
-    ///
-    /// Reify reads both, reifies the container + index, builds
-    /// `container.index_mut(idx)`, then adjusts the receiver via
-    /// the outer dispatch's `self_kind` / `is_ref_impl` and emits
-    /// the outer method-call TIR.
+    /// Reify the `container[i].method(args)` `IndexMut` rewrite from two
+    /// dispatch records: `operator_dispatch[index_expr.id]` for the inner
+    /// `index_mut(idx)` and `method_dispatch[method_call.id]` for the outer
+    /// call. Builds `container.index_mut(idx)`, then adjusts the receiver by
+    /// the outer dispatch's `self_kind` / `is_ref_impl`.
     fn reify_index_mut_method_call(
         &mut self,
         method_call: &ast::MethodCallExpr,
@@ -8402,19 +8139,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a `MethodCallExpr`. Every decision — the resolved
-    /// `FunctionRef`, the receiver-adjustment kind, the ref-impl flag, the
-    /// expression's final type — is already on `sem.types`
-    /// (`method_dispatch`, `expression_types`). Reify reads them and emits
-    /// the same TIR shape
-    /// `Elaborator::resolve_method_call_with` produced, sharing the
-    /// receiver-adjustment helper
-    /// [`super::Elaborator::adjust_receiver_for_self_kind_static`].
-    ///
-    /// The `IndexMutMethodCall` desugar routes through here too: when
-    /// `sem.types.desugars[id] == IndexMutMethodCall`, the receiver is an
-    /// `IndexExpr` and reify materialises the `__index_mut_val` local
-    /// before dispatching the method.
+    /// Reify a `MethodCallExpr`. Every decision — resolved `FunctionRef`,
+    /// receiver-adjustment kind, ref-impl flag, final type — is already on
+    /// `sem.types`. An `IndexMutMethodCall` desugar routes through here too,
+    /// materialising `__index_mut_val` before the dispatch.
     fn reify_method_call(
         &mut self,
         method_call: &ast::MethodCallExpr,
@@ -8580,7 +8308,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Track implicit `&mut self` borrowing for primitive / enum local
         // receivers, mirroring `Elaborator::resolve_method_call_with`
-        // (method_call.rs:517): a scalar-backed value is copied by default,
+        // a scalar-backed value is copied by default,
         // so `x.bump()` must mark `x` address-taken or the boxing pass won't
         // write the mutation back. Enums are plain discriminants — the same
         // scalar shape as primitives.
@@ -8639,7 +8367,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect();
 
         // Pad missing trailing args with the method's defaults.
-        // Mirrors method_call.rs:481+; the recorded `param_names` /
+        // Mirrors `resolve_method_call_with`; the recorded `param_names` /
         // `param_defaults` arrive on `MethodDispatch` from annotate.
         if args.len() < dispatch.param_defaults.len() {
             let mut subs: IndexMap<String, ast::Expr> = IndexMap::default();
@@ -8684,19 +8412,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Resolve a struct field name to its `(index, name)` pair via
-    /// the resolved struct type. Tuple-struct projections (`t.0`)
-    /// resolve through the tuple element index. Returns `(0, name)` on
-    /// lookup failure so reify doesn't panic on a type the dispatch
-    /// hasn't ported yet — the produced TIR is wrong, but downstream
-    /// validation flags it loudly.
-    /// Resolve a field access to its `(index, canonical_name,
-    /// field_type)` against the receiver's struct decl. The field type is
-    /// generic-substituted with the receiver's `type_args` and is the
-    /// authoritative source for the access's `TirExpr::type_id` — unlike
-    /// `expression_types[field.id]`, which collides across template
-    /// sub-parsers. `None` for the type means the receiver was not a known
-    /// struct; the caller falls back to the recorded type.
+    /// Resolve a field access to `(index, canonical_name, field_type)` against
+    /// the receiver's struct decl. The field type is generic-substituted with
+    /// the receiver's `type_args` and is the authoritative source for the
+    /// access's `TirExpr::type_id` — unlike `expression_types[field.id]`, which
+    /// collides across template sub-parsers. `None` means an unknown receiver.
     fn lookup_struct_field_index(
         &self,
         receiver_type: TypeId,
@@ -8738,7 +8458,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     (name, Some(module_source), type_args)
                 }
                 // Peel references and newtypes and recurse, mirroring the
-                // elaborator's `lookup_field_type` (expr.rs:1500): `&Point`,
+                // elaborator's `lookup_field_type`: `&Point`,
                 // `&mut Point`, a newtype `Location = Point`, and chained
                 // newtypes / `&Location` all resolve their fields against the
                 // ultimate underlying struct. Without the `Newtype` arm a
@@ -8790,16 +8510,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         (idx, canonical, Some(field_type))
     }
 
-    /// Run `body` with reify's module perspective (`current_module_source`
-    /// / `current_module_items` / `sem`) swapped to `module` when it is a
-    /// different, loaded module, restoring the originals afterward. Used to
-    /// reify an AST fragment that belongs to another module (e.g. an
-    /// associated constant's body): the `ann_*` accessors key on
-    /// `current_module_source`, so swapping it makes their `AstId`
-    /// lookups hit that module's `ModuleSemantics` rather than the use
-    /// site's. Same mechanism the default-argument path uses inline
-    /// (cross-module AST reify). A no-op when `module` is the current module
-    /// or is not loaded.
+    /// Run `body` with reify's module perspective swapped to `module`, restoring
+    /// it afterward. Reifying an AST fragment from another module (an associated
+    /// constant's body, say) needs this because the `ann_*` accessors key on
+    /// `current_module_source`. A no-op when `module` is the current one or is
+    /// not loaded.
     fn with_const_module_perspective<R>(
         &mut self,
         module: &ModuleSource,
@@ -8896,7 +8611,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         // 1. Local / capture lookup, mirroring `resolve_ident`
-        //    (expr.rs:534+). Use the local's stored type instead of
+        //    Use the local's stored type instead of
         //    `recorded_type`: the binding's own type is authoritative
         //    for an ident and does not depend on the recorded
         //    per-expression annotation. (Historically this also worked
@@ -8983,17 +8698,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // 3b. Current-module global declared in the module AST but absent
-        //     from `current_module_globals`. This happens when reify is
-        //     walking a *swapped-in* callee module (a default-argument
-        //     expression resolved in the callee's scope) whose
-        //     `ModuleSemantics` came from the stdlib snapshot, which does
-        //     not rehydrate `current_module_globals`. The module's AST
-        //     items are available (the swap sets `current_module_items`),
-        //     so resolve the global from there — mirroring production's
-        //     `resolve_ident_in_fallback_module` (expr.rs:936). Without this
-        //     a callee-module global default (e.g. `Z_DEFAULT_COMPRESSION`)
-        //     resolves to `()` and the call lowers to an invalid module.
+        // 3b. Current-module global declared in the AST but absent from
+        //     `current_module_globals` — the case when reify walks a swapped-in
+        //     callee module whose `ModuleSemantics` came from the stdlib
+        //     snapshot, which does not rehydrate that map. Resolve it from
+        //     `current_module_items`; otherwise it lowers to `()`.
         if let Some(global_decl) = self
             .current_module_items
             .iter()
@@ -9028,7 +8737,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    independent of the call site's scope (a pure literal /
         //    static expression in practice), so reify uses the
         //    surrounding `ctx` directly — matches the elaborator's
-        //    `resolve_expr(&const_expr, ctx, …)` (expr.rs:594–605).
+        //    `resolve_expr(&const_expr, ctx, …)`.
         if let Some((const_module, type_id, const_expr)) =
             self.lookup_associated_constant(&ident.name)
         {
@@ -9155,7 +8864,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // 6. Qualified case path `Type::Case`. Variant / enum / flags
         //    are checked in the same priority order as
-        //    `Elaborator::resolve_ident` (expr.rs:607+). The
+        //    `Elaborator::resolve_ident`. The
         //    namespace-import form `ns::Type::Case` (two `::`
         //    separators) is handled by a dedicated branch in the
         //    elaborator that resolves the namespace alias first.
@@ -9252,17 +8961,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, ident.span)
     }
 
-    /// Reify a literal expression into its TIR shape. The recorded
-    /// `TypeId` from `sem.types.expression_types` carries the final
-    /// numeric type (e.g. an `i32` literal coerced to `i64` is recorded
-    /// as `i64`), so this helper does not re-run literal-type defaulting.
-    /// Replay an `i128` / `u128` numeric-literal coercion recorded by
-    /// annotate (`coercion::try_coerce_numeric_literal`). Returns `None`
-    /// for every other shape so the caller falls through to the normal
-    /// walk. The 128-bit types are prelude structs, so the coerced value
-    /// is materialized by a `from_u64` / `from_i64` / `from_pair` call
-    /// rather than a bare literal; all other `NumericLiteral` coercions
-    /// are free (the literal already carries the coerced type).
+    /// Replay an `i128` / `u128` numeric-literal coercion recorded by annotate,
+    /// returning `None` for every other shape. The 128-bit types are prelude
+    /// structs, so the value is materialized by a `from_u64` / `from_i64` /
+    /// `from_pair` call; every other `NumericLiteral` coercion is free, the
+    /// literal already carrying its coerced type.
     fn try_reify_int128_coercion(&self, expr: &ast::Expr) -> Option<TirExpr> {
         let choice = self.ann_coercions(expr.id())?;
         if choice.kind != super::sem::types::CoercionKind::NumericLiteral {
@@ -9633,22 +9336,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{TirExprKind, TypeTable};
         let kind = match &lit.value {
             ast::Literal::Number(repr) => {
-                // Parse the literal value with the shared `util` helpers
-                // (which handle digit separators, scientific notation, and
-                // hex/oct/bin radix) rather than a hand-rolled decoder.
-                // The *recorded type* decides whether to emit an Int or a
-                // Float TIR literal; the literal's *syntactic form*
-                // (`is_float_only_literal`) decides how to read its value.
-                // A radix/scientific int literal coerced to a float target
-                // (`let x: f64 = 0xFF` / `1e2`) reads as an integer then
-                // converts; a float literal to an int target never occurs
-                // (the elaborator rejects it). Mirrors
-                // `Elaborator::resolve_numeric_literal` (expr.rs:337) plus
-                // the numeric coercion.
-                // Peel newtypes (`type Meters = f64`) to the ultimate base
-                // so a float literal bound to a float-newtype target still
-                // takes the float path; otherwise it falls to the integer
-                // path and codegen sees `i32` where `f64` is expected.
+                // The *recorded type* decides Int vs Float TIR literal; the
+                // literal's *syntactic form* (`is_float_only_literal`) decides
+                // how to read its value, so `let x: f64 = 0xFF` reads as an
+                // integer then converts. Peel newtypes first, or a float literal
+                // bound to a float-newtype target takes the integer path.
                 let base_target = self
                     .tysys
                     .type_table
@@ -9659,7 +9351,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // missing/UNKNOWN (e.g. a stdlib const body whose
                 // `expression_types` entry is absent from the cached
                 // snapshot) the syntactic form is authoritative, matching
-                // production's `resolve_numeric_literal` (expr.rs:337). An
+                // production's `resolve_numeric_literal`. An
                 // integer literal still defers to the recorded type so
                 // `let x: f64 = 1` takes the float path via `is_float_target`.
                 let is_float_target = base_target == TypeTable::F32
@@ -9705,7 +9397,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Literal::String(s) => {
                 // Decode escape sequences (`\"`, `\n`, `\\`, …) the same
-                // way the elaborator does (expr.rs:403) — the AST holds
+                // way the elaborator does — the AST holds
                 // the raw source text. Without this a literal like
                 // `"{\""` reaches codegen with the backslash intact and
                 // serializes as `{\"` instead of `{"`.
@@ -9838,17 +9530,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirExpr::new(kind, recorded_type, lit.span)
     }
 
-    /// Reify a pattern in a `let`, `match`, `if let`, or `while let`.
-    /// Binding patterns add locals to `ctx` in the same order annotate
-    /// did (per the walk-order invariant). The variant binding order
-    /// mirrors `Elaborator::resolve_if_pattern_inner`'s recursion.
-    /// Resolve a nullary qualified pattern (`TokenKind::FOO`, `i32::MAX`)
-    /// to its associated-constant value, mirroring the elaborator's
-    /// pattern lowering (stmt.rs:1428+). Integer constants become
-    /// `Literal` patterns (signed/unsigned per the scrutinee) so they
-    /// benefit from switch lowering; everything else becomes a
-    /// `ConstantValue`. Returns `None` when the name is not a recorded
-    /// associated constant (i.e. it is a real variant case).
+    /// Resolve a nullary qualified pattern (`TokenKind::FOO`, `i32::MAX`) to its
+    /// associated-constant value. An integer constant becomes a `Literal`
+    /// pattern, signed per the scrutinee, so it benefits from switch lowering;
+    /// everything else becomes a `ConstantValue`. `None` when the name is not a
+    /// recorded associated constant — i.e. it is a real variant case.
     fn reify_associated_const_pattern(
         &mut self,
         variant_name: &str,
@@ -10047,9 +9733,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// A bare ident naming an immutable global lowers to a
     /// `ConstantValue` comparison against that global rather than a
-    /// binding (mirrors `Elaborator::resolve_if_pattern_inner`,
-    /// stmt.rs:1290+). Mutable globals are not constants and fall through
-    /// to a binding.
+    /// binding (mirrors `Elaborator::resolve_if_pattern_inner`). Mutable
+    /// globals are not constants and fall through to a binding.
     fn reify_immutable_global_pattern(
         &self,
         name: &str,
@@ -10134,8 +9819,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // enum/variant case (`None`, `Red`), an immutable global
                 // constant, or a fresh binding. Disambiguate in the same
                 // order as `Elaborator::resolve_if_pattern_inner`
-                // (stmt.rs:1255+): known case first, then immutable
-                // global, then binding.
+                // known case first, then immutable global, then binding.
                 if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, name) {
                     return TirPattern::Enum {
                         enum_type: self.tysys.type_table.borrow().peel_refs(scrutinee_type),
@@ -10177,7 +9861,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Literal(lit) => {
                 use crate::tir::{PrimitiveType, ResolvedType, TirLiteralPattern};
                 // Mirror `Elaborator::resolve_if_pattern_inner`'s literal
-                // arm (stmt.rs:1344): wide-int literals follow the
+                // arm: wide-int literals follow the
                 // scrutinee's signedness (a `u128` scrutinee must compare
                 // via `u128::*`, not `i128::*`, or codegen emits a
                 // `(ref $u128)` vs `(ref $i128)` mismatch), and char /
@@ -10275,7 +9959,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // `i32::MAX`): a nullary qualified name that resolves to a
                 // recorded associated constant rather than a variant case.
                 // The elaborator inlines it to the constant's value
-                // (stmt.rs:1428+); reify reproduces the same lowering from
+                // reify reproduces the same lowering from
                 // `sem.decls.associated_constants`. Real variant cases are
                 // never in that map, so the lookup distinguishes the two.
                 if bindings.is_empty()
@@ -10304,7 +9988,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
                 // Enum-case pattern (plain discriminant, no payload):
                 // `Color::Red`. The elaborator emits `TirPattern::Enum`
-                // with the case's discriminant index (stmt.rs:1562+);
+                // with the case's discriminant index;
                 // reify reproduces it when the scrutinee is an enum.
                 if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, &case_name)
                 {
@@ -10349,17 +10033,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     (payload, type_args.1)
                 };
 
-                // Match ergonomics: when the scrutinee is a reference
-                // (`match self { Some(v) => … }` with `self: &Option<T>`),
-                // the payload binding inherits the reference kind — `v` is
-                // `&T`, not `T`, so it forwards directly to a `&self`
-                // method. Mirrors `Elaborator::resolve_if_pattern`'s
-                // `RefBinding` handling (stmt.rs:1213+): `&` downgrades a
-                // `&mut` (most restrictive wins). The `payload_type` field
-                // and `enum_type` stay the unwrapped (peeled) forms — the
-                // variant extraction reads the value through the peeled
-                // variant type; only the binding scrutinee carries the
-                // reference.
+                // Match ergonomics: a reference scrutinee (`self: &Option<T>`)
+                // gives the payload binding the reference kind, so `v` is `&T`
+                // and forwards to a `&self` method; `&` downgrades a `&mut`.
+                // `payload_type` / `enum_type` stay peeled — only the binding
+                // scrutinee carries the reference.
                 let binding_scrutinee = self.apply_scrutinee_ref_kind(scrutinee_type, payload_type);
                 let sub_patterns: Vec<TirPattern> = bindings
                     .iter()
@@ -10378,7 +10056,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // gives each its own local slot — so `Num(n) | Neg(n)`
                 // would extract the payload into one slot and the arm body
                 // read another. Mirror `resolve_if_pattern_inner`
-                // (stmt.rs:1798): remap each later alternative's binding
+                // remap each later alternative's binding
                 // locals onto the first alternative's, then point the
                 // arm-scope bindings at the first alternative's locals.
                 let mut resolved: Vec<TirPattern> = Vec::with_capacity(alternatives.len());
@@ -10563,7 +10241,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             };
             // Extract the variant decl's type-param indices so the
             // substitution map below is keyed by `index` — matching
-            // `TypeTable::substitute_type_params` (tir.rs:1480).
+            // `TypeTable::substitute_type_params`.
             let indices: Vec<u32> = (0..variant_info.type_param_type_ids.len() as u32).collect();
             (case_data.payload, indices)
         };
@@ -10674,14 +10352,9 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
     }
 }
 
-/// Map an AST [`ast::UnaryOp`] to its TIR counterpart. The two enums
-/// are 1:1; this helper exists so the dispatch table doesn't repeat
-/// the mapping at every Unary arm.
-/// Free-function attribute extractors — mirror
-/// `Elaborator::extract_*` (item.rs:802+). The elaborator's
-/// instance methods take only `&[Attribute]`, so we reproduce
-/// them as free functions so reify can call them without holding
-/// an Elaborator.
+/// Free-function attribute extractors — mirror `Elaborator::extract_*`.
+/// The elaborator's instance methods take only `&[Attribute]`, so reify
+/// can call these without holding an Elaborator.
 fn extract_is_ambient_attr(attrs: &[crate::ast::Attribute]) -> bool {
     attrs.iter().any(|a| a.name == "ambient")
 }

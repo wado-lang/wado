@@ -206,18 +206,11 @@ impl Resolver<'_> {
             .find_map(|scope| scope.get(name).copied())
     }
 
-    /// The declaration a name written in this module refers to.
-    ///
-    /// The layers are ordered, and the order is the rule: the enclosing item's
-    /// binders, this module's explicit imports (keyed by the local name, so an
-    /// alias resolves to what it aliases), this module's own declarations, then
-    /// the prelude — including its implementation modules, so `i32`, `List` and
-    /// a compiler item declared `internal` there (`ReflectStruct`, `Member`)
-    /// all resolve for a module that never `use`d them.
-    ///
-    /// The module's own declarations rank above the prelude, so a module that
-    /// declares `trait Left` means its own, not `core:prelude/format`'s enum
-    /// case of that name (issue #1298).
+    /// The declaration a name written in this module refers to. The layers are
+    /// ordered, and the order is the rule: the enclosing item's binders, the
+    /// module's explicit imports keyed by local name, its own declarations, then
+    /// the prelude and its implementation modules. Own declarations outranking
+    /// the prelude is what makes a local `trait Left` mean itself (#1298).
     fn resolve_name(&self, name: &str) -> DeclRef {
         if let Some(id) = self.binder(name) {
             return DeclRef::Binder(id);

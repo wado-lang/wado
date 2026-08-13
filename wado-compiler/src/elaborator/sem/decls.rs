@@ -1,18 +1,8 @@
-//! [`ModuleDecls`] — module-internal declarations confirmed by elaboration.
-//!
-//! [`wep-2026-05-26-elaborator-rearchitecture.md`] populates the
-//! fields below by relocating per-module state off
-//! [`super::super::Elaborator`].
-//!
-//! # Membership rule
-//!
-//! Add a field here when it summarises a *declaration* in this module
-//! after elaboration has resolved its signature: function return types,
-//! generic parameter tables, global variable types, associated constants,
-//! synthesised structures. If the fact is a *use-site* decision
-//! (annotation on an [`crate::ast::AstId`]) it belongs in
-//! [`super::types::TypeAnnotations`]; if it is an *import* fact derived
-//! from a `use` declaration it belongs in [`super::imports::ModuleImports`].
+//! [`ModuleDecls`] — module-internal declarations confirmed by elaboration
+//! (WEP 2026-05-26). A field belongs here when it summarises a *declaration*
+//! whose signature elaboration has resolved. A use-site decision keyed by
+//! [`crate::ast::AstId`] belongs in [`super::types::TypeAnnotations`], and an
+//! import fact in [`super::imports::ModuleImports`].
 
 use crate::ast;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -162,17 +152,11 @@ pub(crate) struct ModuleDecls {
     pub(crate) local_flags_cases: IndexMap<String, FlagsInfo>,
     pub(crate) local_variant_cases: IndexMap<String, VariantInfo>,
 
-    /// Function-local item declarations (`Stmt::Item` — a `struct`/`enum`/
-    /// `variant`/`flags`/`type` declared inside a function body). Distinct
-    /// from `local_struct_fields` et al above, which are module-scoped
-    /// (anonymous struct literals, in-progress module decls): these are
-    /// scoped to a single function, populated sequentially by
-    /// `Elaborator::resolve_stmt` as it walks the body (no hoisting — a
-    /// local item is visible only after its own declaration statement,
-    /// matching `let`), and cleared at the start of every
-    /// `Elaborator::resolve_function` call so sibling functions never see
-    /// each other's local items. Consulted by `TypeLookup` with the highest
-    /// precedence, ahead of `local_struct_fields` et al.
+    /// Function-local item declarations (`Stmt::Item`), as against the
+    /// module-scoped `local_struct_fields` above. Populated sequentially as
+    /// `resolve_stmt` walks the body — no hoisting, so a local item is visible
+    /// only after its own statement, like `let` — and cleared per function, so
+    /// siblings never see each other's. `TypeLookup` consults it first.
     pub(crate) fn_local_struct_fields: IndexMap<String, StructFieldInfo>,
     pub(crate) fn_local_newtypes: IndexMap<String, TypeId>,
     pub(crate) fn_local_enum_cases: IndexMap<String, EnumInfo>,

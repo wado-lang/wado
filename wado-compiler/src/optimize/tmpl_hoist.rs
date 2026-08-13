@@ -1,49 +1,8 @@
-//! Template String Buffer Hoisting for Loops
-//!
-//! When a template string (`__tmpl` labeled block) appears inside a loop,
-//! this pass hoists the entire `String` allocation before the loop and reuses
-//! it across iterations, resetting `used = 0` instead of creating a new struct.
-//!
-//! **Before:**
-//! ```text
-//! loop {
-//!     let s = __tmpl: {
-//!         let mut __r = String { repr: array_new(N), used: 0 };
-//!         __r.push_str(...);
-//!         break __tmpl: __r;
-//!     };
-//!     s.len();   // s only used as method receiver
-//! }
-//! ```
-//!
-//! **After:**
-//! ```text
-//! let mut __tmpl_buf_0 = String { repr: array_new(N), used: 0 };
-//! loop {
-//!     let s /* skip_value_copy */ = __tmpl: {
-//!         __tmpl_buf_0.used = 0;        // reset (no struct.new)
-//!         __tmpl_buf_0.push_str(...);      // reuse same String
-//!         break __tmpl: __tmpl_buf_0;
-//!     };
-//!     s.len();   // s aliases __tmpl_buf_0
-//! }
-//! ```
-//!
-//! Safety: The optimization reuses the same String GC struct across iterations.
-//! It is only applied when the template result does not escape the iteration:
-//! the result must be bound to a Let variable whose value never reaches an
-//! escaping position (call argument, aggregate field/element, assignment /
-//! global / return / break value) — directly, through `if`/`match`/block
-//! result tails, or through uncopied alias `let`s (see [`EscapeScan`]). The
-//! inner `__r` buffer is checked too ([`template_buf_escapes`]).
-//!
-//! Runs on the worklist rewrite engine (see
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a [`Rule`]: a
-//! per-function standalone engine session whose `apply_block` fires once at
-//! the body root and walks every loop in the function, applying the template-
-//! string buffer hoist per loop. All mutations route through the engine edit
-//! API (`alloc_expr`, `alloc_stmt`, `alloc_local`, `set_block_stmts`,
-//! `replace_expr_kind`) so the parent map and use index stay coherent.
+//! Template-string buffer hoisting: a `__tmpl` block inside a loop gets its
+//! `String` allocation lifted before the loop and reused, each iteration
+//! resetting `used = 0` instead of building a fresh struct. Sound only when
+//! neither the template result nor the inner `__r` escapes the iteration, which
+//! [`EscapeScan`] and [`template_buf_escapes`] decide. Runs as a [`Rule`].
 
 use std::cell::{Cell, RefCell};
 
@@ -306,28 +265,11 @@ fn template_buf_escapes(body: &Body, tmpl_block: BlockId, buf_local_index: u32) 
     scan.finish().contains(&buf_local_index)
 }
 
-/// Escape analysis for the template-buffer hoist.
-///
-/// A local escapes when its *value* reaches a position that may store it
-/// beyond the iteration: a non-receiver call argument, an aggregate-literal
-/// element or struct field, an assignment / global-set / return / break value.
-/// At each such position the whole value-result chain of the consumed
-/// expression is marked ([`for_each_chain_local`]): the bare local plus every
-/// local reachable as the expression's result — through `&`/`&mut`/casts,
-/// block tails, `if` branch tails, `match` arm bodies, `switch` arm tails, and
-/// labeled-block break values. A call result or a fresh aggregate literal is a
-/// new value, so the chain stops there: a value that leaves only through a
-/// `$value_copy$…` helper stays hoistable.
-///
-/// `let t = <chain containing s>` records an alias edge `t → s` instead of
-/// marking; [`Self::finish`] propagates escapes across edges to a fixpoint.
-/// This keeps precision: a tail value consumed only by non-escaping positions
-/// still hoists.
-///
-/// A `FieldAccess` base is deliberately *not* on the chain (`s.repr` as a
-/// consumed value does not mark `s`): extracted fields feed iterators and
-/// formatters consumed within the iteration, and marking them would disable
-/// the pass for every `.bytes()`-style loop.
+/// Escape analysis for the template-buffer hoist. A local escapes when its value
+/// reaches a position that may store it past the iteration, at which point the
+/// whole value-result chain is marked ([`for_each_chain_local`]); the chain stops
+/// at a call result or fresh literal. `let t = <chain>` records an alias edge
+/// instead, resolved in [`Self::finish`]. A `FieldAccess` base is not on it.
 struct EscapeScan<'a> {
     body: &'a Body,
     escaping: IndexSet<u32>,
@@ -912,16 +854,10 @@ fn transform_expr(
     }
 }
 
-/// Check if a `__tmpl` block has the expected pattern.
-///
-/// Before lowering:
-///   `let mut __r = String::with_capacity(N);`
-///
-/// After lowering (inlined):
-///   `let mut __r = String { repr: array_new<u8>(N), used: 0 };`
-///
-/// Both end with:
-///   `break __tmpl: __r;`
+/// Check if a `__tmpl` block has the expected pattern: `let mut __r =
+/// String::with_capacity(N)` before lowering, or the inlined
+/// `String { repr: array_new<u8>(N), used: 0 }` after, both closing with
+/// `break __tmpl: __r`.
 fn extract_tmpl_candidate(
     body: &Body,
     block: BlockId,
@@ -1848,17 +1784,11 @@ mod tests {
         })
     }
 
-    /// `references_local` decides whether an intermediate `let buf_inner = <e>`
-    /// binding makes `buf_inner` an *alias* of the hoisted template buffer.
-    /// When it answers yes, `extract_fmt_candidates` force-rewrites the matched
-    /// Formatter's `buf` field to `&mut <hoisted buffer>` — so a false positive
-    /// redirects the Formatter to the wrong buffer (a miscompile).
-    ///
-    /// It must therefore match only genuine alias shapes — a bare `Local` or a
-    /// `&mut` chain down to it — and reject any expression that merely *mentions*
-    /// the local (a call argument, an operand, …). Broadening it to a full
-    /// "mentions anywhere" walk (e.g. `expr_mentions_local`) reintroduces that
-    /// miscompile; these assertions exist to fail the moment someone does.
+    /// A yes from `references_local` makes `extract_fmt_candidates` rewrite the
+    /// Formatter's `buf` field to `&mut <hoisted buffer>`, so a false positive
+    /// redirects it to the wrong buffer — a miscompile. It must match only
+    /// genuine alias shapes, a bare `Local` or a `&mut` chain to one, and reject
+    /// an expression that merely *mentions* the local.
     #[test]
     fn references_local_matches_only_aliases_not_mentions() {
         const IDX: u32 = 7;

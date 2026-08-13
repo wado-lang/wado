@@ -290,15 +290,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let target = ctx.labeled_block_targets.pop().unwrap();
 
                 // Unify every `break label: expr` with the fall-through path,
-                // whose value is the trailing statement's — what
-                // `translate_stmts_as_value` leaves on the stack there, or
-                // `unreachable` when the tail is not a value.
-                //
-                // The use-site expected type wins when present; otherwise pick a
-                // representative branch type, skipping `never` and types still
-                // containing UNKNOWN (a bare `null` whose `Option<...>` inner is
-                // not yet known) so a diverging or unresolved branch does not
-                // mask the real type. Mirrors `resolve_match_expr`.
+                // whose value is the trailing statement's. The use-site expected
+                // type wins when present; otherwise pick a representative branch
+                // type, skipping `never` and any still holding UNKNOWN so a
+                // diverging or unresolved branch cannot mask the real one.
                 let tail_type = self.ast_block_result_type(&lb.block);
                 let mut branch_types = target.break_types.clone();
                 branch_types.push(tail_type);
@@ -744,17 +739,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// Resolve a qualified case reference `Type::Case` — a payload-less
-    /// variant case, an enum case, or a flags member. With `in_module: None`
-    /// the type name resolves in the current scope (imports + local); with
-    /// `Some(module)` it resolves against that module's own declarations —
-    /// the default-expression fallback (`default_scope_module`), where the
-    /// use site may not import the type at all (issue #1486).
-    ///
-    /// Returns `None` when the prefix names no known variant/enum/flags type
-    /// (the caller falls through to other interpretations), and
-    /// `Some(TypeTable::ERROR)` when the reference resolved but is invalid
-    /// (a payload-carrying variant case used without arguments).
+    /// Resolve a qualified case reference `Type::Case` — a payload-less variant
+    /// case, an enum case, or a flags member. `in_module: None` resolves the type
+    /// name in the current scope; `Some(module)` against that module's own
+    /// declarations. `None` when the prefix names no such type, so the caller can
+    /// try other interpretations; `Some(TypeTable::ERROR)` when it is invalid.
     fn resolve_qualified_case(
         &mut self,
         ident: &ast::IdentExpr,
@@ -918,17 +907,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ))
     }
 
-    /// Resolve a bare identifier that names a user-defined function (local or
-    /// imported) as a function reference value. Implements the three policies
-    /// for generic functions referenced as values:
-    ///   (a) `name::<T, ...>` — turbofish pins the type parameters.
-    ///   (b) bare `name` with an expected `fn(...)` type — inferred positionally.
-    ///   (c) bare `name` with no expected type — dedicated diagnostic.
-    ///
-    /// For imported functions referenced through an alias (`use { foo as bar }`)
-    /// the emitted `FuncRef` carries the defining-module name (`foo`), not the
-    /// alias, so post-monomorphization keys and the closure forwarder's name
-    /// lookup land on the same identity as a direct reference would.
+    /// Resolve a bare identifier naming a user-defined function as a function
+    /// reference value. A generic one takes its type params from a turbofish,
+    /// else positionally from an expected `fn(…)` type, else gets a dedicated
+    /// diagnostic. An aliased import emits a `FuncRef` under the defining-module
+    /// name, not the alias, so it keys the same as a direct reference.
     fn resolve_func_ref_ident(
         &mut self,
         ident: &ast::IdentExpr,
@@ -1074,21 +1057,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((sig, src, original))
     }
 
-    /// Try to derive type arguments for a generic function reference from an
-    /// expected `fn(...)` type. Only the simple positional case is handled:
-    /// the expected type must itself be a `Function` (or a `Ref`/`MutRef`
-    /// thereof) whose parameter count matches the declaration, and every
-    /// real (non-effect, non-fn-bound) type parameter must end up bound.
-    ///
-    /// Returns:
-    ///   * [`FuncRefInference::Ok`] with the inferred args when inference
-    ///     succeeds.
-    ///   * [`FuncRefInference::ArityMismatch`] when the expected type is a
-    ///     `fn(...)` but its parameter count disagrees — callers turn this
-    ///     into a focused diagnostic instead of the generic bare-reference
-    ///     message.
-    ///   * [`FuncRefInference::NotApplicable`] when the expected type is
-    ///     not a function shape at all (or no expected type was supplied).
+    /// Derive type arguments for a generic function reference from an expected
+    /// `fn(…)` type. Only the simple positional case: the expected type must be a
+    /// `Function` (possibly behind a ref) of matching arity, and every real type
+    /// parameter must end up bound. `ArityMismatch` is separated from
+    /// `NotApplicable` so callers can raise a focused diagnostic.
     fn infer_func_ref_type_args(
         &mut self,
         sig: &super::sem::decls::FunctionSig,
@@ -1848,36 +1821,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // type unresolved; report it rather than ICEing in codegen.
                 self.report_uninferable_result(type_id, if_expr.span, "if expression");
 
-                // Same arm-agreement rule as the `Condition::Expr` arm
-                // below: when `expected_type=Some(X)` pinned `type_id`
-                // to `X` unconditionally, the chain and else blocks
-                // could still produce different types — a divergent
-                // `if let` branch in expression position would
-                // silently miscompile the same way the
-                // `Condition::Expr` arm did before this PR. Mirror
-                // the check here so both `if` shapes share the
-                // soundness guarantee. Skipped for `type_id == Unit`
-                // (statement-position use, branches drop their
-                // values per `translate_stmts`).
+                // Same arm-agreement rule as the `Condition::Expr` arm below:
+                // `expected_type = Some(X)` pins `type_id` unconditionally, so
+                // the chain and else blocks could still disagree and a divergent
+                // branch would silently miscompile. Skipped at `Unit`, which is
+                // statement position — the branches drop their values there.
                 if expected_type.is_some() && type_id != TypeTable::UNIT {
-                    // The chain's then-branch is resolved inside
-                    // `resolve_let_chain_stmts` with the same
-                    // `expected_type`, so a then-block that can't
-                    // satisfy `type_id` already surfaces a
-                    // diagnostic from `resolve_expr` /
-                    // `try_coerce` during that walk — no separate
-                    // chain-side check is needed (and using
-                    // `block_result_type(&chain_block)` to check
-                    // here would emit a spurious "expected X,
-                    // found ()" because `block_result_type`
-                    // recurses through the chain's nested
-                    // `TirStmtKind::IfLet` and `agree_branch_types`
-                    // collapses divergent then/else to `Unit`).
-                    //
-                    // The else-block sits outside the chain and is
-                    // resolved independently, so check it
-                    // directly. Missing-else falls back to the
-                    // implicit `else { () }` rule below.
+                    // `resolve_let_chain_stmts` resolves the then-branch under
+                    // the same `expected_type`, so a mismatch there is already
+                    // diagnosed — and re-checking via `block_result_type` would
+                    // report a spurious "found ()". The else-block is resolved
+                    // independently, so check it directly.
                     if let Some(eb) = &if_expr.else_block {
                         let else_type = self.ast_block_result_type(eb);
                         self.check_branch_type(else_type, type_id, eb.span);
@@ -1990,19 +1944,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
                 }
 
-                // Same rule as `resolve_match_expr`: an if-expression
-                // whose result is consumed must have branches that
-                // agree on a common type. When `expected_type=None`
-                // the existing inference logic above already
-                // diagnosed the mismatch (line ~1318), but when
-                // `expected_type=Some(X)` the inference was bypassed
-                // (`type_id = X` unconditionally) and a divergent
-                // branch would silently produce a wasm `(if (result
-                // X) ...)` whose other branch pushes the wrong
-                // type. Skip when `type_id == Unit`: that's
-                // statement-position use, where each branch's value
-                // gets dropped at the WIR stmt level. Branch types read
-                // from `expression_types` (AST level), not the built block.
+                // Same rule as `resolve_match_expr`: an if-expression whose
+                // result is consumed needs branches that agree. Inference
+                // diagnoses the `expected_type = None` case, but `Some(X)`
+                // bypasses it and would emit an `(if (result X) …)` whose other
+                // side pushes the wrong type. Skipped at `Unit`.
                 if expected_type.is_some() && type_id != TypeTable::UNIT {
                     let then_type = self.ast_block_result_type(&if_expr.then_block);
                     self.check_branch_type(then_type, type_id, if_expr.then_block.span);
@@ -2014,20 +1960,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             if_expr.else_block.as_ref().unwrap().span,
                         );
                     } else {
-                        // See the `Condition::LetChain` arm for the
-                        // rationale. Without an explicit `else`, the
-                        // implicit branch is `()`, which cannot
-                        // satisfy a non-Unit expected type. Emit the
-                        // diagnostic; the surrounding context (e.g.
-                        // `let x: T = ...`) typically emits a
-                        // redundant secondary mismatch on the same
-                        // span, which the user will see as a single
-                        // grouped error in editor diagnostics. We
-                        // don't downgrade `type_id` here — the
-                        // elaborator-recorded diagnostic will abort
-                        // compilation before WIR build runs, so the
-                        // result-typed `if` with no else never
-                        // reaches `wasmparser`.
+                        // Without an explicit `else` the implicit branch is `()`,
+                        // which cannot satisfy a non-Unit expected type.
+                        // `type_id` is left as-is: the recorded diagnostic
+                        // aborts before WIR build, so a result-typed `if` with
+                        // no else never reaches `wasmparser`.
                         self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span);
                     }
                 }
@@ -2300,24 +2237,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Reject arms whose body type disagrees with the match's overall
-        // result type. Skipped when `type_id == Unit`: that means the
-        // match sits in statement position (see `elaborator::resolve_stmt`
-        // for `Stmt::Match`, which pins `expected_type = Some(Unit)`),
-        // and the WIR builder's `translate_match` already drops each
-        // arm body's value via `WirInstr::Drop`. In every other context
-        // (`let x = match {...}`, `f(match {...})`, a match as the
-        // trailing expression of a block whose result is consumed)
-        // divergent arms would silently miscompile — the match's wasm
-        // result type would be picked from one arm, but the other
-        // arm's branch pushes a different type onto the stack, which
-        // either trips wasmparser or produces type-confused output.
-        //
-        // `Unit` here is the match-level type, not the arm-level type:
-        // a unit-typed match can still have `never`-typed arms (e.g.
-        // a `panic`), and those remain compatible. `check_assignable`
-        // already encodes `NEVER` / `UNKNOWN` / type-param deferrals,
-        // so we route through it instead of repeating the rules here.
+        // Reject arms whose body type disagrees with the match's result type;
+        // otherwise the wasm result is picked from one arm while another pushes
+        // something else. Skipped at `Unit`, which is statement position —
+        // `translate_match` drops each arm's value there.
         if type_id != TypeTable::UNIT {
             for &(arm_type, arm_span) in &arm_bodies {
                 let result = {
@@ -3621,19 +3544,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Check if this is a generic struct and infer type arguments.
-        // Reify rebuilds the mangled name + fields; the combined
-        // walk only needs the substitution / coercion side effects below and
-        // the resulting struct type. `struct_name`/`struct_module_source`
-        // were just reassigned (above) to the canonical storage identity —
-        // the internal mangled name for a local struct (`Stmt::Item`, see
-        // `resolve_local_struct`), or the bare declared name for a
-        // module-level one — so a single `struct_fields_in` lookup on that
-        // identity decides "is this generic" the same way it decides "which
-        // struct's info is this", instead of checking a module-level name set
-        // and a local-struct table separately: two lookups that could name
-        // different structs if a local struct shadows a same-named
-        // module-level generic one.
+        // `struct_name` / `struct_module_source` were just reassigned to the
+        // canonical storage identity, so one `struct_fields_in` lookup on it
+        // answers both "is this generic" and "whose fields are these". Checking
+        // a module-level name set and a local-struct table separately could name
+        // two different structs when a local shadows a module-level generic.
         let is_generic_struct = self
             .lookup_struct_fields_in(&struct_name, &struct_module_source)
             .is_some_and(|info| !info.type_param_bounds.is_empty());
@@ -4155,21 +4070,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Infer type arguments for a generic struct from its field values, with
-    /// optional expected-type driven back-inference for phantom parameters.
-    ///
-    /// Runs [`InferCtx`] over the struct's declared field types
-    /// against the literal's resolved field values. If `expected_type` is a
-    /// `GenericInstance` of the same struct (e.g. the caller wrote
-    /// `let m: DirMap<Direction, i32> = DirMap { values: [] }`), the expected
-    /// type-arguments are unified against the struct's declaration-order
-    /// type-parameter ids so that phantom parameters (those that appear in no
-    /// field) still end up concrete.
-    ///
-    /// Unlike the function/method inference sites this returns the *partial*
-    /// result — unbound parameters fall back to their original `TypeParam`
-    /// ids, which the monomorphizer then substitutes from the surrounding
-    /// context. This matches the historical "phantoms are OK" behaviour.
+    /// Infer a generic struct's type arguments by running [`InferCtx`] over its
+    /// declared field types against the literal's values. An `expected_type`
+    /// that is a `GenericInstance` of the same struct is unified in too, so a
+    /// phantom parameter still lands concrete. Returns the *partial* result: an
+    /// unbound parameter keeps its `TypeParam` id for the monomorphizer.
     pub(super) fn infer_struct_type_args(
         &mut self,
         struct_name: &str,
@@ -4583,16 +4488,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Resolve the postfix `?` operator.
-    ///
-    /// Desugars `expr?` into a match that unwraps the success case and
-    /// performs an early return for the failure case.
-    ///
-    /// For `Result<T, E>` in a function returning `Result<U, F>`:
-    ///   match expr { Ok(v) => v, Err(e) => return `Result::Err(F::from(e))` }
-    ///
-    /// For `Option<T>` in a function returning `Option<U>`:
-    ///   match expr { Some(v) => v, None => return null }
     /// Reconstruct the operand's expected type for `?` from the `?`-stripped
     /// expected payload `u` and the function's return type: `Option<u>` or
     /// `Result<u, F>`. `None` when there is no payload or the return type is not
@@ -4629,6 +4524,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
+    /// Resolve the postfix `?`, desugaring `expr?` into a match that unwraps the
+    /// success case and returns early on failure: `Result<T, E>` in a function
+    /// returning `Result<U, F>` becomes
+    /// `match expr { Ok(v) => v, Err(e) => return Result::Err(F::from(e)) }`,
+    /// and `Option<T>` becomes `match expr { Some(v) => v, None => return null }`.
     pub(super) fn resolve_question_mark(
         &mut self,
         qm: &ast::TryOpExpr,
@@ -4779,17 +4679,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ok_type
     }
 
-    /// Generate a call to `From::from(value)` that converts `value` of type
-    /// `from_type` to `target_type`.
-    ///
-    /// Looks up `impl From<from_type> for target_type` and generates
-    /// `target_type::from(value)` as a static method call.
-    ///
-    /// `caller_id` is the [`AstId`] of the source-level expression that
-    /// triggered this conversion (the `?` operator, a static `T::from(v)`
-    /// call, etc.). The resolved facts are recorded under that key so
-    /// reify can rebuild the same `Call` without re-walking impl blocks or
-    /// re-mangling the method name.
+    /// Generate `target_type::from(value)` as a static call, off the
+    /// `impl From<from_type> for target_type`. `caller_id` is the source
+    /// expression that triggered the conversion — the `?` operator, an explicit
+    /// `T::from(v)` — and the resolved facts are recorded under it so reify can
+    /// rebuild the `Call` without re-walking impl blocks or re-mangling.
     pub(super) fn resolve_from_call(
         &mut self,
         target_type: TypeId,
@@ -5100,21 +4994,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 }
 
-/// Walks a closure body and records outer-binding names that the body
-/// mutates. Built on `AstVisitor`'s `walk_*` defaults, so every AST
-/// node is descended into automatically — including future syntax that
-/// adds new `Expr` / `Stmt` variants. Only three observations are
-/// recorded:
-///
-/// * `Assign { target, .. }` / `CompoundAssign { target, .. }` —
-///   extract the target's *root identifier* (a name that survives
-///   `.field` and `[index]` accessors) and record it.
-/// * Nested closures (`Expr::Closure(_)`) are NOT descended; they have
-///   their own capture context and run their own collector.
-///
-/// Everything else falls through to `walk_*`, which recurses without
-/// any per-variant code on this side. That's the property we want: no
-/// `_ => {}` catch-all to silently miss new syntax.
+/// Walks a closure body and records the outer bindings it mutates: the root
+/// identifier of each `Assign` / `CompoundAssign` target, the one that survives
+/// `.field` and `[index]` accessors. A nested closure is not descended — it runs
+/// its own collector. Everything else falls through to `AstVisitor`'s `walk_*`
+/// defaults, so there is no `_ => {}` here for new syntax to slip past.
 struct MutatedVarsCollector<'a> {
     result: &'a mut IndexSet<String>,
 }

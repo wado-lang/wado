@@ -1,22 +1,10 @@
 //! Per-function alias analysis feeding the engine [`ValueGraph`] builder.
-//!
 //! [`build_alias_info`] shares one body walk across the alias analysis and the
-//! mutable-escape scan, returning an [`AliasWalkResult`]: the finished
-//! [`AliasInfo`] (`aliased`, `untrackable`, `alias_groups`) plus
-//! the mutable-escape walk's raw `syntactic_mut` set. [`builder_alias_sets`]
-//! finishes `syntactic_mut` into `mut_escaped` via [`build_mut_escaped`], so
-//! every engine-driven pass feeds the [`ValueGraph`] the alias view it needs to
-//! bound heap-write invalidation. The walk seeds `aliased` from the function's
-//! stable `address_taken_locals` / `stores_aliased_locals` annotations plus a
-//! body scan for transient inlined-in copies, builds the union-find of
-//! reference-typed `let dst = src` aliases, and lifts `stores_aliased_locals`
-//! verbatim into `untrackable`.
-//!
-//! TODO(optimizer): plumb the callee's `stores` annotation into
-//! `AliasCollector` so a `Ref` / `MutRef` on a local that flows into a
-//! `stores`-free callee no longer marks the local aliased. The current
-//! unconditional mark over-approximates for the common
-//! `(&self).field` / `(&mut self).field = ...` single-call patterns.
+//! mutable-escape scan; [`builder_alias_sets`] finishes its `syntactic_mut` into
+//! `mut_escaped`, giving each pass the view it needs to bound heap-write
+//! invalidation. TODO(optimizer): plumb the callee's `stores` annotation in, so
+//! a reference flowing into a `stores`-free callee stops marking its local
+//! aliased — today's unconditional mark over-approximates `(&self).field`.
 //!
 //! [`ValueGraph`]: crate::nir_value_graph
 
@@ -29,21 +17,11 @@ use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtK
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-/// Per-function alias / aliasing-trackability annotations.
-///
-/// Computed once per function by [`build_alias_info`] (from the function's
-/// stable `address_taken_locals` / `stores_aliased_locals` plus a body walk
-/// that catches transient inlined-in copies) and consumed by the engine
-/// [`ValueGraph`] builder ([`builder_alias_sets`]) to bound heap-write
-/// invalidation at the right granularity.
-///
-/// - `aliased`: locals reachable through some other handle (`&x`,
-///   `&mut x`, captured by a closure, struct-field-stored, etc.).
-/// - `untrackable`: locals whose aliasing escapes the analysis (e.g.
-///   stashed across a `stores`-annotated callee).
-/// - `alias_groups`: union-find groups of locals connected by
-///   reference-typed `let dst = src` copies (`Box<T>`, `List<T>`,
-///   `&T`, `&mut T`).
+/// Per-function alias annotations, computed once by [`build_alias_info`]:
+/// `aliased` are locals reachable through another handle, `untrackable` those
+/// whose aliasing escapes the analysis entirely (stashed across a `stores`
+/// callee), and `alias_groups` the union-find over reference-typed
+/// `let dst = src` copies. Bounds heap-write invalidation in the [`ValueGraph`].
 ///
 /// [`ValueGraph`]: crate::nir_value_graph
 #[derive(Default, Clone, Debug)]
@@ -71,35 +49,11 @@ pub(super) struct AliasWalkResult {
     pub(super) syntactic_mut: IndexSet<u32>,
 }
 
-/// Compute per-function alias annotations for a function body, plus the
-/// mutable-escape walk's raw `syntactic_mut` set (see [`build_mut_escaped`]).
-///
-/// Shares one body traversal across three independent per-node collectors —
-/// `collect_aliased_node`, `collect_alias_edges_node`, `collect_mut_escaped_node`
-/// — instead of walking `body` three times: none of the three reads another's
-/// output *during* the walk, only in the post-processing below, so they can
-/// run in the same pass. Populates [`AliasWalkResult::info`] as follows:
-///
-/// - `aliased`: seeds from `address_taken_locals` ∪
-///   `stores_aliased_locals`, then augmented with locals whose
-///   aliasing is visible only inside `body` (transient inlined-in
-///   copies, captures, struct-field-stores). The seeded sets persist
-///   across optimization iterations, so subsequent passes (`ref_elim`,
-///   SROA) erasing the syntactic markers can't make us forget the
-///   alias.
-/// - `untrackable`: mirrors `stores_aliased_locals` exactly. An
-///   inlined `stores`-annotated callee has stashed the reference
-///   somewhere the analyzer cannot see, so any later read may
-///   observe a mutation we never witnessed. The const-fold visitor
-///   refuses to record fields for these locals (matches the OLD
-///   WIR-level `const_forward` conservatism).
-/// - `alias_groups`: union-find over reference-typed `let dst = src`
-///   Local→Local copies in `body` (`Box<T>`, `List<T>`, `&T`,
-///   `&mut T`). Used to widen field-assignment invalidation: writing
-///   `dst.field = …` drops the same field on every alias.
-///
-/// [`AliasWalkResult::syntactic_mut`] is `stores_aliased_locals` plus every
-/// local this walk found a mutable-escape site for.
+/// Compute a body's alias annotations plus the mutable-escape walk's raw
+/// `syntactic_mut` set, sharing one traversal across three per-node collectors.
+/// `aliased` seeds from the function's stable annotations, which persist across
+/// iterations so a pass erasing the syntactic markers cannot make the analysis
+/// forget an alias. `untrackable` mirrors `stores_aliased_locals` exactly.
 pub(super) fn build_alias_info(
     body: &Body,
     locals: &[crate::nir::NirLocal],
@@ -259,19 +213,11 @@ pub(super) fn builder_alias_sets(
     (aliased, info.untrackable.iter().collect(), mut_escaped)
 }
 
-/// Compute the per-function `mut_escaped` set subtractively from `aliased`.
-/// `syntactic_mut` is [`build_alias_info`]'s walk output: the body's syntactic
-/// mutable-escape sites ([`collect_mut_escaped_node`]) plus
-/// `stores_aliased_locals` (an inlined `stores`-annotated callee stashed the
-/// reference, mutability unknown).
-///
-/// 1. Keep every `aliased` local whose type is not provably call-immutable
-///    *or* that has a syntactic mutable escape; drop the rest (provably
-///    immutable: no callee can mutate them).
-/// 2. Close the result over `alias_groups` (the union-find
-///    [`build_alias_info`] already computed), so that mutating one member of an
-///    alias group (a `let dst = src` reference copy, or two same-pointee
-///    reference params) clobbers the whole group's fields.
+/// Compute `mut_escaped` subtractively from `aliased`: keep every local that is
+/// not provably call-immutable or that has a syntactic mutable escape, then
+/// close over `alias_groups` so mutating one member of a group clobbers the
+/// whole group's fields. `syntactic_mut` is [`build_alias_info`]'s walk output
+/// plus `stores_aliased_locals`, whose mutability is unknown.
 fn build_mut_escaped(
     locals: &[crate::nir::NirLocal],
     aliased: &IndexSet<u32>,
@@ -305,22 +251,11 @@ fn build_mut_escaped(
     esc
 }
 
-/// Transitive "a value of this type cannot be mutated by a callee that receives
-/// it by value or by immutable reference" predicate, memoised per pass.
-///
-/// A value escaping into a call is mutable through that call only if it carries
-/// *shared mutable state*: a `&mut T`, a `Box<T>` / `List<T>` cell, a raw
-/// `Array<T>`, a resource handle, a reactive cell, or a variant/generic/unknown
-/// shape we cannot see into. A type free of all of those — primitives, plain
-/// value structs of such fields (e.g. `i128 { low: i64, high: i64 }`), enums,
-/// flags, and immutable `&T` references — is deep-copied on pass-by-value and
-/// cannot be written through an immutable reference, so no callee can change
-/// the fields the `ValueGraph` forwards. (Cross-handle mutation of a `&T`
-/// pointee is handled separately by the alias-group closure in
-/// [`build_mut_escaped`].)
-///
-/// Owns a struct-field map cloned from `project.structs`, so it borrows only
-/// `type_table` for the pass's lifetime.
+/// Memoised "a callee receiving this by value or immutable reference cannot
+/// mutate it" predicate. A value is mutable through a call only if it carries
+/// shared mutable state — a `&mut T`, a `Box` / `List` cell, a raw array, a
+/// resource handle, or an opaque shape. Anything else is deep-copied on
+/// pass-by-value, so no callee reaches the fields the `ValueGraph` forwards.
 pub(super) struct CallImmutability<'a> {
     type_table: &'a TypeTable,
     struct_fields: IndexMap<(String, ModuleSource), Vec<TypeId>>,
@@ -445,17 +380,11 @@ impl<'a> CallImmutability<'a> {
 
 use super::arena_query::storage_root;
 
-/// Call exprs that **mutate no caller local**: a free call, or a call with a
-/// `&self` receiver, whose every argument is safe — not `mut`, an immutable `&`
-/// borrow, or a by-value value of a call-immutable type (a deep copy the callee
-/// cannot reach back through). The value graph can skip a `mut_escaped`
-/// receiver's per-call bump for these, so a field read keeps its version across a
-/// pure accessor (`arr.len()` does not split `arr.used`'s version) — the
-/// precondition for promoting a spliced `FieldAccess` (WEP: the field-bound
-/// recovery). Unknown callees stay impure for a receiver
-/// (`method_mutates_receiver`'s conservative default); a free `Call` is pure when
-/// its args are all safe, since a callee can only mutate what it is handed
-/// mutably.
+/// Call exprs that mutate no caller local: a free call, or one with a `&self`
+/// receiver, whose every argument is safe — not `mut`, an immutable borrow, or a
+/// call-immutable value the callee cannot reach back through. The value graph
+/// skips the per-call bump for these, so `arr.len()` does not split `arr.used`'s
+/// version. An unknown callee stays impure for a receiver.
 pub(super) fn pure_calls(
     body: &Body,
     type_table: &TypeTable,
@@ -774,20 +703,11 @@ fn self_derived_locals(body: &Body, p0: u32, type_table: &TypeTable) -> IndexSet
     set
 }
 
-/// One walk of `body` extracting param-0's receiver-write summary:
-///
-/// - `direct`: a fixpoint-invariant write through param-0's projection root
-///   `p0` — `self.f = …` / `*self = …`, `&mut <self projection>`, a `mut` call
-///   argument rooted at self, or a receiver-projecting method call into a
-///   bodyless / unstamped callee that mutates its receiver (verdict fixed by the
-///   callee's declared first-param type, conservative when unknown).
-/// - `pending`: ids of bodied callees invoked on a self projection. Their verdict
-///   is `mutating[id]`, resolved by the fixpoint as the set grows. `direct`
-///   short-circuits the walk; `pending` is collected only while no direct write
-///   has been seen.
-///
-/// `projects_p0` broadens to [`roots_self`] over [`self_derived_locals`], so a
-/// mutation through a boxed self projection counts.
+/// One walk of `body` summarising param-0's receiver writes. `direct` is a
+/// fixpoint-invariant write through its projection root — an assignment, a
+/// `&mut`, a `mut` argument, or a bodyless callee mutating its receiver — and
+/// short-circuits the walk. `pending` collects the bodied callees invoked on a
+/// self projection, whose verdicts the fixpoint resolves.
 fn summarize_receiver_writes(
     body: &Body,
     p0: u32,
@@ -851,36 +771,11 @@ fn summarize_receiver_writes(
     (direct, pending)
 }
 
-/// Flag the roots of mutable-escape sites in a single node:
-///
-/// - `&mut v` — the inner place's root is mutably referenced.
-/// - `f(…, mut arg, …)` — a mut-ref call argument's root.
-/// - `recv.m(…)` where `m` takes `&mut self` (or the receiver expression is
-///   already a `&mut`), plus the method's own mut-ref arguments. Receiver
-///   mutability comes from the callee's declared first-param type
-///   (`first_param_types`); an unknown callee is treated conservatively as
-///   mutating its receiver.
-///
-/// Immutable `&v` is deliberately *not* a mutable escape: a `&self` receiver
-/// or `&T` argument cannot mutate the pointee, so the local's fields survive
-/// across the call.
-/// A call argument that passes a reference-carrying local (`Box<T>`, `List<T>`,
-/// `&mut T`, resource handle, …) by value can be mutated by the callee through
-/// that handle — exactly like a `&mut`-place (`is_mut`) argument. Boxing lowers a
-/// `&mut x` place into a by-value `Box<x>`, so `is_mut` is `false` on the lowered
-/// arg (`step(xs, &mut pos)` → `step(xs, pos)`); keying only on `is_mut` misses
-/// it and the value graph forwards the callee-mutated pre-call fields across the
-/// call (`let mut pos = 0; step(&mut pos); pos` — a miscompile).
-///
-/// Keyed on the argument's type carrying shared mutable state, not on a
-/// whole-program per-parameter mutation analysis: the latter is unsound here
-/// because this runs after `field_scalarize`, which rewrites a callee's
-/// parameter-field writes into shadow-local writes the body walk no longer sees.
-/// The type check keeps the common read-only case fully optimizable — an
-/// immutable `&T` or a deep-copied value type is `is_call_immutable` and stays
-/// unmarked, so only genuinely mutable handles (which are nearly always actually
-/// mutated) lose cross-call forwarding. Marks both the alias set (field-write
-/// granularity) and `syntactic_mut` (`build_mut_escaped` keeps it escaped).
+/// Flag the root of a call argument that hands the callee shared mutable state
+/// by value — a `Box`, `List`, `&mut T` or resource handle — which it can mutate
+/// exactly like a `&mut` place. Boxing lowers `&mut x` to a by-value `Box<x>`,
+/// clearing `is_mut`, so keying on that flag alone would miscompile
+/// `step(&mut pos)`. Keyed on the type, which survives `field_scalarize`.
 fn collect_ref_arg_escapes(
     body: &Body,
     node: NodeRef,
@@ -1011,16 +906,6 @@ fn collect_mut_escaped_node(
 // Alias group analysis (union-find over reference-typed copies)
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Build the alias-group map. Two locals end up in the same group
-/// when they're connected by a chain of `let dst = src` Local→Local
-/// copies of a reference-typed value (`Box<T>`, `List<T>`, `&T`,
-/// `&mut T`). For value-semantic types (plain structs, variants),
-/// `let dst = src` will later be wrapped in `$value_copy$T(src)` by
-/// the value-copy synthesis pass — `dst` is then a fresh allocation
-/// and does not share storage with `src`, so we don't connect them.
-///
-/// The group is used to widen field-assignment invalidation: writing
-/// `dst.field = ...` invalidates the same field of every alias.
 /// The struct identity a reference type points at, stripping `Ref`/`MutRef`.
 /// `None` for non-reference types or references to non-struct pointees
 /// (primitives, boxed primitives) whose fields const-fold never tracks.
@@ -1117,17 +1002,11 @@ fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> IndexMap<u32, IndexSet<u32
     out
 }
 
-/// True when assigning a value of `type_id` from one local to another
-/// produces aliasing — both names refer to the same heap object. This
-/// is the case for reference types (`Box<T>`, `List<T>`, `&T`,
-/// `&mut T`). Value-semantic types (plain structs, variants) are
-/// turned into a `$value_copy$T(src)` wrapper post-loop, so during
-/// the loop a `let dst = src` edge between two value-typed locals
-/// would over-merge groups that should stay separate.
-///
-/// `Box<T>` and `List<T>` may surface either as `GenericInstance`
-/// (pre-monomorphization) or as concrete monomorphized `Struct`
-/// records carrying the original generic name in `base_name`.
+/// True when copying a `type_id` value between locals aliases them onto one heap
+/// object — the reference types. A value-semantic type gets a `$value_copy$T`
+/// wrapper post-loop, so treating its `let dst = src` as an edge during the loop
+/// would over-merge groups. `Box<T>` / `List<T>` surface as `GenericInstance` or
+/// as monomorphized `Struct` records carrying the generic name in `base_name`.
 fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     let items = type_table.compiler_items();
     let box_name = items.struct_name(crate::compiler_item::CompilerItem::Box);

@@ -1,14 +1,7 @@
-//! Monomorphization pass for Wado TIR
-//!
-//! This phase instantiates generic structs and functions with concrete types.
-//! Monomorphization is a separate compilation phase that runs after type resolution
-//! and before the lower phase.
-//!
-//! The monomorphization process:
-//! 1. Collect all generic struct and function definitions
-//! 2. Find instantiation sites (`GenericInstance` types, generic function calls)
-//! 3. Generate concrete struct and function definitions
-//! 4. Rewrite types and function calls to use monomorphized names
+//! Monomorphization for Wado TIR, between type resolution and lowering: collect
+//! the generic struct and function definitions, find their instantiation sites,
+//! generate a concrete definition per site, and rewrite types and calls onto the
+//! monomorphized names.
 
 mod call_rewrite;
 mod func_inst;
@@ -128,16 +121,11 @@ pub fn monomorphize(flat: &mut FlatPackage) {
     flat.structs = temp_module.structs;
     flat.globals = temp_module.globals;
 
-    // `module_source` is the canonical namespace, so the
-    // `(module_source, name)` pair must be unique across the entire post-mono
-    // function set. Two functions sharing a key would silently overwrite
-    // each other in the `(module, name)`-keyed registries downstream
-    // (`FreeFunctionName`, wasm function naming, `wir_build::func_map`),
-    // and the surviving body / signature would then drive codegen for both
-    // call sites — producing wasm whose validation typically fails several
-    // phases later with a confusing `expected (ref $type), found (ref $type)`
-    // message. Detect the collision here so the responsible synthesis or
-    // monomorphization path surfaces at its first observable point.
+    // `(module_source, name)` must be unique across the post-mono function set:
+    // two functions sharing a key overwrite each other in the `(module, name)`
+    // registries downstream, and the survivor then drives codegen for both call
+    // sites — surfacing several phases later as a confusing
+    // `expected (ref $type), found (ref $type)`. Catch it at its origin.
     let mut seen_functions: IndexMap<(ModuleSource, String), ()> = IndexMap::default();
     for func_rc in &flat.functions {
         let f = func_rc.borrow();
@@ -392,71 +380,20 @@ impl Monomorphizer {
         loop {
             let mut made_progress = false;
 
-            // Batch one round of function instantiations before draining the
-            // struct pending. The ordering inside each outer iteration is
-            //
-            //     instantiate all pending functions
-            //     → drain struct pending to fixpoint (once)
-            //     → rewrite each new function's body through the now-stable
-            //       `GenericInstance → Struct` substitutions
-            //     → collect each new function's call sites
-            //
-            // and is the load-bearing piece of `function_id_for` injectivity
-            // over `project.functions`:
-            //
-            // 1. `instantiate_function` substitutes the function body; for any
-            //    `GenericInstance` whose monomorphised `Struct` is not yet
-            //    interned, `substitute_type` creates a fresh `GenericInstance`
-            //    in the type table (see `substitute.rs`'s `make_generic_instance`
-            //    fallback). The body therefore points at `GenericInstance`
-            //    `TypeId`s for not-yet-monomorphised types.
-            //
-            // 2. Drain `self.structs.pending` (after instantiating the whole
-            //    batch of functions) to fixpoint — struct monomorphisation
-            //    of the new `GenericInstance`s plus any recursively triggered
-            //    structs. After this step `self.structs.type_substitutions`
-            //    covers every `GenericInstance → Struct` pair reachable from
-            //    any body in the batch.
-            //
-            // 3. `rewrite_types_in_function` rewrites every `TypeId` in each
-            //    new body — including a call's `type_args` —
-            //    through `type_substitutions`, so the body is in canonical
-            //    `Struct` form.
-            //
-            // 4. `collect_function_instantiation_sites` finally walks the
-            //    canonicalised body. Every queued `InstantiationKey` carries
-            //    `Struct`-form `TypeId`s, matching the form receiver-driven
-            //    queue paths use. The two paths produce identical
-            //    `Hash`/`Eq` keys, so `try_queue_function`'s dedupe folds
-            //    them by construction and `function_id_for` is injective.
-            //
-            // The previous interleaving (drain all functions while also
-            // collecting their calls, then all structs) ran step 4 before
-            // step 2, so any function call whose argument types referenced a
-            // not-yet-monomorphised `GenericInstance` queued under the
-            // `GenericInstance` form; later siblings of the same call (after
-            // struct mono caught up) queued under the `Struct` form,
-            // producing two `TirFunction`s with the same `function_id_for`.
-            //
-            // Batching (instead of running the struct drain per function)
-            // keeps `collect_instantiation_sites` — an `O(|type_table|)` scan
-            // — at one call per outer iteration rather than one per function,
-            // which is what the previous design's cost profile relied on.
+            // Each outer iteration instantiates every pending function, drains
+            // the struct pending to fixpoint, rewrites the new bodies through
+            // the now-stable `GenericInstance → Struct` substitutions, and only
+            // then collects call sites — collecting earlier would queue under
+            // `GenericInstance` form and break `function_id_for` injectivity.
 
             // Step 1: instantiate every pending function. Defer
             // rewrite/collect to steps 3/4 once the struct drain has run.
             let mut batch: Vec<TirFunction> = Vec::new();
             while let Some(key) = self.functions.pending.pop() {
                 let concrete = {
-                    // Issue #1110 (1)(2): every producer sets
-                    // `FunctionRef::module_source` to the body's home
-                    // module — `elaborator::method_call::resolve_method_call`,
-                    // `synthesis::traits` (via `resolve_impl_module_via_env`),
-                    // `synthesis::template::trait_impl_module`, and
-                    // `monomorphize/func_inst::resolve_method_call_substitution`
-                    // (which re-queries `TraitEnv` after newtype peeling)
-                    // all route through `TraitEnv`. The literal
-                    // `(module_source, name)` lookup is therefore total: a
+                    // Every producer routes through `TraitEnv` and so sets
+                    // `FunctionRef::module_source` to the body's home module,
+                    // making the literal `(module_source, name)` lookup total: a
                     // miss is a producer bug, surfaced as the panic below.
                     let lookup_key = (key.module_source.clone(), key.name.clone());
                     let generic_func = generic_functions.get(&lookup_key);

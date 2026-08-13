@@ -1,17 +1,6 @@
-//! Link phase — transforms a per-module `Package` into a linked `FlatPackage`.
-//!
-//! The link phase sits between type erasure and monomorphization in the pipeline:
-//!
-//! ```text
-//! Package (per-module TIR)
-//!   → link
-//! FlatPackage (flat TIR)
-//!   → monomorphize → lower → optimize → wir_build → codegen
-//! ```
-//!
-//! The link phase flattens all per-module TIR data into flat lists and
-//! performs component-model planning (world exports, test exports, bundled
-//! functions).
+//! Link phase — flatten a per-module `Package` of TIR into a `FlatPackage` of
+//! flat lists, and plan the component model surface: world exports, test
+//! exports, bundled functions. Sits between type erasure and monomorphization.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -131,18 +120,11 @@ pub fn link(package: Package) -> FlatPackage {
     }
 }
 
-/// Assert that no bodyless stub shares a definition's name.
-///
-/// A name carries its subject's declaring module, so one name is one function.
-/// A stub sharing a definition's name is a call waiting to bind to nothing,
-/// which only surfaces much later as an unsatisfied trait bound at WIR build.
-/// Checking where the invariant must hold reports every violation at once, and
-/// running it at each stage boundary names the stage that introduced one.
-///
-/// Shape stubs (tuples, `Stream<u8>`) are emitted per using module by design
-/// and have no definition anywhere, so they never collide. A `core:builtin`
-/// declaration paired with its `core:rt` implementation is the intended shape
-/// of an intrinsic, not a collision.
+/// Assert that no bodyless stub shares a definition's name. A name carries its
+/// declaring module, so one name is one function, and a stub sharing one is a
+/// call bound to nothing — surfacing far later as an unsatisfied trait bound at
+/// WIR build. Running it at each stage boundary names the stage at fault. Shape
+/// stubs and `core:builtin` / `core:rt` intrinsic pairs are not collisions.
 #[cfg(debug_assertions)]
 pub(crate) fn assert_no_stub_shadowing(
     functions: &[Rc<RefCell<crate::tir::TirFunction>>],

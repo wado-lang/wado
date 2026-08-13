@@ -1,25 +1,8 @@
-//! Compiler-internal tracing for development debugging.
-//!
-//! Targets are selected by the `WADO_TRACE` env var (comma-separated list,
-//! or `*` for everything). Output goes to stderr with a `[target]` prefix.
-//! Inactive targets cost one env-var lookup (cached on first access) and a
-//! linear scan over the configured target list — fine for any rate that
-//! makes sense in a compiler pass.
-//!
-//! `compiler_trace!` is for *developer* diagnostics only; user-facing
-//! diagnostics still flow through `Logger` / `CompilerHost::emit_diagnostic`.
-//!
-//! Examples (all from a development shell):
-//!
-//! ```sh
-//! WADO_TRACE=sroa_variant_return cargo run --bin wado -- compile foo.wado
-//! WADO_TRACE=sroa_variant_return,inline cargo run --bin wado -- compile foo.wado
-//! WADO_TRACE='*' cargo run --bin wado -- compile foo.wado
-//! ```
-//!
-//! The macro expands to a guarded `eprintln!`. On `wasm32-unknown-unknown`
-//! `std::env::var` returns `Err(NotPresent)` so the filter is empty and
-//! no output is produced.
+//! Compiler-internal tracing for development debugging, selected by the
+//! `WADO_TRACE` env var — a comma-separated target list, or `*` — and written to
+//! stderr under a `[target]` prefix. `compiler_trace!` expands to a guarded
+//! `eprintln!` and is for *developer* diagnostics only; user-facing ones still
+//! flow through `Logger`. On `wasm32-unknown-unknown` the filter is always empty.
 
 use std::sync::OnceLock;
 

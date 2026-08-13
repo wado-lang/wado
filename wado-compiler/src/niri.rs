@@ -1,24 +1,8 @@
-//! NIR Interpreter (niri).
-//!
-//! Compile-time partial evaluator over the arena `Body`: it reduces what it can
-//! and leaves a residual otherwise.
-//!
-//! Reduction is monotone and idempotent — an expression only moves toward
-//! literal form — so a literal leaf survives a no-op pass as written.
-//!
-//! Each module answers one question:
-//!
-//! - `lattice` — what an expression denotes.
-//! - `frame` — what running a body does.
-//! - `rewrite` — what becomes of an expression once its value is known.
-//! - `trackability` — which locals a walk may hold a value for.
-//! - `pattern` — whether a pattern matches a value.
-//! - `place` — what a borrow or lvalue chain names.
-//! - `region` — which blocks are self-contained enough to run as a frame.
-//! - `callee` — who a call names, and what its operands bind to.
-//!
-//! What the engine can evaluate is stated in
-//! `docs/wep-2026-04-27-nir-interpreter.md`, not here.
+//! NIR Interpreter (niri): a compile-time partial evaluator over the arena
+//! `Body`, reducing what it can and leaving a residual otherwise. Reduction is
+//! monotone and idempotent. Each submodule answers one question — `lattice`,
+//! `frame`, `rewrite`, `trackability`, `pattern`, `place`, `region`, `callee`.
+//! What it can evaluate: `docs/wep-2026-04-27-nir-interpreter.md`.
 
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -287,20 +271,10 @@ struct FrameState {
     /// Empty outside a frame.
     ctfe_clobbered: LocalSet,
     /// What this frame folded a node to, read back by
-    /// [`Interpreter::expr_to_lattice`]. Written on both backends, and
-    /// load-bearing on each for its own reason.
-    ///
-    /// On the scratch body, because [`BodySink`] promotes nothing: a fold has
-    /// nowhere else to be recorded. On a real body, because the rewrite that
-    /// commits a value consumes the node that produced it — a materialized
-    /// sequence stands where the region was — so the value is no longer
-    /// derivable from the tree, and an enclosing fold reading through this node
-    /// needs it. That is why an aggregate is memoized even when the sink takes
-    /// it: what the sink takes is a literal, what the caller needs is a value.
-    ///
-    /// The one `ExprId`-keyed memo the crate keeps (`wado-compiler/AGENTS.md`).
-    /// It holds only for the frame that wrote it and is cleared wherever the
-    /// environment restarts, so no entry outlives the flow that justified it.
+    /// [`Interpreter::expr_to_lattice`]. Load-bearing on both backends: the
+    /// scratch body promotes nothing, and on a real body the committing rewrite
+    /// consumes the node that produced the value, so an enclosing fold has
+    /// nowhere else to read it. Cleared wherever the environment restarts.
     scratch_folds: IndexMap<ExprId, Value>,
     /// Regions whose run this frame already attempted and abandoned. A seed's
     /// value is fixed for the frame's flow (a reassigned local is never
@@ -314,18 +288,11 @@ struct FrameState {
     region_misses: IndexSet<ExprId>,
 }
 
-/// What the engine knows beyond the body in front of it.
-///
-/// Every field is optional and every absence costs folds rather than
-/// correctness: without the callee map a `Call` stays [`Lattice::Unevaluated`],
-/// without the builtin map an `array_get` is an opaque call, without the global
-/// env a `GlobalVarGet` is unevaluated, and without the field env so is
-/// `GLOBAL.f`. The compiler runs the engine in two configurations — one with
-/// the program-wide view, one with only what running a call needs — so a
-/// partial one is by design, not an oversight.
-///
-/// Grouped rather than four independent knobs, so a walk that needs the
-/// program view asks for one thing and the rule above has one place to live.
+/// What the engine knows beyond the body in front of it. Every field is
+/// optional and every absence costs folds rather than correctness: no callee map
+/// leaves a `Call` [`Lattice::Unevaluated`], no global env leaves a
+/// `GlobalVarGet` so, and so on. The compiler runs the engine both with the
+/// program-wide view and with only what running a call needs.
 #[derive(Default, Clone, Copy)]
 pub(crate) struct ProgramFacts<'a> {
     pub(crate) callees: Option<&'a CalleeMap>,
@@ -552,16 +519,9 @@ impl<'a> Interpreter<'a> {
 
     /// Record a lattice value for a `let`-bound local: [`Lattice::Const`] for an
     /// immutable binding whose RHS reduced, [`Lattice::NonConst`] for `let mut`
-    /// or an RHS that did not.
-    ///
-    /// An aggregate constant is only recorded for a local
-    /// [`Self::record_aggregate_locals`] proved unreachable through any other
-    /// handle; otherwise it degrades to [`Lattice::NonConst`].
-    ///
-    /// A binding displaces a place alias the index may have held: reads must
-    /// see the binding, not project through the stale alias. The alias is not
-    /// restored when a scope ends — a read that then finds nothing abandons a
-    /// fold, which is the sound direction.
+    /// or an RHS that did not, and for an aggregate
+    /// [`Self::record_aggregate_locals`] could not prove unaliased. The binding
+    /// displaces any place alias the index held, and never restores it.
     pub fn bind_local(&mut self, index: u32, lattice: Lattice) {
         self.frame.place_aliases.swap_remove(&index);
         let unbacked_aggregate = matches!(&lattice, Lattice::Const(v) if !v.is_scalar())

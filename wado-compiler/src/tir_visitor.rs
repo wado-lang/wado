@@ -1,14 +1,8 @@
-//! Generic visitor traits for mutable and immutable traversal of TIR trees.
-//!
-//! Provides three visitor traits:
-//! - `TirMutVisitor`: mutable traversal (monomorphizer, lowering)
-//! - `TirRefVisitor`: immutable traversal (analysis, collection)
-//! - `TirOptVisitor`: mutable traversal with change tracking (optimization
-//!   and synthesis passes); covers every TIR node, including the
-//!   pre-lowering forms (`TaskReturn`, `VariadicForOf`, `WithHandler`,
-//!   `Resume`, `TemplateString`)
-//!
-//! Also provides utility functions for common TIR queries like `block_has_break_to`.
+//! Visitor traits for TIR traversal: `TirMutVisitor` for mutation (the
+//! monomorphizer, lowering), `TirRefVisitor` for analysis, and `TirOptVisitor`
+//! for mutation with change tracking (optimization and synthesis), which also
+//! covers the pre-lowering forms `TaskReturn`, `VariadicForOf`, `WithHandler`,
+//! `Resume` and `TemplateString`. Plus a few shared TIR queries.
 
 use crate::flat_package::FlatPackage;
 use crate::tir::{

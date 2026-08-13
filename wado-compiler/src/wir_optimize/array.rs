@@ -1,15 +1,7 @@
-//! List optimization passes for WIR.
-//!
-//! - **Constant array data promotion**: `ArrayNewFixed` of constants → `ArrayNewData`,
-//!   when packing encodes smaller than the inline operands.
-//! - **Large array literal splitting**: `array.new_fixed` (>= threshold) → `array.new_default` + sets.
-//!
-//! List literals reach WIR already as `ArrayNewFixed`: the NIR
-//! `optimize::array_literal` pass materializes `ExprKind::ArrayLiteral` from
-//! the `SequenceLiteralBuilder` push sequence, and `wir_build` lowers it
-//! directly. The former WIR-level `collapse_array_push_sequences` that
-//! reconstructed `ArrayNewFixed` from inlined `List::push` chains is therefore
-//! retired; the passes below consume the `ArrayNewFixed` it used to produce.
+//! List optimization passes for WIR, over the `ArrayNewFixed` that list literals
+//! already reach WIR as: promoting one of constants to `ArrayNewData` where
+//! packing encodes smaller than inline operands, and splitting one past the
+//! threshold into `array.new_default` + sets.
 
 use crate::wir::{WirData, WirInstr, WirPackage, WirType, WirTypeDef};
 use crate::wir_visitor::WirMutVisitor;
@@ -57,20 +49,10 @@ fn signed_leb128_len(mut value: i64) -> usize {
 }
 
 /// Whether packing `count` elements of `elem_width` bytes into a passive data
-/// segment is worth it, given what the same elements cost as inline
-/// `array.new_fixed` operands.
-///
-/// A data segment stores every element at its full width, while an operand is
-/// LEB128-compressed: a `List<i32>` of small values costs 3 bytes per element
-/// inline but 4 packed, so promoting it *grows* the module — and, because
-/// `array.new_data` is not a Wasm constant instruction, also demotes a global
-/// that would otherwise have become an eager constant to a runtime-initialized
-/// one.
-///
-/// Past [`ARRAY_NEW_FIXED_LIMIT`] the comparison is moot: the alternative is
-/// not `array.new_fixed` at all but the `array.new_default` + N × `array.set`
-/// build sequence `split_large_array_literals` produces, which is larger than
-/// either and is what the limit exists to avoid.
+/// segment beats leaving them as inline `array.new_fixed` operands. A segment
+/// stores full width while an operand is LEB128-compressed, so a `List<i32>` of
+/// small values *grows* when promoted — and loses eager-const status besides.
+/// Past [`ARRAY_NEW_FIXED_LIMIT`] the alternative is the larger split sequence.
 pub(crate) fn data_promotion_pays(
     count: usize,
     elem_width: usize,
@@ -281,19 +263,11 @@ fn encode_constant_element(
 /// The `array.set` form consumes each value immediately, keeping stack depth low.
 pub(crate) const ARRAY_NEW_FIXED_LIMIT: usize = 256;
 
-/// Split large `ArrayNewFixed` instructions into `ArrayNewDefault` + `ArraySet` sequences.
-///
-/// Walks all function bodies and rewrites any `ArrayNewFixed` with more than
-/// [`ARRAY_NEW_FIXED_LIMIT`] elements. Uses a module-level counter for unique local names.
-///
-/// Unlike `promote_constant_arrays_to_data`, this deliberately skips global
-/// initializers: the split form is a `Seq` of `DeclareLocal` / `LocalSet` /
-/// `ArraySet` / `LocalGet`, none of which is a valid Wasm constant instruction,
-/// so it cannot serve as an eager const-global init. A large *dynamic* array
-/// literal is instead extracted to the `__initialize_module` function body by
-/// lowering, where this pass reaches it; a large *const* array literal that
-/// stays an eager global init keeps `array.new_fixed` (the JIT-time concern is a
-/// runtime code path, not one-time module init).
+/// Rewrite every `ArrayNewFixed` past [`ARRAY_NEW_FIXED_LIMIT`] elements into an
+/// `ArrayNewDefault` + `ArraySet` sequence, naming locals from a module-level
+/// counter. Global initializers are skipped: none of those instructions is a
+/// valid Wasm constant, so a const array literal keeps `array.new_fixed` while a
+/// dynamic one is reached inside `__initialize_module`.
 pub(super) fn split_large_array_literals(module: &mut WirPackage) {
     let mut visitor = SplitLargeArrays { counter: 0 };
     for func in &mut module.functions {

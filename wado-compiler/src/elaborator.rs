@@ -257,16 +257,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Canonicalize a `<ns>::<member>` reference (single `::`, prefix is a
-    /// namespace import alias) to the bare `<member>` form. Returns `None`
-    /// when the name isn't of that shape — including multi-segment cases like
-    /// `<ns>::<Type>::<case>`, which the elaborator routes through dedicated
-    /// namespace paths (see `resolve_ident` / `resolve_call`).
-    ///
-    /// The AST keeps the user-written `ns::member` so LSP cursors land on it
-    /// as typed; the name lookups against `imported_functions`,
-    /// `imported_globals`, struct registries, etc. see the canonical form
-    /// they were populated with.
+    /// Canonicalize a `<ns>::<member>` reference — one `::`, the prefix a
+    /// namespace import alias — to bare `<member>`. `None` for any other shape,
+    /// multi-segment `<ns>::<Type>::<case>` included. The AST keeps what the user
+    /// wrote so LSP cursors land on it, while name lookups see the canonical
+    /// form their registries were populated with.
     pub(super) fn strip_ns_prefix<'s>(&self, name: &'s str) -> Option<&'s str> {
         self.sem.imports.strip_ns_prefix(name)
     }
@@ -303,21 +298,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.lookup_variant_case(name).is_some()
     }
 
-    /// Run `body` in `module`'s perspective: the walker's "current module" and
-    /// its import scope (type sources *and* namespace imports, so `ns::Type`
-    /// types resolve canonically — issue #1415) swapped for the duration.
-    /// Locals are cleared because they describe in-progress resolution, not the
-    /// target module's definitions; everything is restored on return.
-    ///
-    /// Callee-scope work only: the walker resolving a parameter default at the
-    /// call site, which the callee's own scope has to answer for (WEP
-    /// 2026-04-11). A *query* never enters another module's perspective —
-    /// every declaration fact it needs is one the decl pass already resolved
-    /// in the declaring frame (WEP 2026-05-26).
-    ///
-    /// Already being in `module`'s perspective skips the swap entirely — which
-    /// also leaves the in-progress locals in place, as a same-module resolution
-    /// legitimately resolves against them.
+    /// Run `body` in `module`'s perspective, swapping the current module and its
+    /// import scope — type sources and namespace imports both — and clearing
+    /// locals, which describe in-progress resolution rather than the target's
+    /// definitions. For callee-scope work only, such as a parameter default;
+    /// already being there skips the swap, keeping the locals in reach.
     pub(super) fn with_module_perspective_for<R>(
         &mut self,
         module: &ModuleSource,
@@ -487,17 +472,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The receiver keys a static-method lookup may be filed under, in the
-    /// order a consumer should try them.
-    ///
-    /// Neither vantage answers alone. The call site's own scope resolves a
-    /// name it declares or imports, and an alias
-    /// (`use { Instant as ClockInstant }`) is reachable no other way. But a
-    /// name that arrived through a namespace prefix lost its qualifier before
-    /// reaching here, and canonicalising *that* from the call site answers
-    /// with the caller's own same-named type — `helper::Pair::new` finding
-    /// the caller's `Pair`. So a consumer tries both and takes the one the
-    /// index answers for.
+    /// The receiver keys a static-method lookup may be filed under, in the order
+    /// to try them. Neither vantage answers alone: the call site's scope resolves
+    /// a name it declares or imports, but one that arrived through a namespace
+    /// prefix lost its qualifier, and canonicalising *that* from the call site
+    /// finds the caller's own `Pair` for `helper::Pair::new`.
     pub(super) fn static_receiver_keys(
         &self,
         receiver_module: Option<&ModuleSource>,
@@ -570,20 +549,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         control_flow::block_result_type(self.ctrl_flow_ctx(), block)
     }
 
-    /// Emit a `MissingReturn` diagnostic when a declared non-Unit
-    /// return type cannot be satisfied by the body. Skipped for
-    /// `Unit`/`Never` declarations, for missing bodies (declared-only
-    /// externals), and for bodies whose every control path provably
-    /// exits before the end — either via an explicit `return`, a
-    /// divergent statement like `panic("…")`, or a fully-diverging
-    /// labeled block / `loop`.
-    ///
-    /// The previous heuristic accepted any nested `return` even when
-    /// only one branch of an `if` carried one, which let partial-return
-    /// bodies through and produced an invalid core Wasm module ("type
-    /// mismatch: expected i32 but nothing on stack") for the
-    /// fall-through path. AST-walker mirrors that strict definite-exit
-    /// analysis using recorded `expression_types`.
+    /// Emit `MissingReturn` when a declared non-Unit return type cannot be
+    /// satisfied. Skipped for `Unit` / `Never`, for a bodyless external, and for a
+    /// body whose every control path provably exits first. The analysis is
+    /// definite-exit, not "contains a `return` somewhere": accepting one carried
+    /// by a single `if` branch produced an invalid core Wasm module.
     pub(super) fn validate_missing_return_ast(
         &self,
         return_type: TypeId,
@@ -606,18 +576,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         });
     }
 
-    /// Record the resolved [`TypeId`] for the expression at `ast_id` —
-    /// the per-`AstId` annotation reify reads to set `TirExpr::type_id`
-    /// without re-running inference.
-    ///
-    /// Skipped when the resolution failed (yielding [`TypeTable::ERROR`])
-    /// or when the recorded type still mentions
-    /// [`TypeTable::UNKNOWN`]. Both signal a result the body walk is
-    /// going to revisit (the unknown-typed `null` literal is patched up
-    /// once the surrounding `Option<T>` becomes known by
-    /// [`crate::elaborator::expr::patch_unresolved_null`]); recording
-    /// the sentinel here would leave a stale entry the reify pass cannot
-    /// consume and the post-patch TIR would disagree with.
+    /// Record the resolved [`TypeId`] for the expression at `ast_id` — the
+    /// annotation reify reads to set `TirExpr::type_id` without re-inferring.
+    /// Skipped for [`TypeTable::ERROR`] and for a type still mentioning
+    /// [`TypeTable::UNKNOWN`]: both mark a result the body walk will revisit, and
+    /// recording the sentinel would leave an entry reify cannot consume.
     pub(super) fn record_expression_type(&mut self, ast_id: crate::ast::AstId, type_id: TypeId) {
         if type_id == TypeTable::ERROR {
             return;
@@ -633,21 +596,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.expression_types.insert(ast_id, type_id);
     }
 
-    /// Record a method-dispatch decision for the [`crate::ast::MethodCallExpr`]
-    /// at `ast_id`. Centralised here (rather than at the AST wrapper) so
-    /// every TIR-construction path that flows through
-    /// [`Self::build_tir_method_call`] — including the `container[i].method()`
-    /// `IndexMut` rewrite — leaves a single, uniform entry in
-    /// [`sem::types::TypeAnnotations::method_dispatch`].
-    ///
-    /// Synthetic calls (for-of's `.into_iter()` / `.next()`) pass
-    /// `ast_id == None` and skip recording per the
-    /// [`sem::types::MethodDispatch`] contract.
-    ///
-    /// `is_ref_impl` is the flag `lookup_method_info` produces alongside
-    /// the dispatch target; reify uses it together with `self_kind` to
-    /// drive `adjust_receiver_for_self_kind` without re-running impl
-    /// lookup.
+    /// Record a method-dispatch decision, centralised here rather than at the AST
+    /// wrapper so every path through [`Self::build_tir_method_call`] leaves one
+    /// uniform entry. A synthetic call passes `ast_id == None` and records
+    /// nothing. Reify feeds `is_ref_impl` and `self_kind` to
+    /// `adjust_receiver_for_self_kind` instead of re-running impl lookup.
     pub(super) fn record_method_dispatch(
         &mut self,
         ast_id: Option<crate::ast::AstId>,
@@ -843,17 +796,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.decl_key_or_local(trait_name).1
     }
 
-    /// The declaration `name` means from this module's vantage, for the callers
-    /// that hold a name and no reference site to key on.
-    ///
-    /// Runs the resolution table's own scope lookup rather than a second chain
-    /// beside it, so a name-only caller and the site that wrote the same name
-    /// cannot disagree.
-    ///
-    /// `None` when the name reaches no declaration. Answering with the writing
-    /// module instead would hand back a key indistinguishable from a real
-    /// declaration's, which is the confusion this whole design exists to end —
-    /// so the caller decides what its own absence means.
+    /// The declaration `name` means from this module's vantage, for a caller
+    /// holding a name and no reference site to key on. Runs the resolution
+    /// table's own scope lookup rather than a second chain beside it, so a
+    /// name-only caller and the site that wrote the same name cannot disagree.
+    /// `None` when the name reaches no declaration; the caller decides.
     pub(crate) fn canonical_decl_key(&self, name: &str) -> Option<trait_env::DeclKey> {
         self.tysys
             .resolutions
@@ -1922,7 +1869,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // (`impl Future<i32>` → `[i32]`), resolved in the
             // impl's type-param scope so generic impls
             // round-trip their `TypeParam` ids. Mirrors
-            // `item.rs:1621`.
+            // `record_impl_sig`.
             let trait_type_args: Vec<crate::tir::TypeId> = match &impl_block.trait_type {
                 Some(ast::Type::Generic(generic)) => generic
                     .args
@@ -2017,26 +1964,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 })
                 .unwrap_or_default();
 
-            // A default method's body is *foreign* AST owned by
-            // the trait module; its nodes carry the trait
-            // module's globally-unique `AstId`s, so the facts the
-            // walk records cannot collide with impl-module nodes.
-            //
-            // The body walk's only output is a per-impl
-            // `ModuleSemantics` snapshot stored on
-            // `ModuleSemantics::default_method_semantics`. Reify
-            // (the sole TIR source) reads those snapshots and
-            // produces the impl's default-method `TirFunction`s.
-            //
-            // Per-impl snapshots are required because the same
-            // trait body synthesised for many impls would
-            // otherwise overwrite its own per-node facts on each
-            // iteration (one `AstId`, N impls). Each impl gets a
-            // fresh `ModuleSemantics` whose `types` / `bindings`
-            // capture only this one synthesis; `decls` and
-            // `imports` are cloned from the surrounding
-            // (impl-module) `ModuleSemantics` so name resolution
-            // / decl indices work during the body walk.
+            // A default method's body is foreign AST owned by the trait module,
+            // and one `AstId` serves N impls, so each needs its own
+            // `ModuleSemantics` snapshot on `default_method_semantics` or the
+            // synthesis would overwrite its own per-node facts. `decls` and
+            // `imports` are cloned from the impl module for name resolution.
             for default_method in &default_methods {
                 // Build a synthetic `ModuleSemantics` for this
                 // one (impl, default_method) synthesis. Fresh

@@ -1,19 +1,8 @@
 //! Interprocedural reference-storage analysis: which reference-parameter
-//! *positions* a function may persist beyond its call.
-//!
-//! A reference escapes only when a *reference-typed* value derived from a
-//! parameter reaches a persistence sink — returned, placed in an aggregate /
-//! global, stored through a reference, or passed to a callee at a position that
-//! callee stores. A value read (`*p`, a value-typed `p.field`) copies data, not
-//! the reference, so it never escapes. The result is a least fixpoint over the
-//! call graph, seeded conservatively: a bodyless callee (extern / builtin / CM
-//! import) cannot retain a guest reference across its boundary, so it stores its
-//! declared positions only.
-//!
-//! Soundness rests on `carries` being an over-approximation of "this expression
-//! is a reference into a parameter": every unmodelled reference-producing shape
-//! falls to the conservative `_ => {}` only when the expression is *not*
-//! reference-typed, so a genuinely reference-typed derivation is always tracked.
+//! *positions* a function may persist beyond its call. A reference escapes only
+//! when a reference-typed value derived from a parameter reaches a persistence
+//! sink; a value read copies data, not the reference. A least fixpoint over the
+//! call graph, sound as long as `carries` over-approximates.
 
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;

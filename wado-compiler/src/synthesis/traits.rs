@@ -1,14 +1,8 @@
-//! Trait synthesis phase.
-//!
-//! Generates auto-derived trait implementations for types that support them:
-//! - `EnumName^Eq::eq(&self, &Self) -> bool` - discriminant equality
-//! - `EnumName^Ord::cmp(&self, &Self) -> Ordering` - discriminant ordering
-//! - `VariantName^Eq::eq(&self, &Self) -> bool` - case-discriminated payload equality
-//! - `TypeName^Inspect::inspect(&self, &mut Formatter)` - debug formatting
-//! - `EnumName^Display::fmt(&self, &mut Formatter)` - bare case name
-//! - `TypeName^DisplayAlt::fmt_alt(&self, &mut Formatter)` - delegates to `Display`
-//!
-//! Pipeline position: runs as part of the synthesis phase, before monomorphize.
+//! Trait synthesis: auto-derives `Eq` / `Ord` for structs and enums and `Eq` for
+//! variants (discriminant, then payload), `Default` for structs, `Inspect` for
+//! debug formatting, `Display` for an enum's bare case name, and the
+//! `DisplayAlt` / `InspectAlt` fallbacks that delegate to their plain halves.
+//! Runs before monomorphize.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -111,16 +105,11 @@ impl TraitsStdlibNames {
     }
 }
 
-/// One half of an auto-derived trait pair: the `Display`/`DisplayAlt`/`InspectAlt`
-/// fallback machinery is parameterised over which trait to emit and which trait
-/// to delegate to.
-///
-/// Every name in this struct — both trait names and their method names —
-/// flows from the `CompilerItem` registry. The stdlib's
-/// `#[compiler_item("...")]` annotations control the spelling on both
-/// halves, so renaming `Display::fmt` to `Display::display_value` flows
-/// to the synthesised fallback's emitted call without touching this
-/// code.
+/// One half of an auto-derived trait pair: which trait the fallback machinery
+/// emits, and which it delegates to. Every name here — traits and methods alike
+/// — comes from the `CompilerItem` registry, so renaming `Display::fmt` in the
+/// stdlib's `#[compiler_item("…")]` annotations reaches the synthesised call
+/// without touching this code.
 struct TraitPair {
     /// e.g. `Display` or `DisplayAlt`, named by its declaring module.
     target_trait: crate::name::FqTraitName,
@@ -3021,31 +3010,11 @@ pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
 }
 
 impl SynthesisCtx<'_, '_, '_> {
-    /// `true` when an impl of `trait_name` for `<type_name>` is already known
-    /// to the project — either user-written (in the AST layer of `TraitEnv`,
-    /// regardless of which module it lives in) or generated earlier in this
-    /// synthesis pass for the *current* module.
-    ///
-    /// The two halves are deliberately scoped differently:
-    ///
-    /// - The AST-layer check is module-agnostic. A user-written
-    ///   `impl Display for String` in `core:prelude/format` must suppress
-    ///   `synthesize_traits`'s DisplayAlt-delegates-to-Display fallback even
-    ///   when this pass is currently synthesising `core:prelude/string`
-    ///   (String's defining module). Restricting the check to
-    ///   `self.module` would silently shadow the user's impl with the
-    ///   auto-derived fallback the synthesised layer later wins via the
-    ///   `type_module` hint at the call site.
-    /// - The in-pass `pending` check stays module-scoped so two same-name
-    ///   receiver types in different modules (e.g. `struct Widget` in
-    ///   module A and module B) each still get their own auto-derived
-    ///   impl. Without the module component the second derivation would
-    ///   be silently skipped.
-    ///
-    /// `receiver` names the namespace it is spelled in: the in-pass `pending`
-    /// set is keyed by the same string the caller holds, while the AST-layer
-    /// query must ask the map that namespace lives in — a mangled receiver
-    /// looked up as a declaration name reaches nothing.
+    /// `true` when the project already has this impl, user-written or derived
+    /// earlier in this pass. The two halves are scoped differently on purpose:
+    /// the AST-layer check is module-agnostic, so a user's
+    /// `impl Display for String` in `format` suppresses the fallback while
+    /// synthesising `string`; the in-pass `pending` check stays module-scoped.
     pub(crate) fn has_impl(
         &self,
         receiver: ImplReceiver<'_>,
@@ -3542,22 +3511,11 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
     module.functions.extend(generated);
 }
 
-/// Generate auto-derived `Default` trait implementations for structs whose
-/// fields all carry a declared default expression.
-///
-/// For a non-generic struct `S { f0: T0 = e0, f1: T1 = e1, ... }`, synthesize:
-/// - `S^Default::default() -> S` — returns `S { f0: e0, f1: e1, ... }`.
-///
-/// Skips:
-/// - structs where any field has no default expression,
-/// - structs that already have a user-provided `impl Default for S`,
-/// - generic structs (generic field defaults may depend on bounds; left for
-///   a follow-up — monomorphized instances never hit this pass because
-///   `monomorph_info.is_some()`).
-///
-/// Effect purity of the default expressions is already enforced by
-/// `check_default_purity_semantic` before synthesis runs; if it had failed the
-/// pipeline would have bailed, so every `default_expr` reaching here is pure.
+/// Auto-derive `S^Default::default() -> S` for a non-generic struct whose fields
+/// all declare a default, returning `S { f0: e0, … }`. Skips a struct with any
+/// undefaulted field, one already carrying a user `impl Default`, and generic
+/// structs, whose field defaults may depend on bounds. Every `default_expr`
+/// reaching here is pure, `check_default_purity_semantic` having run.
 fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     if module.structs.is_empty() {
         return;
@@ -4108,16 +4066,11 @@ fn generate_newtype_fmt_fn(
     )
 }
 
-/// Generate `Fn<N, Ret>^Inspect::inspect(&self, &mut Formatter)` as
-/// an auto-derived dispatch stub.
-///
-/// The TIR body is `None` — the function entry exists only so call
-/// sites referring to it from templates / user code resolve. A bodyless
-/// TIR function naturally bypasses the inliner and other body walkers;
-/// WIR build recognises [`FunctionKind::FnCanonicalDispatch`] and
-/// supplies the real body: a `call_ref` through the matching
-/// `CanonicalClosure_K`'s `inspect` vtable slot. See WEP: Inspect
-/// (Debug Output) > Closure Inspect via Runtime Dispatch.
+/// Generate `Fn<N, Ret>^Inspect::inspect(&self, &mut Formatter)` as a dispatch
+/// stub with no TIR body — the entry exists only so call sites resolve, and
+/// being bodyless it bypasses the inliner and the other body walkers. WIR build
+/// recognises [`FunctionKind::FnCanonicalDispatch`] and supplies the real body,
+/// a `call_ref` through the matching `CanonicalClosure_K`'s vtable slot.
 fn generate_fn_inspect_fn(
     module_source: &ModuleSource,
     type_arg_names: &[FqTypeName],
@@ -4633,16 +4586,10 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     module.functions.extend(generated);
 }
 
-/// Generate `StructName^InspectAlt::inspect_alt` for non-generic structs (pretty-print).
-///
-/// Body uses Formatter helpers for clean synthesis:
-/// ```text
-/// f.begin_block("StructName {\n");
-/// f.write_indent(); f.write_str("field1: "); self.field1.inspect_alt(f); f.write_str(",\n");
-/// f.write_indent(); f.write_str("field2: "); self.field2.inspect_alt(f); f.write_str(",\n");
-/// f.end_block("}");
-/// ```
-/// Pass an empty `impl_type_params` slice for non-generic structs.
+/// Generate the pretty-printing `StructName^InspectAlt::inspect_alt`, whose body
+/// is a `begin_block` / per-field `write_indent` + `inspect_alt` / `end_block`
+/// sequence of Formatter calls. `impl_type_params` is empty for a non-generic
+/// struct.
 fn generate_struct_inspect_alt_fn(
     struct_name: &str,
     impl_type_params: &[TirTypeParam],
@@ -5653,35 +5600,11 @@ fn decompose_type_for_method_name(
     }
 }
 
-/// Determine the module where an Inspect impl lives for a given type.
-/// Determine the module where a trait impl lives for a given type.
-///
-/// `ref_module` is used for Ref/MutRef types (`traits()` for Eq/Ord, `format()` for Inspect).
-/// `string_module` is used for String (`string()` for Eq/Ord, `format()` for Inspect).
 /// Resolve `module_source` for a `value.<trait>::<method>` call inside an
-/// auto-derived body — issue #1110 (1): the `FunctionRef`'s `module_source`
-/// must be the module that hosts the callee's body.
-///
-/// Strategy:
-///   1. Ask `TraitEnv` where `impl <trait> for <receiver-type>` lives.
-///      `TraitEnv` indexes every AST-layer impl block by struct name and
-///      trait name, so this hits for cross-module impls
-///      (`impl Display for String` in `core:prelude/format`,
-///      `impl<..T> Inspect for [..T]` in `core:prelude/tuple`, ref/mutref
-///      blankets, etc.). This is a deterministic resolution, not a
-///      fall-back to whichever module the synthesis pass happens to be
-///      visiting.
-///   2. If `TraitEnv` is silent — the impl is being auto-derived in the
-///      current synthesis pass and hasn't been published to the
-///      synthesised layer yet — fall back to the receiver type's own
-///      module. `synthesis::traits::generate_*_impls` places auto-
-///      derived bodies in the receiver type's module by convention, so
-///      that's where the body will live.
-///   3. For receivers with no defining module (`TypeParam`, unresolved),
-///      use the caller-supplied `fallback` (the current synthesis module).
-///      The fallback only applies to producer outputs that the
-///      monomorphizer immediately overwrites with a concrete-type
-///      module after type-param substitution.
+/// auto-derived body: it must name the module hosting the callee's body. Ask
+/// `TraitEnv` first, so a cross-module impl resolves deterministically; if it is
+/// silent, the impl is being derived in this pass and lands in the receiver's own
+/// module. A receiver with no defining module takes the caller's `fallback`.
 fn resolve_impl_module_via_env(
     type_id: TypeId,
     trait_name: &crate::name::FqTraitName,
@@ -5735,22 +5658,11 @@ fn resolve_impl_module_via_env(
     type_module.unwrap_or_else(|| fallback.clone())
 }
 
-/// Collect parameterized types that need Inspect/Display impls — per-`TypeId`
-/// kinds whose codegen genuinely depends on the distinct `TypeId`.
-///
-/// Returns `(type_id, base_name, type_arg_names)` for each concrete
-/// parameterized type. Includes tuples and resource handle types (Future,
-/// Stream, etc.).
-///
-/// `ResolvedType::Function` is intentionally **not** enumerated here.
-/// `Fn` dispatch stubs depend only on `(arity, return_type)` because
-/// `wir_build::build_fn_canonical_dispatch_body` casts `self` to the shared
-/// `canonical_inspectable_base` before reading the vtable, so the per-
-/// parameter `TypeId`s are irrelevant at codegen. Enumerating Function
-/// types per `TypeId` here would emit one identical stub per `TypeId` and
-/// collide on `function_id_for`, which is required to be injective over
-/// `project.functions` (asserted in `optimize/dce`). Use
-/// [`collect_canonical_fn_signatures`] for the `(arity, return_type)` view.
+/// Collect the parameterized types needing Inspect/Display impls — the kinds
+/// whose codegen genuinely depends on the distinct `TypeId`, tuples and resource
+/// handles included. `ResolvedType::Function` is deliberately absent: a `Fn`
+/// dispatch stub depends only on `(arity, return_type)`, so use
+/// [`collect_canonical_fn_signatures`] instead.
 fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<FqTypeName>)> {
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
@@ -5779,16 +5691,11 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<FqTyp
         .collect()
 }
 
-/// Canonical `Fn` signature for dispatch-stub synthesis.
-///
-/// `Fn` dispatch stubs (`Fn<arity, ret>^Inspect::inspect`,
-/// `Fn<arity, ret>^InspectAlt::inspect_alt`, and fallbacks) are keyed by
-/// `(arity, return_type)` alone — see `collect_parameterized_types` for the
-/// rationale. `repr_type_id` is the first encountered `ResolvedType::Function`
-/// `TypeId` with this signature; synthesis uses it to build the stub's `&self`
-/// type via `tt.make_ref(repr_type_id)`. Any `TypeId` with the same signature
-/// would work — the choice is deterministic-by-iteration-order so two
-/// compiles produce byte-identical output.
+/// Canonical `Fn` signature for dispatch-stub synthesis, keyed by
+/// `(arity, return_type)` alone — see [`collect_parameterized_types`].
+/// `repr_type_id` is the first `ResolvedType::Function` seen with this
+/// signature, used to build the stub's `&self` type. Any id with the signature
+/// would do; taking the first makes two compiles byte-identical.
 struct FnSignature {
     repr_type_id: TypeId,
     arity: usize,
@@ -5887,16 +5794,8 @@ fn generate_enum_eq_fn(
     )
 }
 
-/// Generate `EnumName^Ord::cmp(&self, &Self) -> Ordering`
-///
-/// Body:
-/// ```text
-/// let a = *self;
-/// let b = *other;
-/// if a < b { return Ordering::Less; }
-/// if a > b { return Ordering::Greater; }
-/// return Ordering::Equal;
-/// ```
+/// Generate `EnumName^Ord::cmp(&self, &Self) -> Ordering`, comparing the two
+/// dereferenced discriminants and returning `Less` / `Greater` / `Equal`.
 fn generate_enum_ord_fn(
     module_source: &ModuleSource,
     enum_name: &str,
@@ -6286,17 +6185,9 @@ fn field_access_local(
     )
 }
 
-/// Generate `StructName^Ord::cmp(&self, &Self) -> Ordering` for non-generic structs.
-///
-/// Body (lexicographic):
-/// ```text
-/// let c = self.f0.cmp(&other.f0);
-/// if c != Ordering::Equal { return c; }
-/// let c = self.f1.cmp(&other.f1);
-/// if c != Ordering::Equal { return c; }
-/// ...
-/// return Ordering::Equal;
-/// ```
+/// Generate `StructName^Ord::cmp(&self, &Self) -> Ordering` for a non-generic
+/// struct: compare field by field in declaration order, returning the first
+/// non-`Equal` result, else `Equal`.
 fn generate_struct_ord_fn(
     struct_name: &str,
     impl_type_params: &[TirTypeParam],

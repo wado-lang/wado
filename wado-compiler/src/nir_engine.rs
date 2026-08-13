@@ -1,19 +1,8 @@
-//! NIR rewrite engine (Phase 4).
-//!
-//! A worklist-driven engine that runs local (peephole) rewrites over one
-//! function's [`Body`] to a local fixed point — visiting a node only when it
-//! might be reducible, rather than the ~31 whole-tree passes the current
-//! optimizer runs in a global fixed point.
-//!
-//! See `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
-//!
-//! The module provides the full engine: the *session* (the parent map, the
-//! local use index, and the worklist, built once per function from a `Body`),
-//! the mutating edit API (`replace_expr_kind`, `set_block_stmts`,
-//! `alloc_*`, `clone_expr`) that keeps the parent map and use index coherent,
-//! the [`Rule`] trait, and the `run` driver. Genuinely-local peephole passes
-//! (`select_lowering`, `match_to_switch`, `string_push`, `array_literal`,
-//! `elide_local`) run as rules over it.
+//! NIR rewrite engine: a worklist driving local rewrites over one function's
+//! [`Body`] to a fixed point, visiting a node only when it might be reducible
+//! rather than re-walking the whole tree per pass. Provides the session — parent
+//! map, local use index and worklist, built once per function — the edit API
+//! that keeps both coherent, the [`Rule`] trait, and `run`. See WEP 2026-06-05.
 
 use std::cell::OnceCell;
 use std::collections::VecDeque;
@@ -283,7 +272,7 @@ pub struct Engine<'a> {
 impl<'a> Engine<'a> {
     /// Build a session over `body`, reusing the caller-owned `buf`: one O(n)
     /// walk populates the parent map and use index and seeds the worklist in
-    /// post-order (see [`Engine::build_indices`]). `locals` is the owning
+    /// post-order (see `Engine::build_indices`). `locals` is the owning
     /// function's local list (see [`Engine::alloc_local`]).
     pub fn new(
         body: &'a mut Body,
@@ -315,20 +304,15 @@ impl<'a> Engine<'a> {
         engine
     }
 
-    /// Return the [`ValueId`] of `expr` if the per-function `ValueGraph`
-    /// assigned one. Returns `None` for impure / allocation-bearing /
-    /// control-flow expressions and for any `ExprId` allocated after the
-    /// cache was built. Built lazily on first call.
+    /// The `ValueId` the per-function `ValueGraph` assigned to `expr`, built
+    /// lazily; `None` for an impure, allocation-bearing or control-flow
+    /// expression, and for any `ExprId` allocated after the build.
     ///
-    /// # Maintenance contract
-    ///
-    /// The graph is built once and maintained in place — there is no rebuild.
-    /// Edits via the engine API (`replace_expr_kind` / `redirect_expr`) keep the
-    /// operands current, and a query re-derives through them
-    /// ([`Engine::maintain_pure_node`]); a structural pass that edits the arena
-    /// directly (`inline`) coarsens the touched region, and a caller that needs
-    /// the reaching values back regrows them into a scratch pool
-    /// ([`Engine::scoped_const_reads`]).
+    /// The graph is built once and maintained in place, never rebuilt: engine
+    /// edits keep the operands current and a query re-derives through them
+    /// (`Engine::maintain_pure_node`), a direct arena edit coarsens the region
+    /// it touched, and a caller needing the reaching values regrows them into a
+    /// scratch pool ([`Engine::scoped_const_reads`]).
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
         // There is no skeleton-expr → value side-table. An expr's value comes
@@ -339,17 +323,11 @@ impl<'a> Engine<'a> {
         self.maintain_pure_node(expr)
     }
 
-    /// Re-derive `expr`'s value from its operands (the sole value source now
-    /// that `value_of` is retired). Operand-determined kinds only (`Binary`,
-    /// non-address `Unary`, `Cast`) plus a read of a stable parameter; every
-    /// other kind — and any node with an unresolved operand — yields `None`.
-    /// Recurses through [`Engine::operand_value`] so a pure subtree over promoted
-    /// leaves resolves whole. Does not cache (there is no side-table to cache
-    /// into).
-    ///
-    /// The parameter base case is load-bearing: without it every leaf of an
-    /// unpromoted tree is `None`, so only all-constant trees ever resolve and
-    /// no promoted value can name a local.
+    /// Re-derive `expr`'s value from its operands — the sole value source now
+    /// that `value_of` is retired. Operand-determined kinds only, plus a read of
+    /// a stable parameter; every other kind, and any unresolved operand, gives
+    /// `None`. The parameter base case is load-bearing: without it only
+    /// all-constant trees resolve and no promoted value can name a local.
     fn maintain_pure_node(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
@@ -390,8 +368,8 @@ impl<'a> Engine<'a> {
         Some(v)
     }
 
-    /// The [`ValueId`] of an operand: the promoted value directly, or the
-    /// skeleton expr's value from the graph.
+    /// The [`ValueId`](crate::nir_value_graph::ValueId) of an operand: the
+    /// promoted value directly, or the skeleton expr's value from the graph.
     pub fn operand_value(&mut self, op: Operand) -> Option<crate::nir_value_graph::ValueId> {
         match op {
             Operand::Value(v) => Some(v),
@@ -433,16 +411,10 @@ impl<'a> Engine<'a> {
     }
 
     /// Every read whose reaching value the use site can re-emit, recovered by a
-    /// scratch re-walk (the same splice-point growth `inline` uses — no live
-    /// rebuild) and without writing anything into `value_of`.
-    ///
-    /// Covers a `Local` read of any local in `forwardable`, and — when
-    /// `include_fields` — a `FieldAccess` read. What disqualifies a local is
-    /// being address-taken or `stores`-aliased, not being an aggregate.
-    ///
-    /// The re-walk exists because SROA introduces stores after the build-once
-    /// graph was built, so the new reads carry no value. Returns `(read, value)`
-    /// pairs; empty when there is no built graph to grow.
+    /// scratch re-walk — the same splice-point growth `inline` uses, with no live
+    /// rebuild. Covers a `Local` read of anything in `forwardable`, plus a
+    /// `FieldAccess` under `include_fields`; being address-taken or
+    /// `stores`-aliased disqualifies a local, being an aggregate does not.
     pub fn scoped_const_reads(
         &mut self,
         forwardable: &IndexSet<u32>,
@@ -663,7 +635,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Supply the pure-builtin callee ids so the value-graph build classifies a
-    /// call's heap effect by `func_id`. See [`Engine::pure_builtin_callees`].
+    /// call's heap effect by `func_id`. See `Engine::pure_builtin_callees`.
     /// Must be set before the first value query to take effect (the graph is
     /// built once and reused).
     pub fn set_pure_builtin_callees(&mut self, ids: &'a IndexSet<crate::nir::FuncId>) {
@@ -725,29 +697,15 @@ impl<'a> Engine<'a> {
         let _ = local;
     }
 
-    /// Whether `local` is **single-assignment**: bound once and never written
-    /// again, which is what makes [`ValuePool::canonical_local`]'s one id per
-    /// index denote one value.
-    ///
-    /// A non-`mut` parameter qualifies by being entry-defined and unreassigned.
-    /// So does an ordinary binding that is never written again — and it is the
-    /// safer of the two under the anchor rule, since its `let` travels with any
-    /// copy of an operand naming it while a parameter's entry def does not.
-    ///
-    /// Single-assignment is *per execution of the binding's scope*: a `let` in a
-    /// loop body is written once in the text and once per iteration. So this
-    /// licenses naming the local within one iteration, and a consumer relocating
-    /// a value across an iteration boundary needs its own check — which is what
-    /// `materialise_point`'s refusal to place outside an enclosing loop is for.
-    ///
+    /// Whether `local` is **single-assignment** — bound once, never written again
+    /// — which is what makes `ValuePool::canonical_local`'s one id per index
+    /// denote one value. Holds per *execution* of the binding's scope, so a `let`
+    /// in a loop body qualifies while naming its value across an iteration needs
+    /// its own check (`materialise_point`'s refusal to place outside the loop).
     /// Read off the use index rather than `NirLocal::is_mut`, which a pass minting
-    /// a temp sets by hand while the index is maintained by the edit API. Every
-    /// half fails safe: `reads` holds every `Local` node in the arena, reachable
-    /// or not, so an assign that folded away still refuses, and refusing costs a
-    /// promotion rather than correctness.
-    ///
-    /// `extract`'s `multi_version_locals` is this predicate, so the value query
-    /// and the freeze agree by construction.
+    /// a temp sets by hand; the index holds every `Local` node whether reachable
+    /// or not, so it fails safe. `extract`'s `multi_version_locals` is this same
+    /// predicate, so the value query and the freeze agree by construction.
     pub fn local_has_one_version(&mut self, local: u32) -> bool {
         match self.local_bindings(local) {
             // No `Let`: a parameter, or a `LetDestructure` binding the use index
@@ -819,18 +777,11 @@ impl<'a> Engine<'a> {
         index
     }
 
-    /// Build the session's three indices — the parent map, the local use
-    /// index, and the post-order worklist seed — in one walk of the live tree.
-    ///
-    /// Not an arena scan: the arena never compacts, and an orphan still holding
-    /// an operand reference to a live node would overwrite that node's parent
-    /// edge, so a rule would edit the orphan while the live tree kept the stale
-    /// shape (seen as `copy_prop` stranding a read on a dropped binding).
-    /// Within the live tree two parents is corruption — an edit shared an id
-    /// instead of moving the kind (`become_expr`) — hence the panic.
-    ///
-    /// Parents and uses are recorded on the way down, the worklist on the way
-    /// up, so leaf reductions are enqueued before the contexts that fold them.
+    /// Build the session's three indices — parent map, local use index, and
+    /// post-order worklist seed — in one walk of the live tree. Not an arena
+    /// scan: the arena never compacts, and an orphan still referencing a live
+    /// node would overwrite its parent edge. Parents and uses are recorded
+    /// descending, the worklist ascending, so leaves fold before their contexts.
     fn build_indices(&mut self) {
         let mut stack = std::mem::take(&mut self.buf.walk_stack);
         let mut children = std::mem::take(&mut self.buf.walk_children);
@@ -1019,15 +970,10 @@ impl<'a> Engine<'a> {
     }
 
     /// Drop the memoized census unless this edit provably cannot have moved it.
-    ///
-    /// An interned value is immutable, so only a change to which operands are
-    /// reachable moves the answer. An empty census survives removal — nothing
-    /// can conjure a read — and survives an attach unless something local-naming
-    /// is waiting: a node allocated detached and spliced in later can be missed
-    /// by a fill in between, which is what `pending_local_naming` covers. A
-    /// non-empty census can shrink as well as grow, so any edit drops it.
-    ///
-    /// Why the empty case earns the special handling: WEP, standing invariants.
+    /// An interned value is immutable, so only a change in which operands are
+    /// reachable moves the answer. An empty census survives a removal — nothing
+    /// conjures a read — and survives an attach unless something local-naming is
+    /// pending. A non-empty one can shrink as well as grow, so any edit drops it.
     fn census_note_structure(&mut self) {
         if self.pending_local_naming.get()
             || self.promoted_reads.get().is_some_and(|c| !c.is_empty())
@@ -1195,19 +1141,11 @@ impl<'a> Engine<'a> {
         true
     }
 
-    /// Edit API: promote `src`'s node content (kind + type + span) into `dst`,
-    /// leaving `src` a dead `Unit`. The arena analogue of `*dst = *src` when a
-    /// rewrite collapses a wrapper onto a nested node it contains — e.g.
-    /// `{ expr; }` → `expr`, or `label: { break label: val }` → `val`.
-    ///
-    /// `dst`'s former subtree is discarded. As with [`set_block_stmts`], this
-    /// does not deep-unregister `Local` mentions inside that discarded subtree:
-    /// the only way a stale mention matters is `is_local_read`, where an extra
-    /// (dead) mention is conservative — it can keep a binding alive, never drop
-    /// a live one. Callers use this to lift a nested node whose discarded
-    /// siblings carry no live reads (every production caller in
-    /// `const_branch_prune` promotes the sole meaningful child of a wrapper).
-    /// `src`'s own mention is moved off `src` so it is not left dangling.
+    /// Edit API: promote `src`'s content into `dst`, leaving `src` a dead `Unit`
+    /// — the arena analogue of `*dst = *src` when a rewrite collapses a wrapper
+    /// onto a node it contains (`{ expr; }` → `expr`). `dst`'s former subtree is
+    /// discarded without deep-unregistering its `Local` mentions: a stale one
+    /// only reaches `is_local_read`, where an extra dead mention is conservative.
     pub fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         if dst == src {
             return;

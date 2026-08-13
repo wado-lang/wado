@@ -1,25 +1,8 @@
-//! Multi-module resolution orchestration.
-//!
-//! Resolution runs in two phases:
-//!
-//! - [`Elaborator::annotate_modules`] collects decl-level type information
-//!   (struct field maps, variant cases, flags, newtypes, resource methods)
-//!   and interns every declaration in the shared [`TypeTable`]. It also
-//!   populates [`TypeTable::type_by_symbol`]/[`TypeTable::symbol_by_type`]
-//!   so LSP queries can resolve a [`AstId`](crate::ast::AstId) to a decl-backed type
-//!   without running TIR lowering. The output is an [`AnnotateState`] that
-//!   both `build_tir` and the LSP consume.
-//! - [`Elaborator::build_tir_from_state`] reads that state and produces one
-//!   [`TirModule`] per source module. It also extends the per-module
-//!   [`super::sem::ModuleSemantics`] entries on `state.module_semantics`
-//!   with the body-walk results (use→def edges, local symbols, local
-//!   types), and new types created during lowering (anonymous structs,
-//!   monomorphic instances) are interned through the shared
-//!   `Rc<RefCell<TypeTable>>`.
-//!
-//! This split keeps the annotate phase self-contained and cheap enough to
-//! run on every `didChange` while reusing its results for the full
-//! compilation pipeline.
+//! Multi-module resolution orchestration, in two phases.
+//! [`Elaborator::annotate_modules`] collects decl-level type information, interns
+//! every declaration in the shared [`TypeTable`], and produces the
+//! [`AnnotateState`] both the LSP and `build_tir` consume;
+//! [`Elaborator::build_tir_from_state`] reads it back for one [`TirModule`] each.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -47,24 +30,10 @@ use super::types::{
 use super::tysys::TypeSystem;
 
 /// Analysis state produced by [`Elaborator::annotate_modules`] and consumed by
-/// [`Elaborator::build_tir_from_state`].
-///
-/// The shared [`TypeSystem`] internals (type arena, decl maps, registries)
-/// are reference-counted so per-module elaborators can clone them cheaply.
-/// The [`TypeTable`] itself remains behind `Rc<RefCell<…>>` because lowering
-/// interns additional types (anonymous structs, monomorphic instances) into
-/// the same table.
-///
-/// Per-module semantic facts (use→def edges, local symbols, decl tables,
-/// import context) live in [`Self::module_semantics`] as a `IndexMap` of
-/// [`super::sem::ModuleSemantics`]. Each entry is owned by exactly one
-/// place at a time — the driver hands the entry to the body walk via
-/// `swap_remove` + `insert`, so no shared-mutability plumbing is needed
-/// (WEP 2026-05-26).
-///
-/// `AnnotateState` is slated to dissolve: its contents redistribute into
-/// [`super::tysys::TypeSystem`] (pipeline-wide), per-module
-/// [`super::sem::ModuleSemantics`] instances, and driver locals.
+/// [`Elaborator::build_tir_from_state`]. The [`TypeSystem`] internals are
+/// reference-counted so per-module elaborators clone them cheaply, and the
+/// [`TypeTable`] stays behind `Rc<RefCell<…>>` because lowering interns into it.
+/// Each [`Self::module_semantics`] entry is owned by one place at a time.
 pub(crate) struct AnnotateState {
     /// Pipeline-wide type knowledge: the type arena, decl-interned type
     /// tables, registries, included-files map, and read-only caches
@@ -85,16 +54,11 @@ pub(crate) struct AnnotateState {
     /// so a `TirModule`'s position in the result map matches the
     /// dependency order downstream phases expect.
     pub(crate) sorted_sources: Vec<ModuleSource>,
-    /// Per-module semantic facts produced by the elaborator. One entry per
-    /// loaded module. Stdlib entries are seeded from the snapshot in
-    /// [`Self::annotate_modules`]; per-compile entries are produced by the
-    /// body walk in [`Self::build_tir_from_state`].
-    ///
-    /// Replaces the previous trio of `Rc<RefCell<…>>` maps
-    /// (`references` / `local_symbols` / `local_types`) — each module's
-    /// data now lives in its own owned [`super::sem::ModuleSemantics`], so
-    /// the body walk's `&mut` access stays disjoint across modules and the
-    /// shared-mutability plumbing disappears (WEP 2026-05-26).
+    /// Per-module semantic facts, one entry per loaded module: stdlib entries
+    /// seeded from the snapshot in [`Self::annotate_modules`], the rest produced
+    /// by the body walk in [`Self::build_tir_from_state`]. Each module owns its
+    /// own [`super::sem::ModuleSemantics`], so the walk's `&mut` access stays
+    /// disjoint and needs no shared-mutability plumbing.
     pub(crate) module_semantics: IndexMap<ModuleSource, super::sem::ModuleSemantics>,
     /// Kiln invocation redirects consulted by `resolve_import` call sites
     /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].
@@ -352,18 +316,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // Newtype pre-pass: resolve every module's concrete newtypes (and
-        // record generic-newtype defs) BEFORE any struct field is resolved.
-        //
-        // Newtypes are not name-registered in the first pass (unlike structs
-        // / variants / enums), so a struct field that references a newtype
-        // defined in another module would otherwise resolve to `unknown`
-        // whenever that module is processed later in `modules` order — e.g. a
-        // user `struct Color { v: f32x4 }` resolved before `core:simd`'s
-        // `pub type f32x4 = v128` is registered. Resolving all newtypes up
-        // front removes the ordering dependency. Newtype bases reference
-        // primitives or structs (name-registered above); newtype→newtype
-        // chains across modules are resolved in dependency order by repeating
+        // Newtype pre-pass, before any struct field is resolved. Unlike structs
+        // and variants, newtypes are not name-registered in the first pass, so a
+        // field referencing one from a module processed later would resolve to
+        // `unknown`. Newtype bases name primitives or structs, already
+        // registered; a cross-module newtype→newtype chain resolves by repeating
         // to a fixpoint.
         loop {
             let mut newly_resolved = false;
@@ -1137,18 +1094,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             module_semantics.entry(ms.clone()).or_default();
         }
         if let Some(snap) = snapshot {
-            // Seed each stdlib module's per-module `types` facts from the
-            // snapshot's annotate state. The flattened `snap` maps below carry
-            // only the facts `semantics_of` drains into `Semantics`
-            // (references, local_*, expression_types, method_dispatch,
-            // coercions, desugars — all empty in `snap_state` after the drain).
-            // The rest — `function_effects`, `effect_ops`, `fn_param_types`,
-            // `fn_return_types`, `method_names`, static / operator / from / for-of
-            // dispatch, `struct_field_types`, … — live only here, and the
-            // Semantics-based effect check needs them for stdlib (callee
-            // effects and the effect→resource propagation closure). Cloning the
-            // whole `types` keeps the two sources in sync; the drained fields
-            // are then re-seeded from the flattened `snap` maps below.
+            // Seed each stdlib module's `types` facts from the snapshot. The
+            // flattened `snap` maps below carry only what `semantics_of` drained
+            // into `Semantics`; signatures, effects and the dispatch maps live
+            // only here, and the effect check needs them for stdlib. The drained
+            // fields are re-seeded from `snap` afterwards.
             if let Some(snap_state) = snapshot_state {
                 for (ms, snap_sem) in &snap_state.module_semantics {
                     if let Some(sem) = module_semantics.get_mut(ms) {
@@ -1159,17 +1109,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                 }
             }
-            // Snapshot keys must always reference modules in the current
-            // compile's `modules` set — the loader's implicit-modules pass
-            // pulls in the snapshot's stdlib closure on every compile. Use
-            // `get_mut` so a divergence shows up as a `debug_assert` failure
-            // rather than silently creating phantom `ModuleSemantics` entries
-            // that LSP would later flatten into `Semantics::references`.
-            // Snapshot ids route back to a per-module `ModuleSemantics` via
-            // the snapshot's `AstIdSpace → ModuleSource` registry: stdlib
-            // ASTs are parsed once per process and shared, so the snapshot's
-            // spaces are the current compile's spaces. A miss shows up as a
-            // `debug_assert` failure rather than silently dropping facts.
+            // A snapshot id routes back to a per-module `ModuleSemantics` through
+            // the snapshot's `AstIdSpace → ModuleSource` registry: stdlib ASTs
+            // are parsed once per process and shared, so its spaces are this
+            // compile's. Every key must name a module in the current `modules`
+            // set, so `get_mut`'s miss fails a `debug_assert` rather than minting.
             let snapshot_invariant =
                 "snapshot id must belong to a module in the current compile's loaded set";
             for (use_id, def_key) in &snap.references {
@@ -1301,16 +1245,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Run the per-module decl pass over every module, then the body walk
-    /// (populating each `ModuleSemantics` with facts), and — when
-    /// `build_tir` is set — reify each module to its final [`TirModule`].
-    /// Errors are collected in the logger; returns [`Bail`] if any module
-    /// failed.
-    ///
-    /// The LSP path passes `build_tir = false`: it needs only the recorded
-    /// facts (use→def edges, types, dispatch) and never reads TIR, so reify and
-    /// the stdlib-snapshot `TirModule` rehydration are skipped and the returned
-    /// map is empty. The batch path (and stdlib-snapshot build) passes `true`.
+    /// Run the per-module decl pass, then the body walk that populates each
+    /// `ModuleSemantics`, and — under `build_tir` — reify each module to its
+    /// [`TirModule`]. Errors collect in the logger; [`Bail`] if any module
+    /// failed. The LSP path passes `false`, needing only the recorded facts, and
+    /// gets an empty map back.
     pub(crate) fn build_tir_from_state(
         state: &mut AnnotateState,
         symbols: &'a SymbolTable,
@@ -1433,15 +1372,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
 
             // Take this module's `ModuleSemantics` out of `state` so the
-            // elaborator can own it for the body walk. The map entry was
-            // pre-populated in `annotate_modules` for every `modules.keys()`
-            // (and `sorted_sources` is derived from `modules`), so the entry
-            // is guaranteed to exist; `expect` rather than `unwrap_or_default`
-            // surfaces any future divergence between `sorted_sources` and
-            // `module_semantics.keys()` loudly. Any bindings the snapshot
-            // contributed survive in the taken instance. We seed the
-            // imports / decls populated above and reinstall the populated
-            // instance after `resolve_module` returns.
+            // elaborator owns it for the body walk, then reinstall it after
+            // `resolve_module` returns. `annotate_modules` pre-populated an
+            // entry per module, so `expect` rather than `unwrap_or_default`
+            // surfaces any divergence from `sorted_sources` loudly.
             let mut sem = state
                 .module_semantics
                 .swap_remove(module_source)
@@ -1648,16 +1582,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         logger.ok_or_bail(result)
     }
 
-    /// Intern every declaration (struct/enum/variant/resource) in the type
-    /// table so that `find_decl_type_by_name` returns a `TypeId` for every
-    /// declared symbol. Flags and newtypes are already interned during the
-    /// annotate second sub-pass, so this covers only the remaining four kinds.
-    ///
-    /// Generic structs with type parameters use the mangled monomorphic form
-    /// at each usage site; the base decl is interned here with the canonical
-    /// name so `register_symbol_key_type_indices` can resolve the owning
-    /// symbol. Monomorphizations created during lowering are separate
-    /// `TypeId`s and do not collide with this base entry.
+    /// Intern every struct / enum / variant / resource declaration so
+    /// `find_decl_type_by_name` answers for each declared symbol — flags and
+    /// newtypes are already interned by the annotate sub-pass. A generic struct's
+    /// base decl is interned under its canonical name, which
+    /// `register_symbol_key_type_indices` resolves against.
     fn intern_all_decl_types(
         modules: &IndexMap<ModuleSource, Module>,
         all_struct_fields: &IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
@@ -1709,16 +1638,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Populate `TypeTable::type_by_symbol` / `symbol_by_type` by walking every
-    /// type-declaring symbol and looking up the `TypeId` the elaborator created
-    /// for it.
-    ///
-    /// This runs as a post-pass over the whole symbol table rather than being
-    /// instrumented at each `make_struct` / `make_enum` / ... call site: the
-    /// decl-creation sites are spread across elaborator/module.rs,
-    /// `elaborator/type_resolution.rs`, elaborator/orchestration.rs, elaborator/call.rs,
-    /// and elaborator/expr.rs, and threading a `AstId` through every one of
-    /// them would churn ~40 call sites. The symbol-table walk is O(symbols) and
-    /// touches only declarations, so the cost is negligible.
+    /// type-declaring symbol and looking up the `TypeId` minted for it. A
+    /// post-pass rather than instrumentation at each `make_*` call site: those
+    /// are spread across five elaborator modules, and threading an `AstId`
+    /// through all of them would churn ~40 sites for a walk that is O(symbols).
     fn register_symbol_key_type_indices(
         symbols: &SymbolTable,
         type_table: &Rc<RefCell<TypeTable>>,
@@ -3314,7 +3237,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .collect();
                     // A generic newtype (`type MyArray<T> = List<T>`)
                     // resolves to a `Newtype` over the instantiated base,
-                    // mirroring `type_resolution.rs:418`. Without this it
+                    // mirroring `type_resolution`. Without this it
                     // falls through to `UNKNOWN`, the newtype's inherited
                     // base methods (`MyArray<i32>::len` → `List<i32>::len`)
                     // never resolve, and monomorphization can't reach them.
@@ -3474,7 +3397,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             // A variadic type-pack spread `..T` resolves to a `TypePack`
             // keyed by the param's positional index, mirroring the instance
-            // resolver's `trait_ctx.type_params` lookup (type_resolution.rs:103).
+            // resolver's `trait_ctx.type_params` lookup.
             // Without this arm a `[..T]` parameter resolves its element to
             // `UNKNOWN`, so a generic tuple method (`Tuple<..T>^Eq::eq`)
             // monomorphizes against `Tuple<unknown>` and never registers at

@@ -75,17 +75,11 @@ fn collect_let_names(body: &Body, names: &mut IndexMap<u32, String>, block: Bloc
     }
 }
 
-/// Pre-compute the WIR-side name for every TIR local index, applying the
-/// same shadow / param-collision rules `local_name` used to compute on the
-/// fly. The live formulation iterated `params` and the entire `local_names`
-/// map per call, which is O(N) per local reference; doing it once up front
-/// keeps `local_name` to an O(1) hash lookup at every visit site.
-///
-/// Rules (mirrored from the original `local_name`):
-/// - When two params share a raw name, every such param is suffixed with
-///   `_{local_index}`.
-/// - A non-param local that shadows a param-or-let keeps the original
-///   name unchanged on the param/let and suffixes the non-param.
+/// Pre-compute the WIR-side name for every TIR local index, once, so
+/// [`FunctionTranslator::local_name`] is an O(1) lookup rather than a scan of
+/// `params` and `local_names` per reference. Two params sharing a raw name are
+/// both suffixed with `_{local_index}`; a non-param local shadowing a param or
+/// let takes the suffix alone, leaving the shadowed name untouched.
 fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> IndexMap<u32, String> {
     let param_indices: IndexSet<u32> = params.iter().map(|p| p.local_index).collect();
 
@@ -125,27 +119,11 @@ fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> Inde
     out
 }
 
-/// Register canonical closure wrapper functions for all closure functors.
-/// Must be called before `translate_function_bodies` so wrappers are available
-/// for `ClosureToCanonical` references.
-///
-/// For each reachable functor we register three wrappers — one per
-/// vtable slot in `CanonicalClosure_K`:
-///
-/// 1. `__closure_wrapper_N(env, args...) -> ret` — refcasts `env` to
-///    `&__Closure_N` and forwards to `__call`.
-/// 2. `__closure_inspect_wrapper_N(env, formatter)` — refcasts both
-///    args and forwards to `__Closure_N^Inspect::inspect`.
-/// 3. `__closure_inspect_alt_wrapper_N(env, formatter)` — refcasts
-///    both args and forwards to `__Closure_N^InspectAlt::inspect_alt`.
-///
-/// The per-functor `__Closure_N^Inspect` / `InspectAlt` impls are
-/// synthesised in lower (Phase 2). For non-inspectable signatures the
-/// canonical struct uses the slim `{ env, func }` schema and only the
-/// call wrapper is registered; the `inspect` / `inspect_alt` wrappers
-/// don't exist and the corresponding fields aren't on the struct, so
-/// nothing has to be filled in. For inspectable signatures all three
-/// wrappers are registered and reach the per-functor impls.
+/// Register one wrapper per `CanonicalClosure_K` vtable slot for each reachable
+/// functor — `__closure_wrapper_N` forwarding to `__call`, plus
+/// `__closure_inspect_wrapper_N` / `_alt_` forwarding to the per-functor
+/// `^Inspect` impls — each refcasting its args first. Must run before
+/// `translate_function_bodies`, which resolves `ClosureToCanonical` against it.
 pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
     use crate::wir::WirType;
 
@@ -469,18 +447,11 @@ fn register_call_wrapper(
     ctx.register_function(func, None)
 }
 
-/// Build an inspect / `inspect_alt` wrapper for a functor.
-///
-/// The wrapper's external signature is fixed by the canonical inspect
-/// callback type `(env: ref null struct, formatter: ref null struct)`,
-/// so the function-table slot type stays stable across DAE shrinkage on
-/// the per-functor impl. Internally, we look up the impl's surviving
-/// params and forward only the matching wrapper-locals: `self` (env) is
-/// fed by `__typed_env` (refcast of `__env`), `f` (formatter) is fed by
-/// `__typed_formatter`. Either or both refcasts are skipped when the
-/// corresponding param has been DAE'd. If the impl was DCE'd entirely
-/// the body falls back to `Unreachable` — the slot stays populated to
-/// keep the canonical struct schema consistent.
+/// Build an inspect / `inspect_alt` wrapper for a functor. Its external
+/// signature is fixed at `(env, formatter)` by the canonical callback type, so
+/// the function-table slot stays stable across DAE shrinkage on the impl: only
+/// surviving params are forwarded. A DCE'd impl leaves an `Unreachable` body,
+/// keeping the slot populated so the canonical schema holds.
 #[allow(clippy::too_many_arguments)]
 fn register_inspect_wrapper(
     ctx: &mut WirContext<'_>,
@@ -653,22 +624,11 @@ fn register_inspect_wrapper(
     ctx.register_function(func, None)
 }
 
-/// Build the WIR body for a `FunctionKind::FnCanonicalDispatch`
-/// stub: cast `self` to the shared `$canonical_inspectable_base`
-/// supertype, then `call_ref (struct.get base $slot self) (self.env,
-/// f)` where `$slot` is `inspect` or `inspect_alt` depending on
-/// `trait_kind`.
-///
-/// Casting to the shared base — instead of one specific
-/// `CanonicalClosure_K` per `(arity, return_type)` — lets the same
-/// dispatch stub serve every parameter shape with that signature
-/// pair; without it the cast would trap whenever a runtime value
-/// belonged to a different per-signature canonical struct.
-///
-/// Returns `None` when no inspectable canonical struct has been
-/// registered: in that case the dispatch stub is unreachable from any
-/// emitted closure value (every canonical struct is slim `{ env, func
-/// }`), so leaving the bodyless TIR placeholder in place is fine.
+/// Build the WIR body for a `FunctionKind::FnCanonicalDispatch` stub: cast
+/// `self` to the shared `$canonical_inspectable_base`, then
+/// `call_ref (struct.get base $slot self) (self.env, f)`. The cast targets the
+/// shared base rather than one `CanonicalClosure_K`, so a single stub serves
+/// every parameter shape. `None` when no inspectable canonical struct exists.
 #[allow(clippy::needless_pass_by_value)] // signature mirrors the param-name plumbing in translate_function_bodies
 fn build_fn_canonical_dispatch_body(
     ctx: &mut WirContext<'_>,
@@ -809,26 +769,11 @@ fn else_is_empty(else_body: &Option<Vec<WirInstr>>) -> bool {
     }
 }
 
-/// Finalize `builtin::cold_path()` markers into Wasm branch hints.
-///
-/// `cold_path()` lowers to a side-effect-free [`WirInstr::ColdPath`] left in
-/// the branch body. This pass finds the enclosing conditional and wraps its
-/// condition in [`WirInstr::BranchHint`] so the emitter records a
-/// `metadata.code.branch_hint` entry. Two shapes are recognized:
-///
-///  - **In-branch**: an `if` whose then/else body carries the marker. A cold
-///    then-branch hints the condition unlikely-true (`likely = false`); a cold
-///    else-branch hints it likely-true (`likely = true`).
-///  - **Fall-through / implicit-else**: an `if cond { <diverges> }` with no
-///    `else` (or a `nop`-only else, as `if let` / `while let` lower to) whose
-///    fall-through path unconditionally reaches a marker later in the same
-///    block. The condition-false side is cold, so the condition is hinted
-///    likely-true. This covers the guard-clause idiom
-///    `if ok { return v } cold_path(); return err`, including its
-///    `if let Some(v) = … { return v } cold_path(); …` form.
-///
-/// The marker itself stays in place and emits nothing. Runs unconditionally at
-/// WIR finalization, so the hint is independent of the optimization level.
+/// Finalize `builtin::cold_path()` markers into `metadata.code.branch_hint`
+/// entries by wrapping the enclosing condition in [`WirInstr::BranchHint`]. Two
+/// shapes: a marker inside an `if` branch hints that branch unlikely, and an
+/// else-less `if cond { <diverges> }` whose fall-through reaches a marker hints
+/// the condition likely. The marker itself emits nothing.
 fn apply_cold_path_hints(instrs: &mut [WirInstr]) {
     for instr in instrs.iter_mut() {
         apply_cold_path_hints_instr(instr);
@@ -836,16 +781,11 @@ fn apply_cold_path_hints(instrs: &mut [WirInstr]) {
     hint_guard_fall_through(instrs, false);
 }
 
-/// Backward fall-through pass for the guard-clause idiom. `reaches_cold` is
-/// whether the path immediately *after* this slice unconditionally reaches a
-/// `cold_path()` marker before any non-cold divergence; the return value is the
-/// same predicate for the path *before* the slice.
-///
-/// A guard `if cond { <diverges> }` (with no/empty else) sitting in front of a
-/// cold path has a cold fall-through, so its taken branch is hinted likely. The
-/// walk descends transparent `Seq`/`Block` tails so a guard inside an `if let` /
-/// `while let` desugaring — which lowers to a `Seq`-wrapped `if … else { nop }`
-/// whose `cold_path()` sibling lives in the enclosing block — is still reached.
+/// Backward fall-through pass for the guard-clause idiom. `reaches_cold` says
+/// whether the path just *after* this slice reaches a `cold_path()` marker
+/// before any non-cold divergence; the return value says the same for the path
+/// *before* it. A guard in front of a cold path gets its taken branch hinted
+/// likely. Descends transparent `Seq`/`Block` tails, so desugarings still match.
 fn hint_guard_fall_through(instrs: &mut [WirInstr], mut reaches_cold: bool) -> bool {
     for i in (0..instrs.len()).rev() {
         if reaches_cold
@@ -1032,16 +972,11 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// Used to skip unnecessary value copies when an immutable binding
     /// is initialized from another immutable local.
     pub(super) immutable_locals: IndexSet<u32>,
-    /// TIR locals that hold a multi-value-call result, mapped to the WIR
-    /// split locals they were unpacked into, keyed by source field name.
-    /// When a `let __tmp = Call(f)` targets a function with
-    /// `ReturnAbi::MultiValue { field_names, .. }`, we emit
-    /// `MultiValueLocalBind [__tmp_0, __tmp_1, …] = Call(f)` and record
-    /// `local_index → { field_name → (split_local_name, ty) }`.
-    /// Subsequent `FieldAccess(LocalGet(__tmp), name)` accesses read the
-    /// matching split local directly instead of `StructGet(__tmp, name)`
-    /// (which would panic at codegen since `__tmp` was never assigned a
-    /// struct ref).
+    /// TIR locals holding a multi-value-call result, mapped to the WIR split
+    /// locals they were unpacked into and keyed by field name. A later
+    /// `FieldAccess(LocalGet(__tmp), name)` reads the matching split local
+    /// instead of `StructGet(__tmp, name)`, which would panic at codegen —
+    /// `__tmp` was never assigned a struct ref.
     pub(super) multi_value_split_locals: IndexMap<u32, IndexMap<String, (String, WirType)>>,
     /// Set while lowering a call whose N results have a taker: the split locals
     /// of a `let` bind, the wildcards of a discard, or the enclosing
@@ -1059,24 +994,10 @@ pub(super) struct FunctionTranslator<'a, 'b> {
 }
 
 impl FunctionTranslator<'_, '_> {
-    /// Get the WIR local name for a given local index.
-    /// Uses the TIR variable name if available, otherwise falls back to `__local_N`.
-    ///
-    /// WIR locals are looked up by name during codegen (`current_locals` is
-    /// keyed by name in `codegen::emit::resolve_local`), so any two locals
-    /// that share a name would clobber each other's entry and silently
-    /// mis-resolve. The disambiguation rules here mirror
-    /// `wir_build::functions`'s construction of `WirFunction::param_names`:
-    ///
-    /// - When two params share a name (e.g. a synthesised closure's
-    ///   implicit `self: &__Closure` env collides with an explicit
-    ///   `self`-named param forwarded from a source method), every such
-    ///   param's name is suffixed with `_{local_index}`.
-    /// - A non-param local that shadows a param keeps the original
-    ///   collision-resolution shape: the param keeps its raw name and the
-    ///   non-param gets the `_{index}` suffix. This avoids renaming params
-    ///   just because a `let self = ...` happens to shadow them in the
-    ///   body.
+    /// The WIR local name for `index`, as [`resolve_local_names`] computed it,
+    /// falling back to `__local_N`. Codegen resolves locals by name, so two
+    /// sharing one would silently mis-resolve — hence the disambiguation there,
+    /// which mirrors `wir_build::functions`' construction of `param_names`.
     pub(super) fn local_name(&self, index: u32) -> String {
         self.resolved_local_names
             .get(&index)
@@ -1323,16 +1244,11 @@ impl FunctionTranslator<'_, '_> {
         (type_id, fields)
     }
 
-    /// Lower a `ExprKind::ArrayLiteral` to the `Array<T>` struct shape
-    /// `struct.new List<T> { repr: array.new_fixed<T>(e0, …, eN-1), used: N }`.
-    ///
-    /// `List<T>` is `{ repr: Array<T>, used: i32 }` (see
-    /// `lib/core/prelude/list.wado`); this mirrors `translate_string_literal`,
-    /// which builds the structurally identical `String { repr, used }`. The
-    /// raw `Array<T>` type is read from the struct's `repr` field, so
-    /// no element-type bookkeeping is duplicated on the NIR node. The resulting
-    /// `ArrayNewFixed` is what `wir_optimize::array::{promote_constant_arrays_to_data,
-    /// split_large_array_literals}` already consume.
+    /// Lower an `ArrayLiteral` to
+    /// `struct.new List<T> { repr: array.new_fixed<T>(e0, …), used: N }`,
+    /// mirroring the structurally identical `String { repr, used }` that
+    /// `seq_literal` builds. The element type is read off the struct's `repr`
+    /// field rather than tracked again on the NIR node.
     fn build_array_literal(
         &mut self,
         array_type_id: crate::tir::TypeId,
@@ -1392,16 +1308,11 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Translate `*r = v` for an in-place aggregate referent (struct /
-    /// `String` / `List<T>` / tuple): copy `v` into the shared handle
-    /// field by field, through two temps so each side is evaluated once.
-    ///
-    /// Statement-position deref-assigns are already expanded at lower
-    /// (`lower::translate::try_expand_deref_aggregate_assign`); this covers
-    /// the expression-position shape (`let u = (*r = v);`) that reaches WIR
-    /// as a plain `Assign { target: Deref, .. }`. Box-shaped referents never
-    /// arrive here — the lower boxing rewrite folds them to a `.value`
-    /// field assignment.
+    /// Translate `*r = v` for an in-place aggregate referent by copying `v` into
+    /// the shared handle field by field, through two temps so each side is
+    /// evaluated once. Only the expression-position shape (`let u = (*r = v);`)
+    /// reaches here — lower already expands the statement-position one, and
+    /// folds a box-shaped referent to a `.value` assignment.
     fn translate_deref_assign(&mut self, ref_expr: Operand, val: WirInstr) -> WirInstr {
         let recv = self.translate_operand(ref_expr);
         let wir_type = self.wir_type(self.operand_type_id(ref_expr));
@@ -1855,19 +1766,11 @@ impl FunctionTranslator<'_, '_> {
                             WirInstr::StructNew { fields, .. } => Some(WirInstr::Return {
                                 value: Some(Box::new(WirInstr::Seq(fields))),
                             }),
-                            // A scaffolded return value: a sequential block
-                            // (`return { let a = …; [a, b] }`, which inlining
-                            // produces when an element needs a binding), or
-                            // nested control flow (`return match { … }` /
-                            // `return if …`). `lift_struct_new_to_seq` rewrites
-                            // each leaf aggregate `StructNew` into its own
-                            // `Return { Seq(fields) }` in place, so the lifted
-                            // expression replaces the whole `Return`: a block's
-                            // tail returns explicitly, and a branch's leaf
-                            // returns before the outer one would — wrapping the
-                            // outer expression in `Return` instead would feed
-                            // the validator an empty stack for the control-flow
-                            // case.
+                            // A scaffolded return value: a sequential block, or
+                            // nested control flow. `lift_struct_new_to_seq`
+                            // turns each leaf `StructNew` into its own
+                            // `Return { Seq(fields) }`, so the lifted expression
+                            // replaces the whole `Return` rather than nesting.
                             mut other @ (WirInstr::Seq(_)
                             | WirInstr::Block { .. }
                             | WirInstr::If { .. }) => {
@@ -1972,13 +1875,6 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Translate a TIR expression to a WIR instruction.
-    ///
-    /// When the expression has type `never` (bottom type), the returned instruction
-    /// diverges.  The `Seq([instr, Unreachable])` wrapper tells the Wasm validator
-    /// that any subsequent type expectations in the same block are vacuously satisfied,
-    /// so `never`-typed sub-expressions can appear in any value position (binary
-    /// operands, struct fields, array elements, function arguments, …).
     /// Handle a `FunctionRef` that did not resolve to a generated function. A
     /// `Type^Trait::method` name is an unsatisfied trait bound that escaped
     /// earlier checks: record it and emit `Unreachable` so the build finishes
@@ -2003,6 +1899,10 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Translate a TIR expression, wrapping a `never`-typed one in
+    /// `Seq([instr, Unreachable])` so it diverges. That tells the validator any
+    /// later type expectation in the block is vacuously satisfied, which is what
+    /// lets a `never`-typed sub-expression sit in any value position.
     pub(super) fn translate_expr(&mut self, expr_id: ExprId) -> WirInstr {
         let instr = self.translate_expr_inner(expr_id);
         if self.body.exprs[expr_id].type_id == TypeTable::NEVER && !instr.ends_with_terminator() {
@@ -2023,17 +1923,11 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Translate a call's operands (receiver first, if any), erasing
-    /// unit-typed parameters from the emitted call while preserving every
-    /// argument's evaluation and the left-to-right order. A unit argument
-    /// still evaluates (`touch(p.f = 5)`, `touch(bump())`): its (void)
-    /// instruction joins the returned prelude, and every non-unit argument to
-    /// its left spills into a temp so it evaluates first. A unit argument
-    /// with no evaluation of its own — a promoted pure value or a bare local
-    /// read — is simply dropped.
-    ///
-    /// Returns `(prelude, call_args)`; wrap a non-empty prelude around the
-    /// call with [`Self::wrap_call_with_prelude`].
+    /// Translate a call's operands, receiver first, erasing unit-typed
+    /// parameters while preserving every argument's evaluation and its
+    /// left-to-right order: a unit argument that still evaluates joins the
+    /// prelude, and every non-unit argument to its left spills to a temp. Returns
+    /// `(prelude, call_args)` — wrap with [`Self::wrap_call_with_prelude`].
     pub(super) fn translate_args_erasing_unit(
         &mut self,
         ordered: &[Operand],
@@ -2888,24 +2782,11 @@ impl FunctionTranslator<'_, '_> {
     }
 }
 
-/// Recursively rewrite leaf `StructNew` nodes in the value of a `Return`
-/// statement so the function pushes its N fields onto the stack instead
-/// of constructing a heap struct. Only applied when the enclosing
-/// function has `ReturnAbi::MultiValue`. Handles:
-///
-/// - direct `StructNew` (the common `return Point { x, y }` case)
-/// - `Seq(items)` — recurse into the trailing item
-/// - `If` produced by `return if …` — recurse into both branch tails;
-///   each branch tail's `StructNew` becomes its own `Return { Seq(fields) }`
-///   and the `If`'s `result` is cleared since branches now transfer
-///   control directly
-/// - typed `Block` produced by `return match …` (`BrTable` lowering) —
-///   rewrite each `StructNew; Br depth` exit pair to `Return { Seq(fields) }`
-///
-/// `wrap_in_return = false` is the outer call (the caller's `Return`
-/// will wrap the produced `Seq`); recursive calls into branch tails use
-/// `wrap_in_return = true` so each branch transfers control before the
-/// outer (now-unused) Return would.
+/// Rewrite the leaf `StructNew` nodes of a `Return` value so the function pushes
+/// its N fields instead of building a heap struct — only for a
+/// `ReturnAbi::MultiValue` function. Recurses into a `Seq` tail, both `If`
+/// branch tails (clearing the `If`'s `result`, since branches now transfer
+/// control themselves), and each `StructNew; Br depth` exit of a `match` block.
 fn lift_struct_new_to_seq(expr: &mut WirInstr, wrap_in_return: bool) {
     match expr {
         WirInstr::StructNew { .. } => {

@@ -1,14 +1,7 @@
-//! Component Model generator — builds a Wasm Component from a core module.
-//!
-//! This module contains all Component Model wrapping logic, handling:
-//! - WASI interface imports
-//! - Memory module
-//! - Bundled modules (FTS, libm)
-//! - Canonical intrinsics
-//! - WASI function lowering
-//! - Core module instantiation
-//! - Canonical lifting for world exports
-//! - HTTP handler export
+//! Component Model generator — wraps a core module into a Wasm Component: WASI
+//! interface imports and function lowering, the memory and bundled modules,
+//! canonical intrinsics, core-module instantiation, and the canonical lifting
+//! for world exports.
 
 use super::component_context::{CmTypeKey, ComponentModelContext};
 use super::postprocess;
@@ -452,17 +445,10 @@ fn type_to_cm_primitive_with_resources(
     wado_type_to_cm_primitive(ty)
 }
 
-/// Build CM `ComponentValType` entries for tuple elements, handling `Stream<T>` and
-/// `Future<T>` elements by emitting the necessary local types into `instance_type`.
-///
-/// Returns the `ComponentValType` list ready to pass to `instance_type.defined_type().tuple(...)`.
-/// Emit a CM type definition for a Wado type, returning the `ComponentValType`.
-///
-/// Recursively defines complex CM types (stream, future, result, list, option, tuple)
-/// inline in `instance_type`. Primitives and own resources are returned directly
-/// without creating new type definitions.
-///
-/// This is the unified entry point for converting any Wado return type into a CM type.
+/// The unified entry point for converting a Wado type into a `ComponentValType`,
+/// defining any complex CM type — stream, future, result, list, option, tuple —
+/// recursively inline in `instance_type`. A primitive or own resource is returned
+/// directly, needing no new definition.
 fn emit_cm_val_type(
     ty: &Type,
     instance_type: &mut InstanceType,
@@ -1003,27 +989,11 @@ fn expose_self_owned_resources(
     }
 }
 
-/// Emit the `core:kiln/types` record/variant surface via an imported
-/// instance. Called once per `core:kiln/generator` component.
-///
-/// Structure:
-/// - Build an `InstanceType` whose interior defines `input-file`,
-///   `output-file`, `response`, `error` as records/variants
-///   and exports each one by its WIT name. The CM validator's
-///   `all_valtypes_named_in_defined` check requires records/variants
-///   referenced by a component-level export to have their original type
-///   ids in `exported_types`; the instance-wrap satisfies that because
-///   inserting exported types into the set happens as the instance's
-///   exports are processed in declaration order.
-/// - Import that instance at the component level as
-///   `core:kiln/types@0.1.0`. No runtime code is required — wasmtime
-///   satisfies the import trivially because the instance has no function
-///   members.
-/// - Alias each exported type from the instance into the component's
-///   local type index space so `emit_world_exports` and the canon
-///   `task-return` routing can reference them by `ctx.type_idx(...)`.
-/// - Also intern the component-local `result<response, error>` handler type,
-///   which the export lift and `task-return` routing resolve by structure.
+/// Emit the `core:kiln/types` record/variant surface once per
+/// `core:kiln/generator` component: define them inside an `InstanceType`,
+/// import it as `core:kiln/types@0.1.0`, and alias each exported type into the
+/// component's local index space. The instance wrap is what satisfies the
+/// validator's `all_valtypes_named_in_defined` check.
 fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentModelContext) {
     let string_vt = ComponentValType::Primitive(PrimitiveValType::String);
     let bool_vt = ComponentValType::Primitive(PrimitiveValType::Bool);
@@ -3518,16 +3488,11 @@ fn import_interface_with_resource(
     );
 }
 
-/// Import a resource-defining source interface once and alias its resource
-/// type(s) — and its `error-code`, for transmission futures — into the outer
-/// component scope. Idempotent on `source_path` (keyed on the package-qualified
-/// instance-type name, a real builder type), so repeated requests from different
-/// consumers collapse to a single import.
-///
-/// This is the single place that emits a minimal, methods-less source instance.
-/// Both the plan-driven resource-source phase and the resource-using phase's
-/// pre-import call it, so the source-instance shape and its outer aliases live
-/// in exactly one place rather than two divergent copies.
+/// Import a resource-defining source interface once and alias its resource types
+/// — and its `error-code`, for transmission futures — into the outer component
+/// scope. Idempotent on `source_path`, keyed by the package-qualified
+/// instance-type name. The single place emitting a methods-less source instance,
+/// so the plan-driven and resource-using phases cannot diverge into two copies.
 fn import_resource_source(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -3862,19 +3827,11 @@ fn import_resource_using_interfaces(
             continue;
         }
 
-        // Ensure all needed resources are imported before building the instance type.
-        // A resource may appear only in a return type (e.g., preopens::get-directories
-        // returns a list of descriptors) without any of its own methods being called.
-        // In that case Phase 1/2 would not have imported the resource-defining interface,
-        // so we do it here at component scope before entering the instance-type builder.
-        // We use package-qualified names (e.g., "filesystem-types") to avoid collisions
-        // with other interfaces that share the same short interface name (e.g., "cli/types").
-        //
-        // EXCEPTION: when the resource's source path IS this interface, we do not
-        // pre-import it. The CM spec requires `[constructor]X` / `[method]X.foo`
-        // to live in the same instance that exports the resource type `X` — so
-        // such resources must be exported directly inside the per-interface
-        // instance type emitted below, not aliased through an outer scope.
+        // Import every needed resource at component scope before entering the
+        // instance-type builder: a resource appearing only in a return type had
+        // no method call to make the earlier phases import its interface. A
+        // resource whose source path *is* this interface is skipped — the CM
+        // spec requires `[method]X.foo` to sit in the instance exporting `X`.
         for resource_name in &needed_resources {
             let Some(source) = project
                 .cm_interface_registry
@@ -4371,17 +4328,11 @@ fn lower_wasi_functions(
     }
 }
 
-/// Append one CM instance export per exported interface.
-///
-/// World exports with `from_interface_fq` populated (CLI `run`, HTTP `handle`)
-/// are grouped by that FQ — an `export Foo;` with several methods yields one
-/// world export per method sharing the FQ — into a single instance carrying
-/// every method's lifted func plus the union of the named CM types their
-/// signatures reference. Freestanding exports (no parent interface, e.g. kiln's
-/// `generate`) carry no instance; `emit_world_exports` emitted them bare.
-///
-/// Runs after `builder.finish()`, appending raw CM sections; the instance index
-/// space continues from `ctx.instance_count()`. No HTTP-specific branching.
+/// Append one CM instance export per exported interface: world exports sharing a
+/// `from_interface_fq` collapse into one instance holding every lifted func plus
+/// the named CM types their signatures reference. A freestanding export has no
+/// instance — `emit_world_exports` already emitted it bare. Runs after
+/// `builder.finish()`, so the instance index space continues from `ctx`.
 fn append_interface_instance_exports(
     component_bytes: &mut Vec<u8>,
     ctx: &ComponentModelContext,

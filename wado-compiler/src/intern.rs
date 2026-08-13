@@ -1,27 +1,12 @@
-//! Pointer-identity string interning.
+//! Pointer-identity string interning: [`InternedStr`] is an `Arc<str>` whose
+//! `Eq` / `Hash` compare pointers, so `clone` / `eq` / `hash` are O(1), and
+//! [`StringInterner`] canonicalises content into a unique `Arc<str>`.
 //!
-//! [`InternedStr`] is an `Arc<str>` newtype whose `Eq` / `Hash` are
-//! defined by pointer identity, making `clone` / `eq` / `hash` all O(1).
-//! [`StringInterner`] is a generic intern pool that canonicalises
-//! `&str` content into a unique `Arc<str>`.
-//!
-//! # Soundness contract
-//!
-//! Two `InternedStr` values compare equal iff their underlying
-//! `Arc<str>` pointers are equal. For this to coincide with content
-//! equality, every `InternedStr` that may be compared with another must
-//! share the same canonical `Arc<str>` for any given content. The crate
-//! maintains this invariant by:
-//!
-//! - constructing all `InternedStr` through a single [`StringInterner`]
-//!   pool (per logical scope, e.g. one per compilation), and
-//! - adopting any `LazyLock<Arc<str>>` statics (well-known names) into
-//!   that same pool via [`StringInterner::with_well_known_arcs`] at
-//!   construction, so `interner.intern("prelude")` returns the same
-//!   `Arc` as a statically-built [`InternedStr`] for `"prelude"`.
-//!
-//! `InternedStr::from_arc` is `pub(crate)` so external callers cannot
-//! bypass this discipline.
+//! Pointer equality coincides with content equality only while every comparable
+//! `InternedStr` shares one canonical `Arc`. The crate holds that by building
+//! them all through a single per-compilation pool and adopting the well-known
+//! `LazyLock<Arc<str>>` statics into it at construction;
+//! `InternedStr::from_arc` is `pub(crate)` so nothing outside can bypass it.
 
 use crate::hashmap::IndexSet;
 use std::fmt;
@@ -95,16 +80,11 @@ impl PartialEq<&str> for InternedStr {
     }
 }
 
-/// Generic pointer-identity string interner.
-///
-/// Owns the canonical `Arc<str>` for each interned content; calls to
-/// [`Self::intern`] with equal `&str` return pointer-equal
-/// [`InternedStr`] values. Clones of an `InternedStr` are O(1) refcount
-/// bumps and never reallocate the underlying buffer.
-///
-/// To share identity with externally-defined `LazyLock<Arc<str>>`
-/// statics, construct the interner via [`Self::with_well_known_arcs`]
-/// so those `Arc`s are adopted up-front.
+/// Generic pointer-identity string interner, owning the canonical `Arc<str>` per
+/// content: [`Self::intern`] on equal `&str` returns pointer-equal
+/// [`InternedStr`]s, and cloning one is a refcount bump. To share identity with
+/// externally-defined `LazyLock<Arc<str>>` statics, construct through
+/// [`Self::with_well_known_arcs`] so those `Arc`s are adopted up front.
 #[derive(Debug)]
 pub struct StringInterner {
     strings: IndexSet<Arc<str>>,

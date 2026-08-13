@@ -1,61 +1,19 @@
-//! [`TypeAnnotations`] — per-[`crate::ast::AstId`] type annotations
-//! and dispatch decisions recorded during the body walk.
-//!
-//! # Membership rule
-//!
-//! Add a field here when it stores a fact keyed by an [`AstId`] produced
-//! as a *decision* by the body-level elaborator: the resolved type of an
-//! expression, the chosen method dispatch target, the chosen coercion, the
-//! desugar kind of a TIR-direct rewrite. A bare `AstId` suffices because
-//! ids are globally unique (`(AstIdSpace, local)`) — cross-module inlined
-//! AST (const bodies, default arguments, trait defaults) carries its own
-//! ids and cannot collide with the consumer's. This is what
-//! [`super::super::reify`] reads in lieu of re-running inference.
-//!
-//! Facts that derive purely from the AST (spans, position lookup) belong
-//! on [`crate::ast_index::AstIndex`], not here. Decl-level facts (function
-//! return types, generic-parameter tables) belong on
-//! [`super::decls::ModuleDecls`].
-//!
-//! The map set is every decision reify cannot re-derive from the AST:
-//! resolved types (`local_types`, `expression_types`), dispatch targets
-//! (`method_dispatch`, `operator_dispatch`, `for_of_iterator`), the chosen
-//! `coercions`, the `desugars` tag for each TIR-direct rewrite (`assert`,
-//! `matches`, comparison chains, `for x of …`, `while`, compound
-//! assignment), `generic_instantiations`, and the capture tables
-//! (`closure_captures`, `assert_captures`). See
-//! `wep-2026-05-26-elaborator-rearchitecture.md` §`Reify — mechanical`.
+//! [`TypeAnnotations`] — the per-[`crate::ast::AstId`] *decisions* the body walk
+//! made and [`super::super::reify`] reads in lieu of re-running inference:
+//! resolved types, dispatch targets, coercions, desugar tags, generic
+//! instantiations, capture tables. Facts derivable from the AST alone belong on
+//! [`crate::ast_index::AstIndex`], decl-level ones on [`super::decls::ModuleDecls`].
 
 use crate::ast::{self, AstId};
 use crate::hashmap::IndexMap;
 use crate::name::Receiver;
 use crate::tir::{FunctionRef, TypeId};
 
-/// Method-dispatch decision recorded by the body walk for a
-/// [`crate::ast::MethodCallExpr`].
-///
-/// `function_ref` captures the resolved target (module, mangled name,
-/// monomorph info, and method-name metadata) so `reify` can emit the
-/// method [`crate::tir::TirExprKind::Call`] without re-running
-/// trait lookup, blanket-impl selection, or method-name mangling.
-/// `self_kind` carries the receiver-adjustment decision (`self` / `&self`
-/// / `&mut self`) so reify can drive `adjust_receiver_for_self_kind` with
-/// the same kind that annotate used.
-///
-/// Short-circuiting paths inside
-/// [`super::super::Elaborator::resolve_method_call_with`] (tuple `.len()`
-/// / `.zip()`, the static-method-as-instance error) do *not* leave an
-/// entry here — they rewrite the call into a non-method-call TIR shape
-/// that reify recognises from the receiver type alone. The synthetic
-/// for-of `.into_iter()` / `.next()` dispatches also skip recording
-/// because they have no source-level `MethodCallExpr` to attach to.
-///
-/// [`Self::is_ref_impl`]: receiver adjustment for `&self` /
-/// `&mut self` requires not only `self_kind` but also whether the method
-/// was found on a reference-type impl (`impl Trait for &T`), because such
-/// impls take an *extra* layer of `&` on the receiver. The flag is the
-/// output of `lookup_method_info` and the input reify feeds to
-/// `adjust_receiver_for_self_kind`.
+/// Method-dispatch decision for a [`crate::ast::MethodCallExpr`]:
+/// `function_ref` is the resolved target, so reify emits the call without
+/// re-running trait lookup or mangling, and `self_kind` plus `is_ref_impl` are
+/// what `adjust_receiver_for_self_kind` needs. Short-circuiting paths leave no
+/// entry: they rewrite the call into a shape reify reads off the receiver type.
 #[derive(Clone)]
 pub(crate) struct MethodDispatch {
     pub(crate) function_ref: FunctionRef,
@@ -82,21 +40,11 @@ pub(crate) struct MethodDispatch {
     /// type makes reify emit a spurious `drop` of a value-less call →
     /// Wasm stack underflow).
     pub(crate) return_type: TypeId,
-    /// Method-level type args for the method [`crate::tir::TirExprKind::Call`]
-    /// node, in the exact form the combined walk passes to
-    /// [`super::super::Elaborator::build_tir_method_call`]. The
-    /// monomorphizer's `collect_func_instantiation_sites` keys off this
-    /// field to queue `Struct^Trait::method<Args>` instances, so it must
-    /// carry the resolved args — both explicit turbofish and
-    /// inference-recovered ones.
-    ///
-    /// Recorded separately from `function_ref.monomorph_info.method_type_args`
-    /// because the blanket-impl branch in `resolve_method_call_with`
-    /// constructs `MonomorphInfo` with `method_type_args: vec![]` even when
-    /// the call site has a non-empty turbofish — the TIR node still receives
-    /// the turbofish args (they pass straight through `build_tir_method_call`),
-    /// so reify needs its own un-zeroed copy to avoid re-resolving the AST
-    /// type-arg list against the current type-param scope.
+    /// Method-level type args for the call node, explicit turbofish and
+    /// inference-recovered alike; the monomorphizer keys off this to queue
+    /// `Struct^Trait::method<Args>` instances. Kept separate from
+    /// `function_ref.monomorph_info.method_type_args`, which the blanket-impl
+    /// branch leaves empty even for a turbofish call.
     pub(crate) method_type_args: Vec<TypeId>,
     /// True when the method takes its receiver `self` by value, so the call
     /// transfers ownership of the receiver. The resource move check reads this
@@ -143,20 +91,11 @@ pub(crate) struct CoercionChoice {
 /// Per-`AstId` type annotations recorded by the body walk.
 #[derive(Default, Clone)]
 pub(crate) struct TypeAnnotations {
-    /// Resolved [`TypeId`] for each local binding, keyed by the binding's
-    /// defining [`AstId`]. Populated alongside
-    /// [`super::bindings::ModuleBindings::local_symbols`] at every
-    /// `record_local_symbol` call. Consumed by LSP inlay hints via
-    /// [`crate::semantics::Semantics::local_type_name`] so `let x = 1` can
-    /// render the inferred `: i32` annotation without reaching into TIR.
-    ///
-    /// Part of [`ElementOverlay`]: a tuple-`for-of` body rebinds the same
-    /// pattern `AstId` to a different element type per iteration, so the
-    /// per-iteration overlay keeps each iteration's value pinned to its
-    /// own `ElementOverlay` rather than letting later iterations overwrite
-    /// earlier reads on the base map. Same applies to inner closure
-    /// params / let bindings whose inferred types depend on the iteration's
-    /// element.
+    /// Resolved [`TypeId`] per local binding, keyed by its defining [`AstId`]
+    /// and recorded alongside `local_symbols`. LSP inlay hints read it so
+    /// `let x = 1` renders `: i32` without reaching into TIR. Part of
+    /// [`ElementOverlay`]: a tuple-`for-of` body rebinds one pattern `AstId` to
+    /// a different type per iteration.
     pub(crate) local_types: IndexMap<AstId, TypeId>,
     /// Resolved [`TypeId`] for every expression visited by
     /// [`super::super::Elaborator::resolve_expr`], keyed by the
@@ -229,28 +168,17 @@ pub(crate) struct TypeAnnotations {
     /// expanded `TirHandlerBinding`s without re-running
     /// `collect_effect_impls_for_type`.
     pub(crate) handler_bindings: IndexMap<AstId, HandlerBindingFacts>,
-    /// Impl-block resolution facts. Keyed by
-    /// the [`crate::ast::ImplBlock`]'s [`AstId`]. Carries the
-    /// resolved `Self` type, the trait reference's canonical and
-    /// mangled forms, the impl's projected
-    /// [`crate::tir::TirTypeParam`] list, associated-type bindings
-    /// for in-body `Self::X` resolution, the handler-method flag
-    /// driving `resume` validation, and the ref-type-impl flag
-    /// for `&self` synthesis. See [`ImplFacts`].
-    ///
-    /// Recorded in the `Item::Impl` arm of `elaborator.rs`; read by reify
-    /// in `reify_impl`.
+    /// Impl-block resolution facts keyed by the [`crate::ast::ImplBlock`]'s
+    /// [`AstId`] — resolved `Self` type, canonical and mangled trait reference,
+    /// projected type-param list, associated-type bindings, and the handler /
+    /// ref-impl flags. See [`ImplFacts`]. Recorded in the `Item::Impl` arm,
+    /// read by `reify_impl`.
     pub(crate) impl_facts: IndexMap<AstId, ImplFacts>,
-    /// Resolved `with` clause for each function / method declaration
-    /// Keyed by the [`crate::ast::Function`]'s or
-    /// [`crate::ast::Method`]'s [`AstId`]. The body walk calls
-    /// [`super::super::Elaborator::resolve_effects`] while effect
-    /// parameters are still in scope and stashes the result here so
-    /// reify can drop the `Vec<EffectRef>` straight into
-    /// [`crate::tir::TirFunction::effects`] without re-running
-    /// effect-param / import / canonicalisation lookups (none of which
-    /// reify has the transient `current_effect_param_decls` scope to
-    /// reproduce faithfully).
+    /// Resolved `with` clause per function / method declaration. The body walk
+    /// resolves it while the effect parameters are still in scope and stashes
+    /// the result here, so reify drops the `Vec<EffectRef>` straight into
+    /// [`crate::tir::TirFunction::effects`] — it has no
+    /// `current_effect_param_decls` scope to redo the lookup faithfully.
     pub(crate) function_effects: IndexMap<AstId, Vec<crate::tir::EffectRef>>,
     /// Declared (pre-erasure) return [`TypeId`] for every `async`
     /// function / method, keyed by the function's [`AstId`]. An async
@@ -261,27 +189,16 @@ pub(crate) struct TypeAnnotations {
     /// for resource-store inference over the return type (e.g. an async
     /// `handle` returning `Result<Response, _>` must surface `Response`).
     pub(crate) function_task_returns: IndexMap<AstId, TypeId>,
-    /// Resolved static-method call dispatch
-    /// (`Type::method(args)` / `builtin::fn(args)` shape) recorded by
-    /// the body walk. Keyed by the [`crate::ast::CallExpr`]'s [`AstId`].
-    /// Carries the resolved [`crate::tir::FunctionRef`] (with mangled
-    /// name, `module_source`, `method_info`, and any monomorphisation
-    /// info) plus the per-arg `is_mut` flags the elaborator drained
-    /// from the looked-up parameter signature. Reify reads this to
-    /// reproduce the same TIR `Call` shape without re-running
-    /// `locate_static_method_impl` / `MethodName::format_local` and
-    /// without consulting the trait-impl index.
+    /// Resolved static-method call dispatch (`Type::method(args)` /
+    /// `builtin::fn(args)`), keyed by the [`crate::ast::CallExpr`]'s [`AstId`]:
+    /// the resolved [`crate::tir::FunctionRef`] plus the per-arg `is_mut` flags
+    /// drained from the looked-up signature, so reify rebuilds the `Call` without
+    /// `locate_static_method_impl` or the trait-impl index.
     pub(crate) static_method_dispatch: IndexMap<AstId, StaticMethodDispatch>,
-    /// `SequenceLiteralBuilder` coercion data for a tuple literal
-    /// coerced into an `List<T>` / user-defined sequence type. Keyed
-    /// by the `Expr::TupleLiteral`'s [`AstId`]. The
-    /// `try_coerce_tuple_to_sequence` path produces a desugar block
-    /// (`__seq_lit: { let __b = Builder::new_literal(N); __b.push_literal(...); ...; break __seq_lit: __b.build(); }`)
-    /// whose shape depends on impl-lookup decisions reify cannot
-    /// reproduce from the AST alone. Recording the resolved trait
-    /// info here lets reify rebuild the same desugar deterministically
-    /// — the `__b` local lands at the same `FunctionContext` index
-    /// reify reserves for it (the walk-order invariant).
+    /// `SequenceLiteralBuilder` coercion data for a tuple literal coerced into a
+    /// `List<T>` or user-defined sequence, keyed by the `Expr::TupleLiteral`'s
+    /// [`AstId`]. The desugar block `try_coerce_tuple_to_sequence` produces
+    /// depends on impl-lookup decisions reify cannot redo from the AST alone.
     pub(crate) sequence_coercions: IndexMap<AstId, SequenceCoercionFacts>,
     /// `KeyValueLiteralBuilder` coercion data for an anonymous
     /// struct literal coerced into a map-style type. Keyed by the
@@ -297,33 +214,17 @@ pub(crate) struct TypeAnnotations {
     /// [`crate::ast::AstId`] (the `?` expr / static-call expr). See
     /// [`FromCallFacts`].
     pub(crate) from_call_facts: IndexMap<AstId, FromCallFacts>,
-    /// `IndexAssign` trait dispatch decisions for `arr[i] = v` and
-    /// `arr[i] OP= v` shapes whose target is an `Expr::Index`. Keyed
-    /// by the **inner [`crate::ast::IndexExpr`]'s [`AstId`]** (the
-    /// `target` of the surrounding `Expr::Assign` /
-    /// `Expr::CompoundAssign`). The recording sites live in
-    /// `Elaborator::assign_to_target` so both `Expr::Assign` and the
-    /// compound-assign desugar feed the same map. Note that
-    /// [`Self::operator_dispatch`] keyed by the same `AstId` carries
-    /// the *read-side* `IndexValue` / `Index` dispatch — the two
-    /// annotations cohabit because an `Expr::Index` is read in
-    /// `let x = arr[i]` and written in `arr[i] = v`, and the
-    /// elaborator dispatches each shape to a different trait.
+    /// `IndexAssign` dispatch for `arr[i] = v` and `arr[i] OP= v`, keyed by the
+    /// *inner* [`crate::ast::IndexExpr`]'s [`AstId`] and recorded in
+    /// `assign_to_target` so both shapes feed one map. The read-side
+    /// `IndexValue` / `Index` dispatch cohabits under the same key in
+    /// [`Self::operator_dispatch`], via different traits.
     pub(crate) index_assign_dispatch: IndexMap<AstId, OperatorDispatch>,
-    /// Per-element annotation overlays for compile-time-unrolled tuple
-    /// `for-of` loops. Keyed by the [`crate::ast::ForOfStmt`]'s
-    /// [`AstId`]; the outer `Vec` holds one entry per *instantiation* of
-    /// that for-of in deterministic walk order (a nested inner for-of is
-    /// instantiated once per outer element, hence multiple entries), and
-    /// the inner `Vec` holds one [`ElementOverlay`] per tuple element.
-    ///
-    /// A tuple for-of's body is a single source sub-tree (fixed `AstId`s)
-    /// that annotate resolves once per element in a *different* type
-    /// context. Every per-element map below would otherwise be overwritten
-    /// so only the last element's facts survive. Annotate captures each
-    /// element's body facts here (`resolve_tuple_for_of`) and reify replays
-    /// them per element. Populated whenever a module has tuple-for-of loops;
-    /// empty only when it has none.
+    /// Per-element annotation overlays for compile-time-unrolled tuple `for-of`
+    /// loops: one outer entry per *instantiation* in walk order (a nested for-of
+    /// is instantiated once per outer element), one inner [`ElementOverlay`] per
+    /// tuple element. The body has fixed `AstId`s resolved once per element, so
+    /// without the overlay only the last element's facts would survive.
     pub(crate) tuple_overlays: IndexMap<AstId, Vec<Vec<ElementOverlay>>>,
     /// Impl-level type parameters as `Elaborator::resolve_method` (the
     /// battle-tested original path) computed them, keyed per impl-method
@@ -359,45 +260,24 @@ pub(crate) struct TypeAnnotations {
     /// and the trait-omitted display form). Reify reads these instead of
     /// re-running `format_local` against the impl facts' `struct_name`.
     pub(crate) method_names: IndexMap<AstId, MethodNames>,
-    /// Resolved `let x: T = …` whole-pattern type annotation, keyed by the
-    /// `LetStmt`'s `AstId`. For simple `Ident` / `MutIdent` bindings the same
-    /// type also appears in `local_types` (keyed by the binding's id); for
-    /// destructuring patterns the binding ids carry per-element types so the
-    /// whole-pattern annotation has no `local_types` slot to land on, and
-    /// reify reads it from here instead of re-resolving the AST annotation.
-    ///
-    /// Part of [`ElementOverlay`] because the `LetStmt::AstId` is shared
-    /// across every iteration of a tuple-`for-of` unrolling, so the
-    /// per-iteration walk would otherwise overwrite earlier entries on
-    /// the base map and reify would read the last iteration's resolution
-    /// for every element. The overlay stack keeps each iteration's value
-    /// pinned to that iteration's `ElementOverlay`.
+    /// Resolved `let x: T = …` whole-pattern annotation, keyed by the `LetStmt`'s
+    /// `AstId`. A simple binding also has it in `local_types`, but a
+    /// destructuring pattern's binding ids carry per-element types, leaving the
+    /// whole-pattern annotation nowhere else to land. Part of [`ElementOverlay`]
+    /// for the same reason as `local_types`.
     pub(crate) let_annotated_types: IndexMap<AstId, TypeId>,
     /// Resolved field types per struct decl `AstId`, in declaration order, as
-    /// `resolve_struct` resolved them with the struct's type-param scope and
-    /// the full annotate-time resolver in place.
-    ///
-    /// Recorded so reify can read field types straight from this map instead
-    /// of relying on `tysys.all_struct_fields` + an UNKNOWN-fallback
-    /// re-resolve. The fallback existed because the static decl-field pass
-    /// (which seeds `all_struct_fields`) runs before import scopes exist and
-    /// cannot follow `pub use` re-export chains — so a field typed by a
-    /// re-exported decl (e.g. `Mark = u64` re-exported from `wasi:clocks`)
-    /// landed as `UNKNOWN` there and forced reify to re-resolve. The combined
-    /// walk already resolves these correctly during `resolve_struct`; we just
-    /// publish the resolved vector here for reify to read.
+    /// `resolve_struct` produced them with the type-param scope in place. Reify
+    /// reads these rather than `tysys.all_struct_fields`, which is seeded by the
+    /// static decl-field pass — that runs before import scopes exist and cannot
+    /// follow `pub use` chains, so a field typed by a re-exported decl lands
+    /// there as UNKNOWN.
     pub(crate) struct_field_types: IndexMap<AstId, Vec<crate::tir::TypeId>>,
-    /// Assignment-target place classification for each identifier that
-    /// resolves to a place (local / `&mut`-deref-capture / global), keyed by
-    /// the [`crate::ast::IdentExpr`]'s [`AstId`]. Recorded by
-    /// [`super::super::Elaborator::resolve_ident`] so
-    /// [`super::super::Elaborator::assign_to_target`] can validate l-values
-    /// and global mutability from the AST + this fact instead of reading the
-    /// now-placeholder resolved `target.kind`. Idents that resolve to
-    /// functions, variants, enums, flags, or constants leave no entry and are
-    /// treated as "not an l-value". Keyed by `AstId` and structurally
-    /// constant across tuple-`for-of` iterations (the place kind of an ident
-    /// does not depend on element type), so it needs no per-element overlay.
+    /// Place classification for each identifier that resolves to one — local,
+    /// `&mut`-deref-capture, or global — so `assign_to_target` can validate
+    /// l-values and global mutability without reading the now-placeholder
+    /// resolved `target.kind`. An ident resolving to a function, variant, enum,
+    /// flags or constant leaves no entry and is not an l-value.
     pub(crate) assign_places: IndexMap<AstId, AssignPlace>,
 }
 
@@ -735,16 +615,11 @@ pub(crate) struct StaticMethodDispatch {
     pub(crate) self_in_args: bool,
 }
 
-/// Generic-instantiation decision recorded by the body walk at a call,
-/// struct-literal, or variant-construction site. `type_args` is the
-/// inferred (or explicitly written) concrete type for each generic
-/// parameter in declaration order. `instance_type` is the `TypeId` of
-/// the resulting [`crate::tir::ResolvedType::GenericInstance`] (for
-/// generic struct/variant types) or the call's monomorphic
-/// [`crate::tir::FunctionRef::monomorph_info`]-keyed target — recorded
-/// alongside `type_args` so reify can drop straight into the TIR slot
-/// without re-running `make_generic_instance` or mangled-name
-/// construction.
+/// Generic-instantiation decision at a call, struct-literal, or
+/// variant-construction site. `type_args` holds the concrete type per generic
+/// parameter in declaration order, `instance_type` the resulting
+/// `GenericInstance` id or the call's monomorphic target — recorded together so
+/// reify drops into the TIR slot without re-running `make_generic_instance`.
 #[derive(Clone)]
 pub(crate) struct GenericInstantiation {
     pub(crate) type_args: Vec<TypeId>,
@@ -765,7 +640,7 @@ pub(crate) struct GenericInstantiation {
 }
 
 /// A single mutating outer-binding captured by a closure. The closure
-/// pre-pass at `closure.rs:140–193` materialises a
+/// pre-pass materialises a
 /// `let __ref_<var_name> = &mut <var_name>;` in the outer scope before
 /// opening the closure body; reify replays the same `add_local` at the
 /// same point. The fields below carry every value the replay needs.
@@ -867,7 +742,7 @@ pub(crate) struct HandlerBindingFacts {
 /// One effect a handler binding installs. Mirrors the per-effect
 /// component the elaborator computes inside
 /// `resolve_explicit_handler_binding` /
-/// `resolve_bundled_handler_binding` (handlers.rs:108+, 236+).
+/// `resolve_bundled_handler_binding`.
 #[derive(Clone)]
 pub(crate) struct HandlerEffectEntry {
     pub(crate) name: String,
@@ -910,16 +785,10 @@ pub(crate) struct ImplFacts {
     /// but is decided at impl-block scope.
     pub(crate) is_ref_impl: bool,
     /// Mangled struct name the elaborator feeds into
-    /// [`crate::name::MethodName::format_local`] when naming the impl's
-    /// methods — the result of `get_type_name(&impl_block.ty)` at
-    /// elaborator-level recording time.
-    ///
-    /// Reify reads this verbatim instead of reconstructing it from the
-    /// resolved [`Self::self_type`] (which would need `&` / `&mut` / tuple
-    /// special cases and the `&T`-blanket "bare `&`" carve-out that
-    /// `get_type_name` already encodes — `module.rs:581`). Keeping the
-    /// canonical name on the impl facts prevents the parity-bug class
-    /// called out in WEP 2026-05-26 §"Reify — mechanical".
+    /// [`crate::name::MethodName::format_local`] when naming the impl's methods.
+    /// Reify reads it verbatim rather than rebuilding it from [`Self::self_type`],
+    /// which would mean re-encoding the `&` / `&mut` / tuple cases and the
+    /// `&T`-blanket carve-out that `get_type_name` already handles.
     pub(crate) struct_name: crate::name::FqTypeName,
     /// The impl target's typed receiver, decided from the AST type at record
     /// time (`Receiver::Ref` for `&T` / `&mut T`, `Receiver::Type` otherwise).

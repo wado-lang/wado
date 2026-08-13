@@ -163,18 +163,11 @@ impl TirOptVisitor for TaskReturnStripper {
     }
 }
 
-/// Generate the inline task-return sequence for `task return value`.
-///
-/// For `Result<T, E>` values, generates:
-/// - Ok arm: flatten T → call task-return(0, ...`flat_ok_values`)
-/// - Err arm: flatten E → call task-return(1, ...`flat_err_values`)
-///
-/// For other types, flattens `value` to its CM ABI flat slots and emits
-/// `task-return(...flat_values)`. For unit-returning exports, the value
-/// is evaluated for its side effects and `task-return()` is emitted.
-///
-/// `task.return` lifts eagerly and `post-return` is illegal alongside `async`,
-/// so the sequence ends by freeing the buffers the flattening allocated.
+/// Generate the inline task-return sequence for `task return value`: a `Result`
+/// becomes a two-arm match, each flattening its payload behind the discriminant;
+/// anything else flattens straight to its CM flat slots; a unit export evaluates
+/// the value for effect and returns nothing. `task.return` lifts eagerly and
+/// `post-return` is illegal under `async`, so the sequence frees its buffers.
 fn generate_inline_task_return(
     value: TirExpr,
     return_type: &Type,

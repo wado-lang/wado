@@ -1,29 +1,8 @@
-//! Annotation pass for effect handler installation (`with E => h do { ... }`)
-//! and the `resume` control-flow expression.
-//!
-//! See WEP 2026-04-11 (Effect Handler) for the language semantics.
-//!
-//! Validation responsibilities here (preserved post-7-B):
-//! - Each binding's effect name must resolve to a known effect declaration
-//!   (not a regular trait, struct, or unknown name).
-//! - The handler value's underlying type (after stripping `&` / `&mut`) must
-//!   have an `impl <Effect> for <Type>` block in scope.
-//! - `resume` is only valid inside a handler method body. The actual
-//!   type-check of the resume value against the operation's return type is
-//!   performed by the existing return-type checker (resume lowers to
-//!   `Return { value }` in the dispatch synthesis pass).
-//!
-//! The combined walk records `HandlerBindingFacts` (and walks every handler
-//! value + body for sub-expression facts); it constructs no
-//! `TirHandlerBinding` / `TirExprKind::WithHandler` / `TirExprKind::Resume`.
-//! Reify rebuilds those from the AST + the recorded facts
-//! (`sem.types.handler_bindings`).
-//!
-//! Bundled handlers (`with &mut h do`) record the per-effect enumeration
-//! (one entry per `impl <Effect> for <Type>` in scope) plus a shared
-//! `bundle_group` so reify emits one `TirHandlerBinding` per recorded
-//! effect, all sharing the same bundle group's synthesised
-//! `__h_<bundle>` local.
+//! Annotation pass for effect handler installation (`with E => h do { … }`) and
+//! `resume`; see WEP 2026-04-11. It validates that each binding names a real
+//! effect declaration, that the handler's stripped type has an `impl` in scope,
+//! and that `resume` sits in a handler method, recording only
+//! `HandlerBindingFacts` for reify to rebuild the TIR nodes from.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
@@ -349,27 +328,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// Walk every `impl Trait for <type_name>` block in scope and return
-    /// the `(base_trait_name, defining_module, trait_type_args)` triple
-    /// for each impl whose `trait_type` resolves to an effect *or*
-    /// resource declaration. Both kinds are installable as handlers
-    /// (see WEP 2026-04-11), so the bundled `with h do` form expands to
-    /// one binding per impl regardless of kind. The `trait_type_args`
-    /// component carries the impl's instantiation (`[u8]` for
-    /// `impl Stream<u8> for MockCM`, `[]` for non-generic impls) so the
-    /// dispatch synthesis can route each binding to the right
-    /// per-monomorphisation infrastructure.
-    ///
-    /// Discovery order: `trait_env.impl_index` entries first (loaded
-    /// modules), then any extra impls in the current module's items
-    /// that aren't covered by the index. Within each source the order
-    /// matches the original module-walk order, which gives users a
-    /// stable, predictable install order for bundled handlers.
-    ///
-    /// Duplicates are filtered by `(decl_module, base_name,
-    /// trait_type_args)` — distinct instantiations of the same generic
-    /// resource (`impl Stream<u8>` vs `impl Stream<i32>`) install
-    /// separately; pure aliasing duplicates collapse.
+    /// The `(base_trait_name, defining_module, trait_type_args)` triple for every
+    /// in-scope `impl` whose trait resolves to an effect or resource — both are
+    /// installable, so a bundled `with h do` expands to one binding each. Dedup
+    /// by that triple keeps `Stream<u8>` and `Stream<i32>` separate. Discovery
+    /// runs the impl index first, then the module's own items, in walk order.
     fn collect_effect_impls_for_type(
         &mut self,
         type_name: &str,
@@ -458,20 +421,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Annotate `resume value`.
-    ///
-    /// The expression itself yields `()` — `resume` is control-flow rather
-    /// than a value-producing expression at the source level. The dispatch
-    /// synthesis pass (running on reify's TIR) lowers `Resume { value }`
-    /// into `Return { value }`, which is checked against the enclosing
-    /// handler method's return type by the existing return-type rules.
-    ///
-    /// Returns a placeholder. Missing-return analysis recognises
-    /// `fn handler_method(&self) -> Mark { resume self.mark }` as a definite
-    /// exit off the AST (`control_flow::expr_always_exits`'s `Expr::Resume`
-    /// arm), and reify rebuilds the `Resume` node from the AST, so the
-    /// combined walk only resolves the value for its fact-recording and
-    /// type-checking side effects.
+    /// Annotate `resume value`, which yields `()` — at source level it is
+    /// control flow, and dispatch synthesis later lowers it to `Return { value }`
+    /// for the ordinary return-type rules to check. Returns a placeholder:
+    /// missing-return analysis reads the definite exit off the AST and reify
+    /// rebuilds the node, so this walk only resolves the value for its facts.
     pub(super) fn resolve_resume(
         &mut self,
         resume: &ast::ResumeExpr,

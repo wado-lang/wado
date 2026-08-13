@@ -355,51 +355,14 @@ impl SpanEmitter for NullSpanEmitter {
     fn debug(&self, _message: &str) {}
 }
 
-/// Abstraction for compiler I/O operations
-///
-/// This trait enables the compiler to work in different environments:
-/// - `FilesystemCompilerHost` for CLI usage (implemented in wado-cli)
-/// - `InMemoryCompilerHost` for testing
-/// - `BrowserCompilerHost` for browser/playground usage
-/// - `LspCompilerHost` for LSP integration
-///
-/// # Standard Library Handling
-///
-/// Standard library paths (`core:*`, `wasi:*`) are NOT passed to `load_source`.
-/// They are handled directly by the compiler via embedded sources (`include_str!`).
-///
-/// # Example
-///
-/// ```ignore
-/// struct MyHost { /* ... */ }
-///
-/// impl CompilerHost for MyHost {
-///     async fn load_source(&self, path: &str) -> Result<String, SourceError> {
-///         // Load source from custom storage
-///     }
-///
-///     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
-///         // Handle diagnostic (print, collect, send to UI, etc.)
-///     }
-/// }
-/// ```
+/// Abstraction for compiler I/O, letting the compiler run under a filesystem,
+/// in-memory, browser, or LSP host. Standard library paths (`core:*`, `wasi:*`)
+/// never reach `load_source`; the compiler serves them from embedded sources.
 pub trait CompilerHost: Send + Sync {
-    /// Load a file as raw bytes.
-    ///
-    /// This is the single I/O primitive for the compiler. Both source files
-    /// (`.wado`) and binary assets (`#include_bytes`) are loaded through this
-    /// method. The compiler interprets the bytes as UTF-8 where appropriate.
-    ///
-    /// # Arguments
-    /// * `path` - File path, which can be:
-    ///   - Local path (e.g., "./lib.wado", "../utils.wado")
-    ///   - Remote URL (e.g., "<https://example.com/lib.wado>", "<http://example.com/lib.wado>")
-    ///
-    /// NOTE: Standard library paths (core:*, wasi:*) are NOT passed to this method.
-    /// They are handled directly by the compiler via embedded sources.
-    ///
-    /// # Returns
-    /// The raw bytes of the file
+    /// Load a file as raw bytes — the compiler's single I/O primitive, used for
+    /// both `.wado` sources and `#include_bytes` assets, with the compiler
+    /// interpreting them as UTF-8 where appropriate. `path` is a local path or a
+    /// remote URL; stdlib paths never arrive here.
     fn load_source(&self, path: &str) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send;
 
     /// Emit a diagnostic (error, warning, etc.)
@@ -409,19 +372,11 @@ pub trait CompilerHost: Send + Sync {
     /// a list, send to an LSP client, etc.
     fn emit_diagnostic(&self, diagnostic: Diagnostic);
 
-    /// Execute a Kiln generator component and return its response.
-    ///
-    /// `component_wasm` is the compiled generator component. The host is
-    /// responsible for instantiating it, linking `core:kiln/host` so that
-    /// `emit-diagnostic` forwards back into this same host,
-    /// and returning the generator's response.
-    ///
-    /// The default implementation returns `Unsupported`, which drives
-    /// "consume-only" mode (the compiler reuses the most recent cached
-    /// outputs on disk and warns on drift). Hosts that have a Wasm runtime
-    /// available (e.g. `wado-cli` via wasmtime) override this method.
-    ///
-    /// See WEP 2026-04-12 (Kiln) for the full protocol.
+    /// Execute a Kiln generator component and return its response. The host
+    /// instantiates `component_wasm` and links `core:kiln/host` so
+    /// `emit-diagnostic` forwards back into itself. The default `Unsupported`
+    /// drives consume-only mode, reusing cached outputs and warning on drift;
+    /// a host with a Wasm runtime overrides it. Protocol: WEP 2026-04-12.
     fn run_generator(
         &self,
         _component_wasm: &[u8],

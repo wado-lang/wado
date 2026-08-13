@@ -2062,18 +2062,11 @@ impl<'a> WirEmitter<'a> {
                 src_offset,
                 len,
             } if self.codegen_flags.array_copy => {
-                // Native lowering (the default): emit the Wasm `array.copy`
-                // instruction directly. Benchmarking showed it wins big on
-                // copy-heavy workloads (zlib decompress ~+41%, syntax-highlight
-                // ~+10%) and is neutral elsewhere, so it is the default; the
-                // arm below open-codes a loop instead and is selected with
-                // `-f no-array-copy` (kept so we can keep re-measuring as the
-                // wasmtime runtime evolves).
-                //
-                // Stack/immediate shape: `array.copy $dst $src` consumes
-                // `dst_ref, dst_offset, src_ref, src_offset, len`. It accepts
-                // nullable refs, so unlike the loop path no `ref.as_non_null`
-                // narrowing is needed.
+                // Native lowering (the default): `array.copy $dst $src` consumes
+                // `dst_ref, dst_offset, src_ref, src_offset, len` and accepts
+                // nullable refs, so unlike the loop below it needs no
+                // `ref.as_non_null`. The loop arm stays behind
+                // `-f no-array-copy` for re-measuring as wasmtime evolves.
                 let dst_wasm_idx = self.resolve_type_index(dest_type_id.index());
                 let src_wasm_idx = self.resolve_type_index(src_type_id.index());
                 self.emit_instr(f, dest);
@@ -2548,16 +2541,11 @@ impl<'a> WirEmitter<'a> {
         ConstExpr::extended(instrs)
     }
 
-    /// Recursively lower a constant-expressible `WirInstr` tree into the
-    /// instruction sequence of a Wasm constant init expression. Mirrors the
-    /// aggregate-construction arms of [`Self::emit_instr`]; only instructions
-    /// valid in a Wasm 3.0 GC constant expression are accepted (scalar consts,
-    /// `ref.null` / `ref.i31` / `ref.func`, and `struct.new` / `array.new_fixed`
-    /// / `array.new_default`). This mirrors [`WirInstr::is_const_expressible`],
-    /// the predicate `wir_optimize::const_global` gates promotion on; anything
-    /// else reaching an init slot is an optimizer bug — a non-const initializer
-    /// should never be placed here — so it ICEs rather than silently
-    /// miscompiling to `i32.const 0`.
+    /// Recursively lower a constant-expressible `WirInstr` tree into a Wasm
+    /// constant init expression, accepting only what a Wasm 3.0 GC constant
+    /// expression allows. Mirrors [`WirInstr::is_const_expressible`], which
+    /// `wir_optimize::const_global` gates promotion on, so anything else
+    /// reaching an init slot is an optimizer bug and ICEs.
     fn push_const_instrs<'i>(&'i self, instr: &'i WirInstr, out: &mut Vec<Instruction<'i>>) {
         match instr {
             WirInstr::I32Const(v) => out.push(Instruction::I32Const(*v)),
@@ -2634,20 +2622,10 @@ impl<'a> WirEmitter<'a> {
             .unwrap_or(0)
     }
 
-    /// Check if a struct field is a packed type (i8/i16).
-    /// Returns `Some(true)` for signed packed (I8/I16), `Some(false)` for unsigned packed (U8/U16),
-    /// or `None` if the field is not packed.
-    /// Check if a struct field is a packed type (i8/i16 storage).
-    /// Returns `Some(true)` for signed packed (I8/I16), `Some(false)` for unsigned packed (U8/U16/Bool),
-    /// or `None` if the field is not packed.
-    /// Check if an array type has packed elements (i8/i16 storage).
-    /// Returns `Some(true)` for signed packed (I8/I16), `Some(false)` for unsigned packed (U8/U16/Bool),
-    /// or `None` if the array element is not packed.
-    /// True when the array's Wado element type is a non-nullable reference.
-    /// The array is *declared* with a nullable element (for
-    /// `array.new_default`), but `array.get` results are narrowed back to
-    /// non-null only for these — a niche-optimized `Option<ref>` element is
-    /// legitimately nullable (`None` == null ref) and must not be narrowed.
+    /// True when the array's Wado element type is a non-nullable reference. The
+    /// array is *declared* with a nullable element, for `array.new_default`, but
+    /// only these narrow their `array.get` results back to non-null — a
+    /// niche-optimized `Option<ref>` element is legitimately nullable.
     fn is_array_element_non_nullable_ref(&self, wir_type_idx: u32) -> bool {
         let idx = wir_type_idx as usize;
         idx < self.wir.types.len()

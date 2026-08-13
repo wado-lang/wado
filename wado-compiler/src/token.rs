@@ -264,21 +264,11 @@ impl Span {
     }
 }
 
-/// Append a stable byte encoding of `kind` to `out`.
-///
-/// Concatenating these encodings for every non-comment token in a source
-/// file yields a hash input that ignores comments, whitespace, and span
-/// positions — used by the Kiln source-hash so a docstring or
-/// reformatting edit on a generator's `.wado` files does not churn the
-/// `generator_source_hash` field of every consumer's `<primary>.kiln.json`.
-///
-/// **Stability constraint:** any change to `TokenKind` (rename a variant,
-/// add a keyword, tweak a payload) alters this encoding and therefore
-/// invalidates every cached generator component and the
-/// `generator_source_hash` field of every committed `*.kiln.json`. Bump
-/// the magic in `wado-cli/src/kiln_provider.rs::combined_sources_hash`
-/// (and `INDEX_VERSION`) in lockstep, and expect a single noisy diff
-/// against committed kiln json after the bump lands.
+/// Append a stable byte encoding of `kind` to `out`. Concatenated over a file's
+/// non-comment tokens this is the Kiln source-hash input, blind to comments,
+/// whitespace and spans, so a reformatting edit churns no consumer's
+/// `generator_source_hash`. Any `TokenKind` change invalidates every cached
+/// generator component, so bump `combined_sources_hash` and `INDEX_VERSION` too.
 pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
     use TokenKind::{
         AmpEq, Ampersand, And, Arrow, As, Assert, Async, Break, ByteCharLit, ByteStringLit, Caret,

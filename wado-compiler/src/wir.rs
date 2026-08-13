@@ -1,17 +1,8 @@
-//! WIR (Wasm IR) — tree-structured intermediate representation between TIR and Wasm binary.
-//!
-//! WIR is close to Wasm semantics but retains enough high-level information to be
-//! readable and debuggable. It maps almost 1:1 to Wasm instructions with these
-//! ergonomic improvements:
-//!
-//! - Named locals (not pre-allocated indices)
-//! - Named types (Wado-level struct/variant/enum/flags, not Wasm type section entries)
-//! - Wado-level value types (Bool, Char, I8, U8, etc. instead of Wasm's i32-for-everything)
-//! - Structured control flow (tree nodes, not flat instruction sequences)
-//! - Explicit value copy operations
-//! - TIR metadata preserved for debugging and unparse
-//!
-//! See `docs/wep-2026-02-14-wir-layer.md` for the full design rationale.
+//! WIR — the tree-structured IR between TIR and the Wasm binary, mapping almost
+//! 1:1 to Wasm instructions while staying readable: locals and types are named
+//! rather than indexed, value types keep their Wado distinctions instead of
+//! collapsing to `i32`, control flow is a tree rather than a flat sequence, value
+//! copies are explicit, and TIR metadata survives for unparse. See WEP 2026-02-14.
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -123,18 +114,11 @@ pub struct WirPackage {
     /// Codegen iterates this to decide membership per phase rather than
     /// re-deriving it (the `codegen.rs` principle: codegen emits the plan).
     pub import_plan: Vec<ImportEntry>,
-    /// Absolute Wasm function index of the first defined function (i.e. the
-    /// number of imported functions). Defined function `i` (the `i`-th entry
-    /// in [`functions`](Self::functions)) has the absolute index
-    /// `defined_func_base + i`, which is the value carried by `WirFuncId`.
-    ///
-    /// - GC module (built by `wir_build`): [`crate::wir_build::DEFINED_FUNC_BASE`].
-    /// - Memory module (built by `WasmModuleInfo::to_wir_package`): `0` (no
-    ///   function imports).
-    ///
-    /// Used by DCE / compaction passes to translate between absolute
-    /// `WirFuncId` indices and 0-based array indices into
-    /// [`functions`](Self::functions) without hard-coding the offset.
+    /// Absolute Wasm index of the first defined function — the number of imported
+    /// ones — so the `i`-th entry in [`functions`](Self::functions) has the
+    /// absolute index a `WirFuncId` carries. `DEFINED_FUNC_BASE` for the GC
+    /// module, `0` for the import-less memory module. DCE and compaction read it
+    /// to convert between the two index spaces without hard-coding an offset.
     pub defined_func_base: u32,
     /// Trait-bound violations collected instead of trapping the build, so the
     /// driver can emit a clean diagnostic and bail. Empty in well-formed programs.
@@ -347,7 +331,7 @@ impl fmt::Display for WirName {
 /// - `fq`: fully-qualified name shared via `Rc<str>` for Debug output
 ///
 /// `Eq` and `Hash` use `index` only (O(1) integer operations).
-/// `Debug` prints the fq name (e.g., "core:prelude//List<i32>").
+/// `Debug` prints the fq name (e.g., `"core:prelude//List<i32>"`).
 /// `Clone` is O(1) — Rc refcount increment (non-atomic, near zero cost).
 #[derive(Clone)]
 pub struct WirTypeId {
@@ -666,16 +650,10 @@ pub struct WirFuncType {
     pub results: Vec<WirType>,
 }
 
-/// WIR type — Wado-level primitives + GC references.
-///
-/// Unlike Wasm's `ValType` (i32/i64/f32/f64 only), WIR preserves the full
-/// Wado type distinctions. The emit phase lowers these:
-///   - I8/I16/U8/U16/Bool/Char → i32 (locals) or i8/i16 (packed struct fields)
-///   - I32/U32 → i32
-///   - I64/U64 → i64
-///   - F32 → f32
-///   - F64 → f64
-///   - Enum/Flags → i32
+/// WIR type — Wado-level primitives plus GC references, preserving the
+/// distinctions Wasm's four-way `ValType` erases. Emit lowers a sub-word integer
+/// to `i32`, or to `i8` / `i16` in a packed struct field; the 64-bit types to
+/// `i64`; floats to their own; and enums and flags to `i32`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum WirType {
     // Signed integers
@@ -1403,20 +1381,11 @@ pub enum WirInstr {
         value: Box<WirInstr>,
         len: Box<WirInstr>,
     },
-    /// Deep-copy an `Array<T>`: allocates a new array the same
-    /// length as `src` and copies every element. Emitted by codegen as the
-    /// same JIT-compiled loop that previously lived inside `emit_value_copy`
-    /// for raw array struct fields.
-    ///
-    /// `element_copy_type` is set when `T` is a value-typed struct that
-    /// needs its own deep copy on every element. Without it the loop
-    /// would just `array.set(dst, i, array.get(src, i))`, which on Wasm
-    /// GC stores the *same* element ref into both arrays — fine for
-    /// primitives, but unsound for struct elements (every clone would
-    /// share the underlying struct with the source). When set, the
-    /// loop calls that type's `$value_copy$` helper between
-    /// `array.get` and `array.set` so each destination element is a
-    /// fresh struct.
+    /// Deep-copy an `Array<T>`: allocate one the length of `src` and copy every
+    /// element. `element_copy_type` is set when `T` is a value-typed struct
+    /// needing its own copy per element — a bare
+    /// `array.set(dst, i, array.get(src, i))` stores the *same* ref into both
+    /// arrays — and the loop then calls that type's `$value_copy$` helper.
     ArrayClone {
         type_id: WirTypeId,
         src: Box<WirInstr>,
@@ -1779,21 +1748,11 @@ impl WirInstr {
         }
     }
 
-    /// Whether this instruction tree is expressible as a Wasm 3.0 GC
-    /// constant init expression. This is the single authority on
-    /// const-ness for global initializers: `wir_optimize::const_global`
-    /// gates eager-global promotion on it, and `codegen::emit`'s
-    /// `push_const_instrs` mirrors exactly this accepted set (a node
-    /// reaching the emitter that fails this predicate is an ICE).
-    ///
-    /// Accepted, recursively: scalar consts, `ref.null` / `ref.i31` /
-    /// `ref.func`, and `struct.new` / `array.new_fixed` /
-    /// `array.new_default` with const children. Notably excludes
-    /// `global.get` (so a const init never references another global,
-    /// sidestepping the core-Wasm const-expr ordering restriction) and
-    /// `array.new_data` / `array.new_elem` (not valid const instructions —
-    /// they read a segment at runtime, so data-backed values like a
-    /// `String`'s repr stay lazy).
+    /// Whether this tree is expressible as a Wasm 3.0 GC constant init — the sole
+    /// authority on const-ness for global initializers, which
+    /// `wir_optimize::const_global` gates eager promotion on and `codegen::emit`
+    /// mirrors exactly. Excludes `global.get` and the segment-reading
+    /// `array.new_data` / `array.new_elem`, leaving a `String`'s repr lazy.
     pub fn is_const_expressible(&self) -> bool {
         match self {
             Self::I32Const(_) | Self::I64Const(_) | Self::F32Const(_) | Self::F64Const(_) => true,

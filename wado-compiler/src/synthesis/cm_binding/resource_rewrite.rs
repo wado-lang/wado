@@ -1,14 +1,8 @@
-//! CM resource method rewriting and stream-read binding synthesis.
-//!
-//! Two passes that run before adapter synthesis:
-//!
-//! - [`synthesize_record_stream_reads`] generates a binding function
-//!   `__cm_stream_read_<T>` for every distinct WASI record `T` referenced
-//!   by `Stream<T>::read()`, so the rewriter has a callable target.
-//! - [`rewrite_cm_resource_methods`] walks every TIR function body and
-//!   rewrites `#[cm("...")]` resource method calls into the appropriate
-//!   raw / internal / entry-module call, before downstream phases see a
-//!   `cm_name`-tagged call they don't know how to translate.
+//! Two passes ahead of adapter synthesis: [`synthesize_record_stream_reads`]
+//! generates a `__cm_stream_read_<T>` binding per WASI record
+//! `Stream<T>::read()` mentions, and [`rewrite_cm_resource_methods`] then turns
+//! every `#[cm("…")]` resource method call into its raw / internal /
+//! entry-module form, before a downstream phase meets a `cm_name`-tagged call.
 
 use std::cell::RefCell;
 use std::rc::Rc;

@@ -1,13 +1,8 @@
-//! `NullableRef` representation lowering for variant types.
-//!
-//! Rewrites a 2-case `{Unit, Payload(T)}` variant whose `T` is a non-nullable
-//! reference to a null-niche shape: unit case → `ref.null none`, payload case →
-//! the payload ref itself, no Wasm types emitted for the variant. Dropping the
-//! discriminant struct is a size win, but the pass is a mandatory lowering, not an
-//! optimization (see `optimize_wir`): the frontend already emits `None` as
-//! `ref.null`, so this makes the WIR type match.
-//!
-//! Runs before SROA and the optimization passes so they see the lowered types.
+//! `NullableRef` representation lowering: a 2-case `{Unit, Payload(T)}` variant
+//! over a non-nullable reference becomes a null niche — unit to `ref.null none`,
+//! payload to the ref itself, no Wasm types emitted. Dropping the discriminant
+//! struct is a size win, but this is mandatory lowering, not optimization: the
+//! frontend already emits `None` as `ref.null`. Runs before SROA.
 
 use crate::hashmap::IndexMap;
 use crate::wir::{WirAbstractHeapType, WirInstr, WirPackage, WirType, WirTypeDef, WirVariantRepr};

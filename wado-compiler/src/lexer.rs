@@ -12,7 +12,7 @@ use crate::compiler_host::{Code, DiagnosticSpan, Severity};
 use crate::token::{Span, TemplateTokenPart, Token, TokenKind};
 
 /// Check if a string is a valid Wado identifier.
-/// Valid identifiers match the pattern /^[a-zA-Z_][a-zA-Z0-9_]*$/
+/// Valid identifiers match the pattern `/^[a-zA-Z_][a-zA-Z0-9_]*$/`
 pub fn is_valid_ident(s: &str) -> bool {
     let mut chars = s.chars();
     match chars.next() {
@@ -1114,16 +1114,11 @@ impl<'a> Lexer<'a> {
         TokenKind::TemplateStringLit(parts)
     }
 
-    /// Collect an interpolation, split into expression source and optional
-    /// format specifier. Called after consuming the opening `{`; consumes up to
-    /// and including the closing `}`. Returns `(expr, format, hit_eof)`; when
-    /// `hit_eof` is true the enclosing template string was truncated
-    /// mid-interpolation and an error has been recorded.
-    ///
-    /// The format specifier is the text after the first top-level `:` (`{expr:spec}`).
-    /// Nesting (parens, brackets, braces), string/template/char literals, and
-    /// `::` scope resolution are tracked here so only a `:` at the expression's
-    /// top level is treated as the separator.
+    /// Collect an interpolation, split into expression source and optional format
+    /// specifier — the text after the first top-level `:`. Called after the
+    /// opening `{` and consuming through the closing `}`. Nesting, literals and
+    /// `::` are tracked, so only a top-level `:` separates. A true `hit_eof` in
+    /// the result means the template was truncated and an error recorded.
     fn collect_interpolation_source(
         &mut self,
         start: usize,

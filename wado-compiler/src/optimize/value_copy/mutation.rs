@@ -1,15 +1,8 @@
-//! The mutation-witness recognizer behind copy propagation's mutation
-//! analyses (consumed via `arena_query::for_each_mutated_root`), plus the
-//! callee oracle it consults.
-//!
-//! The verdict is a callee's declared `&mut` parameter bit (`param_mut`,
-//! captured before boxing erases the `&mut`/`&` distinction) — never a
-//! body-derived "does not write" proof, which has false negatives for
-//! mutations the boxing rewrite hides (`&mut self.payload` becomes
-//! `Box { value: self.payload }`), so trusting it would strip a copy the
-//! callee then corrupts (wado-lang/wado#1544).
-//!
-//! Root resolution and the bodyless-callee default stay with each consumer.
+//! The mutation-witness recognizer behind copy propagation's mutation analyses,
+//! plus the callee oracle it consults. The verdict is the callee's declared
+//! `&mut` parameter bit, captured before boxing erases the `&mut` / `&`
+//! distinction — never a body-derived "does not write" proof, which misses the
+//! mutations boxing hides and would strip a copy the callee corrupts (#1544).
 
 use crate::hashmap::IndexMap;
 use crate::nir::{FuncId, NirUnaryOp};

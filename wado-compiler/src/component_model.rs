@@ -484,26 +484,11 @@ pub struct CmVariantCase {
     pub payload: Option<Type>,
 }
 
-/// Extract the CM name from a `#[cm("...")]` attribute.
-///
-/// Handles two formats:
-/// - Type-level: `#[cm("wasi:pkg/iface@ver#cm-name")]` → takes the fragment after `#`
-/// - Case-level: `#[cm("cm-name")]` → uses the whole arg directly
-///
-/// Strip a `AsyncCall<T>` wrapper from the declared return type of an `async`
-/// interface method, recovering the CM-level result type `T`.
-///
-/// In WIT, `async func foo(...) -> T` lowers the CM-level result as `T`, but
-/// the Wado-facing interface declaration exposes `AsyncCall<T>` so user code can
-/// defer `wait()`-ing until after any stream parameter rendezvous
-/// completes. The CM binding synthesiser needs the raw `T` when computing
-/// outptr layout.
-///
-/// For non-async methods this is a no-op. For async methods whose return
-/// type is missing or not `AsyncCall<_>` we return the original type —
-/// defensive in case hand-written interface declarations predate the
-/// `AsyncCall<T>` convention (in which case the compiler's earlier
-/// expectations still apply).
+/// Strip an `AsyncCall<T>` wrapper from an `async` interface method's declared
+/// return type, recovering the CM-level result `T`. WIT lowers
+/// `async func foo(…) -> T` with result `T`, but the Wado-facing declaration
+/// exposes `AsyncCall<T>` so user code can defer `wait()`-ing — and the binding
+/// synthesiser needs the raw `T` for outptr layout. Otherwise a no-op.
 pub fn unwrap_async_call_if_async(is_async: bool, declared: &Option<Type>) -> Option<Type> {
     if !is_async {
         return declared.clone();
@@ -719,16 +704,11 @@ impl CmFunctionInfo {
     }
 }
 
-/// Build a local alias name for a WASI function.
-///
-/// Format: `wasi:{package}/{interface_name}::{method_name}`
-/// Example: `wasi:cli/Stdout::write_via_stream`
-///
-/// This naming scheme:
-/// - Uses `wasi:` prefix for clarity
-/// - Includes package for uniqueness across packages
-/// - Uses Wado effect/method names (not WIT interface/function names)
-/// - Uses `::` as method separator (Wado convention)
+/// Build a WASI function's local alias name,
+/// `wasi:{package}/{interface_name}::{method_name}` — e.g.
+/// `wasi:cli/Stdout::write_via_stream`. The package keeps it unique across
+/// packages, and the segments are the Wado effect / method names, not the WIT
+/// interface / function ones.
 pub fn build_local_alias_name(package: &str, interface_name: &str, method_name: &str) -> String {
     format!("wasi:{package}/{interface_name}::{method_name}")
 }
@@ -1213,17 +1193,11 @@ fn collect_cm_definitions(module: &crate::ast::Module) -> IndexMap<String, Strin
     out
 }
 
-/// Build the `name -> source_interface` map that applies inside `module_path`.
-///
-/// Entries come from three sources, in order of precedence (later wins if
-/// there were duplicates, but stdlib currently never introduces them):
-///   1. Types declared in this module (`collect_cm_definitions`).
-///   2. Named imports: `use { X } from "other/path.wado"` contributes `X` →
-///      whatever interface `other/path.wado` declares it in.
-///   3. `use { X as Y } from ...` contributes `Y` with the same target.
-///
-/// Names the lookup cannot resolve (primitives, generics, `String`, unknown
-/// references) are left out; downstream consumers treat a missing key as
+/// Build the `name -> source_interface` map that applies inside `module_path`,
+/// from this module's own declarations plus its named imports (an
+/// `X as Y` contributing `Y`). Later entries win, though stdlib introduces no
+/// duplicates. A name the lookup cannot resolve — a primitive, a generic, an
+/// unknown reference — is left out, and consumers read a missing key as
 /// `source_interface = None`.
 fn build_local_name_resolver(
     module_path: &str,
@@ -1279,16 +1253,11 @@ fn resolve_use_source<'a>(
     defs_by_module: &'a IndexMap<&'static str, IndexMap<String, String>>,
 ) -> Option<&'a IndexMap<String, String>> {
     defs_by_module.get(source).or_else(|| {
-        // Flat package form: fold every interface under the same package into
-        // a synthetic merged view. We build this lazily only when needed.
-        // In stdlib, flat package .wado files are pure re-exports whose
-        // definitions each still carry their own `#[cm]` — but `use "wasi:http"`
-        // may be used to grab any of them. Rather than caching the merged map,
-        // we return None and let the caller handle flat imports via per-item
-        // resolution below. Returning None here means bindings like
-        // `use { ErrorCode } from "wasi:http"` in stdlib are not resolved.
-        // Stdlib does not currently rely on flat-package imports for type
-        // references (verified by grep), so this is acceptable.
+        // Flat package form. Rather than caching a merged view of every
+        // interface in the package, return None and let the caller resolve
+        // per-item below — so `use { ErrorCode } from "wasi:http"` does not
+        // resolve here. Stdlib does not rely on flat-package imports for type
+        // references, so nothing needs it yet.
         let _ = source;
         None
     })
@@ -1496,17 +1465,11 @@ impl CmInterfaceRegistry {
         self.source_interfaces.extend(batch);
     }
 
-    /// Return the canonical source interface that owns `(kind, name)` — i.e.
-    /// the `#[cm("...")]` fragment before the `#` (e.g.
-    /// `"wasi:filesystem/types@0.3.0"`). `kind` is one of
-    /// `"variants"`, `"enums"`, `"resources"`, `"structs"`, `"flags"`, or
-    /// `"newtypes"`.
-    ///
-    /// Returns `Some` only when exactly one WASI interface declares the bare
-    /// name. Same-named types from multiple interfaces (e.g. `ErrorCode` in
-    /// `wasi:filesystem/types` vs `wasi:http/types`) return `None` — callers
-    /// must then disambiguate with a source-interface-scoped accessor
-    /// (e.g. `get_variant_cases_by_source`).
+    /// The canonical source interface owning `(kind, name)` — the `#[cm("…")]`
+    /// fragment before the `#`, e.g. `"wasi:filesystem/types@0.3.0"`. `kind` is
+    /// `"variants"`, `"enums"`, `"resources"`, `"structs"`, `"flags"` or
+    /// `"newtypes"`. `Some` only when exactly one WASI interface declares the
+    /// bare name; for an ambiguous one use `get_variant_cases_by_source`.
     pub fn bare_name_owner(&self, kind: &str, name: &str) -> Option<&str> {
         let candidates: Vec<&str> = match kind {
             "variants" => self
@@ -1601,18 +1564,11 @@ impl CmInterfaceRegistry {
             parser.parse_strict().expect("parser error in stdlib")
         }
 
-        // Two-pass bootstrap so every stdlib `Type::Named` reference carries
-        // an exact source interface.
-        //
-        // Pass 1: parse every stdlib module and record the declared type
-        // names and their `#[cm(...)]` interface paths per module. This lets
-        // cross-module `use { X } from "path"` be resolved in pass 2 even
-        // when `path` is parsed after the importer.
-        //
-        // Pass 2: for each module, build a local name -> source_interface map
-        // (local definitions + resolved `use` imports) and walk every `Type`
-        // node to populate `self.source_interface(NamedType)`. Register the
-        // walked module afterwards.
+        // Two-pass bootstrap so every stdlib `Type::Named` carries an exact
+        // source interface. Pass 1 records each module's declared type names and
+        // `#[cm(…)]` paths, so pass 2 can resolve a cross-module `use` whose
+        // target parses after the importer; pass 2 then builds each module's
+        // local name → source_interface map and walks its `Type` nodes.
         let mut modules: Vec<(&'static str, crate::ast::Module)> = Vec::new();
         let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
             IndexMap::default();
@@ -1838,16 +1794,10 @@ impl CmInterfaceRegistry {
                             })
                             .collect();
 
-                        // Keep original return type for newtype semantics
-                        // The elaborator will handle Mark -> newtype mapping.
-                        //
-                        // For `async fn foo(...) -> AsyncCall<T>` CM imports,
-                        // strip the `AsyncCall<T>` wrapper at registration so
-                        // the stored return type is the CM-ABI `T`. The
-                        // elaborator re-wraps it as `AsyncCall<T>` when
-                        // answering Wado-level type queries (so user code
-                        // sees the new API), and the CM binding synthesiser
-                        // also re-wraps when constructing its adapter.
+                        // Store the CM-ABI return type: an async import's
+                        // `AsyncCall<T>` wrapper is stripped here, and both the
+                        // elaborator and the binding synthesiser re-wrap it so
+                        // user code still sees `AsyncCall<T>`.
                         let return_type =
                             unwrap_async_call_if_async(method.is_async, &method.return_type);
 
@@ -1962,7 +1912,7 @@ impl CmInterfaceRegistry {
     }
 
     /// Register a component dependency's binding module via the stdlib's
-    /// [`Self::register_module_decls`] path, recording each interface FQ as a
+    /// `Self::register_module_decls` path, recording each interface FQ as a
     /// component import for [`crate::wir::ImportKind::Component`] classification.
     pub fn register_component_decls(
         &mut self,
@@ -2006,15 +1956,10 @@ impl CmInterfaceRegistry {
     }
 
     /// Register a `--lib` entry module's own named types under the synthesized
-    /// default-interface FQ.
-    ///
-    /// Unlike [`Self::register_module_decls`], library types carry no
-    /// `#[cm(...)]` attribute — they are the package's own declarations, not WIT
-    /// bindings — so CM names are derived by kebab-casing the Wado identifiers
-    /// and the source interface is the library's default-interface FQ. After
-    /// this runs, both the export type plan (`resolve_cm_export_type`) and the
-    /// CM type emitter (`ast_type_to_cm`) resolve these types through the
-    /// registry exactly like WASI types, with no library-specific path.
+    /// default-interface FQ. These carry no `#[cm(…)]` — they are the package's
+    /// declarations, not WIT bindings — so CM names come from kebab-casing the
+    /// Wado identifiers. Afterwards the export type plan and the CM type emitter
+    /// resolve them through the registry exactly like WASI types.
     pub fn register_lib_local_decls(
         &mut self,
         module: &crate::ast::Module,
@@ -2033,20 +1978,11 @@ impl CmInterfaceRegistry {
         }
     }
 
-    /// Register a `--lib` package's locally-defined guest effect interfaces as
-    /// CM imports, so an effect left unhandled at the library boundary lowers to
-    /// a component import the consumer satisfies (rather than an unresolved-call
-    /// ICE). Unlike [`Self::register_module_decls`] — which registers only
-    /// `#[cm(...)]`-tagged stdlib interfaces — this mints a CM identity for a
-    /// user `interface X { ... }`: the interface FQ is the package coordinate
-    /// with the effect's kebab name (`ns:pkg/<effect>@ver`) and each operation's
-    /// CM name is the kebab of its Wado name. An interface already carrying a
-    /// `#[cm]` attribute is a real binding, not a guest effect, and is skipped.
-    ///
-    /// # Errors
-    /// A guest effect whose kebab name equals the library's own interface name
-    /// would mint the library's default-interface FQ, colliding an import with
-    /// the export interface; reported so the user renames the effect.
+    /// Register a `--lib` package's guest effect interfaces as CM imports, so an
+    /// effect left unhandled at the library boundary lowers to a component
+    /// import instead of an unresolved-call ICE. Mints a CM identity for a user
+    /// `interface X { … }`: FQ `ns:pkg/<effect>@ver`, operation names kebabed.
+    /// Errors when an effect's kebab name collides with the library's export.
     pub fn register_lib_guest_effect_imports(
         &mut self,
         interfaces: &[&crate::ast::InterfaceDecl],
@@ -2257,18 +2193,10 @@ impl CmInterfaceRegistry {
 
     // -- Strict, source-aware lookups --------------------------------------
     //
-    // Every stdlib `Type::Named` reference carries an exact
-    // `source_interface` populated during bootstrap (see
-    // `populate_named_type_sources`), so these accessors key directly on
-    // `(interface, name)`. They never fall back to a bare-name scan — the
-    // caller must supply the resolved source — which means a same-named
-    // type in another namespace (e.g. `core:kiln/types::Response` vs.
-    // `wasi:http/types::Response`) cannot shadow a lookup.
-    //
-    // Each accessor returns `Option` so the caller can distinguish "no
-    // registration for that (interface, name) pair" from a specific wrong
-    // interface. When the caller *knows* the registration must exist, use
-    // `.expect("<context>")` to panic loudly if the invariant is violated.
+    // Keyed on `(interface, name)`, never falling back to a bare-name scan, so
+    // a same-named type in another namespace cannot shadow a lookup. The caller
+    // supplies the resolved source, which bootstrap populated on every stdlib
+    // `Type::Named`. `.expect("<context>")` where the registration must exist.
 
     /// Newtype registered at `(interface, name)`, if any.
     pub fn get_newtype_by_source(
@@ -2587,20 +2515,11 @@ impl CmInterfaceRegistry {
             .or_else(|| find_unique_source_with_prefix(&self.newtypes, prefix, name))
     }
 
-    /// Resolve the `wasi:*` source interface for a `NamedType` reference,
-    /// optionally biased by the WASI package currently being synthesized.
-    ///
-    /// Resolution order:
-    ///   1. The reference's own populated `source_interface` (stdlib bootstrap
-    ///      always fills this). Returns `None` if it points outside `wasi:*`.
-    ///   2. When the reference is unresolved (synthesized at lower time from
-    ///      a TIR `ResolvedType`), search every wasi type kind. If a
-    ///      `wasi_package_hint` is supplied, prefer an interface under
-    ///      `wasi:{hint}/` — this disambiguates cross-package same-named
-    ///      types such as `ErrorCode` defined independently in
-    ///      `wasi:filesystem`, `wasi:http`, and `wasi:sockets`.
-    ///   3. Otherwise fall through to the unique wasi-namespace registrant,
-    ///      returning `None` if the name is ambiguous.
+    /// Resolve the `wasi:*` source interface for a `NamedType`. The reference's
+    /// own `source_interface` answers when bootstrap filled it. A reference
+    /// synthesized at lower time has none, so every wasi kind is searched,
+    /// preferring `wasi:{wasi_package_hint}/` — which separates the `ErrorCode`
+    /// of filesystem, http and sockets — else taking the unique registrant.
     pub fn resolve_wasi_source_for(
         &self,
         named: &crate::ast::NamedType,
@@ -2823,18 +2742,11 @@ impl CmInterfaceRegistry {
             || self.flags.keys().any(|(fq, n)| declared_here(fq, n))
     }
 
-    /// Find the interface name (e.g., `"types"`) for a WASI struct given its
-    /// CM kebab name (e.g., `"directory-entry"`). Used by the component
-    /// builder to alias types from WASI interface imports. Scoped to the
-    /// `wasi:` namespace — non-WASI structs are never considered — and
-    /// returns `Some` only when exactly one wasi interface declares the
-    /// struct under that CM name (or a matching Wado name).
-    ///
-    /// The returned key is the package-qualified component-instance key
-    /// `"{package}-{interface}"` (e.g. `"http-types"`), matching how codegen
-    /// registers imported interface instances. A bare interface name would
-    /// collide across packages (`wasi:cli/types` vs `wasi:http/types`, both
-    /// interface `types`).
+    /// Find the interface declaring a WASI struct with CM kebab name `cm_name`,
+    /// for the component builder's import aliasing. Scoped to `wasi:`, and `Some`
+    /// only when exactly one interface declares it. The key is package-qualified
+    /// (`"http-types"`), matching how codegen registers imported instances — a
+    /// bare name would collide `wasi:cli/types` with `wasi:http/types`.
     pub fn find_interface_for_struct_cm_name(&self, cm_name: &str) -> Option<String> {
         let mut found: Option<String> = None;
         for ((source_path, wado_name), (struct_cm_name, _, _)) in &self.structs {
