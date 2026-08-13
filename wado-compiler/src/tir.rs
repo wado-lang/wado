@@ -2861,11 +2861,25 @@ impl TypeTable {
         module_source: ModuleSource,
         type_args: Vec<TypeId>,
     ) -> TypeId {
-        self.intern(ResolvedType::GenericInstance {
+        // Record which declaration the instantiation came from, now, while that
+        // declaration's own type is still interned. Deriving it later — by
+        // looking the base up by name — depends on the base surviving
+        // `prune`, and after monomorphization only the instances are reachable,
+        // so the identity would go missing exactly where codegen needs it.
+        let base = self
+            .find_decl_type_by_name(&name, &module_source)
+            .and_then(|base| self.symbol_by_type.get(base).copied());
+        let id = self.intern(ResolvedType::GenericInstance {
             name,
             module_source,
             type_args,
-        })
+        });
+        if let Some(decl) = base
+            && self.symbol_by_type.get(id).is_none()
+        {
+            self.register_mono_type(decl, id);
+        }
+        id
     }
 
     /// Create an List<T> type (`GenericInstance` { name: "List", ... })
