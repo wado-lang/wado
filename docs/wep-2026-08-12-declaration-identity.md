@@ -471,23 +471,17 @@ compiles, passes the suite, and ends with a mechanical completion check.
 - [x] Declaration data keyed by `DefId`. All seven registries key on the
       declaration, and `TypeLookup`'s `lookup_ref` / `lookup_ref_in` /
       `fn_local_first` are deleted with them.
-- [ ] `Scope` — one implementation of what a name means in a module. Done when
-      `SymbolTable`'s name lookups, `module_import_scope` and `ModuleImports` are
-      deleted. Two helpers in `trait_query` (`scoped_trait_decl_key`,
-      `scoped_trait_decl_module`) are what still read the import maps directly,
-      and they are the semantic decision this step turns on: both are blind to
-      the prelude on purpose, so that an ambient compiler trait stays
-      distinguishable from a same-named user `trait`. The layered scope sees the
-      prelude. Whichever way that resolves needs a fixture.
-  - [ ] The prelude tier. `module_scope_lookup` ignores `#![no_prelude]` and
-        admits every kind; `module_import_scope` honours the attribute and admits
-        types and traits. The opt-out should hold — with the prelude's
-        implementation modules still reachable, since that is what lets a sealed
-        compiler item resolve for a module that never named it.
+- [ ] `Scope` — one implementation of what a name means in a module. The
+      per-name import maps are deleted and nothing outside `Scopes` answers what
+      a name means. What is left is `SymbolTable`'s own lookups, which the
+      resolve pass is built on rather than beside, so folding them in means
+      building `Scopes` during analysis instead of after it.
   - [ ] Function-local items (`Stmt::Item`). The symbol table collects only
-        module-level declarations, so a local `struct` has no identity and no
-        scope entry; `TypeLookup`'s function-local tier answers for it by name.
-        It needs a `DefId` scoped to its declaring function.
+        module-level declarations, so a local `struct` has no identity, and the
+        registries keep two name-keyed tiers above them for it: an ephemeral
+        `fn_local_*` map that tracks the annotate walk's position, and a durable
+        `local_*` map keyed by a mangled storage name no declaration carries. It
+        needs a `DefId` scoped to its declaring function.
 - [ ] `ast::Type::Resolved(DefId)`; synthesis stops spelling names. Done when no
       synthesis site builds a `NamedType` from a `&str`. This has to come before
       the table can be total: a synthesised reference carries an `AstId::fresh`
@@ -526,9 +520,23 @@ mangled storage name that no declaration carries, so `TypeLookup` reads those tw
 maps directly. They go when a local item gets an identity scoped to its declaring
 function.
 
-Unifying the scope is the step with a real risk of behaviour change, because the
-remaining scopes disagree and unifying them picks a winner. Each disagreement is
-a decision made deliberately, with a fixture, rather than one absorbed.
+Unifying the scope was the step with a real risk of behaviour change, and the
+disagreements it surfaced were settled rather than absorbed. Two of them are
+worth stating, because both were narrower than they looked:
+
+- The per-name import maps were not one scope but five questions sharing a map.
+  Each reader gets the one it meant — `imported_as` where the aliasing is the
+  point, `in_scope` for a tie-break between same-named foreign declarations,
+  `value_named` for a name written where a case is reachable. Sharing one map is
+  what made them look like a scope.
+- The two trait-scope helpers were blind to the prelude so that an ambient
+  compiler trait stayed distinguishable from a same-named user `trait`, and both
+  their call sites read `None` as "then it is the ambient one". The layered scope
+  finds that ambient declaration, and it compares equal, so the answer does not
+  move; the distinction is carried by the `decl_index` filter, which is where it
+  belongs. The one case that now differs — the prelude declaring a same-named
+  trait that is not the compiler item — is an ambiguity worth answering rather
+  than defaulting past.
 
 ## Consequences
 
@@ -564,9 +572,9 @@ The numbers this design is aimed at, measured over `wado-compiler/src`:
 
 | quantity                                            | at the start | now     |
 | --------------------------------------------------- | ------------ | ------- |
-| `*name: &str` parameters                            | 867          | 885     |
+| `*name: &str` parameters                            | 867          | 888     |
 | independent walks over the `use` declarations       | 3            | 1       |
-| implementations of "what does this name mean in M"  | 5            | 4       |
+| implementations of "what does this name mean in M"  | 5            | 2       |
 | name-keyed per-module declaration registries        | 7            | 0       |
 | `type_implements_trait` callers passing no identity | 16 of 30     | 0 of 30 |
 | spelling comparisons in trait dispatch              | 2            | 0       |
@@ -583,6 +591,13 @@ Three rows are closed. The query takes a `DefId` and nothing else, so there is n
 `None` left to pass; trait dispatch compares declarations at both ends, with no
 spelling comparison left in the path; and no declaration's contents are reached
 by a name and a module any more, which took `TypeLookup`'s scope walk with it.
+
+The scope row is at two: `Scopes`, and `SymbolTable`'s own lookups, which the
+resolve pass is built on top of rather than beside. `module_import_scope` and
+`ModuleImports` no longer answer what a name means — the per-name import maps are
+deleted — though the former still computes a set of visible spellings for
+`module_visible_types`, which is a heuristic rather than a resolution and does not
+belong to this design.
 
 Two rows have not moved, and both say the same thing. `decl_key_or_local` sat at
 24 for one commit, when a qualified call's required trait was made a `DefId`, and

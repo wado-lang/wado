@@ -107,13 +107,14 @@ impl Scopes {
         for def in from.values() {
             if !matches!(
                 defs.kind(*def),
-                crate::defs::DefKind::Variant | crate::defs::DefKind::Enum | crate::defs::DefKind::Flags
+                crate::defs::DefKind::Variant
+                    | crate::defs::DefKind::Enum
+                    | crate::defs::DefKind::Flags
             ) {
                 continue;
             }
             for member in defs.members(*def) {
-                out.entry(defs.name(*member).to_string())
-                    .or_insert(*member);
+                out.entry(defs.name(*member).to_string()).or_insert(*member);
             }
         }
         out
