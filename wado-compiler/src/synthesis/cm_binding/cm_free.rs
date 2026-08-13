@@ -1,23 +1,8 @@
-//! Which parts of a CM value own linear memory, and how to give it back.
-//!
-//! The Canonical ABI hands a memory-backed value to the host as a pointer into
-//! guest memory, and the guest allocated every buffer behind it. [`CmShape`]
-//! records where those buffers are; [`synthesize_free_cm_value`] emits the
-//! `realloc(ptr, size, align, 0)` calls that release them, walking nested
-//! buffers the outer pointer alone cannot reach — a `list<string>` owns its
-//! element array *and* one payload per element.
-//!
-//! The same classification serves both export boundaries, which differ only in
-//! where the `(ptr, len)` pairs live: behind a memory address for a
-//! synchronous lift's `post-return` ([`synthesize_free_cm_value`]), and in the
-//! flat slots handed to `task.return` for an async one
-//! ([`synthesize_free_cm_flat`]).
-//!
-//! Every offset, size and alignment comes from the `cm_abi` helpers the
-//! lowering side uses, so the two cannot disagree about layout. [`cm_shape`]
-//! panics on a type shape it does not recognise: a type reaching the CM
-//! boundary without an ownership rule fails loudly on first use rather than
-//! leaking silently.
+//! Which parts of a CM value own linear memory, and how to give it back. The
+//! guest allocated every buffer behind a memory-backed value, so [`CmShape`]
+//! records where they are — nested ones the outer pointer cannot reach included
+//! — and the `synthesize_free_cm_*` pair releases them at either export
+//! boundary. [`cm_shape`] panics on an unrecognised shape rather than leaking.
 
 use std::cell::RefCell;
 

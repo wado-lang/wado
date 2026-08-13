@@ -1,14 +1,8 @@
 //! Argument type synthesis — what a call site knows about an argument's type
-//! before any candidate signature exists. Overload selection (WEP 2026-07-31)
-//! needs that before it can pick among a trait's argument lists, arguments being
-//! elaborated only after the winner is known, so this classifies an argument
-//! into an [`ArgClass`]: the set of types it could elaborate to.
-//!
-//! The set must *contain* the real type. Over-approximating costs a resolution,
-//! under-approximating picks the wrong impl, so an inexact premise widens to
-//! [`ArgClass::Head`] or [`ArgClass::Opaque`] rather than guessing. Running
-//! before anything is committed, synthesis must also leave no trace but
-//! interning — the lookups it makes run quiet, asserting the fact count holds.
+//! before any candidate signature exists, which overload selection (WEP
+//! 2026-07-31) needs and elaboration cannot yet give. The resulting
+//! [`ArgClass`] must *contain* the real type, so an inexact premise widens
+//! rather than guessing, and synthesis leaves no trace but interning.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;

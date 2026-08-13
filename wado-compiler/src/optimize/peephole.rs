@@ -1,13 +1,8 @@
-//! Unified peephole engine pass: every position-flexible local rewrite rule
-//! interleaved over one engine session per function — one parent map, use index
-//! and worklist — rather than a session apiece. Only the env-free half of
-//! constant folding runs here; the flow-sensitive folds stay in `const_folding`,
-//! and `select_lowering` is a terminal post-loop lowering.
-//!
-//! Invoked twice per fixed-point iteration: before `inline`, where `string_push`
-//! can still see a `push_str` call, and after, where `array_literal` sees the
-//! exposed `array_new + push` window. Each rule no-ops in the run that is not
-//! its own, bailing on the first non-matching node. See WEP 2026-06-05.
+//! Unified peephole engine pass (WEP 2026-06-05): every position-flexible local
+//! rewrite rule interleaved over one engine session per function rather than a
+//! session apiece, invoked twice per fixed-point iteration so `string_push` can
+//! still see a `push_str` before `inline` and `array_literal` its window after.
+//! Only the env-free half of constant folding runs here.
 
 use cranelift_entity::EntityRef;
 

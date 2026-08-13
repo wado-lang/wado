@@ -1,14 +1,8 @@
 //! Deduplicate identical immutable constant globals, which `const_global`
-//! promotes one apiece however many share a value. Such a global has no
-//! observable identity under Wado's value semantics — reads copy out, `==` is
-//! structural — so two with byte-identical inits and slot metadata are
-//! interchangeable, and each group collapses to one canonical global.
-//!
-//! Identity *is* observable through `ref.eq` on two `&T` operands, so the pass
-//! bails outright on a module containing any. Slot metadata joins the group key,
-//! nullability deciding codegen's `ref.as_non_null`, and an exported global is
-//! never merged away. Removal defers to `compact_globals`, a `Vec::retain` here
-//! shifting its position-keyed index set.
+//! promotes one apiece however many share a value: such a global has no
+//! observable identity, so each group of byte-identical init and slot metadata
+//! collapses to one. Identity *is* observable through `ref.eq`, so the pass
+//! bails on a module containing any, and an exported global never merges away.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirExportDesc, WirFuncId, WirInstr, WirPackage, WirType, WirTypeId};

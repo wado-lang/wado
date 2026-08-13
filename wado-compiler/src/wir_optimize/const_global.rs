@@ -1,13 +1,8 @@
 //! Constant global-initializer promotion: a user-immutable global whose
 //! initializer is no syntactic Wasm constant becomes an `__initialize_module`
 //! runtime assignment, which NIR optimization often reduces back to a constant.
-//! This is the single eager/lazy classifier — it moves the constant into the
-//! eager `init`, marks the global immutable, and drops the `GlobalSet`s.
-//!
-//! The assignment is found wherever it ends up, including duplicated per entry
-//! export when module-init is inlined, so the scan recurses and promotes when
-//! *every* assignment is constant — they are copies of one init. Const-ness is
-//! decided by [`WirInstr::is_const_expressible`], which leaves strings lazy.
+//! This is the single eager/lazy classifier, promoting when *every* assignment
+//! is [`WirInstr::is_const_expressible`] — leaving a string lazy.
 
 use super::dedupe_const_globals::const_key;
 use crate::hashmap::{IndexMap, IndexSet};

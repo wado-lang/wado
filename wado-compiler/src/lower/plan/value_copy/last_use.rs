@@ -1,18 +1,8 @@
-//! TIR-level move-eligibility for the value-copy fold (WEP 2026-05-21). A local
-//! may be *moved* rather than copied when that is provably unobservable: every
-//! read is a final use, and its storage traces back — through locals themselves
-//! dead at the hand-off — to a fresh allocation nothing else references. This
-//! reaches the *synthesized* bodies the source-level last-use pass cannot see.
-//!
-//! One backward liveness pass yields both facts. A *final read* is one after
-//! which the local is dead on every live path. *No live alias* means nothing the
-//! value derives from is still live at the binding, so a once-consumed temporary
-//! passes while a re-read scrutinee does not. Owned storage is then a least
-//! fixpoint over the two.
-//!
-//! A function containing a closure, effect handler, or `resume` is skipped
-//! wholesale, since either can re-observe a local this pass does not model.
-//! `live` over-approximates everywhere, so at worst a copy is kept.
+//! TIR-level move-eligibility for the value-copy fold (WEP 2026-05-21), over the
+//! *synthesized* bodies the source-level pass cannot see. One backward liveness
+//! pass yields both facts a move needs: every read is a final use, and nothing
+//! the value derives from is still live at the binding. A function containing a
+//! closure, handler or `resume` is skipped, either being able to re-observe.
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;

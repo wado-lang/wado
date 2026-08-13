@@ -1,13 +1,8 @@
 //! [`ModuleSemantics`] — per-module semantic facts (WEP 2026-05-26), one
-//! instance per loaded module owned by `AnnotateState::module_semantics`. The
-//! per-module [`super::Elaborator`] takes it for the length of `resolve_module`
-//! and the driver re-installs it; every other phase borrows it.
-//!
-//! Membership splits across four sub-structs, each in its own file so the
-//! "does this fit?" question that gates a new field stays reviewable:
-//! [`bindings::ModuleBindings`] for `use → def` edges, [`imports::ModuleImports`]
-//! for the name-resolution context, [`types::TypeAnnotations`] for per-`AstId`
-//! body-walk decisions, and [`decls::ModuleDecls`] for declarations.
+//! instance per loaded module that the per-module [`super::Elaborator`] takes
+//! for the length of `resolve_module` and every other phase borrows. Membership
+//! splits across four sub-structs, each in its own file so the "does this fit?"
+//! question that gates a new field stays reviewable.
 
 pub(crate) mod bindings;
 pub(crate) mod decls;
@@ -33,13 +28,8 @@ pub(crate) struct ModuleSemantics {
     /// Per-impl trait default-method `ModuleSemantics` snapshots, keyed by
     /// `(impl_block.id, trait_default_method.ast_id)`. The same trait body is
     /// synthesised once per impl, so one trait node legitimately carries a fact
-    /// set per impl — snapshot isolation is what a single flat map could not do,
-    /// globally-unique ids notwithstanding.
-    ///
-    /// Each value carries `types` / `bindings` fresh from that one pair's body
-    /// walk, `decls` / `imports` cloned from the impl module so name resolution
-    /// works inside it, and no nested snapshots. Reify reads an entry through the
-    /// same perspective swap it uses for any cross-module AST.
+    /// set per impl, which snapshot isolation gives and a flat map could not.
+    /// Each value's `decls` / `imports` are cloned from the impl module.
     pub(crate) default_method_semantics: IndexMap<(AstId, AstId), ModuleSemantics>,
 }
 
