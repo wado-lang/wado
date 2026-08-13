@@ -890,7 +890,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> crate::name::FqTraitName {
         let resolutions = &self.tysys.resolutions;
         let answer = resolutions.get(site);
-        if let Some(crate::resolve::Resolution::Binder(_)) = answer {
+        if let crate::resolve::Resolution::Binder(_) = answer {
             return crate::name::FqTraitName::binder(written);
         }
         let (base, args) = crate::name::split_head_and_args(written);
@@ -945,7 +945,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .and_then(|site| {
                 let resolutions = &self.tysys.resolutions;
                 match resolutions.get(site) {
-                    Some(crate::resolve::Resolution::Binder(_)) => {
+                    crate::resolve::Resolution::Binder(_) => {
                         Some(crate::name::FqTraitName::binder(&written))
                     }
                     _ => resolutions.declared(site).map(|def| {

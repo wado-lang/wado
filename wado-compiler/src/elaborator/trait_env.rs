@@ -1981,7 +1981,7 @@ fn sited_impl_target_key(
         return Some(ImplTargetKey::Ref(kind));
     }
     let site = crate::resolve::head_site(ty)?;
-    match resolutions.get(site)? {
+    match resolutions.get(site) {
         // The impl's own binder, which shadows any declaration of that name —
         // `impl<T> Trait for T` written where a `struct T` exists stays a
         // blanket.

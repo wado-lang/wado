@@ -298,7 +298,7 @@ impl Resolutions {
     /// shape, an unresolved name, or a site the walk never reached.
     #[must_use]
     pub fn declared(&self, site: AstId) -> Option<DefId> {
-        match self.get(site)? {
+        match self.get(site) {
             Resolution::Def(def) => Some(def),
             Resolution::Binder(_) | Resolution::Unresolved => None,
         }
@@ -307,16 +307,15 @@ impl Resolutions {
     /// The answer for a reference site, or `None` when the site was never
     /// walked — a coverage hole rather than an unresolved name.
     #[must_use]
-    pub fn get(&self, site: AstId) -> Option<Resolution> {
-        let answer = self.refs.get(&site).copied();
-        // Stated here rather than at the callers so it covers every one of
-        // them, `declared` included. A missing answer is a coverage hole in the
-        // walk, not a name that reaches nothing — those are `Unresolved`.
-        debug_assert!(
-            answer.is_some(),
-            "every reference site is resolved before elaboration, {site:?} was not"
-        );
-        answer
+    /// Total: every reference site has an answer, because the walk reaches
+    /// every one and a name that reaches nothing is [`Resolution::Unresolved`]
+    /// rather than a missing entry. A caller therefore has no "no answer" case
+    /// to write a fallback for — which is the point, since that fallback is
+    /// where a spelling used to be re-resolved.
+    pub fn get(&self, site: AstId) -> Resolution {
+        self.refs.get(&site).copied().unwrap_or_else(|| {
+            panic!("every reference site is resolved before elaboration, {site:?} was not")
+        })
     }
 
     #[must_use]
@@ -781,7 +780,9 @@ mod tests {
             bounds.len()
         );
         for site in sites.into_iter().chain(bounds) {
-            assert!(r.get(site).is_some(), "the walk missed the site {site:?}");
+            // `get` is total, so a site the walk missed panics here naming
+            // itself — the assertion is the call.
+            let _ = r.get(site);
         }
     }
 
