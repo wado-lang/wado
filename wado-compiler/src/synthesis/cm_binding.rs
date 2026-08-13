@@ -274,8 +274,6 @@ impl TirRefVisitor for NamedPayloadFinder<'_> {
     }
 }
 
-/// Why the `Future<T>` / `Stream<T>` payload at `expr` cannot be lowered, or
-/// `None` if it can.
 fn unresolvable_future_stream_payload(
     tt: &TypeTable,
     registry: &crate::component_model::CmInterfaceRegistry,
@@ -298,8 +296,8 @@ fn unresolvable_future_stream_payload(
     crate::component_model::stream_payload_rejection(tt, payload)
 }
 
-/// The payload an expression names, and whether it is a future's. Two shapes
-/// name one: a `new()` static call, and a CM method on a handle.
+/// Two shapes name a payload: a `new()` static call, and a CM method on a
+/// handle. The bool is whether it is a future's.
 fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId, bool)> {
     let TirExprKind::Call { func, .. } = &expr.kind else {
         return None;
@@ -336,10 +334,9 @@ fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId,
     Some((*tt.generic_type_args(type_id)?.first()?, is_future))
 }
 
-/// The first named type nested anywhere in a CM payload that is not registered
-/// under its own module source. Keyed on `module_source`, never the bare name:
-/// a homonym of an imported WASI or dependency declaration lives under a
-/// different source and carries a different shape.
+/// Keyed on `module_source`, never the bare name: a homonym of an imported
+/// WASI or dependency declaration lives under a different source and carries a
+/// different shape.
 fn unresolvable_record_in_payload(
     tt: &TypeTable,
     registry: &crate::component_model::CmInterfaceRegistry,
@@ -379,7 +376,6 @@ fn unresolvable_record_in_payload(
     None
 }
 
-/// The name and module source of a type that lowers to `CmPayloadType::Named`.
 fn named_decl_of(ty: &ResolvedType) -> Option<(&String, &ModuleSource)> {
     match ty {
         ResolvedType::Struct {

@@ -345,9 +345,8 @@ fn payload_ast_type(
     type_id_to_ast_type(id, tt, registry)
 }
 
-/// Whether `elem` takes the value-payload stream path, rather than the `u8`
-/// default or the record path. Asked directly rather than through
-/// `classify_stream_payload`, which panics instead of answering `false`.
+/// Asked directly rather than through `classify_stream_payload`, which panics
+/// instead of answering `false`.
 fn has_value_payload(tt: &TypeTable, elem: TypeId) -> bool {
     !matches!(
         tt.get(elem),
@@ -1854,7 +1853,6 @@ fn parameterize_future_cm_name(
     expr: &TirExpr,
     tt: &TypeTable,
 ) -> Option<CanonicalIntrinsic> {
-    // Matched first so a non-future method skips the receiver classification.
     let make = match cm_name {
         "future-drop-readable" => CanonicalIntrinsic::FutureDropReadable,
         "future-drop-writable" => CanonicalIntrinsic::FutureDropWritable,
@@ -1872,22 +1870,17 @@ fn parameterize_future_cm_name(
     Some(make(payload))
 }
 
-/// Parameterize a stream CM name based on the receiver type.
-/// For non-u8 streams (e.g., `Stream<DirectoryEntry>`), appends the CM record name
-/// (e.g., "stream-drop-readable:directory-entry").
-///
-/// Prefers the canonical CM name registered via `#[cm("…")]` so that
-/// non-mechanical mappings (e.g., `DNSRecord` → `dns-record`) and
-/// preserved acronyms aren't mangled. Falls back to a `PascalCase` →
-/// kebab-case conversion only for receiver element types not in the
-/// registry (user-authored streams).
+/// The stream drop / cancel intrinsic for `cm_name`, parameterized by the
+/// receiver's element. A record element takes its `#[cm("…")]` name, so a
+/// non-mechanical mapping (`DNSRecord` → `dns-record`) is not mangled; only a
+/// user-authored element outside the registry falls back to `PascalCase` →
+/// kebab-case.
 fn parameterize_stream_cm_name(
     cm_name: &str,
     expr: &TirExpr,
     tt: &TypeTable,
     cm_interface_registry: &CmInterfaceRegistry,
 ) -> Option<CanonicalIntrinsic> {
-    // Matched first so a non-stream method skips the receiver classification.
     let make = match cm_name {
         "stream-drop-readable" => CanonicalIntrinsic::StreamDropReadable,
         "stream-drop-writable" => CanonicalIntrinsic::StreamDropWritable,

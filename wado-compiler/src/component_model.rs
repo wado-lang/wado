@@ -16,13 +16,12 @@ use crate::module_source::ModuleSource;
 use crate::name::to_kebab;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
-/// The one classifier, shared by future-read synthesis and the WIR-build
-/// write / cancel / drop / new paths, so every operation on a given `Future<T>`
-/// agrees on its component-level future type.
+/// The one classifier, so every operation on a given `Future<T>` — read, write,
+/// cancel, drop, new — agrees on its component-level future type.
 ///
 /// # Panics
-/// On a payload it cannot classify. Reach one through
-/// [`future_payload_rejection`] first, for a diagnostic instead.
+/// On a payload it cannot classify. Ask [`future_payload_rejection`] first, for
+/// a diagnostic instead.
 pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFuturePayload {
     try_classify_future_payload(type_table, type_arg).unwrap_or_else(|| {
         panic!(
@@ -32,7 +31,6 @@ pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFu
     })
 }
 
-/// Why `payload` cannot be a `future<T>` payload, or `None` if it can.
 pub fn future_payload_rejection(type_table: &TypeTable, payload: TypeId) -> Option<String> {
     try_classify_future_payload(type_table, payload)
         .is_none()
@@ -44,8 +42,7 @@ pub fn future_payload_rejection(type_table: &TypeTable, payload: TypeId) -> Opti
         })
 }
 
-/// Whether `element` takes the registry-driven `Record` stream path, which
-/// needs no [`CmPayloadType`].
+/// The registry-driven `Record` stream path needs no [`CmPayloadType`].
 pub fn is_cm_record_stream_element(type_table: &TypeTable, element: TypeId) -> bool {
     matches!(
         type_table.get(peel_newtypes(type_table, element)),
@@ -53,7 +50,6 @@ pub fn is_cm_record_stream_element(type_table: &TypeTable, element: TypeId) -> b
     )
 }
 
-/// Why `element` cannot be a `stream<T>` element, or `None` if it can.
 pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Option<String> {
     let element = peel_newtypes(type_table, element);
     if matches!(
@@ -99,7 +95,6 @@ fn try_classify_future_payload(
         ResolvedType::GenericInstance {
             name, type_args, ..
         } if name == "Result" && type_args.len() >= 2 => {
-            // A unit Ok arm alone does not make a transmission future.
             if matches!(type_table.get(type_args[0]), ResolvedType::Unit)
                 && let Some(source) = wasi_error_code_source(type_table, type_args[1])
             {
@@ -136,12 +131,12 @@ fn is_trailers_payload(type_table: &TypeTable, type_arg: TypeId) -> bool {
 }
 
 /// A WASI-owned element (`stream<directory-entry>`) belongs to the
-/// registry-driven `Record` path instead, so callers select between the two
-/// with [`is_cm_record_stream_element`] before asking.
+/// registry-driven `Record` path instead — select with
+/// [`is_cm_record_stream_element`] before asking.
 ///
 /// # Panics
-/// On an element it cannot classify. Reach one through
-/// [`stream_payload_rejection`] first, for a diagnostic instead.
+/// On an element it cannot classify. Ask [`stream_payload_rejection`] first,
+/// for a diagnostic instead.
 pub fn classify_stream_payload(
     type_table: &TypeTable,
     element: TypeId,
@@ -437,8 +432,7 @@ fn is_trailers_payload_from_ast(
         .is_some()
 }
 
-/// An AST type as source spells it, for a diagnostic or a panic message — the
-/// `Debug` form dumps spans and ids.
+/// For a diagnostic or a panic message — the `Debug` form dumps spans and ids.
 fn render_ast_type(ty: &crate::ast::Type) -> String {
     let mut out = String::new();
     crate::unparse::unparse_type_into(ty, &mut out);
@@ -698,7 +692,7 @@ impl CmFunctionInfo {
         })
     }
 
-    /// Whether this function returns a Future<T> or a tuple containing Future<T>.
+    /// Whether this function returns a `Future<T>`, or a tuple containing one.
     pub fn return_type_has_future(&self) -> bool {
         fn has_future(ty: &Type) -> bool {
             match ty {
@@ -2396,10 +2390,9 @@ impl CmInterfaceRegistry {
             .map(|(_, wado, _)| wado.as_str())
     }
 
-    /// The Wado name a record / variant / enum / flags is declared under, from
-    /// its CM kebab name, when unambiguous across interfaces and kinds. Codegen
-    /// reconstructs the declaring `Type::Named` for a `CmPayloadType::Named`
-    /// payload through it.
+    /// The Wado name a record / variant / enum / flags is declared under, when
+    /// unambiguous across interfaces and kinds. Codegen rebuilds the declaring
+    /// `Type::Named` for a `CmPayloadType::Named` payload through it.
     pub fn find_named_type_wado_name_by_cm(&self, cm_name: &str) -> Option<&str> {
         let mut hits = self
             .structs
@@ -2813,13 +2806,11 @@ impl CmInterfaceRegistry {
             .map(|(cm_name, _)| cm_name.as_str())
     }
 
-    /// Whether a record / variant / enum / flags named `name` is registered
-    /// under an interface whose CM source is exactly `source`. Keying on the
-    /// declaration's own module source keeps a user type from being confused
-    /// with a same-named WASI or dependency declaration.
+    /// Keying on the declaration's own module source keeps a user type from
+    /// being confused with a same-named WASI or dependency declaration.
     ///
     /// A `--lib` entry declaration is registered under the package default
-    /// interface, whose source [`register_lib_local_decls`] maps to the entry
+    /// interface, whose source [`Self::register_lib_local_decls`] maps to the entry
     /// module; outside `--lib` it is registered nowhere, so this is `false` and
     /// the payload has no CM type to lower against.
     pub fn is_named_type_registered_from(&self, source: &ModuleSource, name: &str) -> bool {
@@ -2966,7 +2957,7 @@ impl CmInterfaceRegistry {
             })
     }
 
-    /// Get the resource type from a return type (if it's Option<ResourceName>)
+    /// The resource named by a return type, if it is an `Option<Resource>`.
     /// Returns (Wado name, CM name) if the return type references a resource
     pub fn get_resource_from_return_type(
         &self,
@@ -3680,7 +3671,6 @@ impl CmTypeGen {
         }
     }
 
-    /// The interface these types are being generated for, when known.
     pub fn interface_hint(&self) -> Option<&str> {
         self.interface_hint.as_deref()
     }

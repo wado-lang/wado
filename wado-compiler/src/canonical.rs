@@ -71,7 +71,6 @@ pub enum CmPayloadType {
     String,
     List(Box<CmPayloadType>),
     Option(Box<CmPayloadType>),
-    /// Either arm absent (`None`) for the unit case.
     Result(Option<Box<CmPayloadType>>, Option<Box<CmPayloadType>>),
     Tuple(Vec<CmPayloadType>),
     /// A record / variant / enum / flags, by CM kebab name.
@@ -153,8 +152,8 @@ impl CmPayloadType {
     }
 }
 
-/// Split a comma-separated type list at the top nesting level only, so that
-/// `result<u32, string>, list<u32>` splits into the two intended parts.
+/// Splits at the top nesting level only, so `result<u32,string>,list<u32>`
+/// splits in two.
 fn split_top_level(s: &str) -> Vec<String> {
     let mut parts = Vec::new();
     let mut depth = 0i32;
@@ -176,7 +175,7 @@ fn split_top_level(s: &str) -> Vec<String> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmStreamPayload {
-    /// The default `stream<u8>` — file I/O, stdin/stdout.
+    /// The default stream, and the only suffix-less one.
     U8,
     /// A CM record element, by its kebab name.
     Record(String),
