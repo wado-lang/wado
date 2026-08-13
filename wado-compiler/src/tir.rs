@@ -1159,18 +1159,7 @@ impl TypeTable {
     /// the generic was declared in.
     #[must_use]
     pub fn is_seq_container(&self, type_id: TypeId) -> bool {
-        let declared = match self.get(type_id) {
-            ResolvedType::Struct { decl_name, .. } => decl_name.as_str(),
-            ResolvedType::GenericInstance { name, .. } => name.as_str(),
-            _ => return false,
-        };
-        [
-            crate::compiler_item::CompilerItem::String,
-            crate::compiler_item::CompilerItem::List,
-        ]
-        .into_iter()
-        .filter_map(|item| self.compiler_items().struct_owned_opt(item))
-        .any(|(_, item_name)| item_name == declared)
+        self.is_string(type_id) || self.is_list(type_id)
     }
 
     /// Find the `TypeId` of a user-declared type (struct, enum, variant, flags,
@@ -1424,6 +1413,17 @@ impl TypeTable {
         let Some(decl) = self
             .compiler_items
             .variant_decl(crate::compiler_item::CompilerItem::Result)
+        else {
+            return false;
+        };
+        self.decl_of_type(id) == Some(decl)
+    }
+
+    /// Whether `id` is an instance of the compiler's `List` struct.
+    pub fn is_list(&self, id: TypeId) -> bool {
+        let Some(decl) = self
+            .compiler_items
+            .struct_decl(crate::compiler_item::CompilerItem::List)
         else {
             return false;
         };

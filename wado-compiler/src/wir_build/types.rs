@@ -1162,10 +1162,8 @@ fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
     {
         let type_table = &*tt_rc.borrow();
         for type_id in type_table.iter_type_ids() {
-            if let ResolvedType::GenericInstance {
-                name, type_args, ..
-            } = type_table.get(type_id)
-                && name == "List"
+            if let ResolvedType::GenericInstance { type_args, .. } = type_table.get(type_id)
+                && type_table.is_list(type_id)
                 && type_args.len() == 1
             {
                 if type_table.contains_type_param(type_args[0]) {
@@ -1195,7 +1193,7 @@ fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
     let mut leaf: Vec<(crate::tir::TypeId, String)> = Vec::new();
     let mut nested: Vec<(crate::tir::TypeId, String)> = Vec::new();
     for (elem_tid, elem_name) in &array_elem_types {
-        if matches!(tt.get(*elem_tid), ResolvedType::GenericInstance { name, .. } if name == "List")
+        if tt.is_list(*elem_tid)
         {
             nested.push((*elem_tid, elem_name.clone()));
         } else {

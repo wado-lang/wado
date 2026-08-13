@@ -3675,6 +3675,14 @@ fn register_seq_containers(table: &mut TypeTable) {
         (wado_compiler::compiler_item::CompilerItem::String, "String"),
         (wado_compiler::compiler_item::CompilerItem::List, "List"),
     ] {
+        // A compiler item names a declaration, so the fixture makes one: intern
+        // the struct, bind it to a declaring node, and register the item
+        // against that same node. Registering a node nothing is bound to leaves
+        // `is_string` / `is_list` answering no, which is what
+        // `is_seq_container` asks.
+        let decl = wado_compiler::ast::AstId::fresh();
+        let ty = table.make_struct(name.to_string(), ModuleSource::default());
+        table.register_decl_type(decl, ty);
         table
             .compiler_items_mut()
             .register(
@@ -3682,7 +3690,7 @@ fn register_seq_containers(table: &mut TypeTable) {
                 wado_compiler::compiler_item::Resolved::Struct {
                     module_source: ModuleSource::default(),
                     name: name.to_string(),
-                    decl: wado_compiler::ast::AstId::fresh(),
+                    decl,
                 },
             )
             .expect("a struct item takes a struct");
