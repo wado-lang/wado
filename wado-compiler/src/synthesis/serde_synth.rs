@@ -190,26 +190,10 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         let tt = type_table.borrow();
         tt.all_types()
             .filter_map(|(id, resolved)| match resolved {
-                ResolvedType::Struct {
-                    decl_name: name,
-                    module_source,
-                    ..
-                }
-                | ResolvedType::Enum {
-                    name,
-                    module_source,
-                    ..
-                }
-                | ResolvedType::Variant {
-                    name,
-                    module_source,
-                    ..
-                }
-                | ResolvedType::Flags {
-                    name,
-                    module_source,
-                    ..
-                } => Some(((name.clone(), module_source.clone()), id)),
+                ResolvedType::Struct { .. }
+                | ResolvedType::Enum { .. }
+                | ResolvedType::Variant { .. }
+                | ResolvedType::Flags { .. } => tt.nominal_head(id).map(|head| (head, id)),
                 _ => None,
             })
             .collect()

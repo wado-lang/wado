@@ -314,8 +314,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Enumerate by the bare head: a generic impl `impl<T> Log for Ctx<T>`
         // is keyed under "Ctx", not the instantiated "Ctx<i32>".
         let type_name = match &resolved {
-            ResolvedType::GenericInstance { name, .. }
-            | ResolvedType::GenericResource { name, .. } => name.clone(),
+            ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => {
+                self.tysys.type_table.borrow().def_name(*def).to_string()
+            }
             _ => self.tysys.type_table.borrow().type_name(handler_type),
         };
         let effects = self.collect_effect_impls_for_type(&type_name);

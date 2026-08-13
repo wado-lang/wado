@@ -854,7 +854,7 @@ impl FunctionTranslator<'_, '_> {
                     .base
                     .type_table
                     .borrow()
-                    .struct_rendered_name(&decl_name, &type_args);
+                    .struct_rendered_name(def, &type_args);
                 self.base
                     .struct_fields_map
                     .get(&(name, module_source))?

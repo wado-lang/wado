@@ -119,11 +119,13 @@ pub fn cm_payload_type_from_type_id(
         // A user/dependency record: lower/lift it as a named CM record. WASI and
         // kiln records keep their own (registry-driven) paths, so they stay
         // `None` here and fall through to the legacy classification.
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),
+        ResolvedType::Struct { def, .. }
+            if !is_cm_owned_source(type_table.struct_head_module(*def)) =>
+        {
+            Some(CmPayloadType::Named(to_kebab(
+                &type_table.struct_head_name(*def),
+            )))
+        }
         _ => None,
     }
 }
@@ -285,9 +287,7 @@ pub fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
 /// is parameterized by it. Falls back to `"cli"` for a non-WASI error type.
 pub fn error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> String {
     let module_source = match type_table.get(error_type_id) {
-        ResolvedType::Enum { module_source, .. } | ResolvedType::Variant { module_source, .. } => {
-            module_source
-        }
+        ResolvedType::Enum { def } | ResolvedType::Variant { def } => type_table.def_module(*def),
         _ => return "cli".to_string(),
     };
     if let ModuleSource::Wasi { interface } = module_source {

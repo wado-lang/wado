@@ -1242,11 +1242,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             crate::tir::ResolvedType::Newtype { base_type, .. } => {
                 self.type_contains_closure_inner(type_table, *base_type, visited)
             }
-            crate::tir::ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => {
+            crate::tir::ResolvedType::Struct { .. } => {
+                let (name, module_source) = &self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(type_id)
+                    .expect("a struct names a declaration");
                 // Recurse into the struct's field types via the elaborator's
                 // pre-built field registry. Self-recursive structs are
                 // protected by `visited`.
@@ -1258,11 +1260,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .into_iter()
                     .any(|t| self.type_contains_closure_inner(type_table, t, visited))
             }
-            crate::tir::ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => {
+            crate::tir::ResolvedType::Variant { .. } => {
+                let (name, module_source) = &self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(type_id)
+                    .expect("a variant names a declaration");
                 // The per-case payload types live in `all_variant_cases`; look
                 // them up so a variant case payload containing a closure type
                 // fails the CM boundary check too.

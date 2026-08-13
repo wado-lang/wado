@@ -868,17 +868,15 @@ fn variant_cases(project: &NirPackage, type_id: TypeId) -> Option<(Vec<String>, 
     let (name, module_source, type_args) = {
         let type_table = project.type_table.borrow();
         match type_table.get(type_id) {
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source.clone(), Vec::new()),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => (name.clone(), module_source.clone(), type_args.clone()),
+            ResolvedType::Variant { .. } => {
+                let (n, m) = type_table.nominal_head(type_id)?;
+                (n, m, Vec::new())
+            }
+            ResolvedType::GenericInstance { type_args, .. } => {
+                let args = type_args.clone();
+                let (n, m) = type_table.nominal_head(type_id)?;
+                (n, m, args)
+            }
             _ => return None,
         }
     };
@@ -1788,17 +1786,17 @@ impl Rebind {
         let boxes = local_types
             .iter()
             .filter_map(|&declared| match type_table.get(declared) {
-                ResolvedType::Struct {
-                    decl_name,
-                    type_args,
-                    ..
-                } if *decl_name == box_name && type_args.len() == 1 => Some((
-                    declared,
-                    (
-                        type_args[0],
-                        type_table.struct_rendered_name(decl_name, type_args),
-                    ),
-                )),
+                ResolvedType::Struct { def, type_args }
+                    if type_table.struct_head_name(*def) == box_name && type_args.len() == 1 =>
+                {
+                    Some((
+                        declared,
+                        (
+                            type_args[0],
+                            type_table.struct_rendered_name(*def, type_args),
+                        ),
+                    ))
+                }
                 _ => None,
             })
             .collect();

@@ -546,11 +546,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let expected_resolved =
                             self.tysys.type_table.borrow().get(expected).clone();
                         if let ResolvedType::GenericInstance {
-                            name: expected_name,
+                            def: expected_def,
                             type_args: expected_args,
-                            ..
                         } = expected_resolved
-                            && expected_name == prefix
+                            && self.tysys.type_table.borrow().def_name(expected_def) == prefix
                             && expected_args.len() == variant_info.type_param_type_ids.len()
                         {
                             payload_type =
@@ -2790,15 +2789,13 @@ impl TypeSystem {
         if let Some(expected) = expected_type {
             let expected_resolved = self.type_table.borrow().get(expected).clone();
             if let ResolvedType::GenericInstance {
-                name,
-                module_source,
+                def,
                 type_args: expected_args,
-                ..
             } = expected_resolved
-                && name == variant_name
+                && self.type_table.borrow().def_name(def) == variant_name
                 && expected_args.len() == variant_info.type_param_type_ids.len()
             {
-                canonical_module_source = Some(module_source);
+                canonical_module_source = Some(self.type_table.borrow().def_module(def).clone());
                 for (&param_id, &expected_arg) in variant_info
                     .type_param_type_ids
                     .iter()
@@ -2826,11 +2823,14 @@ impl TypeSystem {
                 .type_id_of_decl(variant_info.defined_at);
         }
 
-        self.type_table.borrow_mut().make_generic_instance(
-            variant_info.name.clone(),
-            module_source,
-            type_args,
-        )
+        let def = self
+            .type_table
+            .borrow()
+            .decl_named_in(&variant_info.name, &module_source)
+            .expect("the variant being instantiated is declared");
+        self.type_table
+            .borrow_mut()
+            .make_generic_instance(def, type_args)
     }
 }
 

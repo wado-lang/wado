@@ -2777,20 +2777,19 @@ fn extract_resource_instantiation(
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 tid = *inner;
             }
-            ResolvedType::Resource {
-                name,
-                module_source,
-                ..
-            } => {
-                return Some((module_source.clone(), name.clone(), Vec::new()));
+            ResolvedType::Resource { def } => {
+                return Some((
+                    type_table.def_module(*def).clone(),
+                    type_table.def_name(*def).to_string(),
+                    Vec::new(),
+                ));
             }
-            ResolvedType::GenericResource {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => {
-                return Some((module_source.clone(), name.clone(), type_args.clone()));
+            ResolvedType::GenericResource { def, type_args } => {
+                return Some((
+                    type_table.def_module(*def).clone(),
+                    type_table.def_name(*def).to_string(),
+                    type_args.clone(),
+                ));
             }
             _ => return None,
         }

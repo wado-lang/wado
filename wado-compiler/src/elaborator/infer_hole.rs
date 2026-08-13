@@ -613,11 +613,8 @@ fn sub_generic_instantiation(
     sub_vec(tt, &mut gi.type_args, subst);
     gi.instance_type = sub(tt, gi.instance_type, subst);
     if let Some(name) = gi.mangled_name.as_mut()
-        && let ResolvedType::GenericInstance {
-            name: base,
-            type_args,
-            ..
-        } = tt.get(gi.instance_type).clone()
+        && let ResolvedType::GenericInstance { def, type_args } = tt.get(gi.instance_type).clone()
+        && let base = tt.def_name(def).to_string()
     {
         let arg_names: Vec<String> = type_args.iter().map(|&t| tt.type_name(t)).collect();
         *name = crate::name::mangle_generic_name(&base, &arg_names);

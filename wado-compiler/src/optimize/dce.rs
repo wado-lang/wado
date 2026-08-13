@@ -1185,7 +1185,7 @@ impl<'a> DceWalker<'a> {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                     current_type = self.type_table.get(*inner);
                 }
-                ResolvedType::Newtype { def, base_type } => {
+                ResolvedType::Newtype { def, base_type, .. } => {
                     // Remember the outermost newtype for its own trait impls
                     if newtype_info.is_none() {
                         newtype_info = Some((

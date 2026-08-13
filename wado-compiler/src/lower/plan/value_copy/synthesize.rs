@@ -508,8 +508,8 @@ fn is_synth_safe_element(
         | ResolvedType::TypePack { .. } => false,
         ResolvedType::Variant { .. } => true,
         ResolvedType::GenericInstance { def, .. } => {
-            let name = &type_table.borrow().def_name(*def).to_string();
-            let module_source = &type_table.borrow().def_module(*def).clone();
+            let name = &type_table.borrow().def_name(def).to_string();
+            let module_source = &type_table.borrow().def_module(def).clone();
             // Tuples / String / List<T> / known struct templates are
             // safe; unknown generic-instance names whose template
             // isn't a registered struct or variant are not.
@@ -531,7 +531,7 @@ fn is_synth_safe_element(
                         .to_string(),
                 )
             };
-            if name == list_name || name == string_name || name == box_name {
+            if *name == list_name || *name == string_name || *name == box_name {
                 return true;
             }
             // A concrete monomorphised struct entry is the strongest

@@ -41,13 +41,9 @@ impl Monomorphizer {
         // so that substitute_type can use it for self-references
         let mut instance_ids = Vec::new();
         for id in type_table.iter_type_ids() {
-            if let ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } = type_table.get(id)
-                && name == &key.name
+            if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id)
+                && type_table.def_name(*def) == key.name
+                && let module_source = type_table.def_module(*def)
                 && module_source == &key.module_source
                 && type_args == &key.impl_type_args
             {

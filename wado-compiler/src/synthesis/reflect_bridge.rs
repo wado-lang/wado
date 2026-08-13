@@ -114,13 +114,7 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
         let tt = flat.type_table.borrow();
         tt.iter_type_ids()
             .filter_map(|id| {
-                let ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                    ..
-                } = tt.get(id)
-                else {
+                let ResolvedType::GenericInstance { def, type_args } = tt.get(id) else {
                     return None;
                 };
                 // An unsubstituted parameter or projection prints as itself
@@ -134,7 +128,14 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
                 }
                 seen_subjects
                     .insert(tt.mangle_type_arg_for_generic(id))
-                    .then(|| (id, name.clone(), module_source.clone(), type_args.clone()))
+                    .then(|| {
+                        (
+                            id,
+                            tt.def_name(*def).to_string(),
+                            tt.def_module(*def).clone(),
+                            type_args.clone(),
+                        )
+                    })
             })
             .collect()
     };

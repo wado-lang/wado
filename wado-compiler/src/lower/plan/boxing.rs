@@ -283,8 +283,8 @@ impl TypeBuilder {
     fn is_variant_type(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
         match type_table.get(type_id) {
             ResolvedType::Variant { .. } => true,
-            ResolvedType::GenericInstance { name, .. } => {
-                self.variant_names.contains(name.as_str())
+            ResolvedType::GenericInstance { def, .. } => {
+                self.variant_names.contains(type_table.def_name(*def))
             }
             _ => false,
         }
@@ -315,8 +315,8 @@ impl TypeBuilder {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                     let is_prim = matches!(type_table.get(inner), ResolvedType::Primitive(p)
                         if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128));
-                    let is_enum = matches!(type_table.get(inner), ResolvedType::Enum { name, .. }
-                        if !self.variant_names.contains(name.as_str()));
+                    let is_enum = matches!(type_table.get(inner), ResolvedType::Enum { def }
+                        if !self.variant_names.contains(type_table.def_name(*def)));
                     let is_variant = self.is_variant_type(inner, type_table);
                     let is_fn = matches!(type_table.get(inner), ResolvedType::Function { .. });
                     if is_prim || is_enum || is_variant || is_fn {

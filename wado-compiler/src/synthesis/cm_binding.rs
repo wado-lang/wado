@@ -314,11 +314,9 @@ fn unresolvable_record_in_payload(
     registry: &crate::component_model::CmInterfaceRegistry,
     type_id: TypeId,
 ) -> Option<String> {
-    if let ResolvedType::Struct {
-        decl_name: name,
-        module_source,
-        ..
-    } = tt.get(type_id)
+    if let ResolvedType::Struct { def, .. } = tt.get(type_id)
+        && let name = &tt.struct_head_name(*def)
+        && let module_source = &tt.struct_head_module(*def).clone()
         && matches!(
             crate::component_model::cm_payload_type_from_type_id(tt, type_id),
             Some(CmPayloadType::Named(_))
@@ -335,10 +333,8 @@ fn unresolvable_record_in_payload(
             .iter()
             .find_map(|&e| unresolvable_record_in_payload(tt, registry, e));
     }
-    if let ResolvedType::GenericInstance {
-        name, type_args, ..
-    } = tt.get(type_id)
-        && name == "Result"
+    if let ResolvedType::GenericInstance { def, type_args } = tt.get(type_id)
+        && tt.def_name(*def) == "Result"
     {
         return type_args
             .clone()

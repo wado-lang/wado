@@ -1358,7 +1358,7 @@ impl FunctionTranslator<'_, '_> {
             .package
             .structs
             .iter()
-            .filter(|s| s.module_source == *module_source && s.name == name)
+            .filter(|s| s.module_source == module_source && s.name == name)
             .flat_map(|s| &s.fields)
             .find(|f| f.name == field_name)
             .unwrap_or_else(|| panic!("[WIR] struct `{name}` has no field `{field_name}`"))

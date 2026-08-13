@@ -1905,14 +1905,9 @@ fn parameterize_stream_cm_name(
             // The element's declaring interface keys the CM-name lookup. Its
             // `module_source` is the loader identity (a `.wado` path); the
             // registry bridges it to the versioned `#[cm(...)]` key.
-            let elem_source = match tt.get(tt.get_ultimate_base_type(elem)) {
-                ResolvedType::Struct { module_source, .. }
-                | ResolvedType::Variant { module_source, .. }
-                | ResolvedType::Enum { module_source, .. }
-                | ResolvedType::Flags { module_source, .. }
-                | ResolvedType::Resource { module_source, .. } => Some(module_source.to_string()),
-                _ => None,
-            };
+            let elem_source = tt
+                .nominal_head(tt.get_ultimate_base_type(elem))
+                .map(|(_, m)| m.to_string());
             let cm_elem = elem_source
                 .as_deref()
                 .and_then(|source| registered_cm_name(&elem_name, source, cm_interface_registry))

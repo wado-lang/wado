@@ -273,14 +273,12 @@ fn lower_type(
                 None
             }
         },
-        ResolvedType::Struct {
-            decl_name: name, ..
-        } if name == "String" => Some(OptionsType::String),
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } => {
+        ResolvedType::Struct { def, .. } if types.struct_head_name(*def) == "String" => {
+            Some(OptionsType::String)
+        }
+        ResolvedType::Struct { def, .. } => {
+            let name = &types.struct_head_name(*def);
+            let module_source = &types.struct_head_module(*def).clone();
             let nested = nested_struct_descriptor(
                 name,
                 module_source,
@@ -295,11 +293,9 @@ fn lower_type(
                 descriptor: nested,
             })
         }
-        ResolvedType::Enum {
-            name,
-            module_source,
-            ..
-        } => {
+        ResolvedType::Enum { def } => {
+            let name = &types.def_name(*def).to_string();
+            let module_source = &types.def_module(*def).clone();
             let variants =
                 enum_variants(name, module_source, sem, module, field_name, diagnostics)?;
             Some(OptionsType::Enum {
