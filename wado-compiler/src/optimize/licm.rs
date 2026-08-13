@@ -1,24 +1,8 @@
-//! Loop-Invariant Code Motion (LICM) for Wado NIR
-//!
-//! This module hoists loop-invariant computations out of loops to improve performance.
-//! Two kinds of candidates move to the pre-header: field accesses on
-//! variables the loop does not modify (legality via [`ModifiedVars`]), and
-//! pure-arithmetic subtrees whose `Local` leaves are pre-header-stable
-//! (never modified in the loop), deduped by structural identity
-//! ([`ArithKey`]; see [`ArithHoist`]).
-//!
-//! Runs on the worklist rewrite engine (see
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a [`Rule`]: a
-//! per-function standalone engine session whose `apply_block` fires once at
-//! the body root and applies LICM to every loop in the function. All
-//! mutations route through the engine edit API (`alloc_expr`, `alloc_stmt`,
-//! `alloc_local`, `clone_expr`, `set_block_stmts`, `replace_expr_kind`) so
-//! the parent map and use index stay coherent.
-//!
-//! The hoist-candidate and replacement walks recurse over
-//! [`Body::for_each_child`], skipping pattern children; `collect_modified_vars`
-//! keeps its own walk because it special-cases assignments, calls, and pattern
-//! bindings.
+//! Loop-Invariant Code Motion for Wado NIR. Two kinds of candidate move to the
+//! pre-header: a field access on a variable the loop does not modify (legality
+//! via [`ModifiedVars`]), and a pure-arithmetic subtree whose `Local` leaves are
+//! pre-header-stable, deduped by structural identity ([`ArithKey`]). Runs as a
+//! [`Rule`] whose `apply_block` fires once and covers every loop in the body.
 
 use std::cell::Cell;
 
@@ -94,17 +78,10 @@ impl ModifiedVars {
     }
 
     /// True when hoisting `x.field_idx` is unsound: `x` is a reference whose
-    /// pointee's `field_idx` is written in the loop — directly via an alias, or
-    /// opaquely by a call that received the pointee by `&mut`. By-value roots
-    /// are covered by the `fully`/`fields`/alias machinery.
-    ///
-    /// The opaque-`&mut`-call case is type-keyed and restricted to plain structs:
-    /// any `&Struct`/`&mut Struct` read of a clobbered struct type is treated as
-    /// aliasing. Generic instances (`List`/`String`) are deliberately excluded
-    /// here — type-keying them would block reads of an unrelated read-only
-    /// `&List` whenever any same-typed list is mutated in the loop (e.g. a lookup
-    /// `table` while building `out`). Their cascade hazard is handled precisely
-    /// in `licm_loop` via [`Self::is_clobbered_gc_value`] on hoist locals.
+    /// pointee's field is written in the loop, directly or through a `&mut`
+    /// call. The opaque-call case is type-keyed and limited to plain structs;
+    /// keying `List` / `String` would block an unrelated read-only `&List`
+    /// whenever any same-typed list is mutated. Those go through `licm_loop`.
     fn is_reference_field_aliasing_written(
         &self,
         root_type: TypeId,
@@ -2284,30 +2261,18 @@ fn cse_operand_in_scope(
     }
 }
 
-/// Common-subexpression elimination inside a loop body under operand promotion.
+/// Common-subexpression elimination inside a loop body: hash-consing dedups a
+/// repeated pure subexpression to one `ValueId` but cannot *materialise* it, a
+/// loop-carried local's value not being reemittable at an arbitrary slot, so
+/// each occurrence is still re-emitted. This restores the one-computation
+/// `__cse_N` shape — bind a clone to a temp before the earliest top-level
+/// statement holding an occurrence, and redirect them all to read it.
 ///
-/// The value graph hash-conses a pure subexpression (`p * p` over a loop-carried
-/// `p`) to one `ValueId`, so the two occurrences in a guard and the body share
-/// an identity — but each is a distinct *skeleton* `Binary` expr the extractor
-/// can not promote to a bare `Operand::Value` (a loop-carried local's value is
-/// not reemittable at an arbitrary slot, so it stays a sourceless `Opaque`).
-/// Each is therefore re-emitted. This restores the one-computation `__cse_N`
-/// shape the standalone `cse` pass produced before hash-consing subsumed the
-/// *deduplication* (but not the materialisation): bind a clone of the
-/// subexpression to a temp placed before the earliest top-level statement that
-/// contains an occurrence, and redirect every occurrence to read the temp.
-///
-/// Soundness — placement and availability:
-/// - The temp lands before the earliest top-level statement of the loop body
-///   that holds an occurrence, so it dominates every (later or equal) occurrence
-///   in the body's linear statement list.
-/// - A value with ≥2 occurrences sharing one `ValueId` reads the *same* leaf
-///   values at each, so those leaves are in scope at all of them — hence bound
-///   before the earliest occurrence's statement (or loop-carried / a param),
-///   available where the temp is inserted. The clone re-emits the original
-///   skeleton (a `local.get` of each leaf), so it computes exactly the shared
-///   value. Trap-prone ops are excluded, so computing it once up front (possibly
-///   on an iteration a conditional occurrence would have skipped) cannot trap.
+/// That placement dominates every occurrence in the body's linear statement
+/// list, and occurrences sharing a `ValueId` read the same leaves, so those are
+/// in scope where the temp is inserted. Trap-prone ops are excluded, so
+/// computing it up front — perhaps on an iteration that would have skipped it —
+/// cannot trap.
 fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVars) -> bool {
     let stmts = engine.body.blocks[loop_body].stmts.clone();
     // Occurrences of each materialisable arith value, keyed by a value-graph-free

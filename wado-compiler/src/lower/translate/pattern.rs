@@ -76,17 +76,11 @@ fn coerce_value_to_binding(
     }
 }
 
-/// Peel `Ref` / `MutRef` wrappers and `Box<T>` struct wrappers off
-/// `expr`, returning the unwrapped expression and its type.
-///
-/// A `Ref` / `MutRef` is peeled with a `Deref`; a `Box<T>` is peeled
-/// with a `.value` field access. `boxing::prepare_types` redefines
-/// every `Ref(boxable)` `TypeId` to its `Box<T>` struct type, so when
-/// pattern lowering runs after boxing a match scrutinee on a reference
-/// surfaces here as a `Box<T>` struct rather than a `Ref` — both
-/// shapes peel to the matched value. When pattern lowering runs before
-/// boxing the box-payload registry is empty, so this degrades to a
-/// plain `Ref` peel.
+/// Peel `Ref` / `MutRef` and `Box<T>` wrappers off `expr`, returning the
+/// unwrapped expression and its type — a `Deref` for the former, a `.value`
+/// field access for the latter. `boxing::prepare_types` redefines every
+/// `Ref(boxable)` to its `Box<T>`, so post-boxing a reference scrutinee arrives
+/// box-shaped; pre-boxing the registry is empty and this is a plain `Ref` peel.
 fn peel_refs_and_box(
     mut expr: TirExpr,
     mut type_id: TypeId,
@@ -126,18 +120,11 @@ fn peel_refs_and_box(
     }
 }
 
-/// Package-level facts pattern lowering needs, gathered once so the
-/// per-function [`Lowering::lower_function`] entry point can be called
-/// from the translator's [`convert_function`](super::Translator)
-/// per-function walk (WEP 2026-05-11 Phase 10 Step 2b).
-///
-/// Pattern lowering rewrites `LetDestructure` / `IfLet` into explicit
-/// `Let` + `Match` chains and expands or-patterns in `Match` arms. It
-/// runs after the whole `lower::plan` phase (boxing, closure,
-/// `lift_mut`, `value_copy`, …): a match scrutinee on a reference
-/// reaches it as a `Box<T>` struct and the references it synthesises
-/// for ergonomic bindings are box-shaped — [`peel_refs_and_box`] and
-/// [`coerce_value_to_binding`] handle both.
+/// Package-level facts pattern lowering needs, gathered once so
+/// [`Lowering::lower_function`] can run inside the translator's per-function
+/// walk. Lowering rewrites `LetDestructure` / `IfLet` into `Let` + `Match`
+/// chains and expands or-patterns. It runs after all of `lower::plan`, so
+/// scrutinees and synthesised references alike arrive box-shaped.
 pub struct Lowering {
     /// Map from (`variant_name`, `module_source`) to (`case_name`,
     /// `case_index`) pairs. The `module_source` axis keeps two

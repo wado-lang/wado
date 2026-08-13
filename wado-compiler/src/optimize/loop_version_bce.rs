@@ -1,38 +1,14 @@
-//! Loop-versioned bounds-check elimination.
+//! Loop-versioned bounds-check elimination, for the checks
+//! `condition_implication` cannot statically prove: the loop becomes
+//! `if H < B { <clone, checks deleted> } else { <original> }`, sound by
+//! per-iteration transitivity from the guard's `i <= H` and the residual's
+//! `H < B`. All three locals must share one integer type, so the comparisons
+//! agree on signedness, and the slow arm keeps assert timing bit-identical.
 //!
-//! `condition_implication` removes a check `i < B` only when a dominating
-//! guard *statically* implies it. When a loop guard bounds `i` by an
-//! unrelated loop-invariant `H` — `for i = 0; i <= H; i += 1 { a[i] = v }`
-//! checked against `B = a.used`, with the `H`/`B` relation living at the
-//! call site — no static proof exists: the check is semantically live.
-//! This pass versions the loop on the runtime residual instead:
-//!
-//! ```text
-//! if H < B { <loop clone, checks deleted> } else { <original loop> }
-//! ```
-//!
-//! Soundness is per-iteration transitivity: the guard gives `i <= H` (`i`
-//! unmodified between guard and check, `H` loop-invariant), the residual
-//! gives `H < B` (`B` loop-invariant), hence `i < B` — the check's panic
-//! arm is dead in the fast clone. The `<` guard variant proves `i <= H-1`,
-//! so its residual is `H <= B`. All three locals must share one integer
-//! type so the comparisons agree on signedness. The slow arm is the
-//! original loop, so assert timing and message stay bit-identical when the
-//! residual fails.
-//!
-//! A versioned fast arm whose body is exactly `a[i] = CONST; i += 1` then
-//! collapses to a single `builtin::array_fill` (`try_fill_idiom`) — the
-//! bulk `array.fill` replaces per-element `array.set` bounds checks with
-//! one range check. The residual also proves `H + 1` cannot overflow,
-//! making the fill count exact. Dropped loop-local `let` temps are
-//! re-materialized with their final values, so post-loop reads (if any)
-//! observe the same state.
-//!
-//! Runs once after the optimization loop, following
-//! `cond_impl_post_promote` (so only statically-unprovable checks remain),
-//! and pairs with `BranchPruneRule` + `ElideRule` to sweep the deleted
-//! checks' residue. Only leaf loops (no nested loop) are versioned, so
-//! cloning never compounds.
+//! A fast arm that is exactly `a[i] = CONST; i += 1` then collapses to one
+//! `builtin::array_fill` ([`try_fill_idiom`]), the residual also proving
+//! `H + 1` cannot overflow. Runs once after the optimization loop, and only
+//! over leaf loops, so cloning never compounds.
 
 use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
@@ -490,17 +466,11 @@ fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fas
     }
 }
 
-/// If the check condition reads a `let`-bound temp (`!__cond` or `__cond`),
-/// replace that temp's initializer in the fast clone with the constant the
-/// comparison provably evaluates to there (`!c` panics ⇒ `c` is `true`;
-/// `c` panics ⇒ `c` is `false`), deleting the per-iteration compare.
-///
-/// The matched `let` is overwritten only when its initializer structurally
-/// **is** the eliminated bounds comparison over `var` ([`is_check_comparison`]).
-/// Locals are function-scoped slots, so a temp index can be re-bound; blindly
-/// constifying the first `let` for that slot would corrupt an unrelated
-/// initializer. The scan therefore skips non-comparison bindings and keeps
-/// looking for the comparison `let`.
+/// If the check condition reads a `let`-bound temp, replace that temp's
+/// initializer in the fast clone with the constant the comparison provably
+/// evaluates to (`!c` panics ⇒ `c` is `true`), deleting the per-iteration
+/// compare. Overwritten only when the initializer structurally *is* that
+/// comparison, a function-scoped slot being re-bindable.
 fn constify_check_temp(engine: &mut Engine, cond: Operand, var: u32, fast_body: BlockId) {
     let Operand::Expr(ce) = cond else {
         return;
@@ -615,25 +585,11 @@ fn subtree_redefines(engine: &Engine, block: BlockId, locals: &[u32]) -> bool {
     false
 }
 
-/// The constant-fill idiom over a cleaned fast arm:
-///
-/// ```text
-/// loop { if !(i CMP H) break; [pure lets]; array_set(A, i, CONST); i += 1 }
-/// ```
-///
-/// becomes
-///
-/// ```text
-/// if i CMP H {
-///     array_fill(A, i, CONST, <count>);
-///     [lets re-materialized with final values];
-///     i = <final>;
-/// }
-/// ```
-///
-/// where `<count>` is `H + 1 - i` for `<=` (no overflow: the fast arm's
-/// residual proves `H < B`) and `H - i` for `<`. The wrapping `if` preserves
-/// the zero-iteration case exactly (no fill, no local updates).
+/// Collapse a cleaned fast arm — `loop { if !(i CMP H) break; [pure lets];
+/// array_set(A, i, CONST); i += 1 }` — into one `array_fill` plus the lets and
+/// `i` re-materialized at their final values. The count is `H + 1 - i` for `<=`
+/// (the residual proving no overflow) and `H - i` for `<`; the wrapping `if`
+/// preserves the zero-iteration case exactly.
 fn try_fill_idiom(
     engine: &mut Engine,
     binds: &Binds,
