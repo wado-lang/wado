@@ -2119,12 +2119,6 @@ pub(crate) struct TypeLookup<'a> {
     /// pass. The registries this view reads are keyed by declaration, so this is
     /// how a written name reaches one.
     pub(crate) resolutions: &'a crate::resolve::Resolutions,
-    /// Read only by the two trait-scope helpers in `trait_query`, which are
-    /// deliberately blind to the prelude: an ambient compiler trait must stay
-    /// distinguishable from a same-named user `trait`. Everything else reaches a
-    /// declaration through [`Self::declaration`].
-    pub(crate) imported_type_sources: &'a IndexMap<String, ModuleSource>,
-    pub(crate) import_original_names: &'a IndexMap<String, String>,
     /// Namespace-import aliases (`use ns from "..."`). A `ns::Type` reference
     /// in type position is canonicalized to its `ns$Type` alias before any
     /// registry lookup (see `lookup_ref`). Collection passes that have no
@@ -2309,7 +2303,7 @@ impl<'a> TypeLookup<'a> {
     /// The one place a `TypeLookup` turns a spelling into an identity, and it
     /// does not do the turning: [`crate::resolve::Resolutions`] answered it
     /// once, in the module that wrote the name.
-    fn declaration(&self, name: &str) -> Option<crate::defs::DefId> {
+    pub(super) fn declaration(&self, name: &str) -> Option<crate::defs::DefId> {
         let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
         self.resolutions
             .declaration_named(self.current_module_source, canon.as_deref().unwrap_or(name))

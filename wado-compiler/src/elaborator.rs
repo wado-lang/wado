@@ -234,8 +234,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         TypeLookup {
             current_module_source: &self.current_module_source,
             resolutions: &self.tysys.resolutions,
-            imported_type_sources: &self.sem.imports.imported_type_sources,
-            import_original_names: &self.sem.imports.import_original_names,
             namespace_imports: &self.sem.imports.namespace_imports,
             all_newtypes: &self.tysys.all_newtypes,
             all_struct_fields: &self.tysys.all_struct_fields,

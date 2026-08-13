@@ -389,8 +389,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     &invocations,
                     symbols,
                 );
-                let imported_type_sources = import_scope.sources;
-                let import_original_names = import_scope.original_names;
                 let namespace_imports = import_scope.namespace_imports;
                 let empty_struct: IndexMap<String, StructFieldInfo> = IndexMap::default();
                 let empty_newtype: IndexMap<String, TypeId> = IndexMap::default();
@@ -414,8 +412,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         let lookup = TypeLookup {
                             current_module_source: module_source,
                             resolutions: &resolutions,
-                            imported_type_sources: &imported_type_sources,
-                            import_original_names: &import_original_names,
                             namespace_imports: &namespace_imports,
                             all_newtypes: &all_newtypes,
                             all_struct_fields: &all_struct_fields,
@@ -498,8 +494,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &invocations,
                 symbols,
             );
-            let imported_type_sources = import_scope.sources;
-            let import_original_names = import_scope.original_names;
             let namespace_imports = import_scope.namespace_imports;
 
             // Helper closure: build a fresh TypeLookup pointed at the
@@ -517,8 +511,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let lookup = TypeLookup {
                     current_module_source: module_source,
                     resolutions: &resolutions,
-                    imported_type_sources: &imported_type_sources,
-                    import_original_names: &import_original_names,
                     namespace_imports: &namespace_imports,
                     all_newtypes: &all_newtypes,
                     all_struct_fields: &all_struct_fields,

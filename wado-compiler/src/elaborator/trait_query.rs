@@ -762,21 +762,8 @@ impl TypeSystem {
     /// For the `TypeSystem` queries that hold a scope and a spelling rather
     /// than a reference site; a caller with a site asks the site instead.
     fn scoped_trait_decl_key(&self, scope: &TypeLookup, name: &str) -> Option<DeclKey> {
-        let declared = scope
-            .import_original_names
-            .get(name)
-            .map_or(name, String::as_str);
-        if let Some(source) = scope.imported_type_sources.get(name) {
-            let imported = (source.clone(), declared.to_string());
-            if self.trait_env.decl_index.contains_key(&imported) {
-                return Some(imported);
-            }
-        }
-        let local = (scope.current_module_source.clone(), declared.to_string());
-        if self.trait_env.decl_index.contains_key(&local) {
-            return Some(local);
-        }
-        None
+        let key = self.resolutions.decl_key(scope.declaration(name)?);
+        self.trait_env.decl_index.contains_key(&key).then_some(key)
     }
 
     /// Whether holding `bound_name` also gives `trait_name` — the same trait,
@@ -815,19 +802,12 @@ impl TypeSystem {
         scope: &TypeLookup<'a>,
         trait_name: &str,
     ) -> Option<&'a ModuleSource> {
-        let trait_env = &self.trait_env;
-        let declares = |module: &ModuleSource| {
-            trait_env
-                .decl_index
-                .contains_key(&(module.clone(), trait_name.to_string()))
-        };
-        if declares(scope.current_module_source) {
-            return Some(scope.current_module_source);
-        }
-        scope
-            .imported_type_sources
-            .get(trait_name)
-            .filter(|src| declares(src))
+        let def = scope.declaration(trait_name)?;
+        let key = self.resolutions.decl_key(def);
+        self.trait_env
+            .decl_index
+            .contains_key(&key)
+            .then(|| scope.resolutions.defs().module(def))
     }
 
     fn walk_structural_derive_members(
