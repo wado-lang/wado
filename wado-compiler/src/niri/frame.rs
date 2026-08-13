@@ -1,14 +1,9 @@
-//! The compile-time frame: running a body rather than reading it.
-//!
-//! The frame performs each statement exactly once, in order, over values the
-//! engine itself built. That is what separates it from the lattice projection,
-//! which is re-entrant and may run over the same node any number of times: a
-//! write belongs here and nowhere else, and a call that performs one is refused
-//! by the projection outright.
-//!
-//! Everything the frame cannot carry out abandons the evaluation. Stepping past
-//! an unperformed write would leave the place it targets holding a value the
-//! program never produced.
+//! The compile-time frame: running a body rather than reading it. Each statement
+//! is performed exactly once, in order, over values the engine itself built —
+//! which is what separates the frame from the re-entrant lattice projection, so
+//! a write belongs here and nowhere else. Anything the frame cannot carry out
+//! abandons the evaluation: stepping past an unperformed write would leave its
+//! target holding a value the program never produced.
 
 use crate::const_eval::Value;
 use crate::nir_arena::{
@@ -168,16 +163,11 @@ fn named_local(body: &Body, op: Operand) -> Option<u32> {
 
 /// Whether a `&mut` argument's storage is also named by another argument. Each
 /// parameter binds its own snapshot and each write-back replays whole, so a
-/// second handle on the same storage either reads a value the program never had
-/// or has its own write undone.
-///
-/// Whether the other argument could actually observe the write is not asked:
-/// after `prepare_types` a shared borrow of a primitive, plain enum, variant
-/// or fn type is the same `Box<T>` a by-value parameter carries, so no
-/// signature test tells them apart here.
-///
-/// Wado has no borrow checker, so this is ordinary source: the frame declines
-/// to run the call rather than mis-run it.
+/// second handle either reads a value the program never had or loses its own
+/// write. Whether it could actually observe the write is not asked: after
+/// `prepare_types` a shared borrow of a primitive is the same `Box<T>` a
+/// by-value parameter carries. Wado has no borrow checker, so this is ordinary
+/// source — the frame declines the call rather than mis-running it.
 fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u32>)]) -> bool {
     targets
         .iter()
@@ -416,16 +406,13 @@ impl Interpreter<'_> {
         }
     }
 
-    /// Update the frame's value for `root` in place, applying `update` to the
-    /// value at `path`. `None` when the frame holds no constant for the root —
-    /// which is what confines a write to values the engine itself built — or
-    /// when the path does not reach a value the update applies to.
-    ///
-    /// Written through rather than rebuilt: a rebuild copies the whole
-    /// container per write, which makes filling a sequence quadratic in its
-    /// length. A clobbered root never holds a constant here — `bind_ctfe_local`
-    /// is the only way one is recorded and it downgrades those — so writing
-    /// straight into the environment cannot revive a local a frame gave up on.
+    /// Update the frame's value for `root` in place, applying `update` at `path`.
+    /// `None` when the frame holds no constant for the root — which confines a
+    /// write to values the engine itself built — or when the path reaches
+    /// nothing the update applies to. Written through rather than rebuilt, since
+    /// a rebuild copies the container per write and makes filling a sequence
+    /// quadratic. A clobbered root never holds a constant here, so writing
+    /// straight into the environment cannot revive one the frame gave up on.
     fn update_place(
         &mut self,
         root: u32,
@@ -568,22 +555,14 @@ impl Interpreter<'_> {
         self.bind_local(index, lattice);
     }
 
-    /// The operand a `let` binds as a place rather than as a value: a borrow
-    /// names the place it is taken over, and a bare local that already names
-    /// one rebinds the same place — copying a reference copies the reference,
-    /// not its referent, so both handles must reach the same storage.
-    ///
-    /// Nothing else qualifies. A projection out of an alias reads *through*
-    /// the reference and yields a value, and `*p` is the same act spelled with
-    /// a deref — so the RHS is matched as a local written out, not through
-    /// [`place_of`], which peels a deref precisely because a write target
-    /// wants the storage behind it.
-    ///
-    /// A borrow does not always arrive spelled as one: the boxing pass rewrites
-    /// `&x` over an address-taken local into a bare read of the `Box<T>` the
-    /// local became, which is why the reference-shaped type is asked for too. A
-    /// value copy of that same local is a projection (`x.value`), so the
-    /// whole-local read is the borrow and nothing else answers here.
+    /// The operand a `let` binds as a place rather than a value: a borrow names
+    /// the place it was taken over, and a bare local already naming one rebinds
+    /// the same place, since copying a reference copies the reference. Nothing
+    /// else qualifies — a projection out of an alias reads *through* it and
+    /// yields a value, `*p` included, which is why the RHS is matched as a local
+    /// rather than through [`place_of`]. A borrow need not be spelled as one:
+    /// boxing rewrites `&x` into a bare read of the `Box<T>` the local became,
+    /// hence the reference-shaped type test.
     fn aliased_operand(&self, body: &Body, value: Operand) -> Option<Operand> {
         if let Some((_, borrowed)) = borrowed_place_operand(body, value) {
             return Some(borrowed);
@@ -627,16 +606,12 @@ impl Interpreter<'_> {
         }
     }
 
-    /// Fold a call to the value it computes. One that writes through a `&mut`
-    /// parameter is never folded here: this projection is re-entrant, and a
-    /// write applied twice is worse than one not folded at all. Those run at
-    /// statement position, where the executor applies the writes.
-    /// `Unevaluated` on any miss, so the original call — and any runtime trap
-    /// inside it — survives.
-    ///
-    /// A run this frame already made answers from the fold memo, as a region
-    /// does: re-running would re-pay the body copy and the step budget for a
-    /// value already in hand.
+    /// Fold a call to the value it computes. One writing through a `&mut`
+    /// parameter is never folded here — this projection is re-entrant, and a
+    /// write applied twice is worse than one not folded at all; those run at
+    /// statement position instead. `Unevaluated` on any miss, so the original
+    /// call and any trap inside it survive. A run this frame already made answers
+    /// from the fold memo rather than re-paying the body copy and step budget.
     pub(super) fn try_call_fold(&mut self, body: &Body, e: ExprId) -> Lattice {
         if let Some(v) = self.frame.scratch_folds.get(&e) {
             return Lattice::Const(v.clone());
@@ -662,16 +637,13 @@ impl Interpreter<'_> {
         Some((site.func_id, site.operands().map(|(_, op)| op).collect()))
     }
 
-    /// Run a call in a compile-time frame: bind the parameters, execute the
-    /// body, and report the value it returns along with what it leaves in each
-    /// `&mut` parameter. `None` when the frame cannot run it.
-    ///
-    /// `may_write` is the caller's promise to apply the write-backs. Without it
-    /// a callee taking a `&mut` parameter is refused outright, since running it
-    /// would produce writes with nowhere to go.
-    ///
-    /// The body runs on a scratch copy, so the callee's shared arena — held
-    /// under an immutable borrow — is never mutated.
+    /// Run a call in a compile-time frame: bind the parameters, execute the body,
+    /// and report both the returned value and what it leaves in each `&mut`
+    /// parameter. `None` when the frame cannot run it. `may_write` is the
+    /// caller's promise to apply the write-backs; without it a callee taking a
+    /// `&mut` parameter is refused outright, since its writes would have nowhere
+    /// to go. The body runs on a scratch copy, so the callee's shared arena is
+    /// never mutated.
     fn run_call(&mut self, body: &Body, e: ExprId, may_write: bool) -> Option<CallRun> {
         let callees = self.facts.callees?;
         let (key, args) = self.call_target(body, e)?;
@@ -760,17 +732,12 @@ impl Interpreter<'_> {
     }
 
     /// Run the scratch body already installed as the current frame, reporting
-    /// what it returned and what it left in each `&mut` parameter.
-    ///
-    /// `None` rather than an empty write list when a `&mut` parameter has no
-    /// value to write: losing it would leave the caller's place holding what
-    /// the program never produced.
-    ///
-    /// `returns_unit` discards the result — a unit callee denotes nothing, and
-    /// a value left where the call stood fails validation.
-    ///
-    /// Every fallible step of a call lives here, so the caller restores its own
-    /// frame unconditionally on return.
+    /// what it returned and what it left in each `&mut` parameter. `None` rather
+    /// than an empty write list when a `&mut` parameter has no value: losing it
+    /// would leave the caller's place holding what the program never produced.
+    /// `returns_unit` discards the result, since a value left where a unit call
+    /// stood fails validation. Every fallible step lives here, so the caller
+    /// restores its own frame unconditionally.
     fn exec_frame(
         &mut self,
         scratch: &mut Body,
@@ -801,27 +768,14 @@ impl Interpreter<'_> {
         Some(CallRun { result, writes })
     }
 
-    /// The constant a self-contained region denotes: the block runs as a frame
-    /// the engine starts from scratch, since a region that builds its value in
-    /// locals of its own and touches only those is as self-contained as a call
-    /// body. An outer local the region only reads is seeded from the walker's
-    /// environment when it holds a constant there — a value snapshot at the
-    /// region's own flow point, sound because the region cannot write it back:
-    /// [`region_free_reads`] rejects write positions and reference-typed
-    /// mentions, and a local involved in a live place alias is refused here.
-    /// `None` when the block is not such a region, or when running
-    /// it does not finish on a constant — the block survives as written, so
-    /// anything it would do at run time still happens there.
-    ///
-    /// A reference-typed region is refused before the body is copied;
-    /// `Interpreter::commit_fold` states why a reference never folds.
-    ///
-    /// Safe on the re-entrant projection path even though it executes writes:
-    /// self-containment confines every write to locals of the scratch run, so
-    /// nothing is performed twice against the program's own state. A run an
-    /// earlier visit already made answers from the fold memo, since the
-    /// scratch sink promotes nothing and the region would otherwise be re-run
-    /// at every visit.
+    /// The constant a self-contained region denotes, run as its own frame: a
+    /// region building its value in locals of its own is as self-contained as a
+    /// call body. An outer local it only reads is seeded from the walker's
+    /// environment, sound because [`region_free_reads`] rejects write positions
+    /// and reference-typed mentions. `None` when the block is not such a region
+    /// or does not finish on a constant, leaving it to run as written. Safe on
+    /// the re-entrant projection path despite executing writes: self-containment
+    /// confines every one to the scratch run. Repeat visits answer from the memo.
     pub(super) fn try_region_fold(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         let (block, label) = region_shape(body, e)?;
         if let Some(value) = self.frame.scratch_folds.get(&e) {
