@@ -1,14 +1,12 @@
 //! Component Model canonical built-ins and the payload types that parameterize
 //! them.
 //!
-//! `canon future.read` (and its siblings) are typed: the Component Model
-//! instantiates one per `future<T>`, so the core module needs a distinct import
-//! per payload type. [`CanonicalIntrinsic`] is that identity, carried
+//! `canon future.read` and its siblings are typed — the Component Model
+//! instantiates one per `future<T>` — so the core module needs a distinct
+//! import per payload type. [`CanonicalIntrinsic`] is that identity, carried
 //! structurally from synthesis through TIR and NIR into WIR.
-//!
-//! [`CanonicalIntrinsic::import_name`] renders the identity as the core import
-//! name at the end of that path. It is a rendering, not a carrier: nothing
-//! parses it back to recover the payload, so it only has to be injective.
+//! [`CanonicalIntrinsic::import_name`] renders it at the end of that path;
+//! nothing parses the name back, so it only has to be injective.
 
 use std::borrow::Cow;
 use std::fmt;
@@ -71,15 +69,13 @@ impl CmScalarType {
     }
 }
 
-/// A general Component Model value type carried as a `future<T>` / `stream<T>`
-/// payload. Self-contained (built from the type table, no registry needed), so
-/// it is both a stable dedup key and a structural descriptor codegen turns into
-/// a component-level type. Named types are referenced by their CM kebab name;
-/// codegen defines or aliases each one before the `future<T>` / `stream<T>`
-/// that wraps it.
+/// A Component Model value type carried as a `future<T>` / `stream<T>` payload.
+/// Self-contained — built from the type table, no registry needed — so it is
+/// both a dedup key and the descriptor codegen turns into a component type.
+/// A named type is referenced by its CM kebab name, which codegen defines or
+/// aliases before the `future<T>` / `stream<T>` that wraps it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmPayloadType {
-    /// A primitive scalar (`bool`, integers, floats, `char`).
     Scalar(CmScalarType),
     String,
     List(Box<CmPayloadType>),
@@ -90,15 +86,14 @@ pub enum CmPayloadType {
     /// A named CM type by kebab name (record / variant / enum / flags).
     Named(String),
     /// An owned resource handle (`own<r>`), by the resource's CM kebab name.
-    /// Distinct from [`Self::Named`]: a resource's component type is registered
-    /// under its own key and is wrapped in `own` at the use site.
+    /// Separate from [`Self::Named`]: its component type is keyed differently
+    /// and wrapped in `own` at the use site.
     Resource(String),
 }
 
 impl CmPayloadType {
-    /// Encode as a canonical kebab suffix used in the core import name (and the
-    /// component type's debug name). Injective, so distinct CM types get
-    /// distinct intrinsic imports. Inverse of [`Self::parse_suffix`].
+    /// The kebab suffix used in the core import name and the component type's
+    /// debug name. Injective, so distinct CM types get distinct imports.
     pub fn name_suffix(&self) -> String {
         match self {
             Self::Scalar(s) => s.to_string(),
@@ -192,46 +187,29 @@ fn split_top_level(s: &str) -> Vec<String> {
 }
 
 /// The element type of a CM `stream<T>` canonical intrinsic.
-///
-/// Distinguishes between distinct stream types at the Component Model level:
-/// - `U8` = `stream<u8>` (default for file I/O, stdin/stdout)
-/// - `Record(name)` = `stream<T>` where T is a CM record type (e.g., directory-entry)
-/// - `Value(t)` = `stream<T>` for a general scalar / aggregate element type
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmStreamPayload {
-    /// `stream<u8>` — the default stream type
+    /// The default `stream<u8>` — file I/O, stdin/stdout.
     U8,
-    /// `stream<T>` where T is a CM record type, identified by CM kebab-case name
+    /// A CM record element, by its kebab name (e.g. `directory-entry`).
     Record(String),
-    /// `stream<T>` for a general scalar or aggregate element type
     Value(CmPayloadType),
 }
 
-/// The element type of a CM `future<T>` canonical intrinsic.
-///
-/// Distinguishes between distinct future types at the Component Model level:
-/// - `Trailers` = `future<result<option<trailers>, error-code>>` (HTTP body trailers)
-/// - `Transmission` = `future<result<_, error-code>>` (HTTP transmission result)
-/// - `Scalar(s)` = `future<T>` where T is a primitive scalar type
-/// - `Value(t)` = `future<T>` for any other CM value type
+/// The payload of a CM `future<T>` canonical intrinsic.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmFuturePayload {
-    /// The HTTP trailers pattern: `future<result<option<trailers>, error-code>>`
+    /// The HTTP body trailers: `future<result<option<trailers>, error-code>>`.
     Trailers,
-    /// `future<result<_, error-code>>` — error-code type identified by
-    /// the WASI package that defines it (e.g., "cli", "filesystem", "http").
-    /// Each package's error-code is a distinct CM type, so each needs
-    /// its own component-level `future<result<_, E>>` definition.
+    /// `future<result<_, error-code>>`, keyed by the WASI package defining the
+    /// error-code (`"cli"`, `"filesystem"`, …). Each is a distinct CM type, so
+    /// each needs its own component-level definition.
     Transmission(String),
-    /// A scalar value type like `future<s32>`
     Scalar(CmScalarType),
-    /// A general scalar or aggregate value type like `future<string>` or
-    /// `future<list<u32>>`.
     Value(CmPayloadType),
 }
 
-/// A canonical intrinsic needed by the compiled module. The payload type is a
-/// [`CmFuturePayload`] / [`CmStreamPayload`] field, not part of a name.
+/// A canonical intrinsic needed by the compiled module.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CanonicalIntrinsic {
     StreamNew(CmStreamPayload),
@@ -258,22 +236,17 @@ pub enum CanonicalIntrinsic {
     ErrorContextNew,
     ErrorContextDebugMessage,
     ErrorContextDrop,
-    /// `task.return` for an `async` world export, keyed by the export's name so
-    /// each export gets a `task.return` canon typed to its own result. A `--lib`
-    /// world may carry several `async` exports with distinct result types; one
+    /// `task.return` for an `async` world export, keyed by the export's name: a
+    /// `--lib` world may carry several with distinct result types, and one
     /// shared canon could not type them all.
     TaskReturn(String),
-    /// `resource.drop` for an imported Component Model resource.
-    /// The payload is the resource's CM name (e.g. `"request"`).
+    /// `resource.drop` for an imported CM resource, by its CM name.
     ResourceDrop(String),
 }
 
 impl CanonicalIntrinsic {
-    /// The import name used in the core Wasm module.
-    ///
-    /// For parameterized intrinsics, includes a type suffix (e.g., `"future-new:s32"`).
-    /// This is only used for the core-level import name; component codegen uses
-    /// the structured enum directly.
+    /// The import name used in the core Wasm module — a type suffix for a
+    /// parameterized intrinsic, as in `"future-new:s32"`.
     pub fn import_name(&self) -> String {
         match self {
             Self::StreamNew(p) => format_stream_name("stream-new", p),
@@ -368,9 +341,9 @@ impl CanonicalIntrinsic {
     }
 }
 
+/// Inverse of `format_stream_name`: `"stream-read:directory-entry"` →
+/// `StreamRead(Record(…))`, a suffix-less name → the default `U8` stream.
 fn parse_stream_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
-    // Parse "stream-read:directory-entry" → StreamRead(Record("directory-entry"))
-    // Parse "stream-read" → StreamRead(U8)
     let (base, payload) = if let Some((b, suffix)) = name.split_once(':') {
         let payload = if let Some(val) = suffix.strip_prefix("val-") {
             CmStreamPayload::Value(CmPayloadType::parse_suffix(val)?)
@@ -481,10 +454,9 @@ mod intrinsic_name_tests {
         );
     }
 
-    /// The trailers future renders to the bare base name, which is also what a
-    /// payload-parameterized `#[canonical]` annotation spells. Parsing must not
-    /// resolve that to a payload — answering `Trailers` there is what made an
-    /// unclassified `future<T>` come back as the HTTP trailers future.
+    /// The trailers future renders to the bare base name, and so does a
+    /// payload-parameterized `#[canonical]` annotation. Neither may parse back
+    /// to a payload.
     #[test]
     fn a_bare_future_name_does_not_parse_to_a_payload() {
         for name in [
