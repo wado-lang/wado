@@ -1734,10 +1734,9 @@ fn try_compile_lib(source: &str) -> Result<(), String> {
 /// classifier the same question codegen will.
 #[test]
 fn cm_lib_rejects_an_unclassifiable_future_payload() {
-    let err = try_compile_lib(
-        "export fn id_unit(v: Future<()>) -> Future<()> {\n    return v;\n}\n",
-    )
-    .expect_err("`future<()>` export should fail to compile");
+    let err =
+        try_compile_lib("export fn id_unit(v: Future<()>) -> Future<()> {\n    return v;\n}\n")
+            .expect_err("`future<()>` export should fail to compile");
     assert!(
         err.contains("future") && err.contains("Component Model"),
         "expected a future-payload diagnostic, got: {err}"

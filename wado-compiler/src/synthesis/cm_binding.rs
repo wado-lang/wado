@@ -147,13 +147,12 @@ mod record_payload_validation {
             let tt = module.type_table.borrow();
             for func_rc in &module.functions {
                 let func = func_rc.borrow();
-                if !reachable.contains(&(module_source.clone(), func.name.clone())) {
-                    continue;
-                }
                 let Some(body) = &func.body else { continue };
                 let mut finder = super::NamedPayloadFinder {
                     tt: &tt,
                     registry: project.cm_interface_registry.as_ref(),
+                    check_records: reachable
+                        .contains(&(module_source.clone(), func.name.clone())),
                     found: None,
                 };
                 finder.visit_block(body);
@@ -246,6 +245,12 @@ impl TirRefVisitor for CalleeCollector {
 struct NamedPayloadFinder<'a> {
     tt: &'a TypeTable,
     registry: &'a crate::component_model::CmInterfaceRegistry,
+    /// Whether to reject an unresolvable record. Only where the world keeps the
+    /// code: a record's resolvability depends on the world, so a library-shaped
+    /// source compiled for the test world must not be flagged for exports that
+    /// world drops. Classifiability is not world-dependent and is always
+    /// checked.
+    check_records: bool,
     found: Option<String>,
 }
 
@@ -262,26 +267,61 @@ impl TirRefVisitor for NamedPayloadFinder<'_> {
 
     fn visit_expr(&mut self, expr: &TirExpr) {
         if self.found.is_none() {
-            self.found = unresolvable_future_stream_payload(self.tt, self.registry, expr);
+            self.found = unresolvable_future_stream_payload(
+                self.tt,
+                self.registry,
+                expr,
+                self.check_records,
+            );
         }
         self.walk_expr(expr);
     }
 }
 
-/// Why a `Future::<T>::new()` / `Stream::<T>::new()` static call's payload `T`
-/// cannot be lowered, or `None` if it can. `new` is the only way to obtain a
-/// `Future<T>` / `Stream<T>` outside `--lib` (non-lib world exports have fixed
-/// signatures), so checking it covers the creation sites.
+/// Why the `Future<T>` / `Stream<T>` payload at `expr` cannot be lowered, or
+/// `None` if it can.
 ///
-/// Two ways to fail: a named record with no CM type to lower against, and a
-/// payload the classifier cannot name a `future<T>` / `stream<T>` for at all
-/// (`()`, a 128-bit scalar). Both would otherwise reach codegen, where the
-/// second panics. A resource is not one of them — it travels as `own<r>`.
+/// Two sites reach a payload: `Future::<T>::new()` — the only way to obtain one
+/// outside `--lib`, since non-lib world exports have fixed signatures — and any
+/// CM method on a handle, whose receiver names the payload. The second matters
+/// because synthesis classifies every such call in every function, not only the
+/// ones a world export reaches, and the classifier panics on a payload it
+/// cannot name a `future<T>` / `stream<T>` for.
+///
+/// Two ways to fail: a named record with no CM type to lower against (only
+/// asked when `check_records`, see [`NamedPayloadFinder`]), and a payload the
+/// classifier cannot name at all (`()`, a 128-bit scalar). A resource is not
+/// one of them — it travels as `own<r>`.
 fn unresolvable_future_stream_payload(
     tt: &TypeTable,
     registry: &crate::component_model::CmInterfaceRegistry,
     expr: &TirExpr,
+    check_records: bool,
 ) -> Option<String> {
+    let (payload, is_future) = future_stream_payload_site(tt, expr)?;
+    if check_records
+        && let Some(name) = unresolvable_record_in_payload(tt, registry, payload)
+    {
+        return Some(format!(
+            "record type `{name}` is used as a `future` / `stream` payload, \
+             which is only supported in library (`--lib`) components"
+        ));
+    }
+    if is_future {
+        return crate::component_model::future_payload_rejection(tt, payload);
+    }
+    // A CM-owned record element has no general payload type but does take the
+    // registry-driven `Record` stream path, so it is not unlowerable.
+    if crate::component_model::is_cm_record_stream_element(tt, payload) {
+        return None;
+    }
+    crate::component_model::stream_payload_rejection(tt, payload)
+}
+
+/// The payload type an expression names, and whether it is a future's, for the
+/// two shapes that reach the classifier: a `Future::<T>::new()` /
+/// `Stream::<T>::new()` static call, and a CM method on a handle.
+fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId, bool)> {
     let TirExprKind::Call { func, .. } = &expr.kind else {
         return None;
     };
@@ -289,28 +329,33 @@ fn unresolvable_future_stream_payload(
         .method_info
         .as_ref()
         .and_then(|m| m.cm_name.as_deref())?;
-    let is_future = match cm {
-        "future-new" => true,
-        "stream-new" => false,
-        _ => return None,
-    };
-    let payload = func
-        .monomorph_info
-        .as_ref()?
-        .impl_type_args
-        .first()
-        .copied()?;
-    if let Some(name) = unresolvable_record_in_payload(tt, registry, payload) {
-        return Some(format!(
-            "record type `{name}` is used as a `future` / `stream` payload, \
-             which is only supported in library (`--lib`) components"
-        ));
+    if let Some(is_future) = match cm {
+        "future-new" => Some(true),
+        "stream-new" => Some(false),
+        _ => None,
+    } {
+        let payload = func
+            .monomorph_info
+            .as_ref()?
+            .impl_type_args
+            .first()
+            .copied()?;
+        return Some((payload, is_future));
     }
-    if is_future {
-        crate::component_model::future_payload_rejection(tt, payload)
+    // A CM method on a handle: the receiver is the `Future<T>` / `Stream<T>`.
+    let is_future = if cm.starts_with("future-") {
+        true
+    } else if cm.starts_with("stream-") {
+        false
     } else {
-        crate::component_model::stream_payload_rejection(tt, payload)
+        return None;
+    };
+    let (receiver, _, _) = expr.kind.as_method_call()?;
+    let mut type_id = receiver.type_id;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
+        type_id = *inner;
     }
+    Some((*tt.generic_type_args(type_id)?.first()?, is_future))
 }
 
 /// The Wado name of the first user-named type (record / variant / enum /

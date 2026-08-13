@@ -631,7 +631,9 @@ fn check_cm_boundary_representable_inner(
             // `stream<T>`. Being representable is not enough: a resource is a
             // fine boundary value but has no payload type, and the classifier
             // would panic on it.
-            R::GenericResource { name, type_args, .. } => {
+            R::GenericResource {
+                name, type_args, ..
+            } => {
                 let name = name.clone();
                 let args = type_args.clone();
                 for &a in &args {

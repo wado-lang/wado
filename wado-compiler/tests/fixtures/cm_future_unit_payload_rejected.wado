@@ -1,0 +1,24 @@
+// Test: an unlowerable future payload is reported, not panicked on, even when
+// the function carrying it is not one of the world's exports.
+//
+// The record-payload validation is scoped to functions the world's export
+// bindings reach — a record's resolvability depends on the world, so a
+// library-shaped source compiled for the test world must not be flagged for
+// exports that world drops. Classifiability is not world-dependent: synthesis
+// classifies every `future` / `stream` method call in every function, so the
+// classifier's refusal is reachable from code the world never exports.
+use { println, Stdout } from "core:cli";
+
+export fn helper(v: Future<()>) -> i32 {
+    v.drop();
+    return 1;
+}
+
+export fn run() with Stdout {
+    println("unreachable");
+}
+
+__DATA__
+{
+    "compile_error": "`()` has no Component Model representation as a `future` payload"
+}
