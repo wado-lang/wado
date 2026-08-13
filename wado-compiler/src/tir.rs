@@ -708,6 +708,11 @@ pub struct TypeTable {
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
+    /// `(name, module) -> TypeId` for the nominal declarations that are not
+    /// structs. `find_decl_type_by_name` scanned every interned type for these,
+    /// which an instantiation now pays on the way in — see
+    /// `make_generic_instance`.
+    decl_name_index: IndexMap<(String, ModuleSource), TypeId>,
     /// Canonical map: declared-type symbol → `TypeId`.
     ///
     /// Populated by the elaborator whenever it creates a decl-backed type
@@ -855,6 +860,7 @@ impl TypeTable {
             box_payload_types: TypeMap::default(),
             shared_box_type_ids: TypeSet::default(),
             struct_name_index: IndexMap::default(),
+            decl_name_index: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
             symbol_by_type: TypeMap::default(),
             bound_driven_synth_requests: IndexSet::default(),
@@ -904,6 +910,12 @@ impl TypeTable {
             let rendered = self.struct_rendered_name(decl_name, type_args);
             self.struct_name_index
                 .insert((rendered, module_source.clone()), id);
+        }
+        if let Some((name, module_source)) = Self::nominal_key(&ty) {
+            self.decl_name_index.insert(
+                (name.to_string(), module_source.clone()),
+                id,
+            );
         }
         self.types.push(ty.clone());
         self.intern_map.insert(ty, id);
@@ -1175,36 +1187,9 @@ impl TypeTable {
         if let Some(id) = self.find_struct_by_name(name, module_source) {
             return Some(id);
         }
-        for (type_id, resolved) in self.all_types() {
-            let matches = match resolved {
-                ResolvedType::Enum {
-                    name: n,
-                    module_source: ms,
-                }
-                | ResolvedType::Resource {
-                    name: n,
-                    module_source: ms,
-                }
-                | ResolvedType::Flags {
-                    name: n,
-                    module_source: ms,
-                }
-                | ResolvedType::Variant {
-                    name: n,
-                    module_source: ms,
-                }
-                | ResolvedType::Newtype {
-                    name: n,
-                    module_source: ms,
-                    ..
-                } => n == name && ms == module_source,
-                _ => false,
-            };
-            if matches {
-                return Some(type_id);
-            }
-        }
-        None
+        self.decl_name_index
+            .get(&(name.to_string(), module_source.clone()))
+            .copied()
     }
 
     /// Find the `module_source` where a type with the given name is defined.
@@ -1292,6 +1277,7 @@ impl TypeTable {
         // Rebuild intern map from the surviving entries.
         self.intern_map.clear();
         self.struct_name_index.clear();
+        self.decl_name_index.clear();
         for (id, ty) in self.types.iter() {
             self.intern_map.insert(ty.clone(), id);
             if let ResolvedType::Struct {
@@ -1303,6 +1289,38 @@ impl TypeTable {
                 self.struct_name_index
                     .insert((name.clone(), module_source.clone()), id);
             }
+            if let Some((name, module_source)) = Self::nominal_key(ty) {
+                self.decl_name_index
+                    .insert((name.to_string(), module_source.clone()), id);
+            }
+        }
+    }
+
+    /// The `(name, module)` a non-struct nominal declaration interns under.
+    fn nominal_key(ty: &ResolvedType) -> Option<(&str, &ModuleSource)> {
+        match ty {
+            ResolvedType::Enum {
+                name,
+                module_source,
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+            } => Some((name, module_source)),
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            } => Some((name, module_source)),
+            _ => None,
         }
     }
 
