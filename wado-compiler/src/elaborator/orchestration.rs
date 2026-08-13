@@ -782,13 +782,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Topologically sort modules based on struct field type dependencies
         // A module depends on another if it has a struct with a field of a type defined there
-        let sorted_sources =
-            Self::topological_sort_modules(
-                modules,
-                &all_struct_fields,
-                &type_table.borrow(),
-                resolutions.defs(),
-            );
+        let sorted_sources = Self::topological_sort_modules(
+            modules,
+            &all_struct_fields,
+            &type_table.borrow(),
+            resolutions.defs(),
+        );
 
         let (cm_interface_registry, world_registry) = {
             let _span = logger.span("elaborate/cm_interface_registry");

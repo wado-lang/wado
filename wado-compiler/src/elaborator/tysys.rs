@@ -135,7 +135,6 @@ impl TypeSystem {
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
 
-
     /// Whether `type_id` is, or transitively carries, an affine resource
     /// (`Resource` / `GenericResource`, or a struct / tuple / `Result` holding
     /// one). Mirrors `resource_move_check::type_carries_resource`; used to
@@ -155,9 +154,7 @@ impl TypeSystem {
         let children: Vec<TypeId> = match self.type_table.borrow().get(base).clone() {
             ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
-            ResolvedType::Struct { .. } => {
-                self.struct_field_type_ids_of(base).unwrap_or_default()
-            }
+            ResolvedType::Struct { .. } => self.struct_field_type_ids_of(base).unwrap_or_default(),
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } if name == "Result" => type_args,

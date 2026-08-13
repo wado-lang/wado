@@ -493,11 +493,31 @@ compiles, passes the suite, and ends with a mechanical completion check.
       id never reaches the table. The step stands on its own — a spelling minted
       beside an identity is still a spelling — but nothing waits on it.
 - [ ] `ResolvedType` nominal variants carry `DefId`. Done when `ResolvedType`
-      holds no `(name, module_source)` pair. The nominal variants are matched at
-      ~790 sites, 188 of them in or-patterns that bind one `name` across
-      `Struct | Enum | Variant | Newtype | Flags | Resource | GenericInstance`;
-      each such group needs its arms split, which is the point — those patterns
-      are what let an instantiated spelling be read as a declaration name.
+      holds no `(name, module_source)` pair.
+
+      The ~790 match sites are not the work, and counting them was misleading:
+      most bind `name` to render it, and those are fine until the fields go
+      last. What has to move is the smaller set that reads the pair as an
+      *identity*, and `TypeTable::decl_of_type` already answers for those — it
+      predates this design, and resolves a monomorphization and a
+      `GenericInstance` back to the declaration they were spelled from. Each
+      migration so far has been one call replacing a destructure-and-look-up,
+      and each deleted the guard that existed to decide whether the pair meant
+      what the caller hoped: `contains_variant(name)`, a probe of two per-kind
+      indexes, `ref_name == struct_name`.
+
+      Do not trust a grep for the pair shape. It also matches
+      `ExprKind::GlobalVarGet`, which is a NIR node carrying a global's name —
+      a real problem, and a different one. Read each candidate.
+
+  - [ ] TIR declarations carry identity. This is the part that is structural
+        rather than mechanical. `Lowering` keys its variant-case and
+        struct-field maps by `TirVariant` / `TirStruct`'s own
+        `(name, module_source)`, so the pattern translator reaches a case index
+        through a spelling. Those maps key on a `DefId` only once the TIR
+        declaration carries one, which reaches to codegen — and it is what
+        `ResolvedType` losing the pair forces, since a downstream consumer will
+        have nothing to read off the type.
 - [ ] `RequiredTrait` carries a `Resolution`. A qualified call's trait prefix can
       name a type-parameter binder or reach no declaration at all, so a bare
       `DefId` cannot stand for it — the answer the site already has can. Waits on
