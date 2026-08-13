@@ -124,15 +124,17 @@ impl TypeSystem {
     /// The `TypeId` of each field of the struct `(name, module)` in declaration
     /// order, or `None` if no such struct is registered. Used by the resource
     /// move check to decide whether an aggregate transitively owns a resource.
-    pub(crate) fn struct_field_type_ids(
+    /// [`Self::struct_field_type_ids`] for a caller holding the type rather
+    /// than a spelling of it — which is every caller that reached one by
+    /// destructuring a `ResolvedType` for the pair naming its declaration.
+    pub(crate) fn struct_field_type_ids_of(
         &self,
-        name: &str,
-        module: &ModuleSource,
+        type_id: TypeId,
     ) -> Option<Vec<crate::tir::TypeId>> {
-        let def = self.resolutions.declared_in(module, name)?;
-        let info = self.all_struct_fields.get(&def)?;
+        let info = self.all_struct_fields.get(&self.type_def(type_id)?)?;
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
+
 
     /// Whether `type_id` is, or transitively carries, an affine resource
     /// (`Resource` / `GenericResource`, or a struct / tuple / `Result` holding
@@ -153,13 +155,9 @@ impl TypeSystem {
         let children: Vec<TypeId> = match self.type_table.borrow().get(base).clone() {
             ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => self
-                .struct_field_type_ids(&name, &module_source)
-                .unwrap_or_default(),
+            ResolvedType::Struct { .. } => {
+                self.struct_field_type_ids_of(base).unwrap_or_default()
+            }
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } if name == "Result" => type_args,

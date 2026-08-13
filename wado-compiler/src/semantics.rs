@@ -463,15 +463,9 @@ impl Semantics {
     /// The `TypeId` of each field of struct `(name, module)`, in declaration
     /// order. `None` if it is not a registered struct or the annotate state is
     /// unavailable. Used by the resource move check's aggregate walk.
-    pub(crate) fn struct_field_type_ids(
-        &self,
-        name: &str,
-        module: &ModuleSource,
-    ) -> Option<Vec<TypeId>> {
-        self.state
-            .as_ref()?
-            .tysys
-            .struct_field_type_ids(name, module)
+    /// [`Self::struct_field_type_ids`] keyed by the type itself.
+    pub(crate) fn struct_field_type_ids_of(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
+        self.state.as_ref()?.tysys.struct_field_type_ids_of(type_id)
     }
 
     /// Whether the method call at `id` takes its receiver `self` by value,
