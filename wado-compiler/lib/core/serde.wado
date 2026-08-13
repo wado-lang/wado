@@ -1217,12 +1217,6 @@ pub fn apply_case(style: CaseStyle, s: String) -> String {
 pub fn wire_name<M: Member>(m: &M, policy: CaseStyle) -> String {
     return match m.wire_name_override() {
         Option::Some(o) => o,
-        // The `Identity` test is `apply_case`'s own first line, repeated here
-        // so a const `policy` prunes the call at the site. Folding the call's
-        // result to a constant does not delete the call — it allocates through
-        // bounds-checked writes, so its effect summary carries `may_trap` and
-        // the skeleton keeps it — and it re-allocated its `String` argument on
-        // every field of every serialized struct.
-        Option::None => if policy matches { Identity } { m.name() } else { apply_case(policy, m.name()) },
+        Option::None => apply_case(policy, m.name()),
     };
 }

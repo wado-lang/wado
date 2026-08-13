@@ -6255,7 +6255,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // computed above.
         let return_type = declared_return
             .or(block_return_type)
-            .unwrap_or(body.type_id);
+            .unwrap_or_else(|| {
+                // A block body whose every path exits reifies as NEVER, so the
+                // returned expressions are the only source of the real return
+                // type. `block_return_type` looks for them in the AST via
+                // `expression_types`, and comes up empty when the site
+                // elaborated twice and the committed pass is not the one that
+                // recorded the body — a closure argument inside `for … of`
+                // over a `List` is such a site, and it has no `expected_type`
+                // to fall back on either. Falling through to NEVER types
+                // `__call` as `-> !`: it pushes nothing while the caller pops
+                // a value, and the module fails core-Wasm validation.
+                //
+                // The body TIR was just built, so read the type off that
+                // instead — it exists whichever pass recorded what.
+                if body.type_id == TypeTable::NEVER {
+                    tir_block_return_type(&body)
+                        .or(body_expected)
+                        .unwrap_or(body.type_id)
+                } else {
+                    body.type_id
+                }
+            });
 
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
@@ -10837,4 +10858,39 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
             None
         }
     })
+}
+
+/// First `return <value>` type reachable in a reified closure body.
+///
+/// The AST-level companion (`control_flow::find_return_type_in_block`) reads
+/// `expression_types`, which is empty for a body whose recording pass the site
+/// discarded. This one reads the TIR the caller just built, so it answers
+/// whenever a `return <value>` exists at all. Walks the same nesting the AST
+/// version does: blocks, `if` arms, loops, labeled blocks, and `match` arms.
+fn tir_block_return_type(body: &crate::tir::TirExpr) -> Option<crate::tir::TypeId> {
+    use crate::tir::{TirExprKind, TirStmtKind};
+
+    fn in_block(block: &crate::tir::TirBlock) -> Option<crate::tir::TypeId> {
+        block.stmts.iter().find_map(|stmt| match &stmt.kind {
+            TirStmtKind::Return { value } => value.as_ref().map(|v| v.type_id),
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => in_block(then_block).or_else(|| else_block.as_ref().and_then(in_block)),
+            TirStmtKind::Loop { body, .. } => in_block(body),
+            TirStmtKind::Expr(e) => in_expr(e),
+            _ => None,
+        })
+    }
+
+    fn in_expr(expr: &crate::tir::TirExpr) -> Option<crate::tir::TypeId> {
+        match &expr.kind {
+            TirExprKind::Block(block) => in_block(block),
+            TirExprKind::Match { arms, .. } => arms.iter().find_map(|arm| in_expr(&arm.body)),
+            _ => None,
+        }
+    }
+
+    in_expr(body)
 }

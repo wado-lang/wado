@@ -1,0 +1,88 @@
+// A block-bodied closure in call-argument position, inside `for … of` over a
+// `List`, used to compile to a `__call` typed `-> !`: the callee pushed
+// nothing while the caller popped a value, and the module failed core-Wasm
+// validation ("type mismatch: expected i32 but nothing on stack").
+//
+// The closure's return type is inferred by walking the body AST for a
+// `return`, reading each returned expression's recorded type. That walk comes
+// up empty when the site elaborates twice and the committed pass is not the
+// one that recorded the body — so the inference fell through to the body's own
+// (correctly divergent) `!`. The expected fn type from context settles it.
+//
+// `for … of` over a range, a `let`-bound closure, and an expression-bodied
+// closure all took different paths and were unaffected; they are pinned here
+// too so a future narrowing of the fix cannot quietly lose them.
+
+fn call(f: fn() -> i32) -> i32 {
+    return f();
+}
+
+fn call_mut<T>(mut f: fn mut() -> T) -> T {
+    f();
+    return f();
+}
+
+test "block-bodied closure argument inside for-of over a list" {
+    let mut total = 0;
+    for let i of [1, 2, 3] {
+        total += call(|| {
+            let doubled = i * 2;
+            return doubled;
+        });
+    }
+    assert total == 12;
+}
+
+test "same, over a list held in a binding" {
+    let xs = [10, 20];
+    let mut total = 0;
+    for let x of xs {
+        total += call(|| {
+            return x + 1;
+        });
+    }
+    assert total == 32;
+}
+
+test "same, through a generic `fn mut` parameter" {
+    let mut total = 0;
+    for let i of [4, 5] {
+        total += call_mut(|| {
+            let n = i;
+            return n;
+        });
+    }
+    assert total == 9;
+}
+
+test "a closure body that only diverges still types as its context" {
+    let mut seen = 0;
+    for let i of [1] {
+        seen += call(|| {
+            if i > 0 {
+                return 7;
+            }
+            panic("unreachable");
+        });
+    }
+    assert seen == 7;
+}
+
+test "shapes that already worked" {
+    let mut total = 0;
+    for let i of 0..<3 {
+        total += call(|| {
+            return i;
+        });
+    }
+    assert total == 3;
+
+    for let i of [1, 2] {
+        total += call(|| i);
+        let f = || {
+            return i;
+        };
+        total += call(f);
+    }
+    assert total == 9;
+}
