@@ -1,22 +1,12 @@
-//! Return-convention (ownership) analysis over monomorphized TIR
-//! (WEP 2026-05-21, value-copy client).
+//! Return-convention (ownership) analysis over monomorphized TIR (WEP
+//! 2026-05-21). A function *returns owned* when every value it can return is
+//! freshly materialized rather than a borrowed projection of a `&`/global
+//! parameter, so the value-copy fold can consume its result as a move.
 //!
-//! A function *returns owned* when every value it can return is a freshly
-//! materialized value — a literal, a construction, a copy clone, a moved local,
-//! or the owned result of another call — rather than a *borrowed projection* of
-//! a `&`/global parameter (an accessor like `index_value(self: &List, i) -> T {
-//! return self.repr[i] }`). The value-copy fold consults this so a call whose
-//! callee returns owned is treated as fresh: consuming its result into an owner
-//! is a move, no defensive copy needed.
-//!
-//! This is the caller-side, single-phase replacement for the old
-//! `optimize::escape` `returns_fresh` fixpoint. It runs at insertion time
-//! (`lower::plan::value_copy`) so the fold inserts copies precisely, rather than
-//! copying every call result and recovering it in a later `optimize` pass. It is
-//! caller-side by design: the fold only materializes at owner-entry sites, so a
-//! mutable-place accessor (`arr[i].field.push(x)`) is never a materialization
-//! and its element stays aliased — which the callee-side copy-on-extract model
-//! cannot achieve.
+//! Runs caller-side at insertion time, so copies are placed precisely instead
+//! of copying every call result and recovering it later. That is deliberate: the
+//! fold materializes only at owner-entry sites, leaving a mutable-place accessor
+//! like `arr[i].field.push(x)` aliased, which copy-on-extract cannot do.
 
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeySet;
@@ -234,16 +224,10 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
 }
 
 /// Return types for which *every* possible indirect-call target returns owned.
-///
-/// `lower::plan::closure` rewrites every callable value — a closure literal and
-/// a bare `FuncRef` alike — into a functor whose `__call` is an ordinary
-/// function in `project.functions`, so those `__call`s are the complete set of
-/// indirect-call targets. An indirect call is type-checked against its callee's
-/// signature, so only targets returning the same type can be reached: a return
-/// type all of whose `__call`s return owned makes every such call owned.
-///
-/// Derived from `returns_owned`, so it is computed after that fixpoint settles
-/// and never feeds back into it.
+/// `lower::plan::closure` turns every callable value into a functor whose
+/// `__call` is an ordinary function, so those are the complete target set, and
+/// an indirect call reaches only targets of its own return type. Derived from
+/// `returns_owned` after that fixpoint settles, never feeding back into it.
 pub fn compute_indirect_owned_returns(
     project: &FlatPackage,
     returns_owned: &FuncKeySet,

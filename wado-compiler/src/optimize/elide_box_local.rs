@@ -1,9 +1,8 @@
 //! Adjacent-use single-field struct local elimination, for the `Box<T>` pattern
 //! `wrap_in_box` produces and `sroa_param` exposes. A local defined once as a
 //! single-field `StructLiteral` and read once through `FieldAccess` has its
-//! initializer substituted at the use and its `Let` dropped, provided every
-//! intervening sibling passes [`mod_ref::can_move_past`] and the use is the
-//! leftmost evaluated sub-expression of a later, unconditional sibling.
+//! initializer substituted at the use and its `Let` dropped, if the use is the
+//! leftmost sub-expression of a later unconditional sibling it can move past.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};

@@ -1013,20 +1013,11 @@ impl Analyzer<'_> {
         }
     }
 
-    /// Record place-level move candidates at a struct/tuple literal or a `let`
-    /// binding. A direct child that materializes a whole value / clean field of
-    /// an aggregate root `base` aliases it out of the aggregate instead of
-    /// deep-copying, when:
-    ///
-    /// - `base` is dead after the literal (`!live_out.contains(base)`);
-    /// - the materialization sites of `base` are non-overlapping owners (one
-    ///   whole move, or field moves with distinct top-level fields); and
-    /// - no *other* use of `base` in the literal mutates or moves its storage
-    ///   (`conflict`). Read-only borrows (`&self` method, field read) and
-    ///   independent deep copies are harmless because `base` dies right after.
-    ///
-    /// The owned-storage guards (fresh / no live alias / no escaped borrow) are
-    /// applied later, once the fixpoint is known.
+    /// Record place-level move candidates at a struct/tuple literal or `let`. A
+    /// direct child materializing a whole value or clean field of an aggregate
+    /// root aliases it out instead of deep-copying, provided the root is dead
+    /// after the literal, its materialization sites are non-overlapping owners,
+    /// and no other use in the literal mutates or moves its storage.
     fn collect_place_moves(&mut self, children: &[&TirExpr], live_out: &IndexSet<u32>) {
         let mut mats: IndexMap<u32, Vec<(Option<u32>, crate::token::Span)>> = IndexMap::default();
         let mut conflict: IndexSet<u32> = IndexSet::default();

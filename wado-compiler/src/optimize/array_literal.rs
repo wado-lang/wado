@@ -1,48 +1,13 @@
-//! Materialize `ExprKind::ArrayLiteral` from an `Array<T>` builder
-//! sequence — an `array_new(N)` allocation followed by `N` `List::push`
-//! calls.
+//! Materialize `ExprKind::ArrayLiteral` from the builder sequence an array
+//! literal lowers to — a `List<T> { repr: array_new(N), used: 0 }` struct
+//! followed by `N` `List::push` calls on it or on a field of it — rewriting the
+//! struct and dropping the pushes. They need not be contiguous: element temps
+//! sit between them, and pushes to distinct array fields may interleave.
 //!
-//! An array literal `[e0, …, eN-1] as List<T>` is lowered (via the
-//! `SequenceLiteralBuilder` coercion and inlining) to:
-//!
-//! ```text
-//! let mut __b = <init binding> List<T> { repr: array_new(N), used: 0 };
-//! PLACE.push(e0);
-//! PLACE.push(e1);
-//! …
-//! PLACE.push(eN-1);
-//! ```
-//!
-//! `PLACE` is the bound local itself for a direct `List<T>` literal, or a
-//! field of it for a custom `SequenceLiteralBuilder` whose builder wraps an
-//! `List<T>` (e.g. `SeqVec { items: List<T> }`, `Bag { keys, values }`).
-//! This pass recognizes that window — the `List<T> { repr: array_new(N),
-//! used: 0 }` struct plus its `N` trailing `List::push` calls — and rewrites
-//! the struct to `ExprKind::ArrayLiteral { elements }`, dropping the
-//! pushes. The pushes need not be contiguous: inlining `push_literal` leaves
-//! single-use element temps between them (see `pure_temp_binding`), and
-//! pushes to distinct array fields may interleave (see `try_collapse_at`).
-//!
-//! `List::push` is identified by its [`CompilerItem::ListPush`] marker, not
-//! by a canonical path, mirroring `string_push`. `array_new` is identified by
-//! its builtin identity ([`FunctionRef::builtin_name`]), anchored on the
-//! callee's `ModuleSource` rather than a bare name string.
-//!
-//! Runs *after* `inline` in the fixpoint loop: the `SequenceLiteralBuilder`
-//! `new_literal` / `push_literal` / `build` methods (and, for wrapper builders,
-//! the `push_literal → self.field.push` delegation) must be inlined first so
-//! the raw `List<T> { array_new } + List::push` window is exposed. Giving
-//! constant arrays this first-class, analyzable shape lets hash-consing,
-//! `const_fold`, bounds-check elimination, and constant globalization act on
-//! them; `wir_build` lowers `ArrayLiteral` to `array.new_fixed`.
-//!
-//! Runs on the worklist rewrite engine (see
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a block-level
-//! [`Rule`]: the builder window is a run of sibling statements, so it collapses
-//! a block's statement list (`set_block_stmts`), reusing the existing element
-//! expression ids (their statements are dropped, so the ids are moved, not
-//! cloned). Nested blocks are separate worklist nodes processed bottom-up, so
-//! an inner block collapses before its enclosing one.
+//! Runs *after* `inline`, which must expose the raw window first, and as a
+//! block-level [`Rule`], the window being a run of sibling statements. Giving
+//! constant arrays this analyzable shape lets hash-consing, `const_fold`, BCE
+//! and globalization act on them; `wir_build` emits `array.new_fixed`.
 
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -306,17 +271,11 @@ impl Collapser<'_> {
     }
 }
 
-/// If `stmt` is `let temp = value`, return the local index and the bound
-/// value. Used to see through the element temps that inlining
-/// `push_literal(value)` introduces (`let v = <element>; place.push(v)`).
-///
-/// `allow_impure` is set only when the window has a single array target. With
-/// one target the materialized elements keep their original push order, so
-/// moving an impure value into its element slot preserves both evaluation
-/// count (the caller's read guards enforce single use) and order. With
-/// multiple interleaved targets (e.g. `Bag { keys, values }`) the per-field
-/// arrays materialize one after another, which would reorder side effects
-/// across fields, so only pure temps may be resolved there.
+/// If `stmt` is `let temp = value`, return the local index and the bound value —
+/// how the element temps inlining `push_literal` introduces are seen through.
+/// `allow_impure` holds only for a single-target window, where the elements keep
+/// their push order; with interleaved targets the per-field arrays materialize
+/// one after another, reordering side effects, so only pure temps resolve.
 fn temp_binding(body: &Body, stmt: StmtId, allow_impure: bool) -> Option<(u32, Operand)> {
     match &body.stmts[stmt].kind {
         StmtKind::Let {
