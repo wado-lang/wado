@@ -529,24 +529,6 @@ pub enum ResolvedType {
     Error,
 }
 
-impl ResolvedType {
-    /// Get the module path as a Vec<String> for backwards compatibility.
-    /// This is a transitional helper during the migration to `ModuleSource`.
-    #[must_use]
-    pub fn module_path(&self) -> Vec<String> {
-        match self {
-            Self::Struct { module_source, .. }
-            | Self::Enum { module_source, .. }
-            | Self::Variant { module_source, .. }
-            | Self::GenericInstance { module_source, .. }
-            | Self::GenericResource { module_source, .. }
-            | Self::Newtype { module_source, .. }
-            | Self::Flags { module_source, .. } => module_source.to_path(),
-            _ => vec![],
-        }
-    }
-}
-
 /// A dense map from [`TypeId`] to `V`, backed by a `Vec` indexed by
 /// `TypeId.0`.
 ///
@@ -941,14 +923,13 @@ impl TypeTable {
         // struct is a distinct type, and keying on the declaration would
         // collapse them all onto one entry.
         if let ResolvedType::Struct {
-            ref decl_name,
-            ref module_source,
+            ref def,
             ref type_args,
         } = ty
         {
-            let rendered = self.struct_rendered_name(decl_name, type_args);
-            self.struct_name_index
-                .insert((rendered, module_source.clone()), id);
+            let rendered = self.struct_rendered_name(*def, type_args);
+            let module_source = self.struct_head_module(*def).clone();
+            self.struct_name_index.insert((rendered, module_source), id);
         }
         if let Some((name, module_source)) = Self::nominal_key(&ty) {
             self.decl_name_index
@@ -1461,14 +1442,10 @@ impl TypeTable {
             .types
             .iter()
             .filter_map(|(id, ty)| match ty {
-                ResolvedType::Struct {
-                    decl_name,
-                    module_source,
-                    type_args,
-                } => Some((
+                ResolvedType::Struct { def, type_args } => Some((
                     (
-                        self.struct_rendered_name(decl_name, type_args),
-                        module_source.clone(),
+                        self.struct_rendered_name(*def, type_args),
+                        self.struct_head_module(*def).clone(),
                     ),
                     id,
                 )),
@@ -1927,10 +1904,9 @@ impl TypeTable {
         })
     }
 
-    pub fn make_struct(&mut self, name: String, module_source: ModuleSource) -> TypeId {
+    pub fn make_struct(&mut self, def: StructDef) -> TypeId {
         self.intern(ResolvedType::Struct {
-            decl_name: name,
-            module_source,
+            def,
             type_args: Vec::new(),
         })
     }
@@ -1939,15 +1915,16 @@ impl TypeTable {
     /// declaration with its arguments applied. Derived rather than stored, so
     /// there is no fused name for a declaration lookup to mistake for one.
     #[must_use]
-    pub fn struct_rendered_name(&self, decl_name: &str, type_args: &[TypeId]) -> String {
+    pub fn struct_rendered_name(&self, head: StructDef, type_args: &[TypeId]) -> String {
+        let decl_name = self.struct_head_name(head);
         if type_args.is_empty() {
-            return decl_name.to_string();
+            return decl_name;
         }
         let args: Vec<String> = type_args
             .iter()
             .map(|&a| self.mangle_type_arg_for_generic(a))
             .collect();
-        crate::name::mangle_generic_name(decl_name, &args)
+        crate::name::mangle_generic_name(&decl_name, &args)
     }
 
     /// Create a monomorphized struct type (e.g., "Box<i32>")
@@ -3499,14 +3476,13 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 format!("Array<{}>", self.type_name(*elem))
             }
-            ResolvedType::Struct {
-                decl_name,
-                type_args,
-                ..
-            } => crate::name::strip_local_item_id(&self.struct_rendered_name(decl_name, type_args))
-                .to_string(),
-            ResolvedType::Enum { name, .. } => name.clone(),
-            ResolvedType::Resource { name, .. } => name.clone(),
+            ResolvedType::Struct { def, type_args } => {
+                crate::name::strip_local_item_id(&self.struct_rendered_name(*def, type_args))
+                    .to_string()
+            }
+            ResolvedType::Enum { def } | ResolvedType::Resource { def } => {
+                self.def_name(*def).to_string()
+            }
             ResolvedType::Function {
                 is_mut,
                 params,
@@ -3524,12 +3500,10 @@ impl TypeTable {
             }
             ResolvedType::Ref(inner) => format!("&{}", self.type_name(*inner)),
             ResolvedType::MutRef(inner) => format!("&mut {}", self.type_name(*inner)),
-            ResolvedType::Variant { name, .. } => name.clone(),
-            ResolvedType::GenericResource {
-                name, type_args, ..
-            } => {
+            ResolvedType::Variant { def } => self.def_name(*def).to_string(),
+            ResolvedType::GenericResource { def, type_args } => {
                 let arg_names: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
-                format!("{}<{}>", name, arg_names.join(", "))
+                format!("{}<{}>", self.def_name(*def), arg_names.join(", "))
             }
             ResolvedType::Reactive(inner) => format!("Reactive<{}>", self.type_name(*inner)),
             ResolvedType::TypeParam { name, .. } => name.clone(),
@@ -3541,10 +3515,9 @@ impl TypeTable {
             } => {
                 format!("{}::{}", self.type_name(*param_id), assoc_name)
             }
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
                 let arg_names: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
+                let name = self.def_name(*def);
                 if Self::is_tuple_type(name) {
                     format!("[{}]", arg_names.join(", "))
                 } else {
@@ -3555,10 +3528,10 @@ impl TypeTable {
                     )
                 }
             }
-            ResolvedType::Newtype { name, .. } => {
-                crate::name::strip_local_item_id(name).to_string()
+            ResolvedType::Newtype { def, .. } => {
+                crate::name::strip_local_item_id(self.def_name(*def)).to_string()
             }
-            ResolvedType::Flags { name, .. } => name.clone(),
+            ResolvedType::Flags { def } => self.def_name(*def).to_string(),
             ResolvedType::TypePack { name, .. } => format!("..{name}"),
         }
     }
