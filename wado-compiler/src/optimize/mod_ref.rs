@@ -1,66 +1,8 @@
-//! Per-expression mod/ref summary for Wado NIR.
-//!
-//! A [`ModRef`] is a coarse, conservative summary of what an expression
-//! or statement (together with its sub-tree) does to machine state:
-//! which locals/globals it reads and writes, whether it touches the GC
-//! heap or linear memory, whether it may transfer control non-locally,
-//! whether it can call into arbitrary user code, and whether it may
-//! trap.
-//!
-//! Unrelated to Wado's algebraic-effect / `with`-clause machinery; this
-//! is the classical compiler-optimization notion (cf. LLVM
-//! `ModRefInfo`, GCC `mod` / `ref` sets). Lives at NIR because that's
-//! where every modref consumer in this compiler also lives (`dae`,
-//! `dce`, `copy_prop`, `store_load_forward`, `alias`, and the
-//! `elide_box_local` pass that motivated v1).
-//!
-//! ## Client API
-//!
-//! Passes consume the summary through two predicates:
-//!
-//! - [`ModRef::may_clobber`] — could the writes implied by `self`
-//!   invalidate any read implied by `other`? Wasm-semantics-accurate:
-//!   `calls` are treated as touching only globals / GC heap / linear
-//!   memory (callees cannot reach the caller's locals).
-//! - [`can_move_past`] — convenience for the common "skip an
-//!   intervening statement while erasing a candidate local" check used
-//!   by adjacent-use elision passes.
-//!
-//! ## Granularity (v1)
-//!
-//! Coarse: one R/W flag pair per heap / memory channel; calls are
-//! "everything except locals"; traps are a single boolean. The
-//! representation is private to this module — passes only call the
-//! predicates above — so refining the internals (per-`TypeId` GC heap,
-//! per-callee `stores`-aware effect summaries, `Cast`-kind precision,
-//! …) does not require call-site churn.
-//!
-//! NIR-specific assets the v1 implementation does NOT yet exploit but
-//! is designed to grow into:
-//!
-//! - `NirFunction::stores` declares which `&` / `&mut` parameters the
-//!   callee may store references through. A `Call { func }` whose
-//!   callee's `stores` is empty cannot mutate the caller's locals via
-//!   any argument, even when the argument is a reference type.
-//! - `Cast` kind: today every `Cast` is conservatively marked
-//!   `may_trap`. Refining to the actual numeric / ref-cast taxonomy
-//!   lets pure float→float / int-widening casts ride past
-//!   trap-conflicting intervening stmts.
-//!
-//! ## Discipline for extending [`ExprKind`] / [`StmtKind`]
-//!
-//! [`ModRef::accumulate_expr`] / [`ModRef::accumulate_stmt`] enumerate
-//! every effectful variant explicitly. Pure value-producing variants
-//! (constants, arithmetic, etc.) fall into terminal arms that
-//! contribute nothing of their own. When adding a new variant that
-//! introduces a new kind of effect, add it explicitly to the relevant
-//! `accumulate_*` — otherwise it silently defaults to "pure" and the
-//! soundness of downstream passes is lost.
-//!
-//! The companion test [`tests::known_effectful_variants_are_explicit`]
-//! constructs one expression / statement of each effectful shape and
-//! asserts the summary picks up the expected flag, so an accidental
-//! fall-through into a default arm surfaces as a test failure.
+//! Per-expression mod/ref summary — the classical optimization notion (LLVM's
+//! `ModRefInfo`), unrelated to Wado's algebraic effects. Passes consume it
+//! through [`ModRef::may_clobber`] and [`can_move_past`]. A new effectful
+//! [`ExprKind`] / [`StmtKind`] variant must be added to `accumulate_expr` /
+//! `accumulate_stmt` explicitly, or it silently defaults to pure.
 
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -243,18 +185,11 @@ impl ModRef {
         mr
     }
 
-    /// True iff `self`'s writes (or any call inside `self`) might
-    /// invalidate any of `other`'s reads.
+    /// True iff `self`'s writes (or any call inside `self`) might invalidate any
+    /// of `other`'s reads.
     ///
-    /// Call effects: callees can both read and mutate globals, the GC
-    /// heap, and linear memory, so a call on either side conflicts with
-    /// the other side's accesses to those channels — `self`'s call
-    /// clobbers `other`'s channel reads and `other`'s calls (whose
-    /// hidden reads `self`'s hidden writes may feed), and `other`'s
-    /// call reads whatever `self` explicitly writes. Callees CANNOT
-    /// reach the caller's Wasm locals — locals live in the calling
-    /// frame and are not addressable from another function — so a call
-    /// does not clobber a `local_reads`-only expression.
+    /// A call conflicts with the other side's globals / GC heap / linear memory,
+    /// but never with its locals — those live in the calling frame.
     pub fn may_clobber(&self, other: &ModRef) -> bool {
         let other_reads_shared =
             !other.global_reads.is_empty() || other.heap.reads || other.memory.reads;
@@ -701,33 +636,11 @@ impl ModRef {
     }
 }
 
-/// Can the expression with summary `expr_mr` be moved past an
-/// intervening statement with summary `int_mr`, while a candidate
-/// local `candidate` is being eliminated by the rewrite?
-///
-/// Soundness conditions (all must hold):
-///
-/// 1. The intervening statement transfers control linearly
-///    (`control == Linear`). `Conditional` and `NonLocal` intervenings
-///    are rejected: in the `NonLocal` case the use site may never
-///    execute; in the `Conditional` case some path through the
-///    intervening might still escape via an inner `Break`, and we
-///    over-approximate by bailing.
-/// 2. The intervening statement does not read the candidate local.
-///    With single-use candidates this is normally already guaranteed
-///    by the pass's stats check; the test is a cheap defense against
-///    future refactors.
-/// 3. The intervening and the expression do not both `may_trap`.
-///    If only one of them traps, the surviving trap fires at its own
-///    point; if both can trap, the observable trap location differs.
-///    Conservative for v1.
-/// 4. The intervening statement's writes (or any call inside it) do
-///    not clobber any of the expression's reads, AND symmetrically the
-///    expression's writes (or any call inside it) do not clobber any of
-///    the intervening statement's reads. Both directions are required:
-///    reordering the two preserves observable behaviour only when
-///    neither side's writes can be observed by the other (Bernstein's
-///    classical conditions).
+/// Can `expr_mr` move past an intervening `int_mr`, while `candidate` is being
+/// eliminated by the rewrite? All must hold: the intervening transfers control
+/// linearly, does not read `candidate`, and does not `may_trap` alongside the
+/// expression (the observable trap location would move); and neither side's
+/// writes clobber the other's reads (Bernstein's conditions).
 pub(super) fn can_move_past(expr_mr: &ModRef, int_mr: &ModRef, candidate: u32) -> bool {
     if !matches!(int_mr.control, Control::Linear) {
         return false;
@@ -752,25 +665,10 @@ pub(super) fn can_move_past(expr_mr: &ModRef, int_mr: &ModRef, candidate: u32) -
 // ---------------------------------------------------------------------------
 
 /// What a function does to machine state its caller can observe, resolved
-/// transitively across the call graph.
-///
-/// The per-expression [`ModRef`] above stops at a call boundary (`calls =
-/// true`, "callees may touch any global / heap / memory state we cannot
-/// see"). This is the callee-side refinement that module doc promises.
-///
-/// Only three channels are modelled, because only three survive a call whose
-/// arguments are freshly constructed at the call site:
-///
-/// - **globals** and **linear memory** are process-wide mutable state, so
-///   reading them makes a result depend on more than the arguments, and
-///   writing them is observable by everyone.
-/// - **I/O** (component-model calls) is observable by definition.
-///
-/// The **GC heap is deliberately absent**. A callee that mutates heap objects
-/// is still deterministic from its caller's point of view as long as the
-/// objects are ones it allocated itself or received as arguments — and a
-/// reference cannot outlive the call into caller-visible state, because
-/// `stores` (checked by the client) is what would let it escape.
+/// transitively across the call graph — the callee-side refinement of the
+/// per-expression [`ModRef`], which stops at a call boundary. Only globals,
+/// linear memory and I/O are modelled; the GC heap is deliberately absent,
+/// since `stores` (checked by the client) is what would let a reference escape.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct FnEffect {
     /// Reads process-wide mutable state (a global, or linear memory), so two

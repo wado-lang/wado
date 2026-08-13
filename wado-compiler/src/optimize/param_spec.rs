@@ -1,55 +1,8 @@
-//! Constant-field specialization of struct-reference parameters.
-//!
-//! Interprocedural constant propagation over struct fields, by cloning. A hot
-//! caller often threads a by-reference config struct of compile-time constants
-//! — a template's `Formatter` through `fmt_decimal` → `prepare_int_write` —
-//! into callees above the inline threshold, where `if f.sign_plus` and
-//! `if f.width > 0` then survive all the way to Wasm.
-//!
-//! For `g(…, x, …)` where `x` is a struct local (or an already specialized
-//! parameter) with constant fields, the pass clones `g`, substitutes those
-//! fields' reads, and retargets the call. It folds nothing itself: the clone's
-//! dead branches fall to `const_fold` / `const_branch_prune` next iteration,
-//! and `dce` drops the original once every call site has specialized.
-//!
-//! ## Legality
-//!
-//! A field may be substituted only if the callee never writes it — directly or
-//! through any function it forwards the reference to. [`summarize_params`]
-//! computes that write set as a fixed point over the call graph, alongside an
-//! `opaque` flag for a reference whose use the summary cannot classify.
-//!
-//! On the caller side [`collect_roots`] keeps a field only when every write to
-//! it stores the same constant and every call it is forwarded to leaves it
-//! alone. The facts are flow-insensitive — valid at every program point, so no
-//! dataflow is needed to place them.
-//!
-//! ## Profitability
-//!
-//! A field counts when the callee reads it *transitively*, so a clone that
-//! folds nothing in its own body is minted deliberately — it carries the
-//! constants along a pass-through link. That pays off when the chain ends in a
-//! fold and the clone replaces the original; it is duplication when the chain
-//! never folds and a cold path keeps the original live. Rare, but it is why
-//! Wasm grows on formatting-heavy code while whole programs shrink.
-//!
-//! TODO: require that the substituted constants can decide a branch.
-//!
-//! ## Cost
-//!
-//! Alone among the fixed-point-loop passes this one is not gate-aware: it
-//! re-summarizes every live function each iteration.
-//!
-//! TODO: gate it. Unlike a local rewrite pass, a stale summary here is a
-//! correctness surface — one taken before a callee gained a write would
-//! license an unsound substitution.
-//!
-//! ## Propagation depth
-//!
-//! Each clone records what it knows about its own parameters, so the next
-//! iteration roots on them and reaches one call deeper — the loop walks the
-//! chain one link per iteration. The clone cache keys on callee plus bindings,
-//! so a recursive call resolves to the same clone and terminates.
+//! Constant-field specialization: for `g(…, x, …)` where `x`'s struct fields are
+//! compile-time constants, clone `g`, substitute those reads, and retarget the
+//! call — `const_fold` folds the clone next iteration. Legality: no callee writes
+//! the field ([`summarize_params`]), every caller write stores the same constant
+//! ([`collect_roots`]). TODO: demand a decidable branch; TODO: make it gate-aware.
 
 use std::cell::RefCell;
 use std::rc::Rc;
