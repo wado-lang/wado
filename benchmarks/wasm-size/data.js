@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786617351975,
+  "lastUpdate": 1786622793746,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47577,6 +47577,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7209fe075fb61e56028d400e7866d5b491ce111f"
         },
         "date": 1786617351425,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265490,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1a92cc3e37790a5e8c030c895a52edafc26bfdf7",
+          "message": "Merge pull request #1799 from wado-lang/claude/package-cm-catalog-async-i3hd6e\n\nfeat(cm): carry canonical intrinsics by identity, and catalog the named async payloads",
+          "timestamp": "2026-08-13T20:55:50+09:00",
+          "tree_id": "f8a6c4f56d3a75a43ef4cc5e7424009864293894",
+          "url": "https://github.com/wado-lang/wado/commit/1a92cc3e37790a5e8c030c895a52edafc26bfdf7"
+        },
+        "date": 1786622793032,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
