@@ -240,10 +240,13 @@ pub fn rule_alts_labeled(alts: &List<Alternative>) -> bool {
     return true;
 }
 
-/// Check if a group has any storable pattern.
-/// All multi-alt groups are storable (general groups get variant types).
+/// Every group except a `GroupClass::Transparent` one is storable: multi-alt
+/// groups get a variant type, a single alt with 2+ elements gets a struct.
 pub fn is_storable_group(alts: &List<Alternative>) -> bool {
-    return is_simple_cst_group(alts) || is_token_only_group(alts) || is_single_alt_group(alts) || is_general_group(alts);
+    if alts.is_empty() {
+        return false;
+    }
+    return alts.len() > 1 || alts[0].elements.len() >= 2;
 }
 
 /// A general multi-alt group: 2+ alternatives that don't match any specialized pattern.
@@ -528,12 +531,7 @@ pub fn case_names_for_rule(alts: &List<Alternative>) -> List<String> {
 
 /// Return `true` when `first` contains `token` (linear scan).
 pub fn first_contains(first: &List<String>, token: &String) -> bool {
-    for let item of first {
-        if *item == *token {
-            return true;
-        }
-    }
-    return false;
+    return first.iter().any(|item| *item == *token);
 }
 
 /// Append every token in `source` to `arr`, skipping duplicates already in `arr`.

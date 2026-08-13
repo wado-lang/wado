@@ -17,7 +17,16 @@
 //! start/end, EBNF loop states), greedy vs non-greedy encoded purely by
 //! the order of a loop's epsilon edges, exactly like `atn.wado`.
 
-use { Grammar, LexerRule, LexerAlternative, LexerElement, CharClass, CharRange, RepeatKind } from "./ir.wado";
+use {
+    Grammar,
+    LexerRule,
+    LexerAlternative,
+    LexerElement,
+    CharClass,
+    CharRange,
+    RepeatKind,
+    find_lexer_rule,
+} from "./ir.wado";
 use { Atn, AtnState, AtnTransition } from "./atn.wado";
 use { resolve_ci, fold_range_ci } from "./lexer_gen.wado";
 use {
@@ -54,12 +63,9 @@ pub struct LatnResult {
 /// non-greedy repeat whose body recurses into its owning rule). Gates the
 /// whole lexer-ATN path: builder, blob, runtime fragment.
 pub fn grammar_needs_latn(grammar: &Grammar) -> bool {
-    for let rule of &grammar.lexer_rules {
-        if !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules) {
-            return true;
-        }
-    }
-    return false;
+    return grammar.lexer_rules.iter().any(
+        |rule| !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules),
+    );
 }
 
 /// A lexer rule is ATN-class when a non-greedy repeat *directly in its body*
@@ -165,15 +171,6 @@ fn refs_rule_in_alts(
         }
     }
     return false;
-}
-
-fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
-    for let rule of all_rules {
-        if rule.name == *name {
-            return Option::<&LexerRule>::Some(rule);
-        }
-    }
-    return null;
 }
 
 /// Mutable accumulator during construction. `ci` is the case-insensitivity

@@ -265,12 +265,7 @@ fn is_parser_special(name: &String) -> bool {
 }
 
 fn contains(names: &List<String>, name: &String) -> bool {
-    for let n of names {
-        if *n == *name {
-            return true;
-        }
-    }
-    return false;
+    return names.iter().any(|n| *n == *name);
 }
 
 /// Build a rule's attribute environment by collecting its declared

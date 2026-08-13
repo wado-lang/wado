@@ -16,6 +16,7 @@ use {
     RepeatElement,
     LabelElement,
     AltAction,
+    find_lexer_rule,
 } from "./ir.wado";
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
 use { translate_lexer_predicate, translate_lexer_action } from "./action_translate.wado";
@@ -89,12 +90,7 @@ pub fn fold_range_ci(start: char, end: char, out: &mut List<CharRange>) {
 }
 
 fn seen_contains(seen: &List<String>, text: &String) -> bool {
-    for let item of seen {
-        if *item == *text {
-            return true;
-        }
-    }
-    return false;
+    return seen.iter().any(|item| *item == *text);
 }
 
 pub fn collect_literal_tokens(parser_rules: &List<ParserRule>) -> List<LitToken> {
@@ -124,12 +120,7 @@ fn disambiguate_const_name(base: &String, result: &List<LitToken>) -> String {
 }
 
 fn const_name_taken(result: &List<LitToken>, name: &String) -> bool {
-    for let lit of result {
-        if lit.const_name == *name {
-            return true;
-        }
-    }
-    return false;
+    return result.iter().any(|lit| lit.const_name == *name);
 }
 
 fn collect_lits_from_elements(elements: &List<Element>, seen: &mut List<String>, result: &mut List<LitToken>) {
@@ -292,12 +283,7 @@ fn parse_token_type_numeric(s: &String) -> Option<i32> {
 }
 
 fn rule_name_exists(lexer_rules: &List<LexerRule>, name: &String) -> bool {
-    for let rule of lexer_rules {
-        if !rule.is_fragment && rule.name == *name {
-            return true;
-        }
-    }
-    return false;
+    return lexer_rules.iter().any(|rule| !rule.is_fragment && rule.name == *name);
 }
 
 pub fn gen_lexer(
@@ -742,12 +728,7 @@ pub fn lexer_rule_is_called(rule: &LexerRule, all_rules: &List<LexerRule>) -> bo
 }
 
 fn lexer_alt_refs_rule(alt: &LexerAlternative, name: &String) -> bool {
-    for let e of &alt.elements {
-        if lexer_elem_refs_rule(e, name) {
-            return true;
-        }
-    }
-    return false;
+    return alt.elements.iter().any(|e| lexer_elem_refs_rule(e, name));
 }
 
 fn lexer_elem_refs_rule(elem: &LexerElement, name: &String) -> bool {
@@ -1133,12 +1114,7 @@ fn apply_body_reads_chars(rule: &LexerRule, has_members: bool) -> bool {
 
 /// Whether an alt carries a top-level `{ ... }` action (not a predicate).
 fn lexer_alt_has_action(alt: &LexerAlternative) -> bool {
-    for let a of &alt.actions {
-        if a.kind matches { Action } {
-            return true;
-        }
-    }
-    return false;
+    return alt.actions.iter().any(|a| a.kind matches { Action });
 }
 
 /// Emit an alt's top-level actions (identity-translated) as statements.
@@ -1524,12 +1500,7 @@ fn lexer_alt_has_predicate_below(alt: &LexerAlternative, all_rules: &List<LexerR
             return true;
         }
     }
-    for let e of &alt.elements {
-        if lexer_elem_has_predicate_below(e, all_rules) {
-            return true;
-        }
-    }
-    return false;
+    return alt.elements.iter().any(|e| lexer_elem_has_predicate_below(e, all_rules));
 }
 
 fn lexer_elem_has_predicate_below(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
@@ -1774,12 +1745,7 @@ pub fn lexer_alt_last_is_tail(alt: &LexerAlternative, tail: bool) -> bool {
 /// Whether `alt` has a semantic predicate strictly between element `after` and
 /// the trailing position (`after < before_index < elements.len()`).
 fn lexer_alt_has_predicate_after(alt: &LexerAlternative, after: i32) -> bool {
-    for let a of &alt.actions {
-        if a.kind matches { Predicate } && after < a.before_index < alt.elements.len() {
-            return true;
-        }
-    }
-    return false;
+    return alt.actions.iter().any(|a| a.kind matches { Predicate } && after < a.before_index < alt.elements.len());
 }
 
 fn gen_lexer_alt_seq(
@@ -1894,12 +1860,7 @@ fn gen_lexer_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, befor
 
 /// Whether `alt` carries a semantic predicate at position `at`.
 fn lexer_alt_has_predicate_at(alt: &LexerAlternative, at: i32) -> bool {
-    for let a of &alt.actions {
-        if a.kind matches { Predicate } && a.before_index == at {
-            return true;
-        }
-    }
-    return false;
+    return alt.actions.iter().any(|a| a.kind matches { Predicate } && a.before_index == at);
 }
 
 /// Whether the greedy loop could eat a char the suffix needs — the one thing
@@ -2732,22 +2693,8 @@ fn gen_lexer_not(
     w.line(&"pos += 1;");
 }
 
-fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
-    for let rule of all_rules {
-        if rule.name == *name {
-            return Option::<&LexerRule>::Some(rule);
-        }
-    }
-    return null;
-}
-
 fn find_fragment(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
-    for let rule of all_rules {
-        if rule.name == *name && rule.is_fragment {
-            return Option::<&LexerRule>::Some(rule);
-        }
-    }
-    return null;
+    return all_rules.iter().find(|r: &LexerRule| r.name == *name && r.is_fragment);
 }
 
 /// Tries to extract a single lowercase char from a case-insensitive CharClass (e.g., [aA]).
@@ -3066,12 +3013,7 @@ fn keyword_carrier_admits(
 }
 
 fn is_keyword_rule_name(name: &String, keywords: &List<KeywordInfo>) -> bool {
-    for let kw of keywords {
-        if kw.rule_name == *name {
-            return true;
-        }
-    }
-    return false;
+    return keywords.iter().any(|kw| kw.rule_name == *name);
 }
 
 /// Extracts the fixed literal text from a lexer rule, if it's a pure literal sequence.
@@ -3317,30 +3259,15 @@ fn has_modes(mode_names: &List<String>) -> bool {
 }
 
 fn has_set_mode(rules: &List<LexerRule>) -> bool {
-    for let r of rules {
-        if r.set_mode >= 0 {
-            return true;
-        }
-    }
-    return false;
+    return rules.iter().any(|r| r.set_mode >= 0);
 }
 
 fn has_more(rules: &List<LexerRule>) -> bool {
-    for let r of rules {
-        if r.more {
-            return true;
-        }
-    }
-    return false;
+    return rules.iter().any(|r| r.more);
 }
 
 fn has_channel(rules: &List<LexerRule>) -> bool {
-    for let r of rules {
-        if r.channel != 0 {
-            return true;
-        }
-    }
-    return false;
+    return rules.iter().any(|r| r.channel != 0);
 }
 
 /// Whether `rule` always matches once its first character does: every
@@ -3667,12 +3594,7 @@ fn range_key(start: char, end: char) -> i64 {
 
 /// Check if a char matches any of the ranges in first_chars.
 fn char_matches_ranges(c: char, ranges: &List<[char, char]>) -> bool {
-    for let r of ranges {
-        if c >= r[0] && c <= r[1] {
-            return true;
-        }
-    }
-    return false;
+    return ranges.iter().any(|r| c >= r[0] && c <= r[1]);
 }
 
 fn add_range(out: &mut List<[char, char]>, seen: &mut TreeSet<i64>, start: char, end: char) {

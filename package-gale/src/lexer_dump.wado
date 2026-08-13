@@ -387,13 +387,8 @@ fn walk_elem(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, ci: bool, tail
     }
 }
 
-fn find_inlined_fragment(rules: &List<LexerRule>, name: &String) -> Option<LexerRule> {
-    for let r of rules {
-        if r.name == *name && r.is_fragment && !fragment_is_recursive(r, rules) {
-            return Option::<LexerRule>::Some(*r);
-        }
-    }
-    return null;
+fn find_inlined_fragment(rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[rules] {
+    return rules.iter().find(|r| r.name == *name && r.is_fragment && fragment_is_recursive(r, rules) == false);
 }
 
 fn decision_line(o: &mut DumpOut, text: &String) {

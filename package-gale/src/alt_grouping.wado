@@ -10,10 +10,9 @@
 //!
 //! The priority tier constants (`ALT_PRIORITY_*`) and the per-alt
 //! priority key (`alt_sort_priority`) are the contract that the parse-
-//! side dispatch and the scan-side dispatch share. See
-//! `lower.wado`'s mirror copies for the lowered-IR equivalents and the
-//! CLAUDE.md "Failed Approaches" section for why the bands are split
-//! the way they are.
+//! side dispatch and the scan-side dispatch share. See the CLAUDE.md
+//! "Failed Approaches" section for why the bands are split the way they
+//! are.
 
 use { Alternative, Element } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
@@ -160,39 +159,20 @@ pub fn compute_overlap_groups(first_sets: &List<List<String>>) -> List<List<i32>
 }
 
 pub fn has_multi_alt_groups(groups: &List<List<i32>>) -> bool {
-    for let group of groups {
-        if group.len() > 1 {
-            return true;
-        }
-    }
-    return false;
+    return groups.iter().any(|g| g.len() > 1);
 }
 
 pub fn sort_group_by_specificity(group: &mut List<i32>, first_sets: &List<List<String>>) {
-    // Sort by first set size ascending: smaller first set = more specific = try first.
-    // Ties broken by source order (smaller group index first). This is a
-    // selection sort over the total order (size asc, index asc); the index
-    // tie-break is what makes it stable — swapping only on a strictly smaller
-    // size would reorder tied alts (e.g. sizes [2,2,1] → [2,1,0]).
-    for let mut i = 0; i < group.len(); i += 1 {
-        for let mut j = i + 1; j < group.len(); j += 1 {
-            let sj = first_sets[group[j]].len();
-            let si = first_sets[group[i]].len();
-            let mut swap = false;
-            if sj < si {
-                swap = true;
-            } else if sj == si {
-                if group[j] < group[i] {
-                    swap = true;
-                }
-            }
-            if swap {
-                let tmp = group[i];
-                group[i] = group[j];
-                group[j] = tmp;
-            }
+    // A smaller first set is the more specific alt, so it is tried first.
+    let sets = first_sets;
+    group.sort_by(|a: &i32, b: &i32| {
+        let sa = sets[*a].len();
+        let sb = sets[*b].len();
+        if sa != sb {
+            return sa.cmp(&sb);
         }
-    }
+        return a.cmp(b);
+    });
 }
 
 // Priority bands consumed by `alt_sort_priority` and friends. Higher
@@ -258,30 +238,23 @@ pub fn alt_sort_priority(alt: &Alternative) -> i32 {
 /// scan is emitted first — the runtime tournament picks the longest
 /// scan, resolving ties to the first grammar alt.
 pub fn sort_group_by_mandatory_count_desc(group: &mut List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) {
+    let mut keyed: List<[i32, i32, i32]> = [];
     for let mut i = 0; i < group.len(); i += 1 {
-        for let mut j = i + 1; j < group.len(); j += 1 {
-            let li = ll_match_length(&alts[group[i]], ctx);
-            let lj = ll_match_length(&alts[group[j]], ctx);
-            let mut swap = false;
-            if lj > li {
-                swap = true;
-            } else if lj == li {
-                let pi = alt_sort_priority(&alts[group[i]]);
-                let pj = alt_sort_priority(&alts[group[j]]);
-                if pj > pi {
-                    swap = true;
-                } else if pj == pi {
-                    if group[j] < group[i] {
-                        swap = true;
-                    }
-                }
-            }
-            if swap {
-                let tmp = group[i];
-                group[i] = group[j];
-                group[j] = tmp;
-            }
+        let idx = group[i];
+        let len = ll_match_length(&alts[idx], ctx);
+        keyed.push([len, alt_sort_priority(&alts[idx]), idx]);
+    }
+    keyed.sort_by(|a: &[i32, i32, i32], b: &[i32, i32, i32]| {
+        if a.0 != b.0 {
+            return b.0.cmp(&a.0);
         }
+        if a.1 != b.1 {
+            return b.1.cmp(&a.1);
+        }
+        return a.2.cmp(&b.2);
+    });
+    for let mut i = 0; i < keyed.len(); i += 1 {
+        group[i] = keyed[i].2;
     }
 }
 
@@ -327,32 +300,20 @@ pub fn ll_match_length(alt: &Alternative, ctx: &mut GenContext) -> i32 {
 }
 
 pub fn sort_group_by_element_count(group: &mut List<i32>, alts: &List<Alternative>) {
-    for let mut i = 0; i < group.len(); i += 1 {
-        for let mut j = i + 1; j < group.len(); j += 1 {
-            let pi = alt_sort_priority(&alts[group[i]]);
-            let pj = alt_sort_priority(&alts[group[j]]);
-            let mut swap = false;
-            if pj > pi {
-                swap = true;
-            } else if pj == pi {
-                // Within same-priority tier: more elements = more specific = first
-                let ej = alts[group[j]].elements.len();
-                let ei = alts[group[i]].elements.len();
-                if ej > ei {
-                    swap = true;
-                } else if ej == ei {
-                    // Full tie: keep source order (smaller index first) so the
-                    // tournament's first-tried alt is deterministic.
-                    if group[j] < group[i] {
-                        swap = true;
-                    }
-                }
-            }
-            if swap {
-                let tmp = group[i];
-                group[i] = group[j];
-                group[j] = tmp;
-            }
+    // The source-order tie-break is what makes the tournament's first-tried
+    // alt deterministic.
+    let all = alts;
+    group.sort_by(|a: &i32, b: &i32| {
+        let pa = alt_sort_priority(&all[*a]);
+        let pb = alt_sort_priority(&all[*b]);
+        if pa != pb {
+            return pb.cmp(&pa);
         }
-    }
+        let ea = all[*a].elements.len();
+        let eb = all[*b].elements.len();
+        if ea != eb {
+            return eb.cmp(&ea);
+        }
+        return a.cmp(b);
+    });
 }

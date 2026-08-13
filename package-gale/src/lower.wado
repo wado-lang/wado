@@ -44,7 +44,7 @@ use {
     RepeatKind,
     GroupElement,
 } from "./ir.wado";
-use { alt_is_wildcard_led, compute_overlap_groups, alt_sort_priority } from "./alt_grouping.wado";
+use { alt_is_wildcard_led, compute_overlap_groups, sort_group_by_element_count } from "./alt_grouping.wado";
 use {
     rule_type_name,
     literal_const_name,
@@ -329,7 +329,6 @@ fn walk_rule_for_kind_sets(rule: &Rule, ctx: &mut GenContext) {
         },
         MultiAlt(m) => {
             walk_dispatch_for_kind_sets(&m.dispatch, ctx);
-            walk_dispatch_for_kind_sets(&m.scan_dispatch, ctx);
             for let alt of &m.alts {
                 walk_alt_body_for_kind_sets(alt, ctx);
             }
@@ -339,7 +338,6 @@ fn walk_rule_for_kind_sets(rule: &Rule, ctx: &mut GenContext) {
         },
         LeftRecursive(l) => {
             walk_dispatch_for_kind_sets(&l.atom.dispatch, ctx);
-            walk_dispatch_for_kind_sets(&l.atom.scan_dispatch, ctx);
             for let alt of &l.atom.alts {
                 walk_alt_body_for_kind_sets(alt, ctx);
             }
@@ -486,7 +484,6 @@ fn walk_op_for_kind_sets(op: &Op, ctx: &mut GenContext) {
         },
         Group(go) => {
             walk_dispatch_for_kind_sets(&go.dispatch, ctx);
-            walk_dispatch_for_kind_sets(&go.scan_dispatch, ctx);
             for let inner_alt of &go.alts {
                 walk_alt_body_for_kind_sets(inner_alt, ctx);
             }
@@ -567,7 +564,6 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
         alts,
         scan_alts,
         dispatch: dispatch,
-        scan_dispatch: dispatch,
     };
 }
 
@@ -1353,7 +1349,6 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
         alts,
         scan_alts,
         dispatch: dispatch,
-        scan_dispatch: dispatch,
     };
 }
 
@@ -1678,6 +1673,10 @@ fn build_overlap_dispatch(
     first_sets: &List<List<String>>,
     ctx: &mut GenContext,
 ) -> MultiAltDispatch {
+    let n_sets = first_sets.len();
+    let n_indices = indices.len();
+    assert n_sets == n_indices, `${*owner_label}: first_sets is parallel to indices, not to alts (${n_sets} vs ${n_indices})`;
+
     // An open-ended alt's static first set is empty, so `any_overlap` reads it
     // as disjoint and the Direct chain would give it an unreachable
     // empty-token branch. Its real first set is universal — the same invariant
@@ -1723,14 +1722,13 @@ fn build_overlap_dispatch(
     for let idx of indices {
         sorted.push(*idx);
     }
-    sort_alts_by_element_count(&mut sorted, alts);
+    sort_group_by_element_count(&mut sorted, alts);
     return MultiAltDispatch::Tournament(TournamentDispatch { alts: sorted });
 }
 
 /// True when a `build_overlap_dispatch` `owner_label` marks a scan-side
 /// pass (suffix " (scan)"), so the warn site can skip it and keep the
-/// parse-side label. `strip_suffix` returns the input unchanged when the
-/// suffix is absent, so a shortened result means it matched.
+/// parse-side label.
 fn ends_with_scan(label: &String) -> bool {
     return label.ends_with(" (scan)");
 }
@@ -1798,52 +1796,13 @@ fn any_overlap(first_sets: &List<List<String>>) -> bool {
     return false;
 }
 
-/// Sort `indices` by descending number of MANDATORY-leading-elements,
-/// with ties broken by `alt_sort_priority` and finally source order.
-/// Mirrors `alt_grouping::sort_group_by_element_count` for the
-/// tournament-style dispatch.
-fn sort_alts_by_element_count(indices: &mut List<i32>, alts: &List<Alternative>) {
-    for let mut i = 0; i < indices.len(); i += 1 {
-        for let mut j = i + 1; j < indices.len(); j += 1 {
-            let pi = alt_sort_priority(&alts[indices[i]]);
-            let pj = alt_sort_priority(&alts[indices[j]]);
-            let mut swap = false;
-            if pj > pi {
-                swap = true;
-            } else if pj == pi {
-                let ej = alts[indices[j]].elements.len();
-                let ei = alts[indices[i]].elements.len();
-                if ej > ei {
-                    swap = true;
-                } else if ej == ei {
-                    // Full tie: keep source order so the tournament's
-                    // first-tried alt is deterministic (stable sort).
-                    if indices[j] < indices[i] {
-                        swap = true;
-                    }
-                }
-            }
-            if swap {
-                let tmp = indices[i];
-                indices[i] = indices[j];
-                indices[j] = tmp;
-            }
-        }
-    }
-}
-
 
 /// Whether the rule has at least one directly-left-recursive
 /// alternative. Mirrors `parser_gen::is_left_recursive`'s shallow
 /// first-element check (ANTLR4 only rewrites direct LR; deep LR is
 /// out of contract — see `vendor/antlr4/doc/left-recursion.md`).
 fn has_left_recursive_alt(rule: &ParserRule) -> bool {
-    for let alt of &rule.alternatives {
-        if alt_is_left_recursive(alt, &rule.name) {
-            return true;
-        }
-    }
-    return false;
+    return rule.alternatives.iter().any(|alt| alt_is_left_recursive(alt, &rule.name));
 }
 
 /// FieldDecl for the leading self-reference element of an LR alt
@@ -2306,22 +2265,12 @@ fn lower_alt_scan_element(
 /// wrapped in a `Label`). Drives the scan-side OptionalLookahead
 /// trigger via `surface_is_optional_repeat`.
 fn has_nested_optional_in_alt(alt: &Alternative) -> bool {
-    for let elem of &alt.elements {
-        if surface_is_optional_repeat(elem) {
-            return true;
-        }
-    }
-    return false;
+    return alt.elements.iter().any(|elem| surface_is_optional_repeat(elem));
 }
 
 /// True when any element of `alt` contains a variable-length repeat.
 fn alt_has_variable_repeat(alt: &Alternative) -> bool {
-    for let elem of &alt.elements {
-        if surface_contains_variable_repeat(elem) {
-            return true;
-        }
-    }
-    return false;
+    return alt.elements.iter().any(|elem| surface_contains_variable_repeat(elem));
 }
 
 fn surface_is_optional_repeat(elem: &Element) -> bool {
@@ -2853,7 +2802,6 @@ fn lower_transparent_group(
         alts: [body],
         scan_alts: [scan_body],
         dispatch: empty_direct_dispatch(),
-        scan_dispatch: empty_direct_dispatch(),
     });
 }
 
@@ -2975,7 +2923,6 @@ fn lower_single_alt_group(
         alts: [body],
         scan_alts: [scan_body],
         dispatch: empty_direct_dispatch(),
-        scan_dispatch: empty_direct_dispatch(),
     });
 }
 
@@ -3037,7 +2984,6 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         alts: bodies,
         scan_alts: scan_bodies,
         dispatch: dispatch,
-        scan_dispatch: dispatch,
     });
 }
 
@@ -3127,7 +3073,6 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         alts: bodies,
         scan_alts: scan_bodies,
         dispatch: dispatch,
-        scan_dispatch: dispatch,
     });
 }
 
@@ -3316,7 +3261,6 @@ fn lower_general_group(
         alts: bodies,
         scan_alts: scan_bodies,
         dispatch: dispatch,
-        scan_dispatch: dispatch,
     });
 }
 
