@@ -60,24 +60,14 @@ pub(super) struct FuncInstState {
 }
 
 impl FuncInstState {
-    /// Look up the module owning the impl that backs `info`, restricted
-    /// to fully concrete impls (no impl-level type parameters). Mono uses
-    /// this — rather than the broader [`TraitEnv::impl_module_for`] —
-    /// because a generic impl's post-substitution function is materialised
-    /// in the receiver type's module, not the impl block's module: that
-    /// invariant is what `call_rewrite`'s "ref-blanket" path relies on to
-    /// route `&List<i32>^Inspect::inspect` through the `&T`-blanket
-    /// instantiation rather than collapsing it to `List<i32>::inspect`.
-    ///
-    /// The lookup uses `info.struct_name()` (the post-substitution type
-    /// name) rather than `info.base_struct_name()`, which mirrors the
-    /// legacy `trait_method_locations.contains_key(<full mangled name>)`
-    /// semantics: a concrete impl's key is the full type name (e.g. the
-    /// `impl Ord for i32` block keys ("i32", "Ord")), and post-mono
-    /// substitution emits trait-method calls whose `struct_name` is the
-    /// resolved concrete type ("i32", not "Score"). Querying by
-    /// `base_struct_name` would miss this case for newtypes whose
-    /// `struct_name` has been resolved through the newtype.
+    /// The module owning the impl behind `info`, restricted to fully concrete
+    /// impls. Mono needs this rather than the broader
+    /// [`TraitEnv::impl_module_for`] because a generic impl's post-substitution
+    /// function is materialised in the *receiver's* module — the invariant
+    /// `call_rewrite`'s ref-blanket path relies on to keep
+    /// `&List<i32>^Inspect::inspect` from collapsing to `List<i32>::inspect`.
+    /// Keyed by the post-substitution `struct_name`, since a concrete impl keys
+    /// on the full type name and substitution emits the resolved concrete type.
     pub fn impl_module(
         &self,
         info: &LocalMethodName,
@@ -301,19 +291,13 @@ impl Monomorphizer {
         names.contains(&self.method_instantiation_name(&base_key, type_table))
     }
 
-    /// Queue a function instantiation if not already queued. Returns true
-    /// if newly queued.
-    ///
-    /// Dedupe is keyed solely on the full `InstantiationKey`. Together
-    /// with faithful Ref/MutRef mangling (so `[&T]` and `[T]` mangle to
-    /// distinct names) and `TypeRewriter`'s post-monomorphisation
-    /// type-id rewrite over **every** `TypeId` field reachable from a
-    /// `TirFunction` body — including a call's `type_args` —
-    /// every concrete instantiation site reaches `try_queue_function`
-    /// with `GenericInstance`/`Struct`-canonicalised type args. That
-    /// makes `function_id_for(func)` injective over `project.functions`
-    /// by construction — the load-bearing invariant for DCE's
-    /// position-based retain (asserted at `optimize/dce.rs:675`).
+    /// Queue a function instantiation unless already queued, deduping on the full
+    /// `InstantiationKey` alone. With faithful Ref/MutRef mangling — so `[&T]`
+    /// and `[T]` differ — and `TypeRewriter`'s post-monomorphisation rewrite of
+    /// every reachable `TypeId`, a call's `type_args` included, every site
+    /// arrives with canonicalised args. That makes `function_id_for` injective
+    /// over `project.functions` by construction, which DCE's position-based
+    /// retain asserts and depends on.
     pub fn try_queue_function(
         &mut self,
         key: InstantiationKey,
@@ -326,20 +310,13 @@ impl Monomorphizer {
         if self.concrete_impl_owns_name(&key, &mangled_name, type_table) {
             return false;
         }
-        // A blanket instance reaches the same function from two dispatch sites —
-        // a template pre-resolution and a normal method dispatch — whose derived
-        // args (`..F` tuple, or a ref blanket's pointee) can be
-        // distinct-but-equivalent `TypeId`s, so the keys differ but the mangled
-        // name is identical. Dedup those on the name to avoid the
-        // duplicate-function check; either body is complete. The struct blanket
-        // carries `[T, ..F]` (len 2); the ref/mutref blankets carry `[pointee]`
-        // (len 1) under a `&`/`&mut`-headed template name.
-        // The ref/mutref case applies only to a *universal* `&T` blanket
-        // (`impl<T: Inspect> Inspect for &T`): its template name is `&^Trait` and
-        // the template + type-param dispatch both queue it. A `&^Trait` name that
-        // is really a newtype-peeled shape impl (`&List^IntoIterator` collapsed to
-        // `&`) has no universal blanket and must NOT be deduped — dropping it
-        // would leave the for-of loop's iterator unresolved.
+        // A blanket instance reaches one function from two dispatch sites whose
+        // derived args can be distinct-but-equivalent `TypeId`s, so the keys
+        // differ while the mangled name matches; dedup on the name, either body
+        // being complete. Only a *universal* `&T` blanket qualifies for the
+        // ref case: a `&^Trait` name that is really a newtype-peeled shape impl
+        // has no universal blanket, and deduping it would leave a for-of loop's
+        // iterator unresolved.
         let is_ref_universal_blanket = key.impl_type_args.len() == 1
             && key.method_info.as_ref().is_some_and(|i| {
                 i.ref_receiver().is_some_and(|ref_kind| {
@@ -371,20 +348,13 @@ impl Monomorphizer {
         true
     }
 
-    /// Generate monomorphized struct name: `Box` + `[i32]` -> `"Box<i32>"`.
-    ///
-    /// Uses `mangle_type_arg_for_generic` so that `Variant`/`Enum`/
-    /// `Resource`/`Newtype`/`Flags` type arguments are qualified by their
-    /// declaring `ModuleSource`. This matches what the type-table-side
-    /// `get_type_name_info(GenericInstance)` produces for the same type
-    /// arg, so the struct registered here and the `GenericInstance`
-    /// looked up by mangled name in `substitute_type` agree on a single
-    /// identity. Without this, a generic instantiated over a variant
-    /// (e.g. `IterMap<ListIter<Color>, String>`) was registered with an
-    /// unqualified name from one side and looked up with a qualified
-    /// name from the other, producing two distinct wasm-GC types for the
-    /// same struct and an "expected (ref $type), found (ref $type)" ICE
-    /// at codegen-time validation.
+    /// Generate a monomorphized struct name: `Box` + `[i32]` → `"Box<i32>"`.
+    /// Mangles through `mangle_type_arg_for_generic`, so a named type argument
+    /// carries its declaring module — the same form the type-table side produces,
+    /// letting the struct registered here and the `GenericInstance` looked up by
+    /// name agree on one identity. Unqualified on one side and qualified on the
+    /// other produced two wasm-GC types for one struct and an
+    /// "expected (ref $type), found (ref $type)" ICE at validation.
     pub fn instantiation_name(&self, key: &InstantiationKey, type_table: &TypeTable) -> String {
         let args: Vec<String> = key
             .impl_type_args
@@ -532,24 +502,15 @@ impl Monomorphizer {
         }
     }
 
-    /// If `type_id` (peeling references) is a newtype that answers this call
-    /// with its OWN impl, return the newtype's own name (e.g. `"ByteList"`);
-    /// otherwise `None`.
-    ///
-    /// Unlike [`Self::get_struct_name_from_type`], which makes newtypes
-    /// transparent by peeling to the base, this preserves the newtype's identity
-    /// — but only when the newtype actually overrides the method. The collect
-    /// path tries this name first so the queued instantiation
-    /// (`ByteList^Trait::method`) matches the call the rewrite emits, not the
-    /// inherited base (`List^Trait::method`). Newtypes without their own impl
-    /// (e.g. `Meters`, simd `v128` lanes) return `None` and keep peeling to the
-    /// base, so their dispatch is unchanged.
-    ///
-    /// A trait method asks for an `impl <Trait> for`; an inherent method asks
-    /// for a method of that name. Answering only the first left
-    /// `impl MyArray<T> { fn second() }` invisible, so an inherent call on a
-    /// generic newtype was named after the base it inherits from — a function
-    /// that does not exist.
+    /// The newtype's own name when `type_id` peels to one that answers this call
+    /// with its *own* impl, else `None`. Unlike
+    /// [`Self::get_struct_name_from_type`], which peels newtypes transparently,
+    /// this preserves the identity — but only where the newtype overrides the
+    /// method, so the collect path queues `ByteList^Trait::method` to match what
+    /// the rewrite emits rather than the inherited base. A trait method asks for
+    /// an `impl Trait for`, an inherent one for a method of that name: answering
+    /// only the first named an inherent call after a base function that does not
+    /// exist.
     pub fn newtype_own_struct_name_with_impl(
         &self,
         type_id: TypeId,
@@ -639,20 +600,15 @@ impl Monomorphizer {
         own.as_ref() == Some(&info.fq_base_struct_name())
     }
 
-    /// Build the ordered list of `(mangled_method_name, trait_name)` formats to
-    /// probe when resolving a generic method call on `receiver_type_id`.
-    ///
-    /// A newtype's OWN impl is tried before its base so the resolution lands on
-    /// the newtype's own instantiation (`ByteList^serialize`) rather than the
-    /// inherited base (`List^serialize`). For each candidate struct name both
-    /// the inherent (`None`) and trait-qualified formats are emitted. Returns
-    /// the newtype's own name alongside the list so callers can also seed their
-    /// candidate set with it. Shared by the collect (`func_inst.rs`) and rewrite
-    /// (`call_rewrite.rs`) paths so the two stay in lockstep.
-    ///
-    /// The names are receivers, so they come off the receiver's type — a
-    /// template is registered under the fq head its definition was named with,
-    /// which a struct-instantiation spelling does not reproduce.
+    /// The ordered `(mangled_method_name, trait_name)` formats to probe when
+    /// resolving a generic method call, a newtype's own impl before its base so
+    /// resolution lands on `ByteList^serialize` rather than `List^serialize`.
+    /// Each candidate name yields both the inherent and trait-qualified forms,
+    /// and the newtype's own name comes back alongside so callers can seed with
+    /// it. Shared by the collect and rewrite paths, keeping them in lockstep.
+    /// The names come off the receiver's type: a template is registered under the
+    /// fq head its definition was named with, which an instantiation spelling
+    /// does not reproduce.
     pub fn newtype_aware_method_names(
         &self,
         receiver_type_id: TypeId,

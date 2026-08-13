@@ -1,40 +1,15 @@
-//! Condition Implication — eliminates bounds checks implied false by guards.
+//! Condition Implication — drives to `false` every bounds check a guard already
+//! refutes, leaving `const_branch_prune` to remove the dead branch. The
+//! recognised guards are a loop guard, a dominating `if`, a straight-line early
+//! exit, a short-circuit LHS, a bitmask range, an earlier panic-guard on the same
+//! index ([`rbce_walk`]), and a `let idx = arr.len() - k` ([`len_minus_fact`]).
 //!
-//! When a loop guard proves `i < bound`, any inner check `i >= bound` is known
-//! false and is replaced with `false`. The existing `const_branch_prune` pass
-//! then removes the dead branch on the next iteration.
-//!
-//! Recognised patterns (all **structural** and `value_of`-free):
-//!
-//! - loop guard `if !(var < bound) { break }` → checks in the body
-//!   (`structural_loop_guard`);
-//! - dominating `if (var + k) < bound { … }` → checks in the then-block
-//!   (`apply_dominating_if`);
-//! - straight-line early-exit `if (var + k) >= bound { return/break }` → checks
-//!   in the statements after it (`recognize_early_exit`);
-//! - short-circuit `(var + k) >= bound || expr` → checks in `expr`
-//!   (`ShortCircuitEliminator`);
-//! - bitmask `(x & MASK) >= BOUND`, `BOUND > MASK >= 0` (`BitmaskEliminator`);
-//! - redundant re-check: the panic-guard `arr[i]` lowers to proves `i < arr.used`,
-//!   so a later `arr[i]` (array unmodified between) is dropped — a forward walk
-//!   ([`rbce_walk`]) harvesting guard facts, needing no source-level guard;
-//! - last-element: a `let idx = arr.len() - k` (k >= 1) proves `idx < arr.len()`
-//!   ([`len_minus_fact`]), refuting the later `arr[idx]` guard — the
-//!   top-of-stack / `arr.last()` idiom, dropped if the array is resized between.
-//!
-//! Matching is **syntactic over the skeleton plus the value pool**, never the
-//! `value_of` side-table: a guard's `var` / `bound` are compared by structure
-//! ([`BoundKey`], copy temps resolved through [`Binds`]); a promoted operand
-//! (`Operand::Value`) is decomposed through `body.values` (the IR's value pool).
-//! Flow-correctness comes from a position-aware "no statement modified
-//! `var` / `bound` between the guard and the check" scan ([`stmt_modifies`] /
-//! [`node_modifies`]) rather than from `ValueId` identity. See
-//! `array_bounds_elim_oob_guard_var_mutated.wado` /
-//! `array_bounds_elim_oob_bound_shrunk.wado` for the fixtures pinning this.
-//!
-//! Runs via [`eliminate_at_root`], sharing licm's engine session (see
-//! `licm.rs`). The single rewrite point promotes a condition to constant
-//! `false` (`set_false`), replacing already-judged condition nodes only.
+//! Matching is syntactic over the skeleton plus the value pool, never the
+//! `value_of` side-table: `var` and `bound` compare by structure ([`BoundKey`]),
+//! and a promoted operand decomposes through `body.values`. Flow-correctness
+//! comes from a position-aware "nothing modified `var` / `bound` in between" scan
+//! rather than from `ValueId` identity. Runs via [`eliminate_at_root`], sharing
+//! licm's engine session.
 
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
@@ -88,16 +63,12 @@ pub(super) fn resolve_panic_ids(
         .collect()
 }
 
-/// Standalone post-`promote_fields` run of the structural BCE matcher.
-///
-/// `promote_fields` (born-as-operands) freezes invariant field reads — an array
-/// bound `arr.used` over a stable receiver — into `Operand::Value`, but it runs
-/// *after* the optimization loop, so the in-loop cond-impl never sees the
-/// promoted bound. This re-runs the matcher on the post-promotion body, where
-/// `(idx & MASK) < BOUND`'s bound is now a constant operand the structural
-/// recogniser reads through the value **pool** (no `value_of`). The caller pairs
-/// it with `const_branch_prune` to fixpoint so the now-`false` checks' panic
-/// blocks are removed.
+/// Standalone post-`promote_fields` run of the structural matcher.
+/// `promote_fields` freezes an invariant field read such as `arr.used` into an
+/// `Operand::Value`, but runs *after* the optimization loop, so the in-loop pass
+/// never sees the promoted bound. Re-running here, the recogniser reads it
+/// through the value pool. The caller pairs this with `const_branch_prune` to
+/// fixpoint so the newly-`false` checks' panic blocks go too.
 pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackage) -> bool {
     use crate::nir::NirFunction;
     use crate::nir_engine::EngineBuffers;
@@ -436,17 +407,13 @@ fn struct_field_init(
         .map(|f| f.value)
 }
 
-/// The offset `c` such that `bound`'s value equals `guard_var + c`, where `bound`
-/// is an invariant struct-field read (`arr.used` over `List { used: guard_var + c }`)
-/// projected via [`struct_field_init`]. Lets a `<=` guard relate its bound to a
-/// check bound (the caller keeps only `c > cj`).
-///
-/// A bare `guard_var + c` arithmetic bound is deliberately **not** accepted: Wado
-/// add wraps, so `guard_var + c` can overflow to a value below `guard_var`,
-/// making `guard_var + cj < guard_var + c` unsound (see `wraple` repro). The
-/// struct-field form is safe because the field holds a real list length, which
-/// the runtime maintains in `[0, capacity)` with `capacity < 2^31` — so
-/// `used == guard_var + c` proves the sum did not wrap.
+/// The offset `c` for which `bound` equals `guard_var + c`, where `bound` is an
+/// invariant struct-field read projected via [`struct_field_init`] — what lets a
+/// `<=` guard relate its bound to a check bound. A bare arithmetic
+/// `guard_var + c` is deliberately refused: Wado add wraps, so it can overflow
+/// below `guard_var`. The struct-field form is safe because the field holds a
+/// real list length, which the runtime keeps in `[0, capacity)` with
+/// `capacity < 2^31`, so the equality proves the sum did not wrap.
 fn bound_offset_over(
     engine: &Engine,
     binds: &Binds,
@@ -784,21 +751,13 @@ fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId, binds: &Binds)
     let Some((var, goff, bound, gop)) = parse_cmp(engine, binds, *inner) else {
         return false;
     };
-    // Walk body statements after the guard, in order. While no statement has
-    // modified `var` / `bound` since the guard, eliminate the dominated checks
-    // nested anywhere in the statement (the inlined `index_value` check is a
-    // `StmtKind::If` / `ExprKind::If` inside the statement's expression block,
-    // not a top-level statement). A statement that modifies `var` / `bound`
-    // (e.g. the `i += 1` induction update) stops the scan — the guard fact no
-    // longer holds past it.
-    //
-    // - `<` guard: surviving `var + goff < bound`; a check `var + j >= bound` is
-    //   refuted only for `j == goff` (same wrapping index, [`eliminate_checks_in_node`]).
-    // - `<=` guard (`goff == 0`, `bound` a local `gbl`): surviving `var <= gbl`,
-    //   i.e. `var < gbl + 1`; a check `var + j >= B` is refuted when `B` relates
-    //   to `gbl + c` with `c >= j + 1` ([`eliminate_le_checks_in_node`]). This is
-    //   the `arr.used == limit + 1` case.
-    // `<=` guards require a local bound; `<` accepts any. Reject other ops.
+    // Walk the statements after the guard in order, eliminating dominated checks
+    // nested anywhere inside each — an inlined `index_value` check is an `If`
+    // within the statement's expression block, not a top-level statement — and
+    // stopping at the first statement that modifies `var` / `bound`, such as the
+    // `i += 1` induction update, past which the fact no longer holds. A `<` guard
+    // refutes only the same wrapping index; a `<=` guard refutes a check whose
+    // bound relates to the guard's by a large enough offset, and needs a local.
     let le_gbl = match gop {
         NirBinaryOp::Lt => None,
         NirBinaryOp::LtEq if goff == 0 => match bound {
@@ -869,17 +828,13 @@ fn refute_panic_checks(
     changed
 }
 
-/// Drive to `false` every `if (var >= bound) { panic }` (no else) nested in
-/// `node`, matching the loop guard's `var` / `bound` structurally.
-///
-/// The guard gives `var + k < bound`; a check `var + j >= bound` is refuted only
-/// for `j == k`. Wado add wraps (i32 two's-complement), so `var + j <= var + k`
-/// does **not** hold in general: if `var + k` overflows (e.g. `var == i32::MAX`,
-/// `k == 1`) the guard passes on the wrapped-negative value while `var + j`
-/// (`j < k`) stays a large in-range positive that violates the bound. Only
-/// `j == k` computes the identical wrapping index as the guard, so `var + k <
-/// bound` refutes `var + k >= bound` regardless of wrap. See
-/// `opt_bce_wrap_guard.wado`.
+/// Drive to `false` every else-less `if (var >= bound) { panic }` nested in
+/// `node` whose `var` / `bound` match the guard structurally. The guard gives
+/// `var + k < bound`, and a check `var + j >= bound` is refuted only for
+/// `j == k`: Wado add wraps, so if `var + k` overflows the guard passes on a
+/// wrapped-negative value while a smaller `var + j` stays a large in-range
+/// positive that violates the bound. Only the identical index is safe whatever
+/// the wrap.
 fn eliminate_checks_in_node(
     engine: &mut Engine,
     node: NodeRef,
@@ -1444,18 +1399,13 @@ fn short_circuit_parts(engine: &Engine, node: NodeRef) -> Option<(Operand, Opera
     }
 }
 
-/// Forward redundant-bounds-check elimination: walk `node` in execution order
-/// maintaining a set of proven `var + off < bound` facts harvested from
-/// panic-guard checks at *unconditionally-executed* positions, and drive to
-/// `false` any later dominated check the facts already refute (e.g. `arr[i]`
-/// re-checked after an earlier `arr[i]` with the array unmodified between).
-///
-/// Facts thread by `&mut` through straight-line positions, by clone into
-/// conditional ones (an `if` branch, short-circuit RHS, or `match` arm — a
-/// branch's harvest must not escape), and afresh into loop / labeled-block
-/// bodies. [`invalidate`] drops a fact when a processed node may modify its
-/// `var` / `bound` root, so a resize between two checks keeps the later one —
-/// the same mod-tracking the straight-line early-exit elimination above uses.
+/// Forward redundant-bounds-check elimination: walk `node` in execution order,
+/// harvesting proven `var + off < bound` facts from panic-guard checks at
+/// unconditionally-executed positions and driving to `false` any later check they
+/// refute — a re-checked `arr[i]` with the array unmodified between. Facts thread
+/// by `&mut` through straight-line positions, by clone into conditional ones so a
+/// branch's harvest cannot escape, and afresh into loop bodies. [`invalidate`]
+/// drops a fact whose root a node may modify, so a resize keeps the later check.
 fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, binds: &Binds) -> bool {
     if let Some(cond) = panic_guard_check(engine, node) {
         if let Some((var, off, bound)) = parse_check(engine, binds, cond) {
