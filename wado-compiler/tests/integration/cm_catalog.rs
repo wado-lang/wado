@@ -1763,6 +1763,29 @@ fn cm_lib_accepts_newtype_future_payloads() {
     }
 }
 
+/// A WASI resource reaching codegen through an export signature, not through a
+/// guest-created `Future::<T>::new()`. Its `own<…>` type is aliased from the
+/// defining interface, so it is absent from the library's own resource exports
+/// and `ast_type_to_cm` indexes `resource_exports` for a key it does not hold.
+///
+/// Red: panics at `component_model.rs`'s `resource_exports[cm_name]`. Admitting
+/// `CmPayloadType::Resource` made this shape classifiable without giving the
+/// export-signature walk a way to reach an imported resource's type — the
+/// canonical-payload path has one (`prebuild_resource_payload_types`), this one
+/// does not.
+#[ignore = "known regression: WASI resource in a --lib export payload ICEs"]
+#[test]
+fn cm_lib_builds_a_wasi_resource_future_payload() {
+    let source = "use { Descriptor } from \"wasi:filesystem\";\n\
+         export async fn id(v: Future<Option<Descriptor>>) -> Future<Option<Descriptor>> {\n    \
+         let value = v.read();\n    v.drop();\n    \
+         let [rx, tx] = Future::<Option<Descriptor>>::new();\n    \
+         task return rx;\n    \
+         if let Some(x) = value {\n        tx.write(x);\n    }\n}\n";
+    try_compile_lib(source)
+        .expect("a `future<option<own<descriptor>>>` export payload should compile");
+}
+
 /// A lib-local type whose CM name collides with a bundled WASI one: the
 /// reverse lookup must be scoped to the library's own interface.
 #[test]
