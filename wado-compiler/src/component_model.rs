@@ -487,10 +487,8 @@ pub struct CmVariantCase {
 /// Strip an `AsyncCall<T>` wrapper from an `async` interface method's declared
 /// return type, recovering the CM-level result `T`. WIT lowers
 /// `async func foo(…) -> T` with result `T`, but the Wado-facing declaration
-/// exposes `AsyncCall<T>` so user code can defer `wait()`-ing past any stream
-/// parameter rendezvous — and the binding synthesiser needs the raw `T` for
-/// outptr layout. A no-op for non-async methods, and a return type that is not
-/// `AsyncCall<_>` passes through unchanged.
+/// exposes `AsyncCall<T>` so user code can defer `wait()`-ing — and the binding
+/// synthesiser needs the raw `T` for outptr layout. Otherwise a no-op.
 pub fn unwrap_async_call_if_async(is_async: bool, declared: &Option<Type>) -> Option<Type> {
     if !is_async {
         return declared.clone();
@@ -1471,8 +1469,7 @@ impl CmInterfaceRegistry {
     /// fragment before the `#`, e.g. `"wasi:filesystem/types@0.3.0"`. `kind` is
     /// `"variants"`, `"enums"`, `"resources"`, `"structs"`, `"flags"` or
     /// `"newtypes"`. `Some` only when exactly one WASI interface declares the
-    /// bare name; a name in several (`ErrorCode`) gives `None`, and the caller
-    /// must use a source-scoped accessor such as `get_variant_cases_by_source`.
+    /// bare name; for an ambiguous one use `get_variant_cases_by_source`.
     pub fn bare_name_owner(&self, kind: &str, name: &str) -> Option<&str> {
         let candidates: Vec<&str> = match kind {
             "variants" => self
@@ -1985,9 +1982,7 @@ impl CmInterfaceRegistry {
     /// effect left unhandled at the library boundary lowers to a component
     /// import instead of an unresolved-call ICE. Mints a CM identity for a user
     /// `interface X { … }`: FQ `ns:pkg/<effect>@ver`, operation names kebabed.
-    /// An interface already carrying `#[cm]` is a real binding and is skipped.
-    /// Errors when an effect's kebab name equals the library's own interface
-    /// name, which would collide the import with the export.
+    /// Errors when an effect's kebab name collides with the library's export.
     pub fn register_lib_guest_effect_imports(
         &mut self,
         interfaces: &[&crate::ast::InterfaceDecl],
@@ -2521,12 +2516,10 @@ impl CmInterfaceRegistry {
     }
 
     /// Resolve the `wasi:*` source interface for a `NamedType`. The reference's
-    /// own `source_interface` answers when bootstrap filled it, giving `None` if
-    /// it points outside `wasi:*`. A reference synthesized at lower time from a
-    /// TIR type has none, so every wasi kind is searched, preferring
-    /// `wasi:{wasi_package_hint}/` — which is what separates the `ErrorCode`
-    /// declared independently in filesystem, http and sockets — and otherwise
-    /// taking the unique registrant, or `None` when the name is ambiguous.
+    /// own `source_interface` answers when bootstrap filled it. A reference
+    /// synthesized at lower time has none, so every wasi kind is searched,
+    /// preferring `wasi:{wasi_package_hint}/` — which separates the `ErrorCode`
+    /// of filesystem, http and sockets — else taking the unique registrant.
     pub fn resolve_wasi_source_for(
         &self,
         named: &crate::ast::NamedType,
@@ -2750,11 +2743,10 @@ impl CmInterfaceRegistry {
     }
 
     /// Find the interface declaring a WASI struct with CM kebab name `cm_name`,
-    /// for the component builder's import aliasing. Scoped to `wasi:`, and
-    /// `Some` only when exactly one interface declares it. The key returned is
-    /// package-qualified (`"http-types"`), matching how codegen registers
-    /// imported instances — a bare interface name would collide across packages,
-    /// `wasi:cli/types` against `wasi:http/types`.
+    /// for the component builder's import aliasing. Scoped to `wasi:`, and `Some`
+    /// only when exactly one interface declares it. The key is package-qualified
+    /// (`"http-types"`), matching how codegen registers imported instances — a
+    /// bare name would collide `wasi:cli/types` with `wasi:http/types`.
     pub fn find_interface_for_struct_cm_name(&self, cm_name: &str) -> Option<String> {
         let mut found: Option<String> = None;
         for ((source_path, wado_name), (struct_cm_name, _, _)) in &self.structs {

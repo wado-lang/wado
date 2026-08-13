@@ -1,9 +1,8 @@
 //! Optimization passes for Wado NIR, rewriting the [`NirPackage`] in place. Each
 //! pass documents itself in its own module under `optimize/`; the sequence of
-//! [`run_pass`] calls below is the only statement of what runs in what order,
-//! with the rationale for each position beside it. `docs/optimizer.md` is the
-//! reader-facing inventory, and WEP 2026-06-05 covers the two-tier NIR, the
-//! rewrite engine, and the gate.
+//! [`run_pass`] calls below is the only statement of what runs in what order.
+//! `docs/optimizer.md` is the reader-facing inventory, and WEP 2026-06-05 covers
+//! the two-tier NIR, the rewrite engine, and the gate.
 
 mod alias;
 mod arena_query;
@@ -110,10 +109,8 @@ pub enum OptLevel {
 /// Longest string literal materialized as a constant `array.new_fixed<u8>`
 /// rather than a passive data segment; above it the compact repr is kept and the
 /// global stays lazy. `-O3` trades code size for more eager string globals,
-/// while `-Os` and the rest stay conservative. Applies to every ordinary literal,
-/// an `assert` template included; a global hoisted by
-/// `const_object_globalization` overrides it via
-/// [`crate::nir::NirGlobal::prefer_fixed_string_repr`].
+/// while `-Os` and the rest stay conservative. A global hoisted by
+/// `const_object_globalization` overrides it via `prefer_fixed_string_repr`.
 fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
     match opt_level {
         OptLevel::O3 => 8,
@@ -188,11 +185,10 @@ pub fn optimize(
         }
         OptLevel::O3 => {
             // The iteration cap is defensive: since `field_forward` merged into
-            // `const_fold`, a straight-line constant chain folds in one
-            // iteration rather than one statement per round, so even Gale
-            // parsers converge well under 10. Threshold 32 sits just under a
-            // size cliff at 33 on syntax-highlight (859KB → 1049KB), where more
-            // Gale action functions become inline candidates for no speed gain.
+            // `const_fold`, a straight-line constant chain folds in one iteration
+            // rather than one statement per round, so even Gale parsers converge
+            // well under 10. Threshold 32 sits just under a size cliff at 33 on
+            // syntax-highlight (859KB → 1049KB), for no speed gain.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(30),
                 inline_threshold: inline_threshold.unwrap_or(32),
@@ -525,9 +521,8 @@ fn run_optimization_passes(
         gated!("nir/container_sroa", scalarize_containers);
         // Peephole engine, pre-inline run — several rules over one worklist; see
         // `optimize/peephole.rs`. Before inline so `string_push` still sees the
-        // `buf.push_str("0.")` shape, which the inliner's expansion would erase,
-        // leaving short-string formatting to pay full per-call allocation. Hosts
-        // `MatchToSwitchRule` (`include_match = true`), so `inline` copies
+        // `buf.push_str("0.")` shape, which the inliner's expansion would erase.
+        // Hosts `MatchToSwitchRule` (`include_match = true`), so `inline` copies
         // `Switch`-shaped bodies, and `const_branch_prune`.
         gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, true));
         // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
@@ -589,10 +584,8 @@ fn run_optimization_passes(
         // The flow-sensitive half of constant folding — env-bound locals,
         // forwarded struct fields, immutable-global reads, constant-branch
         // collapse — where the env-free half runs in `nir/peephole`. It absorbs
-        // what `field_forward` used to do: the two alternated one statement per
-        // round on Gale's chained-`push` patterns and left `-O3` non-convergent,
-        // where the merged walk folds a whole chain in one iteration. No `cse`
-        // pass: hash-consing already shares identical values.
+        // `field_forward`, which used to alternate one statement per round and
+        // left `-O3` non-convergent. No `cse` pass: hash-consing already shares.
         {
             let c = run_pass("nir/const_fold", project, profiler, |p| {
                 fold_constants(p, &mut gate, &mut const_fold_cache)

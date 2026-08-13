@@ -73,8 +73,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// numeric-literal coercion, shared with [`Self::desugar_comparison_chain`].
     /// A primitive coerces the literal to the other operand's type; a struct type
     /// such as `i128` takes each expected type from the operator trait's method
-    /// signature, which handles an asymmetric operator like
-    /// `Shl::shl(&self, rhs: u32)` without special-casing it.
+    /// signature, which covers an asymmetric `Shl::shl(&self, rhs: u32)`.
     pub(super) fn resolve_binary_operands_with_coercion(
         &mut self,
         left_ast: &ast::Expr,
@@ -185,12 +184,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether an operand's own elaboration would consult the expected type, so a
-    /// comparison resolves the *other* side first and hands this one its type. A
-    /// syntactic subset of what argument synthesis calls
-    /// [`super::synth::ArgClass::Opaque`], syntactic on purpose: reify decides the
-    /// same order with no synthesis to ask, and a type-dependent order would
-    /// desync the two walks inside a tuple `for-of`. Subset rather than equality
-    /// is the safe side — a form left out just resolves on its own.
+    /// comparison resolves the *other* side first and hands this one its type.
+    /// Syntactic on purpose: reify decides the same order with no synthesis to
+    /// ask, and a type-dependent order would desync the two walks inside a tuple
+    /// `for-of`. A form left out just resolves on its own, so a subset is safe.
     pub(super) fn takes_shape_from_expected_type(expr: &ast::Expr) -> bool {
         match expr {
             ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => true,
@@ -329,12 +326,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if is_comparison {
             // The receiver for trait lookup, named by its declaring module and
-            // read off the resolved type — the declaration is right here, so no
-            // written name is re-resolved. `Enum` is deliberately absent, its
-            // `==` lowering to a native discriminant compare; `Variant` must be
-            // present, since only reaching `resolve_trait_method_for_op` records
-            // the bound-driven synthesis request, and otherwise its comparison
-            // falls through to monomorphize time, after synthesis already ran.
+            // read off the resolved type. `Enum` is deliberately absent, its `==`
+            // lowering to a native discriminant compare; `Variant` must be
+            // present, since only `resolve_trait_method_for_op` records the
+            // bound-driven synthesis request, and synthesis has already run.
             let struct_name = match &left_type {
                 ResolvedType::Struct {
                     decl_name: name,
@@ -1130,9 +1125,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// path is an assignable place — index-assignable receivers already returned
     /// above. A read-only `Index` access lowers to `*recv.index(i)` over
     /// `&Output`, so writing through it is an immutable-reference error; an
-    /// `IndexValue` access is a by-value call and no place at all; and with no
-    /// recorded read dispatch only a tuple index is assignable, an unindexable
-    /// receiver having been diagnosed by `resolve_index`.
+    /// `IndexValue` access is a by-value call and no place at all.
     fn index_target_assignable(&mut self, index_expr: &ast::IndexExpr) -> bool {
         let needs_deref = self
             .sem
@@ -1479,9 +1472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// read side is an ordinary `resolve_expr` on the target, which dispatches
     /// the `Index` trait for a custom indexed read; the write side reuses
     /// [`Self::assign_to_target`], fed the already-resolved value through
-    /// [`AssignValue::Resolved`] so no synthesised AST is involved. `target` is
-    /// evaluated twice, which is fine for a pure l-value and runs the inner
-    /// sub-expressions of `arr[bump()] += 1` twice.
+    /// [`AssignValue::Resolved`]. `target` is evaluated twice.
     pub(super) fn resolve_compound_assign(
         &mut self,
         compound: &ast::CompoundAssignExpr,
@@ -1666,11 +1657,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The single TIR-level builder for every operator dispatching to a trait
     /// method, unary and binary alike, over already-resolved operands matching
-    /// `resolved.param_types` in order. It is the sole authority for four things:
-    /// type-checking each argument against the declared parameter type — with a
-    /// `&Self` parameter expecting the receiver's own type, so newtype dispatch
-    /// accepts the newtype on both sides — adjusting the receiver, wrapping an
-    /// argument in `&` iff its parameter is a reference, and building the `Call`.
+    /// `resolved.param_types` in order. Sole authority for four things:
+    /// type-checking each argument (a `&Self` parameter expects the receiver's
+    /// own type), adjusting the receiver, `&`-wrapping, and building the `Call`.
     fn build_trait_op_method_call_on_resolved(
         &mut self,
         receiver: TirExpr,

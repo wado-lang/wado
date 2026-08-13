@@ -2,16 +2,13 @@
 //! may be *moved* rather than copied when that is provably unobservable: every
 //! read is a final use, and its storage traces back — through locals themselves
 //! dead at the hand-off — to a fresh allocation nothing else references. This
-//! reaches the *synthesized* bodies the source-level last-use pass cannot see,
-//! whose temporaries are the fold's remaining hot copies; the two sets are
-//! unioned there.
+//! reaches the *synthesized* bodies the source-level last-use pass cannot see.
 //!
 //! One backward liveness pass yields both facts. A *final read* is one after
-//! which the local is dead on every live path — divergent `match` arms
-//! contribute to live-in but not live-out, and a loop body reaches a fixpoint. *No
-//! live alias* means nothing the value derives from is still live at the binding,
-//! checked against live-out, so a once-consumed temporary passes while a re-read
-//! scrutinee does not. Owned storage is then a least fixpoint over the two.
+//! which the local is dead on every live path. *No live alias* means nothing the
+//! value derives from is still live at the binding, so a once-consumed temporary
+//! passes while a re-read scrutinee does not. Owned storage is then a least
+//! fixpoint over the two.
 //!
 //! A function containing a closure, effect handler, or `resume` is skipped
 //! wholesale, since either can re-observe a local this pass does not model.

@@ -2735,8 +2735,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// namespaces: usually a declaration, but an impl binding it as its own type
     /// parameter (`impl<V: Bound> Trait for V`) keys under that binder instead.
     /// Both are searched in the current module, only the declaration namespace
-    /// outside it. Consumers re-check the impl's spelling, so this cannot
-    /// over-match.
+    /// outside it. Consumers re-check the impl's spelling.
     fn trait_impl_keys_current_first(&self, struct_name: &str) -> Vec<(ModuleSource, AstId)> {
         let env = &self.tysys.trait_env;
         let declared = env.entries_by_receiver_vec(&self.impl_target(struct_name).receiver());
@@ -2984,11 +2983,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The argument preselect over a receiver's conversion impls: `Selected` and
     /// `Ambiguous` short-circuit resolution, so it decides calls. It must run
     /// *before* the argument is elaborated — the expected type shaping a literal
-    /// comes from the selected impl, and choosing afterwards is circular. An
-    /// `Opaque` argument, or a class several impls answer alike, passes through.
-    /// Admissibility is [`Elaborator::class_admits`] over each impl's *resolved*
-    /// source type: a spelling table would under-admit newtypes, and
-    /// under-admission is what selects wrongly.
+    /// comes from the selected impl. Admissibility is [`Elaborator::class_admits`]
+    /// over each impl's *resolved* source type, since spelling under-admits.
     pub(super) fn conversion_preselect(
         &mut self,
         struct_name: &str,

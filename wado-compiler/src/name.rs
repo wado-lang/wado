@@ -1360,10 +1360,9 @@ pub fn resolve_module_path(base: &str, relative: &str) -> String {
 
 /// Canonicalize a resolved local module identity to the unique minimal form for
 /// its physical file, relative to `entry_dir`. Composing relative steps from the
-/// importer is not canonical — a path that climbs above `entry_dir` and re-enters
-/// spells the same file two ways, which lexical normalization cannot fold — so
-/// re-anchoring is what lets the loader intern each file once. Empty
-/// `entry_dir` just normalizes.
+/// importer is not canonical — a path climbing above `entry_dir` and re-entering
+/// spells the same file two ways — so re-anchoring is what lets the loader intern
+/// each file once. Empty `entry_dir` just normalizes.
 #[must_use]
 pub fn canonical_local_path(entry_dir: &str, resolved: &str) -> String {
     if entry_dir.is_empty() {
@@ -2507,11 +2506,9 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
 }
 
 /// A receiver name in the form a mangled name may embed, carrying the declaring
-/// module — a bare `&str` cannot become one by accident, only a constructor
-/// below that states why its input is already fq. The mangled spelling is a
-/// rendering ([`Self::to_mangled`]), never parsed back: a `ModuleSource` may
-/// itself contain `/` and `<`, so no split is correct in general, and it cannot
-/// be rebuilt without the interner. Ask the fields instead.
+/// module — a bare `&str` cannot become one by accident. The mangled spelling is
+/// a rendering ([`Self::to_mangled`]), never parsed back: a `ModuleSource` may
+/// itself contain `/` and `<`, so no split is correct in general. Ask the fields.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FqTypeName {
     /// Outermost `&` / `&mut`, when the receiver is a reference shape.

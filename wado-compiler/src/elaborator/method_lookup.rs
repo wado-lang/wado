@@ -1033,9 +1033,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// already-resolved parameter and return types, which must come from a method
     /// lookup so their slots are the ones the caller binds. Deliberately does not
     /// re-resolve the method's AST: a fresh scope would report spurious errors for
-    /// a `Self::Item` depending on assoc-type bindings only the outer context has.
-    /// Sized to the method's non-effect type params in declaration order, with an
-    /// unbound one keeping its `TypeParam` id and nothing to infer giving empty.
+    /// a `Self::Item`. An unbound parameter keeps its `TypeParam` id.
     pub(super) fn infer_method_type_args(
         &mut self,
         input: MethodInferenceInput<'_>,
@@ -1612,11 +1610,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether a concrete `impl Trait for <NamedType>` really targets the
     /// receiver. `candidate_matches_receiver`'s bare-name check accepts every
-    /// same-named impl, so two modules' `impl Describe for Data` both arrive
-    /// here; resolve each impl's receiver in its own module and compare `TypeId`s
-    /// along the newtype chain. A blanket, ref-shape, or parametric generic impl
-    /// is exempt, its `ty` being `TypeParam`-bearing — but a fully concrete
-    /// `impl X for List<u8>` is checked, or it would also match `List<i32>`.
+    /// same-named impl, so resolve each impl's receiver in its own module and
+    /// compare `TypeId`s along the newtype chain. A `TypeParam`-bearing impl is
+    /// exempt; a concrete `impl X for List<u8>` is checked, or `List<i32>` matches.
     fn concrete_impl_matches_receiver(
         &mut self,
         impl_ref: &ImplBlockRef,
@@ -3258,12 +3254,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )),
         };
 
-        // The IndexMut rewrite is the only path building user-visible
-        // method-call TIR without going through `resolve_method_call_with`, so
-        // record dispatch here and let `m["k"].push(1)` leave the same annotation
-        // as an ordinary call. The `AstId` is also tagged
-        // `DesugarKind::IndexMutMethodCall`, so reify takes the expansion path
-        // and synthesises `__index_mut_val` rather than a plain method call.
+        // The IndexMut rewrite is the only path building user-visible method-call
+        // TIR without going through `resolve_method_call_with`, so record
+        // dispatch here and let `m["k"].push(1)` leave the same annotation as an
+        // ordinary call. The `AstId` is also tagged
+        // `DesugarKind::IndexMutMethodCall`, so reify takes the expansion path.
         self.record_method_dispatch(
             Some(method_call.id),
             &func,
@@ -3292,11 +3287,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The sole elaborator-side constructor of a method call — a
     /// [`TirExprKind::Call`] whose receiver heads its `args`. Centralising it
     /// gives one audit point for "every elaborator-emitted method call was
-    /// typechecked against the callee's declared parameter types", so a future
-    /// machine-enforced version of that invariant can plug in here rather than
-    /// chasing scattered `Call { … }` literals. Typechecking itself stays the
-    /// caller's job. Post-resolve phases rebuild such nodes from already-checked
-    /// expressions and legitimately bypass this.
+    /// typechecked against the callee's declared parameter types", though the
+    /// typechecking itself stays the caller's job.
     pub(super) fn build_tir_method_call(
         receiver: TirExpr,
         func: FunctionRef,

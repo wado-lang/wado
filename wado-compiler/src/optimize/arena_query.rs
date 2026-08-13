@@ -187,11 +187,9 @@ pub(super) fn is_place_prefix(q: &Place, p: &Place) -> bool {
 
 /// The local whose interior storage `expr` reaches, seeing through the sharing
 /// projections — field access, indexing, variant payload, a transparent cast,
-/// and `&`/`&mut`/`*` — but not an arithmetic unary, which produces a fresh
-/// scalar. The root-only query for the escape / aliasing / mutation analyses,
-/// as against the narrower [`place_root_local`] and the path-sensitive
-/// [`place_path`]. `None` does not mean fresh: `container.index_value(i)` gives
-/// `None` yet aliases the container, so pair it with a freshness gate.
+/// and `&`/`&mut`/`*` — but not an arithmetic unary. The root-only query for the
+/// escape / aliasing / mutation analyses. `None` does not mean fresh:
+/// `container.index_value(i)` still aliases, so pair it with a freshness gate.
 pub(super) fn storage_root(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
@@ -359,12 +357,10 @@ pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
 }
 
 /// True when the expression has no observable effect *and cannot trap* — the
-/// predicate for a pass that *deletes* an expression, where dropping a
-/// `100 / x` would erase a trap the program is entitled to. [`is_pure_expr`]
-/// stays trap-agnostic for reordering and CSE, which keep the expression and its
-/// trap. The trap dimension comes from the shared [`ModRef`] oracle, so the
-/// taxonomy lives in one place. With a type table a `FieldAccess` on a non-null
-/// receiver is non-trapping; pass `None` to stay conservative.
+/// predicate for a pass that *deletes* an expression, where dropping a `100 / x`
+/// would erase a trap the program is entitled to. [`is_pure_expr`] stays
+/// trap-agnostic for reordering and CSE. With a type table a `FieldAccess` on a
+/// non-null receiver is non-trapping; pass `None` to stay conservative.
 pub(super) fn is_pure_nontrapping_expr_typed(
     body: &Body,
     id: ExprId,
@@ -522,11 +518,9 @@ pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
 
 /// Flow-insensitive `&mut`-alias map: per `&mut`-typed local, the function locals
 /// its reference may point into. Built in one walk plus a fixpoint over
-/// ref-to-ref copies — a `&mut place` definition contributes the place's root, a
-/// ref-to-ref copy propagates them, and every other shape (a call returning
-/// `&mut`, a read out of an aggregate, a pattern binding) makes the provenance
-/// unknown, so a write may hit any `borrowed` local. A mut-ref parameter aliases
-/// nothing: a caller cannot hold a reference into this frame's fresh locals.
+/// ref-to-ref copies; every other shape leaves the provenance unknown, so a write
+/// may hit any `borrowed` local. A mut-ref parameter aliases nothing — a caller
+/// cannot hold a reference into this frame's fresh locals.
 #[derive(Debug, Default)]
 pub(super) struct MutRefAliases {
     entries: crate::hashmap::IndexMap<u32, AliasEntry>,
@@ -785,12 +779,10 @@ fn is_mut_ref_typed(body: &Body, e: ExprId, type_table: &crate::tir::TypeTable) 
 }
 
 /// Report every local root the node `id` itself may mutate, the caller's walk
-/// driving traversal into children. The one shared witness→root dispatch: a
-/// single storage-chain resolution expanded through [`MutRefAliases`], and a
+/// driving traversal into children. The one shared witness→root dispatch, with a
 /// single bodyless-callee fallback. That fallback trusts the call site's declared
-/// `mut` bit, since the `&mut`-type test has false negatives for a boxed
-/// argument — `&mut scalar` arrives `Box`-typed with `is_mut` still set, the box
-/// cell being the caller-visible storage. Receivers have only the type.
+/// `mut` bit, since the `&mut`-type test misses a boxed argument: `&mut scalar`
+/// arrives `Box`-typed with `is_mut` still set.
 pub(super) fn for_each_mutated_root(
     body: &Body,
     id: ExprId,

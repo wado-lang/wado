@@ -79,11 +79,8 @@ fn collect_global_refs_recursive(instr: &WirInstr, out: &mut IndexSet<String>) {
 /// Mark globals reached by no `GlobalGet` / `GlobalSet` anywhere and by no
 /// export, whose value can therefore never be observed. This reclaims the
 /// const-object globals whose only uses sat in a cold panic branch the peephole
-/// folded away — taking fill and read with it, before
-/// `promote_const_global_inits` could make the fill an eager initializer, and
-/// leaving a `global mut` the immutable-only `dedupe_const_globals` never
-/// merges. Only fully unreferenced globals go, and since the instructions
-/// address globals by name, removal patches nothing.
+/// folded away, leaving a `global mut` the immutable-only `dedupe_const_globals`
+/// never merges. Instructions address globals by name, so removal patches nothing.
 pub fn mark_unreferenced_globals(module: &mut WirPackage) {
     let mut referenced: IndexSet<String> = IndexSet::default();
     for (i, func) in module.functions.iter().enumerate() {
@@ -141,10 +138,9 @@ fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
 
 /// Flag defined functions unreachable from exports and elements into
 /// `dead_func_indices`, leaving the removal and reindexing to
-/// [`compact_dead_items`]. Catches functions whose call sites never
-/// materialized — notably the monomorphic `List<T>::push` and `grow` for a
-/// single-element `[v]`, which `optimize::array_literal` rewrote into an
-/// `array.new_fixed` before the push chain was ever emitted.
+/// [`compact_dead_items`]. Catches functions whose call sites never materialized
+/// — notably `List<T>::push` and `grow` for a single-element `[v]`, which
+/// `optimize::array_literal` rewrote into an `array.new_fixed`.
 pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
     let num_funcs = u32::try_from(module.functions.len()).unwrap();
     if num_funcs == 0 {
@@ -383,8 +379,7 @@ fn collect_instr_type_refs(instr: &mut WirInstr, out: &mut IndexSet<u32>) {
 /// module's arrays and remapping every reference so the emitter can take the
 /// result as-is: `WirFuncId`s across bodies, exports and element tables, and
 /// `WirTypeId`s across bodies, signatures, import descriptors, globals, the type
-/// definitions themselves and `variant_case_info`. Globals need no patching,
-/// being addressed by name.
+/// definitions and `variant_case_info`. Globals are addressed by name.
 pub fn compact_dead_items(module: &mut WirPackage) {
     if module.dead_func_indices.is_empty()
         && module.dead_type_indices.is_empty()

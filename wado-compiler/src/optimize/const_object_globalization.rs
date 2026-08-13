@@ -1,17 +1,14 @@
 //! Body globalization — hoist a constant, read-only aggregate `let` out of a
 //! function body into a shared module global, so Wasm 3.0 GC builds it once at
 //! instantiation instead of rebuilding it per call. The hoisted global mirrors
-//! what `lower::plan::globals::extract` produces: a Wasm-mutable slot with a
-//! `null` placeholder, assigned once inline, which
-//! [`crate::wir_optimize::const_global`] then classifies eager or lazy.
+//! `lower::plan::globals::extract`: a Wasm-mutable slot with a `null`
+//! placeholder, which [`crate::wir_optimize::const_global`] later classifies.
 //!
 //! Two independent gates carry the soundness — the initializer must be a
 //! side-effect-free constant with no free locals ([`is_globalizable_const`]), and
 //! every use must be a reading position ([`is_readonly_body`]). A constant handed
-//! to a call by value runs the read-only gate over the *callee's* parameter,
-//! since the value crosses uncopied; being read-only is not enough there, because
-//! a by-value parameter may legitimately hand a projection of itself back as
-//! owned, which [`param_storage_escapes`] rules out.
+//! to a call by value crosses uncopied, so the callee's parameter is gated too,
+//! with [`param_storage_escapes`] ruling out an owned projection.
 
 use cranelift_entity::EntityRef;
 use std::cell::RefCell;
@@ -1123,12 +1120,9 @@ fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 
 /// Whether the callee hands the *storage* of by-value parameter `idx` back out,
 /// by returning a projection of it, stashing it, or passing it on by value.
-/// [`is_readonly_body`] does not cover this: reading a field is a read, and a
-/// by-value parameter is the callee's own copy, so returning that field is
-/// legitimate — the return-convention fixpoint even calls it owned, letting the
-/// caller skip a defensive copy. Hoisting invalidates the premise, since the
-/// "owned" value is the global's storage. A borrow is not an escape, bounded by
-/// the callee's own read-only gate, and a scalar projection copies outright.
+/// [`is_readonly_body`] does not cover this: returning a field of the callee's
+/// own copy is legitimate and even counts as owned, a premise hoisting
+/// invalidates. A borrow or a scalar projection is not an escape.
 fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     let roots = projection_alias_roots(body, idx, gate);
     let escapes = |op: Operand| delivers_projection_operand(body, op, &roots, gate);
@@ -1199,10 +1193,8 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 /// `idx` plus every local bound from something that can yield one of their
 /// storages — a `let`, a destructuring `let`, or a `match` arm over such a
 /// scrutinee. All name the same storage, so an escape through any is an escape of
-/// the parameter. The source need only *contain* a reference-typed projection of
-/// a root: `let r = if c { s.a } else { s.b };` binds one of two and nothing says
-/// which. Over-approximating only tightens the check, and a scalar binding cannot
-/// carry such a projection at all.
+/// the parameter. The source need only *contain* a reference-typed projection:
+/// `let r = if c { s.a } else { s.b };` binds one of two and nothing says which.
 fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
     let mut roots = vec![idx];
     let mut i = 0;
@@ -1860,10 +1852,9 @@ fn stmt_needs_lazy_guard(body: &Body, stmt: StmtId, gate: &Gate<'_>, prefer_fixe
 /// Wrap a hoisted `GlobalVarSet` in `if builtin::is_uninitialized(<global>)`.
 /// The unguarded form is only correct because `wir_optimize::const_global`
 /// promotes a const-expressible initializer into the eager `init` and deletes
-/// the assignment; one [`needs_lazy_guard`] calls non-promotable survives, and
-/// unguarded would re-run on every activation. The guard also pins the
-/// semantics to the first execution of the expression it replaced, so a callee
-/// that traps still does so there rather than at instantiation.
+/// the assignment; one [`needs_lazy_guard`] calls non-promotable would re-run on
+/// every activation. The guard also pins the semantics to the first execution of
+/// the expression it replaced, so a trapping callee still traps there.
 fn guard_set_on_uninit(
     body: &mut Body,
     set: ExprId,

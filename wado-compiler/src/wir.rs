@@ -1385,8 +1385,7 @@ pub enum WirInstr {
     /// element. `element_copy_type` is set when `T` is a value-typed struct
     /// needing its own copy per element — a bare
     /// `array.set(dst, i, array.get(src, i))` stores the *same* ref into both
-    /// arrays, fine for a primitive but leaving every struct clone sharing the
-    /// source. Set, the loop calls that type's `$value_copy$` helper in between.
+    /// arrays — and the loop then calls that type's `$value_copy$` helper.
     ArrayClone {
         type_id: WirTypeId,
         src: Box<WirInstr>,
@@ -1752,11 +1751,8 @@ impl WirInstr {
     /// Whether this tree is expressible as a Wasm 3.0 GC constant init — the sole
     /// authority on const-ness for global initializers, which
     /// `wir_optimize::const_global` gates eager promotion on and `codegen::emit`
-    /// mirrors exactly, a node failing it at the emitter being an ICE. Accepts,
-    /// recursively, scalar consts, the `ref.*` constants, and the aggregate
-    /// constructors over const children. Excludes `global.get`, so a const init
-    /// never references another global, and `array.new_data` / `array.new_elem`,
-    /// which read a segment at runtime — leaving a `String`'s repr lazy.
+    /// mirrors exactly. Excludes `global.get` and the segment-reading
+    /// `array.new_data` / `array.new_elem`, leaving a `String`'s repr lazy.
     pub fn is_const_expressible(&self) -> bool {
         match self {
             Self::I32Const(_) | Self::I64Const(_) | Self::F32Const(_) | Self::F64Const(_) => true,

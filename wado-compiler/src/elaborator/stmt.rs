@@ -146,13 +146,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a `Stmt::Item` — a declaration inside a function body, scoped to
-    /// that function. Sequential and forward-declaration-required, like `let`.
-    /// A struct or newtype is minted under a mangled `{name}@{AstId}` so
-    /// same-named locals in sibling functions cannot collide in the module's
-    /// shared tables, with the bare name additionally registered in the
-    /// function-scoped ones. The other kinds are parsed but not yet resolved:
-    /// `Shape::Circle(1)` needs a per-`AstId` fact reify's call resolution can
-    /// read, which struct literals get from `recorded_type` and these do not.
+    /// that function. Sequential and forward-declaration-required, like `let`. A
+    /// struct or newtype is minted under a mangled `{name}@{AstId}` so sibling
+    /// functions cannot collide in the module's shared tables. The other kinds
+    /// are parsed but not resolved, having no per-`AstId` fact for reify.
     fn resolve_local_item(&mut self, item: &ast::Item) {
         match item {
             ast::Item::Struct(struct_decl) => self.resolve_local_struct(struct_decl),
@@ -1197,10 +1194,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a let-chain condition, one nesting level per element: a `Let`
     /// becomes a two-arm `Match`, an `Expr` an `If` guard, every failure falling
     /// through to `else_block` and the innermost success running `then_block`.
-    /// This walk only resolves the scrutinees and conditions for their facts and
-    /// binds the patterns into `ctx` — reify rebuilds the chain from the
-    /// `DesugarKind::IfLetChain` tag and the AST. The else-block is resolved once
-    /// by the caller, in the outer scope, so it is not threaded here.
+    /// This walk only resolves the scrutinees and conditions and binds the
+    /// patterns; reify rebuilds the chain from the `DesugarKind::IfLetChain` tag.
     pub(super) fn resolve_let_chain_stmts(
         &mut self,
         elements: &[ConditionElement],
@@ -2410,11 +2405,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Lower a non-tuple `for let v of iterable { body }` into a labelled block
     /// binding `__iter_N = iterable.into_iter()` around a `loop` that matches
     /// `__iter_N.next()`, breaking on `None`. The synthetic local and both
-    /// dispatches are registered with no defining `AstId`, so neither enters
-    /// `local_symbols` nor records a use→def edge — clicking `for` does not drag
-    /// the user into `Iterator::next`. `for_of.iterable` is resolved as written,
-    /// so a user's own `.enumerate()` flows into the chain rather than being
-    /// wrapped in a second one.
+    /// dispatches carry no defining `AstId`, so clicking `for` does not drag the
+    /// user into `Iterator::next`. `for_of.iterable` is resolved as written.
     fn resolve_iterator_for_of(&mut self, for_of: &ForOfStmt, ctx: &mut FunctionContext) {
         use super::method_call::MethodCallInput;
 
@@ -2766,10 +2758,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a C-style `for init; cond; update { B }` into
     /// `{ init; loop { if !cond { break; } __for_N_body: { B } update; } }`,
     /// with the `let pat = e` form guarding on a `match` instead. The outer block
-    /// is a fresh scope, keeping `init`'s bindings local to the `for`, and `B`'s
-    /// label is what [`Self::resolve_continue`] reroutes a naked `continue` to,
-    /// so control still falls through `update`. A naked `break` already targets
-    /// the `loop`, so it needs no rewriting.
+    /// is a fresh scope, and `B`'s label is what [`Self::resolve_continue`]
+    /// reroutes a naked `continue` to, so control still falls through `update`.
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
         self.record_desugar(f.id, super::sem::types::DesugarKind::CStyleFor);
         let loop_id = ctx.next_loop_id;

@@ -2,9 +2,7 @@
 //! [`Elaborator::annotate_modules`] collects decl-level type information, interns
 //! every declaration in the shared [`TypeTable`], and produces the
 //! [`AnnotateState`] both the LSP and `build_tir` consume;
-//! [`Elaborator::build_tir_from_state`] reads it back for one [`TirModule`] per
-//! module, extending each `ModuleSemantics` with the body-walk results. The
-//! split keeps annotate cheap enough to run on every `didChange`.
+//! [`Elaborator::build_tir_from_state`] reads it back for one [`TirModule`] each.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -35,10 +33,7 @@ use super::tysys::TypeSystem;
 /// [`Elaborator::build_tir_from_state`]. The [`TypeSystem`] internals are
 /// reference-counted so per-module elaborators clone them cheaply, and the
 /// [`TypeTable`] stays behind `Rc<RefCell<…>>` because lowering interns into it.
-/// Per-module facts live in [`Self::module_semantics`], each entry owned by one
-/// place at a time — the driver hands it to the body walk by `swap_remove` +
-/// `insert`, so no shared-mutability plumbing is needed. Slated to dissolve into
-/// `TypeSystem`, `ModuleSemantics`, and driver locals.
+/// Each [`Self::module_semantics`] entry is owned by one place at a time.
 pub(crate) struct AnnotateState {
     /// Pipeline-wide type knowledge: the type arena, decl-interned type
     /// tables, registries, included-files map, and read-only caches
@@ -1101,10 +1096,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let Some(snap) = snapshot {
             // Seed each stdlib module's `types` facts from the snapshot. The
             // flattened `snap` maps below carry only what `semantics_of` drained
-            // into `Semantics`; everything else — signatures, effects, the
-            // dispatch maps — lives only here, and the effect check needs it for
-            // stdlib. Cloning the whole `types` keeps both sources in sync, and
-            // the drained fields are re-seeded from `snap` afterwards.
+            // into `Semantics`; signatures, effects and the dispatch maps live
+            // only here, and the effect check needs them for stdlib. The drained
+            // fields are re-seeded from `snap` afterwards.
             if let Some(snap_state) = snapshot_state {
                 for (ms, snap_sem) in &snap_state.module_semantics {
                     if let Some(sem) = module_semantics.get_mut(ms) {
@@ -1119,8 +1113,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // the snapshot's `AstIdSpace → ModuleSource` registry: stdlib ASTs
             // are parsed once per process and shared, so its spaces are this
             // compile's. Every key must name a module in the current `modules`
-            // set, so use `get_mut` — a miss then fails a `debug_assert` instead
-            // of dropping facts or minting a phantom entry LSP would flatten in.
+            // set, so `get_mut`'s miss fails a `debug_assert` rather than minting.
             let snapshot_invariant =
                 "snapshot id must belong to a module in the current compile's loaded set";
             for (use_id, def_key) in &snap.references {
@@ -1255,9 +1248,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Run the per-module decl pass, then the body walk that populates each
     /// `ModuleSemantics`, and — under `build_tir` — reify each module to its
     /// [`TirModule`]. Errors collect in the logger; [`Bail`] if any module
-    /// failed. The LSP path passes `false`, needing only the recorded facts, so
-    /// reify and the snapshot rehydration are skipped and the map comes back
-    /// empty.
+    /// failed. The LSP path passes `false`, needing only the recorded facts, and
+    /// gets an empty map back.
     pub(crate) fn build_tir_from_state(
         state: &mut AnnotateState,
         symbols: &'a SymbolTable,
@@ -1592,10 +1584,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Intern every struct / enum / variant / resource declaration so
     /// `find_decl_type_by_name` answers for each declared symbol — flags and
-    /// newtypes are already interned by the annotate sub-pass. A generic
-    /// struct's base decl is interned under its canonical name, which is what
-    /// `register_symbol_key_type_indices` resolves against; the monomorphic
-    /// forms minted at each use site are separate `TypeId`s and do not collide.
+    /// newtypes are already interned by the annotate sub-pass. A generic struct's
+    /// base decl is interned under its canonical name, which
+    /// `register_symbol_key_type_indices` resolves against.
     fn intern_all_decl_types(
         modules: &IndexMap<ModuleSource, Module>,
         all_struct_fields: &IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,

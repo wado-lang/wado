@@ -3013,10 +3013,7 @@ impl SynthesisCtx<'_, '_, '_> {
     /// earlier in this pass. The two halves are scoped differently on purpose:
     /// the AST-layer check is module-agnostic, so a user's
     /// `impl Display for String` in `format` suppresses the fallback while
-    /// synthesising `string`; the in-pass `pending` check stays module-scoped, so
-    /// two modules' same-named receivers each still get their own impl.
-    /// `receiver` names its own namespace — a mangled one looked up as a
-    /// declaration name reaches nothing.
+    /// synthesising `string`; the in-pass `pending` check stays module-scoped.
     pub(crate) fn has_impl(
         &self,
         receiver: ImplReceiver<'_>,
@@ -3517,8 +3514,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
 /// all declare a default, returning `S { f0: e0, … }`. Skips a struct with any
 /// undefaulted field, one already carrying a user `impl Default`, and generic
 /// structs, whose field defaults may depend on bounds. Every `default_expr`
-/// reaching here is pure: `check_default_purity_semantic` would have bailed the
-/// pipeline otherwise.
+/// reaching here is pure, `check_default_purity_semantic` having run.
 fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     if module.structs.is_empty() {
         return;
@@ -5605,12 +5601,9 @@ fn decompose_type_for_method_name(
 
 /// Resolve `module_source` for a `value.<trait>::<method>` call inside an
 /// auto-derived body: it must name the module hosting the callee's body. Ask
-/// `TraitEnv` first — it indexes every AST-layer impl block, so a cross-module
-/// impl resolves deterministically rather than defaulting to whichever module
-/// synthesis happens to be visiting. If it is silent, the impl is being derived
-/// in this pass and will land in the receiver type's own module by convention.
-/// A receiver with no defining module takes the caller's `fallback`, which the
-/// monomorphizer overwrites after substitution.
+/// `TraitEnv` first, so a cross-module impl resolves deterministically; if it is
+/// silent, the impl is being derived in this pass and lands in the receiver's own
+/// module. A receiver with no defining module takes the caller's `fallback`.
 fn resolve_impl_module_via_env(
     type_id: TypeId,
     trait_name: &crate::name::FqTraitName,
@@ -5667,9 +5660,8 @@ fn resolve_impl_module_via_env(
 /// Collect the parameterized types needing Inspect/Display impls — the kinds
 /// whose codegen genuinely depends on the distinct `TypeId`, tuples and resource
 /// handles included. `ResolvedType::Function` is deliberately absent: a `Fn`
-/// dispatch stub depends only on `(arity, return_type)`, so enumerating per
-/// `TypeId` would emit identical stubs that collide on `function_id_for`, which
-/// `optimize/dce` asserts is injective. Use [`collect_canonical_fn_signatures`].
+/// dispatch stub depends only on `(arity, return_type)`, so use
+/// [`collect_canonical_fn_signatures`] instead.
 fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<FqTypeName>)> {
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {

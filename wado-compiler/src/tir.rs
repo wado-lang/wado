@@ -3334,9 +3334,8 @@ impl TypeTable {
     /// Mangle `id` as a type argument inside a generic instance's or monomorph's
     /// identity name — the `T` in `Result<unit, T>`. Unlike
     /// [`Self::mangle_type_name`], every named user-defined head is qualified by
-    /// its declaring `ModuleSource` — otherwise two same-named types from
-    /// different modules collapse onto one WIR identity, and the second silently
-    /// inherits the first's representation. All such identities must agree.
+    /// its declaring `ModuleSource`, or two same-named types collapse onto one
+    /// WIR identity and the second inherits the first's representation.
     pub fn mangle_type_arg_for_generic(&self, id: TypeId) -> String {
         match self.get(id) {
             ResolvedType::Variant {

@@ -808,10 +808,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// Require the impl's target and trait reference to name, between them, every
     /// type parameter it declares — a use site determines them from the receiver
     /// and trait arguments alone, so one they never mention has no value to be
-    /// given (Rust's E0207). A predicate determines one too, so the arguments a
-    /// bound writes count as mentions, though its subject does not: `A` in
-    /// `A: Eq` is what the bound constrains. A name that is really a concrete
-    /// type does not count, and an effect parameter is bound by the handler.
+    /// given (Rust's E0207). A bound's arguments count as mentions, its subject
+    /// does not; an effect parameter is bound by the handler.
     fn check_impl_params_constrained(&mut self, impl_block: &ast::ImplBlock) {
         let mut named: Vec<String> = Vec::new();
         impl_block.ty.mentioned_names(&mut named);
@@ -854,10 +852,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// effect, or a resource, the latter two installing handlers through the same
     /// syntax. Nothing else resolves it: every downstream index keys off the
     /// written string, so an `impl` of an undeclared name registers happily,
-    /// matches no query, and reaches the back end unmentioned. The head resolves
-    /// through the same chain the block's own facts use, so the two cannot
-    /// disagree; a synthesized head, having no reference site, falls back to the
-    /// name-only chain.
+    /// matches no query, and reaches the back end unmentioned.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
         let name = super::trait_env::get_type_name_static(trait_type);
         let key = match crate::resolve::head_site(trait_type) {
@@ -1479,9 +1474,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Lower an effect or resource declaration's method list to [`TirEffectOp`]s,
     /// with the enclosing type-param scope set up first so a generic resource's
     /// signatures can mention `T`. `resource_self` marks a resource decl, whose
-    /// `&self` shorthand becomes a real parameter at index 0 so dispatch wrapper
-    /// signatures match `__cm_binding__<R>_<op>(self, args)`; an effect decl
-    /// takes no receiver, so any `self_kind` is dropped.
+    /// `&self` shorthand becomes a real parameter at index 0 to match
+    /// `__cm_binding__<R>_<op>(self, args)`; an effect decl takes no receiver.
     pub(super) fn resolve_effect_ops(
         &mut self,
         type_params: &[ast::GenericParam],
@@ -1987,10 +1981,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve parameters. A default expression resolves in the callee's
         // lexical scope with only the earlier parameters visible, so it reaches
-        // the definition module's private items without call-site substitution.
-        // A function crossing the Component Model boundary — exported, or an
-        // import carrying `#[canonical]` / `#[cm]` — takes neither a default nor
-        // a closure in its signature: the ABI requires every parameter.
+        // the definition module's private items. A function crossing the
+        // Component Model boundary takes neither a default nor a closure in its
+        // signature: the ABI requires every parameter.
         let is_cm_import =
             func.body.is_none() && func.attrs.iter().any(|a| a.cm_boundary.is_some());
         let crosses_cm_boundary = func.is_export || is_cm_import;
@@ -2208,9 +2201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `impl Tag for [i32, i32]`) — a generic self type, tuples included, whose
     /// every argument is concrete. Its methods are per-instantiation functions
     /// named `List<u8>::method` and called directly. The tuple arm carries
-    /// coherence Rule 1: `impl Tag for [i32, i32]` names its method
-    /// `[i32,i32]^Tag::tag`, the name that receiver looks up, so the variadic
-    /// template is never instantiated for that arity.
+    /// coherence Rule 1: the variadic template is skipped for that arity.
     pub(super) fn impl_is_concrete_instantiation(
         &self,
         impl_ty: &ast::Type,
@@ -2234,10 +2225,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Resolve a method. Under `impl_is_concrete` the surrounding impl is a fully
     /// concrete instantiation, so its arguments are *not* registered as impl type
-    /// params: with no free parameter to keep aligned — unlike
-    /// `impl TreeMap<String, V>`, where `String` holds its slot so `V`'s index
-    /// stays put — the signature resolves to `&List<u8>` rather than
-    /// `&List<TypeParam>`, and reify emits a standalone `List<u8>::method`.
+    /// params — there is no free parameter to keep aligned, unlike
+    /// `impl TreeMap<String, V>`. The signature then resolves to `&List<u8>` and
+    /// reify emits a standalone `List<u8>::method`.
     pub(super) fn resolve_method(
         &mut self,
         func: &Function,

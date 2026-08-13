@@ -742,10 +742,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a qualified case reference `Type::Case` — a payload-less variant
     /// case, an enum case, or a flags member. `in_module: None` resolves the type
     /// name in the current scope; `Some(module)` against that module's own
-    /// declarations, for a default expression whose use site may not import the
-    /// type. `None` when the prefix names no such type, so the caller can try
-    /// other interpretations; `Some(TypeTable::ERROR)` when it resolved but is
-    /// invalid, e.g. a payload-carrying case used without arguments.
+    /// declarations. `None` when the prefix names no such type, so the caller can
+    /// try other interpretations; `Some(TypeTable::ERROR)` when it is invalid.
     fn resolve_qualified_case(
         &mut self,
         ident: &ast::IdentExpr,
@@ -1063,8 +1061,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `fn(…)` type. Only the simple positional case: the expected type must be a
     /// `Function` (possibly behind a ref) of matching arity, and every real type
     /// parameter must end up bound. `ArityMismatch` is separated from
-    /// `NotApplicable` so callers can raise a focused diagnostic rather than the
-    /// generic bare-reference one.
+    /// `NotApplicable` so callers can raise a focused diagnostic.
     fn infer_func_ref_type_args(
         &mut self,
         sig: &super::sem::decls::FunctionSig,
@@ -1832,10 +1829,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if expected_type.is_some() && type_id != TypeTable::UNIT {
                     // `resolve_let_chain_stmts` resolves the then-branch under
                     // the same `expected_type`, so a mismatch there is already
-                    // diagnosed — and checking it here via `block_result_type`
-                    // would report a spurious "found ()", since that recurses
-                    // through the nested `IfLet` and collapses divergent
-                    // branches to `Unit`. The else-block is resolved
+                    // diagnosed — and re-checking via `block_result_type` would
+                    // report a spurious "found ()". The else-block is resolved
                     // independently, so check it directly.
                     if let Some(eb) = &if_expr.else_block {
                         let else_type = self.ast_block_result_type(eb);
@@ -1951,10 +1946,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Same rule as `resolve_match_expr`: an if-expression whose
                 // result is consumed needs branches that agree. Inference
-                // already diagnoses the `expected_type = None` case, but
-                // `Some(X)` bypasses it, and a divergent branch would emit an
-                // `(if (result X) …)` whose other side pushes the wrong type.
-                // Skipped at `Unit` — statement position drops the values.
+                // diagnoses the `expected_type = None` case, but `Some(X)`
+                // bypasses it and would emit an `(if (result X) …)` whose other
+                // side pushes the wrong type. Skipped at `Unit`.
                 if expected_type.is_some() && type_id != TypeTable::UNIT {
                     let then_type = self.ast_block_result_type(&if_expr.then_block);
                     self.check_branch_type(then_type, type_id, if_expr.then_block.span);
@@ -2246,9 +2240,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reject arms whose body type disagrees with the match's result type;
         // otherwise the wasm result is picked from one arm while another pushes
         // something else. Skipped at `Unit`, which is statement position —
-        // `translate_match` drops each arm's value there. That `Unit` is the
-        // match-level type, so a unit match may still hold `never`-typed arms;
-        // `check_assignable` already encodes those deferrals.
+        // `translate_match` drops each arm's value there.
         if type_id != TypeTable::UNIT {
             for &(arm_type, arm_span) in &arm_bodies {
                 let result = {
@@ -4081,10 +4073,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Infer a generic struct's type arguments by running [`InferCtx`] over its
     /// declared field types against the literal's values. An `expected_type`
     /// that is a `GenericInstance` of the same struct is unified in too, so a
-    /// phantom parameter — one appearing in no field — still lands concrete.
-    /// Unlike the function inference sites this returns the *partial* result:
-    /// an unbound parameter keeps its `TypeParam` id for the monomorphizer to
-    /// substitute from context.
+    /// phantom parameter still lands concrete. Returns the *partial* result: an
+    /// unbound parameter keeps its `TypeParam` id for the monomorphizer.
     pub(super) fn infer_struct_type_args(
         &mut self,
         struct_name: &str,

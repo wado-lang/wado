@@ -202,11 +202,9 @@ impl FunctionTranslator<'_, '_> {
 
     /// Bind `let [a, b] = builtin::i64_mul_wide_u(…)` straight into the binding
     /// locals: the instruction pushes both results, so `MultiValueLocalBind` pops
-    /// them with no tuple struct in between — the one expression-position
-    /// lowering builds would otherwise need a WIR pass to recover. The pattern
-    /// must name every result, one `local.set` per pushed value, or the operand
-    /// stack is left unbalanced; a rest pattern or a shorter tuple falls through
-    /// to the tuple-struct path.
+    /// them with no tuple struct in between. The pattern must name every result,
+    /// one `local.set` per pushed value, or the operand stack is unbalanced; a
+    /// rest pattern or shorter tuple falls through to the tuple-struct path.
     fn try_bind_multivalue_builtin(&mut self, pattern: PatId, value: Operand) -> Option<WirInstr> {
         let PatKind::Tuple(patterns, has_rest) = &self.body.pats[pattern].kind else {
             return None;
@@ -249,9 +247,8 @@ impl FunctionTranslator<'_, '_> {
     /// Translate a `LetDestructure`. Pattern lowering has already rewritten every
     /// form but the multivalue-builtin one into plain `Let` / `Expr`, so only a
     /// `Tuple` over such a call — or a `Binding` for its single result — reaches
-    /// here. Any other shape means lowering stopped rewriting something it used
-    /// to, and panics: emitting nothing would silently drop the destructure and
-    /// leave its bindings unassigned.
+    /// here. Any other shape panics: emitting nothing would silently drop the
+    /// destructure and leave its bindings unassigned.
     pub(super) fn translate_let_pattern(&mut self, pattern: PatId, value: Operand) -> WirInstr {
         if let Some(instr) = self.try_bind_multivalue_builtin(pattern, value) {
             return instr;
@@ -366,9 +363,8 @@ impl FunctionTranslator<'_, '_> {
             // Translate the body in two parts — the binding writes and the body
             // proper — so a guarded branch can place each write at exactly one
             // point: in the condition `Seq` where the guard can read it, or in
-            // the inner `then_body`, never both. Emitting at both would leave a
-            // redundant `_n = i; if guard { _n = i; … }` that no later pass
-            // cleans up, write-only elimination dropping only locals never read.
+            // the inner `then_body`, never both. Emitting at both leaves a
+            // redundant `_n = i; if guard { _n = i; … }` no later pass cleans up.
             let mut bindings = Vec::new();
             let body = {
                 for _ in 0..if_nesting {
@@ -441,10 +437,8 @@ impl FunctionTranslator<'_, '_> {
                 // Guarded arm: fold the pattern test and the guard into one
                 // short-circuiting condition, so the fall-through subtree sits at
                 // exactly one tree depth. A nested two-`If` form would clone it
-                // into both `else` branches at depths differing by one, and since
-                // break depths are baked in when an arm body is translated, the
-                // shallower copy would carry a stale `Br` depth and produce
-                // invalid core Wasm. Also avoids a 2^N clone explosion.
+                // into both `else` branches at depths differing by one, and break
+                // depths are baked in at translation. Also avoids a 2^N blowup.
                 let guard_expr = self.translate_operand(*guard);
                 let pattern_is_trivially_true = matches!(&condition, WirInstr::I32Const(1));
                 let folded_condition = if pattern_is_trivially_true {
@@ -495,11 +489,10 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Per source-order arm, whether it lowers as irrefutable — emitted as its
-    /// body and bindings with no surrounding `If`. Two sources: an
-    /// always-true pattern with no guard, or the guardless last arm of an
-    /// exhaustive variant-or-enum match, where every earlier arm has failed and
-    /// both the test and the trailing `unreachable` are dead. The caller uses the
-    /// result for depth accounting *and* emission, so the two cannot drift.
+    /// body and bindings with no surrounding `If`. Two sources: an always-true
+    /// pattern with no guard, or the guardless last arm of an exhaustive
+    /// variant-or-enum match. The caller uses the result for depth accounting
+    /// *and* emission, so the two cannot drift.
     fn compute_emitted_as_irrefutable(&self, scrut_type: TypeId, arms: &[ArmData]) -> Vec<bool> {
         let mut out: Vec<bool> = arms
             .iter()
@@ -1227,8 +1220,7 @@ impl FunctionTranslator<'_, '_> {
     /// `LocalSet` is well-typed under wasm GC's exact-type rules. In priority
     /// order: wrap in a `StructNew` when the local is a `Box` the source is not,
     /// narrow with `RefAsNonNull` when the local is non-nullable and the source
-    /// is not, and skip entirely for a unit binding, which has no Wasm local. An
-    /// unknown source type falls through to the raw `LocalSet`.
+    /// is not, and skip a unit binding, which has no Wasm local.
     fn emit_pattern_binding_set(
         &self,
         local_index: u32,

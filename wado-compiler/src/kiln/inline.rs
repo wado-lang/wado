@@ -458,10 +458,9 @@ fn optional_source_string(
 
 /// Lower an inline `module: "<specifier>"` to a [`GeneratorModule`], accepting
 /// the same shapes as a regular `use … from "<source>"`: a `./` or `../` path,
-/// resolved against the file carrying the clause exactly as the loader resolves
-/// `from`, or a `<ns>:<name>[@<ver>]` identifier, stored verbatim as a
-/// [`GeneratorModule::Spec`] until the build-dependency elaborator lands. A bare
-/// relative name without `./` is rejected with the same hint `use` gives.
+/// resolved against the file carrying the clause, or a `<ns>:<name>[@<ver>]`
+/// identifier, stored verbatim as a [`GeneratorModule::Spec`]. A bare relative
+/// name without `./` is rejected with the same hint `use` gives.
 fn lower_module_specifier(
     module_path: &str,
     use_decl: &UseDecl,

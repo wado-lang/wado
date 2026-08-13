@@ -2,8 +2,7 @@
 //! [`Body`] to a fixed point, visiting a node only when it might be reducible
 //! rather than re-walking the whole tree per pass. Provides the session — parent
 //! map, local use index and worklist, built once per function — the edit API
-//! that keeps both indices coherent, the [`Rule`] trait, and the `run` driver.
-//! Genuinely-local peephole passes run as rules over it. See WEP 2026-06-05.
+//! that keeps both coherent, the [`Rule`] trait, and `run`. See WEP 2026-06-05.
 
 use std::cell::OnceCell;
 use std::collections::VecDeque;
@@ -327,9 +326,7 @@ impl<'a> Engine<'a> {
     /// Re-derive `expr`'s value from its operands — the sole value source now
     /// that `value_of` is retired. Operand-determined kinds only, plus a read of
     /// a stable parameter; every other kind, and any unresolved operand, gives
-    /// `None`. Recurses through [`Engine::operand_value`], so a pure subtree over
-    /// promoted leaves resolves whole. The parameter base case is load-bearing:
-    /// without it every leaf of an unpromoted tree is `None`, so only
+    /// `None`. The parameter base case is load-bearing: without it only
     /// all-constant trees resolve and no promoted value can name a local.
     fn maintain_pure_node(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.body.value_graph.as_ref()?;
@@ -416,10 +413,8 @@ impl<'a> Engine<'a> {
     /// Every read whose reaching value the use site can re-emit, recovered by a
     /// scratch re-walk — the same splice-point growth `inline` uses, with no live
     /// rebuild. Covers a `Local` read of anything in `forwardable`, plus a
-    /// `FieldAccess` under `include_fields`; what disqualifies a local is being
-    /// address-taken or `stores`-aliased, not being an aggregate. The re-walk
-    /// exists because SROA adds stores after the build-once graph, so those reads
-    /// carry no value. Empty when there is no graph to grow.
+    /// `FieldAccess` under `include_fields`; being address-taken or
+    /// `stores`-aliased disqualifies a local, being an aggregate does not.
     pub fn scoped_const_reads(
         &mut self,
         forwardable: &IndexSet<u32>,
@@ -785,11 +780,8 @@ impl<'a> Engine<'a> {
     /// Build the session's three indices — parent map, local use index, and
     /// post-order worklist seed — in one walk of the live tree. Not an arena
     /// scan: the arena never compacts, and an orphan still referencing a live
-    /// node would overwrite its parent edge, leaving a rule to edit the orphan
-    /// while the live tree kept the stale shape. Within the live tree two parents
-    /// is corruption, hence the panic. Parents and uses are recorded descending,
-    /// the worklist ascending, so leaves are enqueued before the contexts that
-    /// fold them.
+    /// node would overwrite its parent edge. Parents and uses are recorded
+    /// descending, the worklist ascending, so leaves fold before their contexts.
     fn build_indices(&mut self) {
         let mut stack = std::mem::take(&mut self.buf.walk_stack);
         let mut children = std::mem::take(&mut self.buf.walk_children);
@@ -981,9 +973,7 @@ impl<'a> Engine<'a> {
     /// An interned value is immutable, so only a change in which operands are
     /// reachable moves the answer. An empty census survives a removal — nothing
     /// conjures a read — and survives an attach unless something local-naming is
-    /// pending, since a node allocated detached and spliced in later can be
-    /// missed by a fill in between. A non-empty one can shrink as well as grow,
-    /// so any edit drops it.
+    /// pending. A non-empty one can shrink as well as grow, so any edit drops it.
     fn census_note_structure(&mut self) {
         if self.pending_local_naming.get()
             || self.promoted_reads.get().is_some_and(|c| !c.is_empty())
@@ -1154,10 +1144,8 @@ impl<'a> Engine<'a> {
     /// Edit API: promote `src`'s content into `dst`, leaving `src` a dead `Unit`
     /// — the arena analogue of `*dst = *src` when a rewrite collapses a wrapper
     /// onto a node it contains (`{ expr; }` → `expr`). `dst`'s former subtree is
-    /// discarded without deep-unregistering its `Local` mentions: a stale mention
-    /// only reaches `is_local_read`, where an extra dead one is conservative,
-    /// keeping a binding alive but never dropping a live one. `src`'s own mention
-    /// is moved off it so nothing dangles.
+    /// discarded without deep-unregistering its `Local` mentions: a stale one
+    /// only reaches `is_local_read`, where an extra dead mention is conservative.
     pub fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         if dst == src {
             return;

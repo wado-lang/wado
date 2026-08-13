@@ -50,12 +50,10 @@ pub(super) struct AliasWalkResult {
 }
 
 /// Compute a body's alias annotations plus the mutable-escape walk's raw
-/// `syntactic_mut` set, sharing one traversal across three per-node collectors —
-/// none reads another's output during the walk, only in the post-processing.
+/// `syntactic_mut` set, sharing one traversal across three per-node collectors.
 /// `aliased` seeds from the function's stable annotations, which persist across
-/// iterations so a later pass erasing the syntactic markers cannot make the
-/// analysis forget an alias, then picks up whatever is visible only inside
-/// `body`. `untrackable` mirrors `stores_aliased_locals` exactly.
+/// iterations so a pass erasing the syntactic markers cannot make the analysis
+/// forget an alias. `untrackable` mirrors `stores_aliased_locals` exactly.
 pub(super) fn build_alias_info(
     body: &Body,
     locals: &[crate::nir::NirLocal],
@@ -256,10 +254,8 @@ fn build_mut_escaped(
 /// Memoised "a callee receiving this by value or immutable reference cannot
 /// mutate it" predicate. A value is mutable through a call only if it carries
 /// shared mutable state — a `&mut T`, a `Box` / `List` cell, a raw array, a
-/// resource handle, or a shape the analysis cannot see into. Anything free of
-/// those is deep-copied on pass-by-value, so no callee reaches the fields the
-/// `ValueGraph` forwards. Cross-handle mutation of a `&T` pointee is
-/// [`build_mut_escaped`]'s alias-group closure instead.
+/// resource handle, or an opaque shape. Anything else is deep-copied on
+/// pass-by-value, so no callee reaches the fields the `ValueGraph` forwards.
 pub(super) struct CallImmutability<'a> {
     type_table: &'a TypeTable,
     struct_fields: IndexMap<(String, ModuleSource), Vec<TypeId>>,
@@ -387,9 +383,8 @@ use super::arena_query::storage_root;
 /// Call exprs that mutate no caller local: a free call, or one with a `&self`
 /// receiver, whose every argument is safe — not `mut`, an immutable borrow, or a
 /// call-immutable value the callee cannot reach back through. The value graph
-/// skips the per-call bump for these, so `arr.len()` does not split
-/// `arr.used`'s version — the precondition for promoting a spliced
-/// `FieldAccess`. An unknown callee stays impure for a receiver.
+/// skips the per-call bump for these, so `arr.len()` does not split `arr.used`'s
+/// version. An unknown callee stays impure for a receiver.
 pub(super) fn pure_calls(
     body: &Body,
     type_table: &TypeTable,
@@ -710,10 +705,9 @@ fn self_derived_locals(body: &Body, p0: u32, type_table: &TypeTable) -> IndexSet
 
 /// One walk of `body` summarising param-0's receiver writes. `direct` is a
 /// fixpoint-invariant write through its projection root — an assignment, a
-/// `&mut`, a `mut` argument, or a call into a bodyless callee that mutates its
-/// receiver — and short-circuits the walk. `pending` collects the bodied callees
-/// invoked on a self projection, whose verdicts the fixpoint resolves, and is
-/// gathered only while no direct write has been seen.
+/// `&mut`, a `mut` argument, or a bodyless callee mutating its receiver — and
+/// short-circuits the walk. `pending` collects the bodied callees invoked on a
+/// self projection, whose verdicts the fixpoint resolves.
 fn summarize_receiver_writes(
     body: &Body,
     p0: u32,
@@ -780,10 +774,8 @@ fn summarize_receiver_writes(
 /// Flag the root of a call argument that hands the callee shared mutable state
 /// by value — a `Box`, `List`, `&mut T` or resource handle — which it can mutate
 /// exactly like a `&mut` place. Boxing lowers `&mut x` to a by-value `Box<x>`,
-/// clearing `is_mut`, so keying on that flag alone would forward pre-call fields
-/// across `step(&mut pos)` and miscompile. Keyed on the type rather than a
-/// per-parameter mutation analysis, which is unsound after `field_scalarize`
-/// rewrites a callee's parameter-field writes into shadow locals.
+/// clearing `is_mut`, so keying on that flag alone would miscompile
+/// `step(&mut pos)`. Keyed on the type, which survives `field_scalarize`.
 fn collect_ref_arg_escapes(
     body: &Body,
     node: NodeRef,
@@ -1013,9 +1005,8 @@ fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> IndexMap<u32, IndexSet<u32
 /// True when copying a `type_id` value between locals aliases them onto one heap
 /// object — the reference types. A value-semantic type gets a `$value_copy$T`
 /// wrapper post-loop, so treating its `let dst = src` as an edge during the loop
-/// would over-merge groups that must stay separate. `Box<T>` / `List<T>` surface
-/// either as `GenericInstance` or as monomorphized `Struct` records carrying the
-/// generic name in `base_name`.
+/// would over-merge groups. `Box<T>` / `List<T>` surface as `GenericInstance` or
+/// as monomorphized `Struct` records carrying the generic name in `base_name`.
 fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     let items = type_table.compiler_items();
     let box_name = items.struct_name(crate::compiler_item::CompilerItem::Box);

@@ -46,12 +46,11 @@ pub struct Semantics {
     /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this
     /// instead of re-walking the AST on every request.
     pub(crate) ast_indices: IndexMap<ModuleSource, AstIndex>,
-    /// Shared elaborator state from [`Elaborator::annotate_modules`], paired
-    /// with `is_complete` to distinguish three outcomes: `(None, false)` —
-    /// analyze or resolve bailed, leaving only `symbols` + `ast_indices`;
-    /// `(Some(_), false)` — annotate finished but `build_tir` bailed, so
-    /// `tir_modules` is empty; `(Some(_), true)` — full success. Batch
-    /// compilation rejects all but the last, making its `expect` safe.
+    /// Shared elaborator state from [`Elaborator::annotate_modules`], paired with
+    /// `is_complete` to distinguish three outcomes: `(None, false)` — analyze or
+    /// resolve bailed, leaving only `symbols` + `ast_indices`; `(Some(_), false)`
+    /// — annotate finished but `build_tir` bailed; `(Some(_), true)` — full
+    /// success. Batch compilation rejects all but the last.
     pub(crate) state: Option<AnnotateState>,
     /// `AstIdSpace → ModuleSource` registry over the loaded modules: which
     /// module's parse minted each id space. Lets bare-`AstId` facts be

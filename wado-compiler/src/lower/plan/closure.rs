@@ -222,8 +222,7 @@ struct FnParamSpecKey {
 /// method holding the transformed body, so the literal becomes a `StructLiteral`,
 /// a `Capture` becomes a field access on `self`, and a known `IndirectCall`
 /// becomes `callee.__call(args)`. Applied only to closures bound to a local and
-/// called directly; one passed as an argument goes through fn-param
-/// specialization, which generates a callee taking the functor struct instead.
+/// called directly; one passed as an argument goes through fn-param spec.
 struct ClosureLowerer {
     /// Counter for the Phase 1 walk. Each visited `Closure` has its
     /// `functor_id` populated from this — that ID is the stable index
@@ -564,13 +563,11 @@ impl ClosureLowerer {
             }
             .visit_expr(&mut transformed_body);
 
-            // Keep a block body's statements as-is so a `Return` inside
-            // survives — the inliner rewrites `Return` into `Break` only at
-            // statement level and would miss one wrapped in a Block expression.
-            // A single-expression body that reified into a Block leaves its
-            // value in the trailing `Expr` statement; for a value-returning
-            // closure that is the return value, so promote it to a `Return` or
-            // wir_build drops it as a bare statement.
+            // Keep a block body's statements as-is so a `Return` inside survives
+            // — the inliner rewrites `Return` into `Break` only at statement
+            // level. A single-expression body that reified into a Block leaves
+            // its value in the trailing `Expr` statement; promote it to a
+            // `Return` or wir_build drops it as a bare statement.
             let body_stmts = match &transformed_body.kind {
                 TirExprKind::Block(block) => {
                     let mut stmts = block.stmts.clone();
@@ -710,8 +707,7 @@ impl ClosureLowerer {
             // impls, so trait dispatch on a specialised `&__Closure_N` writes
             // the per-literal signature and unparsed source. Template expansion
             // routes fn-typed receivers through `Fn<N, Ret>^<Trait>::<method>`,
-            // which `ClosureCallSiteLowerer` retargets here. DCE removes them
-            // when neither a user call, the redirect, nor a vtable slot reaches.
+            // which `ClosureCallSiteLowerer` retargets here.
             let signature = format_closure_signature(&collected.params, return_type, type_table);
             // Recover the per-literal source body (`|x: i32| x + 1`)
             // by unparsing the captured TIR closure form. The TIR is
@@ -1415,10 +1411,8 @@ impl TirRefVisitor for LocalCollector<'_> {
 /// Phase 2 visitor deciding which closures are safe to specialise: those whose
 /// value never escapes its declaring local, every use being a direct call or a
 /// redirect-eligible trait dispatch. Anything else must travel as a
-/// `CanonicalClosure_K`, since a specialised `__Closure_N` is incompatible with
-/// a canonical fn type. Only a call's callee, receiver or func is a non-escape
-/// position; `Let { value: Closure }` is special-cased, the literal being what
-/// binds the local, and its body walked under a fresh `local_to_closure`.
+/// `CanonicalClosure_K`. Only a call's callee, receiver or func is a non-escape
+/// position; `Let { value: Closure }` is special-cased, the literal binding it.
 struct ClosureSafetyAnalyzer<'a> {
     local_to_closure: &'a mut IndexMap<u32, u32>,
     specializable: &'a mut IndexSet<u32>,
@@ -1636,13 +1630,10 @@ impl ClosureCallSiteLowerer<'_> {
     }
 
     /// Redirect a `Fn<N, Ret>^{Inspect,InspectAlt,Display,DisplayAlt}` call on a
-    /// specialised closure local to the per-functor impl. All four shapes must
-    /// be redirected: the `Display` fallbacks delegate through
-    /// `self.Inspect::inspect(f)`, which would reach the canonical-vtable stub
-    /// and trap its `ref.cast` on a `&__Closure_N`. The rewritten `FunctionRef`
-    /// takes the *functor's* module, since the impl stays where the literal was
-    /// lowered even when the body was inlined elsewhere. A receiver that does not
-    /// peel to a local in `local_to_closure` falls through to the generic stub.
+    /// specialised closure local to the per-functor impl. All four shapes must be
+    /// redirected: the `Display` fallbacks delegate through `Inspect::inspect`,
+    /// which would trap the canonical stub's `ref.cast`. The rewritten
+    /// `FunctionRef` takes the *functor's* module, where the impl was lowered.
     fn try_redirect_inspect_to_functor(&self, receiver: &mut TirExpr, func: &mut FunctionRef) {
         let info = match &func.method_info {
             Some(info) => info,
@@ -1857,9 +1848,8 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
 /// In-place body transformer for the synthesised `__call` method: rewrites each
 /// `Capture` into a `self.__capture_<index>` field access and shifts every local
 /// index — reads, `Let`s, and pattern bindings alike — past the synthetic `self`.
-/// A nested `Closure` body is not recursed into, having its own index namespace
-/// and its own `__call`, but its `captures[*].outer_index` names locals in *this*
-/// scope, so those shift too or the nested functor reads one slot too early.
+/// A nested `Closure` body has its own index namespace and is not recursed into,
+/// but its `captures[*].outer_index` names locals here, so those shift too.
 struct ClosureBodyTransformer<'a> {
     captures: &'a [TirCapture],
     self_ref_type: TypeId,

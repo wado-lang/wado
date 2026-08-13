@@ -2,9 +2,7 @@
 //! `wir_build` and `codegen::emit`. Each documents itself in its own module; the
 //! phase sequence in [`optimize_wir`] is the only statement of what runs in what
 //! order. `nullable_ref` is a mandatory representation lowering and runs at every
-//! `-O`; the rest are skipped at `-O0`. What is left here needs post-lowering
-//! shapes — the rest moved to NIR to join its fixed-point loop. A
-//! `#![wasm_module(…)]` core module runs the same list as its own package.
+//! `-O`; the rest are skipped at `-O0`. What is left here needs post-lowering shapes.
 
 pub(crate) mod array;
 mod branch_hint;

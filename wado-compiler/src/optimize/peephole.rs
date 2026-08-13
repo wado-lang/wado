@@ -1,9 +1,8 @@
 //! Unified peephole engine pass: every position-flexible local rewrite rule
 //! interleaved over one engine session per function — one parent map, use index
 //! and worklist — rather than a session apiece. Only the env-free half of
-//! constant folding runs here; the flow-sensitive folds need the driving
-//! visitor's per-function dataflow state and stay in `const_folding`. Likewise
-//! `select_lowering`, a terminal post-loop lowering.
+//! constant folding runs here; the flow-sensitive folds stay in `const_folding`,
+//! and `select_lowering` is a terminal post-loop lowering.
 //!
 //! Invoked twice per fixed-point iteration: before `inline`, where `string_push`
 //! can still see a `push_str` call, and after, where `array_literal` sees the

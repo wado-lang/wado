@@ -153,9 +153,8 @@ pub struct WirContext<'a> {
     /// Shared inspectable supertype `$canonical_inspectable_base`, created lazily
     /// at the first inspectable `CanonicalClosure_K` registration. The dispatch
     /// stub `ref.cast`s `self` to it, so every inspectable closure reaches the
-    /// same slot positions whatever its parameter types — without it the stub
-    /// would have to pick one `CanonicalClosure_K` per signature and trap on any
-    /// value belonging to a different per-signature struct.
+    /// same slot positions whatever its parameter types — otherwise the stub
+    /// would trap on any value from a different per-signature struct.
     pub canonical_inspectable_base_type_id: Option<WirTypeId>,
 
     /// Available WASI function names (computed during component generation).
@@ -177,8 +176,7 @@ pub struct WirContext<'a> {
     /// `(function_name, module_source)` since a name alone is not unique across
     /// modules. The value is the callee's per-result `(field_name, type_id)` in
     /// declaration order, which the call-site translator uses to build named
-    /// split locals without re-deriving the aggregate shape. Computed at
-    /// WIR-build start.
+    /// split locals without re-deriving the aggregate shape.
     pub multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>>,
     /// Unresolved `Type^Trait::method` calls (unsatisfied trait bounds),
     /// collected rather than trapping; the driver reports them and bails.
@@ -450,12 +448,8 @@ impl<'a> WirContext<'a> {
     /// Get or create the `(fn_type_id, closure_struct_type_id)` pair for a
     /// signature — the vtable shape trait dispatch needs on an `Fn<N, Ret>` held
     /// behind a parameter, field or global. An inspectable struct is laid out
-    /// `{ env, inspect, inspect_alt, func }`, the first three forming the GC
-    /// subtype prefix it shares with `$canonical_inspectable_base` and the typed
-    /// `func` slot coming last; the callback type takes abstract
-    /// `(ref null struct)` args, so one type covers every literal and each
-    /// wrapper refcasts before forwarding. A non-inspectable signature keeps the
-    /// slim `{ env, func }` and needs no supertype, its stub never synthesised.
+    /// `{ env, inspect, inspect_alt, func }`, the first three being the GC subtype
+    /// prefix shared with `$canonical_inspectable_base`; others keep `{ env, func }`.
     pub fn get_or_create_canonical_closure_type(
         &mut self,
         param_wirs: Vec<WirType>,

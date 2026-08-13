@@ -1,12 +1,8 @@
 //! Export-side CM adapter synthesis. Every world export gets one binding from
 //! [`synthesize_export_binding`]: a shared prelude lifts the flat CM params into
 //! Wado values, the user function is called once, and the
-//! [`ExportReturnStrategy`] the driver picked from the export's shape selects the
-//! epilogue — a bare `task-return`, a direct flattened return for a sync `--lib`
-//! export, the body's own `task return` for an `export async fn`, or an Ok/Err
-//! match for an async `Result`. The `synthesize_lower_to_flat` / `FlatLocal`
-//! triple is `pub(super)` because `task_return.rs` expands inline `task return`
-//! into the same flat-args sequence.
+//! [`ExportReturnStrategy`] the driver picked selects the epilogue — a bare
+//! `task-return`, a flattened return, `task return`, or an Ok/Err match.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -829,8 +825,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     // borrow and drop it before recursing, so an inner list lift
                     // can `borrow_mut` through the `LiftContext`. Resolve the
                     // struct's own type id here too: `target_type_id` may arrive
-                    // as a reference wrapper, and `StructLiteral` expects the
-                    // concrete `ResolvedType::Struct` id from the TIR decl.
+                    // as a reference wrapper, and `StructLiteral` needs the concrete one.
                     let (field_ast_tys, struct_type_id) = {
                         let tt = type_table_cell.borrow();
                         let field_tys: Vec<Type> = struct_decl
@@ -1213,8 +1208,7 @@ fn coerce_payload_slots(
 /// `(disc: i32, …joined-payload-flats)`, whose payload slots are the positional
 /// join of every case's flattening. Reads the discriminant, lifts the active
 /// case's payload from `flat[1..]`, and builds the GC value through an if/else
-/// chain, mirroring the memory-based `synthesize_lift_wasi_variant`. Consumes the
-/// discriminant plus the widest case's flattening.
+/// chain, mirroring the memory-based `synthesize_lift_wasi_variant`.
 #[allow(clippy::too_many_arguments)]
 fn lift_variant_from_flat_params(
     variant_decl: &TirVariantDecl,
@@ -1339,9 +1333,8 @@ fn lift_variant_from_flat_params(
 /// Build an export binding's adapter parameters and call arguments — the shared
 /// prelude of [`synthesize_export_binding`], run whichever
 /// [`ExportReturnStrategy`] follows. Lifts the flat CM params back to Wado-typed
-/// args where `export_needs_param_lifting`, else passes them through, appending
-/// the prelude to `body_stmts` and the locals to `locals`. `next_local` is the
-/// first free index after the params and any lifting temporaries.
+/// args where `export_needs_param_lifting`, else passes them through. Returns
+/// the first free local index after the params and lifting temporaries.
 fn build_export_adapter_params(
     user_func_ref: &TirFunction,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
@@ -1757,9 +1750,7 @@ pub(super) fn post_return_func_name(export_name: &str) -> String {
 /// allocated to reclaim. The gate is the indirect return rather than memory
 /// ownership: a result wider than one core value comes back through a
 /// guest-allocated area that leaks without this, so a record of two `u32` owns no
-/// memory and still loses eight bytes per call. Ownership only decides whether
-/// the nested-buffer walk emits anything. The canonical ABI passes the lifted
-/// results, which here is that out-pointer.
+/// memory and still loses eight bytes per call.
 pub(super) fn synthesize_post_return(
     export_name: &str,
     env: &ExportBindingEnv<'_>,

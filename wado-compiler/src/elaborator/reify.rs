@@ -1291,9 +1291,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Synthesise a `Struct^Trait::method` `TirFunction` for each default method
     /// the impl does not override, reading the body-walk facts from
     /// `sem.default_method_semantics[(impl_block.id, default_method.id)]`. The
-    /// module perspective is swapped to the trait module for the walk — same
-    /// pattern as [`Self::with_const_module_perspective`] — since the facts are
-    /// keyed by `AstId`s that name it.
+    /// module perspective is swapped to the trait module for the walk, since the
+    /// facts are keyed by `AstId`s that name it.
     fn reify_impl_default_methods(&mut self, impl_block: &ast::ImplBlock) -> Vec<TirFunction> {
         use crate::name::MethodName;
 
@@ -5898,10 +5897,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a closure expression from the capture analysis in
     /// `sem.types.closure_captures[closure.id]`: `mut_captures` materialise as
-    /// `let __ref_v = &mut v;` ahead of the body in declaration order,
-    /// `captures` is the final capture list, and `is_mutating` picks
-    /// `fn mut(…)` over `fn(…)`. Follows `resolve_closure` step by step so the
-    /// walk-order invariant holds.
+    /// `let __ref_v = &mut v;` ahead of the body in declaration order, `captures`
+    /// is the final capture list, and `is_mutating` picks `fn mut(…)`. Follows
+    /// `resolve_closure` step by step so the walk-order invariant holds.
     fn reify_closure(
         &mut self,
         closure: &ast::ClosureExpr,
@@ -6163,10 +6161,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a tuple literal, handling spread elements. The tuple `TypeId` is
     /// built bottom-up via `make_tuple` so a nested tuple's element type is the
-    /// same interned id as the inner literal's, which `nir/sroa` relies on at
-    /// `-O2`. A spread expands per `type_contains_pack`: a pack (direct or
-    /// mapped) to `TypePackExpansion`, a tuple containing one to `TupleSpread`,
-    /// and a concrete tuple to inline per-element `FieldAccess`.
+    /// same interned id as the inner literal's, which `nir/sroa` relies on. A
+    /// spread expands per `type_contains_pack`: a pack to `TypePackExpansion`, a
+    /// tuple containing one to `TupleSpread`, a concrete one to `FieldAccess`es.
     fn reify_tuple_literal(
         &mut self,
         tuple_lit: &ast::TupleLiteralExpr,
@@ -8153,10 +8150,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a `MethodCallExpr`. Every decision — resolved `FunctionRef`,
     /// receiver-adjustment kind, ref-impl flag, final type — is already on
-    /// `sem.types`; receiver adjustment shares
-    /// [`super::Elaborator::adjust_receiver_for_self_kind_static`]. An
-    /// `IndexMutMethodCall` desugar routes through here too, materialising
-    /// `__index_mut_val` before the dispatch.
+    /// `sem.types`. An `IndexMutMethodCall` desugar routes through here too,
+    /// materialising `__index_mut_val` before the dispatch.
     fn reify_method_call(
         &mut self,
         method_call: &ast::MethodCallExpr,

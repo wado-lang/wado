@@ -7,9 +7,8 @@
 //! Matching is syntactic over the skeleton plus the value pool, never the
 //! `value_of` side-table: `var` and `bound` compare by structure ([`BoundKey`]),
 //! and a promoted operand decomposes through `body.values`. Flow-correctness
-//! comes from a position-aware "nothing modified `var` / `bound` in between" scan
-//! rather than from `ValueId` identity. Runs via [`eliminate_at_root`], sharing
-//! licm's engine session.
+//! comes from a position-aware "nothing modified `var` / `bound` in between"
+//! scan rather than from `ValueId` identity.
 
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
@@ -66,9 +65,8 @@ pub(super) fn resolve_panic_ids(
 /// Standalone post-`promote_fields` run of the structural matcher.
 /// `promote_fields` freezes an invariant field read such as `arr.used` into an
 /// `Operand::Value`, but runs *after* the optimization loop, so the in-loop pass
-/// never sees the promoted bound. Re-running here, the recogniser reads it
-/// through the value pool. The caller pairs this with `const_branch_prune` to
-/// fixpoint so the newly-`false` checks' panic blocks go too.
+/// never sees the promoted bound. The caller pairs this with `const_branch_prune`
+/// to fixpoint so the newly-`false` checks' panic blocks go too.
 pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackage) -> bool {
     use crate::nir::NirFunction;
     use crate::nir_engine::EngineBuffers;
@@ -408,12 +406,10 @@ fn struct_field_init(
 }
 
 /// The offset `c` for which `bound` equals `guard_var + c`, where `bound` is an
-/// invariant struct-field read projected via [`struct_field_init`] — what lets a
-/// `<=` guard relate its bound to a check bound. A bare arithmetic
-/// `guard_var + c` is deliberately refused: Wado add wraps, so it can overflow
-/// below `guard_var`. The struct-field form is safe because the field holds a
-/// real list length, which the runtime keeps in `[0, capacity)` with
-/// `capacity < 2^31`, so the equality proves the sum did not wrap.
+/// invariant struct-field read projected via [`struct_field_init`]. A bare
+/// arithmetic `guard_var + c` is refused: Wado add wraps, so it can overflow
+/// below `guard_var`. The struct-field form holds a real list length, kept in
+/// `[0, capacity)` with `capacity < 2^31`, so the equality proves no wrap.
 fn bound_offset_over(
     engine: &Engine,
     binds: &Binds,
@@ -753,11 +749,9 @@ fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId, binds: &Binds)
     };
     // Walk the statements after the guard in order, eliminating dominated checks
     // nested anywhere inside each — an inlined `index_value` check is an `If`
-    // within the statement's expression block, not a top-level statement — and
-    // stopping at the first statement that modifies `var` / `bound`, such as the
-    // `i += 1` induction update, past which the fact no longer holds. A `<` guard
-    // refutes only the same wrapping index; a `<=` guard refutes a check whose
-    // bound relates to the guard's by a large enough offset, and needs a local.
+    // within the statement's expression block — and stopping at the first
+    // statement that modifies `var` / `bound`. A `<` guard refutes only the same
+    // wrapping index; a `<=` guard also refutes an offset bound.
     let le_gbl = match gop {
         NirBinaryOp::Lt => None,
         NirBinaryOp::LtEq if goff == 0 => match bound {
@@ -832,9 +826,7 @@ fn refute_panic_checks(
 /// `node` whose `var` / `bound` match the guard structurally. The guard gives
 /// `var + k < bound`, and a check `var + j >= bound` is refuted only for
 /// `j == k`: Wado add wraps, so if `var + k` overflows the guard passes on a
-/// wrapped-negative value while a smaller `var + j` stays a large in-range
-/// positive that violates the bound. Only the identical index is safe whatever
-/// the wrap.
+/// wrapped-negative value while a smaller `var + j` stays in range.
 fn eliminate_checks_in_node(
     engine: &mut Engine,
     node: NodeRef,
@@ -1402,10 +1394,8 @@ fn short_circuit_parts(engine: &Engine, node: NodeRef) -> Option<(Operand, Opera
 /// Forward redundant-bounds-check elimination: walk `node` in execution order,
 /// harvesting proven `var + off < bound` facts from panic-guard checks at
 /// unconditionally-executed positions and driving to `false` any later check they
-/// refute — a re-checked `arr[i]` with the array unmodified between. Facts thread
-/// by `&mut` through straight-line positions, by clone into conditional ones so a
-/// branch's harvest cannot escape, and afresh into loop bodies. [`invalidate`]
-/// drops a fact whose root a node may modify, so a resize keeps the later check.
+/// refute. Facts thread by `&mut` through straight-line positions, by clone into
+/// conditional ones, and afresh into loop bodies; [`invalidate`] drops stale ones.
 fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, binds: &Binds) -> bool {
     if let Some(cond) = panic_guard_check(engine, node) {
         if let Some((var, off, bound)) = parse_check(engine, binds, cond) {

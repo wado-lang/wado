@@ -2,8 +2,7 @@
 //! locals: one `List<T_k>` per field, so the per-element `struct.new` goes away.
 //! Uses are recognized by signature shape ([`ListMethodKind`]), never by method
 //! name, and an unclassified method makes the candidate escape. Runs before
-//! `inline`, which would expand those calls. TODO(optimizer): nested containers,
-//! and a `value_copy_demote` element-immutability query instead of the whitelist.
+//! `inline`, which would expand those calls.
 
 use std::cell::Cell;
 
