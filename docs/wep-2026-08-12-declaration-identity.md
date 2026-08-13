@@ -46,6 +46,22 @@ distinguishable at the type level from any other key.
 holds only between the table and the first call. Everything downstream is back in
 the forgeable currency.
 
+The pair is not the weakest form of this, and describing the defect as a pair hid
+the rest of it. Eighteen sites compare a type's name against a bare string
+literal — `name == "Result"`, `name == "Option"`, `name == "String"` — with no
+module in the comparison at all. `compiler_item.rs` opens by warning against
+exactly this, which is what its registry exists to replace, and they survived
+anyway. What they decide is not incidental: whether `?` may be used on a value,
+whether a value lowers to a CM `result<ok, err>` or to a general payload, whether
+a type is represented as nullable. A module declaring its own `Result` answered
+yes to all of them.
+
+A search for the pair shape cannot find these, which is why they outlived a
+document written to end the class. The rule the design needs is stronger than
+"do not build a `DeclKey` by hand": **a spelling never decides which declaration
+is meant**, whether it is compared against a pair, against another spelling, or
+against a literal.
+
 #### B. Scope has five implementations
 
 "What does this name mean in module M" is answered by five independent bodies of

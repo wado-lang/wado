@@ -912,10 +912,8 @@ impl TypeTable {
                 .insert((rendered, module_source.clone()), id);
         }
         if let Some((name, module_source)) = Self::nominal_key(&ty) {
-            self.decl_name_index.insert(
-                (name.to_string(), module_source.clone()),
-                id,
-            );
+            self.decl_name_index
+                .insert((name.to_string(), module_source.clone()), id);
         }
         self.types.push(ty.clone());
         self.intern_map.insert(ty, id);
