@@ -13,8 +13,6 @@
 use std::borrow::Cow;
 use std::fmt;
 
-/// A CM (Component Model) scalar value type for parameterized canonical intrinsics.
-///
 /// The scalar element of a `future<T>` / `stream<T>`. Maps 1:1 to
 /// `wasm_encoder::PrimitiveValType` in codegen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

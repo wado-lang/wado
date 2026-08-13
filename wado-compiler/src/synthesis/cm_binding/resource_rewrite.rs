@@ -325,10 +325,9 @@ fn payload_ast_type(
     registry: &CmInterfaceRegistry,
 ) -> crate::ast::Type {
     let id = crate::component_model::peel_newtypes(tt, payload);
-    // Rebuild containers from peeled children, so an alias nested in an
-    // `Option` / `List` / tuple is peeled too. Peeling on the produced AST
-    // instead would miss a lib-local alias: the `NamedType` synthesis mints for
-    // one carries no source interface to look the newtype up by.
+    // Peeled here rather than on the produced AST, which would miss a lib-local
+    // alias: the `NamedType` synthesis mints for one carries no source
+    // interface to look the newtype up by.
     if let ResolvedType::GenericInstance {
         name, type_args, ..
     } = tt.get(id)

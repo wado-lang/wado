@@ -124,7 +124,6 @@ fn try_classify_future_payload(
         }
         _ => {}
     }
-    // A general value payload (`future<string>`, `future<list<u32>>`, …).
     if let Some(payload) = cm_payload_type_from_type_id(type_table, type_arg) {
         return Some(CmFuturePayload::Value(payload));
     }

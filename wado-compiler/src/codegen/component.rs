@@ -966,8 +966,7 @@ fn build_transmission_future_type_for(
 
 /// Alias at outer component scope every resource in `needed_resources` that
 /// `interface_info` declares itself, so `resource.drop` — which resolves
-/// against outer scope — can name it. A no-op for one already exposed and for
-/// resources defined elsewhere, which are aliased from their own interface.
+/// against outer scope — can name it.
 fn expose_self_owned_resources(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1400,8 +1399,7 @@ fn payload_type_to_cm_key(payload: &CmPayloadType, ctx: &ComponentModelContext) 
                 .collect(),
         ),
         CmPayloadType::Named(name) => CmTypeKey::Leaf(ctx.type_idx(name)),
-        // A resource travels as an owned handle. Its component type is aliased
-        // at outer scope by the interface that defines it, under `resource:<cm>`.
+        // A resource travels as an owned handle.
         CmPayloadType::Resource(cm_name) => CmTypeKey::Own(Box::new(CmTypeKey::Leaf(
             ctx.type_idx(&format!("resource:{cm_name}")),
         ))),
@@ -1447,9 +1445,8 @@ fn collect_named_payload_names(payload: &CmPayloadType, out: &mut Vec<String>) {
 /// stream payload names, so `own<r>` has a resource type to point at.
 ///
 /// A payload resource is otherwise aliased only when some imported function's
-/// signature names it. `Connector::send` does; a guest-created
-/// `Future::<Error>::new()` names none, and its `own<error>` would resolve
-/// against a type nothing registered.
+/// signature names it, which a guest-created `Future::<Error>::new()` does
+/// not.
 fn prebuild_resource_payload_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1531,9 +1528,8 @@ fn prebuild_value_named_types(
             continue;
         }
         // The library's own interface first: the registry also holds every
-        // bundled WASI interface, so a lib-local name that collides with a WASI
-        // one is ambiguous unqualified — and going unbuilt leaves codegen to
-        // panic on the missing type.
+        // bundled WASI interface, so a lib-local name colliding with a WASI one
+        // is ambiguous unqualified.
         let registry = &project.cm_interface_registry;
         let Some(wado_name) = interface_hint
             .as_deref()

@@ -244,11 +244,9 @@ impl TirRefVisitor for CalleeCollector {
 struct NamedPayloadFinder<'a> {
     tt: &'a TypeTable,
     registry: &'a crate::component_model::CmInterfaceRegistry,
-    /// Whether to reject an unresolvable record. Only where the world keeps the
-    /// code: a record's resolvability depends on the world, so a library-shaped
-    /// source compiled for the test world must not be flagged for exports that
-    /// world drops. Classifiability is not world-dependent and is always
-    /// checked.
+    /// Whether to reject an unresolvable record — only where the world keeps
+    /// the code, since a record's resolvability depends on the world.
+    /// Classifiability does not, and is always checked.
     check_records: bool,
     found: Option<String>,
 }
@@ -280,17 +278,10 @@ impl TirRefVisitor for NamedPayloadFinder<'_> {
 /// Why the `Future<T>` / `Stream<T>` payload at `expr` cannot be lowered, or
 /// `None` if it can.
 ///
-/// Two sites reach a payload: `Future::<T>::new()` — the only way to obtain one
-/// outside `--lib`, since non-lib world exports have fixed signatures — and any
-/// CM method on a handle, whose receiver names the payload. The second matters
-/// because synthesis classifies every such call in every function, not only the
-/// ones a world export reaches, and the classifier panics on a payload it
-/// cannot name a `future<T>` / `stream<T>` for.
-///
-/// Two ways to fail: a named record with no CM type to lower against (only
-/// asked when `check_records`, see [`NamedPayloadFinder`]), and a payload the
-/// classifier cannot name at all (`()`, a 128-bit scalar). A resource is not
-/// one of them — it travels as `own<r>`.
+/// Two ways to fail: a named record with no CM type to lower against (asked
+/// only when `check_records`, see [`NamedPayloadFinder`]), and a payload the
+/// classifier cannot name at all, such as `()`. A resource is not one of them —
+/// it travels as `own<r>`.
 fn unresolvable_future_stream_payload(
     tt: &TypeTable,
     registry: &crate::component_model::CmInterfaceRegistry,
