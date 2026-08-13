@@ -40,6 +40,10 @@ use {
     all_alts_are_single_token,
     single_token_first,
     rule_alts_labeled,
+    follow_sep,
+    join_kinds,
+    i32_arrays_equal,
+    elements_match,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec, str_lit } from "./wadopoet.wado";
@@ -53,6 +57,7 @@ use {
     build_group_prediction_tree,
     prediction_collect_all_indices,
     prediction_at_end_conflicts,
+    ambiguous_node_routes_via_atn,
     MAX_LOOKAHEAD_DEPTH,
 } from "./prediction.wado";
 use {
@@ -295,17 +300,6 @@ fn split_top_level_commas(text: &String) -> List<String> {
         out.push(cur.trim());
     }
     return out;
-}
-
-/// `", follow"` when the grammar emits FOLLOW machinery, else `""`.
-/// Appended after a call's fixed arguments so the forwarded `follow`
-/// is passed only when the callee actually declares the parameter
-/// (`ctx.emit_follow()`). See `GenContext::emit_follow`.
-fn follow_sep(emit_follow: bool) -> String {
-    if emit_follow {
-        return ", follow";
-    }
-    return "";
 }
 
 /// `", <FollowArg expr>"` (e.g. `, &FOLLOW_MASK_3`) when the grammar
@@ -640,17 +634,6 @@ fn entry_emits_vals(ctx: &GenContext, rule_name: &String) -> bool {
         Some(r) => rule_emits_vals(ctx, r),
         None => false,
     };
-}
-
-fn join_kinds(kinds: &List<String>) -> String {
-    let mut result = String::with_capacity(64);
-    for let mut i = 0; i < kinds.len(); i += 1 {
-        if i > 0 {
-            result.push_str(&", ");
-        }
-        result.push_str(&kinds[i]);
-    }
-    return result;
 }
 
 /// Emit the "matched — consume the current token and return its index" tail of
@@ -1178,7 +1161,6 @@ fn gen_parser_struct(
     );
     w.end();
     w.blank();
-
 
     // A "token" handed to the rest of the parser is its `i32` index into the
     // stream; node fields store that index, not a Token aggregate.
@@ -2399,18 +2381,6 @@ fn gen_scan_partition_body(
     w.line(&"return -1;");
 }
 
-fn i32_arrays_equal(a: &List<i32>, b: &List<i32>) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    for let mut i = 0; i < a.len(); i += 1 {
-        if a[i] != b[i] {
-            return false;
-        }
-    }
-    return true;
-}
-
 /// Op-driven alt-scan walker. Passes `i32::MAX` as the
 /// `min_prec_override` for the LAST element when it is a self-
 /// recursive `ScanRuleCall`, so the trailing self-ref short-
@@ -3431,7 +3401,6 @@ fn current_rule_emits_vals(ctx: &GenContext) -> bool {
     return rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
 }
 
-
 /// Compact parser for an all-single-token multi-alt rule. The CST node
 /// is a `{ span, token }` struct (`gen_multi_alt_cst` single-token path),
 /// so parsing reduces to: confirm the lookahead is in the rule's first
@@ -4258,15 +4227,6 @@ fn collect_gated_ambiguous_alts(
     }
 }
 
-/// Whether an `Ambiguous` node's decision is emitted as a runtime-ATN
-/// prediction (`atn_predict_with_stack`). Shared by the marking pass and
-/// `gen_prediction_code_inner`'s `route_via_atn` so the two cannot disagree
-/// about which nodes take the ATN path.
-fn ambiguous_node_routes_via_atn(a: &AmbiguousNode, rule_name: &String, ctx: &GenContext) -> bool {
-    return a.reason matches { AtEndConflict }
-        && ctx.emits_at_end_conflict_via_atn(ctx.current_rule_index(), rule_name, &a.branch_tokens);
-}
-
 /// Whether an `Ambiguous` node routes through the runtime ATN *and* carries a
 /// gateable predicate — so its gate alts feed the simulator's `disabled_alts`
 /// prune rather than an inline dispatch chain.
@@ -4699,6 +4659,19 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
     w.line(&`p.atn_ret_pending = ${ret};`);
 }
 
+global EMPTY_SYNC: List<String> = [];
+
+/// Resolve a leaf's FIRST-of-rest to the by-reference `expect` sync argument:
+/// `&SYNC_<id>` for a distinct non-empty set (interned into a `global` once,
+/// never rebuilt per call), or `&EMPTY_SYNC` for the empty set. Mirrors the
+/// `FOLLOW_MASK_<id>` interning so the hot path copies nothing.
+fn sync_set_ref(ctx: &mut GenContext, sync: &List<String>) -> String {
+    if let Some(id) = ctx.intern_sync_set(sync) {
+        return `&SYNC_${id}`;
+    }
+    return String::from("&EMPTY_SYNC");
+}
+
 /// Emit a single leaf-op parse line, reading the deduped field name
 /// and resolved token / follow-arg / min-prec values straight from
 /// `Op`. Lower's `lower_alt_body` / `lower_label_op` / etc. have
@@ -4717,19 +4690,6 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
 /// emitted field name comes from `op.field` exclusively — `dedup_base`
 /// is consulted only for the sync. The sync goes away entirely once
 /// every emit path consumes `Op`.
-global EMPTY_SYNC: List<String> = [];
-
-/// Resolve a leaf's FIRST-of-rest to the by-reference `expect` sync argument:
-/// `&SYNC_<id>` for a distinct non-empty set (interned into a `global` once,
-/// never rebuilt per call), or `&EMPTY_SYNC` for the empty set. Mirrors the
-/// `FOLLOW_MASK_<id>` interning so the hot path copies nothing.
-fn sync_set_ref(ctx: &mut GenContext, sync: &List<String>) -> String {
-    if let Some(id) = ctx.intern_sync_set(sync) {
-        return `&SYNC_${id}`;
-    }
-    return String::from("&EMPTY_SYNC");
-}
-
 pub fn gen_op_leaf(
     w: &mut CodeWriter,
     op: &Op,
@@ -7159,7 +7119,6 @@ fn gen_rep_break(
     gen_rep_break_with_recovery(w, scan_pos, rep_op, ctx, loop_first);
 }
 
-
 fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &List<String>) -> String {
     // Continue while peek is not EOF and not in the follow set. `follow_first`
     // may already contain TK_EOF (e.g. when the follow is the final `EOF`
@@ -7217,7 +7176,6 @@ pub fn compute_non_greedy_condition(
     let peek1_cond = ctx.kind_check_str(&second_continue, &"p.peek_at(1)");
     return `(${peek0_cond}) && (${peek1_cond})`;
 }
-
 
 enum LookaheadAccess {
     Scan,
@@ -7647,7 +7605,6 @@ fn gen_consume_group_store_optional_op(
         name_counts,
     );
 }
-
 
 fn gen_consume_token_group(
     w: &mut CodeWriter,
@@ -8537,18 +8494,6 @@ fn gen_prediction_code_inner(
             w.end();
         },
     }
-}
-
-/// Check if a consumed element matches the expected element at a given skip position.
-/// Returns true only for exact terminal matches (TokenRef or Literal).
-/// Unwraps Labels to compare inner elements.
-fn elements_match(consumed: &Element, expected: &Element) -> bool {
-    let exp = unwrap_label(expected);
-    return match consumed {
-        TokenRef(a) => *exp matches { TokenRef(b) && b.name == a.name },
-        Literal(a) => *exp matches { Literal(b) && b.text == a.text },
-        RuleRef(_) | Group(_) | Repeat(_) | Label(_) | Wildcard(_) | Not(_) => false,
-    };
 }
 
 /// Collect the alt indices whose per-alt `_scan_<n>` helper the dispatch
