@@ -90,17 +90,15 @@ pub(super) fn peel_to_struct(
 ) -> Option<(String, ModuleSource, Vec<TypeId>)> {
     let peeled = tt.peel_refs(type_id);
     match tt.get(peeled) {
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } => Some((name.clone(), module_source.clone(), Vec::new())),
-        ResolvedType::GenericInstance {
-            name,
-            module_source,
-            type_args,
-            ..
-        } => Some((name.clone(), module_source.clone(), type_args.clone())),
+        ResolvedType::Struct { .. } => {
+            let (n, m) = tt.nominal_head(peeled)?;
+            Some((n, m, Vec::new()))
+        }
+        ResolvedType::GenericInstance { type_args, .. } => {
+            let args = type_args.clone();
+            let (n, m) = tt.nominal_head(peeled)?;
+            Some((n, m, args))
+        }
         _ => None,
     }
 }
@@ -1177,16 +1175,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
         let (struct_name, module_source) = match resolved {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            }
-            | ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => (name, module_source),
+            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => self.tysys.type_table.borrow()
+                .nominal_head(receiver_type)
+                .expect("a nominal type names a declaration"),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 return self.record_field_reference(inner, field_name, use_id);
             }
@@ -1250,11 +1241,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
         match resolved {
             // Struct field access
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => {
+            ResolvedType::Struct { .. } => {
+                let (name, module_source) = self.tysys.type_table.borrow()
+                    .nominal_head(struct_type)
+                    .expect("a struct names a declaration");
                 let declared = self.lookup_struct_fields_in(&name, &module_source);
                 let hit = declared.map(|info| {
                     info.fields
@@ -1280,12 +1270,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Generic instance - look up field from generic struct definition
             // and substitute type parameters with concrete type args.
             // Tuples use numeric field access (0, 1, 2, ...).
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => {
+            ResolvedType::GenericInstance { type_args, .. } => {
+                let (name, module_source) = self.tysys.type_table.borrow()
+                    .nominal_head(struct_type)
+                    .expect("a generic instance names a declaration");
                 // Tuple field access (numeric field names: 0, 1, 2, ...)
                 if TypeTable::is_tuple_type(&name)
                     && let Ok(index) = field_name.parse::<usize>()
@@ -1342,11 +1330,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
         let (struct_name, module_source) = match resolved {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => (name, module_source),
+            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => self.tysys.type_table.borrow()
+                .nominal_head(struct_type)
+                .expect("a nominal type names a declaration"),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.check_field_visibility(inner, field_name, span);
                 return;
@@ -1355,11 +1341,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.check_field_visibility(base_type, field_name, span);
                 return;
             }
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => (name, module_source),
             _ => return,
         };
 
@@ -1455,10 +1436,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             ResolvedType::GenericInstance {
-                name,
-                module_source,
+                def,
                 type_args: inner_args,
-                ..
             } => {
                 let new_args: Vec<TypeId> = inner_args
                     .iter()
@@ -1466,7 +1445,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect();
                 if new_args == inner_args {
                     type_id
-                } else {{ let def = self.tysys.type_table.borrow_mut().decl_named_in(&name, &module_source).expect("the declaration this type names exists"); self.tysys.type_table.borrow_mut().make_generic_instance(def, new_args) }
+                } else {
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_generic_instance(def, new_args)
                 }
             }
             _ => type_id,
@@ -1519,11 +1502,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Handle tuple indexing: t[0] is equivalent to t.0
         if let ResolvedType::GenericInstance {
-            ref name,
+            def,
             type_args: ref elements,
-            ..
         } = base_type
-            && TypeTable::is_tuple_type(name)
+            && TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def))
         {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
@@ -1564,11 +1546,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For List and custom types, look for Index or IndexValue trait implementation
         // (List implements IndexValue<i32> with type Output = T)
         let struct_name = match &base_type {
-            ResolvedType::Struct {
-                decl_name: name, ..
-            } => name.clone(),
-            ResolvedType::GenericInstance { name, .. } => name.clone(),
-            ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. } => self.tysys.type_table.borrow()
+                .nominal_head(base_type_id)
+                .map(|(n, _)| n)
+                .unwrap_or_default(),
             // The raw GC array dispatches `[]` through `impl IndexValue /
             // IndexAssign for Array<T>`, keyed by the base name "Array".
             ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
@@ -1738,12 +1722,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => recv_type,
         };
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct {
-                decl_name: name, ..
-            }
-            | ResolvedType::GenericInstance { name, .. }
-            | ResolvedType::Newtype { name, .. }
-            | ResolvedType::Flags { name, .. } => name,
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. } => self.tysys.type_table.borrow()
+                .nominal_head(base_type_id)
+                .map(|(n, _)| n)
+                .unwrap_or_default(),
             ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
             _ => return None,
         };
@@ -2406,11 +2391,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         match &resolved {
-            ResolvedType::Enum {
-                name,
-                module_source,
-                ..
-            } => {
+            ResolvedType::Enum { .. } => {
+                let (name, module_source) = &self.tysys.type_table.borrow()
+                    .nominal_head(scrutinee_type)
+                    .expect("an enum names a declaration");
                 if let Some(enum_info) = self.lookup_enum_case_in(name, module_source) {
                     let all_cases: IndexSet<&str> =
                         enum_info.cases.iter().map(|c| c.name.as_str()).collect();
@@ -2435,18 +2419,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
             }
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => {
+            ResolvedType::Variant { .. } => {
+                let (name, module_source) = &self.tysys.type_table.borrow()
+                    .nominal_head(scrutinee_type)
+                    .expect("a variant names a declaration");
                 self.check_variant_exhaustiveness(&classified, name, module_source, span);
             }
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => {
+            ResolvedType::GenericInstance { .. } => {
+                let (name, module_source) = &self.tysys.type_table.borrow()
+                    .nominal_head(scrutinee_type)
+                    .expect("a generic instance names a declaration");
                 if self.contains_variant(name) {
                     self.check_variant_exhaustiveness(&classified, name, module_source, span);
                 }
@@ -2574,7 +2556,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | crate::tir::PrimitiveType::U64
                     | crate::tir::PrimitiveType::U128
             )
-        ) || matches!(resolved, ResolvedType::Struct { decl_name: ref name, .. } if name == "u128")
+        ) || matches!(resolved, ResolvedType::Struct { def, .. } if self.tysys.type_table.borrow().struct_head_name(def) == "u128")
     }
 
     fn exh_literal(&self, lit: &Literal, scrutinee_type: TypeId) -> ExhPattern {
@@ -2702,11 +2684,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
         match &resolved {
-            ResolvedType::Enum {
-                name,
-                module_source,
-                ..
-            } => {
+            ResolvedType::Enum { .. } => {
+                let (name, module_source) = &self.tysys.type_table.borrow()
+                    .nominal_head(scrutinee_type)
+                    .expect("an enum names a declaration");
                 if let Some(enum_info) = self.lookup_enum_case_in(name, module_source)
                     && enum_info.find_case(&normalized).is_some()
                 {
@@ -3045,11 +3026,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
         // For large literals: 170... as i128 → i128::from_pair(low, high)
         let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => Some((FqTypeName::declared(&module_source, &name), name)),
+            ResolvedType::Struct { .. } => self.tysys.type_table.borrow()
+                .nominal_head(target_type)
+                .map(|(n, m)| (FqTypeName::declared(&m, &n), n)),
             _ => None,
         };
 
@@ -3169,7 +3148,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             let source_is_wide_int = matches!(
                 tt.get(tt.get_ultimate_base_type(source_type)),
-                ResolvedType::Struct { decl_name: name, .. } if name == "i128" || name == "u128"
+                ResolvedType::Struct { def, .. }
+                    if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128"
             );
             let target_supported = !source_is_wide_int
                 || match tt.get(tt.get_ultimate_base_type(target_type)) {
@@ -3186,9 +3166,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | PrimitiveType::U8
                         | PrimitiveType::Char,
                     ) => true,
-                    ResolvedType::Struct {
-                        decl_name: name, ..
-                    } => name == "i128" || name == "u128",
+                    ResolvedType::Struct { def, .. } => {
+                        tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128"
+                    }
                     _ => false,
                 };
             if !target_supported {
@@ -3336,9 +3316,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // typed by — it would settle on the default `i32` and then mismatch.
         let expected_args =
             expected_type.and_then(|ty| match self.tysys.type_table.borrow().get(ty) {
-                ResolvedType::GenericInstance {
-                    name, type_args, ..
-                } if *name == struct_name => Some(type_args.clone()),
+                ResolvedType::GenericInstance { def, type_args }
+                    if self.tysys.type_table.borrow().def_name(*def) == struct_name =>
+                {
+                    Some(type_args.clone())
+                }
                 _ => None,
             });
         let resolved_struct_fields: Option<Vec<(String, TypeId)>> = self
@@ -4249,11 +4231,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(expected) = expected_type {
             let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
             if let ResolvedType::GenericInstance {
-                name,
+                def,
                 type_args: expected_args,
-                ..
             } = expected_resolved
-                && name == struct_info.name
+                && self.tysys.type_table.borrow().def_name(def) == struct_info.name
                 && expected_args.len() == struct_info.type_param_type_ids.len()
             {
                 for (&var, &expected_arg) in inst.vars.iter().zip(expected_args.iter()) {
@@ -4299,9 +4280,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ty = self.tysys.type_table.borrow().get(type_id).clone();
         match ty {
             ResolvedType::TypePack { .. } => true,
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } if TypeTable::is_tuple_type(&name) => {
+            ResolvedType::GenericInstance { def, type_args }
+                if TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def)) =>
+            {
                 type_args.iter().any(|e| self.type_contains_pack(*e))
             }
             _ => false,
@@ -4512,11 +4493,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     let spread_type = self.tysys.type_table.borrow().get(spread_type_id).clone();
                     if let ResolvedType::GenericInstance {
-                        name,
+                        def,
                         type_args: inner_elems,
-                        ..
                     } = spread_type
-                        && TypeTable::is_tuple_type(&name)
+                        && TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def))
                     {
                         // A concrete tuple spread expands inline to one element
                         // per field.

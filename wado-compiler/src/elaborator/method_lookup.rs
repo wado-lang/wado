@@ -524,8 +524,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check newtypes/flags — the impl block may live in the module that defines the type
         if let Some(type_id) = self.lookup_newtype(struct_name) {
             let ms = match self.tysys.type_table.borrow().get(type_id).clone() {
-                ResolvedType::Newtype { module_source, .. }
-                | ResolvedType::Flags { module_source, .. } => Some(module_source),
+                ResolvedType::Newtype { def, .. } | ResolvedType::Flags { def } => {
+                    Some(self.tysys.type_table.borrow().def_module(def).clone())
+                }
                 _ => None,
             };
             if let Some(module_source) = ms {
@@ -579,24 +580,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For primitives, module_source is None to trigger "search all loaded modules" logic
         let (struct_name, struct_module_source, receiver_type_args, newtype_base) = match &base_type
         {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => (name.clone(), Some(module_source.clone()), None, None),
-            // Resource types use reference semantics - handle like struct for method lookup
-            ResolvedType::Resource {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), Some(module_source.clone()), None, None),
+            ResolvedType::Struct { .. } | ResolvedType::Resource { .. } => {
+                let (name, module_source) = self.tysys.type_table.borrow()
+                    .nominal_head(base_type_id)
+                    .expect("a nominal type names a declaration");
+                (name, Some(module_source), None, None)
+            }
             // Generic instances like Box<i32> use the base name "Box" for method lookup.
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
+                let name = &self.tysys.type_table.borrow().def_name(*def).to_string();
+                let module_source = &self.tysys.type_table.borrow().def_module(*def).clone();
                 if TypeTable::is_tuple_type(name) {
                     let elems = type_args;
                     if method_name == "len" {
@@ -682,12 +675,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Newtype: first try looking up methods on the newtype itself,
             // then fall back to the base type for method inheritance
             ResolvedType::Newtype {
-                name,
-                module_source,
                 base_type,
+                type_args: newtype_args,
                 ..
             } => {
-                let (head, own_type_args) = if name.contains('<') {
+                let (name, module_source) = &self.tysys.type_table.borrow()
+                    .nominal_head(base_type_id)
+                    .expect("a newtype names a declaration");
+                let (head, own_type_args) = if !newtype_args.is_empty() {
                     let args = {
                         let tt = self.tysys.type_table.borrow();
                         let ultimate = tt.get_ultimate_base_type(base_type_id);
@@ -706,13 +701,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Flags: first try looking up methods on the flags type itself,
             // then fall back to u32 for method inheritance
-            ResolvedType::Flags {
-                name,
-                module_source,
-                ..
-            } => (
-                name.clone(),
-                Some(module_source.clone()),
+            ResolvedType::Flags { .. } => (
+                self.tysys.type_table.borrow().nominal_head(base_type_id).expect("a flags type names a declaration").0,
+                Some(self.tysys.type_table.borrow().nominal_head(base_type_id).expect("a flags type names a declaration").1),
                 None,
                 Some(TypeTable::U32),
             ),
@@ -734,20 +725,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Unit type () - search for impl blocks in loaded modules
             ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), None, None, None),
             // Enum types - search for impl blocks by enum name
-            ResolvedType::Enum {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), Some(module_source.clone()), None, None),
+            ResolvedType::Enum { .. } => {
+                let (name, module_source) = self.tysys.type_table.borrow()
+                    .nominal_head(base_type_id)
+                    .expect("an enum names a declaration");
+                (name, Some(module_source), None, None)
+            }
             // Generic resource types (Future<T>, Stream<T>, etc.)
-            ResolvedType::GenericResource {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => (
-                name.clone(),
-                Some(module_source.clone()),
+            ResolvedType::GenericResource { def, type_args } => (
+                self.tysys.type_table.borrow().def_name(*def).to_string(),
+                Some(self.tysys.type_table.borrow().def_module(*def).clone()),
                 if type_args.is_empty() {
                     None
                 } else {
@@ -1434,8 +1421,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::Newtype { base_type, .. } => {
                         let base_name = match self.tysys.type_table.borrow().get(base_type).clone()
                         {
-                            ResolvedType::GenericInstance { name, .. }
-                            | ResolvedType::GenericResource { name, .. } => name,
+                            ResolvedType::GenericInstance { def, .. }
+                            | ResolvedType::GenericResource { def, .. } => {
+                                self.tysys.type_table.borrow().def_name(def).to_string()
+                            }
                             ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
                             _ => self.tysys.type_table.borrow().type_name(base_type),
                         };
@@ -1581,16 +1570,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         };
         let receiver_outer = match self.tysys.type_table.borrow().get(rt) {
-            ResolvedType::GenericInstance { name, .. }
-            | ResolvedType::Struct {
-                decl_name: name, ..
-            }
-            | ResolvedType::Enum { name, .. }
-            | ResolvedType::Resource { name, .. }
-            | ResolvedType::GenericResource { name, .. }
-            | ResolvedType::Newtype { name, .. }
-            | ResolvedType::Flags { name, .. }
-            | ResolvedType::Variant { name, .. } => name.clone(),
+            ResolvedType::GenericInstance { .. }
+            | ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Variant { .. } => self.tysys.type_table.borrow()
+                .nominal_head(rt)
+                .map(|(n, _)| n)
+                .unwrap_or_default(),
             ResolvedType::Primitive(p) => p.as_str().to_string(),
             // The raw GC array's outer constructor is "Array", so a `&Array<T>`
             // ref impl (`impl Trait for &Array<T>`) matches a `&Array<_>` receiver.
@@ -3112,10 +3102,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct {
-                decl_name: name, ..
-            } => name,
-            ResolvedType::GenericInstance { name, .. } => name,
+            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
+                self.tysys.type_table.borrow().nominal_head(base_type_id).map(|(n, _)| n)?
+            }
             _ => return None, // Not a struct type
         };
 
@@ -3143,19 +3132,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(output_base_type_id)
             .clone()
         {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => (name, module_source, None),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => (
-                name,
-                module_source,
+            ResolvedType::Struct { .. } => {
+                let (n, m) = self.tysys.type_table.borrow()
+                    .nominal_head(output_base_type_id)
+                    .expect("a struct names a declaration");
+                (n, m, None)
+            }
+            ResolvedType::GenericInstance { type_args, .. } => (
+                self.tysys.type_table.borrow().nominal_head(output_base_type_id)
+                    .expect("a generic instance names a declaration")
+                    .0,
+                self.tysys.type_table.borrow().nominal_head(output_base_type_id)
+                    .expect("a generic instance names a declaration")
+                    .1,
                 if type_args.is_empty() {
                     None
                 } else {
