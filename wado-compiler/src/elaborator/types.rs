@@ -2125,7 +2125,7 @@ pub(crate) struct TypeLookup<'a> {
     /// appear in resolved bodies).
     pub(crate) namespace_imports: &'a IndexMap<String, ModuleSource>,
     pub(crate) all_newtypes: &'a IndexMap<crate::defs::DefId, TypeId>,
-    pub(crate) all_struct_fields: &'a IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
+    pub(crate) all_struct_fields: &'a IndexMap<crate::defs::DefId, StructFieldInfo>,
     pub(crate) all_variant_cases: &'a IndexMap<ModuleSource, IndexMap<String, VariantInfo>>,
     pub(crate) all_enum_cases: &'a IndexMap<ModuleSource, IndexMap<String, EnumInfo>>,
     pub(crate) all_flags_cases: &'a IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>,
@@ -2258,12 +2258,13 @@ impl<'a> TypeLookup<'a> {
     }
 
     pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
-        self.fn_local_first(
-            name,
-            self.fn_local_struct_fields,
-            Some(self.local_struct_fields),
-            self.all_struct_fields,
-        )
+        if let Some(info) = self.fn_local_struct_fields.get(name) {
+            return Some(info);
+        }
+        if let Some(info) = self.local_struct_fields.get(name) {
+            return Some(info);
+        }
+        self.all_struct_fields.get(&self.declaration(name)?)
     }
 
     /// Resolve `(name, module_source)` — an already-known type identity,
@@ -2274,13 +2275,15 @@ impl<'a> TypeLookup<'a> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&'a StructFieldInfo> {
-        self.lookup_ref_in(
-            name,
-            module_source,
-            self.local_struct_fields,
-            self.all_struct_fields,
-            |info| &info.module_source,
-        )
+        if let Some(info) = self
+            .local_struct_fields
+            .get(name)
+            .filter(|info| info.module_source == *module_source)
+        {
+            return Some(info);
+        }
+        self.all_struct_fields
+            .get(&self.resolutions.declared_in(module_source, name)?)
     }
 
     /// Resolve a source-written struct-literal name against `module_source`,

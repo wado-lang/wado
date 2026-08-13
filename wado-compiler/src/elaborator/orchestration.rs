@@ -170,7 +170,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             snapshot_state
                 .map(|s| (*s.tysys.all_generic_newtypes).clone())
                 .unwrap_or_default();
-        let mut all_struct_fields: IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>> =
+        let mut all_struct_fields: IndexMap<crate::defs::DefId, StructFieldInfo> =
             snapshot_state
                 .map(|s| (*s.tysys.all_struct_fields).clone())
                 .unwrap_or_default();
@@ -218,11 +218,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     )
                                 })
                                 .collect();
-                        all_struct_fields
-                            .entry(module_source.clone())
-                            .or_default()
-                            .insert(
-                                struct_decl.name.clone(),
+                        if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
+                            all_struct_fields.insert(
+                                def,
                                 StructFieldInfo {
                                     name: struct_decl.name.clone(),
                                     module_source: module_source.clone(),
@@ -234,6 +232,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     type_param_type_ids: Vec::new(), // filled in second pass
                                 },
                             );
+                        }
                         super::item::register_struct_compiler_item(
                             &type_table,
                             &struct_decl.attrs,
@@ -625,10 +624,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             type_param_bounds,
                             type_param_type_ids,
                         };
-                        all_struct_fields
-                            .entry(module_source.clone())
-                            .or_default()
-                            .insert(struct_decl.name.clone(), info);
+                        if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
+                            all_struct_fields.insert(def, info);
+                        }
                     }
                     Item::Newtype(newtype_decl) => {
                         if newtype_decl.type_params.is_empty() {
@@ -957,10 +955,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Pre-compute the global known type names cache once (shared across all modules)
         let known_type_names_cache = {
             let mut cache = IndexSet::default();
-            for m in all_struct_fields.values() {
-                for name in m.keys() {
-                    cache.insert(name.clone());
-                }
+            for info in all_struct_fields.values() {
+                cache.insert(info.name.clone());
             }
             for m in all_variant_cases.values() {
                 for name in m.keys() {
@@ -1012,7 +1008,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
             let mut local: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
-            collect(&all_struct_fields, &mut local);
+            for info in all_struct_fields.values() {
+                local
+                    .entry(info.module_source.clone())
+                    .or_default()
+                    .insert(info.name.clone());
+            }
             collect(&all_variant_cases, &mut local);
             collect(&all_enum_cases, &mut local);
             collect(&all_flags_cases, &mut local);
@@ -1678,7 +1679,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `TypeId`s and do not collide with this base entry.
     fn intern_all_decl_types(
         modules: &IndexMap<ModuleSource, Module>,
-        all_struct_fields: &IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
+        all_struct_fields: &IndexMap<crate::defs::DefId, StructFieldInfo>,
         all_resource_types: &IndexMap<crate::defs::DefId, ResourceInfo>,
         defs: &crate::defs::DefTable,
         type_table: &Rc<RefCell<TypeTable>>,
@@ -1695,9 +1696,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Item::Struct(struct_decl) => {
                         // Resolve via struct_fields so the canonical name/module
                         // from `StructFieldInfo` wins over anything else.
-                        let (name, ms) = all_struct_fields
-                            .get(module_source)
-                            .and_then(|m| m.get(&struct_decl.name))
+                        let (name, ms) = defs
+                            .of_ast_id(struct_decl.id)
+                            .and_then(|def| all_struct_fields.get(&def))
                             .map(|info| (info.name.clone(), info.module_source.clone()))
                             .unwrap_or_else(|| (struct_decl.name.clone(), module_source.clone()));
                         let type_id = tt.make_struct(name, ms);
@@ -1898,7 +1899,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// codegen, dependency structs are registered before the structs that reference them.
     pub(super) fn topological_sort_modules(
         modules: &IndexMap<ModuleSource, Module>,
-        all_struct_fields: &IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
+        all_struct_fields: &IndexMap<crate::defs::DefId, StructFieldInfo>,
         type_table: &TypeTable,
     ) -> Vec<ModuleSource> {
         // Collect and sort sources for deterministic ordering
@@ -1917,11 +1918,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Analyze struct fields to find cross-module dependencies.
         // Recursively unwrap wrapper types (Ref, MutRef, Option, GenericInstance,
         // Tuple, etc.) to detect dependencies through any nesting level.
-        for (module_src, name_map) in all_struct_fields {
+        for info in all_struct_fields.values() {
+            let module_src = &info.module_source;
             let Some(&from_idx) = source_to_idx.get(module_src) else {
                 continue;
             };
-            for (struct_name, info) in name_map {
+            {
+                let struct_name = &info.name;
                 for (_field_name, field_type_id, _) in &info.fields {
                     let mut dep_sources = Vec::new();
                     Self::collect_cross_module_deps(*field_type_id, type_table, &mut dep_sources);

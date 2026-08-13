@@ -57,7 +57,7 @@ pub(crate) struct TypeSystem {
     /// flat maps.
     pub(crate) all_newtypes: Rc<IndexMap<crate::defs::DefId, TypeId>>,
     pub(crate) all_generic_newtypes: Rc<IndexMap<crate::defs::DefId, GenericNewtypeInfo>>,
-    pub(crate) all_struct_fields: Rc<IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>>,
+    pub(crate) all_struct_fields: Rc<IndexMap<crate::defs::DefId, StructFieldInfo>>,
     pub(crate) all_variant_cases: Rc<IndexMap<ModuleSource, IndexMap<String, VariantInfo>>>,
     pub(crate) all_enum_cases: Rc<IndexMap<ModuleSource, IndexMap<String, EnumInfo>>>,
     pub(crate) all_flags_cases: Rc<IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>>,
@@ -129,7 +129,8 @@ impl TypeSystem {
         name: &str,
         module: &ModuleSource,
     ) -> Option<Vec<crate::tir::TypeId>> {
-        let info = self.all_struct_fields.get(module)?.get(name)?;
+        let def = self.resolutions.declared_in(module, name)?;
+        let info = self.all_struct_fields.get(&def)?;
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
 

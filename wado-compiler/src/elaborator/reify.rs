@@ -8755,8 +8755,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let found = if let Some(info) = module_source
             .as_ref()
-            .and_then(|ms| self.tysys.all_struct_fields.get(ms))
-            .and_then(|m| m.get(&struct_name))
+            .and_then(|ms| self.tysys.resolutions.declared_in(ms, &struct_name))
+            .and_then(|def| self.tysys.all_struct_fields.get(&def))
         {
             resolve_in(info)
         } else {
