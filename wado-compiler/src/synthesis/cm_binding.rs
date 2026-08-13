@@ -151,8 +151,7 @@ mod record_payload_validation {
                 let mut finder = super::NamedPayloadFinder {
                     tt: &tt,
                     registry: project.cm_interface_registry.as_ref(),
-                    check_records: reachable
-                        .contains(&(module_source.clone(), func.name.clone())),
+                    check_records: reachable.contains(&(module_source.clone(), func.name.clone())),
                     found: None,
                 };
                 finder.visit_block(body);
@@ -299,9 +298,7 @@ fn unresolvable_future_stream_payload(
     check_records: bool,
 ) -> Option<String> {
     let (payload, is_future) = future_stream_payload_site(tt, expr)?;
-    if check_records
-        && let Some(name) = unresolvable_record_in_payload(tt, registry, payload)
-    {
+    if check_records && let Some(name) = unresolvable_record_in_payload(tt, registry, payload) {
         return Some(format!(
             "record type `{name}` is used as a `future` / `stream` payload, \
              which is only supported in library (`--lib`) components"

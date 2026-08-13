@@ -15,8 +15,8 @@ use std::fmt;
 
 /// A CM (Component Model) scalar value type for parameterized canonical intrinsics.
 ///
-/// Used to specify the element type of `future<T>` and (in the future) `stream<T>`.
-/// Maps 1:1 to `wasm_encoder::PrimitiveValType` in codegen.
+/// The scalar element of a `future<T>` / `stream<T>`. Maps 1:1 to
+/// `wasm_encoder::PrimitiveValType` in codegen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CmScalarType {
     S8,
@@ -76,9 +76,9 @@ impl CmScalarType {
 /// A general Component Model value type carried as a `future<T>` / `stream<T>`
 /// payload. Self-contained (built from the type table, no registry needed), so
 /// it is both a stable dedup key and a structural descriptor codegen turns into
-/// a component-level type. Named types (record / variant / enum / flags /
-/// resource) are referenced by their CM kebab name, already registered at the
-/// component level because they appear in the world's export/import signatures.
+/// a component-level type. Named types are referenced by their CM kebab name;
+/// codegen defines or aliases each one before the `future<T>` / `stream<T>`
+/// that wraps it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmPayloadType {
     /// A primitive scalar (`bool`, integers, floats, `char`).
@@ -215,6 +215,7 @@ pub enum CmStreamPayload {
 /// - `Trailers` = `future<result<option<trailers>, error-code>>` (HTTP body trailers)
 /// - `Transmission` = `future<result<_, error-code>>` (HTTP transmission result)
 /// - `Scalar(s)` = `future<T>` where T is a primitive scalar type
+/// - `Value(t)` = `future<T>` for any other CM value type
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmFuturePayload {
     /// The HTTP trailers pattern: `future<result<option<trailers>, error-code>>`
@@ -231,11 +232,8 @@ pub enum CmFuturePayload {
     Value(CmPayloadType),
 }
 
-/// A canonical intrinsic needed by the compiled module.
-///
-/// Replaces the previous string-based approach (e.g., `"future-new:s32"`) with
-/// structured metadata. The future type parameter is stored as `CmFuturePayload`
-/// instead of being encoded in the name string.
+/// A canonical intrinsic needed by the compiled module. The payload type is a
+/// [`CmFuturePayload`] / [`CmStreamPayload`] field, not part of a name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CanonicalIntrinsic {
     StreamNew(CmStreamPayload),
@@ -310,12 +308,10 @@ impl CanonicalIntrinsic {
         }
     }
 
-    /// Parse a canonical intrinsic from a WASI import name.
-    ///
-    /// Used for TIR-level WASI imports registered before WIR translation,
-    /// including the payload-parameterized stream / future intrinsics emitted
-    /// as `CmRawCall`s by synthesis (e.g. `"future-read:transmission-http"`).
-    /// Inverse of [`Self::import_name`].
+    /// Parse a canonical intrinsic from a `#[canonical("wasi", "...")]`
+    /// annotation's name, for the TIR-level WASI imports registered before WIR
+    /// translation. Partial inverse of [`Self::import_name`]: a name that
+    /// states no payload does not parse.
     pub fn from_import_name(name: &str) -> Option<Self> {
         Some(match name {
             _ if name.starts_with("stream-") => {
@@ -399,15 +395,10 @@ fn parse_stream_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
     })
 }
 
+/// Partial inverse of `format_future_name`. A suffix-less name carries no
+/// payload, so it does not parse: it is what a `#[canonical("wasi",
+/// "future-read")]` annotation spells, a template the call site parameterizes.
 fn parse_future_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
-    // Partial inverse of `format_future_name`:
-    //   "future-read:transmission-http"   → FutureRead(Transmission("http"))
-    //   "future-read:s32"                 → FutureRead(Scalar(S32))
-    //
-    // A suffix-less name carries no payload, so it does not parse. It is what a
-    // `#[canonical("wasi", "future-read")]` annotation spells — a template the
-    // call site parameterizes — and reading it as the trailers future (which
-    // renders to that same bare name) would answer a payload nobody stated.
     let (base, payload) = match name.split_once(':') {
         None => return None,
         Some((b, suffix)) => {
@@ -449,13 +440,9 @@ fn format_future_name(base: &str, payload: CmFuturePayload) -> String {
         CmFuturePayload::Value(ref t) => format!("{base}:val-{}", t.name_suffix()),
     }
 }
-/// What a `CmRawCall` invokes.
-///
-/// Synthesis knows which of the two it is emitting, so it says so here rather
-/// than encoding it into a name a later phase has to parse back. Recovering a
-/// [`CanonicalIntrinsic`] from its rendered name is lossy — the trailers future
-/// renders to the bare base name, which is also what an unclassified payload
-/// produced — and that ambiguity is what this type removes.
+/// What a `CmRawCall` invokes. Synthesis knows which of the two it emits, so it
+/// says so here rather than encoding it into a name a later phase parses back —
+/// [`CanonicalIntrinsic::import_name`] is not invertible.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmCallTarget {
     /// A lowered WASI import, by its local alias name

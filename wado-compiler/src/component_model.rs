@@ -27,12 +27,10 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 /// - `Result<Option<resource>, E>` → `Trailers` (the HTTP trailers pattern)
 ///
 /// # Panics
-/// A payload matching none of these has no component-level `future<T>` to
-/// lower against. Returning one of the shapes above anyway would compile it as
-/// a different CM type — which is how an unclassified payload used to come back
-/// as the HTTP trailers future. Reach such a payload through
-/// [`future_payload_rejection`] first, so the user gets a diagnostic rather
-/// than this panic.
+/// A payload matching none of these has no component-level `future<T>` to lower
+/// against; answering one of the shapes above anyway would compile it as a
+/// different CM type. Reach such a payload through [`future_payload_rejection`]
+/// first, so the user gets a diagnostic rather than this panic.
 pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFuturePayload {
     try_classify_future_payload(type_table, type_arg).unwrap_or_else(|| {
         panic!(
@@ -44,11 +42,9 @@ pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFu
 
 /// Why `payload` cannot be a `future<T>` payload, or `None` if it can.
 ///
-/// Asked ahead of [`classify_future_payload`] by the boundary and
-/// `Future::new` validators, so an unsupported payload reaches the user as a
-/// compile error. Shares [`try_classify_future_payload`] with the classifier
-/// rather than restating its conditions — a second copy of the rule is how the
-/// TIR and AST classifiers came to disagree.
+/// Asked ahead of [`classify_future_payload`] so an unsupported payload reaches
+/// the user as a compile error. Shares [`try_classify_future_payload`] with the
+/// classifier rather than restating its conditions.
 pub fn future_payload_rejection(type_table: &TypeTable, payload: TypeId) -> Option<String> {
     try_classify_future_payload(type_table, payload)
         .is_none()
@@ -89,12 +85,11 @@ pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Opti
         })
 }
 
-/// Peel newtype aliases. A WIT alias has no representation of its own, so a
-/// payload's CM identity is its base's — and the AST classifier's
-/// `resolve_type` already peels, so the two answer differently unless this
-/// does too.
+/// Peel newtype aliases: a WIT alias has no representation of its own, so a
+/// payload's CM identity is its base's. The AST classifier's `resolve_type`
+/// peels too, and the two must agree.
 ///
-/// Newtypes only: `TypeTable::resolve_newtype_base` also collapses `flags` to
+/// Newtypes only — `TypeTable::resolve_newtype_base` also collapses `flags` to
 /// `u32`, and a CM `flags` is its own type, one byte wide at ≤8 labels.
 pub fn peel_newtypes(type_table: &TypeTable, type_id: TypeId) -> TypeId {
     let mut id = type_id;
@@ -170,8 +165,6 @@ fn is_trailers_payload(type_table: &TypeTable, type_arg: TypeId) -> bool {
 ///
 /// # Panics
 /// An element with no CM payload type has no `stream<T>` to lower against.
-/// `U8` used to stand in, which silently retyped the stream rather than
-/// reporting that its element cannot cross the boundary.
 pub fn classify_stream_payload(
     type_table: &TypeTable,
     element: TypeId,
@@ -195,9 +188,9 @@ pub fn classify_stream_payload(
 }
 
 /// Build a self-contained [`CmPayloadType`] from a resolved type, for use as a
-/// `future<T>` / `stream<T>` payload identity. Returns `None` for types not yet
-/// supported as general payloads (resources, 128-bit and SIMD primitives), so
-/// callers fall back to legacy handling.
+/// `future<T>` / `stream<T>` payload identity. `None` for a type with no
+/// general payload — a CM-owned record, which takes the registry-driven path,
+/// and 128-bit / SIMD primitives, which have no CM scalar.
 pub fn cm_payload_type_from_type_id(
     type_table: &TypeTable,
     type_id: TypeId,
@@ -243,8 +236,8 @@ pub fn cm_payload_type_from_type_id(
             ))
         }
         // A user/dependency named type: lower/lift it as that CM type. WASI and
-        // kiln declarations keep their own (registry-driven) paths, so they stay
-        // `None` here and fall through to the legacy classification.
+        // kiln declarations keep their own registry-driven paths, so they stay
+        // `None` here.
         ResolvedType::Struct {
             decl_name: name,
             module_source,
@@ -517,9 +510,8 @@ pub fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
 /// or `None` if the type is not a WASI error-code. Each package's error-code is
 /// a distinct CM type, so the transmission future is parameterized by it.
 ///
-/// A non-WASI Err arm answers `None` rather than defaulting to `"cli"`: it makes
-/// an ordinary `result<_, E>` payload, and naming a package it never imports
-/// would lower it against that package's error-code type.
+/// A non-WASI Err arm answers `None`: it makes an ordinary `result<_, E>`
+/// payload, not a transmission future.
 fn wasi_error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> Option<String> {
     let (ResolvedType::Enum { module_source, .. } | ResolvedType::Variant { module_source, .. }) =
         type_table.get(error_type_id)
@@ -2425,10 +2417,9 @@ impl CmInterfaceRegistry {
     /// Used by codegen to reconstruct the declaring `Type::Named` for a
     /// `CmPayloadType::Named(<cm-name>)` payload.
     /// Reverse-lookup restricted to one interface. The unqualified
-    /// [`Self::find_named_type_wado_name_by_cm`] refuses a CM name that more
-    /// than one interface registers, and the registry holds every bundled WASI
-    /// interface — so a lib-local `ErrorCode` is ambiguous against WASI's
-    /// unless the caller says which interface it means.
+    /// [`Self::find_named_type_wado_name_by_cm`] refuses a CM name more than one
+    /// interface registers, and the registry holds every bundled WASI
+    /// interface, so a lib-local `ErrorCode` needs the caller to say which.
     pub fn find_named_type_wado_name_by_cm_in(
         &self,
         interface: &str,

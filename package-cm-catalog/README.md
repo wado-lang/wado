@@ -27,7 +27,7 @@ For `future`/`stream` two flavours appear:
 
 Full intended scope; checked items are implemented.
 
-**Value types**
+### Value types
 
 - [x] Primitives (`bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`, `string`)
 - [x] Containers (`list`, `tuple`, `option`, all four `result` forms)
@@ -36,7 +36,7 @@ Full intended scope; checked items are implemented.
 - [x] `flags` inside `option` / `list` / `tuple` — the CM width (one byte at ≤8
       labels) only shows up where the ABI reads a stride or an offset
 
-**`future<T>` (consume/produce)**
+### `future<T>` (consume/produce)
 
 - [x] Scalar payloads (`bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`)
 - [x] `string`
@@ -49,7 +49,7 @@ Full intended scope; checked items are implemented.
 - [x] `tuple<…>`
 - [x] `variant` / `enum` / `flags` payloads
 
-**`stream<T>`**
+### `stream<T>`
 
 - [x] `stream<u8>` (pass-through)
 - [x] `stream<T>` consume/produce — scalar element payloads (`stream<u32>`)
@@ -57,21 +57,21 @@ Full intended scope; checked items are implemented.
 - [x] `stream<T>` consume/produce — `variant` / `enum` / `flags` element payloads
 - `stream<char>` is intentionally out of scope (rejected by the Component Model)
 
-**Embedded handles (pass-through)**
+### Embedded handles (pass-through)
 
 - [x] `option<future>`, `result<future, _>`, `list<future>`, `list<stream>`,
       `tuple<future, _>`, a record with a `future` field
 
-**Test oracle**
+### Test oracle
 
 - [x] Async value read-back — assert the payload survives the round-trip, not
       only the handle
 
-**Handles**
+### Handles
 
-- [ ] `own<resource>` / `borrow<resource>` identity — a resource is carried as
+- [ ] `own<resource>` / `borrow<resource>` identity. A resource does travel as
       `own<r>` inside a `future` / `stream` payload
-      (`wasi_tls_send_done_future.wado`), but the catalog defines no resource of
+      (`wasi_tls_send_done_future.wado`), but the catalog declares no resource of
       its own to write an identity export against
 
 ## Regenerating the WIT

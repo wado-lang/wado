@@ -2,9 +2,8 @@
 //
 // A payload resource's component type is aliased at outer scope only when some
 // imported function's signature names it. `Connector::send` does; a future the
-// guest creates itself names none, so `own<error>` resolved against a type
-// nothing had registered and codegen panicked with
-// `unknown component type: resource:error`.
+// guest creates itself names none, so its defining interface has to be imported
+// for the payload's sake.
 //
 // `option<own<error>>` rather than a bare `own<error>` so the writable end has
 // a value to send: dropping an unwritten one traps, and there is no way to

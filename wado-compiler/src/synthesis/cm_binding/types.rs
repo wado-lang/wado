@@ -626,11 +626,10 @@ fn check_cm_boundary_representable_inner(
             }
             // Stream/Future handles are themselves i32, but their payload is
             // lifted/lowered by value on read/write, so it must be
-            // representable (and non-recursive) too — and, for a future or a
-            // stream, classifiable into a component-level `future<T>` /
-            // `stream<T>`. Being representable is not enough: a resource is a
-            // fine boundary value but has no payload type, and the classifier
-            // would panic on it.
+            // representable (and non-recursive) too — and classifiable into a
+            // component-level `future<T>` / `stream<T>`, which representable
+            // alone does not give: `()` is a fine boundary value with no
+            // payload type.
             R::GenericResource {
                 name, type_args, ..
             } => {
@@ -1421,8 +1420,8 @@ pub(super) fn type_id_to_ast_type(
             name,
             module_source,
         } => cm_named(name, module_source),
-        // Flags keep their declaration identity: a CM `flags` is 1 byte at ≤8
-        // labels, so an `i32` stand-in would size and store it four bytes wide.
+        // A CM `flags` is 1 byte at ≤8 labels, so it keeps its declaration
+        // identity rather than standing in as a four-byte `i32`.
         ResolvedType::Flags {
             name,
             module_source,
@@ -1478,9 +1477,8 @@ pub(super) fn type_id_to_ast_type(
             type_table,
             cm_interface_registry,
         ))),
-        // No CM surface. Standing one of these in as `i32` is silent
-        // corruption, not a fallback: it sized `flags` four bytes wide until
-        // `Flags` got its own arm above.
+        // No CM surface. Standing one of these in as `i32` would silently
+        // mis-size it rather than report that it cannot cross the boundary.
         ResolvedType::Never
         | ResolvedType::Function { .. }
         | ResolvedType::Reactive(_)

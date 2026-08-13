@@ -1,14 +1,12 @@
 // Test: a `future<result<_, own<error>>>` — the Err arm is a resource.
 //
 // `Connector::send` returns `Future<Result<(), Error>>`, where `wasi:tls`'s
-// `Error` is a resource. A resource has no value representation, so the payload
-// used to be classified as the WASI *transmission* future — `future<result<_,
-// error-code>>` — which typed tls's future against `wasi:cli`'s error-code
-// enum, a type this program never imports. Nothing caught it because the
-// signature only reaches classification once the future is operated on:
-// `wasi_tls_mock_recv.wado` binds it to `_send_done` and never touches it.
+// `Error` is a resource. A unit Ok arm is also the WASI transmission shape, so
+// only the Err arm tells the two apart.
 //
-// Here `done` is dropped explicitly, which is what drives the classification.
+// The payload reaches classification only once the future is operated on;
+// `wasi_tls_mock_recv.wado` binds it to `_send_done` and never touches it, so
+// `done` is dropped explicitly here.
 use { println, Stdout } from "core:cli";
 use { Connector, Error } from "wasi:tls";
 

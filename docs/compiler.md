@@ -262,9 +262,9 @@ Three registries collect declarative information from the standard library and f
 
 `canon future.read` and its siblings are typed — the Component Model instantiates one per `future<T>` — so the core module needs a distinct import per payload type. `CanonicalIntrinsic` (`canonical.rs`) is that identity, and `CmRawCall` carries it from synthesis through TIR and NIR into WIR.
 
-`import_name` renders the identity as the core import name at the end of that path. It is a rendering, not a carrier: nothing parses it back to recover a payload, so it only has to be injective. Do not reintroduce the round-trip — the trailers future renders to the bare base name, which is also what a `#[canonical("wasi", "future-read")]` annotation spells, and reading that back as a payload is how an unclassified `future<T>` once became the HTTP trailers future.
+`import_name` renders that identity as the core import name at the end of the path. It is a rendering, not a carrier: nothing parses it back, so it only has to be injective. Keep it that way — the trailers future and a payload-parameterized `#[canonical]` annotation both spell the bare base name, so the encoding is not invertible.
 
-A payload that classifies as nothing is reported, never defaulted. `classify_future_payload` recognizes the trailers shape structurally and panics otherwise; `classify_stream_payload` panics rather than falling back to `stream<u8>`. Callers that only need to know whether an element has a payload type ask `cm_payload_type_from_type_id` directly instead of reading a classifier's answer.
+A payload that classifies as nothing is reported, never defaulted: `classify_future_payload` recognizes the trailers shape structurally and panics otherwise, and `classify_stream_payload` panics rather than falling back to `stream<u8>`. Ask `future_payload_rejection` / `stream_payload_rejection` first so the user gets a diagnostic instead.
 
 ## LSP
 

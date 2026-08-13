@@ -11,8 +11,9 @@
 //! that exact handle — `cm_catalog.rs` round-trips it functionally rather than
 //! by handle equality, since the handle is single-use.
 //!
-//! Still TODO in this catalog: handles (`own`/`borrow` of resources), whose
-//! non-duplicable boundary semantics differ from the value types above.
+//! Still TODO in this catalog: an `own`/`borrow` resource identity export,
+//! whose non-duplicable boundary semantics differ from the value types above.
+//! The catalog declares no resource of its own to write one against.
 //!
 //! This file is the published package source, reused verbatim as a compiler
 //! test fixture (`wado-compiler/tests/fixtures/cm_catalog.wado` must stay
@@ -537,8 +538,8 @@ export async fn id_stream_variant(v: Stream<Shape>) -> Stream<Shape> {
     v.drop();
     tx.drop();
 }
-// `flags` is the payload whose CM width differs most from its Wado one: three
-// labels lower to a single byte, not the u32 the guest holds it in.
+// The element whose CM width differs from its Wado one, so the stride is what
+// this checks.
 export async fn id_stream_flags(v: Stream<Perms>) -> Stream<Perms> {
     let [rx, tx] = Stream::<Perms>::new();
     task return rx;

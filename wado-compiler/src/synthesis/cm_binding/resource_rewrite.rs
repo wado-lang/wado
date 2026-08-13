@@ -316,13 +316,9 @@ pub(super) fn synthesize_stream_writes(project: &mut Package) {
 /// The AST type a `future<T>` / `stream<T>` payload lays out as.
 ///
 /// A newtype is a WIT type alias with no representation of its own, so the
-/// payload's size, alignment, and load / store ops are its base's. Keeping the
-/// alias here types the buffer access by a name the CM never sees, which the
-/// core module then fails to validate.
-///
-/// Peeled at every level, so `Future<Option<Meters>>` resolves too — by the
-/// same rule the AST payload classifier applies, which is what keeps the layout
-/// and the classified payload describing one type.
+/// payload's size, alignment, and load / store ops are its base's — at every
+/// level, and by the same rule the payload classifier applies, so the layout
+/// and the classified payload describe one type.
 fn payload_ast_type(
     payload: TypeId,
     tt: &TypeTable,
@@ -358,8 +354,8 @@ fn payload_ast_type(
 /// Whether `elem` takes the value-payload stream path: it has a general CM
 /// payload type, and is not the `u8` default that has a path of its own.
 ///
-/// Asked directly rather than through `classify_stream_payload`: these are
-/// predicates, and a classifier has to name some type to answer at all.
+/// Asked directly rather than through `classify_stream_payload`, which has to
+/// name some type to answer at all.
 fn has_value_payload(tt: &TypeTable, elem: TypeId) -> bool {
     !matches!(
         tt.get(elem),
