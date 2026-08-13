@@ -871,11 +871,13 @@ fn variant_cases(project: &NirPackage, type_id: TypeId) -> Option<(Vec<String>, 
             ResolvedType::Variant {
                 name,
                 module_source,
+                ..
             } => (name.clone(), module_source.clone(), Vec::new()),
             ResolvedType::GenericInstance {
                 name,
                 module_source,
                 type_args,
+                ..
             } => (name.clone(), module_source.clone(), type_args.clone()),
             _ => return None,
         }

@@ -238,6 +238,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Enum {
                 name,
                 module_source,
+                ..
             } => (name.clone(), module_source.clone()),
             // Generic resource types (Future<T>, Stream<T>, etc.) - use resource name and module
             ResolvedType::GenericResource {
@@ -254,6 +255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Flags {
                 name,
                 module_source,
+                ..
             } => (name.clone(), module_source.clone()),
             // Raw GC array `Array<T>`: inherent methods live in
             // `impl Array<T>` (core:prelude/array.wado), keyed by "Array".
@@ -876,11 +878,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 type_args,
                 module_source,
+                ..
             }
             | ResolvedType::GenericResource {
                 name,
                 type_args,
                 module_source,
+                ..
             } => {
                 // Qualify the base and the arguments alike, so a concrete-generic
                 // impl's method name matches its definition (issue #1348). A
@@ -1501,6 +1505,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name,
                     module_source,
                     type_args: instance_type_args,
+                    ..
                 } = resolved
                 {
                     Some((name, module_source, instance_type_args))
@@ -1648,6 +1653,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let ResolvedType::Variant {
             name,
             module_source,
+            ..
         } = self.tysys.type_table.borrow().get(target_type_id).clone()
         {
             // Look up the variant case info
@@ -1856,6 +1862,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Resource {
                 name,
                 module_source,
+                ..
             } => (
                 name.clone(),
                 module_source.clone(),
@@ -1868,6 +1875,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 type_args,
+                ..
             } => {
                 let type_arg_names: Vec<FqTypeName> = type_args
                     .iter()
@@ -1900,10 +1908,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Enum {
                 name,
                 module_source,
+                ..
             }
             | ResolvedType::Variant {
                 name,
                 module_source,
+                ..
             } => (
                 name.clone(),
                 module_source.clone(),
@@ -1914,6 +1924,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 type_args,
+                ..
             } => {
                 let args: Vec<FqTypeName> = type_args
                     .iter()
@@ -1930,6 +1941,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 base_type,
+                ..
             } => {
                 // First try the newtype's own name (for methods defined via `impl NewtypeName`)
                 let newtype_name = name.clone();
@@ -1954,6 +1966,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             name,
                             module_source,
                             type_args,
+                            ..
                         } => {
                             let args: Vec<FqTypeName> = type_args
                                 .iter()
@@ -2004,6 +2017,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Flags {
                 name,
                 module_source,
+                ..
             } => {
                 // First try the flags' own name, then fall back to u32
                 let flags_name = name.clone();

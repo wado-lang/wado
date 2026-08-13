@@ -5760,6 +5760,7 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<FqTyp
                 name,
                 type_args,
                 module_source,
+                ..
             } if TypeTable::is_tuple_type(name) => {
                 if !type_args.iter().all(|e| tt.is_concrete(*e)) {
                     return None;

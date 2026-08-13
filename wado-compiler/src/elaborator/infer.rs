@@ -73,11 +73,13 @@ pub(super) fn unify(
                 name: expected_name,
                 module_source: expected_module_source,
                 type_args: expected_elems,
+                ..
             },
             ResolvedType::GenericInstance {
                 name: actual_name,
                 module_source: actual_module_source,
                 type_args: actual_elems,
+                ..
             },
         ) if TypeTable::is_tuple_type(expected_name)
             && TypeTable::is_tuple_type(actual_name)
@@ -144,6 +146,7 @@ pub(super) fn unify(
                 name: actual_name,
                 module_source: actual_module_source,
                 type_args: actual_elems,
+                ..
             },
         ) if name == &list_name
             && TypeTable::is_tuple_type(actual_name)

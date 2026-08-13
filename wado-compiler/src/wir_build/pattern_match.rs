@@ -646,6 +646,7 @@ impl FunctionTranslator<'_, '_> {
             ResolvedType::Enum {
                 name,
                 module_source,
+                ..
             } => self
                 .ctx
                 .package
@@ -694,6 +695,7 @@ impl FunctionTranslator<'_, '_> {
                 name,
                 module_source,
                 type_args,
+                ..
             } => {
                 let mangled = super::types::generic_instance_name(self.type_table, name, type_args);
                 crate::name::wir_type_key(module_source, &mangled)
@@ -1356,6 +1358,7 @@ impl FunctionTranslator<'_, '_> {
             decl_name,
             module_source,
             type_args,
+            ..
         } = self.type_table.get(struct_type)
         else {
             panic!("[WIR] struct pattern on non-struct {struct_type:?}");

@@ -303,6 +303,7 @@ impl<'a> PatternLowerer<'a> {
                 decl_name,
                 module_source,
                 type_args,
+                ..
             } => self
                 .struct_fields_map
                 .get(&(

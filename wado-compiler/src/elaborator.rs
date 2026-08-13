@@ -1432,18 +1432,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             | ResolvedType::Enum {
                 name,
                 module_source,
+                ..
             }
             | ResolvedType::Variant {
                 name,
                 module_source,
+                ..
             }
             | ResolvedType::Flags {
                 name,
                 module_source,
+                ..
             }
             | ResolvedType::Resource {
                 name,
                 module_source,
+                ..
             }
             | ResolvedType::Newtype {
                 name,

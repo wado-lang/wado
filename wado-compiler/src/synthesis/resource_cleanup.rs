@@ -174,6 +174,7 @@ fn carries_resource_rec(
         ResolvedType::Resource {
             name,
             module_source,
+            ..
         } => {
             return reg
                 .get_resource_cm_name_by_module(&module_source.to_string(), &name)
@@ -186,6 +187,7 @@ fn carries_resource_rec(
             decl_name,
             module_source,
             type_args,
+            ..
         } => sfr
             .get(&(
                 tt.struct_rendered_name(&decl_name, &type_args),
@@ -427,6 +429,7 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
         ResolvedType::Resource {
             name,
             module_source,
+            ..
         } => match cx
             .reg
             .get_resource_cm_name_by_module(&module_source.to_string(), &name)
@@ -442,6 +445,7 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
             decl_name,
             module_source,
             type_args,
+            ..
         } => {
             let fields = cx
                 .struct_fields

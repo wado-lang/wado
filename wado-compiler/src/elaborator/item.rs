@@ -1261,6 +1261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             crate::tir::ResolvedType::Variant {
                 name,
                 module_source,
+                ..
             } => {
                 // The per-case payload types live in `all_variant_cases`; look
                 // them up so a variant case payload containing a closure type

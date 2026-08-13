@@ -701,6 +701,7 @@ fn element_layout_of(
         decl_name,
         module_source,
         type_args,
+        ..
     } = type_table.get(elem_ty)
     {
         let key = (

@@ -41,6 +41,7 @@ impl Monomorphizer {
                 name,
                 module_source,
                 type_args,
+                ..
             } = type_table.get(id)
                 && name == &key.name
                 && module_source == &key.module_source

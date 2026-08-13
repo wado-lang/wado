@@ -519,6 +519,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name,
                     module_source,
                     type_args,
+                    ..
                 } => (name, module_source, type_args),
                 ResolvedType::Struct {
                     decl_name: name,
@@ -560,6 +561,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name,
                     module_source,
                     type_args,
+                    ..
                 } => (name, module_source, type_args),
                 _ => return None,
             };

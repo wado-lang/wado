@@ -766,12 +766,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Enum {
                 name,
                 module_source,
+                ..
             } => self
                 .lookup_enum_case_in(name, module_source)
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
             ResolvedType::Variant {
                 name,
                 module_source,
+                ..
             }
             | ResolvedType::GenericInstance {
                 name,
@@ -797,15 +799,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Enum {
                 name,
                 module_source,
+                ..
             }
             | ResolvedType::Variant {
                 name,
                 module_source,
+                ..
             } => (name.as_str(), module_source, None),
             ResolvedType::GenericInstance {
                 name,
                 module_source,
                 type_args,
+                ..
             } => (name.as_str(), module_source, Some(type_args.len())),
             _ => {
                 return false;
@@ -1554,6 +1559,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let ResolvedType::Enum {
                     name,
                     module_source,
+                    ..
                 } = &resolved_type
                 {
                     if !bindings.is_empty() {
@@ -1620,6 +1626,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::Variant {
                         name,
                         module_source,
+                        ..
                     } => self.get_variant_case_payload_type(
                         name,
                         module_source,
@@ -1632,6 +1639,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         name,
                         module_source,
                         type_args,
+                        ..
                     } => {
                         // Check if this is a variant (not a struct)
                         if self.contains_variant(name) {
@@ -2603,10 +2611,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name,
                     module_source,
                     type_args,
+                    ..
                 } if self.contains_variant(&name) => Some((name, module_source, type_args)),
                 ResolvedType::Variant {
                     name,
                     module_source,
+                    ..
                 } if self.contains_variant(&name) => Some((name, module_source, vec![])),
                 _ => None,
             };

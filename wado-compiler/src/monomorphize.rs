@@ -193,6 +193,7 @@ fn dispatch_receiver_identity(tt: &TypeTable, type_id: TypeId) -> Option<crate::
         ResolvedType::Flags {
             name,
             module_source,
+            ..
         } => Some(crate::name::FqTypeName::declared(module_source, name)),
         _ => None,
     }

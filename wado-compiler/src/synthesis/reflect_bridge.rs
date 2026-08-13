@@ -116,6 +116,7 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
                     name,
                     module_source,
                     type_args,
+                    ..
                 } = tt.get(id)
                 else {
                     return None;

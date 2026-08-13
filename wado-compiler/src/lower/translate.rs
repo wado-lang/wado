@@ -845,6 +845,7 @@ impl FunctionTranslator<'_, '_> {
             decl_name,
             module_source,
             type_args,
+            ..
         } = inner_resolved
         {
             let name = self

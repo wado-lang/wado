@@ -198,14 +198,17 @@ fn distribute_bound_driven_requests(project: &mut Package) {
                 | ResolvedType::Enum {
                     name,
                     module_source,
+                    ..
                 }
                 | ResolvedType::Variant {
                     name,
                     module_source,
+                    ..
                 }
                 | ResolvedType::Flags {
                     name,
                     module_source,
+                    ..
                 } => Some(((name.clone(), module_source.clone()), id)),
                 _ => None,
             })

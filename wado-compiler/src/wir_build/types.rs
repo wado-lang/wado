@@ -32,6 +32,7 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
             decl_name,
             module_source,
             type_args,
+            ..
         } => {
             let name = type_table.struct_rendered_name(decl_name, type_args);
             vec![crate::name::wir_type_key(module_source, &name)]
@@ -826,6 +827,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                     name,
                     module_source,
                     type_args,
+                    ..
                 } = type_table.get(type_id)
                 else {
                     continue;

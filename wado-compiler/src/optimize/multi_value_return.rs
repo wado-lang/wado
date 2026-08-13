@@ -310,6 +310,7 @@ pub(super) fn aggregate_field_info(
         decl_name,
         module_source,
         type_args,
+        ..
     } = resolved
     {
         let name = type_table.struct_rendered_name(decl_name, type_args);

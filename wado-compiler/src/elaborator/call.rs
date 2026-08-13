@@ -2793,6 +2793,7 @@ impl TypeSystem {
                 name,
                 module_source,
                 type_args: expected_args,
+                ..
             } = expected_resolved
                 && name == variant_name
                 && expected_args.len() == variant_info.type_param_type_ids.len()

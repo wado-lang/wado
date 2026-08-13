@@ -1185,6 +1185,7 @@ impl<'a> DceWalker<'a> {
                     name,
                     module_source,
                     base_type,
+                    ..
                 } => {
                     // Remember the outermost newtype for its own trait impls
                     if newtype_info.is_none() {
@@ -1240,6 +1241,7 @@ impl<'a> DceWalker<'a> {
                 ref decl_name,
                 ref type_args,
                 ref module_source,
+                ..
             } if !type_args.is_empty() => {
                 let base_struct = decl_name;
                 let name = &self.type_table.struct_rendered_name(decl_name, type_args);
@@ -1355,6 +1357,7 @@ impl<'a> DceWalker<'a> {
                 name,
                 type_args,
                 module_source: _,
+                ..
             } => {
                 // Generic instance method (e.g. `Box<i32>::get`,
                 // `TreeMap<String,i32>^Index::index`). Trait methods
@@ -1385,6 +1388,7 @@ impl<'a> DceWalker<'a> {
             ResolvedType::Enum {
                 name,
                 module_source,
+                ..
             } => {
                 // Enum method (user-defined or auto-derived trait impl).
                 let method_id = FunctionId::Method(MethodName::new(
@@ -1711,6 +1715,7 @@ impl DceAnalysis {
                     decl_name,
                     module_source,
                     type_args,
+                    ..
                 } => {
                     if type_args.is_empty() {
                         self.struct_exact
@@ -1724,6 +1729,7 @@ impl DceAnalysis {
                 ResolvedType::Variant {
                     name,
                     module_source,
+                    ..
                 } => {
                     self.variant_exact
                         .insert((name.clone(), module_source.clone()));
@@ -1731,6 +1737,7 @@ impl DceAnalysis {
                 ResolvedType::Enum {
                     name,
                     module_source,
+                    ..
                 } => {
                     self.enum_exact
                         .insert((name.clone(), module_source.clone()));
@@ -1782,6 +1789,7 @@ fn variant_decls_kept_past_use(
             ResolvedType::Variant {
                 name,
                 module_source,
+                ..
             }
             | ResolvedType::GenericInstance {
                 name,

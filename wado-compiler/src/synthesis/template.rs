@@ -987,6 +987,7 @@ fn peel_transparent_newtype(
                     name,
                     base_type,
                     module_source,
+                    ..
                 } if ctx
                     .trait_env
                     .trait_def_of_fq(trait_name)

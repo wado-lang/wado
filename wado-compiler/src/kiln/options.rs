@@ -298,6 +298,7 @@ fn lower_type(
         ResolvedType::Enum {
             name,
             module_source,
+            ..
         } => {
             let variants =
                 enum_variants(name, module_source, sem, module, field_name, diagnostics)?;

@@ -812,6 +812,7 @@ impl<'a> WirContext<'a> {
                 decl_name,
                 module_source,
                 type_args,
+                ..
             } => {
                 // The WIR struct map is keyed on the rendered spelling: each
                 // instantiation is its own struct type.
@@ -845,6 +846,7 @@ impl<'a> WirContext<'a> {
                 name,
                 type_args: elements,
                 module_source,
+                ..
             } if TypeTable::is_tuple_type(name) => {
                 // CM binding synthesis interns its own `TypeId`s for the same
                 // elements, so a miss falls back to structural matching.
@@ -864,6 +866,7 @@ impl<'a> WirContext<'a> {
                 name,
                 module_source,
                 type_args,
+                ..
             } => {
                 // A generic instance is either a struct or a variant, and the
                 // two live in different maps. Registration aliases the

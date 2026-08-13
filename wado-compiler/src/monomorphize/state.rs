@@ -605,6 +605,7 @@ impl Monomorphizer {
                     base_type,
                     name,
                     module_source,
+                    ..
                 } => {
                     let base = *base_type;
                     // A generic newtype's stored name bakes its arguments into

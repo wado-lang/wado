@@ -7476,10 +7476,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name,
                     module_source,
                     type_args,
+                    ..
                 } => (name, module_source, recorded_type, type_args),
                 ResolvedType::Variant {
                     name,
                     module_source,
+                    ..
                 } => (name, module_source, recorded_type, Vec::new()),
                 _ => (
                     String::new(),
@@ -8718,6 +8720,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name,
                     module_source,
                     type_args,
+                    ..
                 } => {
                     // Tuple projection (`t.0`): a tuple has no struct decl, so the
                     // struct-fields lookup below misses and the `(0, …)` fallback would
@@ -9963,6 +9966,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ResolvedType::Enum {
                 name,
                 module_source,
+                ..
             } => (name, module_source),
             _ => return None,
         };
@@ -9982,6 +9986,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ResolvedType::Variant {
                 name,
                 module_source,
+                ..
             }
             | ResolvedType::GenericInstance {
                 name,
@@ -10013,11 +10018,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ResolvedType::Variant {
                     name,
                     module_source,
+                    ..
                 } => (name, module_source, Vec::<TypeId>::new()),
                 ResolvedType::GenericInstance {
                     name,
                     module_source,
                     type_args,
+                    ..
                 } => (name, module_source, type_args),
                 _ => (
                     String::new(),
@@ -10319,11 +10326,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         ResolvedType::Variant {
                             name,
                             module_source,
+                            ..
                         } => (name, (Vec::<TypeId>::new(), module_source)),
                         ResolvedType::GenericInstance {
                             name,
                             module_source,
                             type_args,
+                            ..
                         } => (name, (type_args, module_source)),
                         _ => (
                             String::new(),

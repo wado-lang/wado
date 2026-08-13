@@ -872,6 +872,7 @@ impl TypeSystem {
             ResolvedType::Variant {
                 name,
                 module_source,
+                ..
             } => {
                 if tr == OnBoundTrait::Ord {
                     return None;
@@ -883,6 +884,7 @@ impl TypeSystem {
                 name,
                 module_source,
                 type_args,
+                ..
             } => {
                 if let Some(info) = scope.struct_fields_in(name, module_source) {
                     Some(walk_struct(info, type_args, visit))
@@ -1079,6 +1081,7 @@ impl TypeSystem {
             && let ResolvedType::Enum {
                 name,
                 module_source,
+                ..
             }
             | ResolvedType::Struct {
                 decl_name: name,
@@ -1088,10 +1091,12 @@ impl TypeSystem {
             | ResolvedType::Variant {
                 name,
                 module_source,
+                ..
             }
             | ResolvedType::Flags {
                 name,
                 module_source,
+                ..
             }
             | ResolvedType::GenericInstance {
                 name,
@@ -1231,6 +1236,7 @@ impl TypeSystem {
                 name,
                 type_args,
                 module_source,
+                ..
             } => (
                 FqTypeName::of_head(module_source, name),
                 if type_args.is_empty() {
@@ -1305,6 +1311,7 @@ impl TypeSystem {
             ResolvedType::Flags {
                 name,
                 module_source,
+                ..
             } => {
                 if self.find_trait_impl_for_type(
                     ctx,

@@ -176,6 +176,7 @@ fn collect_resource_refs(
         ResolvedType::Resource {
             name,
             module_source,
+            ..
         }
         | ResolvedType::GenericResource {
             name,
@@ -244,6 +245,7 @@ fn collect_resource_refs(
         ResolvedType::Variant {
             name,
             module_source,
+            ..
         } => {
             if let Some(payloads) = variant_payloads.get(&(module_source.clone(), name.clone())) {
                 for pt in payloads {
@@ -1723,6 +1725,7 @@ impl TypeRefCtx {
             ResolvedType::Variant {
                 name,
                 module_source,
+                ..
             } => self
                 .variant_payloads
                 .get(&(module_source.clone(), name.clone()))

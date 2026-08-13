@@ -2770,6 +2770,7 @@ fn extract_resource_instantiation(
             ResolvedType::Resource {
                 name,
                 module_source,
+                ..
             } => {
                 return Some((module_source.clone(), name.clone(), Vec::new()));
             }
@@ -2777,6 +2778,7 @@ fn extract_resource_instantiation(
                 name,
                 module_source,
                 type_args,
+                ..
             } => {
                 return Some((module_source.clone(), name.clone(), type_args.clone()));
             }

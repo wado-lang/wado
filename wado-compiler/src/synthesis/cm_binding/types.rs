@@ -1400,6 +1400,7 @@ pub(super) fn type_id_to_ast_type(
         ResolvedType::Enum {
             name,
             module_source,
+            ..
         } => cm_named(name, module_source),
         ResolvedType::Resource { name, .. } => named_no_source(name),
         ResolvedType::GenericInstance {

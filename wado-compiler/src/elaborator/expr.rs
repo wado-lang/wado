@@ -1284,6 +1284,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 type_args,
+                ..
             } => {
                 // Tuple field access (numeric field names: 0, 1, 2, ...)
                 if TypeTable::is_tuple_type(&name)
@@ -1457,6 +1458,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 type_args: inner_args,
+                ..
             } => {
                 let new_args: Vec<TypeId> = inner_args
                     .iter()
@@ -2412,6 +2414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Enum {
                 name,
                 module_source,
+                ..
             } => {
                 if let Some(enum_info) = self.lookup_enum_case_in(name, module_source) {
                     let all_cases: IndexSet<&str> =
@@ -2440,6 +2443,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Variant {
                 name,
                 module_source,
+                ..
             } => {
                 self.check_variant_exhaustiveness(&classified, name, module_source, span);
             }
@@ -2706,6 +2710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Enum {
                 name,
                 module_source,
+                ..
             } => {
                 if let Some(enum_info) = self.lookup_enum_case_in(name, module_source)
                     && enum_info.find_case(&normalized).is_some()

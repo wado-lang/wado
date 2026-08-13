@@ -266,6 +266,7 @@ fn variant_cases_concrete(
         ResolvedType::Variant {
             name,
             module_source,
+            ..
         } => type_table
             .borrow()
             .variant_template_cases(name, module_source)
@@ -274,6 +275,7 @@ fn variant_cases_concrete(
             name,
             module_source,
             type_args,
+            ..
         } => {
             let cases = type_table
                 .borrow()

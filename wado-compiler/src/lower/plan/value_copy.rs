@@ -230,6 +230,7 @@ fn needs_copy_in_env(
             name,
             module_source,
             type_args,
+            ..
         } => {
             if name == box_name {
                 return false;
@@ -262,6 +263,7 @@ fn needs_copy_in_env(
         ResolvedType::Variant {
             name,
             module_source,
+            ..
         } => type_table
             .variant_template_cases(name, module_source)
             .is_some_and(|cases| {

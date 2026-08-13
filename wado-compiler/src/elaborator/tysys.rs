@@ -450,6 +450,7 @@ impl TypeSystem {
                 name,
                 module_source,
                 type_args,
+                ..
             } => {
                 let new_args: Vec<TypeId> = type_args
                     .iter()

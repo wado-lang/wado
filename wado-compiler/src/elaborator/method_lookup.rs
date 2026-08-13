@@ -588,12 +588,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Resource {
                 name,
                 module_source,
+                ..
             } => (name.clone(), Some(module_source.clone()), None, None),
             // Generic instances like Box<i32> use the base name "Box" for method lookup.
             ResolvedType::GenericInstance {
                 name,
                 module_source,
                 type_args,
+                ..
             } => {
                 if TypeTable::is_tuple_type(name) {
                     let elems = type_args;
@@ -683,6 +685,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 base_type,
+                ..
             } => {
                 let (head, own_type_args) = if name.contains('<') {
                     let args = {
@@ -706,6 +709,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Flags {
                 name,
                 module_source,
+                ..
             } => (
                 name.clone(),
                 Some(module_source.clone()),
@@ -733,12 +737,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Enum {
                 name,
                 module_source,
+                ..
             } => (name.clone(), Some(module_source.clone()), None, None),
             // Generic resource types (Future<T>, Stream<T>, etc.)
             ResolvedType::GenericResource {
                 name,
                 module_source,
                 type_args,
+                ..
             } => (
                 name.clone(),
                 Some(module_source.clone()),
@@ -3146,6 +3152,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 type_args,
+                ..
             } => (
                 name,
                 module_source,
