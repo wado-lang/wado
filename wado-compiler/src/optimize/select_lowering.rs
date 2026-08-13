@@ -1,17 +1,8 @@
-//! Select lowering optimization for Wado NIR.
-//!
-//! Post-optimization rewrite that converts simple `if cond { a } else { b }`
-//! expressions to `builtin::select(cond, a, b)`, which emits the branchless
-//! Wasm `select` instruction. Both branches must be pure (no side effects, no
-//! traps) since `select` evaluates both operands eagerly.
-//!
-//! Runs as a [`Rule`] on the worklist rewrite engine (see
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) over each function's
-//! arena `Body`. The `select` Call reuses the existing
-//! condition / arm expression ids, so the rewrite is a single
-//! `replace_expr_kind` with no node allocation. The rule is confluent — a
-//! `select` arm must be leaf-pure, so an arm can never itself be an
-//! `If` / `Call`.
+//! Select lowering: a post-optimization [`Rule`] turning `if cond { a } else
+//! { b }` into `builtin::select(cond, a, b)` and its branchless Wasm
+//! instruction. Both arms must be pure and trap-free, `select` evaluating them
+//! eagerly. The rewrite reuses the existing expression ids, so it is one
+//! `replace_expr_kind`, and leaf-purity makes the rule confluent.
 
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;
@@ -139,15 +130,10 @@ fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Opti
 }
 
 /// A promoted pure value is select-eligible under the same rule as a skeleton
-/// arm ([`is_select_eligible`]): a duplicable leaf — a scalar constant or a local
-/// read — or pure non-trapping operators over such leaves.
-///
-/// The two rules must stay in step. Which one an arm reaches depends only on
-/// whether promotion froze it, so a shape one accepts and the other refuses
-/// costs the lowering silently.
-///
-/// A [`ValueKind::Const`] aggregate stays out: materialising it in both arms
-/// allocates twice, and `select` takes scalars anyway.
+/// arm ([`is_select_eligible`]): a duplicable leaf — a scalar constant or local
+/// read — or pure non-trapping operators over such leaves. The two must stay in
+/// step, an arm reaching one or the other only by whether promotion froze it. A
+/// [`ValueKind::Const`] aggregate stays out; `select` takes scalars anyway.
 fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> bool {
     let kind = body.values.kind(v);
     if kind.is_operand_constant() {
@@ -228,16 +214,10 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
 }
 
 /// True when an `as` cast from `src` to `dst` lowers to a trapping Wasm
-/// instruction (only `f32`/`f64` → integer traps; everything else is a
-/// wrap / extend / convert / identity).
-///
-/// Intentionally finer than the shared `arena_query::expr_node_may_trap`
-/// taxonomy (which, like `mod_ref`, marks every `Cast` conservatively
-/// trap-capable): a `select` arm is a single duplicable leaf, so refining the
-/// cast test here recovers non-trapping widening / reinterpret casts that the
-/// conservative predicate would reject. Kept local because widening this
-/// refinement into the shared taxonomy would change the other consumers'
-/// classification.
+/// instruction — only float → integer; everything else wraps, extends,
+/// converts, or is the identity. Deliberately finer than the shared
+/// `arena_query::expr_node_may_trap`, which marks every `Cast` trap-capable, and
+/// kept local so the other consumers' classification is unchanged.
 fn is_trapping_cast(src: TypeId, dst: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         (type_table.get(src), type_table.get(dst)),

@@ -1,44 +1,8 @@
 //! Per-thread snapshot of the stdlib closure's post-`semantics_with_logger`
-//! state.
-//!
-//! Every `compile_with_options` invocation that targets non-stdlib user
-//! code re-runs the loader → analyze → elaborate (annotate + `build_tir`) pipeline
-//! over the same stdlib AST closure (`core:prelude` and its transitive
-//! imports plus `core:libm.wat`). Measurements on
-//! `package-gale` (257 compiles, see WEP comments in
-//! `wado-cli/src/test.rs`) put the per-compile stdlib portion of
-//! `elaborate/build_tir` at ~112 ms — adding up to ~28 s of CPU duplicated
-//! across one `wado test` run.
-//!
-//! [`get_or_init_snapshot`] returns a thread-local [`Semantics`] that
-//! has been driven through the same pipeline on a synthetic empty
-//! entry source, so the loader's implicit-modules pass produces the
-//! exact same closure as a real compile. Per-compile consumers can
-//! clone the snapshot's [`TypeTable`], decl maps, [`BuiltinRegistry`],
-//! [`TraitEnv`] and pre-lowered [`TirModule`]s as the seed for their
-//! own [`AnnotateState`] / `elaborate/build_tir` work and run those
-//! passes only over the user modules that come on top.
-//!
-//! ## Why thread-local
-//!
-//! [`Semantics`] holds `Rc<RefCell<…>>` for the type table and
-//! per-function bodies, so it is `!Send + !Sync`. A process-global
-//! `OnceLock<Semantics>` would not type-check. The thread-local
-//! `OnceCell` strategy matches how `wado test` schedules compile work
-//! (one current-thread tokio runtime per blocking worker thread, with
-//! the same worker thread typically handling many sequential compiles
-//! from `buffer_unordered`), so each worker pays the snapshot build
-//! cost once and amortises it across every subsequent compile on that
-//! thread.
-//!
-//! ## Why an empty entry source
-//!
-//! Constructing the snapshot via the real `ModuleLoader::load_all`
-//! avoids reimplementing the loader's implicit-modules pass and Wasm
-//! asset synthesis (notably the `core:libm.wat` `ModuleSource::Wasm`
-//! that `core:prelude/primitive.wado` imports). The entry source is
-//! empty, so the resulting closure is exactly the stdlib subset every
-//! real compile transitively loads.
+//! state, so each compile seeds from it instead of re-running loader → analyze →
+//! elaborate over the same stdlib AST (~112 ms apiece, ~28 s per `wado test`
+//! run on package-gale). Thread-local because [`Semantics`] is `!Send`, and
+//! built over an empty entry source so the loader yields the real closure.
 
 use std::cell::{Cell, OnceCell, RefCell};
 use std::future::Future;
@@ -68,21 +32,14 @@ thread_local! {
     static BUILDING: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Return the current thread's stdlib [`Semantics`] snapshot.
-///
-/// On first call the snapshot is built by driving the full loader +
-/// [`semantics_with_logger`] pipeline over an empty entry source. Returns
-/// [`None`] if the current call is itself running underneath
-/// [`build_snapshot`] — that is the call path the snapshot builder
-/// takes through `semantics_with_logger`, and trying to satisfy it from the
-/// (still-being-built) cache would re-enter the `OnceCell` initialiser.
+/// Return the current thread's stdlib [`Semantics`] snapshot, building it on
+/// first call by driving the loader and [`semantics_with_logger`] over an empty
+/// entry source. [`None`] under [`build_snapshot`] itself, where reading the
+/// still-being-built cache would re-enter the `OnceCell` initialiser.
 ///
 /// # Panics
-///
-/// Panics if the stdlib closure fails to load or analyze.  The stdlib
-/// is shipped with the compiler and must always compile cleanly; a
-/// failure here indicates a build-time inconsistency in the stdlib
-/// itself, which is a non-recoverable bug.
+/// If the stdlib closure fails to load or analyze — a build-time inconsistency
+/// in the shipped stdlib, which is not recoverable.
 pub(crate) fn get_or_init_snapshot() -> Option<Rc<Semantics>> {
     if BUILDING.with(Cell::get) {
         return None;
@@ -194,22 +151,11 @@ pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
         .collect()
 }
 
-/// Deep-clone a cached [`TirModule`] for use in a per-compile pipeline.
-///
-/// The snapshot holds [`TirModule`]s whose `Rc<RefCell<TirFunction>>`
-/// values are shared across all stdlib modules in the snapshot, and
-/// whose `type_table` `Rc<RefCell<TypeTable>>` points at the snapshot's
-/// frozen table.  A naïve `Clone` would only bump those `Rc` refcounts,
-/// so a per-compile optimiser pass mutating a function body would
-/// corrupt the cached snapshot.
-///
-/// This helper rebuilds the function `Rc`s into fresh allocations,
-/// memoising by the source `Rc`'s pointer identity so aliasing within
-/// the module (e.g. between `functions` and `generic_functions`) is
-/// preserved.  The `type_table` field is repointed to the per-compile
-/// shared table; `TypeIds` embedded in function bodies remain valid
-/// because the per-compile table is seeded from a clone of the
-/// snapshot's table and stdlib entries occupy the same indices.
+/// Deep-clone a cached [`TirModule`] for a per-compile pipeline. A naïve `Clone`
+/// would only bump the snapshot's shared `Rc`s, letting an optimiser pass
+/// corrupt it, so the function `Rc`s are rebuilt fresh — memoised by pointer
+/// identity, preserving aliasing within the module — and `type_table` repointed.
+/// Embedded `TypeId`s stay valid, the per-compile table being a seeded clone.
 pub(crate) fn rehydrate_tir_module(
     snap_module: &TirModule,
     fresh_type_table: &Rc<RefCell<TypeTable>>,
