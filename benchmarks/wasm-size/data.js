@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786660082651,
+  "lastUpdate": 1786661054537,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47709,6 +47709,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d68c8a823205154289b4aa854ebbe25eaf0a6a6a"
         },
         "date": 1786660082248,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265490,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "83a07601b4283bf1178628b6890f2b1059d90b0a",
+          "message": "Merge pull request #1804 from wado-lang/claude/package-gale-src-code-smell-8zkztw\n\nrefactor(gale): remove duplicated, dead, and speculative code in package-gale/src",
+          "timestamp": "2026-08-14T07:32:21+09:00",
+          "tree_id": "6d011afa166ed0844ea22f6fd8088d120c8d0962",
+          "url": "https://github.com/wado-lang/wado/commit/83a07601b4283bf1178628b6890f2b1059d90b0a"
+        },
+        "date": 1786661054202,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
