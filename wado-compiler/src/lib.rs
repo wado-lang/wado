@@ -312,22 +312,10 @@ impl Default for CompilerOptions {
     }
 }
 
-/// Compile Wado source code with a `CompilerHost` for I/O operations.
-///
-/// This is the main compilation entry point. It runs the full compilation pipeline:
-/// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
-///
-/// # Arguments
-/// * `source` - The entry module source code
-/// * `host` - `CompilerHost` for loading imported modules and emitting diagnostics
-/// * `filename` - Optional filename for error messages
-/// * `opt_level` - Optimization level
-///
-/// # Example
-/// ```ignore
-/// let host = FilesystemCompilerHost::new(base_path);
-/// let result = compile_with_host(source, &host, Some("main.wado"), OptLevel::O1).await?;
-/// ```
+/// Compile the entry module `source`, the main entry point, running the whole
+/// pipeline: lexer → parser → binder → loader → analyzer → elaborator → lower →
+/// optimize → `tir_to_wir`. `host` loads imported modules and receives
+/// diagnostics, and `filename` labels them.
 pub async fn compile_with_host<H: CompilerHost>(
     source: &str,
     host: &H,

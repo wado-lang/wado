@@ -1,15 +1,8 @@
-//! Per-invocation Kiln cache file (`<output_dir>/<primary>.kiln.json`)
-//! schema, shared between `wado-cli` (which reads and writes the file via
-//! `std::fs`) and `wado-lsp` (which reads it for consume-only redirect
-//! resolution).
-//!
-//! This module is intentionally I/O-free so the compiler crate keeps its
-//! `wasm32-unknown-unknown` clean build. The native CLI host wraps it with
-//! `std::fs` reads and writes; the LSP host (which builds for both native
-//! and `wasm32-wasip2`) does its own narrow read.
-//!
-//! See [WEP: Kiln](../../../docs/wep-2026-04-12-kiln.md), section
-//! "Caching".
+//! Schema of the per-invocation Kiln cache file
+//! `<output_dir>/<primary>.kiln.json`, shared between `wado-cli`, which reads
+//! and writes it, and `wado-lsp`, which reads it for consume-only redirects.
+//! Deliberately I/O-free, keeping the compiler crate's `wasm32-unknown-unknown`
+//! build clean — each host wraps it with its own reads. See WEP 2026-04-12.
 
 use serde::{Deserialize, Serialize};
 

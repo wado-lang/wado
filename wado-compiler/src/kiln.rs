@@ -1,15 +1,8 @@
-//! Kiln: schema-driven code generation for the Wado compiler.
-//!
-//! See WEP 2026-04-12 for the design. This module holds the pure-data
-//! algorithmic pieces that stay wasm32-clean: the canonical invocation
-//! representation, the DAG + topological sort, cache-key composition, and
-//! `#![generated]` header emission.
-//!
-//! The pipeline driver — which actually calls
-//! [`crate::CompilerHost::run_generator`], writes generated files, and
-//! maintains `wado.lock` — lives in `wado-cli`. That driver takes the data
-//! types exported here, schedules invocations against a [`plan::Plan`], and
-//! checks each step against the lockfile via [`cache::compose_cache_key`].
+//! Kiln: schema-driven code generation (WEP 2026-04-12). This module holds the
+//! pure-data pieces that stay wasm32-clean — the canonical invocation
+//! representation, the DAG and its topological sort, cache-key composition, and
+//! `#![generated]` header emission. The driver that runs generators, writes
+//! files and maintains `wado.lock` lives in `wado-cli` and consumes these.
 
 pub mod cache;
 pub mod header;

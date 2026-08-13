@@ -3,7 +3,7 @@
 //! [`synthesize::synthesize_helpers`] generates a helper apiece. A wrap is
 //! emitted only where the ownership analyses — last-use liveness, freshness,
 //! confinement, read-only sharing — cannot prove a move, share or fresh value,
-//! so every copy is necessary and there is no later elision pass.
+//! so every copy is necessary and nothing elides them later.
 
 pub mod analyze;
 pub mod callgraph;

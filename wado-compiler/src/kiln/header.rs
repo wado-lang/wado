@@ -1,18 +1,8 @@
-//! `#![generated]` header emission and parsing.
-//!
-//! Every file a Kiln generator produces is stamped with a
-//! `#![generated(by = "...", sources = [...])]` module attribute. The
-//! compiler uses this for two things:
-//!
-//! 1. Tools (formatter, linter, VS Code) can show a subtle banner.
-//! 2. The pipeline's stale-output GC deletes files inside an invocation's
-//!    `output-dir` that bear `#![generated]` but were *not* produced by
-//!    the current run. Hand-authored files in the same directory are
-//!    untouched.
-//!
-//! The header is line-based and kept near the top of the file; parsing
-//! here is intentionally tolerant (whitespace, trailing comma) but
-//! emission is canonical.
+//! `#![generated(by = …, sources = […])]` header emission and parsing. Every
+//! file a Kiln generator produces is stamped with it, so tools can show a banner
+//! and the pipeline's stale-output GC can delete a stamped file the current run
+//! did not produce, leaving hand-authored neighbours alone. Parsing is
+//! deliberately tolerant of whitespace and trailing commas; emission is canonical.
 
 use super::invocation::InvocationPath;
 
