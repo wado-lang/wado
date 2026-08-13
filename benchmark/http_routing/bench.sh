@@ -31,7 +31,6 @@ WADO_ADDR="127.0.0.1:8080"
 HONO_PORT="3000"
 AXUM_PORT="3001"
 BUN_PORT="3002"
-HONO_H2C_PORT="3003"
 
 # Hono's official router-benchmark request set ("METHOD PATH" per entry):
 # short static, static sharing a radix, dynamic, mixed static/dynamic,
@@ -87,22 +86,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Probe a row over the protocol that row is measured on. `curl` here is built
-# without h2c, and an h2c-only server (Hono on Node) answers nothing else, so
-# the h2c rows are probed with a one-request `oha` instead.
 wait_ready() {
-  local url="$1" flags="${2:-}"
+  local url="$1"
   for _ in $(seq 1 120); do
-    if [ -n "$flags" ]; then
-      # shellcheck disable=SC2086
-      [ "$("$OHA_BIN" $flags -n 1 -c 1 --no-tui "$url" 2>/dev/null |
-        awk '/Success rate/ {print $3}')" = "100.00%" ] && return 0
-    else
-      curl -fs -o /dev/null "$url" 2>/dev/null && return 0
-    fi
+    curl -fs -o /dev/null "$url" 2>/dev/null && return 0
     sleep 0.5
   done
-  echo "ERROR: server not ready at $url ${flags:-http/1.1}" >&2
+  echo "ERROR: server not ready at $url" >&2
   return 1
 }
 
@@ -115,32 +105,14 @@ cargo build --release --quiet --manifest-path Cargo.toml
 echo "=== Installing Hono dependencies ==="
 npm install --prefix . --silent --no-audit --no-fund
 
-# Measurement roster, populated in start order. Hono on Bun is optional.
-#
-# A row is a (name, url, extra oha flags) triple, not a process, and every row
-# names its protocol. Both matter for a fair read: a reverse proxy talks h2c to
-# its upstream by default, so h2c is the shape these servers are actually
-# deployed in, and the two protocols are not interchangeable at this response
-# size.
-#
-# How a server gets its h2c row differs by runtime, which is why the roster is
-# built by hand rather than as a loop:
-#   * `wado serve` and Axum sniff the connection preface, so one process
-#     answers both rows on one port.
-#   * Node's `node:http` and `node:http2` are separate servers with no upgrade
-#     path between them, so Hono (Node) needs a second process on its own port
-#     (app.h2c.js) and its h2c row does not answer HTTP/1.1 at all.
-#   * `Bun.serve` has no h2c server, so Hono (Bun) is HTTP/1.1 only.
-#
-# Rows rotate slice by slice, so two rows sharing a process never load it at
-# the same time.
+# Server roster, populated in start order. Hono on Bun is optional. Every
+# server is driven over HTTP/1.1; see README.md for why h2c is not measured
+# here.
 SERVER_NAMES=()
 SERVER_URLS=()
-SERVER_FLAGS=()
 register() {
   SERVER_NAMES+=("$1")
   SERVER_URLS+=("$2")
-  SERVER_FLAGS+=("${3:-}")
 }
 
 # Multi-threaded servers are sized to the server core budget so none is
@@ -151,21 +123,16 @@ echo "=== Starting servers ==="
 "${SERVER_PIN[@]}" "$WADO_BIN" serve --addr "$WADO_ADDR" \
   --workers "$SERVER_CORE_COUNT" app.wado >/dev/null 2>&1 &
 PIDS+=($!)
-register "wado h1" "http://${WADO_ADDR}"
-register "wado h2c" "http://${WADO_ADDR}" "--http2"
+register "wado serve" "http://${WADO_ADDR}"
 
 PORT="$HONO_PORT" "${SERVER_PIN[@]}" node app.js >/dev/null 2>&1 &
 PIDS+=($!)
-register "Node h1" "http://127.0.0.1:${HONO_PORT}"
-
-PORT="$HONO_H2C_PORT" "${SERVER_PIN[@]}" node app.h2c.js >/dev/null 2>&1 &
-PIDS+=($!)
-register "Node h2c" "http://127.0.0.1:${HONO_H2C_PORT}" "--http2"
+register "Hono (Node)" "http://127.0.0.1:${HONO_PORT}"
 
 if command -v bun >/dev/null 2>&1; then
   PORT="$BUN_PORT" "${SERVER_PIN[@]}" bun run app.bun.js >/dev/null 2>&1 &
   PIDS+=($!)
-  register "Bun h1" "http://127.0.0.1:${BUN_PORT}"
+  register "Hono (Bun)" "http://127.0.0.1:${BUN_PORT}"
 else
   echo "  SKIP: bun not found (install bun or add it to benchmark/mise.toml)"
 fi
@@ -173,11 +140,10 @@ fi
 PORT="$AXUM_PORT" TOKIO_WORKER_THREADS="$SERVER_CORE_COUNT" \
   "${SERVER_PIN[@]}" ./target/release/axum_server >/dev/null 2>&1 &
 PIDS+=($!)
-register "Axum h1" "http://127.0.0.1:${AXUM_PORT}"
-register "Axum h2c" "http://127.0.0.1:${AXUM_PORT}" "--http2"
+register "Axum (native)" "http://127.0.0.1:${AXUM_PORT}"
 
-for si in "${!SERVER_URLS[@]}"; do
-  wait_ready "${SERVER_URLS[$si]}/status" "${SERVER_FLAGS[$si]}"
+for url in "${SERVER_URLS[@]}"; do
+  wait_ready "${url}/status"
 done
 
 # Per-(server, request) best result, keyed "<server_idx>|<request_idx>".
@@ -191,10 +157,8 @@ for round in $(seq 1 "$ROUNDS"); do
     method="${req%% *}"
     path="${req#* }"
     for si in "${!SERVER_NAMES[@]}"; do
-      # Unquoted on purpose: an empty entry must expand to no argument.
-      # shellcheck disable=SC2086
       out=$("${OHA_PIN[@]}" "$OHA_BIN" -m "$method" -z "${SLICE}s" \
-        -c "$CONNECTIONS" --no-tui ${SERVER_FLAGS[$si]} "${SERVER_URLS[$si]}${path}" 2>/dev/null)
+        -c "$CONNECTIONS" --no-tui "${SERVER_URLS[$si]}${path}" 2>/dev/null)
       rps=$(echo "$out" | awk '/Requests\/sec/ {printf "%.0f", $2}')
       [ -z "$rps" ] && rps=0
       key="${si}|${ri}"
