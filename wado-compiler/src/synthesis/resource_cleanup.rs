@@ -1,13 +1,8 @@
 //! Resource drop elaboration. A CM `own<resource>` handle must be released with
-//! `resource.drop` exactly once, and Wado has no destructors, so an untransferred
-//! resource would leak a host table slot. Runs pre-monomorphize, inserting a drop
-//! wherever a value is still owned at the end of its scope.
-//!
-//! A resource is *owned* by its binding and *transferred* when passed by value,
-//! returned, or placed in an aggregate; a borrowing receiver, a `matches` test
-//! and a `&` are not. So the drop is always the unique remaining owner and
-//! cannot double-free. A binding that merely *contains* one is dropped through a
-//! synthesized `match` over the cases carrying it.
+//! `resource.drop` exactly once and Wado has no destructors, so this inserts a
+//! drop wherever a value is still owned at the end of its scope. A resource is
+//! *transferred* when passed by value, returned, or placed in an aggregate — not
+//! by a borrowing receiver or a `&` — so the drop cannot double-free.
 
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;

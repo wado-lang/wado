@@ -1,19 +1,8 @@
-//! Compile-time parameter resolution (`#[param]`).
-//!
-//! Runs after link and before monomorphize/lower. For each `#[param]` global it
-//! resolves an override (highest priority first: `-D NAME=value`, then the
-//! `from_env` environment variable) and, on success, replaces the global's
-//! initializer with the converted literal. The rewritten global then flows
-//! through the ordinary pipeline — scalar literals are eligible for Constant
-//! Global Promotion, `String` uses the existing lazy-init path — so no new
-//! optimization is needed.
-//!
-//! v1 converts override strings to the declared type natively in Rust (after a
-//! trim), matching the built-in impls of `LenientFromStr` (radix prefixes, `_`
-//! separators, `nan`/`inf`, `1`/`0` for `bool`). v2 swaps this native path for
-//! evaluating the trait via wasm-CTFE, lifting the built-in-only restriction.
-//! The conversion is isolated in [`convert_builtin`] so only that boundary
-//! changes. See `wep-2026-04-26-compile-time-params.md`.
+//! Compile-time parameter resolution (`#[param]`, WEP 2026-04-26), between link
+//! and monomorphize: resolve each global's override — `-D NAME=value` first,
+//! then its `from_env` variable — and replace the initializer with the converted
+//! literal. Conversion is native Rust matching `LenientFromStr`, isolated in
+//! [`convert_builtin`] so a future wasm-CTFE path replaces only that boundary.
 
 use std::cell::RefCell;
 use std::rc::Rc;

@@ -1,27 +1,12 @@
-//! Optimizer remarks: surface residual value-semantic copies that survive
-//! optimization. See WEP `wep-2026-06-03-optimizer-remarks.md`.
+//! Optimizer remarks (WEP 2026-06-03): surface the value-semantic copies that
+//! survive optimization and would otherwise be invisible while coding. After the
+//! NIR pipeline a survivor is a `$value_copy$T` helper call, an `array_clone` /
+//! `array_clone_shallow` spine copy, or a `copy_value`.
 //!
-//! Wado deep-copies aggregates on assignment, parameter passing, and return.
-//! A large part of the optimizer exists to remove those hidden copies, and most
-//! of them are removed; the ones that remain are invisible while coding. After
-//! the NIR optimization pipeline, a surviving copy appears as one of:
-//!
-//! - a call to a synthesized `$value_copy$T` deep-copy helper,
-//! - a `builtin::array_clone` / `array_clone_shallow` call — the lowered (and
-//!   possibly `value_copy_demote`-shallowed) spine copy of a `List<T>` or
-//!   `String`, or
-//! - a `builtin::copy_value` call — a direct deep copy of a value.
-//!
-//! NIR is the last IR that still carries per-expression source spans — WIR
-//! instructions do not — and `wir_build` lowers these copies one-to-one, so
-//! walking the optimized NIR yields the residual-copy set with exact source
-//! locations.
-//!
-//! Detection covers the entry package — the entry point and the local modules
-//! it reaches — and nothing else. A dependency, `core:` and `wasi:` are someone
-//! else's source, and their internals (`String::push` growth, …) would drown
-//! out the program under compilation. `array_copy` is excluded regardless: it
-//! is bulk buffer movement, not a value-semantic copy.
+//! NIR is the last IR carrying per-expression spans and `wir_build` lowers these
+//! one-to-one, so walking optimized NIR yields exact source locations. Detection
+//! covers the entry package alone — a dependency's internals would drown out the
+//! program — and `array_copy` is bulk movement, not a copy, so it is excluded.
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;

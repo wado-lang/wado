@@ -1,25 +1,7 @@
-//! Embedded standard library sources
-//!
-//! The standard library is bundled into the compiler binary using `include_str!`.
-//! This ensures the compiler is self-contained and doesn't need to locate
-//! the library at runtime.
-//!
-//! ## Namespace Structure
-//!
-//! - `core:*` - High-level Wado standard library (e.g., `println()`, `read_file()`)
-//! - `wasi:*` - Raw WASI packages, organized by interface (e.g., `wasi:cli/stdout`)
-//!
-//! ## Usage in Wado code
-//!
-//! ```wado
-//! // High-level helpers
-//! use {println, eprintln} from "core:cli";
-//!
-//! // Raw WASI interfaces (use the specific interface path)
-//! use {Stdout} from "wasi:cli/stdout";
-//! use {Descriptor, Filesize} from "wasi:filesystem/types";
-//! use {Preopens} from "wasi:filesystem/preopens";
-//! ```
+//! Standard library sources, bundled into the compiler binary by `include_str!`
+//! so it locates nothing at runtime. `core:*` is the high-level Wado library
+//! (`core:cli`'s `println`, …) and `wasi:*` the raw WASI packages, keyed by
+//! interface (`wasi:cli/stdout`, `wasi:filesystem/types`).
 
 pub const CORE_PRELUDE: &str = include_str!("../lib/core/prelude.wado");
 
