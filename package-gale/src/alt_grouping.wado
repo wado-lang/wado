@@ -10,10 +10,9 @@
 //!
 //! The priority tier constants (`ALT_PRIORITY_*`) and the per-alt
 //! priority key (`alt_sort_priority`) are the contract that the parse-
-//! side dispatch and the scan-side dispatch share. See
-//! `lower.wado`'s mirror copies for the lowered-IR equivalents and the
-//! CLAUDE.md "Failed Approaches" section for why the bands are split
-//! the way they are.
+//! side dispatch and the scan-side dispatch share. See the CLAUDE.md
+//! "Failed Approaches" section for why the bands are split the way they
+//! are.
 
 use { Alternative, Element } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
@@ -164,7 +163,7 @@ pub fn has_multi_alt_groups(groups: &List<List<i32>>) -> bool {
 }
 
 pub fn sort_group_by_specificity(group: &mut List<i32>, first_sets: &List<List<String>>) {
-    // Smaller first set = more specific = try first; ties keep source order.
+    // A smaller first set is the more specific alt, so it is tried first.
     let sets = first_sets;
     group.sort_by(|a: &i32, b: &i32| {
         let sa = sets[*a].len();
@@ -301,9 +300,8 @@ pub fn ll_match_length(alt: &Alternative, ctx: &mut GenContext) -> i32 {
 }
 
 pub fn sort_group_by_element_count(group: &mut List<i32>, alts: &List<Alternative>) {
-    // Within a priority tier: more elements = more specific = first. A full
-    // tie keeps source order so the tournament's first-tried alt is
-    // deterministic.
+    // The source-order tie-break is what makes the tournament's first-tried
+    // alt deterministic.
     let all = alts;
     group.sort_by(|a: &i32, b: &i32| {
         let pa = alt_sort_priority(&all[*a]);
