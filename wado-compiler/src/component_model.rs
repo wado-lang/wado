@@ -60,6 +60,7 @@ pub fn future_payload_rejection(type_table: &TypeTable, payload: TypeId) -> Opti
 
 /// Why `element` cannot be a `stream<T>` element, or `None` if it can.
 pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Option<String> {
+    let element = peel_newtypes(type_table, element);
     if matches!(
         type_table.get(element),
         ResolvedType::Primitive(PrimitiveType::U8)
@@ -76,10 +77,26 @@ pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Opti
         })
 }
 
+/// Peel newtype aliases. A WIT alias has no representation of its own, so a
+/// payload's CM identity is its base's — and the AST classifier's
+/// `resolve_type` already peels, so the two answer differently unless this
+/// does too.
+///
+/// Newtypes only: `TypeTable::resolve_newtype_base` also collapses `flags` to
+/// `u32`, and a CM `flags` is its own type, one byte wide at ≤8 labels.
+pub fn peel_newtypes(type_table: &TypeTable, type_id: TypeId) -> TypeId {
+    let mut id = type_id;
+    while let ResolvedType::Newtype { base_type, .. } = type_table.get(id) {
+        id = *base_type;
+    }
+    id
+}
+
 fn try_classify_future_payload(
     type_table: &TypeTable,
     type_arg: TypeId,
 ) -> Option<CmFuturePayload> {
+    let type_arg = peel_newtypes(type_table, type_arg);
     match type_table.get(type_arg) {
         ResolvedType::Primitive(prim) => {
             if let Some(scalar) = primitive_to_cm_scalar(prim) {
@@ -148,6 +165,7 @@ pub fn classify_stream_payload(
     element: TypeId,
 ) -> crate::canonical::CmStreamPayload {
     use crate::canonical::CmStreamPayload;
+    let element = peel_newtypes(type_table, element);
     if matches!(
         type_table.get(element),
         ResolvedType::Primitive(PrimitiveType::U8)
@@ -172,6 +190,7 @@ pub fn cm_payload_type_from_type_id(
     type_table: &TypeTable,
     type_id: TypeId,
 ) -> Option<CmPayloadType> {
+    let type_id = peel_newtypes(type_table, type_id);
     if let Some(inner) = type_table.as_option(type_id) {
         return Some(CmPayloadType::Option(Box::new(
             cm_payload_type_from_type_id(type_table, inner)?,
@@ -231,12 +250,6 @@ pub fn cm_payload_type_from_type_id(
             name,
             module_source,
         } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),
-        // A newtype is a WIT type alias, so its payload is its base's. The
-        // alias itself never reaches the component: `erase_newtypes_and_flags`
-        // collapses it before codegen.
-        ResolvedType::Newtype { base_type, .. } => {
-            cm_payload_type_from_type_id(type_table, *base_type)
-        }
         // A resource travels as an owned handle. Unlike the value types above,
         // a WASI-owned one is included: its component type is aliased from the
         // interface that defines it, so there is one to point `own<…>` at.
@@ -284,6 +297,42 @@ fn cm_scalar_from_ast_name(name: &str) -> Option<CmScalarType> {
     })
 }
 
+/// Peel newtype aliases at every level of an AST type.
+///
+/// `CmInterfaceRegistry::resolve_type` also peels, but only reaches a newtype
+/// whose `NamedType` carries a `source_interface` — which synthesis sets for
+/// CM-namespace types alone, so a lib-local alias survives it. This resolves
+/// the source the way [`cm_payload_type_from_ast`] does, which works for both.
+pub fn peel_ast_newtypes(ty: &crate::ast::Type, registry: &CmInterfaceRegistry) -> crate::ast::Type {
+    use crate::ast::Type;
+    match ty {
+        Type::Named(n) => {
+            let base = registry
+                .resolve_cm_source_for(n, None)
+                .and_then(|src| {
+                    registry
+                        .get_newtype_by_source(&src, &crate::name::DeclName::new(&n.name))
+                        .cloned()
+                });
+            match base {
+                Some(base) => peel_ast_newtypes(&base, registry),
+                None => ty.clone(),
+            }
+        }
+        Type::Generic(g) => Type::Generic(crate::ast::GenericType {
+            args: g.args.iter().map(|a| peel_ast_newtypes(a, registry)).collect(),
+            ..g.clone()
+        }),
+        Type::Tuple(elems) => Type::Tuple(
+            elems
+                .iter()
+                .map(|e| peel_ast_newtypes(e, registry))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
 /// AST-`Type` analogue of [`cm_payload_type_from_type_id`], for codegen (which
 /// works off the export's raw Wado return type). Returns `None` for resources
 /// and other unsupported shapes.
@@ -308,12 +357,6 @@ pub fn cm_payload_type_from_ast(
             let src = registry.resolve_cm_source_for(n, None)?;
             if src.starts_with("wasi:") || src.starts_with("core:kiln/") {
                 return None;
-            }
-            // A newtype is a WIT type alias: its payload is its base's.
-            if let Some(base) =
-                registry.get_newtype_by_source(&src, &crate::name::DeclName::new(&n.name))
-            {
-                return cm_payload_type_from_ast(&base.clone(), registry);
             }
             let cm = registry
                 .get_struct_cm_name_by_source(&src, &n.name)
@@ -2398,6 +2441,38 @@ impl CmInterfaceRegistry {
     /// from its CM (kebab) name, when unambiguous across interfaces and kinds.
     /// Used by codegen to reconstruct the declaring `Type::Named` for a
     /// `CmPayloadType::Named(<cm-name>)` payload.
+    /// Reverse-lookup restricted to one interface. The unqualified
+    /// [`Self::find_named_type_wado_name_by_cm`] refuses a CM name that more
+    /// than one interface registers, and the registry holds every bundled WASI
+    /// interface — so a lib-local `ErrorCode` is ambiguous against WASI's
+    /// unless the caller says which interface it means.
+    pub fn find_named_type_wado_name_by_cm_in(
+        &self,
+        interface: &str,
+        cm_name: &str,
+    ) -> Option<&str> {
+        self.structs
+            .iter()
+            .map(|((iface, wado), (cm, ..))| (iface, wado, cm))
+            .chain(
+                self.variants
+                    .iter()
+                    .map(|((iface, wado), (cm, _))| (iface, wado, cm)),
+            )
+            .chain(
+                self.enums
+                    .iter()
+                    .map(|((iface, wado), (cm, _))| (iface, wado, cm)),
+            )
+            .chain(
+                self.flags
+                    .iter()
+                    .map(|((iface, wado), (cm, _))| (iface, wado, cm)),
+            )
+            .find(|(iface, _, cm)| iface.as_str() == interface && cm.as_str() == cm_name)
+            .map(|(_, wado, _)| wado.as_str())
+    }
+
     pub fn find_named_type_wado_name_by_cm(&self, cm_name: &str) -> Option<&str> {
         let mut hits = self
             .structs
@@ -3676,6 +3751,11 @@ impl CmTypeGen {
             cache: IndexMap::default(),
             interface_hint: Some(interface_hint.to_string()),
         }
+    }
+
+    /// The interface these types are being generated for, when known.
+    pub fn interface_hint(&self) -> Option<&str> {
+        self.interface_hint.as_deref()
     }
 
     /// Register a pre-existing type index for cache lookups

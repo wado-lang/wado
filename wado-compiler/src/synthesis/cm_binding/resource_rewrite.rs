@@ -320,16 +320,37 @@ pub(super) fn synthesize_stream_writes(project: &mut Package) {
 /// alias here types the buffer access by a name the CM never sees, which the
 /// core module then fails to validate.
 ///
-/// Newtypes only — `TypeTable::resolve_newtype_base` also collapses `flags` to
-/// `u32`, and a CM `flags` is its own type, one byte wide at ≤8 labels.
+/// Peeled at every level, so `Future<Option<Meters>>` resolves too — by the
+/// same rule the AST payload classifier applies, which is what keeps the layout
+/// and the classified payload describing one type.
 fn payload_ast_type(
     payload: TypeId,
     tt: &TypeTable,
     registry: &CmInterfaceRegistry,
 ) -> crate::ast::Type {
-    let mut id = payload;
-    while let ResolvedType::Newtype { base_type, .. } = tt.get(id) {
-        id = *base_type;
+    let id = crate::component_model::peel_newtypes(tt, payload);
+    // Rebuild containers from peeled children, so an alias nested in an
+    // `Option` / `List` / tuple is peeled too. Peeling on the produced AST
+    // instead would miss a lib-local alias: the `NamedType` synthesis mints for
+    // one carries no source interface to look the newtype up by.
+    if let ResolvedType::GenericInstance {
+        name, type_args, ..
+    } = tt.get(id)
+    {
+        let args: Vec<crate::ast::Type> = type_args
+            .iter()
+            .map(|&a| payload_ast_type(a, tt, registry))
+            .collect();
+        return if TypeTable::is_tuple_type(name) {
+            crate::ast::Type::Tuple(args)
+        } else {
+            crate::ast::Type::Generic(crate::ast::GenericType {
+                id: crate::ast::AstId::fresh(),
+                name: name.clone(),
+                args,
+                span: synth_span(),
+            })
+        };
     }
     type_id_to_ast_type(id, tt, registry)
 }

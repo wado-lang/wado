@@ -275,8 +275,8 @@ impl TirRefVisitor for NamedPayloadFinder<'_> {
 ///
 /// Two ways to fail: a named record with no CM type to lower against, and a
 /// payload the classifier cannot name a `future<T>` / `stream<T>` for at all
-/// (a resource, `()`, a 128-bit scalar). Both would otherwise reach codegen,
-/// where the second panics.
+/// (`()`, a 128-bit scalar). Both would otherwise reach codegen, where the
+/// second panics. A resource is not one of them — it travels as `own<r>`.
 fn unresolvable_future_stream_payload(
     tt: &TypeTable,
     registry: &crate::component_model::CmInterfaceRegistry,
@@ -336,6 +336,12 @@ fn unresolvable_record_in_payload(
         && !registry.is_named_type_registered_from(module_source, name)
     {
         return Some(name.clone());
+    }
+    // Through a newtype too: `cm_payload_type_from_type_id` peels aliases, so a
+    // `type Alias = Point` payload reaches codegen as `point` and must be
+    // checked as one.
+    if let ResolvedType::Newtype { base_type, .. } = tt.get(type_id) {
+        return unresolvable_record_in_payload(tt, registry, *base_type);
     }
     if let Some(inner) = tt.as_option(type_id).or_else(|| tt.as_list(type_id)) {
         return unresolvable_record_in_payload(tt, registry, inner);

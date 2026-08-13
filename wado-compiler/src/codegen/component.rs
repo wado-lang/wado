@@ -134,6 +134,7 @@ pub fn build_component(
     // type can reference the record's index. Shares `lib_type_gen` with
     // `emit_world_exports`, so the export-signature record and the canonical
     // record are one and the same.
+    prebuild_resource_payload_types(&mut builder, &mut ctx, project, &all_canonical_intrinsics);
     prebuild_value_named_types(
         &mut builder,
         &mut ctx,
@@ -925,14 +926,44 @@ fn embed_imported_wasm_modules(
     }
 }
 
-/// Build `future<result<_, error-code>>` (transmission) type without HTTP-specific types.
-///
-/// Used when only `CmFuturePayload::Transmission` is needed (e.g., `write_via_stream`)
-/// but no HTTP types are imported.
 /// Build `future<result<_, error-code>>` type for a specific `ErrorCode` source.
 ///
 /// Different WASI interfaces (cli, filesystem, http, sockets) have different
 /// error-code types, so each needs its own transmission future type.
+fn build_transmission_future_type_for(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    source: &str,
+) -> u32 {
+    let error_code_key = if source == "cli" {
+        "error-code".to_string()
+    } else {
+        format!("{source}-error-code")
+    };
+    let error_code_idx = if ctx.has_type(&error_code_key) {
+        ctx.type_idx(&error_code_key)
+    } else {
+        // Fallback to CLI error-code if package-specific one is not available
+        ctx.type_idx("error-code")
+    };
+
+    let result = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Result {
+            ok: None,
+            err: Some(Box::new(CmTypeKey::Leaf(error_code_idx))),
+        },
+        Some(&format!("{source}-transmission-result")),
+    );
+    intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Future(Box::new(CmTypeKey::Leaf(result))),
+        Some(&format!("{source}-transmission-future")),
+    )
+}
+
 /// Alias at outer component scope every resource in `needed_resources` that
 /// `interface_info` declares itself, so `resource.drop` — which resolves
 /// against outer scope — can name it. A no-op for one already exposed and for
@@ -972,40 +1003,6 @@ fn expose_self_owned_resources(
             ComponentExportKind::Type,
         );
     }
-}
-
-fn build_transmission_future_type_for(
-    builder: &mut ComponentBuilder,
-    ctx: &mut ComponentModelContext,
-    source: &str,
-) -> u32 {
-    let error_code_key = if source == "cli" {
-        "error-code".to_string()
-    } else {
-        format!("{source}-error-code")
-    };
-    let error_code_idx = if ctx.has_type(&error_code_key) {
-        ctx.type_idx(&error_code_key)
-    } else {
-        // Fallback to CLI error-code if package-specific one is not available
-        ctx.type_idx("error-code")
-    };
-
-    let result = intern_cm_type(
-        builder,
-        ctx,
-        &CmTypeKey::Result {
-            ok: None,
-            err: Some(Box::new(CmTypeKey::Leaf(error_code_idx))),
-        },
-        Some(&format!("{source}-transmission-result")),
-    );
-    intern_cm_type(
-        builder,
-        ctx,
-        &CmTypeKey::Future(Box::new(CmTypeKey::Leaf(result))),
-        Some(&format!("{source}-transmission-future")),
-    )
 }
 
 /// Emit the `core:kiln/types` record/variant surface via an imported
@@ -1446,6 +1443,68 @@ fn collect_named_payload_names(payload: &CmPayloadType, out: &mut Vec<String>) {
 /// `lib_type_gen` (so the export-signature type and the canonical type are one
 /// type) and bound by its CM name in `ctx`, so `payload_type_to_cm_key`'s
 /// `type_idx` lookup resolves it.
+/// Import the interface defining every resource a `Value(Resource)` future /
+/// stream payload names, so `own<r>` has a resource type to point at.
+///
+/// A payload resource is otherwise aliased only when some imported function's
+/// signature names it. `Connector::send` does; a guest-created
+/// `Future::<Error>::new()` names none, and its `own<error>` would resolve
+/// against a type nothing registered.
+fn prebuild_resource_payload_types(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    project: &NirPackage,
+    canonical_intrinsics: &[CanonicalIntrinsic],
+) {
+    let mut cm_names: Vec<String> = Vec::new();
+    for intrinsic in canonical_intrinsics {
+        if let Some(CmFuturePayload::Value(p)) = intrinsic.future_payload() {
+            collect_resource_payload_names(&p, &mut cm_names);
+        }
+        if let Some(CmStreamPayload::Value(p)) = intrinsic.stream_payload() {
+            collect_resource_payload_names(&p, &mut cm_names);
+        }
+    }
+    for cm_name in cm_names {
+        if ctx.has_type(&format!("resource:{cm_name}")) {
+            continue;
+        }
+        let Some(source) = project
+            .cm_interface_registry
+            .resource_source_by_cm_name(&cm_name)
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        import_resource_source(builder, ctx, project, &source);
+    }
+}
+
+/// Collect the CM (kebab) names of every resource nested in a payload.
+fn collect_resource_payload_names(payload: &CmPayloadType, out: &mut Vec<String>) {
+    match payload {
+        CmPayloadType::Resource(name) => {
+            if !out.contains(name) {
+                out.push(name.clone());
+            }
+        }
+        CmPayloadType::List(t) | CmPayloadType::Option(t) => {
+            collect_resource_payload_names(t, out);
+        }
+        CmPayloadType::Result(ok, err) => {
+            for t in [ok, err].into_iter().flatten() {
+                collect_resource_payload_names(t, out);
+            }
+        }
+        CmPayloadType::Tuple(elems) => {
+            for e in elems {
+                collect_resource_payload_names(e, out);
+            }
+        }
+        CmPayloadType::Scalar(_) | CmPayloadType::String | CmPayloadType::Named(_) => {}
+    }
+}
+
 fn prebuild_value_named_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1465,14 +1524,21 @@ fn prebuild_value_named_types(
             collect_named_payload_names(&p, &mut names);
         }
     }
+    let interface_hint = type_gen.interface_hint().map(str::to_string);
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
     for cm_name in names {
         if ctx.has_type(&cm_name) {
             continue;
         }
-        let Some(wado_name) = project
-            .cm_interface_registry
-            .find_named_type_wado_name_by_cm(&cm_name)
+        // The library's own interface first: the registry also holds every
+        // bundled WASI interface, so a lib-local name that collides with a WASI
+        // one is ambiguous unqualified — and going unbuilt leaves codegen to
+        // panic on the missing type.
+        let registry = &project.cm_interface_registry;
+        let Some(wado_name) = interface_hint
+            .as_deref()
+            .and_then(|iface| registry.find_named_type_wado_name_by_cm_in(iface, &cm_name))
+            .or_else(|| registry.find_named_type_wado_name_by_cm(&cm_name))
             .map(str::to_string)
         else {
             continue;

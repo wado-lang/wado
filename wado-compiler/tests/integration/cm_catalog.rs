@@ -1763,6 +1763,40 @@ fn cm_lib_rejects_an_unclassifiable_future_new() {
     );
 }
 
+/// A newtype is a WIT type alias, so its payload is its base's — at every
+/// level. The AST classifier's `resolve_type` peels aliases throughout, so the
+/// TIR side has to as well or the two describe different component types.
+#[test]
+fn cm_lib_accepts_newtype_future_payloads() {
+    for ty in ["Meters", "Option<Meters>", "List<Meters>", "[Meters, u32]"] {
+        let source = format!(
+            "pub type Meters = f64;\n\
+             export async fn id(v: Future<{ty}>) -> Future<{ty}> {{\n    \
+             let value = v.read();\n    v.drop();\n    \
+             let [rx, tx] = Future::<{ty}>::new();\n    \
+             task return rx;\n    \
+             if let Some(x) = value {{\n        tx.write(x);\n    }}\n}}\n"
+        );
+        try_compile_lib(&source).unwrap_or_else(|e| panic!("`Future<{ty}>` should compile: {e}"));
+    }
+}
+
+/// A lib-local type whose CM name collides with a bundled WASI one must still
+/// be built: the registry holds every WASI interface, so the reverse lookup is
+/// ambiguous unless it is scoped to the library's own interface.
+#[test]
+fn cm_lib_builds_a_type_whose_cm_name_collides_with_wasi() {
+    try_compile_lib(
+        "pub enum ErrorCode {\n    Io,\n    Timeout,\n}\n\
+         export async fn id(v: Future<ErrorCode>) -> Future<ErrorCode> {\n    \
+         let value = v.read();\n    v.drop();\n    \
+         let [rx, tx] = Future::<ErrorCode>::new();\n    \
+         task return rx;\n    \
+         if let Some(x) = value {\n        tx.write(x);\n    }\n}\n",
+    )
+    .expect("a lib-local `ErrorCode` future payload should compile");
+}
+
 /// A library export whose signature carries a type with no Component Model value
 /// representation must be rejected with a readable compile error, not an ICE or
 /// silently-wrong code. An empty record is the canonical case.
