@@ -327,12 +327,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         let scope = self.tysys.trait_env.import_scope(module);
         let saved_src = std::mem::replace(&mut self.current_module_source, module.clone());
-        let saved_imp =
-            std::mem::replace(&mut self.sem.imports.imported_type_sources, scope.sources);
-        let saved_orig = std::mem::replace(
-            &mut self.sem.imports.import_original_names,
-            scope.original_names,
-        );
         let saved_ns = std::mem::replace(
             &mut self.sem.imports.namespace_imports,
             scope.namespace_imports,
@@ -347,8 +341,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let result = body(self);
 
         self.current_module_source = saved_src;
-        self.sem.imports.imported_type_sources = saved_imp;
-        self.sem.imports.import_original_names = saved_orig;
         self.sem.imports.namespace_imports = saved_ns;
         self.sem.decls.local_struct_fields = saved_local_struct;
         self.sem.decls.local_newtypes = saved_local_newtypes;

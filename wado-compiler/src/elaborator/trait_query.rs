@@ -1531,26 +1531,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether the trait declaration `decl` is in scope in the current frame:
-    /// declared by the current module, or imported into it under any local
-    /// name. Ties between same-named foreign declarations break on this.
-    pub(super) fn trait_decl_in_scope(&self, decl: &DeclKey) -> bool {
-        if decl.0 == self.current_module_source {
-            return true;
-        }
-        self.sem
-            .imports
-            .imported_type_sources
-            .iter()
-            .any(|(local, src)| {
-                src == &decl.0
-                    && self
-                        .sem
-                        .imports
-                        .import_original_names
-                        .get(local)
-                        .unwrap_or(local)
-                        == &decl.1
-            })
+    /// declared by the current module, or reachable from it under any name.
+    /// Ties between same-named foreign declarations break on this.
+    pub(super) fn trait_decl_in_scope(&self, decl: crate::defs::DefId) -> bool {
+        self.tysys
+            .resolutions
+            .in_scope(&self.current_module_source, decl)
     }
 
     /// Whether the trait `key` names declares `method_name`. The cheap form of

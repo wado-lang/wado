@@ -3139,22 +3139,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// matching independent of whatever alias the caller uses for the source
     /// type.
     fn import_original_name(&self, name: &str, module: &ModuleSource) -> String {
-        let fallback = || name.to_string();
-        if module == &self.current_module_source {
-            return self
-                .sem
-                .imports
-                .import_original_names
-                .get(name)
-                .cloned()
-                .unwrap_or_else(fallback);
-        }
-        let scope = self.tysys.trait_env.import_scope(module);
-        scope
-            .original_names
-            .get(name)
-            .cloned()
-            .unwrap_or_else(fallback)
+        // One question — what did `module` import under this name — asked of
+        // the module whatever it is, rather than of two maps chosen by whether
+        // it happens to be the frame's own.
+        self.tysys
+            .resolutions
+            .imported_as(module, name)
+            .map_or_else(
+                || name.to_string(),
+                |def| self.tysys.resolutions.defs().name(def).to_string(),
+            )
     }
 
     pub(super) fn locate_static_method_impl(

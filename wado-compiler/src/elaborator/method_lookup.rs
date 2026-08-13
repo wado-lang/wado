@@ -539,15 +539,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return first.clone();
         }
 
-        // Aliased imports (`use { Counter as CounterA }`) aren't declared
-        // as local Structs anywhere; consult `imported_type_sources` to
-        // recover the canonical declaring module. This intentionally
-        // narrower than the full `canonical_decl_key` fallback chain —
-        // synthesized lookups (e.g. `String^Inspect`) must still resolve
-        // through their well-known modules, which the full chain might
-        // route elsewhere.
-        if let Some(src) = self.sem.imports.imported_type_sources.get(struct_name) {
-            return src.clone();
+        // Aliased imports (`use { Counter as CounterA }`) aren't declared as
+        // local Structs anywhere, so the declaring module comes from what the
+        // name reaches here. Deliberately the scope and not the full
+        // `decl_key_or_local` chain: its index scans pick a module by spelling
+        // across the whole program, which is what would route a synthesized
+        // lookup (`String^Inspect`) away from its well-known module.
+        if let Some(def) = self
+            .tysys
+            .resolutions
+            .value_named(&self.current_module_source, struct_name)
+        {
+            return self.tysys.resolutions.defs().module(def).clone();
         }
         // Default to current module source
         self.current_module_source.clone()
@@ -761,14 +764,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.get_type_name(&header.ty) != struct_name {
                     continue;
                 }
+                // Whether the impl's own module means the receiver's
+                // declaration by that spelling — asked of that module, which is
+                // the only vantage the answer is a fact about.
                 let targets_receiver = impl_module == module_source
                     || self
                         .tysys
-                        .trait_env
-                        .import_scope(impl_module)
-                        .sources
-                        .get(&struct_name)
-                        .is_some_and(|m| m == module_source);
+                        .resolutions
+                        .value_named(impl_module, &struct_name)
+                        .is_some_and(|def| {
+                            self.tysys.resolutions.defs().module(def) == module_source
+                        });
                 if !targets_receiver {
                     continue;
                 }
@@ -2294,7 +2300,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if distinct.len() > 1 {
             let visible: IndexSet<crate::defs::DefId> = distinct
                 .iter()
-                .filter(|d| self.trait_decl_in_scope(&self.tysys.resolutions.decl_key(**d)))
+                .filter(|d| self.trait_decl_in_scope(**d))
                 .copied()
                 .collect();
             if visible.len() == 1 {

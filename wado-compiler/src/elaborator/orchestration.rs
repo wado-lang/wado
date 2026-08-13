@@ -1386,8 +1386,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &state.invocations,
                 symbols,
             );
-            let imported_type_sources = import_scope.sources;
-            let import_original_names = import_scope.original_names;
             let namespace_imports = import_scope.namespace_imports;
             // Imported function names (namespace type members already in scope).
             let mut imported_functions = IndexSet::default();
@@ -1449,8 +1447,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .module_semantics
                 .swap_remove(module_source)
                 .expect("module_semantics is pre-populated by annotate_modules");
-            sem.imports.imported_type_sources = imported_type_sources;
-            sem.imports.import_original_names = import_original_names;
             sem.imports.namespace_imports = namespace_imports;
             sem.decls.imported_functions = imported_functions;
 

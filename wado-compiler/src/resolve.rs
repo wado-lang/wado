@@ -264,6 +264,35 @@ impl Resolutions {
             .copied()
     }
 
+    /// The declaration `module` explicitly `use`d under the local name `name`.
+    ///
+    /// The import tier alone, so an alias answers with what it aliases and a
+    /// name the module never imported answers with nothing — the question a
+    /// caller asks when the *aliasing* is the point, not what the name means.
+    #[must_use]
+    pub fn imported_as(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
+        self.scopes
+            .imports
+            .get(module)
+            .and_then(|m| m.get(name))
+            .copied()
+    }
+
+    /// Whether `def` is reachable from `module` under any name at all.
+    ///
+    /// The reverse of a lookup, and the only question a tie-break between two
+    /// same-named foreign declarations can be settled by: whether this module
+    /// can see the declaration, not whether some spelling matches.
+    #[must_use]
+    pub fn in_scope(&self, module: &ModuleSource, def: DefId) -> bool {
+        let tier = |t: &IndexMap<ModuleSource, IndexMap<String, DefId>>| {
+            t.get(module).is_some_and(|m| m.values().any(|d| *d == def))
+        };
+        tier(&self.scopes.imports)
+            || tier(&self.scopes.own)
+            || self.scopes.prelude.values().any(|d| *d == def)
+    }
+
     /// The declaration a reference site names. `None` for a binder, a builtin
     /// shape, an unresolved name, or a site the walk never reached.
     #[must_use]

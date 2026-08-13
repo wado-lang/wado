@@ -20,14 +20,6 @@ use crate::module_source::ModuleSource;
 /// Per-module name-resolution context derived from `use` declarations.
 #[derive(Default, Clone)]
 pub(crate) struct ModuleImports {
-    /// `local_name → defining ModuleSource`, populated from
-    /// `use { Foo as Bar } from "..."` declarations. `Bar` (the local name)
-    /// is the key.
-    pub(crate) imported_type_sources: IndexMap<String, ModuleSource>,
-    /// `local_name → original_decl_name`. Populated only for aliased
-    /// imports (`use { Foo as Bar }`), so [`super::super::Elaborator::canonical_decl_key`]
-    /// can canonicalise an aliased name to its original declaration.
-    pub(crate) import_original_names: IndexMap<String, String>,
     /// Namespace-alias map. `use helper from "..."` registers `helper →
     /// resolved("...")` so `helper::foo` paths in identifiers resolve
     /// against the namespace's module.

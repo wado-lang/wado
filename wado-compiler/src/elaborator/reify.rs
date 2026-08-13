@@ -8125,21 +8125,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .contains_key(&ident.name)
             {
                 (self.current_module_source.clone(), ident.name.clone())
-            } else if let Some(import_src) = self
-                .sem
-                .imports
-                .imported_type_sources
-                .get(&ident.name)
-                .cloned()
+            } else if let Some(def) = self
+                .tysys
+                .resolutions
+                .value_named(&self.current_module_source, &ident.name)
             {
-                let original_name = self
-                    .sem
-                    .imports
-                    .import_original_names
-                    .get(&ident.name)
-                    .cloned()
-                    .unwrap_or_else(|| ident.name.clone());
-                (import_src, original_name)
+                let defs = self.tysys.resolutions.defs();
+                (defs.module(def).clone(), defs.name(def).to_string())
             } else {
                 // The callee resolves neither as a local fn-typed
                 // value (closure-call branch above) nor as a known
@@ -9081,23 +9073,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ident.span,
             );
         }
-        if let Some(import_src) = self
-            .sem
-            .imports
-            .imported_type_sources
-            .get(&ident.name)
-            .cloned()
+        if let Some(def) = self
+            .tysys
+            .resolutions
+            .value_named(&self.current_module_source, &ident.name)
         {
-            let original_name = self
-                .sem
-                .imports
-                .import_original_names
-                .get(&ident.name)
-                .cloned()
-                .unwrap_or_else(|| ident.name.clone());
-            // Imports through `use` collapse types + functions into the
-            // same `imported_type_sources` map; the type / variant /
-            // enum / flags / resource cases were already handled
+            let (import_src, original_name) = {
+                let defs = self.tysys.resolutions.defs();
+                (defs.module(def).clone(), defs.name(def).to_string())
+            };
+            // The scope answers for types and functions alike; the type /
+            // variant / enum / flags / resource cases were already handled
             // above and would have returned. Anything left here is a
             // function import.
             let type_args = self
