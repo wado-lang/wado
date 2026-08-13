@@ -47,9 +47,12 @@ holds only between the table and the first call. Everything downstream is back i
 the forgeable currency.
 
 The pair is not the weakest form of this, and describing the defect as a pair hid
-the rest of it. Eighteen sites compare a type's name against a bare string
-literal — `name == "Result"`, `name == "Option"`, `name == "String"` — with no
-module in the comparison at all. `compiler_item.rs` opens by warning against
+the rest of it. Sites compare a type's name against a bare string literal —
+`name == "Result"`, `name == "Option"`, `name == "String"` — with no module in
+the comparison at all. Grepping those four spellings finds twenty-six, in
+`codegen`, `monomorphize`, `parser`, `kiln`, `synthesis`, `wir_build` and the
+optimizer; the true count is higher, since that pattern only asks about four
+declarations. `compiler_item.rs` opens by warning against
 exactly this, which is what its registry exists to replace, and they survived
 anyway. What they decide is not incidental: whether `?` may be used on a value,
 whether a value lowers to a CM `result<ok, err>` or to a general payload, whether
