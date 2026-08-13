@@ -1,9 +1,8 @@
 //! Plan Wado's value-copy semantics: [`analyze::collect_seed_types`] names the
 //! types the fold wraps in `$value_copy$T(…)` and
 //! [`synthesize::synthesize_helpers`] generates a helper apiece. A wrap is
-//! emitted only where the ownership analyses — last-use liveness, freshness,
-//! confinement, read-only sharing — cannot prove a move, share or fresh value,
-//! so every copy is necessary and nothing elides them later.
+//! emitted only where the ownership analyses cannot prove a move, share or fresh
+//! value, so every copy is necessary and nothing elides them later.
 
 pub mod analyze;
 pub mod callgraph;

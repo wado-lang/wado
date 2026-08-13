@@ -1,18 +1,8 @@
-//! [`ModuleImports`] — per-module name resolution context derived from
-//! `use` declarations.
-//!
-//! Populated by [`super::super::orchestration::Elaborator::build_tir_from_state`]
-//! before the body walk starts, and consulted by name-resolution sites in
-//! the elaborator ([`wep-2026-05-26-elaborator-rearchitecture.md`]).
-//!
-//! # Membership rule
-//!
-//! Add a field here when it carries a fact derived from this module's
-//! `use` declarations (or its local declarations that participate in
-//! same-name resolution, like `interface` / `resource`). If the fact is
-//! the canonicalisation of an *imported* name to its *declaring* module,
-//! it belongs here. If the fact is a *local* declaration's body, it
-//! belongs in [`super::decls::ModuleDecls`].
+//! [`ModuleImports`] — per-module name resolution context derived from `use`
+//! declarations (WEP 2026-05-26), populated before the body walk starts. A field
+//! belongs here when it canonicalises an imported name to its declaring module,
+//! or comes from a local declaration participating in same-name resolution. A
+//! local declaration's *body* goes in [`super::decls::ModuleDecls`].
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;

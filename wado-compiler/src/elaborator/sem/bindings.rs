@@ -1,28 +1,12 @@
-//! [`ModuleBindings`] — `use → def` edges and locally defined symbols.
+//! [`ModuleBindings`] — `use → def` edges and locally defined symbols, written
+//! by the body walk (WEP 2026-05-26) wherever an identifier resolves or a
+//! user-visible local is introduced. A field belongs here when it answers a
+//! go-to-definition or find-references question over a use-site / def-site pair;
+//! per-`AstId` type facts go to [`super::types::TypeAnnotations`].
 //!
-//! Populated by the body walk
-//! ([`wep-2026-05-26-elaborator-rearchitecture.md`]) — every call site that
-//! resolves an identifier to its defining symbol writes here, and every
-//! site that introduces a user-visible local binding registers it here.
-//!
-//! # Membership rule
-//!
-//! Add a field here when it answers a question the LSP poses for
-//! go-to-definition, find-references, or hover-on-local — and only when
-//! that question depends on a use-site / def-site pair within a single
-//! module. Per-`AstId` type facts go to [`super::types::TypeAnnotations`],
-//! not here.
-//!
-//! # Ownership
-//!
-//! One instance per loaded module, owned by [`super::ModuleSemantics`].
-//! Plain owned [`crate::hashmap::IndexMap`]s replace the previous
-//! `Rc<RefCell<…>>` plumbing the elaborator shared with
-//! [`super::super::orchestration::AnnotateState`]: each module's body walk
-//! has exclusive `&mut` access to its own [`ModuleBindings`] for the
-//! duration of [`super::super::Elaborator::resolve_module`], and the
-//! driver re-installs the populated instance back into
-//! `state.module_semantics` afterwards.
+//! One instance per loaded module, owned by [`super::ModuleSemantics`] and held
+//! `&mut` by that module's body walk for its duration, so plain owned maps
+//! replace the `Rc<RefCell<…>>` the elaborator once shared with the driver.
 
 use crate::ast::AstId;
 use crate::hashmap::IndexMap;
