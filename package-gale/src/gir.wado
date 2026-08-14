@@ -135,8 +135,7 @@ pub variant DiagnosticSite {
     /// one, and reports nothing (its parse-side twin carries the warning).
     GeneralGroup(i32),
     /// A `SimpleCst` group's alternative dispatch. The shape carries no
-    /// index, so two of them in one rule share an owner — as they did when
-    /// the label was a bare `SimpleCst group`.
+    /// index, so two of them in one rule share an owner.
     SimpleCstGroup,
     /// An `e?`, by the deduped field name lowering gave it — the same name
     /// the generated parser binds, so the diagnostic points at something the
@@ -230,8 +229,6 @@ pub fn surfaces_on_build(kind: &DiagnosticKind) -> bool {
 }
 
 /// The diagnostics a build reports, in the order lowering raised them.
-/// `gale dump` renders the whole list; a build drops the kinds
-/// `surfaces_on_build` marks as shape descriptions.
 pub fn build_diagnostics(all: &List<Diagnostic>) -> List<Diagnostic> {
     let mut out: List<Diagnostic> = [];
     for let d of all {

@@ -1376,9 +1376,8 @@ A : 'a' -> type(65535) ;";
 }
 
 test "a malformed lexer command argument is rejected" {
-    // `pushMode(42)` used to intern a mode literally named `42`. A mode is
-    // named, never numbered, so this is a grammar error, not a mode; and no
-    // command takes a string.
+    // A mode is named, never numbered, so `pushMode(42)` is a grammar error
+    // rather than a mode named `42`; and no command takes a string.
     let cases: List<String> = ["pushMode(42)", "mode(42)", "mode('x')", "type('x')"];
     for let cmd of &cases {
         let input = `lexer grammar Test;\nA : 'a' -> ${*cmd} ;`;
@@ -1388,8 +1387,8 @@ test "a malformed lexer command argument is rejected" {
 }
 
 test "an empty lexer command list is rejected" {
-    // `-> ;` has no command at all; it used to be reported as an unknown
-    // command literally named `;`.
+    // `-> ;` has no command at all, so the `;` is reported as what was found,
+    // not as an unknown command named `;`.
     let input = "lexer grammar Test;
 A : 'a' -> ;";
     let err = if let Err(e) = &parse(input) {

@@ -1175,9 +1175,9 @@ C : 'c' ;
 }
 
 test "both error paths name tokens through one vocabulary" {
-    // `expect` reports through `token_kind_name`; the no-viable fallback used
-    // to inline the kind constants instead, so the same token read `A` on one
-    // path and `TK_A` on the other.
+    // `expect` and the no-viable fallback both report through
+    // `token_kind_name`, so one token never reads `A` on one path and `TK_A`
+    // on the other.
     let input = "grammar Test;
 r : A B | A C ;
 s : r ;

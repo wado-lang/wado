@@ -2792,14 +2792,13 @@ fn op_is_leaf(op: &Op) -> bool {
 
 /// Open the scope for a `Plus`'s mandatory first iteration.
 ///
-/// That iteration has to run before the loop's exit test, so it cannot sit
-/// inside the loop body — but its bindings are still iteration-local: lower
-/// names a repeat body in the body's own table, blind to the surrounding
-/// alternative. Emitted bare they redeclare whatever the alternative binds
-/// under the same name, in either order — `b=B (B C)+?` collides with the
-/// label before it and `(B C)+? D b=B` with the one after it. Only the
-/// iteration's own scope settles both, so it always gets one rather than the
-/// emitter trying to predict a name the alternative has not bound yet.
+/// That iteration runs before the loop's exit test, so it cannot sit inside the
+/// loop body — but its bindings are still iteration-local: lower names a repeat
+/// body in the body's own table, blind to the surrounding alternative. Emitted
+/// bare they redeclare whatever the alternative binds under the same name, in
+/// either order — `b=B (B C)+?` collides with the label before it, `(B C)+? D
+/// b=B` with the one after. Hence a scope every time, rather than the emitter
+/// predicting a name the alternative has not bound yet.
 ///
 /// Nothing outside the iteration reads those locals — the tree builder holds
 /// the matched values — so a block is enough. Caller closes it with `w.end()`.
@@ -3666,8 +3665,7 @@ fn gen_op_optional_shape_lookahead(
     };
     let mut is_first = true;
     for let entry of &s.shapes {
-        // An empty signature would render as a bare `if ${gate}` — not a
-        // condition. Lower drops those shapes; this is the check that says so.
+        // An empty signature renders as a bare `if ${gate}` — not a condition.
         assert !entry.sig.is_empty(), "gen_op_optional_shape_lookahead: shape has an empty lookahead signature; lower drops those";
         let cond = `${gen_lookahead_condition(ctx, &entry.sig)}${*gate}`;
         if is_first {
@@ -4423,10 +4421,9 @@ fn gen_op_list_label(
         panic("gen_op_list_label: ListLabel op mapped to non-Label element");
     };
     if !op_is_leaf(&ll.inner) && !ll.inner matches { Group(_) } {
-        // Inner of shape `Op::Repeat` / nested `Op::ListLabel` — rare; routes
-        // through the surface walker, which reserves the label's name itself,
-        // so this returns before the reservation below. Phase 2-C migrates the
-        // Op::Repeat arm.
+        // Inner of shape `Op::Repeat` / nested `Op::ListLabel`: the surface
+        // walker reserves the label's name itself, so return before the
+        // reservation below.
         gen_element(w, elem, ctx, name_counts);
         return;
     }
@@ -6749,9 +6746,8 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
     w.line(&`${msg},`);
     w.line(&"p.peek_span(),");
     // Resolve the wanted set through `token_kind_name`, the vocabulary
-    // `expect` reports with. Naming the kind constants here instead would put
-    // internal names in front of a grammar author on one error path and rule
-    // names on the other.
+    // `expect` reports with — naming the kind constants here would put
+    // internal names in front of a grammar author on this path alone.
     w.write(&"[");
     for let mut i = 0; i < expected.len(); i += 1 {
         if i > 0 {

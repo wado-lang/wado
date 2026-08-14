@@ -119,9 +119,8 @@ fn classify(
                 Action::Drop
             } else {
                 // Effectful or trap-capable. A skeleton expr demotes to a bare
-                // `Expr(value)`, which still runs its trap; a promoted value has
-                // no `ExprId` to demote to, so the binding stays as the thing
-                // that runs it.
+                // `Expr(value)`, which still runs it; a promoted value has no
+                // `ExprId` to demote to, so its binding is what runs it.
                 value.as_expr().map_or(Action::Keep, Action::Demote)
             }
         }

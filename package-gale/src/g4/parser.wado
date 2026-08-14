@@ -1081,11 +1081,10 @@ impl G4Parser {
         );
     }
 
-    /// The `(<arg>)` of a lexer command that takes one. `type` names a token,
-    /// which ANTLR4 lets you give as a literal type number instead
-    /// (`-> type(65535)`); `mode` / `pushMode` name a declared mode, where a
-    /// number means nothing — `pushMode(42)` used to mint a mode literally
-    /// named `42` rather than being rejected.
+    /// The `(<arg>)` of a lexer command that takes one. `allow_int` is for
+    /// `type`, which ANTLR4 lets you give as a literal type number
+    /// (`-> type(65535)`); a `mode` / `pushMode` argument names a declared
+    /// mode, where a number means nothing.
     fn parse_lexer_command_arg(&mut self, command: &String, allow_int: bool) -> Result<String, ParseError> {
         self.expect(G4Token::LParen)?;
         let ok = self.is_kind(G4Token::Identifier) || allow_int && self.is_kind(G4Token::IntLit);
@@ -1610,12 +1609,12 @@ fn binary_set(key: &String) -> List<CharRange> {
 }
 
 /// The POSIX compatibility properties (UTS #18 Annex C) ANTLR4 answers through
-/// ICU. None is a UCD property, so no table names them; each is derived here
-/// from tables Gale already has, which makes the derivation — not a table —
-/// the thing that can be wrong. `\P{...}` complements whatever comes back, so
-/// a definition that is merely close admits characters rather than missing
-/// them; every one below is measured against the published jar and pinned
-/// character-by-character in `parser_test.wado`.
+/// ICU. None is a UCD property, so each is derived here from tables Gale
+/// already has — the derivation, not a table, is what can be wrong. `\P{...}`
+/// complements whatever comes back, so a definition that is merely close
+/// admits characters rather than missing them; every one below is measured
+/// against the published jar and pinned character-by-character in
+/// `parser_test.wado`.
 ///
 /// `Alpha`, `Lower`, `Upper` and `Space` are POSIX names too, but each is a
 /// UCD alias (`Alphabetic`, `Lowercase`, `Uppercase`, `White_Space`) the

@@ -8,6 +8,8 @@ use crate::nir_arena::{ExprId, ExprKind, NodeRef, StmtKind};
 use crate::nir_engine::Engine;
 use crate::nir_value_graph::{ValueId, ValueKind};
 
+use super::arena_query::value_may_trap;
+
 /// Rewrite a pure expression whose `ValueGraph` representative is a literal into
 /// that literal. Idempotent: an expression already holding the target literal
 /// is left untouched, so the worklist retry terminates.
@@ -603,8 +605,6 @@ fn apply_field_materialise(
     }
     changed
 }
-
-use super::arena_query::value_may_trap;
 
 /// Whether one shared local beats re-emitting `v` at each use. Re-emission pays
 /// the tree's operations per use; the local pays one `local.set`, a `local.get`

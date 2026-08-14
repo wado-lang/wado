@@ -2328,10 +2328,9 @@ fn lower_scan_optional_lookahead_group(
     let mut bodies: List<ScanBody> = [];
     for let shape of &shapes {
         // An all-optionals-off shape selects no element, so it has no
-        // lookahead to gate on and no body to scan. Drop it here, as the
-        // parse-side twin (`try_optional_shape_lookahead`) does — emit then
-        // asserts every signature it reads is non-empty instead of skipping
-        // one silently.
+        // lookahead to gate on and no body to scan, so it is dropped here as
+        // by the parse-side twin (`try_optional_shape_lookahead`); emit
+        // asserts on a non-empty signature rather than skipping one silently.
         let sig = shape_lookahead_signature_for_alt(shape, &alt.elements, ctx);
         if sig.is_empty() {
             continue;

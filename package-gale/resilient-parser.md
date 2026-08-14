@@ -93,8 +93,7 @@ Diagnostic { severity, code, message, span, line, col,
 `expected`/`found` are token-kind ids (tooling reuses the grammar's name tables).
 A `message` says only what was found (`got ")"`); what was wanted lives in
 `expected`, and `ParseError::full_message` is the one place the two are
-combined — so every failure path reports the same vocabulary in the same
-phrasing instead of each spelling its own "expected X" prefix.
+combined.
 `code` is machine-switchable (`MissingToken`, `ExtraToken`, `NoViableAlternative`,
 `UnterminatedConstruct`, `LexError`, `UnexpectedToken`); `recovery` names the edit
 applied; `related` carries secondary notes (e.g. "'(' opened here").

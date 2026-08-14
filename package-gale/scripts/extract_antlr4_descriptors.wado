@@ -711,13 +711,10 @@ fn emit_test_file(spec: &TestFileSpec, body: fn(&mut CodeWriter)) -> String {
     return w.to_string();
 }
 
-/// True when the descriptor's own `[errors]` report a single-token deletion.
-///
-/// ANTLR4 keeps the deleted token in the tree as a bare error node and puts
-/// the deletion on the error stream; Gale wraps it in its `<skip …>` marker, a
-/// deliberate superset extension. The compare normalises the wrapper away —
-/// but only here, where ANTLR4 deleted a token too, so a deletion Gale invents
-/// on its own can never be normalised into a match.
+/// True when the descriptor's own `[errors]` report a single-token deletion —
+/// the only case where the compare may normalise Gale's `<skip …>` marker
+/// away, so a deletion Gale invents on its own can never be normalised into a
+/// match. See "Deleted terminals in parse trees" in `antlr4-compatibility.md`.
 fn descriptor_deletes_tokens(parsed: &ParsedDescriptor) -> bool {
     return parsed.errors.contains("extraneous input");
 }

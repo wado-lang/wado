@@ -576,14 +576,11 @@ impl GenContext {
         return self.predicate_gated.contains(&id);
     }
 
-    /// Record a prediction-strategy diagnostic, deduped on
-    /// `(owner, message)`. A single decision site can be revisited: the
-    /// parse and scan passes lower the same alts twice — both re-enter
-    /// the same warn site with an identical `(owner, message)`.
-    /// Collapsing here keeps each prediction warning
-    /// reported once regardless of how many times lowering revisits the
-    /// decision. `message` already encodes everything `kind` does, so
-    /// the pair is a sufficient key without an `Eq` on `DiagnosticKind`.
+    /// Record a prediction-strategy diagnostic, deduped on `(owner, message)`
+    /// so a decision site lowering revisits — the parse and scan passes lower
+    /// the same alts twice — is reported once. `message` already encodes
+    /// everything `kind` does, so the pair keys it without an `Eq` on
+    /// `DiagnosticKind`.
     pub fn warn(&mut self, owner: &DiagnosticOwner, kind: DiagnosticKind, message: String) {
         for let d of &self.diagnostics {
             if d.owner == *owner && d.message == message {

@@ -685,9 +685,8 @@ test "warn dedupes diagnostics with the same owner and message" {
 
 test "warn keeps distinct diagnostics" {
     // Different owner or different message → distinct warnings, not
-    // collapsed. Two decision sites in the SAME rule are distinct owners:
-    // the owner is structured, so they no longer collide the way two
-    // labels that happened to render alike would.
+    // collapsed. Two decision sites in the same rule are distinct owners:
+    // the owner is structured, so two that render alike do not collide.
     let mut ctx = mk_ctx();
     ctx.warn(&DiagnosticOwner::rule_dispatch(&"a"), DiagnosticKind::OverlapTournament, String::from(
         "alts 0, 1 share lookahead {TK_ID}",

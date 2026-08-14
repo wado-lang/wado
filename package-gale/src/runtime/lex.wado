@@ -424,15 +424,11 @@ impl TokenStream {
 }
 
 
-/// ParseError represents a parse failure with location and expected tokens.
+/// A parse failure with its location and wanted set.
 ///
-/// `message` says what was found (`got "for"`), never what was wanted:
-/// the wanted set lives in `expected`, in the token vocabulary, and
-/// `full_message` is the single place the two are combined. Keeping them
-/// apart is what lets every failure path share one vocabulary and one
-/// phrasing instead of each spelling its own "expected X" prefix.
-/// `message` is also free of position and rule context, so it stays
-/// composable. `line`/`col` are a
+/// `message` says only what was found (`got "for"`), free of position and rule
+/// context; the wanted set lives in `expected` and `full_message` is the one
+/// place the two are combined. `line`/`col` are a
 /// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
 /// from `span.start` against the source at error-construction time;
 /// `Parser::error` fills them in. `rule_stack` records the chain of parser

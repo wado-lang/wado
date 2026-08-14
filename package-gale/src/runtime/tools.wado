@@ -67,16 +67,9 @@ fn skip_marker_close(chars: &List<char>, open: i32) -> i32 {
 }
 
 /// Drop Gale's `<skip …>` markers, leaving the deleted terminal bare — the
-/// shape ANTLR4's `Trees.toStringTree` prints, which keeps an extraneous token
-/// as a plain error node and reports the deletion on the error stream instead.
-///
-/// The marker is a deliberate superset extension (see the recovery table in
-/// the README), so the compatibility suite normalises it away here rather than
-/// the renderer dropping it: `to_string_tree()` goes on saying more than
-/// ANTLR4 does. The suite applies this only to descriptors whose own
-/// `[errors]` report an extraneous token, so the compare asks "did Gale delete
-/// what ANTLR4 deleted" and cannot hide a deletion ANTLR4 never made. The
-/// token's text survives, so deleting a *different* token still shows up.
+/// shape ANTLR4's `Trees.toStringTree` prints. Used by the compatibility
+/// compare, so `to_string_tree()` goes on saying more than ANTLR4 does; see
+/// "Deleted terminals in parse trees" in `antlr4-compatibility.md`.
 ///
 /// A marker closes at the first `>` followed by a space, `)`, or end of input.
 /// A deleted token whose own text holds such a `>` therefore cuts early and

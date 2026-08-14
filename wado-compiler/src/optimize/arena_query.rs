@@ -370,7 +370,7 @@ pub(super) fn is_pure_nontrapping_expr_typed(
 }
 
 /// [`is_pure_nontrapping_expr_typed`] for an operand. A promoted value is pure
-/// by construction, but not necessarily non-trapping — `let _ = 1 / 0` freezes a
+/// by construction but not necessarily total — `let _ = 1 / 0` freezes a
 /// trapping division into one — so its tree is walked in the pool.
 pub(super) fn is_pure_nontrapping_operand_typed(
     body: &Body,
@@ -485,7 +485,9 @@ pub(super) fn value_may_trap(pool: &crate::nir_value_graph::ValuePool, v: ValueI
         }
         ValueKind::Cast { .. } => true,
         ValueKind::Select { cond, then, else_ } => {
-            value_may_trap(pool, *cond) || value_may_trap(pool, *then) || value_may_trap(pool, *else_)
+            value_may_trap(pool, *cond)
+                || value_may_trap(pool, *then)
+                || value_may_trap(pool, *else_)
         }
         ValueKind::FieldAccess { .. } | ValueKind::LoopPhi { .. } => true,
         ValueKind::Int(..)
