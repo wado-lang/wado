@@ -837,9 +837,16 @@ compiles, passes the suite, and ends with a mechanical completion check.
       ends in a single build, and three plausible fixes in a row measured as
       no-ops when reasoned about instead.
 
-      Both attempts that changed nothing were reverted rather than kept on
+      Four attempts that changed nothing were reverted rather than kept on
       the argument that they were more correct in principle. That rule is
       what makes the measurements above worth anything.
+
+      The method is the transferable part. Every probe this migration ran
+      answered its question; every hypothesis reasoned out from the code
+      cost a build and moved nothing. These types are dense enough that
+      reading them predicts the wrong producer more often than the right
+      one — so print the two names and compare them, rather than deducing
+      which one must be wrong.
 
 - [x] Tuple trait dispatch resolves again. The tuple family becoming a
       declaration gave it a *module*, and three of the four routes into
