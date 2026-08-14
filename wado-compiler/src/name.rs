@@ -85,36 +85,6 @@ pub fn mangle_local_item_name(name: &str, id: crate::ast::AstId) -> String {
     format!("{name}{LOCAL_ITEM_ID_SEP}{}", id.local())
 }
 
-/// Replace every occurrence of the type name `old` inside a mangled function
-/// name (`List<Old>::with_capacity`, `Map<Old, Other>.insert`) with `new`,
-/// matching only at type-name boundaries. A raw substring replace would also
-/// rewrite names that merely contain `old` as a fragment (`Old` inside
-/// `OldExtended`); a boundary match cannot.
-pub fn replace_type_name_in_mangled(mangled: &str, old: &str, new: &str) -> String {
-    fn is_boundary(c: Option<char>) -> bool {
-        match c {
-            None => true,
-            Some(c) => !(c.is_alphanumeric() || c == '_'),
-        }
-    }
-    let mut out = String::with_capacity(mangled.len());
-    let mut rest = mangled;
-    while let Some(pos) = rest.find(old) {
-        out.push_str(&rest[..pos]);
-        // Left context comes from everything emitted so far — `rest` alone
-        // loses it once a previous match consumed the preceding characters.
-        let before = out.chars().next_back();
-        let after = rest[pos + old.len()..].chars().next();
-        if is_boundary(before) && is_boundary(after) {
-            out.push_str(new);
-        } else {
-            out.push_str(old);
-        }
-        rest = &rest[pos + old.len()..];
-    }
-    out.push_str(rest);
-    out
-}
 
 /// The name of the synthesized deep-copy helper for a value type, identified
 /// by its module-qualified structural mangle
@@ -964,6 +934,27 @@ impl LocalMethodName {
                 self.method_name
             ),
             None => format!("{receiver}::{}", self.method_name),
+        }
+    }
+
+    /// Replace the type `old` with `new` throughout this method's own
+    /// identity — the receiver and the receiver's type arguments.
+    ///
+    /// The substitution belongs here rather than on the rendered name: a
+    /// monomorphized call is keyed on `fq_base_struct_name` /
+    /// `fq_struct_name`, and its `name` is overwritten with whatever that key
+    /// finds. Rewriting the name left the key naming the old type.
+    ///
+    /// `trait_name`'s arguments and `method_type_args` are still stored as
+    /// rendered strings and are left alone — they are the surface `SymbolPath`
+    /// subsumes, and a CM type swap changes the receiver, not the trait a
+    /// method implements.
+    pub fn substitute_type(&mut self, old: &FqTypeName, new: &FqTypeName) {
+        if let Receiver::Type(fq) = &self.receiver {
+            self.receiver = Receiver::Type(fq.substitute(old, new));
+        }
+        for arg in &mut self.struct_type_args {
+            *arg = arg.substitute(old, new);
         }
     }
 
@@ -1938,41 +1929,53 @@ pub fn test_function_name(
 mod tests {
     use super::*;
 
+    /// A type swap is a substitution over the structure, so the cases a
+    /// string rewrite had to defend against cannot arise: a type whose *name*
+    /// contains the old one is a different `FqTypeName` and never matches, and
+    /// a nested occurrence is reached by walking arguments rather than by
+    /// finding a substring.
     #[test]
-    fn replace_type_name_in_mangled_matches_boundaries_only() {
-        // Type-argument positions rewrite.
+    fn substituting_a_type_walks_the_structure_not_the_spelling() {
+        let mut interner = ModuleSourceInterner::new();
+        let m = interner.local("./a.wado");
+        let old = FqTypeName::declared(&m, "Old");
+        let new = FqTypeName::declared(&m, "New");
+        let list = |arg: FqTypeName| FqTypeName::declared(&m, "List").with_args(vec![arg]);
+
+        // The whole name, and an argument position, and a nested one.
+        assert_eq!(old.substitute(&old, &new), new);
+        assert_eq!(list(old.clone()).substitute(&old, &new), list(new.clone()));
         assert_eq!(
-            replace_type_name_in_mangled("List<Old>::with_capacity", "Old", "New"),
-            "List<New>::with_capacity"
+            list(list(old.clone())).substitute(&old, &new),
+            list(list(new.clone()))
         );
+
+        // A different declaration whose name merely contains the old one.
+        let extended = list(FqTypeName::declared(&m, "OldExtended"));
+        assert_eq!(extended.substitute(&old, &new), extended);
+
+        // Same spelling, different module — a different type, so untouched.
+        let elsewhere = interner.local("./b.wado");
+        let foreign = list(FqTypeName::declared(&elsewhere, "Old"));
+        assert_eq!(foreign.substitute(&old, &new), foreign);
+
+        // A reference substitutes its pointee and keeps the prefix.
         assert_eq!(
-            replace_type_name_in_mangled("Map<Old, Old>.insert", "Old", "New"),
-            "Map<New, New>.insert"
+            old.clone()
+                .with_reference(RefKind::Mut)
+                .substitute(&old, &new),
+            new.clone().with_reference(RefKind::Mut)
         );
-        // Nested generic old names rewrite as a unit.
-        assert_eq!(
-            replace_type_name_in_mangled(
-                "List<Tuple<String, List<u8>>>::push",
-                "Tuple<String, List<u8>>",
-                "Pair"
-            ),
-            "List<Pair>::push"
+
+        // The receiver a monomorphized call is keyed on follows the same swap.
+        let mut method = LocalMethodName::new(
+            FqTypeName::declared(&m, "List"),
+            None,
+            "with_capacity".to_string(),
         );
-        // A name merely containing the old name as a fragment is untouched.
-        assert_eq!(
-            replace_type_name_in_mangled("List<OldExtended>::push", "Old", "New"),
-            "List<OldExtended>::push"
-        );
-        assert_eq!(
-            replace_type_name_in_mangled("List<VeryOld>::push", "Old", "New"),
-            "List<VeryOld>::push"
-        );
-        // Consecutive occurrences forming one identifier stay untouched: the
-        // left context must survive across matches.
-        assert_eq!(
-            replace_type_name_in_mangled("List<OldOld>::push", "Old", "New"),
-            "List<OldOld>::push"
-        );
+        method.struct_type_args = vec![old.clone()];
+        method.substitute_type(&old, &new);
+        assert_eq!(method.struct_type_args, vec![new]);
     }
 
     #[test]
@@ -2706,6 +2709,40 @@ impl FqTypeName {
     /// The declaration namespace: the name as source writes it, which is what
     /// an `impl` header spells and what every by-name declaration lookup keys
     /// on. Also the form diagnostics show.
+    /// This name with every occurrence of the type `old` replaced by `new` —
+    /// the whole name when it *is* `old`, and otherwise each argument,
+    /// recursively.
+    ///
+    /// A substitution over the structure. Rewriting the rendered spelling
+    /// instead means finding `old`'s mangling inside `self`'s and splicing,
+    /// which cannot tell a type from a type whose name contains it and leaves
+    /// the identity that produced the spelling unchanged.
+    #[must_use]
+    pub fn substitute(&self, old: &FqTypeName, new: &FqTypeName) -> FqTypeName {
+        if self == old {
+            return new.clone();
+        }
+        // A reference's pointee substitutes on its own: `&T` is `T` under a
+        // prefix, and `old` naming the pointee must reach it.
+        if let Some(kind) = self.reference
+            && self.args.is_empty()
+        {
+            let bare = FqTypeName {
+                reference: None,
+                head: self.head.clone(),
+                args: Vec::new(),
+            };
+            if &bare == old {
+                return new.clone().with_reference(kind);
+            }
+        }
+        FqTypeName {
+            reference: self.reference,
+            head: self.head.clone(),
+            args: self.args.iter().map(|a| a.substitute(old, new)).collect(),
+        }
+    }
+
     ///
     /// Modules dropped from the head and,
     /// recursively, from every type argument. Diagnostics only.
