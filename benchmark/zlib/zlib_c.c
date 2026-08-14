@@ -1,6 +1,9 @@
 // zlib C benchmark for comparison with Wado and zlib-rs
 //
-// Compresses and decompresses twitter.json (~631KB) x10 iterations.
+// Compresses and decompresses twitter.json (~631KB) with zlib (deflate level 6,
+// matching zlib-rs and core:zlib). Reports compression and decompression
+// throughput (MB/s of the original data). Each phase auto-calibrates its
+// iteration count to run for about a second.
 //
 // Compiled to Wasm with:
 //   clang --target=wasm32-wasi -O3 ...
@@ -11,10 +14,36 @@
 #include <time.h>
 #include "../../wasm-size/zlib/zlib-1.3.1/zlib.h"
 
+#define TARGET_NS 1000000000LL  // ~1s budget per phase
+
 static long long now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+}
+
+// Mirror of core:benchmark's calibration: scale n toward the target, capped at
+// 100x growth per step and a hard ceiling.
+static long long next_iters(long long n, long long elapsed, long long target) {
+    long long e = elapsed > 0 ? elapsed : 1;
+    long long est = n * target / e;
+    long long hi = n * 100;
+    if (est > hi) est = hi;
+    if (est > 1000000000LL) est = 1000000000LL;
+    if (est < 1) est = 1;
+    return est;
+}
+
+static void report(const char *label, double work_per_iter, long long n, long long elapsed_ns) {
+    double secs = (double)elapsed_ns / 1e9;
+    double rate = secs > 0.0 ? (work_per_iter * (double)n) / secs : 0.0;
+    double per_ms = (double)elapsed_ns / (double)n / 1e6;
+    char rbuf[64];
+    if (rate >= 1e9) snprintf(rbuf, sizeof rbuf, "%.2f GB/s", rate / 1e9);
+    else if (rate >= 1e6) snprintf(rbuf, sizeof rbuf, "%.2f MB/s", rate / 1e6);
+    else if (rate >= 1e3) snprintf(rbuf, sizeof rbuf, "%.2f KB/s", rate / 1e3);
+    else snprintf(rbuf, sizeof rbuf, "%.2f B/s", rate);
+    printf("%s: %s   (%.3f ms/iter, %lld iter)\n", label, rbuf, per_ms, n);
 }
 
 static unsigned char *read_file(const char *path, size_t *out_size) {
@@ -36,68 +65,73 @@ static unsigned char *read_file(const char *path, size_t *out_size) {
     return buf;
 }
 
-int main(void) {
+typedef struct {
+    unsigned char *data;
     size_t size;
-    unsigned char *data = read_file("json_twitter/twitter.json", &size);
-    int iterations = 10;
+    unsigned char *compressed;
+    uLong bound;
+    uLong compressed_len;
+    unsigned char *decompressed;
+} bench_ctx;
 
-    printf("zlib %zu bytes x %d iterations\n", size, iterations);
-
-    // Benchmark compression (10 iterations)
-    uLong bound = compressBound((uLong)size);
-    unsigned char *compressed = (unsigned char *)malloc(bound);
-    uLong compressed_len = 0;
-
-    long long t0 = now_ns();
-    for (int iter = 0; iter < iterations; iter++) {
-        uLong dest_len = bound;
-        int rc = compress2(compressed, &dest_len, data, (uLong)size, 6);
-        if (rc != Z_OK) {
-            fprintf(stderr, "compress2 failed: %d\n", rc);
-            return 1;
-        }
-        compressed_len = dest_len;
+static void run_compress(bench_ctx *c) {
+    uLong dest_len = c->bound;
+    int rc = compress2(c->compressed, &dest_len, c->data, (uLong)c->size, 6);
+    if (rc != Z_OK) {
+        fprintf(stderr, "compress2 failed: %d\n", rc);
+        exit(1);
     }
-    long long t1 = now_ns();
+    c->compressed_len = dest_len;
+}
 
-    long long compress_ns = t1 - t0;
-    long long compress_ms = compress_ns / 1000000;
-    long long compress_us_rem = (compress_ns / 1000) % 1000;
-    printf("Compressed: %zu -> %lu bytes\n", size, (unsigned long)compressed_len);
-    printf("Compress: %lld.%03lld ms\n", compress_ms, compress_us_rem);
-
-    // Benchmark decompression (10 iterations)
-    unsigned char *decompressed = (unsigned char *)malloc(size);
-
-    long long t2 = now_ns();
-    for (int iter = 0; iter < iterations; iter++) {
-        uLong dest_len = (uLong)size;
-        int rc = uncompress(decompressed, &dest_len, compressed, compressed_len);
-        if (rc != Z_OK) {
-            fprintf(stderr, "uncompress failed: %d\n", rc);
-            return 1;
-        }
+static void run_decompress(bench_ctx *c) {
+    uLong dest_len = (uLong)c->size;
+    int rc = uncompress(c->decompressed, &dest_len, c->compressed, c->compressed_len);
+    if (rc != Z_OK) {
+        fprintf(stderr, "uncompress failed: %d\n", rc);
+        exit(1);
     }
-    long long t3 = now_ns();
+}
 
-    long long decompress_ns = t3 - t2;
-    long long decompress_ms = decompress_ns / 1000000;
-    long long decompress_us_rem = (decompress_ns / 1000) % 1000;
-    printf("Decompress: %lld.%03lld ms\n", decompress_ms, decompress_us_rem);
+// Calibrate `f` to run for about TARGET_NS, then report its throughput.
+static void bench(const char *label, double work_per_iter, void (*f)(bench_ctx *), bench_ctx *ctx) {
+    f(ctx);  // warmup
+    long long n = 1, elapsed = 0;
+    for (;;) {
+        long long start = now_ns();
+        for (long long i = 0; i < n; i++) {
+            f(ctx);
+        }
+        elapsed = now_ns() - start;
+        if (elapsed >= TARGET_NS) break;
+        long long nx = next_iters(n, elapsed, TARGET_NS);
+        if (nx <= n) break;
+        n = nx;
+    }
+    report(label, work_per_iter, n, elapsed);
+}
 
-    // Verify round-trip
-    if (memcmp(data, decompressed, size) != 0) {
+int main(void) {
+    bench_ctx ctx;
+    ctx.data = read_file("json_twitter/twitter.json", &ctx.size);
+    ctx.bound = compressBound((uLong)ctx.size);
+    ctx.compressed = (unsigned char *)malloc(ctx.bound);
+    ctx.compressed_len = 0;
+    ctx.decompressed = (unsigned char *)malloc(ctx.size);
+
+    printf("zlib %zu bytes\n", ctx.size);
+
+    bench("Compress", (double)ctx.size, run_compress, &ctx);
+    printf("Compressed: %zu -> %lu bytes\n", ctx.size, (unsigned long)ctx.compressed_len);
+    bench("Decompress", (double)ctx.size, run_decompress, &ctx);
+
+    if (memcmp(ctx.data, ctx.decompressed, ctx.size) != 0) {
         fprintf(stderr, "ERROR: decompressed data mismatch\n");
         return 1;
     }
 
-    long long total_ns = compress_ns + decompress_ns;
-    long long total_ms = total_ns / 1000000;
-    long long total_us_rem = (total_ns / 1000) % 1000;
-    printf("Elapsed: %lld.%03lld ms\n", total_ms, total_us_rem);
-
-    free(data);
-    free(compressed);
-    free(decompressed);
+    free(ctx.data);
+    free(ctx.compressed);
+    free(ctx.decompressed);
     return 0;
 }
