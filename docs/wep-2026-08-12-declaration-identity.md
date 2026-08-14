@@ -810,8 +810,26 @@ compiles, passes the suite, and ends with a mechanical completion check.
 
       That map is `FlatPackage::generic_structs`, and it is the last
       name-keyed declaration registry in the pipeline — the one `#5` above
-      is about. `TirStruct` already carries its `StructDef`; the
-      instantiation key needs one too.
+      is about. Three seams sat behind each other there: which sites are
+      admitted as instantiations, which template a site finds, and what the
+      concrete struct registers as. All three are fixed, and the fixture's
+      first three cases pass.
+
+      The fourth is the one that names the remaining work. It declares
+      `struct Box<T>` twice in one module, once per function, with different
+      field lists. Each fix routes through `decl_named_in(name, module)`,
+      and `decl_index` is built with `or_insert` — first declaration wins —
+      so two sibling local structs resolve to one declaration and collapse
+      onto one wasm-GC type. Wasm validation catches it, so it fails loudly
+      rather than miscompiling, but the defect is this document's own
+      subject: a name standing in for an identity, one level below where the
+      last one was.
+
+      `InstantiationKey` is what has to carry the `DefId`. `TirStruct`
+      already does. Until it does, `decl_named_in` is doing work no
+      name-keyed index can do — telling two same-named declarations in one
+      module apart — and it is worth stating plainly that this is not a
+      lookup that can be made to work, only one that can be removed.
 
       The lesson so far is about measurement, not identity. The WIR panic
       names the type through whatever the *lookup* renders with, so before
