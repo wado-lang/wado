@@ -304,9 +304,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .contains_key(namespaced.namespace.as_str())
         {
             // `ns::Type` / `ns::Type<args>` (`ns` is a namespace-import alias):
-            // resolve the `ns$Type` alias, which `imported_type_sources` scopes
-            // to the namespace's own module. Mirrors `canonical_ns_ref` for
-            // idents.
+            // resolve the `ns$Type` alias, which the import tier scopes to the
+            // namespace's own module. Mirrors `canonical_ns_ref` for idents.
             let alias =
                 crate::name::namespace_member_alias(&namespaced.namespace, &namespaced.name);
             if namespaced.args.is_empty() {

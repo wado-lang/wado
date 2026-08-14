@@ -22,9 +22,9 @@ pub const CLOSURE_CALL_METHOD: &str = "__call";
 /// Separator between a namespace-import alias and the imported member in the
 /// canonical `ns$member` name a `ns::member` reference resolves to. `$` is not
 /// a valid Wado identifier character, so the alias is a single `::`-free token
-/// that flows through the per-name import maps (`imported_type_sources`,
-/// `imported_globals`, the symbol-table imports) like a `use { X as Y }`
-/// alias, scoped to the namespace's own module.
+/// that flows through the resolution table's import tier and the per-name
+/// import maps (`imported_globals`, the symbol-table imports) like a
+/// `use { X as Y }` alias, scoped to the namespace's own module.
 pub const NAMESPACE_MEMBER_SEP: char = '$';
 
 /// Build the `ns$member` alias for a namespace-imported symbol.

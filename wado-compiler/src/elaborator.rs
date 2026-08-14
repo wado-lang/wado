@@ -311,10 +311,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Run `body` in `module`'s perspective, swapping the current module and its
-    /// import scope — type sources and namespace imports both — and clearing
-    /// locals, which describe in-progress resolution rather than the target's
-    /// definitions. For callee-scope work only, such as a parameter default;
-    /// already being there skips the swap, keeping the locals in reach.
+    /// namespace imports and clearing locals, which describe in-progress
+    /// resolution rather than the target's definitions. For callee-scope work
+    /// only, such as a parameter default; already being there skips the swap,
+    /// keeping the locals in reach.
     pub(super) fn with_module_perspective_for<R>(
         &mut self,
         module: &ModuleSource,
@@ -323,12 +323,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if self.current_module_source == *module {
             return body(self);
         }
-        let scope = self.tysys.trait_env.import_scope(module);
+        let namespaces = self.tysys.trait_env.namespace_imports(module);
         let saved_src = std::mem::replace(&mut self.current_module_source, module.clone());
-        let saved_ns = std::mem::replace(
-            &mut self.sem.imports.namespace_imports,
-            scope.namespace_imports,
-        );
+        let saved_ns = std::mem::replace(&mut self.sem.imports.namespace_imports, namespaces);
         let saved_local_struct = std::mem::take(&mut self.sem.decls.local_struct_fields);
         let saved_local_newtypes = std::mem::take(&mut self.sem.decls.local_newtypes);
         let saved_local_enum = std::mem::take(&mut self.sem.decls.local_enum_cases);
