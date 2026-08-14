@@ -2,15 +2,17 @@
 //!
 //! Every declaration in the program gets a [`DefId`]: an opaque index into the
 //! [`DefTable`] built once, after loading, from every module's items. It is the
-//! only identity the compiler compares, and it cannot be manufactured from a
-//! name — there is no constructor outside this module and no lookup keyed by
-//! `(module, name)` anywhere.
+//! identity the compiler compares, and this module mints no others —
+//! [`DefTable::declare`] is the only constructor. Names travel the other way:
+//! [`DefTable::name`] renders one for a diagnostic or for a mangle.
 //!
-//! That absence is the design. A consumer holding only a spelling cannot obtain
-//! an identity, so it cannot compare one, so it has to be handed the reference
-//! site instead — which is what makes two modules' same-named declarations stay
-//! apart. Names travel the other way: [`DefTable::name`] renders one for a
-//! diagnostic or for a mangle, and nothing reads it back.
+//! The goal is that a spelling cannot reach an identity at all, so two modules'
+//! same-named declarations cannot be confused for one. That is not yet true:
+//! [`crate::tir::TypeTable::decl_named_in`] still answers `(name, module)` with
+//! a declaration, first-declared-wins, and has callers left. Until its head
+//! carries a `DefId` rather than a `(module, name)` pair, what keeps two
+//! same-named declarations apart is that their rendered names differ — a
+//! convention each site maintains, not a property of the key.
 //!
 //! See `docs/wep-2026-08-12-declaration-identity.md`.
 

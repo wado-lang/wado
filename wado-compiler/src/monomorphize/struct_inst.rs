@@ -25,15 +25,12 @@ impl Monomorphizer {
         let concrete_type_id =
             type_table.make_monomorphized_struct_from_args(generic.def, key.impl_type_args.clone());
 
-        // Find the GenericInstance TypeId and record the substitution early
-        // so that substitute_type can use it for self-references.
+        // Record the substitution before substituting fields, so a
+        // self-referential struct resolves to the concrete type.
         //
-        // The declaration is the key. `(name, module)` is not: sibling
-        // functions each declaring a `struct Box<T>` mint one
-        // `GenericInstance` apiece, and matching on the spelling claimed all
-        // of them for whichever instantiation was drained last — every
-        // literal then named that one struct, and one carrying more fields
-        // than it declares left values on the stack.
+        // Matched on the declaration, not on `(name, module)`: sibling
+        // functions each declaring a `struct Box<T>` mint one `GenericInstance`
+        // apiece, and a spelling claims all of them.
         let head_def = key
             .def
             .or_else(|| generic.def.decl())

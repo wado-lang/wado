@@ -61,13 +61,14 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
 }
 
 /// Separator between a local item's declared name and its disambiguating
-/// `AstId` in the internal storage name a function-scoped `struct`/`type`
-/// declaration (`Stmt::Item`) is minted under (see the local-item-definitions
-/// WEP). `@` is not a valid Wado identifier character. This is the type's
-/// *storage identity*, used to key the durable, module-wide field/case
-/// tables so two sibling functions' same-named local items never collide;
-/// [`crate::tir::TypeTable::type_name`] strips it back off before the name
-/// reaches a diagnostic.
+/// `AstId` in the storage name a function-scoped `struct` / `type` declaration
+/// (`Stmt::Item`) renders to. `@` is not a valid Wado identifier character.
+///
+/// The declaration data is keyed by [`crate::defs::DefId`]; this is what keeps
+/// two sibling functions' same-named local items apart in the registries still
+/// keyed by a rendered name — the WIR struct registry above all. A diagnostic
+/// never sees it: [`crate::tir::TypeTable::type_name`] renders the declared
+/// head instead of trimming this one back off.
 pub const LOCAL_ITEM_ID_SEP: char = '@';
 
 /// Build the internal storage name for a local item declaration: the declared
@@ -939,15 +940,13 @@ impl LocalMethodName {
     /// Replace the type `old` with `new` throughout this method's own
     /// identity — the receiver and the receiver's type arguments.
     ///
-    /// The substitution belongs here rather than on the rendered name: a
-    /// monomorphized call is keyed on `fq_base_struct_name` /
-    /// `fq_struct_name`, and its `name` is overwritten with whatever that key
-    /// finds. Rewriting the name left the key naming the old type.
+    /// Here rather than on the rendered name: a monomorphized call is keyed on
+    /// `fq_base_struct_name` / `fq_struct_name`, and its `name` is overwritten
+    /// with whatever that key finds.
     ///
-    /// `trait_name`'s arguments and `method_type_args` are still stored as
-    /// rendered strings and are left alone — they are the surface `SymbolPath`
-    /// subsumes, and a CM type swap changes the receiver, not the trait a
-    /// method implements.
+    /// `trait_name`'s arguments and `method_type_args` are still rendered
+    /// strings and are left alone — a CM type swap changes the receiver, not
+    /// the trait.
     pub fn substitute_type(&mut self, old: &FqTypeName, new: &FqTypeName) {
         if let Receiver::Type(fq) = &self.receiver {
             self.receiver = Receiver::Type(fq.substitute(old, new));

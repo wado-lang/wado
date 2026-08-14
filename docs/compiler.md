@@ -233,6 +233,15 @@ Every fq name names its subject by the module that declares it, and a type
 written into any name goes through `TypeTable::mangle_type_arg_for_generic`. A
 simple name alone is never an identity — two modules may declare the same one.
 
+What is one is a `crate::defs::DefId`: a dense index into the whole-program
+`DefTable`, built after loading from every module's items. Declaration data
+(fields, cases, members, visibility, span) is keyed by it, and `ResolvedType`'s
+nominal variants carry it, so a consumer reads a declaration without knowing
+which module it stands in. `TypeTable::decl_named_in` still turns a
+`(name, module)` pair into one for the callers that hold only a spelling; it
+answers first-declared-wins, so it cannot tell two same-named declarations in a
+module apart. See WEP 2026-08-12 for what still depends on that and why.
+
 A method key is `(impl module, declared receiver, trait, method)`, so `{impl}`
 and `{decl}` repeat whenever a type is implemented in the module declaring it —
 the common case. A receiver with no declaring module (a builtin, a tuple) has no

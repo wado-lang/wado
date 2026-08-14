@@ -529,9 +529,13 @@ Each mechanism states what it makes impossible, not what it discourages.
 
 ## Migration
 
-What is left, in the order it has to happen: the storage before the scope,
-synthesis before the table can be total, both before the mangling. Each step
-compiles, passes the suite, and ends with a mechanical completion check.
+The order it had to happen in: the storage before the scope, synthesis before
+the table can be total, both before the mangling. Each step compiles, passes the
+suite, and ends with a mechanical completion check.
+
+Every box below is ticked. That means each step met its own completion check —
+not that the class of bug this document opens with is unwritable yet. See
+[Where this stands](#where-this-stands) for the gap, which is one step wide.
 
 - [x] Declaration data keyed by `DefId`. All seven registries key on the
       declaration, and `TypeLookup`'s `lookup_ref` / `lookup_ref_in` /
@@ -1121,6 +1125,39 @@ on its own:
 - A regression cannot land quietly. A new reference-bearing node without an id
   fails the grammar test; a new query typed on names has nothing to hand it; a
   missed site panics rather than falling back.
+
+### Where this stands
+
+Those four are the design. Three of them hold; the first does not yet, and the
+distinction matters more than the ticked boxes above suggest.
+
+`TypeTable::decl_named_in` still answers `(name, module)` with a declaration,
+`or_insert` so the first one declared wins, and it has callers left.
+`DeclKey` is still `(ModuleSource, String)`, so the trait impl index is keyed by
+a spelling pair, and `TypeHead::Declared` carries a name rather than a `DefId`
+— which makes `FqTypeName` equality name equality. Twenty-two
+`(String, ModuleSource)`-keyed maps remain, one of them a generic-struct
+template registry in `monomorphize` (the "seven registries" row below counts the
+elaborator's, which are gone).
+
+So what keeps two same-named declarations apart today is not that a name cannot
+reach an identity. It is that their _rendered_ names differ —
+`mangle_local_item_name`'s `@AstId` suffix, plus the function-local tier
+`TypeLookup` consults first. That is a convention every minting site and every
+lookup site has to maintain, which is the same rule §8 states for manglers, now
+load-bearing for correctness rather than just for output.
+
+The evidence that the mechanism is intact rather than removed is the shape of
+the work: closing one fixture — two sibling functions each declaring
+`struct Box<T>` — took seven separate fixes, at type resolution, the struct
+literal, the WIR lookup key, template admission, template lookup, the
+registration name, and the instantiation scan. Each was a distinct caller of the
+same first-wins index. A removed mechanism takes one fix.
+
+The remaining step is the one the `decl_key_or_local` row below already names:
+a nominal head carries its `DefId` instead of a `(module, name)` pair. That is
+what makes `decl_named_in` deletable, and deleting it is what turns "does not
+happen" into "cannot happen".
 
 Costs and risks:
 

@@ -176,12 +176,13 @@ pub(crate) struct ModuleDecls {
 
     /// The spelling a local item's *type* renders to, back to the declaration.
     ///
-    /// A local item's type is interned under `{name}@{AstId}` so two functions'
-    /// same-named structs stay distinct types, and a consumer that destructured
-    /// a `ResolvedType` arrives holding that spelling rather than the identity
-    /// the type came from. This index is the one place that spelling is turned
-    /// back into a declaration, and it goes when `ResolvedType` carries the
-    /// declaration itself — at which point nothing renders a name to ask with.
+    /// The type is interned on its declaration, and renders as `{name}@{AstId}`
+    /// so the registries still keyed by a rendered name keep two functions'
+    /// same-named structs apart. This index is the one place that rendering is
+    /// turned back into a declaration, for the consumers that still arrive
+    /// holding a spelling rather than the identity it came from. It goes with
+    /// the last of those, not with `ResolvedType`, which already carries the
+    /// declaration.
     pub(crate) local_item_renders: IndexMap<(String, ModuleSource), crate::defs::DefId>,
 
     /// The local items in scope at the walk's current position, by the name
