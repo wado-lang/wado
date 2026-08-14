@@ -2,6 +2,10 @@ global mut heap_offset: i32 = 8;
 
 global POW10: List<u64> = deferred null;
 
+global POW10_FINE: List<u64> = deferred null;
+
+global POW10_K: i32 = 27;
+
 pub global PARSE_DIGITS_MAX: i32 = 19;
 
 pub global PARSE_EXP_MAX: i32 = 350;
@@ -3632,40 +3636,11 @@ fn pow10_coarse(i: i32) -> PmHiLo {
 }
 
 fn pow10_fine(i: i32) -> u64 {
-    return match i {
-        0 => 9223372036854775808,
-        1 => 11529215046068469760,
-        2 => 14411518807585587200,
-        3 => 18014398509481984000,
-        4 => 11258999068426240000,
-        5 => 14073748835532800000,
-        6 => 17592186044416000000,
-        7 => 10995116277760000000,
-        8 => 13743895347200000000,
-        9 => 17179869184000000000,
-        10 => 10737418240000000000,
-        11 => 13421772800000000000,
-        12 => 16777216000000000000,
-        13 => 10485760000000000000,
-        14 => 13107200000000000000,
-        15 => 16384000000000000000,
-        16 => 10240000000000000000,
-        17 => 12800000000000000000,
-        18 => 16000000000000000000,
-        19 => 10000000000000000000,
-        20 => 12500000000000000000,
-        21 => 15625000000000000000,
-        22 => 9765625000000000000,
-        23 => 12207031250000000000,
-        24 => 15258789062500000000,
-        25 => 9536743164062500000,
-        26 => 11920928955078125000,
-        _ => core::rt::unreachable(),
-    };
+    return core::prelude/fpfmt.wado::POW10_FINE."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i);
 }
 
-fn mul_pow10(p: i32) -> PmHiLo {
-    let K: i32 = 27;
+pub fn mul_pow10(p: i32) -> PmHiLo {
+    let K: i32 = core::prelude/fpfmt.wado::POW10_K;
     let Q_MIN: i32 = -13;
     let mut q: i32 = (p / K);
     let mut r: i32 = (p % K);
@@ -3705,6 +3680,9 @@ fn mul_pow10(p: i32) -> PmHiLo {
 }
 
 pub fn get_pow10(p: i32) -> PmHiLo {
+    if ((p >= 0) && (p < core::prelude/fpfmt.wado::POW10_K)) {
+        return PmHiLo { hi: "core::prelude/fpfmt.wado::pow10_fine"(p), lo: 0 };
+    }
     return "core::prelude/fpfmt.wado::mul_pow10"(p);
 }
 
@@ -3738,7 +3716,7 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/fpfmt.wado", used: 23 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 302 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 293 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed": ", used: 2 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"digits must be <= 18", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: n <= 18\n", used: 20 });
@@ -3975,8 +3953,12 @@ fn write_digits_at(buf: &mut String, offset: i32, val: u64, nd: i32) {
     }
 }
 
-fn fill_zeros(buf: &mut String, n: i32) {
-    buf."core:prelude/string.wado/String::append_byte_filled"(48, n);
+fn zeros_at(buf: &mut String, offset: i32, n: i32) {
+    if (n <= 0) {
+        return;
+    }
+    let raw: &mut Array<u8> = buf."core:prelude/string.wado/String::internal_raw_bytes_mut"();
+    "core::builtin::core/builtin/array_fill<u8>"(raw, offset, 48, n);
 }
 
 fn reserve_uninit(buf: &mut String, n: i32) -> i32 {
@@ -3986,15 +3968,17 @@ fn reserve_uninit(buf: &mut String, n: i32) -> i32 {
 pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
     let decimal_pos: i32 = (nd + p);
     if (decimal_pos <= 0) {
-        buf."core:prelude/string.wado/String::push_str"(&String { repr: packed"0.", used: 2 });
-        "core::prelude/fpfmt.wado::fill_zeros"(buf, -decimal_pos);
-        let digit_offset: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, nd);
-        "core::prelude/fpfmt.wado::write_digits_at"(buf, digit_offset, d, nd);
+        let leading: i32 = -decimal_pos;
+        let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, ((2 + leading) + nd));
+        buf."core:prelude/string.wado/String::set_byte_unchecked"(start, 48);
+        buf."core:prelude/string.wado/String::set_byte_unchecked"((start + 1), 46);
+        "core::prelude/fpfmt.wado::zeros_at"(buf, (start + 2), leading);
+        "core::prelude/fpfmt.wado::write_digits_at"(buf, ((start + 2) + leading), d, nd);
     } else {
         if (decimal_pos >= nd) {
-            let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, nd);
+            let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, decimal_pos);
             "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
-            "core::prelude/fpfmt.wado::fill_zeros"(buf, (decimal_pos - nd));
+            "core::prelude/fpfmt.wado::zeros_at"(buf, (start + nd), (decimal_pos - nd));
         } else {
             let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, (nd + 1));
             "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
@@ -4078,19 +4062,21 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
             buf."core:prelude/string.wado/String::push_str"(&String { repr: packed"0", used: 1 });
             return;
         }
-        buf."core:prelude/string.wado/String::push_str"(&String { repr: packed"0.", used: 2 });
+        let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, (2 + precision));
+        buf."core:prelude/string.wado/String::set_byte_unchecked"(start, 48);
+        buf."core:prelude/string.wado/String::set_byte_unchecked"((start + 1), 46);
+        let frac: i32 = (start + 2);
         if (precision <= leading_zeros) {
-            "core::prelude/fpfmt.wado::fill_zeros"(buf, precision);
+            "core::prelude/fpfmt.wado::zeros_at"(buf, frac, precision);
             return;
         }
-        "core::prelude/fpfmt.wado::fill_zeros"(buf, leading_zeros);
+        "core::prelude/fpfmt.wado::zeros_at"(buf, frac, leading_zeros);
         let remaining_prec: i32 = (precision - leading_zeros);
         let digits_to_output: i32 = if (remaining_prec < nd) {
             remaining_prec;
         } else {
             nd;
         };
-        let trailing: i32 = ((precision - leading_zeros) - digits_to_output);
         let mut trim_d: u64 = d;
         let mut skip: i32 = (nd - digits_to_output);
         loop {
@@ -4100,17 +4086,21 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
             trim_d = (trim_d / 10);
             skip = (skip - 1);
         }
-        let digit_offset: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, digits_to_output);
-        "core::prelude/fpfmt.wado::write_digits_at"(buf, digit_offset, trim_d, digits_to_output);
-        "core::prelude/fpfmt.wado::fill_zeros"(buf, trailing);
+        "core::prelude/fpfmt.wado::write_digits_at"(buf, (frac + leading_zeros), trim_d, digits_to_output);
+        "core::prelude/fpfmt.wado::zeros_at"(buf, ((frac + leading_zeros) + digits_to_output), (remaining_prec - digits_to_output));
     } else {
         if (decimal_pos >= nd) {
-            let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, nd);
+            let point: i32 = if (precision > 0) {
+                (1 + precision);
+            } else {
+                0;
+            };
+            let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, (decimal_pos + point));
             "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
-            "core::prelude/fpfmt.wado::fill_zeros"(buf, (decimal_pos - nd));
+            "core::prelude/fpfmt.wado::zeros_at"(buf, (start + nd), (decimal_pos - nd));
             if (precision > 0) {
-                buf."core:prelude/string.wado/String::push_str"(&String { repr: packed".", used: 1 });
-                "core::prelude/fpfmt.wado::fill_zeros"(buf, precision);
+                buf."core:prelude/string.wado/String::set_byte_unchecked"((start + decimal_pos), 46);
+                "core::prelude/fpfmt.wado::zeros_at"(buf, ((start + decimal_pos) + 1), precision);
             }
         } else {
             let after_decimal: i32 = (nd - decimal_pos);
@@ -4133,12 +4123,12 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
                 return;
             }
             let trailing: i32 = (precision - after_decimal);
-            let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, (nd + 1));
+            let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, ((nd + 1) + trailing));
             "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
             let raw: &mut Array<u8> = buf."core:prelude/string.wado/String::internal_raw_bytes_mut"();
             "core::builtin::core/builtin/array_copy<u8>"(raw, ((start + decimal_pos) + 1), raw, (start + decimal_pos), (nd - decimal_pos));
             buf."core:prelude/string.wado/String::set_byte_unchecked"((start + decimal_pos), 46);
-            "core::prelude/fpfmt.wado::fill_zeros"(buf, trailing);
+            "core::prelude/fpfmt.wado::zeros_at"(buf, ((start + nd) + 1), trailing);
         }
     }
 }
@@ -4163,7 +4153,7 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         };
         let trailing: i32 = (precision - to_output);
         let digit_count: i32 = (1 + to_output);
-        let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, (digit_count + 1));
+        let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, ((digit_count + 1) + trailing));
         let mut trim_d: u64 = d;
         let mut skip: i32 = (nd - digit_count);
         loop {
@@ -4177,7 +4167,7 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         let raw: &mut Array<u8> = buf."core:prelude/string.wado/String::internal_raw_bytes_mut"();
         "core::builtin::core/builtin/array_copy<u8>"(raw, (start + 2), raw, (start + 1), (digit_count - 1));
         buf."core:prelude/string.wado/String::set_byte_unchecked"((start + 1), 46);
-        "core::prelude/fpfmt.wado::fill_zeros"(buf, trailing);
+        "core::prelude/fpfmt.wado::zeros_at"(buf, ((start + digit_count) + 1), trailing);
     } else {
         let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, 1);
         let mut first_d: u64 = d;
@@ -14853,8 +14843,6 @@ pub fn "core:prelude/list.wado/List<char>::with_capacity"(capacity: i32) -> List
     return List<char> { repr: core::builtin::array_new::<char>(capacity), used: 0 };
 }
 
-fn "core/builtin/array_fill<u8>"(arr: &mut Array<u8>, offset: i32, value: u8, len: i32);
-
 pub fn "core:prelude/slice.wado/ArraySlice<u8>::get_unchecked"(self: &ArraySlice<u8>, index: i32) -> u8 {
     return core::builtin::array_get::<u8>(self.repr, (self.start + index));
 }
@@ -15001,6 +14989,8 @@ fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/Inspect::inspec
         }
     }
 }
+
+fn "core/builtin/array_fill<u8>"(arr: &mut Array<u8>, offset: i32, value: u8, len: i32);
 
 fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &List<u64>, index: i32) -> u64 {
     __assert_0: {
@@ -19729,6 +19719,37 @@ pub fn __initialize_module() {
         __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(100000000000000000);
         __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(1000000000000000000);
         __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10000000000000000000);
+        break __seq_lit: __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::build"();
+    };
+    core::prelude/fpfmt.wado::POW10_FINE = __seq_lit: {
+        let mut __b: List<u64> = "core::prelude/list.wado::core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::new_literal"(27);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(9223372036854775808);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(11529215046068469760);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(14411518807585587200);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(18014398509481984000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(11258999068426240000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(14073748835532800000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(17592186044416000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10995116277760000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(13743895347200000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(17179869184000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10737418240000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(13421772800000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(16777216000000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10485760000000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(13107200000000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(16384000000000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10240000000000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(12800000000000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(16000000000000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10000000000000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(12500000000000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(15625000000000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(9765625000000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(12207031250000000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(15258789062500000000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(9536743164062500000);
+        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(11920928955078125000);
         break __seq_lit: __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::build"();
     };
 }
