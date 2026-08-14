@@ -3928,7 +3928,13 @@ impl TypeTable {
             | ResolvedType::Flags { def }
             | ResolvedType::Resource { def }
             | ResolvedType::GenericInstance { def, .. } => {
-                FqTypeName::declared(self.def_module(*def), self.def_name(*def))
+                // The *rendered* name, as the `Struct` arm above uses: this
+                // spells a receiver into a method name, and a function-local
+                // declaration's methods are registered under its disambiguated
+                // spelling. `def_name` here made a local `type UserId = i32`
+                // call `UserId^Inspect::inspect` against a definition emitted
+                // as `UserId@2^Inspect::inspect`.
+                FqTypeName::declared(self.def_module(*def), &self.decl_render_name(*def))
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.fq_base_type_name(*inner)
