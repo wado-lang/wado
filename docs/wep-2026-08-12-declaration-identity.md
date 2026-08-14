@@ -791,8 +791,28 @@ compiles, passes the suite, and ends with a mechanical completion check.
       states, and it was still underestimated: the constructors are the work.
       Every one of these is a construction site that kept its spelling.
 
-- [ ] The tuple family's declaring module is not where its impls live, and a
-      receiver's impl module is read off the declaration.
+- [ ] Tuple trait dispatch cannot resolve `[a,b]^Trait::method`. Half of it
+      was the spelling, and that half is fixed. The other half is not the
+      module: the theory that `module_source_for_trait_impl` answering with
+      the family's declaring module (`core:prelude/types.wado`) rather than
+      its impls' (`core:prelude/tuple.wado`) was the cause was tested and
+      refuted — making it answer `None` changed nothing, 64/16 before and
+      after, and the edit was reverted rather than left in on a hunch.
+
+      What is left is one observation, from a single diagnostic:
+
+          type `[]<i32,String,bool>` does not implement trait `Inspect`;
+          type `[f64,f64]` does not implement trait `Inspect`
+
+      Two tuple receivers, one message, two spellings — *after* the `builtin`
+      fix. So the wrong one is not minted through `FqTypeName` at all. Find
+      who builds a call name for a tuple receiver by another route, and the
+      cluster goes with it.
+
+      The older entry this replaces is worth keeping only as a warning: the
+      declaring module and the impl module genuinely do differ for the tuple
+      family, and that is genuinely against the convention the monomorphizer
+      falls back on. It is still not what breaks this.
       `module_source_for_trait_impl` reads a receiver's declaring module and
       the monomorphizer falls through to it "by convention" when no per-type
       impl answers — the convention being that a generic `impl` for a type
