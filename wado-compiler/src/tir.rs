@@ -1208,7 +1208,60 @@ impl TypeTable {
         module: ModuleSource,
         kind: crate::defs::DefKind,
     ) -> crate::defs::DefId {
-        std::sync::Arc::make_mut(&mut self.defs).declare_for_test(&module, name, kind)
+        let def = std::sync::Arc::make_mut(&mut self.defs).declare_for_test(&module, name, kind);
+        if kind.is_type() {
+            self.decl_index
+                .entry((name.to_string(), module))
+                .or_insert(def);
+        }
+        def
+    }
+
+    /// Register the compiler-item declarations a bare table's own type
+    /// constructors read — `make_list`, `make_option`, `make_result`,
+    /// `make_tuple`, `make_compiler_struct(String)`.
+    ///
+    /// A test that builds types without loading the stdlib has no annotate
+    /// pass to record what `#[compiler_item("…")]` marks, and those
+    /// constructors answer from the declaration rather than from a spelling.
+    #[cfg(test)]
+    pub(crate) fn seed_compiler_items_for_test(&mut self) {
+        use crate::compiler_item::{CompilerItem, Resolved};
+        use crate::defs::DefKind;
+
+        let prelude = ModuleSource::prelude();
+        let _ = self
+            .compiler_items
+            .register(CompilerItem::Tuple, Resolved::TupleFamily {
+                module_source: prelude.clone(),
+            });
+        self.declare_for_test(Self::TUPLE_TYPE_NAME, prelude.clone(), DefKind::Struct);
+
+        for (item, name) in [
+            (CompilerItem::List, "List"),
+            (CompilerItem::String, "String"),
+        ] {
+            let def = self.declare_for_test(name, prelude.clone(), DefKind::Struct);
+            let decl = self.defs.ast_id(def);
+            let _ = self.compiler_items.register(item, Resolved::Struct {
+                module_source: prelude.clone(),
+                name: name.to_string(),
+                decl,
+            });
+        }
+
+        for (item, name) in [
+            (CompilerItem::Option, "Option"),
+            (CompilerItem::Result, "Result"),
+        ] {
+            let def = self.declare_for_test(name, prelude.clone(), DefKind::Variant);
+            let decl = self.defs.ast_id(def);
+            let _ = self.compiler_items.register(item, Resolved::Variant {
+                module_source: prelude.clone(),
+                name: name.to_string(),
+                decl,
+            });
+        }
     }
 
     /// The declaration a compiler item names.
@@ -1791,15 +1844,6 @@ impl TypeTable {
     /// Create an `Option<T>` type using the module source registered
     /// via `#[compiler_item("option")]`.
     pub fn make_option(&mut self, inner: TypeId) -> TypeId {
-        let module_source = self
-            .compiler_items
-            .variant_module(crate::compiler_item::CompilerItem::Option)
-            .cloned()
-            .expect(
-                "Option module source not registered; missing \
-                 #[compiler_item(\"option\")] on the Option variant",
-            );
-        let _ = module_source;
         let def = self
             .compiler_item_def(crate::compiler_item::CompilerItem::Option)
             .expect("the Option declaration is a registered compiler item");
@@ -1809,15 +1853,6 @@ impl TypeTable {
     /// Create a `Result<T, E>` type using the module source registered
     /// via `#[compiler_item("result")]`.
     pub fn make_result(&mut self, ok: TypeId, err: TypeId) -> TypeId {
-        let module_source = self
-            .compiler_items
-            .variant_module(crate::compiler_item::CompilerItem::Result)
-            .cloned()
-            .expect(
-                "Result module source not registered; missing \
-                 #[compiler_item(\"result\")] on the Result variant",
-            );
-        let _ = module_source;
         let def = self
             .compiler_item_def(crate::compiler_item::CompilerItem::Result)
             .expect("the Result declaration is a registered compiler item");
@@ -6043,6 +6078,7 @@ mod tests {
     #[test]
     fn test_intern_deduplication() {
         let mut table = TypeTable::new();
+        table.seed_compiler_items_for_test();
         // Test that interning the same type returns the same TypeId
         let arr1 = table.make_list(TypeTable::I32);
         let arr2 = table.make_list(TypeTable::I32);
@@ -6145,6 +6181,7 @@ mod tests {
     #[test]
     fn a_projection_answer_applies_inside_a_container() {
         let mut table = TypeTable::new();
+        table.seed_compiler_items_for_test();
         let self_param = table.make_type_param("Self".to_string(), 0);
         let projection = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
         let list_of_projection = table.make_list(projection);

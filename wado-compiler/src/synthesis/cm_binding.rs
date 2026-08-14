@@ -1180,16 +1180,20 @@ mod tests {
         // bound to leaves the identity reads this fixture exists for —
         // `is_result`, `as_option`, `is_string`, `is_list` — answering no
         // rather than wrong, which is the harder failure to notice.
+        // The node a compiler item records must be the declaration's own,
+        // not a second fresh one: `compiler_item_def` walks the registered
+        // node back to a `DefId`, and a node no declaration carries walks
+        // back to nothing.
         let bind_variant = |tt: &mut TypeTable, name: &str, module: ModuleSource| {
-            let decl = crate::ast::AstId::fresh();
             let def = tt.declare_for_test(name, module, crate::defs::DefKind::Variant);
+            let decl = tt.defs().ast_id(def);
             let ty = tt.make_variant(def);
             tt.register_decl_type(decl, ty);
             decl
         };
         let bind_struct = |tt: &mut TypeTable, name: &str, module: ModuleSource| {
-            let decl = crate::ast::AstId::fresh();
             let def = tt.declare_for_test(name, module, crate::defs::DefKind::Struct);
+            let decl = tt.defs().ast_id(def);
             let ty = tt.make_struct(crate::tir::StructDef::Decl(def));
             tt.register_decl_type(decl, ty);
             decl
@@ -1264,6 +1268,19 @@ mod tests {
                 module_source: ModuleSource::list(),
                 name: "List".to_string(),
                 decl: list_decl,
+            },
+        );
+        // A WASI variant payload lifts through a tuple, and `make_tuple`
+        // reads the tuple family's declaration like any other head.
+        tt.declare_for_test(
+            TypeTable::TUPLE_TYPE_NAME,
+            ModuleSource::prelude(),
+            crate::defs::DefKind::Struct,
+        );
+        let _ = tt.compiler_items_mut().register(
+            CompilerItem::Tuple,
+            Resolved::TupleFamily {
+                module_source: ModuleSource::prelude(),
             },
         );
     }

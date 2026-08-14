@@ -1274,6 +1274,7 @@ mod tests {
         // `FieldAccess`.)
         use crate::tir::TypeTable;
         let mut types = TypeTable::new();
+        types.seed_compiler_items_for_test();
         let tuple_ty = types.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
         let mut body = Body::empty();
         let base = body.exprs.push(ExprNode {

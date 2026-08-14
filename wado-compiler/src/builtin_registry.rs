@@ -290,7 +290,9 @@ mod tests {
     }
 
     fn make_type_table() -> RefCell<TypeTable> {
-        RefCell::new(TypeTable::new())
+        let mut table = TypeTable::new();
+        table.seed_compiler_items_for_test();
+        RefCell::new(table)
     }
 
     #[test]
