@@ -2530,10 +2530,17 @@ mod tests {
         let elems = vec![FqTypeName::builtin("i32"), FqTypeName::builtin("f64")];
         let by_name = FqTypeName::of_head(&ModuleSource::default(), TUPLE_TYPE_NAME)
             .with_args(elems.clone());
+        // `declared` is the route a caller takes when it read `(name, module)`
+        // off a resolved type — the family declares a module, and the spelling
+        // still must not carry it.
+        let by_decl =
+            FqTypeName::declared(&ModuleSource::default(), TUPLE_TYPE_NAME).with_args(elems.clone());
         let by_constructor = FqTypeName::tuple(elems);
         assert_eq!(by_name.to_mangled(), "[i32,f64]");
         assert_eq!(by_name.to_mangled(), by_constructor.to_mangled());
+        assert_eq!(by_decl.to_mangled(), by_constructor.to_mangled());
         assert_eq!(by_name.to_display(), by_constructor.to_display());
+        assert_eq!(by_decl.to_display(), by_constructor.to_display());
     }
 
     #[test]
@@ -2716,8 +2723,19 @@ impl FqTypeName {
     ///
     /// `name` is the declaration's own name and carries no type arguments;
     /// [`Self::with_args`] adds them once the receiver is instantiated.
+    ///
+    /// The tuple family is the one declaration whose *spelling* is not
+    /// `Module/Head<args>`: it is `[a,b]`, bare. It became a declaration in
+    /// WEP 2026-08-12, so a caller reading `(name, module)` off a resolved
+    /// type now lands here with it — and the qualified form it would produce
+    /// (`core:prelude/types.wado/[]<i32,String>`) is a name no impl is
+    /// registered under. Every other builtin spells `Head<args>` either way,
+    /// so only this one has to be caught.
     #[must_use]
     pub fn declared(module: &crate::module_source::ModuleSource, name: &str) -> Self {
+        if name == TUPLE_TYPE_NAME {
+            return Self::of_head_kind(TypeHead::Tuple);
+        }
         Self::of_head_kind(TypeHead::Declared {
             module: module.clone(),
             name: name.to_string(),
