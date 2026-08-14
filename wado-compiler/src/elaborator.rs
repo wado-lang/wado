@@ -1243,6 +1243,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().struct_fields_in(name, module_source)
     }
 
+    /// Field info for the struct `def` declares.
+    pub(super) fn lookup_struct_fields_of_decl(
+        &self,
+        def: crate::defs::DefId,
+    ) -> Option<&StructFieldInfo> {
+        self.type_lookup().struct_fields_of(def)
+    }
+
     /// Field info for a struct type's head; see `TypeLookup::struct_fields_of`.
     pub(super) fn lookup_struct_fields_of(
         &self,

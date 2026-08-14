@@ -1310,8 +1310,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
                 }
-                // Clone fields to avoid borrow issues
-                let fields_clone = self.lookup_struct_fields_in(&name, &module_source).cloned();
+                // Clone fields to avoid borrow issues. The declaration the
+                // instance names answers first: a function-local generic
+                // struct's fields are keyed by its identity, and the spelling
+                // reaches them only through the local-item render index.
+                let by_def = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_def(struct_type)
+                    .and_then(|def| self.lookup_struct_fields_of_decl(def).cloned());
+                let fields_clone = by_def
+                    .or_else(|| self.lookup_struct_fields_in(&name, &module_source).cloned());
                 if let Some(struct_info) = fields_clone {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
