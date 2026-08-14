@@ -46,7 +46,8 @@ pub fn future_payload_rejection(type_table: &TypeTable, payload: TypeId) -> Opti
 pub fn is_cm_record_stream_element(type_table: &TypeTable, element: TypeId) -> bool {
     matches!(
         type_table.get(peel_newtypes(type_table, element)),
-        ResolvedType::Struct { module_source, .. } if is_cm_owned_source(module_source)
+        ResolvedType::Struct { def, .. }
+            if def.decl().is_some_and(|d| is_cm_owned_source(type_table.def_module(d)))
     )
 }
 
@@ -92,27 +93,13 @@ fn try_classify_future_payload(
                 return Some(CmFuturePayload::Scalar(scalar));
             }
         }
-<<<<<<< HEAD
         ResolvedType::GenericInstance { type_args, .. }
             if type_table.is_result(type_arg) && type_args.len() >= 2 =>
         {
-            if matches!(type_table.get(type_args[0]), ResolvedType::Unit) {
-                return CmFuturePayload::Transmission(error_code_source(type_table, type_args[1]));
-||||||| bad542cd7
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } if name == "Result" && type_args.len() >= 2 => {
-            if matches!(type_table.get(type_args[0]), ResolvedType::Unit) {
-                return CmFuturePayload::Transmission(error_code_source(type_table, type_args[1]));
-=======
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } if name == "Result" && type_args.len() >= 2 => {
             if matches!(type_table.get(type_args[0]), ResolvedType::Unit)
                 && let Some(source) = wasi_error_code_source(type_table, type_args[1])
             {
                 return Some(CmFuturePayload::Transmission(source));
->>>>>>> origin/main
             }
         }
         _ => {}
@@ -126,13 +113,10 @@ fn try_classify_future_payload(
 /// `result<option<trailers>, error-code>`, recognized by shape: codegen builds
 /// this `future<T>` from the HTTP types interface, not from a [`CmPayloadType`].
 fn is_trailers_payload(type_table: &TypeTable, type_arg: TypeId) -> bool {
-    let ResolvedType::GenericInstance {
-        name, type_args, ..
-    } = type_table.get(type_arg)
-    else {
+    let ResolvedType::GenericInstance { type_args, .. } = type_table.get(type_arg) else {
         return false;
     };
-    if name != "Result" || type_args.len() < 2 {
+    if !type_table.is_result(type_arg) || type_args.len() < 2 {
         return false;
     }
     let Some(inner) = type_table.as_option(type_args[0]) else {
@@ -218,7 +202,6 @@ pub fn cm_payload_type_from_type_id(
                 arm(type_args[1])?,
             ))
         }
-<<<<<<< HEAD
         // A user/dependency record: lower/lift it as a named CM record. WASI and
         // kiln records keep their own (registry-driven) paths, so they stay
         // `None` here and fall through to the legacy classification.
@@ -229,38 +212,19 @@ pub fn cm_payload_type_from_type_id(
                 &type_table.struct_head_name(*def),
             )))
         }
-||||||| bad542cd7
-        // A user/dependency record: lower/lift it as a named CM record. WASI and
-        // kiln records keep their own (registry-driven) paths, so they stay
-        // `None` here and fall through to the legacy classification.
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),
-=======
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),
-        ResolvedType::Enum {
-            name,
-            module_source,
+        ResolvedType::Enum { def }
+        | ResolvedType::Variant { def }
+        | ResolvedType::Flags { def }
+            if !is_cm_owned_source(type_table.def_module(*def)) =>
+        {
+            Some(CmPayloadType::Named(to_kebab(type_table.def_name(*def))))
         }
-        | ResolvedType::Variant {
-            name,
-            module_source,
-        }
-        | ResolvedType::Flags {
-            name,
-            module_source,
-        } if !is_cm_owned_source(module_source) => Some(CmPayloadType::Named(to_kebab(name))),
         // Unlike the records above, a WASI-owned resource is included: its
         // component type is aliased from the defining interface, so `own<…>`
         // has one to point at.
-        ResolvedType::Resource { name, .. } => Some(CmPayloadType::Resource(to_kebab(name))),
->>>>>>> origin/main
+        ResolvedType::Resource { def } => {
+            Some(CmPayloadType::Resource(to_kebab(type_table.def_name(*def))))
+        }
         _ => None,
     }
 }
@@ -492,36 +456,16 @@ pub fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
     })
 }
 
-<<<<<<< HEAD
-/// WASI package owning an `ErrorCode` type (e.g. `"http/types.wado"` → `"http"`).
-/// Each package's error-code is a distinct CM type, so the transmission future
-/// is parameterized by it. Falls back to `"cli"` for a non-WASI error type.
-pub fn error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> String {
-    let module_source = match type_table.get(error_type_id) {
-        ResolvedType::Enum { def } | ResolvedType::Variant { def } => type_table.def_module(*def),
-        _ => return "cli".to_string(),
-||||||| bad542cd7
-/// WASI package owning an `ErrorCode` type (e.g. `"http/types.wado"` → `"http"`).
-/// Each package's error-code is a distinct CM type, so the transmission future
-/// is parameterized by it. Falls back to `"cli"` for a non-WASI error type.
-pub fn error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> String {
-    let module_source = match type_table.get(error_type_id) {
-        ResolvedType::Enum { module_source, .. } | ResolvedType::Variant { module_source, .. } => {
-            module_source
-        }
-        _ => return "cli".to_string(),
-=======
 /// WASI package owning an `ErrorCode` type (`"http/types.wado"` → `"http"`), or
 /// `None` if the type is not a WASI error-code — an ordinary `result<_, E>`
 /// payload, then, not a transmission future.
 fn wasi_error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> Option<String> {
-    let (ResolvedType::Enum { module_source, .. } | ResolvedType::Variant { module_source, .. }) =
+    let (ResolvedType::Enum { def } | ResolvedType::Variant { def }) =
         type_table.get(error_type_id)
     else {
         return None;
->>>>>>> origin/main
     };
-    let ModuleSource::Wasi { interface } = module_source else {
+    let ModuleSource::Wasi { interface } = type_table.def_module(*def) else {
         return None;
     };
     Some(interface.split('/').next().unwrap_or("cli").to_string())

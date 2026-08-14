@@ -293,35 +293,12 @@ fn replace_type_in_adapter_with_names(
     }
 }
 
-<<<<<<< HEAD
-/// Replaces every occurrence of `old_type` with `new_type` throughout an
-/// adapter body, and — when `rename` is set — substitutes the same pair inside
-/// each callee's own identity (needed for monomorphized helpers like
-/// `List<T>::with_capacity` where `T` is a WASI-derived type differing from the
-/// user's newtype alias).
-///
-/// Traversal is exhaustive via `TirMutVisitor`, so the swap reaches every
-/// expression position — match arms, nested blocks, closures, index/assign
-/// targets — rather than the partial set the previous hand-written walkers
-/// covered.
-||||||| bad542cd7
-/// Replaces every occurrence of `old_type` with `new_type` throughout an
-/// adapter body, and — when `rename` is set — rewrites function references
-/// whose mangled name embeds `old_name` to use `new_name` (needed for
-/// monomorphized helpers like `List<T>::with_capacity` where `T` is a
-/// WASI-derived type differing from the user's newtype alias).
-///
-/// Traversal is exhaustive via `TirMutVisitor`, so the swap reaches every
-/// expression position — match arms, nested blocks, closures, index/assign
-/// targets — rather than the partial set the previous hand-written walkers
-/// covered.
-=======
 /// Replaces every `old_type` with `new_type` throughout an adapter body, and
-/// with `rename` set also rewrites function references whose mangled name
-/// embeds `old_name` — needed for a monomorphized `List<T>::with_capacity`
-/// whose `T` is WASI-derived. Traversal rides `TirMutVisitor`, so the swap
-/// reaches every expression position.
->>>>>>> origin/main
+/// with `rename` set also substitutes the same pair inside each callee's own
+/// identity — needed for a monomorphized `List<T>::with_capacity` whose `T` is
+/// WASI-derived. Traversal rides `TirMutVisitor`, so the swap reaches every
+/// expression position.
+
 struct TypeReplacer<'a> {
     old_type: TypeId,
     new_type: TypeId,

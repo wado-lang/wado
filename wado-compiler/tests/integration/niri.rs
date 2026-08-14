@@ -8241,8 +8241,8 @@ fn a_stored_reference_parameter_does_not_fold_into_a_snapshot() {
     // `h.inner` aliases `p`, so scenario() == 9. The alias escapes inside an
     // aggregate rather than as the return type, which the sibling test covers.
     let mut table = TypeTable::new();
-    let inner_ty = table.make_struct("Inner".to_string(), ModuleSource::default());
-    let holder_ty = table.make_struct("Holder".to_string(), ModuleSource::default());
+    let inner_ty = fixture_struct(&mut table, "Inner", ModuleSource::default());
+    let holder_ty = fixture_struct(&mut table, "Holder", ModuleSource::default());
     let ref_inner = table.make_ref(inner_ty);
 
     let mut keep = make_pure_fn(
@@ -8308,7 +8308,7 @@ fn a_ref_global_alias_rebound_by_a_later_let_does_not_vouch_for_it() {
     // One index, two bindings: the flow-insensitive scan cannot say which one
     // governs the read.
     let mut table = TypeTable::new();
-    let cfg_ty = table.make_struct("Cfg".to_string(), ModuleSource::default());
+    let cfg_ty = fixture_struct(&mut table, "Cfg", ModuleSource::default());
     let module = ModuleSource::default();
     let mut fields = GlobalFieldEnv::default();
     fields.insert(
@@ -8356,7 +8356,7 @@ fn an_orphaned_ref_global_binding_does_not_vouch_for_a_live_local() {
     // A displaced `let cfg = &CONFIG` stays in the arena and cannot run, so it
     // must not speak for the binding that replaced it.
     let mut table = TypeTable::new();
-    let cfg_ty = table.make_struct("Cfg".to_string(), ModuleSource::default());
+    let cfg_ty = fixture_struct(&mut table, "Cfg", ModuleSource::default());
     let module = ModuleSource::default();
     let mut fields = GlobalFieldEnv::default();
     fields.insert(

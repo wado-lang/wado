@@ -853,40 +853,16 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         }
     }
 
-<<<<<<< HEAD
-    /// Require that the name an `impl` implements is declared.
-    ///
-    /// `impl X for T` names a trait, an effect or a resource — the latter two
-    /// install handlers through the same syntax — so all three declaration
-    /// kinds satisfy it. Nothing else resolves this name: every index downstream
-    /// keys off the written string, so an `impl` of a name nothing declares
-    /// registers happily, matches no query, and reaches the back end unmentioned.
-    ///
-    /// The header's own reference site answers, and only it. A global by-name
-    /// scan would let `impl Deserialize for T;` compile in a module that never
-    /// named `Deserialize` — and the header would then carry no identity, so
-    /// dispatch would be left comparing spellings two modules can share.
-    /// Naming the trait is what a module does to implement it.
-||||||| bad542cd7
-    /// Require that the name an `impl` implements is declared.
-    ///
-    /// `impl X for T` names a trait, an effect or a resource — the latter two
-    /// install handlers through the same syntax — so all three declaration
-    /// kinds satisfy it. Nothing else resolves this name: every index downstream
-    /// keys off the written string, so an `impl` of a name nothing declares
-    /// registers happily, matches no query, and reaches the back end unmentioned.
-    ///
-    /// The head resolves through the same chain the block's own facts use, so
-    /// the check and the facts cannot disagree about which declaration it
-    /// names. A head with a reference site answers from the site; a synthesized
-    /// one, which has none, falls back to the name-only chain.
-=======
     /// Require that the name an `impl` implements is declared — as a trait, an
     /// effect, or a resource, the latter two installing handlers through the same
     /// syntax. Nothing else resolves it: every downstream index keys off the
     /// written string, so an `impl` of an undeclared name registers happily,
     /// matches no query, and reaches the back end unmentioned.
->>>>>>> origin/main
+    ///
+    /// The header's own reference site answers, and only it. A global by-name
+    /// scan would let `impl Deserialize for T;` compile in a module that never
+    /// named `Deserialize`, and the header would carry no identity — leaving
+    /// dispatch comparing spellings two modules can share.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
         let implementable = crate::resolve::head_site(trait_type)
             .and_then(|site| self.tysys.resolutions.declared(site))

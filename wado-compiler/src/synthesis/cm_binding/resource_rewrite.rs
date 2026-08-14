@@ -317,20 +317,18 @@ fn payload_ast_type(
     let id = crate::component_model::peel_newtypes(tt, payload);
     // Peeled off the TypeId, not the produced AST: a lib-local alias's
     // synthesized `NamedType` carries no source interface to look it up by.
-    if let ResolvedType::GenericInstance {
-        name, type_args, ..
-    } = tt.get(id)
-    {
+    if let ResolvedType::GenericInstance { def, type_args } = tt.get(id) {
+        let name = tt.def_name(*def).to_string();
         let args: Vec<crate::ast::Type> = type_args
             .iter()
             .map(|&a| payload_ast_type(a, tt, registry))
             .collect();
-        return if TypeTable::is_tuple_type(name) {
+        return if TypeTable::is_tuple_type(&name) {
             crate::ast::Type::Tuple(args)
         } else {
             crate::ast::Type::Generic(crate::ast::GenericType {
                 id: crate::ast::AstId::fresh(),
-                name: name.clone(),
+                name,
                 args,
                 span: synth_span(),
             })

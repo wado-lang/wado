@@ -152,69 +152,32 @@ pub(crate) struct ModuleDecls {
     pub(crate) local_flags_cases: IndexMap<String, FlagsInfo>,
     pub(crate) local_variant_cases: IndexMap<String, VariantInfo>,
 
-<<<<<<< HEAD
     /// Function-local item declarations (`Stmt::Item` — a `struct` or `type`
-    /// declared inside a function body), by their own identity. Distinct from
-    /// `local_struct_fields` et al above, which are module-scoped (anonymous
-    /// struct literals, in-progress module decls).
-    ///
-    /// Two functions declaring the same spelling declare two of them, and
-    /// these maps say so, because a local item is a declaration with a
-    /// [`crate::defs::DefId`] like any other rather than a mangled storage
-    /// name standing in for one.
+    /// declared inside a function body), by their own identity, as against the
+    /// module-scoped `local_struct_fields` above. Two functions declaring the
+    /// same spelling declare two items, and these maps say so: a local item is
+    /// a declaration with a [`crate::defs::DefId`] like any other.
     pub(crate) local_item_struct_fields: IndexMap<crate::defs::DefId, StructFieldInfo>,
     pub(crate) local_item_newtypes: IndexMap<crate::defs::DefId, TypeId>,
 
     /// The spelling a local item's *type* renders to, back to the declaration.
     ///
-    /// The type is interned on its declaration, and renders as `{name}@{AstId}`
-    /// so the registries still keyed by a rendered name keep two functions'
-    /// same-named structs apart. This index is the one place that rendering is
-    /// turned back into a declaration, for the consumers that still arrive
-    /// holding a spelling rather than the identity it came from. It goes with
-    /// the last of those, not with `ResolvedType`, which already carries the
-    /// declaration.
+    /// The type is interned on its declaration and renders as `{name}@{AstId}`,
+    /// which is what keeps two functions' same-named structs apart in the
+    /// registries still keyed by a rendered name. This index is the one place
+    /// that rendering is turned back into a declaration, for the consumers that
+    /// still arrive holding a spelling.
     pub(crate) local_item_renders: IndexMap<(String, ModuleSource), crate::defs::DefId>,
 
-    /// The local items in scope at the walk's current position, by the name
-    /// written in source. Filled as `Elaborator::resolve_stmt` passes each
-    /// declaration (no hoisting — a local item is visible only after its own
-    /// statement, matching `let`) and cleared at the start of every function
-    /// body walk, so sibling functions never see each other's local items.
+    /// The local items in scope at the walk's position, by the name written in
+    /// source. Populated sequentially as `resolve_stmt` walks the body — no
+    /// hoisting, so a local item is visible only after its own statement, like
+    /// `let` — and cleared per function, so siblings never see each other's.
     ///
-    /// It answers with an identity rather than a declaration's contents: what
-    /// the identity carries is read out of the two maps above, which is what
-    /// keeps this the walk's position rather than a second scope.
+    /// It answers with an identity, not with a declaration's contents: those
+    /// are read out of the two maps above, which is what keeps this the walk's
+    /// position rather than a second scope.
     pub(crate) fn_local_items: IndexMap<String, crate::defs::DefId>,
-||||||| bad542cd7
-    /// Function-local item declarations (`Stmt::Item` — a `struct`/`enum`/
-    /// `variant`/`flags`/`type` declared inside a function body). Distinct
-    /// from `local_struct_fields` et al above, which are module-scoped
-    /// (anonymous struct literals, in-progress module decls): these are
-    /// scoped to a single function, populated sequentially by
-    /// `Elaborator::resolve_stmt` as it walks the body (no hoisting — a
-    /// local item is visible only after its own declaration statement,
-    /// matching `let`), and cleared at the start of every
-    /// `Elaborator::resolve_function` call so sibling functions never see
-    /// each other's local items. Consulted by `TypeLookup` with the highest
-    /// precedence, ahead of `local_struct_fields` et al.
-    pub(crate) fn_local_struct_fields: IndexMap<String, StructFieldInfo>,
-    pub(crate) fn_local_newtypes: IndexMap<String, TypeId>,
-    pub(crate) fn_local_enum_cases: IndexMap<String, EnumInfo>,
-    pub(crate) fn_local_flags_cases: IndexMap<String, FlagsInfo>,
-    pub(crate) fn_local_variant_cases: IndexMap<String, VariantInfo>,
-=======
-    /// Function-local item declarations (`Stmt::Item`), as against the
-    /// module-scoped `local_struct_fields` above. Populated sequentially as
-    /// `resolve_stmt` walks the body — no hoisting, so a local item is visible
-    /// only after its own statement, like `let` — and cleared per function, so
-    /// siblings never see each other's. `TypeLookup` consults it first.
-    pub(crate) fn_local_struct_fields: IndexMap<String, StructFieldInfo>,
-    pub(crate) fn_local_newtypes: IndexMap<String, TypeId>,
-    pub(crate) fn_local_enum_cases: IndexMap<String, EnumInfo>,
-    pub(crate) fn_local_flags_cases: IndexMap<String, FlagsInfo>,
-    pub(crate) fn_local_variant_cases: IndexMap<String, VariantInfo>,
->>>>>>> origin/main
 }
 
 impl ModuleDecls {

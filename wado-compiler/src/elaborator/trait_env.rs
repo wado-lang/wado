@@ -1789,37 +1789,13 @@ impl TraitEnv {
     }
 }
 
-<<<<<<< HEAD
-/// Which namespace an impl-module query spells its receiver in.
-///
-/// The index answers in two, and they are not interchangeable: a mangled fq
-/// receiver picks out one declaration, a declared name picks out any
-/// declaration spelling itself that way. Each namespace has its own storage,
-/// written from one receiver identity, so a query cannot land in the wrong one
-/// — see WEP 2026-08-12.
-///
-/// [`Self::Of`] carries the identity and lets the index derive both spellings;
-/// the other two are for callers that hold only one. A bare `&str` cannot claim
-/// to be mangled.
-||||||| bad542cd7
-/// Which namespace an impl-module query spells its receiver in.
-///
-/// The index answers in two, and they are not interchangeable: a mangled fq
-/// receiver picks out one declaration, a declared name picks out any
-/// declaration spelling itself that way. Each namespace has its own storage,
-/// written from one receiver identity, so a query cannot land in the wrong one
-/// — see WEP 2026-08-10.
-///
-/// [`Self::Of`] carries the identity and lets the index derive both spellings;
-/// the other two are for callers that hold only one. A bare `&str` cannot claim
-/// to be mangled.
-=======
 /// Which namespace an impl-module query spells its receiver in. The two are not
 /// interchangeable — a mangled fq receiver picks out one declaration, a declared
 /// name picks out any declaration spelling itself that way — and each has its
-/// own storage. [`Self::Of`] carries the identity and derives both spellings;
-/// the others are for callers holding only one.
->>>>>>> origin/main
+/// own storage, written from one receiver identity, so a query cannot land in
+/// the wrong one (WEP 2026-08-12). [`Self::Of`] carries the identity and derives
+/// both spellings; the others are for callers holding only one.
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ImplReceiver<'a> {
     /// The receiver itself. Both spellings are derived from it here, so the

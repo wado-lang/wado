@@ -401,47 +401,13 @@ pub enum ResolvedType {
     Variant {
         def: crate::defs::DefId,
     },
-<<<<<<< HEAD
-    // NOTE: Option<T> is no longer a dedicated type variant.
-    // It is represented as GenericInstance { def: <the `Option` declaration>, type_args: [T] }.
-    // Use TypeTable::as_option() to check if a type is Option<T>.
-||||||| bad542cd7
-    // NOTE: Option<T> is no longer a dedicated type variant.
-    // It is represented as GenericInstance { name: "Option", module_source: types(), type_args: [T] }.
-    // Use TypeTable::as_option() to check if a type is Option<T>.
-=======
     // `Option<T>` is a `GenericInstance`, not a variant here — see
     // `TypeTable::as_option`. `Future<T>` / `Stream<T>` and their writable twins
     // are `GenericResource`, built by `make_future` / `make_future_writable`.
->>>>>>> origin/main
     //
-<<<<<<< HEAD
-    // TODO: Re-add NullableRef optimization for Option<T> where T is non-nullable.
-    // When T is a reference type (struct, array, string, etc.), Option<T> can be
-    // represented as (ref null T) — null means None, non-null means Some(T).
-    // This avoids the SubtypeHierarchy overhead (discriminant struct + case subtypes).
-    // Key requirement: Option<Option<T>> MUST NOT use NullableRef (ambiguous null).
-    // See wep-2026-02-09-variant-independent-types.md for the general optimization strategy.
-    //
-    // NOTE: Future<T>, Stream<T>, FutureWritable<T>, StreamWritable<T> are no longer dedicated
-    // type variants. They are represented as GenericResource { def: <the declaration>, .. }.
-    // Use TypeTable::make_future() / as_future() etc. to create and inspect them.
-||||||| bad542cd7
-    // TODO: Re-add NullableRef optimization for Option<T> where T is non-nullable.
-    // When T is a reference type (struct, array, string, etc.), Option<T> can be
-    // represented as (ref null T) — null means None, non-null means Some(T).
-    // This avoids the SubtypeHierarchy overhead (discriminant struct + case subtypes).
-    // Key requirement: Option<Option<T>> MUST NOT use NullableRef (ambiguous null).
-    // See wep-2026-02-09-variant-independent-types.md for the general optimization strategy.
-    //
-    // NOTE: Future<T>, Stream<T>, FutureWritable<T>, StreamWritable<T> are no longer dedicated
-    // type variants. They are represented as GenericResource { name: "Future", ... }.
-    // Use TypeTable::make_future() / as_future() etc. to create and inspect them.
-=======
     // TODO: represent `Option<T>` as `ref null T` when `T` is a non-nullable
     // reference, dropping the discriminant struct. `Option<Option<T>>` must not
     // take that route — its null would be ambiguous.
->>>>>>> origin/main
     /// Generic resource instantiation (e.g., `Future<i32>`, `Stream<String>`).
     /// Represents opaque i32 handles to Component Model resources with type parameters.
     GenericResource {
@@ -547,81 +513,11 @@ pub enum ResolvedType {
     Error,
 }
 
-<<<<<<< HEAD
-/// A dense map from [`TypeId`] to `V`, backed by a `Vec` indexed by
-/// `TypeId.0`.
-///
-/// `TypeId`s are dense and sequential — [`TypeTable::intern`] only ever
-/// hands out [`TypeMap::next_id`] — so a `Vec` replaces what would
-/// otherwise be a `TypeId`-keyed hash map and every access becomes a
-/// hash-free array index. This matters because [`TypeTable::get`] is the
-/// single hottest accessor in the compiler.
-///
-/// The newtype keeps the storage **type-safe**: callers index by `TypeId`
-/// (never a bare `usize`), so an unrelated integer or the wrong table
-/// cannot be passed by mistake, and the lone `TypeId`→`usize` conversion
-/// lives here. Absent / erased entries are `None`; [`TypeMap::retain`]
-/// punches holes rather than renumbering, so surviving `TypeId`s keep
-/// their indices.
-||||||| bad542cd7
-impl ResolvedType {
-    /// Get the module path as a Vec<String> for backwards compatibility.
-    /// This is a transitional helper during the migration to `ModuleSource`.
-    #[must_use]
-    pub fn module_path(&self) -> Vec<String> {
-        match self {
-            Self::Struct { module_source, .. }
-            | Self::Enum { module_source, .. }
-            | Self::Variant { module_source, .. }
-            | Self::GenericInstance { module_source, .. }
-            | Self::GenericResource { module_source, .. }
-            | Self::Newtype { module_source, .. }
-            | Self::Flags { module_source, .. } => module_source.to_path(),
-            _ => vec![],
-        }
-    }
-}
-
-/// A dense map from [`TypeId`] to `V`, backed by a `Vec` indexed by
-/// `TypeId.0`.
-///
-/// `TypeId`s are dense and sequential — [`TypeTable::intern`] only ever
-/// hands out [`TypeMap::next_id`] — so a `Vec` replaces what would
-/// otherwise be a `TypeId`-keyed hash map and every access becomes a
-/// hash-free array index. This matters because [`TypeTable::get`] is the
-/// single hottest accessor in the compiler.
-///
-/// The newtype keeps the storage **type-safe**: callers index by `TypeId`
-/// (never a bare `usize`), so an unrelated integer or the wrong table
-/// cannot be passed by mistake, and the lone `TypeId`→`usize` conversion
-/// lives here. Absent / erased entries are `None`; [`TypeMap::retain`]
-/// punches holes rather than renumbering, so surviving `TypeId`s keep
-/// their indices.
-=======
-impl ResolvedType {
-    /// Get the module path as a `Vec<String>` for backwards compatibility.
-    /// This is a transitional helper during the migration to `ModuleSource`.
-    #[must_use]
-    pub fn module_path(&self) -> Vec<String> {
-        match self {
-            Self::Struct { module_source, .. }
-            | Self::Enum { module_source, .. }
-            | Self::Variant { module_source, .. }
-            | Self::GenericInstance { module_source, .. }
-            | Self::GenericResource { module_source, .. }
-            | Self::Newtype { module_source, .. }
-            | Self::Flags { module_source, .. } => module_source.to_path(),
-            _ => vec![],
-        }
-    }
-}
-
 /// A dense map from [`TypeId`] to `V`, backed by a `Vec` indexed by `TypeId.0`.
 /// `TypeId`s are dense and sequential, so every access is a hash-free array
 /// index — [`TypeTable::get`] is the compiler's hottest accessor. The newtype
 /// keeps the lone `TypeId`→`usize` conversion in one place. Erased entries are
 /// `None`: [`TypeMap::retain`] punches holes rather than renumbering.
->>>>>>> origin/main
 #[derive(Debug, Clone)]
 pub(crate) struct TypeMap<V> {
     slots: Vec<Option<V>>,
@@ -787,46 +683,16 @@ pub struct TypeTable {
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
-<<<<<<< HEAD
     /// `(name, module) -> TypeId` for the nominal declarations that are not
     /// structs. `find_decl_type_by_name` scanned every interned type for these,
     /// which an instantiation now pays on the way in — see
     /// `make_generic_instance`.
     decl_name_index: IndexMap<(String, ModuleSource), TypeId>,
-    /// Canonical map: declared-type symbol → `TypeId`.
-    ///
-    /// Populated by the elaborator whenever it creates a decl-backed type
-    /// (`make_struct`, `make_enum`, `make_variant`, `make_flags`,
-    /// `make_newtype`, `make_resource`) via [`TypeTable::register_decl_type`].
-    /// Lets LSP-style queries translate a [`AstId`](crate::ast::AstId) — the canonical
-    /// identity of a declaration — to the `TypeId` it represents without
-    /// searching by name.
-    ///
-    /// Monomorphized instances are NOT entered here; the base generic's key
-    /// still resolves to the base `TypeId`. Use `symbol_of_type` to walk from
-    /// any decl-backed `TypeId` (including monomorphizations) back to the
-    /// declaring symbol.
-||||||| bad542cd7
-    /// Canonical map: declared-type symbol → `TypeId`.
-    ///
-    /// Populated by the elaborator whenever it creates a decl-backed type
-    /// (`make_struct`, `make_enum`, `make_variant`, `make_flags`,
-    /// `make_newtype`, `make_resource`) via [`TypeTable::register_decl_type`].
-    /// Lets LSP-style queries translate a [`AstId`](crate::ast::AstId) — the canonical
-    /// identity of a declaration — to the `TypeId` it represents without
-    /// searching by name.
-    ///
-    /// Monomorphized instances are NOT entered here; the base generic's key
-    /// still resolves to the base `TypeId`. Use `symbol_of_type` to walk from
-    /// any decl-backed `TypeId` (including monomorphizations) back to the
-    /// declaring symbol.
-=======
     /// Canonical map: declared-type symbol → `TypeId`, populated whenever the
     /// elaborator mints a decl-backed type, so an LSP-style query can go from an
     /// [`AstId`](crate::ast::AstId) to its type without searching by name.
     /// Monomorphized instances are not entered — the base generic's key still
     /// resolves to the base id; `symbol_of_type` walks the other way.
->>>>>>> origin/main
     type_by_symbol: IndexMap<crate::ast::AstId, TypeId>,
     /// Inverse of `type_by_symbol` plus monomorphization tracking: every
     /// decl-backed `TypeId` — including monomorphized instances —
@@ -2134,73 +2000,9 @@ impl TypeTable {
         crate::name::mangle_generic_name(&decl_name, &args)
     }
 
-<<<<<<< HEAD
     /// Intern the instantiation of `def` with `type_args`, deriving its
     /// rendered spelling rather than taking one from the caller. An empty
     /// `type_args` interns the *declaration* — a different type.
-||||||| bad542cd7
-    /// Create a monomorphized struct type (e.g., "Box<i32>")
-    ///
-    /// - `name`: The fully mangled name (e.g., "`TreeMap`<String,i32>")
-    /// - `base_name`: The original generic struct name (e.g., "`TreeMap`")
-    /// - `type_args`: what it was instantiated with. Must be the arguments
-    ///   `name` renders from — passing an empty list for an instantiated type
-    ///   interns the *declaration* instead, a different type that spells itself
-    ///   the same way. The `debug_assert` below is that contract.
-    pub fn make_monomorphized_struct(
-        &mut self,
-        name: String,
-        module_source: ModuleSource,
-        base_name: String,
-        type_args: Vec<TypeId>,
-    ) -> TypeId {
-        debug_assert_eq!(
-            name,
-            self.struct_rendered_name(&base_name, &type_args),
-            "the caller's rendering must be what `struct_rendered_name` derives"
-        );
-        let _ = name;
-        self.intern(ResolvedType::Struct {
-            decl_name: base_name,
-            module_source,
-            type_args,
-        })
-    }
-
-    /// Intern the instantiation of `base_name` with `type_args`, deriving its
-    /// rendered spelling rather than taking one from the caller.
-=======
-    /// Create a monomorphized struct type (e.g., `"Box<i32>"`)
-    ///
-    /// - `name`: The fully mangled name (e.g., "`TreeMap`<String,i32>")
-    /// - `base_name`: The original generic struct name (e.g., "`TreeMap`")
-    /// - `type_args`: what it was instantiated with. Must be the arguments
-    ///   `name` renders from — passing an empty list for an instantiated type
-    ///   interns the *declaration* instead, a different type that spells itself
-    ///   the same way. The `debug_assert` below is that contract.
-    pub fn make_monomorphized_struct(
-        &mut self,
-        name: String,
-        module_source: ModuleSource,
-        base_name: String,
-        type_args: Vec<TypeId>,
-    ) -> TypeId {
-        debug_assert_eq!(
-            name,
-            self.struct_rendered_name(&base_name, &type_args),
-            "the caller's rendering must be what `struct_rendered_name` derives"
-        );
-        let _ = name;
-        self.intern(ResolvedType::Struct {
-            decl_name: base_name,
-            module_source,
-            type_args,
-        })
-    }
-
-    /// Intern the instantiation of `base_name` with `type_args`, deriving its
-    /// rendered spelling rather than taking one from the caller.
->>>>>>> origin/main
     pub fn make_monomorphized_struct_from_args(
         &mut self,
         def: StructDef,
@@ -3920,35 +3722,11 @@ impl TypeTable {
         }
     }
 
-<<<<<<< HEAD
-    /// The name a struct is *stored* under in the package's struct list and
-    /// named by in a `StructLiteral`: the declaration or instantiation name
-    /// with the head left bare, module disambiguation carried alongside as a
-    /// `ModuleSource` rather than folded into the string.
-    ///
-    /// Every mangler qualifies a declared head by its module; this namespace
-    /// must not, because that is how the struct list is keyed. The list holds
-    /// one entry per instantiation, so an instantiation is spelled with its
-    /// arguments — the declaration alone names a template nothing stores.
-    /// `None` for a type that is not struct-shaped.
-||||||| bad542cd7
-    /// The name a struct is *stored* under in the package's struct list and
-    /// named by in a `StructLiteral`: the declaration or instantiation name
-    /// with the head left bare, module disambiguation carried alongside as a
-    /// `ModuleSource` rather than folded into the string.
-    ///
-    /// Every mangler qualifies a declared head by its module; this namespace
-    /// must not, because that is how the struct list is keyed. The list holds
-    /// one entry per instantiation, so an instantiation is spelled with its
-    /// arguments — `decl_name` alone names a template nothing stores. `None`
-    /// for a type that is not struct-shaped.
-=======
     /// The name a struct is *stored* under in the package's struct list: the
     /// head left bare, with module disambiguation carried alongside as a
     /// `ModuleSource` rather than folded in — unlike every mangler, because that
     /// is how the list is keyed. It holds one entry per instantiation, so an
     /// instantiation is spelled with its arguments. `None` if not struct-shaped.
->>>>>>> origin/main
     #[must_use]
     pub fn struct_list_name(&self, id: TypeId) -> Option<String> {
         match self.get(id) {

@@ -602,10 +602,8 @@ fn check_cm_boundary_representable_inner(
             // The handle is an i32, but its payload is lifted and lowered by
             // value, so it must be classifiable too — `()` is representable
             // yet has no payload type.
-            R::GenericResource {
-                name, type_args, ..
-            } => {
-                let name = name.clone();
+            R::GenericResource { def, type_args } => {
+                let name = type_table.def_name(*def).to_string();
                 let args = type_args.clone();
                 for &a in &args {
                     recurse(a, visited)?;
@@ -1365,8 +1363,12 @@ pub(super) fn type_id_to_ast_type(
     match resolved {
         ResolvedType::Primitive(p) => named_no_source(p.as_str()),
         ResolvedType::Unit => Type::Tuple(Vec::new()),
-<<<<<<< HEAD
-        ResolvedType::Struct { .. } | ResolvedType::Variant { .. } | ResolvedType::Enum { .. } => {
+        // `Flags` joins them: its own CM type, 1 byte at <=8 labels, not a
+        // four-byte `i32`.
+        ResolvedType::Struct { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Flags { .. } => {
             let (name, module_source) = type_table
                 .nominal_head(type_id)
                 .expect("a nominal type names a declaration");
@@ -1375,50 +1377,7 @@ pub(super) fn type_id_to_ast_type(
         ResolvedType::Resource { def } => named_no_source(type_table.def_name(*def)),
         ResolvedType::GenericInstance { def, type_args } => {
             let name = &type_table.def_name(*def).to_string();
-||||||| bad542cd7
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } => cm_named(name, module_source),
-        ResolvedType::Variant {
-            name,
-            module_source,
-            ..
-        } => cm_named(name, module_source),
-        ResolvedType::Enum {
-            name,
-            module_source,
-        } => cm_named(name, module_source),
-        ResolvedType::Resource { name, .. } => named_no_source(name),
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } => {
-=======
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } => cm_named(name, module_source),
-        ResolvedType::Variant {
-            name,
-            module_source,
-            ..
-        } => cm_named(name, module_source),
-        ResolvedType::Enum {
-            name,
-            module_source,
-        } => cm_named(name, module_source),
-        // Its own CM type, 1 byte at ≤8 labels, not a four-byte `i32`.
-        ResolvedType::Flags {
-            name,
-            module_source,
-        } => cm_named(name, module_source),
-        ResolvedType::Resource { name, .. } => named_no_source(name),
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } => {
->>>>>>> origin/main
+
             let args: Vec<Type> = type_args
                 .iter()
                 .map(|&tid| type_id_to_ast_type(tid, type_table, cm_interface_registry))

@@ -328,26 +328,14 @@ fn unresolvable_record_in_payload(
     registry: &crate::component_model::CmInterfaceRegistry,
     type_id: TypeId,
 ) -> Option<String> {
-<<<<<<< HEAD
-    if let ResolvedType::Struct { def, .. } = tt.get(type_id)
-        && let name = &tt.struct_head_name(*def)
-        && let module_source = &tt.struct_head_module(*def).clone()
-||||||| bad542cd7
-    if let ResolvedType::Struct {
-        decl_name: name,
-        module_source,
-        ..
-    } = tt.get(type_id)
-=======
-    if let Some((name, module_source)) = named_decl_of(tt.get(type_id))
->>>>>>> origin/main
+    if let Some((name, module_source)) = named_decl_of(tt, tt.get(type_id))
         && matches!(
             crate::component_model::cm_payload_type_from_type_id(tt, type_id),
             Some(CmPayloadType::Named(_))
         )
-        && !registry.is_named_type_registered_from(module_source, name)
+        && !registry.is_named_type_registered_from(&module_source, &name)
     {
-        return Some(name.clone());
+        return Some(name);
     }
     // Codegen peels aliases, so check through them here too.
     if let ResolvedType::Newtype { base_type, .. } = tt.get(type_id) {
@@ -372,27 +360,17 @@ fn unresolvable_record_in_payload(
     None
 }
 
-fn named_decl_of(ty: &ResolvedType) -> Option<(&String, &ModuleSource)> {
-    match ty {
-        ResolvedType::Struct {
-            decl_name,
-            module_source,
-            ..
-        } => Some((decl_name, module_source)),
-        ResolvedType::Enum {
-            name,
-            module_source,
-        }
-        | ResolvedType::Variant {
-            name,
-            module_source,
-        }
-        | ResolvedType::Flags {
-            name,
-            module_source,
-        } => Some((name, module_source)),
-        _ => None,
-    }
+/// The declared name and module of a nominal type, or `None` for one that
+/// names no declaration.
+fn named_decl_of(tt: &TypeTable, ty: &ResolvedType) -> Option<(String, ModuleSource)> {
+    let def = match ty {
+        ResolvedType::Struct { def, .. } => def.decl()?,
+        ResolvedType::Enum { def }
+        | ResolvedType::Variant { def }
+        | ResolvedType::Flags { def } => *def,
+        _ => return None,
+    };
+    Some((tt.def_name(def).to_string(), tt.def_module(def).clone()))
 }
 
 /// Phase entry point: generate CM binding functions and rewrite call sites.
