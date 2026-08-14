@@ -780,16 +780,30 @@ compiles, passes the suite, and ends with a mechanical completion check.
         module, and it is the same shape one level up: see the entry below;
       - an anonymous struct's synthesized impl registers under a key the
         bound check does not ask for, now that its head is a shape;
-      - a function-local struct's type renders as its plain declared name
-        while the WIR registry still keys the mangled `Point@AstId(N)`
-        storage spelling — which also means two sibling `test` blocks
-        declaring `struct Point` would collide there. That registry needs the
-        identity, not the spelling, and it is the last name-keyed store in
-        the pipeline.
+      - a function-local struct's type rendered as its plain declared name
+        while the WIR registry keys the mangled `Point@AstId(N)` storage
+        spelling. `DefTable` could not tell a local declaration from a
+        module-level one, so nothing downstream could either; `Def` now
+        carries `function_local` and `TypeTable::decl_render_name` applies
+        the disambiguator. `def_name` stays the *declared* name — what an
+        `impl` header spells — and the two namespaces are finally distinct
+        at the source rather than by convention.
 
       The lesson for the budget is the one the migration section already
       states, and it was still underestimated: the constructors are the work.
       Every one of these is a construction site that kept its spelling.
+
+      Two remain, 14 fixtures at two optimization levels. A local `type
+      UserId = …` still reports `UserId does not implement Inspect`, and the
+      diagnostic spells it plainly — so that path does not run through
+      `decl_render_name`, and giving `synthesis/traits.rs`'s newtype loops
+      the rendered name changed nothing, measured. And an anonymous struct's
+      synthesized `ReflectStruct` impl does not answer the `Serialize` bound
+      that `core:serde`'s blanket derives it from.
+
+      Both attempts that changed nothing were reverted rather than kept on
+      the argument that they were more correct in principle. That rule is
+      what makes the measurements above worth anything.
 
 - [x] Tuple trait dispatch resolves again. The tuple family becoming a
       declaration gave it a *module*, and three of the four routes into
