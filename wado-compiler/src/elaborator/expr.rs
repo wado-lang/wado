@@ -3780,17 +3780,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
+            // A literal may name nothing: the undefined-struct diagnostic is
+            // emitted above, and the walk continues on `unknown` rather than
+            // stopping at the first unresolved name.
             let struct_type = {
                 let def = self
                     .tysys
                     .type_table
-                    .borrow_mut()
-                    .decl_named_in(&struct_name, &struct_module_source)
-                    .expect("the declaration this type names exists");
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_generic_instance(def, type_args.clone())
+                    .borrow()
+                    .decl_named_in(&struct_name, &struct_module_source);
+                match def {
+                    Some(def) => self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_generic_instance(def, type_args.clone()),
+                    None => TypeTable::UNKNOWN,
+                }
             };
             // Build mangled name with type arguments
             let arg_names: Vec<String> = type_args
@@ -3820,13 +3826,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let def = self
                         .tysys
                         .type_table
-                        .borrow_mut()
-                        .decl_named_in(&struct_name, &struct_module_source)
-                        .expect("the declaration this type names exists");
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_struct(crate::tir::StructDef::Decl(def))
+                        .borrow()
+                        .decl_named_in(&struct_name, &struct_module_source);
+                    match def {
+                        Some(def) => self
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_struct(crate::tir::StructDef::Decl(def)),
+                        None => TypeTable::UNKNOWN,
+                    }
                 }
             };
             (struct_type, struct_name, fields)
