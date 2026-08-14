@@ -800,6 +800,19 @@ compiles, passes the suite, and ends with a mechanical completion check.
       anonymous struct's synthesized `ReflectStruct` impl does not answer the
       `Serialize` bound that `core:serde`'s blanket derives it from.
 
+      Probes eliminated three of the five `TraitBoundNotSatisfied` emit sites
+      and a fourth hardcodes `Ord`, so the anonymous-struct failure is
+      `enforce_single_bound` — the primitive every bound-enforcement path
+      funnels through — failing at `check_and_register_bound`.
+
+      Which points at a gap this design predicts. The bound is enforced
+      during elaboration, but `Serialize` for a struct is *derived*, by
+      `core:serde`'s blanket over `ReflectStruct`, whose impl synthesis mints
+      only afterwards. A named struct crosses that gap on the bound-driven
+      request mechanism. An anonymous struct has no declaration — so if that
+      request is keyed by one, this is the same defect one layer up, and the
+      shape is the identity it should key by instead. Measure before editing.
+
       One trap, worth naming because it caught this investigation: the
       diagnostic's spelling proves nothing about the type's. Every unresolved
       -bound message runs through `display_type_name`, which calls
