@@ -432,8 +432,13 @@ impl TokenStream {
 
 /// ParseError represents a parse failure with location and expected tokens.
 ///
-/// `message` is the local "expected X, got Y" description, kept free of
-/// position and rule context so it stays composable. `line`/`col` are a
+/// `message` says what was found (`got "for"`), never what was wanted:
+/// the wanted set lives in `expected`, in the token vocabulary, and
+/// `full_message` is the single place the two are combined. Keeping them
+/// apart is what lets every failure path share one vocabulary and one
+/// phrasing instead of each spelling its own "expected X" prefix.
+/// `message` is also free of position and rule context, so it stays
+/// composable. `line`/`col` are a
 /// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
 /// from `span.start` against the source at error-construction time;
 /// `Parser::error` fills them in. `rule_stack` records the chain of parser
@@ -462,6 +467,16 @@ impl ParseError {
         return ParseError { message, span, expected, line, col, rule_stack: [] };
     }
 
+    /// `message` with the expected set folded in — `expected ',' or ';'; got
+    /// ")"`. Read by `Display` and by the diagnostic a pending error becomes,
+    /// so the two never drift.
+    pub fn full_message(&self) -> String {
+        if self.expected.is_empty() {
+            return self.message;
+        }
+        return `expected ${join_expected(&self.expected)}; ${self.message}`;
+    }
+
     /// Render the rule chain as `outer > ... > inner` (start rule first).
     /// `rule_stack` is stored innermost-first, so iterate it in reverse.
     /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
@@ -486,9 +501,22 @@ impl ParseError {
     }
 }
 
+/// `A`, `A or B`, `A, B or C`.
+fn join_expected(names: &List<String>) -> String {
+    let n = names.len();
+    let mut out = String::with_capacity(n * 8);
+    for let mut i = 0; i < n; i += 1 {
+        if i > 0 {
+            out.push_str(&if i == n - 1 { " or " } else { ", " });
+        }
+        out.push_str(&names[i]);
+    }
+    return out;
+}
+
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.message}`);
+        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.full_message()}`);
         if !self.rule_stack.is_empty() {
             f.write_str(&`\n  in rule: ${self.rule_path()}`);
         }
@@ -6938,6 +6966,14 @@ struct Parser {
     diagnostics: List<Diagnostic>,
 }
 
+fn kind_names(kinds: &List<i32>) -> List<String> {
+    let mut out: List<String> = List::with_capacity(kinds.len());
+    for let k of kinds {
+        out.push(token_kind_name(*k));
+    }
+    return out;
+}
+
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
@@ -6970,7 +7006,7 @@ impl Parser {
     }
 
     fn pending_message(&self) -> String {
-        if let Some(e) = &self.pending { return e.message; }
+        if let Some(e) = &self.pending { return e.full_message(); }
         return String::from("");
     }
 
@@ -7039,8 +7075,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            let name = token_kind_name(kind);
-            self.fail(`expected ${name}, got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -7088,11 +7123,10 @@ impl Parser {
             self.b.missing(_syn2);
             return _syn2;
         }
-        let name = token_kind_name(kind);
         self.fail(
-            `expected ${name}, got "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [name],
+            [token_kind_name(kind)],
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -7106,7 +7140,7 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `expected any token, got "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
             DiagnosticCode::UnexpectedToken,
@@ -7134,7 +7168,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["set complement"],
+            [] as List<String>,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -7155,9 +7189,9 @@ impl Parser {
             }
         }
         self.fail(
-            `unexpected token "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["token set"],
+            kind_names(&included),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -15609,9 +15643,9 @@ fn _parse_type_parameter__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         return;
     }
     p.no_viable(
-        "expected typeParameter",
+        "no alternative of typeParameter matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_LessThan"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_LessThan)],
     );
     return;
 }
@@ -15904,9 +15938,9 @@ fn _parse_type___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         return;
     }
     p.no_viable(
-        "expected type_",
+        "no alternative of type_ matches",
         p.peek_span(),
-        ["TK_BitOr", "TK_BitAnd", "TK_OpenParen", "TK_Any", "TK_NullLiteral", "TK_Number", "TK_DecimalLiteral", "TK_Boolean", "TK_BooleanLiteral", "TK_String", "TK_StringLiteral", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_Void", "TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_OpenBrace", "TK_OpenBracket", "TK_Typeof", "TK_This", "TK_LessThan", "TK_New"],
+        [token_kind_name(TK_BitOr), token_kind_name(TK_BitAnd), token_kind_name(TK_OpenParen), token_kind_name(TK_Any), token_kind_name(TK_NullLiteral), token_kind_name(TK_Number), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_Boolean), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_String), token_kind_name(TK_StringLiteral), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_Void), token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_OpenBrace), token_kind_name(TK_OpenBracket), token_kind_name(TK_Typeof), token_kind_name(TK_This), token_kind_name(TK_LessThan), token_kind_name(TK_New)],
     );
     return;
 }
@@ -15936,9 +15970,9 @@ fn _parse_union_or_intersection_or_primary_type__inner_atom(p: &mut Parser, foll
         return;
     }
     p.no_viable(
-        "expected unionOrIntersectionOrPrimaryType",
+        "no alternative of unionOrIntersectionOrPrimaryType matches",
         p.peek_span(),
-        ["TK_OpenParen", "TK_Any", "TK_NullLiteral", "TK_Number", "TK_DecimalLiteral", "TK_Boolean", "TK_BooleanLiteral", "TK_String", "TK_StringLiteral", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_Void", "TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_OpenBrace", "TK_OpenBracket", "TK_Typeof", "TK_This"],
+        [token_kind_name(TK_OpenParen), token_kind_name(TK_Any), token_kind_name(TK_NullLiteral), token_kind_name(TK_Number), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_Boolean), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_String), token_kind_name(TK_StringLiteral), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_Void), token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_OpenBrace), token_kind_name(TK_OpenBracket), token_kind_name(TK_Typeof), token_kind_name(TK_This)],
     );
     return;
 }
@@ -16193,9 +16227,9 @@ fn _parse_primary_type__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &E
         return;
     }
     p.no_viable(
-        "expected primaryType",
+        "no alternative of primaryType matches",
         p.peek_span(),
-        ["TK_OpenParen", "TK_Any", "TK_NullLiteral", "TK_Number", "TK_DecimalLiteral", "TK_Boolean", "TK_BooleanLiteral", "TK_String", "TK_StringLiteral", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_Void", "TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_OpenBrace", "TK_OpenBracket", "TK_Typeof", "TK_This"],
+        [token_kind_name(TK_OpenParen), token_kind_name(TK_Any), token_kind_name(TK_NullLiteral), token_kind_name(TK_Number), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_Boolean), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_String), token_kind_name(TK_StringLiteral), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_Void), token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_OpenBrace), token_kind_name(TK_OpenBracket), token_kind_name(TK_Typeof), token_kind_name(TK_This)],
     );
     return;
 }
@@ -16312,9 +16346,9 @@ fn _parse_predefined_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         return;
     }
     p.no_viable(
-        "expected predefinedType",
+        "no alternative of predefinedType matches",
         p.peek_span(),
-        ["TK_Any", "TK_NullLiteral", "TK_Number", "TK_DecimalLiteral", "TK_Boolean", "TK_BooleanLiteral", "TK_String", "TK_StringLiteral", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_Void"],
+        [token_kind_name(TK_Any), token_kind_name(TK_NullLiteral), token_kind_name(TK_Number), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_Boolean), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_String), token_kind_name(TK_StringLiteral), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_Void)],
     );
     return;
 }
@@ -16444,9 +16478,9 @@ fn _parse_type_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         }
     }
     p.no_viable(
-        "expected typeName",
+        "no alternative of typeName matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract)],
     );
     return;
 }
@@ -16779,9 +16813,9 @@ fn _parse_type_member__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         return;
     }
     p.no_viable(
-        "expected typeMember",
+        "no alternative of typeMember matches",
         p.peek_span(),
-        ["TK_ReadOnly", "TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_StringLiteral", "TK_DecimalLiteral", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral", "TK_OpenBracket", "TK_LessThan", "TK_OpenParen"],
+        [token_kind_name(TK_ReadOnly), token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_StringLiteral), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral), token_kind_name(TK_OpenBracket), token_kind_name(TK_LessThan), token_kind_name(TK_OpenParen)],
     );
     return;
 }
@@ -17087,9 +17121,9 @@ fn _parse_type_query_expression__inner(p: &mut Parser, follow: &List<List<i32>> 
         }
     }
     p.no_viable(
-        "expected typeQueryExpression",
+        "no alternative of typeQueryExpression matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral)],
     );
     return;
 }
@@ -17250,9 +17284,9 @@ fn _parse_parameter_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         return;
     }
     p.no_viable(
-        "expected parameterList",
+        "no alternative of parameterList matches",
         p.peek_span(),
-        ["TK_Ellipsis", "TK_At", "TK_Public", "TK_Private", "TK_Protected", "TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Interface", "TK_Package", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_OpenBracket", "TK_OpenBrace"],
+        [token_kind_name(TK_Ellipsis), token_kind_name(TK_At), token_kind_name(TK_Public), token_kind_name(TK_Private), token_kind_name(TK_Protected), token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenBrace)],
     );
     return;
 }
@@ -17375,9 +17409,9 @@ fn _parse_parameter__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         }
     }
     p.no_viable(
-        "expected parameter",
+        "no alternative of parameter matches",
         p.peek_span(),
-        ["TK_At", "TK_Public", "TK_Private", "TK_Protected", "TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Interface", "TK_Package", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_OpenBracket", "TK_OpenBrace"],
+        [token_kind_name(TK_At), token_kind_name(TK_Public), token_kind_name(TK_Private), token_kind_name(TK_Protected), token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenBrace)],
     );
     return;
 }
@@ -17529,9 +17563,9 @@ fn _parse_accessibility_modifier__inner(p: &mut Parser, follow: &List<List<i32>>
         return;
     }
     p.no_viable(
-        "expected accessibilityModifier",
+        "no alternative of accessibilityModifier matches",
         p.peek_span(),
-        ["TK_Public", "TK_Private", "TK_Protected"],
+        [token_kind_name(TK_Public), token_kind_name(TK_Private), token_kind_name(TK_Protected)],
     );
     return;
 }
@@ -17565,9 +17599,9 @@ fn _parse_identifier_or_pattern__inner(p: &mut Parser, follow: &List<List<i32>> 
         return;
     }
     p.no_viable(
-        "expected identifierOrPattern",
+        "no alternative of identifierOrPattern matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_OpenBracket", "TK_OpenBrace"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenBrace)],
     );
     return;
 }
@@ -18297,9 +18331,9 @@ fn _parse_decorator_member_expression__inner_atom(p: &mut Parser, follow: &List<
         return;
     }
     p.no_viable(
-        "expected decoratorMemberExpression",
+        "no alternative of decoratorMemberExpression matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_OpenParen"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_OpenParen)],
     );
     return;
 }
@@ -19792,9 +19826,9 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         return;
     }
     p.no_viable(
-        "expected statement",
+        "no alternative of statement matches",
         p.peek_span(),
-        ["TK_OpenBrace", "TK_OpenBracket", "TK_Public", "TK_Private", "TK_Protected", "TK_Var", "TK_Let", "TK_Const", "TK_ReadOnly", "TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Require", "TK_Declare", "TK_Import", "TK_Export", "TK_SemiColon", "TK_At", "TK_Class", "TK_Function_", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Enum", "TK_Extends", "TK_Super", "TK_Implements", "TK_Interface", "TK_Package", "TK_Static", "TK_Await", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_StringLiteral", "TK_DecimalLiteral", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral", "TK_OpenParen", "TK_PlusPlus", "TK_MinusMinus", "TK_Plus", "TK_Minus", "TK_BitNot", "TK_Not", "TK_YieldStar", "TK_BackTick", "TK_RegularExpressionLiteral", "TK_BigDecimalIntegerLiteral", "TK_BigHexIntegerLiteral", "TK_BigOctalIntegerLiteral", "TK_BigBinaryIntegerLiteral", "TK_LessThan"],
+        [token_kind_name(TK_OpenBrace), token_kind_name(TK_OpenBracket), token_kind_name(TK_Public), token_kind_name(TK_Private), token_kind_name(TK_Protected), token_kind_name(TK_Var), token_kind_name(TK_Let), token_kind_name(TK_Const), token_kind_name(TK_ReadOnly), token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Require), token_kind_name(TK_Declare), token_kind_name(TK_Import), token_kind_name(TK_Export), token_kind_name(TK_SemiColon), token_kind_name(TK_At), token_kind_name(TK_Class), token_kind_name(TK_Function_), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Implements), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_StringLiteral), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral), token_kind_name(TK_OpenParen), token_kind_name(TK_PlusPlus), token_kind_name(TK_MinusMinus), token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_BitNot), token_kind_name(TK_Not), token_kind_name(TK_YieldStar), token_kind_name(TK_BackTick), token_kind_name(TK_RegularExpressionLiteral), token_kind_name(TK_BigDecimalIntegerLiteral), token_kind_name(TK_BigHexIntegerLiteral), token_kind_name(TK_BigOctalIntegerLiteral), token_kind_name(TK_BigBinaryIntegerLiteral), token_kind_name(TK_LessThan)],
     );
     return;
 }
@@ -20052,9 +20086,9 @@ fn _parse_import_from_block__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         return;
     }
     p.no_viable(
-        "expected importFromBlock",
+        "no alternative of importFromBlock matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_Multiply", "TK_OpenBrace", "TK_StringLiteral"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_Multiply), token_kind_name(TK_OpenBrace), token_kind_name(TK_StringLiteral)],
     );
     return;
 }
@@ -20170,9 +20204,9 @@ fn _parse_module_export_name__inner(p: &mut Parser, follow: &List<List<i32>> = &
         return;
     }
     p.no_viable(
-        "expected moduleExportName",
+        "no alternative of moduleExportName matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_StringLiteral"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_StringLiteral)],
     );
     return;
 }
@@ -20200,9 +20234,9 @@ fn _parse_imported_binding__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         return;
     }
     p.no_viable(
-        "expected importedBinding",
+        "no alternative of importedBinding matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Yield", "TK_Await"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Yield), token_kind_name(TK_Await)],
     );
     return;
 }
@@ -20468,9 +20502,9 @@ fn _parse_export_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         return _parse_export_statement__inner_alt_1(p, follow);
     }
     p.no_viable(
-        "expected exportStatement",
+        "no alternative of exportStatement matches",
         p.peek_span(),
-        ["TK_Export"],
+        [token_kind_name(TK_Export)],
     );
     return;
 }
@@ -20514,9 +20548,9 @@ fn _parse_export_from_block__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         return;
     }
     p.no_viable(
-        "expected exportFromBlock",
+        "no alternative of exportFromBlock matches",
         p.peek_span(),
-        ["TK_Multiply", "TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_OpenBrace"],
+        [token_kind_name(TK_Multiply), token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_OpenBrace)],
     );
     return;
 }
@@ -20717,9 +20751,9 @@ fn _parse_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         }
     }
     p.no_viable(
-        "expected declaration",
+        "no alternative of declaration matches",
         p.peek_span(),
-        ["TK_OpenBracket", "TK_OpenBrace", "TK_Public", "TK_Private", "TK_Protected", "TK_Var", "TK_Let", "TK_Const", "TK_ReadOnly", "TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Require", "TK_Declare", "TK_At", "TK_Export", "TK_Class", "TK_Function_"],
+        [token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenBrace), token_kind_name(TK_Public), token_kind_name(TK_Private), token_kind_name(TK_Protected), token_kind_name(TK_Var), token_kind_name(TK_Let), token_kind_name(TK_Const), token_kind_name(TK_ReadOnly), token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Require), token_kind_name(TK_Declare), token_kind_name(TK_At), token_kind_name(TK_Export), token_kind_name(TK_Class), token_kind_name(TK_Function_)],
     );
     return;
 }
@@ -20866,9 +20900,9 @@ fn _parse_variable_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &
         return;
     }
     p.no_viable(
-        "expected variableStatement",
+        "no alternative of variableStatement matches",
         p.peek_span(),
-        ["TK_OpenBracket", "TK_OpenBrace", "TK_Public", "TK_Private", "TK_Protected", "TK_Var", "TK_Let", "TK_Const", "TK_ReadOnly", "TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Require", "TK_Declare"],
+        [token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenBrace), token_kind_name(TK_Public), token_kind_name(TK_Private), token_kind_name(TK_Protected), token_kind_name(TK_Var), token_kind_name(TK_Let), token_kind_name(TK_Const), token_kind_name(TK_ReadOnly), token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Require), token_kind_name(TK_Declare)],
     );
     return;
 }
@@ -21462,9 +21496,9 @@ fn _parse_iteration_statement__inner(p: &mut Parser, follow: &List<List<i32>> = 
         return _parse_iteration_statement__inner_alt_4(p, follow);
     }
     p.no_viable(
-        "expected iterationStatement",
+        "no alternative of iterationStatement matches",
         p.peek_span(),
-        ["TK_Do", "TK_While", "TK_For"],
+        [token_kind_name(TK_Do), token_kind_name(TK_While), token_kind_name(TK_For)],
     );
     return;
 }
@@ -21492,9 +21526,9 @@ fn _parse_var_modifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         return;
     }
     p.no_viable(
-        "expected varModifier",
+        "no alternative of varModifier matches",
         p.peek_span(),
-        ["TK_Var", "TK_Let", "TK_Const"],
+        [token_kind_name(TK_Var), token_kind_name(TK_Let), token_kind_name(TK_Const)],
     );
     return;
 }
@@ -22397,9 +22431,9 @@ fn _parse_class_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         }
     }
     p.no_viable(
-        "expected classElement",
+        "no alternative of classElement matches",
         p.peek_span(),
-        ["TK_Public", "TK_Private", "TK_Protected", "TK_Constructor", "TK_At", "TK_Async", "TK_Static", "TK_ReadOnly", "TK_Abstract", "TK_OpenBracket", "TK_OpenBrace", "TK_Var", "TK_Let", "TK_Const", "TK_Identifier", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Namespace", "TK_Require", "TK_Declare", "TK_Import", "TK_Export", "TK_SemiColon", "TK_Class", "TK_Function_", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Enum", "TK_Extends", "TK_Super", "TK_Implements", "TK_Interface", "TK_Package", "TK_Await", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_StringLiteral", "TK_DecimalLiteral", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral", "TK_OpenParen", "TK_PlusPlus", "TK_MinusMinus", "TK_Plus", "TK_Minus", "TK_BitNot", "TK_Not", "TK_YieldStar", "TK_BackTick", "TK_RegularExpressionLiteral", "TK_BigDecimalIntegerLiteral", "TK_BigHexIntegerLiteral", "TK_BigOctalIntegerLiteral", "TK_BigBinaryIntegerLiteral", "TK_LessThan"],
+        [token_kind_name(TK_Public), token_kind_name(TK_Private), token_kind_name(TK_Protected), token_kind_name(TK_Constructor), token_kind_name(TK_At), token_kind_name(TK_Async), token_kind_name(TK_Static), token_kind_name(TK_ReadOnly), token_kind_name(TK_Abstract), token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenBrace), token_kind_name(TK_Var), token_kind_name(TK_Let), token_kind_name(TK_Const), token_kind_name(TK_Identifier), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Namespace), token_kind_name(TK_Require), token_kind_name(TK_Declare), token_kind_name(TK_Import), token_kind_name(TK_Export), token_kind_name(TK_SemiColon), token_kind_name(TK_Class), token_kind_name(TK_Function_), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Implements), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Await), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_StringLiteral), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral), token_kind_name(TK_OpenParen), token_kind_name(TK_PlusPlus), token_kind_name(TK_MinusMinus), token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_BitNot), token_kind_name(TK_Not), token_kind_name(TK_YieldStar), token_kind_name(TK_BackTick), token_kind_name(TK_RegularExpressionLiteral), token_kind_name(TK_BigDecimalIntegerLiteral), token_kind_name(TK_BigHexIntegerLiteral), token_kind_name(TK_BigOctalIntegerLiteral), token_kind_name(TK_BigBinaryIntegerLiteral), token_kind_name(TK_LessThan)],
     );
     return;
 }
@@ -22651,9 +22685,9 @@ fn _parse_property_member_declaration__inner(p: &mut Parser, follow: &List<List<
         return;
     }
     p.no_viable(
-        "expected propertyMemberDeclaration",
+        "no alternative of propertyMemberDeclaration matches",
         p.peek_span(),
-        ["TK_Public", "TK_Private", "TK_Protected", "TK_Async", "TK_Static", "TK_ReadOnly", "TK_Abstract"],
+        [token_kind_name(TK_Public), token_kind_name(TK_Private), token_kind_name(TK_Protected), token_kind_name(TK_Async), token_kind_name(TK_Static), token_kind_name(TK_ReadOnly), token_kind_name(TK_Abstract)],
     );
     return;
 }
@@ -22979,9 +23013,9 @@ fn _parse_class_element_name__inner(p: &mut Parser, follow: &List<List<i32>> = &
         return;
     }
     p.no_viable(
-        "expected classElementName",
+        "no alternative of classElementName matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_StringLiteral", "TK_DecimalLiteral", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral", "TK_OpenBracket", "TK_Hashtag"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_StringLiteral), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral), token_kind_name(TK_OpenBracket), token_kind_name(TK_Hashtag)],
     );
     return;
 }
@@ -23210,9 +23244,9 @@ fn _parse_formal_parameter_list__inner(p: &mut Parser, follow: &List<List<i32>> 
         return;
     }
     p.no_viable(
-        "expected formalParameterList",
+        "no alternative of formalParameterList matches",
         p.peek_span(),
-        ["TK_At", "TK_Public", "TK_Private", "TK_Protected", "TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Interface", "TK_Package", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_OpenBracket", "TK_OpenBrace", "TK_Ellipsis"],
+        [token_kind_name(TK_At), token_kind_name(TK_Public), token_kind_name(TK_Private), token_kind_name(TK_Protected), token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenBrace), token_kind_name(TK_Ellipsis)],
     );
     return;
 }
@@ -24107,9 +24141,9 @@ fn _parse_property_assignment__inner(p: &mut Parser, follow: &List<List<i32>> = 
         }
     }
     p.no_viable(
-        "expected propertyAssignment",
+        "no alternative of propertyAssignment matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_StringLiteral", "TK_DecimalLiteral", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral", "TK_OpenBracket", "TK_Multiply", "TK_Ellipsis", "TK_OpenParen", "TK_PlusPlus", "TK_MinusMinus", "TK_Plus", "TK_Minus", "TK_BitNot", "TK_Not", "TK_OpenBrace", "TK_YieldStar", "TK_BackTick", "TK_RegularExpressionLiteral", "TK_BigDecimalIntegerLiteral", "TK_BigHexIntegerLiteral", "TK_BigOctalIntegerLiteral", "TK_BigBinaryIntegerLiteral", "TK_LessThan"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_StringLiteral), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral), token_kind_name(TK_OpenBracket), token_kind_name(TK_Multiply), token_kind_name(TK_Ellipsis), token_kind_name(TK_OpenParen), token_kind_name(TK_PlusPlus), token_kind_name(TK_MinusMinus), token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_BitNot), token_kind_name(TK_Not), token_kind_name(TK_OpenBrace), token_kind_name(TK_YieldStar), token_kind_name(TK_BackTick), token_kind_name(TK_RegularExpressionLiteral), token_kind_name(TK_BigDecimalIntegerLiteral), token_kind_name(TK_BigHexIntegerLiteral), token_kind_name(TK_BigOctalIntegerLiteral), token_kind_name(TK_BigBinaryIntegerLiteral), token_kind_name(TK_LessThan)],
     );
     return;
 }
@@ -24218,9 +24252,9 @@ fn _parse_property_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         return;
     }
     p.no_viable(
-        "expected propertyName",
+        "no alternative of propertyName matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_StringLiteral", "TK_DecimalLiteral", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral", "TK_OpenBracket"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_StringLiteral), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral), token_kind_name(TK_OpenBracket)],
     );
     return;
 }
@@ -25318,9 +25352,9 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
         return;
     }
     p.no_viable(
-        "expected singleExpression",
+        "no alternative of singleExpression matches",
         p.peek_span(),
-        ["TK_Async", "TK_Function_", "TK_Identifier", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_StringLiteral", "TK_DecimalLiteral", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral", "TK_OpenBracket", "TK_OpenParen", "TK_PlusPlus", "TK_MinusMinus", "TK_Plus", "TK_Minus", "TK_BitNot", "TK_Not", "TK_OpenBrace", "TK_YieldStar", "TK_BackTick", "TK_RegularExpressionLiteral", "TK_BigDecimalIntegerLiteral", "TK_BigHexIntegerLiteral", "TK_BigOctalIntegerLiteral", "TK_BigBinaryIntegerLiteral", "TK_LessThan"],
+        [token_kind_name(TK_Async), token_kind_name(TK_Function_), token_kind_name(TK_Identifier), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_StringLiteral), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral), token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenParen), token_kind_name(TK_PlusPlus), token_kind_name(TK_MinusMinus), token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_BitNot), token_kind_name(TK_Not), token_kind_name(TK_OpenBrace), token_kind_name(TK_YieldStar), token_kind_name(TK_BackTick), token_kind_name(TK_RegularExpressionLiteral), token_kind_name(TK_BigDecimalIntegerLiteral), token_kind_name(TK_BigHexIntegerLiteral), token_kind_name(TK_BigOctalIntegerLiteral), token_kind_name(TK_BigBinaryIntegerLiteral), token_kind_name(TK_LessThan)],
     );
     return;
 }
@@ -26125,9 +26159,9 @@ fn _parse_as_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         }
     }
     p.no_viable(
-        "expected asExpression",
+        "no alternative of asExpression matches",
         p.peek_span(),
-        ["TK_Any", "TK_NullLiteral", "TK_Number", "TK_DecimalLiteral", "TK_Boolean", "TK_BooleanLiteral", "TK_String", "TK_StringLiteral", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_Void", "TK_Async", "TK_Function_", "TK_Identifier", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral", "TK_OpenBracket", "TK_OpenParen", "TK_PlusPlus", "TK_MinusMinus", "TK_Plus", "TK_Minus", "TK_BitNot", "TK_Not", "TK_OpenBrace", "TK_YieldStar", "TK_BackTick", "TK_RegularExpressionLiteral", "TK_BigDecimalIntegerLiteral", "TK_BigHexIntegerLiteral", "TK_BigOctalIntegerLiteral", "TK_BigBinaryIntegerLiteral", "TK_LessThan"],
+        [token_kind_name(TK_Any), token_kind_name(TK_NullLiteral), token_kind_name(TK_Number), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_Boolean), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_String), token_kind_name(TK_StringLiteral), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_Void), token_kind_name(TK_Async), token_kind_name(TK_Function_), token_kind_name(TK_Identifier), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral), token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenParen), token_kind_name(TK_PlusPlus), token_kind_name(TK_MinusMinus), token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_BitNot), token_kind_name(TK_Not), token_kind_name(TK_OpenBrace), token_kind_name(TK_YieldStar), token_kind_name(TK_BackTick), token_kind_name(TK_RegularExpressionLiteral), token_kind_name(TK_BigDecimalIntegerLiteral), token_kind_name(TK_BigHexIntegerLiteral), token_kind_name(TK_BigOctalIntegerLiteral), token_kind_name(TK_BigBinaryIntegerLiteral), token_kind_name(TK_LessThan)],
     );
     return;
 }
@@ -26218,9 +26252,9 @@ fn _parse_assignable__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         return;
     }
     p.no_viable(
-        "expected assignable",
+        "no alternative of assignable matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_OpenBracket", "TK_OpenBrace"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenBrace)],
     );
     return;
 }
@@ -26369,9 +26403,9 @@ fn _parse_anonymous_function__inner(p: &mut Parser, follow: &List<List<i32>> = &
         }
     }
     p.no_viable(
-        "expected anonymousFunction",
+        "no alternative of anonymousFunction matches",
         p.peek_span(),
-        ["TK_Async", "TK_Function_", "TK_Identifier", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_StringLiteral", "TK_DecimalLiteral", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral", "TK_OpenBracket", "TK_OpenParen"],
+        [token_kind_name(TK_Async), token_kind_name(TK_Function_), token_kind_name(TK_Identifier), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_StringLiteral), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral), token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenParen)],
     );
     return;
 }
@@ -26441,9 +26475,9 @@ fn _parse_arrow_function_parameters__inner(p: &mut Parser, follow: &List<List<i3
         return;
     }
     p.no_viable(
-        "expected arrowFunctionParameters",
+        "no alternative of arrowFunctionParameters matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_StringLiteral", "TK_DecimalLiteral", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral", "TK_OpenBracket", "TK_OpenParen"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_StringLiteral), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral), token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenParen)],
     );
     return;
 }
@@ -26527,9 +26561,9 @@ fn _parse_arrow_function_body__inner(p: &mut Parser, follow: &List<List<i32>> = 
         }
     }
     p.no_viable(
-        "expected arrowFunctionBody",
+        "no alternative of arrowFunctionBody matches",
         p.peek_span(),
-        ["TK_Async", "TK_Function_", "TK_Identifier", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral", "TK_StringLiteral", "TK_DecimalLiteral", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral", "TK_OpenBracket", "TK_OpenParen", "TK_PlusPlus", "TK_MinusMinus", "TK_Plus", "TK_Minus", "TK_BitNot", "TK_Not", "TK_OpenBrace", "TK_YieldStar", "TK_BackTick", "TK_RegularExpressionLiteral", "TK_BigDecimalIntegerLiteral", "TK_BigHexIntegerLiteral", "TK_BigOctalIntegerLiteral", "TK_BigBinaryIntegerLiteral", "TK_LessThan"],
+        [token_kind_name(TK_Async), token_kind_name(TK_Function_), token_kind_name(TK_Identifier), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_StringLiteral), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral), token_kind_name(TK_OpenBracket), token_kind_name(TK_OpenParen), token_kind_name(TK_PlusPlus), token_kind_name(TK_MinusMinus), token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_BitNot), token_kind_name(TK_Not), token_kind_name(TK_OpenBrace), token_kind_name(TK_YieldStar), token_kind_name(TK_BackTick), token_kind_name(TK_RegularExpressionLiteral), token_kind_name(TK_BigDecimalIntegerLiteral), token_kind_name(TK_BigHexIntegerLiteral), token_kind_name(TK_BigOctalIntegerLiteral), token_kind_name(TK_BigBinaryIntegerLiteral), token_kind_name(TK_LessThan)],
     );
     return;
 }
@@ -26557,9 +26591,9 @@ fn _parse_assignment_operator__inner(p: &mut Parser, follow: &List<List<i32>> = 
         return;
     }
     p.no_viable(
-        "expected assignmentOperator",
+        "no alternative of assignmentOperator matches",
         p.peek_span(),
-        ["TK_MultiplyAssign", "TK_DivideAssign", "TK_ModulusAssign", "TK_PlusAssign", "TK_MinusAssign", "TK_LeftShiftArithmeticAssign", "TK_RightShiftArithmeticAssign", "TK_RightShiftLogicalAssign", "TK_BitAndAssign", "TK_BitXorAssign", "TK_BitOrAssign", "TK_PowerAssign", "TK_NullishCoalescingAssign"],
+        [token_kind_name(TK_MultiplyAssign), token_kind_name(TK_DivideAssign), token_kind_name(TK_ModulusAssign), token_kind_name(TK_PlusAssign), token_kind_name(TK_MinusAssign), token_kind_name(TK_LeftShiftArithmeticAssign), token_kind_name(TK_RightShiftArithmeticAssign), token_kind_name(TK_RightShiftLogicalAssign), token_kind_name(TK_BitAndAssign), token_kind_name(TK_BitXorAssign), token_kind_name(TK_BitOrAssign), token_kind_name(TK_PowerAssign), token_kind_name(TK_NullishCoalescingAssign)],
     );
     return;
 }
@@ -26614,9 +26648,9 @@ fn _parse_literal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         return;
     }
     p.no_viable(
-        "expected literal",
+        "no alternative of literal matches",
         p.peek_span(),
-        ["TK_NullLiteral", "TK_BooleanLiteral", "TK_StringLiteral", "TK_BackTick", "TK_RegularExpressionLiteral", "TK_DecimalLiteral", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral", "TK_BigDecimalIntegerLiteral", "TK_BigHexIntegerLiteral", "TK_BigOctalIntegerLiteral", "TK_BigBinaryIntegerLiteral"],
+        [token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral), token_kind_name(TK_StringLiteral), token_kind_name(TK_BackTick), token_kind_name(TK_RegularExpressionLiteral), token_kind_name(TK_DecimalLiteral), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral), token_kind_name(TK_BigDecimalIntegerLiteral), token_kind_name(TK_BigHexIntegerLiteral), token_kind_name(TK_BigOctalIntegerLiteral), token_kind_name(TK_BigBinaryIntegerLiteral)],
     );
     return;
 }
@@ -26707,9 +26741,9 @@ fn _parse_template_string_atom__inner(p: &mut Parser, follow: &List<List<i32>> =
         return;
     }
     p.no_viable(
-        "expected templateStringAtom",
+        "no alternative of templateStringAtom matches",
         p.peek_span(),
-        ["TK_TemplateStringAtom", "TK_TemplateStringStartExpression", "TK_TemplateStringEscapeAtom"],
+        [token_kind_name(TK_TemplateStringAtom), token_kind_name(TK_TemplateStringStartExpression), token_kind_name(TK_TemplateStringEscapeAtom)],
     );
     return;
 }
@@ -26737,9 +26771,9 @@ fn _parse_numeric_literal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         return;
     }
     p.no_viable(
-        "expected numericLiteral",
+        "no alternative of numericLiteral matches",
         p.peek_span(),
-        ["TK_DecimalLiteral", "TK_HexIntegerLiteral", "TK_OctalIntegerLiteral", "TK_OctalIntegerLiteral2", "TK_BinaryIntegerLiteral"],
+        [token_kind_name(TK_DecimalLiteral), token_kind_name(TK_HexIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral), token_kind_name(TK_OctalIntegerLiteral2), token_kind_name(TK_BinaryIntegerLiteral)],
     );
     return;
 }
@@ -26767,9 +26801,9 @@ fn _parse_bigint_literal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         return;
     }
     p.no_viable(
-        "expected bigintLiteral",
+        "no alternative of bigintLiteral matches",
         p.peek_span(),
-        ["TK_BigDecimalIntegerLiteral", "TK_BigHexIntegerLiteral", "TK_BigOctalIntegerLiteral", "TK_BigBinaryIntegerLiteral"],
+        [token_kind_name(TK_BigDecimalIntegerLiteral), token_kind_name(TK_BigHexIntegerLiteral), token_kind_name(TK_BigOctalIntegerLiteral), token_kind_name(TK_BigBinaryIntegerLiteral)],
     );
     return;
 }
@@ -26897,9 +26931,9 @@ fn _parse_identifier_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         }
     }
     p.no_viable(
-        "expected identifierName",
+        "no alternative of identifierName matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Await", "TK_ReadOnly", "TK_Require", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_Require), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral)],
     );
     return;
 }
@@ -26927,9 +26961,9 @@ fn _parse_identifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         return;
     }
     p.no_viable(
-        "expected identifier",
+        "no alternative of identifier matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract)],
     );
     return;
 }
@@ -27011,9 +27045,9 @@ fn _parse_identifier_or_key_word__inner(p: &mut Parser, follow: &List<List<i32>>
         return;
     }
     p.no_viable(
-        "expected identifierOrKeyWord",
+        "no alternative of identifierOrKeyWord matches",
         p.peek_span(),
-        ["TK_Identifier", "TK_Async", "TK_As", "TK_From", "TK_Yield", "TK_Of", "TK_Any", "TK_Number", "TK_Boolean", "TK_String", "TK_Unique", "TK_Symbol", "TK_Never", "TK_Undefined", "TK_Object", "TK_KeyOf", "TK_TypeAlias", "TK_Constructor", "TK_Namespace", "TK_Abstract", "TK_Require"],
+        [token_kind_name(TK_Identifier), token_kind_name(TK_Async), token_kind_name(TK_As), token_kind_name(TK_From), token_kind_name(TK_Yield), token_kind_name(TK_Of), token_kind_name(TK_Any), token_kind_name(TK_Number), token_kind_name(TK_Boolean), token_kind_name(TK_String), token_kind_name(TK_Unique), token_kind_name(TK_Symbol), token_kind_name(TK_Never), token_kind_name(TK_Undefined), token_kind_name(TK_Object), token_kind_name(TK_KeyOf), token_kind_name(TK_TypeAlias), token_kind_name(TK_Constructor), token_kind_name(TK_Namespace), token_kind_name(TK_Abstract), token_kind_name(TK_Require)],
     );
     return;
 }
@@ -27050,9 +27084,9 @@ fn _parse_reserved_word__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         return;
     }
     p.no_viable(
-        "expected reservedWord",
+        "no alternative of reservedWord matches",
         p.peek_span(),
-        ["TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Yield", "TK_Async", "TK_Await", "TK_ReadOnly", "TK_From", "TK_As", "TK_Require", "TK_TypeAlias", "TK_String", "TK_Boolean", "TK_Number", "TK_Module", "TK_NullLiteral", "TK_BooleanLiteral"],
+        [token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Yield), token_kind_name(TK_Async), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_From), token_kind_name(TK_As), token_kind_name(TK_Require), token_kind_name(TK_TypeAlias), token_kind_name(TK_String), token_kind_name(TK_Boolean), token_kind_name(TK_Number), token_kind_name(TK_Module), token_kind_name(TK_NullLiteral), token_kind_name(TK_BooleanLiteral)],
     );
     return;
 }
@@ -27080,9 +27114,9 @@ fn _parse_keyword__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         return;
     }
     p.no_viable(
-        "expected keyword",
+        "no alternative of keyword matches",
         p.peek_span(),
-        ["TK_Break", "TK_Do", "TK_Instanceof", "TK_Typeof", "TK_Case", "TK_Else", "TK_New", "TK_Var", "TK_Catch", "TK_Finally", "TK_Return", "TK_Void", "TK_Continue", "TK_For", "TK_Switch", "TK_While", "TK_Debugger", "TK_Function_", "TK_This", "TK_With", "TK_Default", "TK_If", "TK_Throw", "TK_Delete", "TK_In", "TK_Try", "TK_Class", "TK_Enum", "TK_Extends", "TK_Super", "TK_Const", "TK_Export", "TK_Import", "TK_Implements", "TK_Let", "TK_Private", "TK_Public", "TK_Interface", "TK_Package", "TK_Protected", "TK_Static", "TK_Yield", "TK_Async", "TK_Await", "TK_ReadOnly", "TK_From", "TK_As", "TK_Require", "TK_TypeAlias", "TK_String", "TK_Boolean", "TK_Number", "TK_Module"],
+        [token_kind_name(TK_Break), token_kind_name(TK_Do), token_kind_name(TK_Instanceof), token_kind_name(TK_Typeof), token_kind_name(TK_Case), token_kind_name(TK_Else), token_kind_name(TK_New), token_kind_name(TK_Var), token_kind_name(TK_Catch), token_kind_name(TK_Finally), token_kind_name(TK_Return), token_kind_name(TK_Void), token_kind_name(TK_Continue), token_kind_name(TK_For), token_kind_name(TK_Switch), token_kind_name(TK_While), token_kind_name(TK_Debugger), token_kind_name(TK_Function_), token_kind_name(TK_This), token_kind_name(TK_With), token_kind_name(TK_Default), token_kind_name(TK_If), token_kind_name(TK_Throw), token_kind_name(TK_Delete), token_kind_name(TK_In), token_kind_name(TK_Try), token_kind_name(TK_Class), token_kind_name(TK_Enum), token_kind_name(TK_Extends), token_kind_name(TK_Super), token_kind_name(TK_Const), token_kind_name(TK_Export), token_kind_name(TK_Import), token_kind_name(TK_Implements), token_kind_name(TK_Let), token_kind_name(TK_Private), token_kind_name(TK_Public), token_kind_name(TK_Interface), token_kind_name(TK_Package), token_kind_name(TK_Protected), token_kind_name(TK_Static), token_kind_name(TK_Yield), token_kind_name(TK_Async), token_kind_name(TK_Await), token_kind_name(TK_ReadOnly), token_kind_name(TK_From), token_kind_name(TK_As), token_kind_name(TK_Require), token_kind_name(TK_TypeAlias), token_kind_name(TK_String), token_kind_name(TK_Boolean), token_kind_name(TK_Number), token_kind_name(TK_Module)],
     );
     return;
 }
@@ -27120,9 +27154,9 @@ fn _parse_eos__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
         return;
     }
     p.no_viable(
-        "expected eos",
+        "no alternative of eos matches",
         p.peek_span(),
-        ["TK_SemiColon", "TK_EOF"],
+        [token_kind_name(TK_SemiColon), token_kind_name(TK_EOF)],
     );
     return;
 }
@@ -27151,7 +27185,7 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     if p.recovering && p.diagnostics.len() < max_errors {
         if let Some(e) = &p.pending {
             let lc = line_col(p.tokens.chars, e.span.start);
-            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
+            let mut d = Diagnostic::error(p.pending_code, e.full_message(), e.span, lc.0, lc.1);
             d.rule_stack = e.rule_stack;
             p.diagnostics.push(d);
         }

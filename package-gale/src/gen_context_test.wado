@@ -11,7 +11,7 @@ use {
     Visibility,
 } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
-use { DiagnosticKind } from "./gir.wado";
+use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
 use { LitToken } from "./lexer_gen.wado";
 
 fn mk_ctx() -> GenContext {
@@ -665,39 +665,46 @@ test "position_first_sets_from: matches alt_position_first_sets at start=0" {
     }
 }
 
-test "warn dedupes diagnostics with the same rule and message" {
+test "warn dedupes diagnostics with the same owner and message" {
     // A single prediction decision is revisited by lowering: the
     // parse and scan passes lower the same alts twice. Each revisit
-    // re-enters the same warn site with an identical (rule, message),
+    // re-enters the same warn site with an identical (owner, message),
     // so `warn` must
     // collapse them — otherwise the same overlap warning is reported
     // N+1 times in `gale dump` and on `gale gen` stderr.
     let mut ctx = mk_ctx();
-    let label = String::from("rule 'r'");
+    let owner = DiagnosticOwner::rule_dispatch(&"r");
     let msg = String::from("alts 0, 1 share lookahead {TK_ID}");
-    ctx.warn(&label, DiagnosticKind::OverlapTournament, msg);
-    ctx.warn(&label, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
-    ctx.warn(&label, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
+    ctx.warn(&owner, DiagnosticKind::OverlapTournament, msg);
+    ctx.warn(&owner, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
+    ctx.warn(&owner, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
     let diags = ctx.copy_diagnostics();
     assert diags.len() == 1, `expected 1 deduped diagnostic, got ${diags.len()}`;
-    assert diags[0].rule == "rule 'r'";
+    assert diags[0].owner == owner;
 }
 
 test "warn keeps distinct diagnostics" {
-    // Different rule or different message → distinct warnings, not
-    // collapsed.
+    // Different owner or different message → distinct warnings, not
+    // collapsed. Two decision sites in the SAME rule are distinct owners:
+    // the owner is structured, so they no longer collide the way two
+    // labels that happened to render alike would.
     let mut ctx = mk_ctx();
-    ctx.warn(&String::from("rule 'a'"), DiagnosticKind::OverlapTournament, String::from(
+    ctx.warn(&DiagnosticOwner::rule_dispatch(&"a"), DiagnosticKind::OverlapTournament, String::from(
         "alts 0, 1 share lookahead {TK_ID}",
     ));
-    ctx.warn(&String::from("rule 'b'"), DiagnosticKind::OverlapTournament, String::from(
+    ctx.warn(&DiagnosticOwner::rule_dispatch(&"b"), DiagnosticKind::OverlapTournament, String::from(
         "alts 0, 1 share lookahead {TK_ID}",
     ));
-    ctx.warn(&String::from("rule 'a'"), DiagnosticKind::OverlapTournament, String::from(
+    ctx.warn(&DiagnosticOwner::rule_dispatch(&"a"), DiagnosticKind::OverlapTournament, String::from(
         "alts 0, 2 share lookahead {TK_X}",
     ));
+    ctx.warn(
+        &DiagnosticOwner { rule: "a", site: DiagnosticSite::GeneralGroup(0) },
+        DiagnosticKind::OverlapTournament,
+        String::from("alts 0, 1 share lookahead {TK_ID}"),
+    );
     let diags = ctx.copy_diagnostics();
-    assert diags.len() == 3, `expected 3 distinct diagnostics, got ${diags.len()}`;
+    assert diags.len() == 4, `expected 4 distinct diagnostics, got ${diags.len()}`;
 }
 
 test "precompute_scannability: mutually recursive defined rules are scannable" {

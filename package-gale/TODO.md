@@ -11,10 +11,9 @@ This file lists what is **not yet done** at a behavioral level; find the code vi
 ## Order of attack
 
 1. **Soundness and compatibility divergence** — these mis-parse valid input, so they outrank every feature below.
-2. **Structured diagnostic-to-rule identity** before the diagnostics that depend on it.
-3. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand. The skip buckets were re-triaged this way on 2026-07-30 and are now small; the standing value is that a re-extract is what proves an entry is still blocked rather than merely old.
-4. **Stage C**, starting with the SuperClass action-op replay: the largest block, and the gate for drop-in ANTLR4 replacement.
-5. Everything else, in whatever order a live case surfaces it.
+2. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand. The skip buckets were re-triaged this way on 2026-07-30 and are now small; the standing value is that a re-extract is what proves an entry is still blocked rather than merely old.
+3. **Stage C**, starting with the SuperClass action-op replay: the largest block, and the gate for drop-in ANTLR4 replacement.
+4. Everything else, in whatever order a live case surfaces it.
 
 The two LL-prediction gaps are deliberately parked, not queued — see below.
 
@@ -40,22 +39,7 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 
 ### Diagnostics and minor
 
-- [ ] The error-fallback path puts internal constant names in user-facing "expected" lists while the normal expect path uses the token vocabulary — two error paths, two vocabularies.
-- [ ] Error-token text is a message, so diagnostics read `unexpected token "unterminated string"`.
-- [ ] A parse error's `expected` set is populated everywhere but rendered by nothing (the Display impl omits it).
-- [ ] An empty lookahead signature is guarded on the scan side but not the parse side, where the lookahead condition would emit syntactically broken code; either the guard is dead or the parse side is missing it.
-- [ ] A list-label leaf path double-bumps the inner name counter, and the group case lacks the collision rebind the leaf case has — both in the label-dedup bug class a fixture already exists for. The non-greedy transparent first iteration also dedups outer-scope bindings against a fresh counter table.
-
-### Unchecked-argument quality nits (non-crash)
-
-- [ ] Malformed lexer command _arguments_ are unchecked (the paren panics are fixed): `pushMode(42)` interns a mode literally named `42`, and `-> ;` yields the odd "unknown lexer command ;".
-
-## Diagnostics & introspection
-
-Grammar-authoring DX follow-ups, from the review in [#1246](https://github.com/wado-lang/wado/issues/1246) (closed — these are what it left behind). Take them in this order; the first is a prerequisite for the second.
-
-- **Structured diagnostic-to-rule identity.** A diagnostic's owning rule is carried today as the free-form human label the warn was raised with, and tooling re-associates it by substring-matching the quoted rule name — so group-scoped warnings (no quoted rule name) never inline under their owning rule. Carry a structured owner (rule name / index), set it at the warn site, and compare by equality, keeping the label display-only. The same change lets the overlap-dispatch builder be told explicitly whether it is on the scan pass instead of recovering that from a label suffix.
-- **Optional-scan-guard-fallback warning.** Lowering warns on an overlap tournament today; the obvious next warning fires when an `e?` resolves to a scan-guarded optional (live case: a rule in `package-gale-highlight-wado/grammar/Wado.g4`). Deferred because it needs the enclosing rule name available at the warn site; add the diagnostic kind, the warn, and a fixture together.
+- [ ] A literal token names itself with its own kind constant (`TK_LIT_PLUS`) everywhere the vocabulary is read — `expected` lists and `<missing X>` alike — where ANTLR4's `getDisplayName` shows the literal text (`'+'`). One vocabulary, so this is a single change in `token_kind_name`; it moves `<missing X>` rendering, so it needs a corpus run rather than a local fixture. No committed expected tree contains a `<missing>` on a literal today.
 
 ## Stage C — action / predicate execution
 

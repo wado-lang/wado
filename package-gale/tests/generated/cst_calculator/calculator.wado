@@ -428,8 +428,13 @@ impl TokenStream {
 
 /// ParseError represents a parse failure with location and expected tokens.
 ///
-/// `message` is the local "expected X, got Y" description, kept free of
-/// position and rule context so it stays composable. `line`/`col` are a
+/// `message` says what was found (`got "for"`), never what was wanted:
+/// the wanted set lives in `expected`, in the token vocabulary, and
+/// `full_message` is the single place the two are combined. Keeping them
+/// apart is what lets every failure path share one vocabulary and one
+/// phrasing instead of each spelling its own "expected X" prefix.
+/// `message` is also free of position and rule context, so it stays
+/// composable. `line`/`col` are a
 /// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
 /// from `span.start` against the source at error-construction time;
 /// `Parser::error` fills them in. `rule_stack` records the chain of parser
@@ -458,6 +463,16 @@ impl ParseError {
         return ParseError { message, span, expected, line, col, rule_stack: [] };
     }
 
+    /// `message` with the expected set folded in — `expected ',' or ';'; got
+    /// ")"`. Read by `Display` and by the diagnostic a pending error becomes,
+    /// so the two never drift.
+    pub fn full_message(&self) -> String {
+        if self.expected.is_empty() {
+            return self.message;
+        }
+        return `expected ${join_expected(&self.expected)}; ${self.message}`;
+    }
+
     /// Render the rule chain as `outer > ... > inner` (start rule first).
     /// `rule_stack` is stored innermost-first, so iterate it in reverse.
     /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
@@ -482,9 +497,22 @@ impl ParseError {
     }
 }
 
+/// `A`, `A or B`, `A, B or C`.
+fn join_expected(names: &List<String>) -> String {
+    let n = names.len();
+    let mut out = String::with_capacity(n * 8);
+    for let mut i = 0; i < n; i += 1 {
+        if i > 0 {
+            out.push_str(&if i == n - 1 { " or " } else { ", " });
+        }
+        out.push_str(&names[i]);
+    }
+    return out;
+}
+
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.message}`);
+        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.full_message()}`);
         if !self.rule_stack.is_empty() {
             f.write_str(&`\n  in rule: ${self.rule_path()}`);
         }
@@ -2174,6 +2202,14 @@ struct Parser {
     diagnostics: List<Diagnostic>,
 }
 
+fn kind_names(kinds: &List<i32>) -> List<String> {
+    let mut out: List<String> = List::with_capacity(kinds.len());
+    for let k of kinds {
+        out.push(token_kind_name(*k));
+    }
+    return out;
+}
+
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
@@ -2206,7 +2242,7 @@ impl Parser {
     }
 
     fn pending_message(&self) -> String {
-        if let Some(e) = &self.pending { return e.message; }
+        if let Some(e) = &self.pending { return e.full_message(); }
         return String::from("");
     }
 
@@ -2275,8 +2311,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            let name = token_kind_name(kind);
-            self.fail(`expected ${name}, got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -2324,11 +2359,10 @@ impl Parser {
             self.b.missing(_syn2);
             return _syn2;
         }
-        let name = token_kind_name(kind);
         self.fail(
-            `expected ${name}, got "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [name],
+            [token_kind_name(kind)],
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -2342,7 +2376,7 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `expected any token, got "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
             DiagnosticCode::UnexpectedToken,
@@ -2370,7 +2404,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["set complement"],
+            [] as List<String>,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -2391,9 +2425,9 @@ impl Parser {
             }
         }
         self.fail(
-            `unexpected token "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["token set"],
+            kind_names(&included),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -2885,9 +2919,9 @@ fn _parse_signed_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         return;
     }
     p.no_viable(
-        "expected signedAtom",
+        "no alternative of signedAtom matches",
         p.peek_span(),
-        ["TK_PLUS", "TK_MINUS", "TK_COS", "TK_TAN", "TK_SIN", "TK_ACOS", "TK_ATAN", "TK_ASIN", "TK_LOG", "TK_LN", "TK_SQRT", "TK_SCIENTIFIC_NUMBER", "TK_VARIABLE", "TK_PI", "TK_EULER", "TK_I", "TK_LPAREN"],
+        [token_kind_name(TK_PLUS), token_kind_name(TK_MINUS), token_kind_name(TK_COS), token_kind_name(TK_TAN), token_kind_name(TK_SIN), token_kind_name(TK_ACOS), token_kind_name(TK_ATAN), token_kind_name(TK_ASIN), token_kind_name(TK_LOG), token_kind_name(TK_LN), token_kind_name(TK_SQRT), token_kind_name(TK_SCIENTIFIC_NUMBER), token_kind_name(TK_VARIABLE), token_kind_name(TK_PI), token_kind_name(TK_EULER), token_kind_name(TK_I), token_kind_name(TK_LPAREN)],
     );
     return;
 }
@@ -2925,9 +2959,9 @@ fn _parse_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         return;
     }
     p.no_viable(
-        "expected atom",
+        "no alternative of atom matches",
         p.peek_span(),
-        ["TK_SCIENTIFIC_NUMBER", "TK_VARIABLE", "TK_PI", "TK_EULER", "TK_I", "TK_LPAREN"],
+        [token_kind_name(TK_SCIENTIFIC_NUMBER), token_kind_name(TK_VARIABLE), token_kind_name(TK_PI), token_kind_name(TK_EULER), token_kind_name(TK_I), token_kind_name(TK_LPAREN)],
     );
     return;
 }
@@ -2968,9 +3002,9 @@ fn _parse_constant__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         return;
     }
     p.no_viable(
-        "expected constant",
+        "no alternative of constant matches",
         p.peek_span(),
-        ["TK_PI", "TK_EULER", "TK_I"],
+        [token_kind_name(TK_PI), token_kind_name(TK_EULER), token_kind_name(TK_I)],
     );
     return;
 }
@@ -3054,9 +3088,9 @@ fn _parse_funcname__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         return;
     }
     p.no_viable(
-        "expected funcname",
+        "no alternative of funcname matches",
         p.peek_span(),
-        ["TK_COS", "TK_TAN", "TK_SIN", "TK_ACOS", "TK_ATAN", "TK_ASIN", "TK_LOG", "TK_LN", "TK_SQRT"],
+        [token_kind_name(TK_COS), token_kind_name(TK_TAN), token_kind_name(TK_SIN), token_kind_name(TK_ACOS), token_kind_name(TK_ATAN), token_kind_name(TK_ASIN), token_kind_name(TK_LOG), token_kind_name(TK_LN), token_kind_name(TK_SQRT)],
     );
     return;
 }
@@ -3080,9 +3114,9 @@ fn _parse_relop__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         return;
     }
     p.no_viable(
-        "expected relop",
+        "no alternative of relop matches",
         p.peek_span(),
-        ["TK_EQ", "TK_GT", "TK_LT"],
+        [token_kind_name(TK_EQ), token_kind_name(TK_GT), token_kind_name(TK_LT)],
     );
     return;
 }
@@ -3107,7 +3141,7 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     if p.recovering && p.diagnostics.len() < max_errors {
         if let Some(e) = &p.pending {
             let lc = line_col(p.tokens.chars, e.span.start);
-            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
+            let mut d = Diagnostic::error(p.pending_code, e.full_message(), e.span, lc.0, lc.1);
             d.rule_stack = e.rule_stack;
             p.diagnostics.push(d);
         }

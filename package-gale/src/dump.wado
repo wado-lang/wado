@@ -5,11 +5,9 @@
 //! The output is plain text and stable across runs: every collection
 //! is iterated in its stored (deterministic) order. Each rule appears
 //! once, with non-overlapping sections (shape, alts, prediction tree,
-//! repeats, diagnostics). The trailing summary lists
-//! every diagnostic — including the group-scoped ones whose label
-//! carries no quoted rule name and so are not inlined under a rule
-//! (see `render_rule_diagnostics`; a structured owner id would let
-//! them inline, tracked in TODO.md).
+//! repeats, diagnostics). Each diagnostic inlines under the rule its
+//! structured owner names; the trailing summary lists every diagnostic,
+//! including the grammar-level hosts that own no rule.
 //!
 //! GIR carries the lowered shape decisions (Direct vs Tournament,
 //! repeat strategy, per-call-site FOLLOW args). The prediction-tree section is
@@ -458,16 +456,14 @@ fn repeat_strategy_label(strategy: &RepeatStrategy) -> String {
 // Diagnostics
 // ==========================================================================
 
-/// Inline any diagnostics whose `rule` label refers to this rule. The
-/// diagnostic's `rule` is a human label like `rule 'r'` / `LR rule
-/// 'expr' atom`, so match by the quoted rule name. Group-scoped labels
-/// (`General group rGroup0`, `SimpleCst group`) carry no quoted name and
-/// so never match here — they surface in the summary only. A structured
-/// owner id on `Diagnostic` would let them inline (TODO.md).
+/// Inline every diagnostic this rule owns. `Diagnostic.owner.rule` is the
+/// bare rule name, so the match is an equality — group-scoped and
+/// action-scoped diagnostics inline here too. Grammar-level hosts
+/// (`@members`, the highlight query, …) carry no rule and surface in the
+/// summary only.
 fn render_rule_diagnostics(out: &mut String, rule_name: &String, lowered: &LoweredGrammar) {
-    let needle = `'${*rule_name}'`;
     for let d of &lowered.diagnostics {
-        if !contains(&d.rule, &needle) {
+        if d.owner.rule != *rule_name {
             continue;
         }
         out.push_str(&"  ! warning: ");
@@ -481,6 +477,7 @@ fn render_rule_diagnostics(out: &mut String, rule_name: &String, lowered: &Lower
 fn diagnostic_kind_label(kind: &DiagnosticKind) -> String {
     return match *kind {
         OverlapTournament => "overlap-tournament",
+        OptionalScanGuardFallback => "optional-scan-guard-fallback",
         UnsupportedAction => "unsupported-action",
         HighlightQuery => "highlight-query",
         FragmentEntry => "fragment-entry",
@@ -497,7 +494,7 @@ fn render_summary(out: &mut String, lowered: &LoweredGrammar) {
     out.push_str(&"):\n");
     for let d of &lowered.diagnostics {
         out.push_str(&"  ");
-        out.push_str(&d.rule);
+        out.push_str(&d.owner.label());
         out.push_str(&": ");
         out.push_str(&d.message);
         out.push('\n');
@@ -518,29 +515,4 @@ fn push_token_set(out: &mut String, tokens: &List<String>) {
         out.push_str(&tokens[i]);
     }
     out.push(']');
-}
-
-/// Substring test (no dependency on the test-only `str_contains`).
-fn contains(haystack: &String, needle: &String) -> bool {
-    let h_len = haystack.len();
-    let n_len = needle.len();
-    if n_len == 0 {
-        return true;
-    }
-    if n_len > h_len {
-        return false;
-    }
-    for let mut i = 0; i <= h_len - n_len; i += 1 {
-        let mut found = true;
-        for let mut j = 0; j < n_len; j += 1 {
-            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
-                found = false;
-                break;
-            }
-        }
-        if found {
-            return true;
-        }
-    }
-    return false;
 }

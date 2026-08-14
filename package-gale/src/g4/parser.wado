@@ -89,6 +89,35 @@ impl LexerCommands {
     }
 }
 
+/// Every lexer command ANTLR4 defines. Doubles as the wanted set each
+/// lexer-command diagnostic reports, so the list is stated once.
+global LEXER_COMMAND_NAMES: List<String> = [
+    "skip",
+    "more",
+    "channel",
+    "type",
+    "pushMode",
+    "popMode",
+    "mode",
+];
+
+/// The "what was found" half of a parse error; the wanted set travels
+/// separately in `ParseError.expected`. A token the lexer could not form names
+/// its own lexical problem — quoting its raw text would show a truncated
+/// fragment and say nothing about why the lexer stopped.
+fn found_desc(tok: &Token) -> String {
+    if tok.kind == G4Token::UnterminatedString as i32 {
+        return String::from("unterminated string literal");
+    }
+    if tok.kind == G4Token::UnterminatedCharClass as i32 {
+        return String::from("unterminated character set");
+    }
+    if tok.kind == G4Token::UnexpectedChar as i32 {
+        return `unexpected character "${tok.text}"`;
+    }
+    return `got "${tok.text}"`;
+}
+
 fn first_char(s: &String) -> Option<char> {
     let mut iter = s.chars();
     return iter.next();
@@ -177,7 +206,7 @@ impl G4Parser {
         }
         let expected: List<String> = [kind.name()];
         return Result::<&Token, ParseError>::Err(
-            ParseError::new(`expected ${kind.name()}, got "${tok.text}"`, tok.span, expected),
+            ParseError::new(found_desc(tok), tok.span, expected),
         );
     }
 
@@ -649,7 +678,7 @@ impl G4Parser {
                 if !valid {
                     return Result::<List<GrammarOption>, ParseError>::Err(
                         ParseError::new(
-                            `invalid <assoc=...> value: only "left" or "right" are accepted`,
+                            `invalid <assoc=...> value`,
                             value_span,
                             ["left", "right"],
                         ),
@@ -961,7 +990,7 @@ impl G4Parser {
         let tok = self.peek();
         let expected: List<String> = ["identifier", "string", "(", ".", "~"];
         return Result::<Element, ParseError>::Err(
-            ParseError::new(`unexpected token "${tok.text}"`, tok.span, expected),
+            ParseError::new(found_desc(tok), tok.span, expected),
         );
     }
 
@@ -1060,12 +1089,42 @@ impl G4Parser {
         );
     }
 
+    /// The `(<arg>)` of a lexer command that takes one. `type` names a token,
+    /// which ANTLR4 lets you give as a literal type number instead
+    /// (`-> type(65535)`); `mode` / `pushMode` name a declared mode, where a
+    /// number means nothing — `pushMode(42)` used to mint a mode literally
+    /// named `42` rather than being rejected.
+    fn parse_lexer_command_arg(&mut self, command: &String, allow_int: bool) -> Result<String, ParseError> {
+        self.expect(G4Token::LParen)?;
+        let ok = self.is_kind(G4Token::Identifier) || (allow_int && self.is_kind(G4Token::IntLit));
+        if !ok {
+            let tok = self.peek();
+            let expected: List<String> = if allow_int { ["identifier", "int"] } else { ["identifier"] };
+            return Result::<String, ParseError>::Err(
+                ParseError::new(
+                    `${found_desc(tok)} as the argument of \`${*command}\``,
+                    tok.span,
+                    expected,
+                ),
+            );
+        }
+        let arg = self.advance().text.to_string();
+        self.expect(G4Token::RParen)?;
+        return Result::<String, ParseError>::Ok(arg);
+    }
+
     fn parse_lexer_actions(
         &mut self,
         actions: &mut LexerCommands,
         mode_names: &mut List<String>,
     ) -> Result<(), ParseError> {
         loop {
+            if !self.is_kind(G4Token::Identifier) {
+                let tok = self.peek();
+                return Result::<(), ParseError>::Err(
+                    ParseError::new(found_desc(tok), tok.span, LEXER_COMMAND_NAMES),
+                );
+            }
             let action_tok = self.advance();
             let action_span = action_tok.span;
             let action_name = action_tok.text.to_string();
@@ -1074,19 +1133,15 @@ impl G4Parser {
                     actions.skip = true;
                 },
                 "pushMode" => {
-                    self.expect(G4Token::LParen)?;
-                    let mode_name = self.advance();
-                    self.expect(G4Token::RParen)?;
-                    actions.push_mode = intern_mode(mode_names, &mode_name.text.to_string());
+                    let mode_name = self.parse_lexer_command_arg(&"pushMode", false)?;
+                    actions.push_mode = intern_mode(mode_names, &mode_name);
                 },
                 "popMode" => {
                     actions.pop_mode = true;
                 },
                 "mode" => {
-                    self.expect(G4Token::LParen)?;
-                    let mode_name = self.advance();
-                    self.expect(G4Token::RParen)?;
-                    actions.set_mode = intern_mode(mode_names, &mode_name.text.to_string());
+                    let mode_name = self.parse_lexer_command_arg(&"mode", false)?;
+                    actions.set_mode = intern_mode(mode_names, &mode_name);
                 },
                 "channel" => {
                     self.expect(G4Token::LParen)?;
@@ -1120,10 +1175,9 @@ impl G4Parser {
                     }
                 },
                 "type" => {
-                    self.expect(G4Token::LParen)?;
-                    let target = self.advance();
-                    self.expect(G4Token::RParen)?;
-                    actions.type_override = Option::<String>::Some(target.text.to_string());
+                    actions.type_override = Option::<String>::Some(
+                        self.parse_lexer_command_arg(&"type", true)?,
+                    );
                 },
                 "more" => {
                     actions.more = true;
@@ -1131,9 +1185,9 @@ impl G4Parser {
                 _ => {
                     return Result::<(), ParseError>::Err(
                         ParseError::new(
-                            `unknown lexer command "${action_name}" — expected one of: skip, more, channel, type, pushMode, popMode, mode`,
+                            `unknown lexer command "${action_name}"`,
                             action_span,
-                            ["skip", "more", "channel", "type", "pushMode", "popMode", "mode"],
+                            LEXER_COMMAND_NAMES,
                         ),
                     );
                 },
@@ -1282,7 +1336,7 @@ impl G4Parser {
         let tok = self.peek();
         let expected: List<String> = ["string", "char-class", "identifier", "(", "~", "."];
         return Result::<LexerElement, ParseError>::Err(
-            ParseError::new(`unexpected token "${tok.text}" in lexer rule`, tok.span, expected),
+            ParseError::new(`${found_desc(tok)} in a lexer rule`, tok.span, expected),
         );
     }
 

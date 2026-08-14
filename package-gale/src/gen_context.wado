@@ -18,7 +18,7 @@ use {
     count_general_groups,
     dedup_append_arr,
 } from "./gen_util.wado";
-use { Diagnostic, DiagnosticKind } from "./gir.wado";
+use { Diagnostic, DiagnosticKind, DiagnosticOwner } from "./gir.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
 use { TreeMap } from "core:collections";
 
@@ -576,22 +576,31 @@ impl GenContext {
         return self.predicate_gated.contains(&id);
     }
 
-    /// Record a prediction-strategy diagnostic for `rule`, deduped on
-    /// `(rule, message)`. A single decision site can be revisited: the
+    /// Record a prediction-strategy diagnostic, deduped on
+    /// `(owner, message)`. A single decision site can be revisited: the
     /// parse and scan passes lower the same alts twice — both re-enter
-    /// the same warn site with an identical `(rule, message)`.
+    /// the same warn site with an identical `(owner, message)`.
     /// Collapsing here keeps each prediction warning
     /// reported once regardless of how many times lowering revisits the
-    /// decision, so the dedup does not depend on a display-string
-    /// heuristic. `message` already encodes everything `kind` does, so
+    /// decision. `message` already encodes everything `kind` does, so
     /// the pair is a sufficient key without an `Eq` on `DiagnosticKind`.
-    pub fn warn(&mut self, owner_label: &String, kind: DiagnosticKind, message: String) {
+    pub fn warn(&mut self, owner: &DiagnosticOwner, kind: DiagnosticKind, message: String) {
         for let d of &self.diagnostics {
-            if d.rule == *owner_label && d.message == message {
+            if d.owner == *owner && d.message == message {
                 return;
             }
         }
-        self.diagnostics.push(Diagnostic { rule: *owner_label, kind, message });
+        self.diagnostics.push(Diagnostic { owner: *owner, kind, message });
+    }
+
+    /// The name of the parser rule currently being lowered / emitted, or
+    /// `""` outside a rule. Diagnostics raised from inside a rule use it as
+    /// their structured owner.
+    pub fn current_rule_name(&self) -> String {
+        if self.current_rule_index < 0 {
+            return String::new();
+        }
+        return self.parser_rules[self.current_rule_index].name;
     }
 
     /// Return the collected diagnostics (a value copy under Wado value

@@ -303,6 +303,44 @@ test "render_dump annotates an Ambiguous leaf with its halt reason" {
     assert str_contains(&report, &"at-end vs branch conflict"), report;
 }
 
+test "render_dump inlines a group-scoped diagnostic under its owning rule" {
+    // The overlap lives in a nested group, not in `r`'s own alternatives, so
+    // the diagnostic's owner is the group. It still belongs to `r` and must
+    // appear in `r`'s section — the owner carries the rule name, which no
+    // amount of substring-matching on a `General group rGroup0` label
+    // recovers.
+    let g = "grammar G;
+r : (ID INT | ID STR) ;
+ID : 'a' ;
+INT : '1' ;
+STR : '\"' ;";
+    let report = dump_source(&g);
+
+    let head = section_of(&report, &"rule r");
+    assert str_contains(&head, &"warning: overlap-tournament"), report;
+    assert str_contains(&head, &"TK_ID"), report;
+    // And it is still listed once in the summary, under the group's label.
+    assert str_contains(&report, &"General group rGroup0:"), report;
+}
+
+/// The slice of `report` from the line introducing `header` to the next
+/// top-level rule header, so a per-rule assertion cannot pass on text that
+/// belongs to a different rule or to the trailing summary.
+fn section_of(report: &String, header: &String) -> String {
+    let mut out = String::new();
+    let mut inside = false;
+    for let line of report.split("\n") {
+        if line.starts_with("rule ") {
+            inside = line.starts_with(*header);
+        }
+        if inside {
+            out.push_str(&line);
+            out.push('\n');
+        }
+    }
+    return out;
+}
+
 test "render_dump keeps an at-end alt out of an expanded opaque dispatch" {
     // `e : a | b | X ;` over `a : X Y ; b : X Z ;` — alts 0 and 1 enter
     // multi-token rules the opaque expansion can separate on the second

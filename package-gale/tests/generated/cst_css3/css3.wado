@@ -431,8 +431,13 @@ impl TokenStream {
 
 /// ParseError represents a parse failure with location and expected tokens.
 ///
-/// `message` is the local "expected X, got Y" description, kept free of
-/// position and rule context so it stays composable. `line`/`col` are a
+/// `message` says what was found (`got "for"`), never what was wanted:
+/// the wanted set lives in `expected`, in the token vocabulary, and
+/// `full_message` is the single place the two are combined. Keeping them
+/// apart is what lets every failure path share one vocabulary and one
+/// phrasing instead of each spelling its own "expected X" prefix.
+/// `message` is also free of position and rule context, so it stays
+/// composable. `line`/`col` are a
 /// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
 /// from `span.start` against the source at error-construction time;
 /// `Parser::error` fills them in. `rule_stack` records the chain of parser
@@ -461,6 +466,16 @@ impl ParseError {
         return ParseError { message, span, expected, line, col, rule_stack: [] };
     }
 
+    /// `message` with the expected set folded in — `expected ',' or ';'; got
+    /// ")"`. Read by `Display` and by the diagnostic a pending error becomes,
+    /// so the two never drift.
+    pub fn full_message(&self) -> String {
+        if self.expected.is_empty() {
+            return self.message;
+        }
+        return `expected ${join_expected(&self.expected)}; ${self.message}`;
+    }
+
     /// Render the rule chain as `outer > ... > inner` (start rule first).
     /// `rule_stack` is stored innermost-first, so iterate it in reverse.
     /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
@@ -485,9 +500,22 @@ impl ParseError {
     }
 }
 
+/// `A`, `A or B`, `A, B or C`.
+fn join_expected(names: &List<String>) -> String {
+    let n = names.len();
+    let mut out = String::with_capacity(n * 8);
+    for let mut i = 0; i < n; i += 1 {
+        if i > 0 {
+            out.push_str(&if i == n - 1 { " or " } else { ", " });
+        }
+        out.push_str(&names[i]);
+    }
+    return out;
+}
+
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.message}`);
+        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.full_message()}`);
         if !self.rule_stack.is_empty() {
             f.write_str(&`\n  in rule: ${self.rule_path()}`);
         }
@@ -28344,6 +28372,14 @@ struct Parser {
     diagnostics: List<Diagnostic>,
 }
 
+fn kind_names(kinds: &List<i32>) -> List<String> {
+    let mut out: List<String> = List::with_capacity(kinds.len());
+    for let k of kinds {
+        out.push(token_kind_name(*k));
+    }
+    return out;
+}
+
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
@@ -28376,7 +28412,7 @@ impl Parser {
     }
 
     fn pending_message(&self) -> String {
-        if let Some(e) = &self.pending { return e.message; }
+        if let Some(e) = &self.pending { return e.full_message(); }
         return String::from("");
     }
 
@@ -28445,8 +28481,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            let name = token_kind_name(kind);
-            self.fail(`expected ${name}, got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -28494,11 +28529,10 @@ impl Parser {
             self.b.missing(_syn2);
             return _syn2;
         }
-        let name = token_kind_name(kind);
         self.fail(
-            `expected ${name}, got "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [name],
+            [token_kind_name(kind)],
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -28512,7 +28546,7 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `expected any token, got "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
             DiagnosticCode::UnexpectedToken,
@@ -28540,7 +28574,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["set complement"],
+            [] as List<String>,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -28561,9 +28595,9 @@ impl Parser {
             }
         }
         self.fail(
-            `unexpected token "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["token set"],
+            kind_names(&included),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -33013,9 +33047,9 @@ fn _parse_charset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         return _parse_charset__inner_alt_1(p, follow);
     }
     p.no_viable(
-        "expected charset",
+        "no alternative of charset matches",
         p.peek_span(),
-        ["TK_Charset"],
+        [token_kind_name(TK_Charset)],
     );
     return;
 }
@@ -33271,9 +33305,9 @@ fn _parse_imports__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         return _parse_imports__inner_alt_3(p, follow);
     }
     p.no_viable(
-        "expected imports",
+        "no alternative of imports matches",
         p.peek_span(),
-        ["TK_Import"],
+        [token_kind_name(TK_Import)],
     );
     return;
 }
@@ -33467,9 +33501,9 @@ fn _parse_namespace___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         return _parse_namespace___inner_alt_1(p, follow);
     }
     p.no_viable(
-        "expected namespace_",
+        "no alternative of namespace_ matches",
         p.peek_span(),
-        ["TK_Namespace"],
+        [token_kind_name(TK_Namespace)],
     );
     return;
 }
@@ -33693,9 +33727,9 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         return;
     }
     p.no_viable(
-        "expected mediaQuery",
+        "no alternative of mediaQuery matches",
         p.peek_span(),
-        ["TK_MediaOnly", "TK_Not", "TK_Comment", "TK_Space", "TK_OpenParen"],
+        [token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_Comment), token_kind_name(TK_Space), token_kind_name(TK_OpenParen)],
     );
     return;
 }
@@ -33963,9 +33997,9 @@ fn _parse_combinator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         return;
     }
     p.no_viable(
-        "expected combinator",
+        "no alternative of combinator matches",
         p.peek_span(),
-        ["TK_Plus", "TK_Greater", "TK_Tilde", "TK_Space"],
+        [token_kind_name(TK_Plus), token_kind_name(TK_Greater), token_kind_name(TK_Tilde), token_kind_name(TK_Space)],
     );
     return;
 }
@@ -34157,9 +34191,9 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
         return;
     }
     p.no_viable(
-        "expected simpleSelectorSequence",
+        "no alternative of simpleSelectorSequence matches",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Multiply", "TK_Pipe", "TK_Hash", "TK_Dot", "TK_OpenBracket", "TK_Colon", "TK_PseudoNot"],
+        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Multiply), token_kind_name(TK_Pipe), token_kind_name(TK_Hash), token_kind_name(TK_Dot), token_kind_name(TK_OpenBracket), token_kind_name(TK_Colon), token_kind_name(TK_PseudoNot)],
     );
     return;
 }
@@ -34805,9 +34839,9 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         return;
     }
     p.no_viable(
-        "expected negationArg",
+        "no alternative of negationArg matches",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Multiply", "TK_Pipe", "TK_Hash", "TK_Dot", "TK_OpenBracket", "TK_Colon"],
+        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Multiply), token_kind_name(TK_Pipe), token_kind_name(TK_Hash), token_kind_name(TK_Dot), token_kind_name(TK_OpenBracket), token_kind_name(TK_Colon)],
     );
     return;
 }
@@ -34851,9 +34885,9 @@ fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         return;
     }
     p.no_viable(
-        "expected operator_",
+        "no alternative of operator_ matches",
         p.peek_span(),
-        ["TK_Divide", "TK_Comma", "TK_Space", "TK_Equal"],
+        [token_kind_name(TK_Divide), token_kind_name(TK_Comma), token_kind_name(TK_Space), token_kind_name(TK_Equal)],
     );
     return;
 }
@@ -34897,9 +34931,9 @@ fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         return;
     }
     p.no_viable(
-        "expected property_",
+        "no alternative of property_ matches",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_Multiply", "TK_Underscore"],
+        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Variable), token_kind_name(TK_Multiply), token_kind_name(TK_Underscore)],
     );
     return;
 }
@@ -35046,9 +35080,9 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         }
     }
     p.no_viable(
-        "expected ruleset",
+        "no alternative of ruleset matches",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Multiply", "TK_Pipe", "TK_Hash", "TK_Dot", "TK_OpenBracket", "TK_Colon", "TK_PseudoNot", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Function_", "TK_OpenParen", "TK_OpenBrace"],
+        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Multiply), token_kind_name(TK_Pipe), token_kind_name(TK_Hash), token_kind_name(TK_Dot), token_kind_name(TK_OpenBracket), token_kind_name(TK_Colon), token_kind_name(TK_PseudoNot), token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_Number), token_kind_name(TK_Percentage), token_kind_name(TK_Dimension), token_kind_name(TK_UnknownDimension), token_kind_name(TK_String_), token_kind_name(TK_Url_), token_kind_name(TK_Url), token_kind_name(TK_UnicodeRange), token_kind_name(TK_Includes), token_kind_name(TK_DashMatch), token_kind_name(TK_Function_), token_kind_name(TK_OpenParen), token_kind_name(TK_OpenBrace)],
     );
     return;
 }
@@ -35219,9 +35253,9 @@ fn _parse_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         }
     }
     p.no_viable(
-        "expected declaration",
+        "no alternative of declaration matches",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_Multiply", "TK_Underscore"],
+        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Variable), token_kind_name(TK_Multiply), token_kind_name(TK_Underscore)],
     );
     return;
 }
@@ -35600,9 +35634,9 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         return;
     }
     p.no_viable(
-        "expected term",
+        "no alternative of term matches",
         p.peek_span(),
-        ["TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_String_", "TK_UnicodeRange", "TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Var", "TK_Url_", "TK_Url", "TK_Hash", "TK_Calc", "TK_Function_", "TK_UnknownDimension", "TK_DxImageTransform"],
+        [token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_Number), token_kind_name(TK_Percentage), token_kind_name(TK_Dimension), token_kind_name(TK_String_), token_kind_name(TK_UnicodeRange), token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Var), token_kind_name(TK_Url_), token_kind_name(TK_Url), token_kind_name(TK_Hash), token_kind_name(TK_Calc), token_kind_name(TK_Function_), token_kind_name(TK_UnknownDimension), token_kind_name(TK_DxImageTransform)],
     );
     return;
 }
@@ -36211,9 +36245,9 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         return;
     }
     p.no_viable(
-        "expected any_",
+        "no alternative of any_ matches",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_Hash", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Colon", "TK_Function_", "TK_OpenParen", "TK_OpenBracket"],
+        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_Number), token_kind_name(TK_Percentage), token_kind_name(TK_Dimension), token_kind_name(TK_UnknownDimension), token_kind_name(TK_String_), token_kind_name(TK_Url_), token_kind_name(TK_Url), token_kind_name(TK_Hash), token_kind_name(TK_UnicodeRange), token_kind_name(TK_Includes), token_kind_name(TK_DashMatch), token_kind_name(TK_Colon), token_kind_name(TK_Function_), token_kind_name(TK_OpenParen), token_kind_name(TK_OpenBracket)],
     );
     return;
 }
@@ -36311,9 +36345,9 @@ fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         return;
     }
     p.no_viable(
-        "expected unused",
+        "no alternative of unused matches",
         p.peek_span(),
-        ["TK_OpenBrace", "TK_AtKeyword", "TK_SemiColon", "TK_Cdo", "TK_Cdc"],
+        [token_kind_name(TK_OpenBrace), token_kind_name(TK_AtKeyword), token_kind_name(TK_SemiColon), token_kind_name(TK_Cdo), token_kind_name(TK_Cdc)],
     );
     return;
 }
@@ -36569,9 +36603,9 @@ fn _parse_nested_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         return;
     }
     p.no_viable(
-        "expected nestedStatement",
+        "no alternative of nestedStatement matches",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Multiply", "TK_Pipe", "TK_Hash", "TK_Dot", "TK_OpenBracket", "TK_Colon", "TK_PseudoNot", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Function_", "TK_OpenParen", "TK_OpenBrace", "TK_Media", "TK_Page", "TK_FontFace", "TK_Keyframes", "TK_Supports", "TK_Viewport", "TK_CounterStyle", "TK_FontFeatureValues", "TK_AtKeyword"],
+        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Multiply), token_kind_name(TK_Pipe), token_kind_name(TK_Hash), token_kind_name(TK_Dot), token_kind_name(TK_OpenBracket), token_kind_name(TK_Colon), token_kind_name(TK_PseudoNot), token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_Number), token_kind_name(TK_Percentage), token_kind_name(TK_Dimension), token_kind_name(TK_UnknownDimension), token_kind_name(TK_String_), token_kind_name(TK_Url_), token_kind_name(TK_Url), token_kind_name(TK_UnicodeRange), token_kind_name(TK_Includes), token_kind_name(TK_DashMatch), token_kind_name(TK_Function_), token_kind_name(TK_OpenParen), token_kind_name(TK_OpenBrace), token_kind_name(TK_Media), token_kind_name(TK_Page), token_kind_name(TK_FontFace), token_kind_name(TK_Keyframes), token_kind_name(TK_Supports), token_kind_name(TK_Viewport), token_kind_name(TK_CounterStyle), token_kind_name(TK_FontFeatureValues), token_kind_name(TK_AtKeyword)],
     );
     return;
 }
@@ -36736,9 +36770,9 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &
         }
     }
     p.no_viable(
-        "expected supportsCondition",
+        "no alternative of supportsCondition matches",
         p.peek_span(),
-        ["TK_Not", "TK_OpenParen", "TK_Function_"],
+        [token_kind_name(TK_Not), token_kind_name(TK_OpenParen), token_kind_name(TK_Function_)],
     );
     return;
 }
@@ -36843,9 +36877,9 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: &List<List
         }
     }
     p.no_viable(
-        "expected supportsConditionInParens",
+        "no alternative of supportsConditionInParens matches",
         p.peek_span(),
-        ["TK_OpenParen", "TK_Function_"],
+        [token_kind_name(TK_OpenParen), token_kind_name(TK_Function_)],
     );
     return;
 }
@@ -37097,9 +37131,9 @@ fn _parse_url__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
         return;
     }
     p.no_viable(
-        "expected url",
+        "no alternative of url matches",
         p.peek_span(),
-        ["TK_Url_", "TK_Url"],
+        [token_kind_name(TK_Url_), token_kind_name(TK_Url)],
     );
     return;
 }
@@ -37488,9 +37522,9 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         return;
     }
     p.no_viable(
-        "expected calcValue",
+        "no alternative of calcValue matches",
         p.peek_span(),
-        ["TK_Plus", "TK_Minus", "TK_Number", "TK_Dimension", "TK_UnknownDimension", "TK_Percentage", "TK_OpenParen"],
+        [token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_Number), token_kind_name(TK_Dimension), token_kind_name(TK_UnknownDimension), token_kind_name(TK_Percentage), token_kind_name(TK_OpenParen)],
     );
     return;
 }
@@ -37636,9 +37670,9 @@ fn _parse_font_face_declaration__inner(p: &mut Parser, follow: &List<List<i32>> 
         }
     }
     p.no_viable(
-        "expected fontFaceDeclaration",
+        "no alternative of fontFaceDeclaration matches",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_Multiply", "TK_Underscore"],
+        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Variable), token_kind_name(TK_Multiply), token_kind_name(TK_Underscore)],
     );
     return;
 }
@@ -37992,9 +38026,9 @@ fn _parse_font_family_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         return;
     }
     p.no_viable(
-        "expected fontFamilyName",
+        "no alternative of fontFamilyName matches",
         p.peek_span(),
-        ["TK_String_", "TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To"],
+        [token_kind_name(TK_String_), token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To)],
     );
     return;
 }
@@ -38139,9 +38173,9 @@ fn _parse_ident__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         return;
     }
     p.no_viable(
-        "expected ident",
+        "no alternative of ident matches",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To"],
+        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To)],
     );
     return;
 }
@@ -38216,7 +38250,7 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     if p.recovering && p.diagnostics.len() < max_errors {
         if let Some(e) = &p.pending {
             let lc = line_col(p.tokens.chars, e.span.start);
-            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
+            let mut d = Diagnostic::error(p.pending_code, e.full_message(), e.span, lc.0, lc.1);
             d.rule_stack = e.rule_stack;
             p.diagnostics.push(d);
         }

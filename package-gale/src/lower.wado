@@ -119,6 +119,8 @@ use {
     KindSet,
     FollowArg,
     DiagnosticKind,
+    DiagnosticOwner,
+    DiagnosticSite,
 } from "./gir.wado";
 
 /// True when an element threads a `FollowArg` into a callee: a `RuleRef`,
@@ -557,8 +559,8 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
         all_indices.push(i);
     }
 
-    let owner_label = `rule '${rule.name}'`;
-    let dispatch = build_overlap_dispatch(&owner_label, &rule.alternatives, &all_indices, &first_sets, ctx);
+    let owner = DiagnosticOwner::rule_dispatch(&rule.name);
+    let dispatch = build_overlap_dispatch(&owner, false, &rule.alternatives, &all_indices, &first_sets, ctx);
     return MultiAltRule {
         header,
         alts,
@@ -1342,8 +1344,8 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
         scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx, &rule.name, false));
     }
 
-    let owner_label = `LR rule '${rule.name}' atom`;
-    let dispatch = build_overlap_dispatch(&owner_label, &rule.alternatives, non_lr_indices, &first_sets, ctx);
+    let owner = DiagnosticOwner { rule: rule.name, site: DiagnosticSite::LrAtomDispatch };
+    let dispatch = build_overlap_dispatch(&owner, false, &rule.alternatives, non_lr_indices, &first_sets, ctx);
     return MultiAltRule {
         header,
         alts,
@@ -1662,20 +1664,23 @@ fn any_wildcard_alt(alts: &List<Alternative>, indices: &List<i32>) -> bool {
 /// descending — emit runs each scan helper and commits to the
 /// longest match. ANTLR4's longest-match LL choice, no backtracking.
 ///
-/// `owner_label` is the human-readable owner used in the panic message
-/// for unscannable alts (`"rule 'expr'"`, `"SimpleCst group"`, …).
-/// `alts` is the underlying surface alternative list; `indices`
-/// selects which alts participate in this dispatch.
+/// `owner` identifies the decision site: it names the owner in the panic
+/// message for unscannable alts and keys the advisory diagnostic. `is_scan`
+/// marks the scan-side pass, which mirrors a parse-side decision and so
+/// reports nothing. `alts` is the underlying surface alternative list;
+/// `indices` selects which alts participate in this dispatch.
 fn build_overlap_dispatch(
-    owner_label: &String,
+    owner: &DiagnosticOwner,
+    is_scan: bool,
     alts: &List<Alternative>,
     indices: &List<i32>,
     first_sets: &List<List<String>>,
     ctx: &mut GenContext,
 ) -> MultiAltDispatch {
+    let pass = if is_scan { " (scan)" } else { "" };
     let n_sets = first_sets.len();
     let n_indices = indices.len();
-    assert n_sets == n_indices, `${*owner_label}: first_sets is parallel to indices, not to alts (${n_sets} vs ${n_indices})`;
+    assert n_sets == n_indices, `${owner.label()}${pass}: first_sets is parallel to indices, not to alts (${n_sets} vs ${n_indices})`;
 
     // An open-ended alt's static first set is empty, so `any_overlap` reads it
     // as disjoint and the Direct chain would give it an unreachable
@@ -1694,16 +1699,13 @@ fn build_overlap_dispatch(
 
     for let idx of indices {
         let mut visiting: List<String> = [];
-        assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting), `${*owner_label}: alt ${*idx} is not fully scannable; Tournament dispatch needs all alts scannable`;
+        assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting), `${owner.label()}${pass}: alt ${*idx} is not fully scannable; Tournament dispatch needs all alts scannable`;
     }
 
-    // Surface the overlap as an advisory diagnostic. `GenContext::warn`
-    // dedupes on `(rule, message)`, so each overlap is reported once
-    // even though parse and scan passes both visit it. The scan pass uses a
-    // distinct "(scan)" label that `warn` would NOT dedupe against the
-    // parse-side label, so skip it here — the parse-side pass is the one
-    // that carries the rule-facing label.
-    if !ends_with_scan(owner_label) {
+    // Surface the overlap as an advisory diagnostic. The scan pass mirrors a
+    // decision the parse pass already reported against the same owner, so it
+    // stays silent rather than relying on `warn`'s dedup.
+    if !is_scan {
         let shared = shared_overlap_tokens(first_sets);
         // Reporting the shared set for an open-ended alt would read as `{}`.
         let cause = if shared.is_empty() {
@@ -1712,7 +1714,7 @@ fn build_overlap_dispatch(
             `share lookahead ${join_kind_set(&shared)}`;
         };
         ctx.warn(
-            owner_label,
+            owner,
             DiagnosticKind::OverlapTournament,
             `alts ${join_kind_list(indices)} ${cause}; resolved by longest-match scan tournament, not a token-led branch`,
         );
@@ -1724,13 +1726,6 @@ fn build_overlap_dispatch(
     }
     sort_group_by_element_count(&mut sorted, alts);
     return MultiAltDispatch::Tournament(TournamentDispatch { alts: sorted });
-}
-
-/// True when a `build_overlap_dispatch` `owner_label` marks a scan-side
-/// pass (suffix " (scan)"), so the warn site can skip it and keep the
-/// parse-side label.
-fn ends_with_scan(label: &String) -> bool {
-    return label.ends_with(" (scan)");
 }
 
 /// Collect the token kinds that appear in more than one alt's first
@@ -2010,7 +2005,11 @@ fn lower_general_scan_group(
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
         all_indices.push(ai);
     }
-    let dispatch = build_overlap_dispatch(&"General group (scan)", alts, &all_indices, &first_sets, ctx);
+    let owner = DiagnosticOwner {
+        rule: ctx.current_rule_name(),
+        site: DiagnosticSite::GeneralGroup(-1),
+    };
+    let dispatch = build_overlap_dispatch(&owner, true, alts, &all_indices, &first_sets, ctx);
     let mut wildcard_indices: List<i32> = [];
     for let mut ai = 0; ai < alts.len(); ai += 1 {
         if alt_is_wildcard_led(&alts[ai]) {
@@ -2328,7 +2327,16 @@ fn lower_scan_optional_lookahead_group(
     let mut sigs: List<List<List<String>>> = [];
     let mut bodies: List<ScanBody> = [];
     for let shape of &shapes {
-        sigs.push(shape_lookahead_signature_for_alt(shape, &alt.elements, ctx));
+        // An all-optionals-off shape selects no element, so it has no
+        // lookahead to gate on and no body to scan. Drop it here, as the
+        // parse-side twin (`try_optional_shape_lookahead`) does — emit then
+        // asserts every signature it reads is non-empty instead of skipping
+        // one silently.
+        let sig = shape_lookahead_signature_for_alt(shape, &alt.elements, ctx);
+        if sig.is_empty() {
+            continue;
+        }
+        sigs.push(sig);
         bodies.push(lower_scan_shape_body(shape, &alt.elements, ctx));
     }
     return ScanElement::OptionalLookahead(ScanOptionalLookaheadElement {
@@ -3064,7 +3072,11 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         });
         all_indices.push(i);
     }
-    let dispatch = build_overlap_dispatch(&"SimpleCst group", alts, &all_indices, &first_sets, ctx);
+    let owner = DiagnosticOwner {
+        rule: ctx.current_rule_name(),
+        site: DiagnosticSite::SimpleCstGroup,
+    };
+    let dispatch = build_overlap_dispatch(&owner, false, alts, &all_indices, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::SimpleCst(SimpleCstShape {
             type_name: type_name,
@@ -3105,7 +3117,11 @@ fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext) -
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
         all_indices.push(i);
     }
-    let dispatch = build_overlap_dispatch(&"SimpleCst group (scan)", alts, &all_indices, &first_sets, ctx);
+    let owner = DiagnosticOwner {
+        rule: ctx.current_rule_name(),
+        site: DiagnosticSite::SimpleCstGroup,
+    };
+    let dispatch = build_overlap_dispatch(&owner, true, alts, &all_indices, &first_sets, ctx);
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         dispatch: dispatch,
@@ -3249,8 +3265,11 @@ fn lower_general_group(
         });
         scan_bodies.push(ScanBody { elements: scan_elements });
     }
-    let owner_label = `General group ${*rule_name}Group${group_index}`;
-    let dispatch = build_overlap_dispatch(&owner_label, alts, &all_indices, &first_sets, ctx);
+    let owner = DiagnosticOwner {
+        rule: *rule_name,
+        site: DiagnosticSite::GeneralGroup(group_index),
+    };
+    let dispatch = build_overlap_dispatch(&owner, false, alts, &all_indices, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::General(GeneralShape {
             variant_type: variant_type,
@@ -3332,7 +3351,11 @@ fn lower_repeat_op(
     let mut opt_specialised: Option<RepeatStrategy> = null;
     if !rep.non_greedy {
         if let Optional = rep.kind {
-            opt_specialised = pick_optional_specialised(&rep.element, body_has_field, ctx);
+            let owner = DiagnosticOwner {
+                rule: *rule_name,
+                site: DiagnosticSite::Optional(outer_field),
+            };
+            opt_specialised = pick_optional_specialised(&rep.element, body_has_field, &owner, ctx);
         }
     }
 
@@ -3543,7 +3566,17 @@ fn element_has_field(elem: &Element) -> bool {
 /// Optional+Group dispatch decision — emit consumes the resulting
 /// strategy variant directly via `gen_op_storable_optional` /
 /// `gen_op_transparent_optional`.
-fn pick_optional_specialised(inner: &Element, body_has_field: bool, ctx: &mut GenContext) -> Option<RepeatStrategy> {
+///
+/// Reaching the scan guard is the advisory case: neither lookahead mode
+/// decided the optional, so emit speculatively scans the body on every visit.
+/// `owner` names the optional so the warning points at a binding the author
+/// can find.
+fn pick_optional_specialised(
+    inner: &Element,
+    body_has_field: bool,
+    owner: &DiagnosticOwner,
+    ctx: &mut GenContext,
+) -> Option<RepeatStrategy> {
     let k_token = try_optional_k_token_lookahead(inner);
     let shape = try_optional_shape_lookahead(inner, ctx);
     let scan_guard = try_optional_scan_guard(inner, ctx);
@@ -3554,9 +3587,6 @@ fn pick_optional_specialised(inner: &Element, body_has_field: bool, ctx: &mut Ge
         if let Some(s) = shape {
             return Option::Some(s);
         }
-        if let Some(s) = scan_guard {
-            return Option::Some(s);
-        }
     } else {
         if let Some(s) = shape {
             return Option::Some(s);
@@ -3564,11 +3594,20 @@ fn pick_optional_specialised(inner: &Element, body_has_field: bool, ctx: &mut Ge
         if let Some(s) = k_token {
             return Option::Some(s);
         }
-        if let Some(s) = scan_guard {
-            return Option::Some(s);
-        }
+    }
+    if let Some(s) = scan_guard {
+        warn_optional_scan_guard(owner, ctx);
+        return Option::Some(s);
     }
     return null;
+}
+
+fn warn_optional_scan_guard(owner: &DiagnosticOwner, ctx: &mut GenContext) {
+    ctx.warn(
+        owner,
+        DiagnosticKind::OptionalScanGuardFallback,
+        "no fixed-token lookahead decides this optional; entry is gated by speculatively scanning the body on every visit",
+    );
 }
 
 /// Try to materialise an `OptionalLookahead` strategy (k-token mode).
@@ -3980,9 +4019,20 @@ fn lower_label_op(
         // Inside a Repeat, `lower_repeat_op` adopts the label name
         // directly (the Repeat itself implies `List<>`); that path
         // skips this wrapper.
+        //
+        // The inner is emitted into the surrounding alternative's scope, not
+        // a loop body, so its name has to be unique there. `inner_counts` is
+        // fresh, so the name lower just gave it is blind to the alt — name it
+        // after the label instead and dedup that in the alt's own table. The
+        // local is never read (the tree builder holds the matched value) and
+        // `list_label_field_decl` takes only the inner's *type*, so nothing
+        // downstream depends on it; reserving it here is what keeps a later
+        // sibling from claiming the same name.
+        let item_base = `${label_field}_item`;
+        let item_field = dedup_name(&item_base, name_counts);
         return Op::ListLabel(ListLabelOp {
             field: label_field,
-            inner: inner_op,
+            inner: rebind_op_field(inner_op, &item_field, &item_base),
             dedup_base: lab.field_name,
         });
     }

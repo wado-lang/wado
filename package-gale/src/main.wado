@@ -126,7 +126,7 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with Stdou
     // proceeds and must succeed.
     let generated = generate(&mut merged, &options);
     for let d of &generated.diagnostics {
-        eprintln(`gale: warning: ${d.rule}: ${d.message}`);
+        eprintln(`gale: warning: ${d.owner.label()}: ${d.message}`);
     }
 
     match *output {

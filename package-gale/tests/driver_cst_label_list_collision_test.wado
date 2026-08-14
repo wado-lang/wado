@@ -1,16 +1,24 @@
-//! Stage 2b migration: a mandatory first `+=` label plus a Repeat that also
-//! `+=`-labels into the same list — all transparent in the tree.
+//! Bindings whose scope at lower time is narrower than the scope emit puts
+//! them in. Lower names a list label's inner and a repeat body in a table of
+//! their own, but a non-Repeat list label and a `+`'s mandatory first
+//! iteration are both emitted into the surrounding alternative — where the
+//! author's own label may already hold that name. A leak is a duplicate `let`
+//! in one scope, so the generated module failing to compile is itself the
+//! assertion; the trees below pin the behaviour on top of that.
 
 use g from "./grammars/label_list_collision.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_label_list_collision" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
-    let result = g::parse(input);
+fn assert_tree_of(result: &g::ParseResult, input: &String, expected: &String) {
     assert result.ok(), `unexpected diagnostics for ${*input}`;
-    let actual = g::to_string_tree(&result);
+    let actual = g::to_string_tree(result);
     assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+fn assert_tree(input: &String, expected: &String) {
+    assert_tree_of(&g::parse(input), input, expected);
 }
 
 test "label-list: single mandatory label" {
@@ -21,4 +29,29 @@ test "label-list: first label + one Repeat iter" {
 }
 test "label-list: many iters" {
     assert_tree(&"tag tag tag tag", &"(stream tag tag tag tag)");
+}
+
+test "label-list: list label before a label wanting the element's own name" {
+    assert_tree_of(&g::parse_leading_list(&"tag tag"), &"tag tag", &"(leading_list tag tag)");
+}
+
+test "label-list: list label after a label wanting the element's own name" {
+    assert_tree_of(&g::parse_trailing_list(&"tag tag"), &"tag tag", &"(trailing_list tag tag)");
+}
+
+test "label-list: group-inner list label after a label named for the group" {
+    assert_tree_of(&g::parse_list_group(&"tag word"), &"tag word", &"(list_group tag word)");
+}
+
+test "non-greedy plus: mandatory first iteration keeps its own scope" {
+    assert_tree_of(
+        &g::parse_lazy_plus(&"tag tag word end"),
+        &"tag tag word end",
+        &"(lazy_plus tag tag word end)",
+    );
+    assert_tree_of(
+        &g::parse_lazy_plus(&"tag tag word tag word end"),
+        &"tag tag word tag word end",
+        &"(lazy_plus tag tag word tag word end)",
+    );
 }

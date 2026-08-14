@@ -100,17 +100,82 @@ pub struct LoweredGrammar {
 }
 
 /// A prediction-strategy diagnostic attached to a single decision site.
-/// See `LoweredGrammar.diagnostics`. `rule` is the human-readable owner
-/// label the lowering site used (`rule 'r'`, `LR rule 'expr' atom`,
-/// `General group rGroup0`, `SimpleCst group`) — not a bare rule name,
-/// which is why `dump.wado` re-associates by substring rather than
-/// equality (a structured owner id is a tracked follow-up). `kind`
-/// classifies the decision for tooling; `message` is the one-liner shown
-/// to grammar authors.
+/// See `LoweredGrammar.diagnostics`. `owner` identifies the construct
+/// structurally, so tooling associates a diagnostic with its rule by
+/// equality and never by parsing the display label. `kind` classifies the
+/// decision for tooling; `message` is the one-liner shown to grammar
+/// authors.
 pub struct Diagnostic {
-    pub rule: String,
+    pub owner: DiagnosticOwner,
     pub kind: DiagnosticKind,
     pub message: String,
+}
+
+/// The grammar construct a diagnostic belongs to.
+///
+/// `rule` is the owning parser rule, empty for a grammar-level host. It is
+/// what `dump` compares to inline a diagnostic under its rule, so it holds
+/// a bare rule name — never a decorated label. `site` separates the
+/// decision points inside one rule so two of them are not deduped
+/// together. `label()` is the only thing rendered; nothing parses it back.
+pub struct DiagnosticOwner {
+    pub rule: String = "",
+    pub site: DiagnosticSite,
+}
+
+pub variant DiagnosticSite {
+    /// The rule's own alternative dispatch.
+    RuleDispatch,
+    /// The non-LR atom dispatch of a left-recursive rule.
+    LrAtomDispatch,
+    /// A general group's alternative dispatch, by `GeneralShape.group_index`.
+    /// `-1` when no index is in scope: the scan pass lowers a group without
+    /// one, and reports nothing (its parse-side twin carries the warning).
+    GeneralGroup(i32),
+    /// A `SimpleCst` group's alternative dispatch. The shape carries no
+    /// index, so two of them in one rule share an owner — as they did when
+    /// the label was a bare `SimpleCst group`.
+    SimpleCstGroup,
+    /// An `e?`, by the deduped field name lowering gave it — the same name
+    /// the generated parser binds, so the diagnostic points at something the
+    /// author can find.
+    Optional(String),
+    /// A parser action / predicate body, by action id.
+    Action(i32),
+    /// A lexer action body, by action id. `rule` stays empty — a lexer rule
+    /// is not a parser rule and must not inline under one.
+    LexerAction(i32),
+    /// A grammar-level host owning no rule: `@members`, `@lexer::members`,
+    /// `superClass`, `fragment_entries`, the highlight query.
+    Host(String),
+}
+
+impl DiagnosticOwner {
+    pub fn rule_dispatch(rule: &String) -> DiagnosticOwner {
+        return DiagnosticOwner { rule: *rule, site: DiagnosticSite::RuleDispatch };
+    }
+
+    pub fn host(name: &String) -> DiagnosticOwner {
+        return DiagnosticOwner { site: DiagnosticSite::Host(*name) };
+    }
+
+    /// The human-readable owner shown by `gale dump` and `gale gen`.
+    pub fn label(&self) -> String {
+        return match &self.site {
+            RuleDispatch => `rule '${self.rule}'`,
+            LrAtomDispatch => `LR rule '${self.rule}' atom`,
+            GeneralGroup(i) => if *i >= 0 {
+                `General group ${self.rule}Group${*i}`;
+            } else {
+                `General group in rule '${self.rule}'`;
+            },
+            SimpleCstGroup => `SimpleCst group in rule '${self.rule}'`,
+            Optional(field) => `optional '${*field}' in rule '${self.rule}'`,
+            Action(id) => `action ${*id}`,
+            LexerAction(id) => `lexer action ${*id}`,
+            Host(name) => *name,
+        };
+    }
 }
 
 /// Classifies a prediction-strategy diagnostic. Each variant marks a
@@ -120,16 +185,18 @@ pub struct Diagnostic {
 ///
 /// Only the strategy fallbacks Gale actually raises today are listed.
 /// New kinds land here together with the lowering site that raises them
-/// and a fixture — an `OptionalScanGuardFallback` (warn when an `e?`
-/// resolves to `OptionalScanGuard`) is the obvious next one, deferred
-/// until `pick_optional_specialised` threads the enclosing rule name
-/// (tracked in TODO.md).
+/// and a fixture.
 pub variant DiagnosticKind {
     /// Two or more alts share a leading token; the overlap is resolved
     /// by a scan-side longest-match tournament rather than a token-led
     /// `if/else` chain. Sound, but the author may have intended
     /// disjoint alts.
     OverlapTournament,
+    /// An `e?` could not be decided by a fixed-token lookahead and fell
+    /// back to a scan guard: the optional body is scanned speculatively on
+    /// every visit. Sound, but the author can often make the decision
+    /// token-led instead.
+    OptionalScanGuardFallback,
     /// An action / predicate body could not be executed as written: it
     /// references attributes the value-channel substitution does not yet
     /// emit, or the identity translator does not cover it. Loud rather

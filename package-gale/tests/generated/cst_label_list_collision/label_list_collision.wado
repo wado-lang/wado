@@ -428,8 +428,13 @@ impl TokenStream {
 
 /// ParseError represents a parse failure with location and expected tokens.
 ///
-/// `message` is the local "expected X, got Y" description, kept free of
-/// position and rule context so it stays composable. `line`/`col` are a
+/// `message` says what was found (`got "for"`), never what was wanted:
+/// the wanted set lives in `expected`, in the token vocabulary, and
+/// `full_message` is the single place the two are combined. Keeping them
+/// apart is what lets every failure path share one vocabulary and one
+/// phrasing instead of each spelling its own "expected X" prefix.
+/// `message` is also free of position and rule context, so it stays
+/// composable. `line`/`col` are a
 /// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
 /// from `span.start` against the source at error-construction time;
 /// `Parser::error` fills them in. `rule_stack` records the chain of parser
@@ -458,6 +463,16 @@ impl ParseError {
         return ParseError { message, span, expected, line, col, rule_stack: [] };
     }
 
+    /// `message` with the expected set folded in — `expected ',' or ';'; got
+    /// ")"`. Read by `Display` and by the diagnostic a pending error becomes,
+    /// so the two never drift.
+    pub fn full_message(&self) -> String {
+        if self.expected.is_empty() {
+            return self.message;
+        }
+        return `expected ${join_expected(&self.expected)}; ${self.message}`;
+    }
+
     /// Render the rule chain as `outer > ... > inner` (start rule first).
     /// `rule_stack` is stored innermost-first, so iterate it in reverse.
     /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
@@ -482,9 +497,22 @@ impl ParseError {
     }
 }
 
+/// `A`, `A or B`, `A, B or C`.
+fn join_expected(names: &List<String>) -> String {
+    let n = names.len();
+    let mut out = String::with_capacity(n * 8);
+    for let mut i = 0; i < n; i += 1 {
+        if i > 0 {
+            out.push_str(&if i == n - 1 { " or " } else { ", " });
+        }
+        out.push_str(&names[i]);
+    }
+    return out;
+}
+
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.message}`);
+        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.full_message()}`);
         if !self.rule_stack.is_empty() {
             f.write_str(&`\n  in rule: ${self.rule_path()}`);
         }
@@ -1396,15 +1424,19 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 }
 pub enum TokenKind {
     TAG,
+    WORD,
+    END,
     WS,
     Eof,
     Error,
 }
 
 pub global TK_TAG: i32 = 0;
-pub global TK_WS: i32 = 1;
-pub global TK_EOF: i32 = 2;
-pub global TK_ERROR: i32 = 3;
+pub global TK_WORD: i32 = 1;
+pub global TK_END: i32 = 2;
+pub global TK_WS: i32 = 3;
+pub global TK_EOF: i32 = 4;
+pub global TK_ERROR: i32 = 5;
 
 struct Lexer {
     chars: List<char>,
@@ -1432,6 +1464,30 @@ fn try_TAG(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
     pos += 1;
     if pos >= chars.len() || chars[pos] != 'g' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_WORD(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'w' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'd' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_END(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'd' { return -1; }
     pos += 1;
     return pos;
 }
@@ -1468,9 +1524,15 @@ pub fn tokenize(input: &String) -> TokenStream {
         if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char matches { 'e' } {
+            end = try_END(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_END; }
         } else if first_char matches { 't' } {
             end = try_TAG(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_TAG; }
+        } else if first_char matches { 'w' } {
+            end = try_WORD(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WORD; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1495,6 +1557,8 @@ pub fn tokenize(input: &String) -> TokenStream {
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
         TK_TAG => "TAG",
+        TK_WORD => "WORD",
+        TK_END => "END",
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
@@ -1503,8 +1567,12 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 pub global RK_STREAM: NodeKind = 0;
+pub global RK_LEADING_LIST: NodeKind = 1;
+pub global RK_TRAILING_LIST: NodeKind = 2;
+pub global RK_LIST_GROUP: NodeKind = 3;
+pub global RK_LAZY_PLUS: NodeKind = 4;
 
-global RULE_NAMES: List<String> = ["stream"];
+global RULE_NAMES: List<String> = ["stream", "leading_list", "trailing_list", "list_group", "lazy_plus"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1534,6 +1602,14 @@ struct Parser {
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
+}
+
+fn kind_names(kinds: &List<i32>) -> List<String> {
+    let mut out: List<String> = List::with_capacity(kinds.len());
+    for let k of kinds {
+        out.push(token_kind_name(*k));
+    }
+    return out;
 }
 
 impl Parser {
@@ -1568,7 +1644,7 @@ impl Parser {
     }
 
     fn pending_message(&self) -> String {
-        if let Some(e) = &self.pending { return e.message; }
+        if let Some(e) = &self.pending { return e.full_message(); }
         return String::from("");
     }
 
@@ -1637,8 +1713,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            let name = token_kind_name(kind);
-            self.fail(`expected ${name}, got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -1686,11 +1761,10 @@ impl Parser {
             self.b.missing(_syn2);
             return _syn2;
         }
-        let name = token_kind_name(kind);
         self.fail(
-            `expected ${name}, got "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [name],
+            [token_kind_name(kind)],
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1704,7 +1778,7 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `expected any token, got "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
             DiagnosticCode::UnexpectedToken,
@@ -1732,7 +1806,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["set complement"],
+            [] as List<String>,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1753,9 +1827,9 @@ impl Parser {
             }
         }
         self.fail(
-            `unexpected token "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["token set"],
+            kind_names(&included),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1772,6 +1846,94 @@ fn scan_stream(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_leading_list(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_trailing_list(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_list_group(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
+    pos += 1;
+    let gp_0 = pos;
+    let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_0(sgk_0) {
+        sg_0: {
+            pos = gp_0;
+            sg_0_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_TAG { break sg_0_0; }
+                pos += 1;
+                break sg_0;
+            }
+            pos = gp_0;
+            sg_0_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_WORD { break sg_0_1; }
+                pos += 1;
+                break sg_0;
+            }
+            return -1;
+        }
+    } else {
+        return -1;
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_lazy_plus(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
+    pos += 1;
+    sg_1_done: {
+        sg_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_TAG { break sg_1; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_WORD { break sg_1; }
+            pos += 1;
+            break sg_1_done;
+        }
+        return -1;
+    }
+    while pos < tokens.len() && tokens[pos] == TK_TAG {
+        let sp = pos;
+        sg_2_done: {
+            sg_2: {
+                if pos >= tokens.len() || tokens[pos] != TK_TAG { break sg_2; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_WORD { break sg_2; }
+                pos += 1;
+                break sg_2_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_END { return -1; }
+    pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
     return pos;
@@ -1809,6 +1971,90 @@ fn _parse_stream(p: &mut Parser) -> () {
     }
 }
 
+fn _parse_leading_list__inner(p: &mut Parser) -> () {
+    let start = p.peek_start();
+    let items_item = p.expect(TK_TAG, &EMPTY_SYNC);
+    let tag = p.expect(TK_TAG, &SYNC_0);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_leading_list(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_LEADING_LIST, _start);
+    _parse_leading_list__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("leading_list");
+    }
+}
+
+fn _parse_trailing_list__inner(p: &mut Parser) -> () {
+    let start = p.peek_start();
+    let tag = p.expect(TK_TAG, &SYNC_1);
+    let items_item = p.expect(TK_TAG, &EMPTY_SYNC);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_trailing_list(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_TRAILING_LIST, _start);
+    _parse_trailing_list__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("trailing_list");
+    }
+}
+
+fn _parse_list_group__inner(p: &mut Parser) -> () {
+    let start = p.peek_start();
+    let tag_or_word = p.expect(TK_TAG, &SYNC_2);
+    let items_item = p.expect_set([TK_TAG, TK_WORD]);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_list_group(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_LIST_GROUP, _start);
+    _parse_list_group__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("list_group");
+    }
+}
+
+fn _parse_lazy_plus__inner(p: &mut Parser) -> () {
+    let start = p.peek_start();
+    let tag = p.expect(TK_TAG, &SYNC_1);
+    _first_iter: {
+        let tag = p.expect(TK_TAG, &SYNC_3);
+        let word = p.expect(TK_WORD, &EMPTY_SYNC);
+    }
+    while !p.recovering && (p.peek_kind() == TK_TAG) {
+        let tag = p.expect(TK_TAG, &SYNC_3);
+        let word = p.expect(TK_WORD, &EMPTY_SYNC);
+    }
+    let end = p.expect(TK_END, &SYNC_0);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_lazy_plus(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_LAZY_PLUS, _start);
+    _parse_lazy_plus__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("lazy_plus");
+    }
+}
+
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
@@ -1818,7 +2064,7 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     if p.recovering && p.diagnostics.len() < max_errors {
         if let Some(e) = &p.pending {
             let lc = line_col(p.tokens.chars, e.span.start);
-            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
+            let mut d = Diagnostic::error(p.pending_code, e.full_message(), e.span, lc.0, lc.1);
             d.rule_stack = e.rule_stack;
             p.diagnostics.push(d);
         }
@@ -1834,17 +2080,33 @@ pub fn parse_stream(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_stream(p));
 }
 
+pub fn parse_leading_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_leading_list(p));
+}
+
+pub fn parse_trailing_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_trailing_list(p));
+}
+
+pub fn parse_list_group(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_list_group(p));
+}
+
+pub fn parse_lazy_plus(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lazy_plus(p));
+}
+
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(4);
-    for let mut k = 0; k < 4; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(4);
-    for let mut k = 0; k < 4; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
@@ -1861,5 +2123,13 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
     return String::new();
 }
 
+fn _kind_set_0(k: i32) -> bool {
+    return k matches { TK_TAG | TK_WORD };
+}
+
 global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [TK_EOF];
+global SYNC_1: List<i32> = [TK_TAG];
+global SYNC_2: List<i32> = [TK_TAG, TK_WORD];
+global SYNC_3: List<i32> = [TK_WORD];
 

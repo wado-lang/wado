@@ -432,8 +432,13 @@ impl TokenStream {
 
 /// ParseError represents a parse failure with location and expected tokens.
 ///
-/// `message` is the local "expected X, got Y" description, kept free of
-/// position and rule context so it stays composable. `line`/`col` are a
+/// `message` says what was found (`got "for"`), never what was wanted:
+/// the wanted set lives in `expected`, in the token vocabulary, and
+/// `full_message` is the single place the two are combined. Keeping them
+/// apart is what lets every failure path share one vocabulary and one
+/// phrasing instead of each spelling its own "expected X" prefix.
+/// `message` is also free of position and rule context, so it stays
+/// composable. `line`/`col` are a
 /// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
 /// from `span.start` against the source at error-construction time;
 /// `Parser::error` fills them in. `rule_stack` records the chain of parser
@@ -462,6 +467,16 @@ impl ParseError {
         return ParseError { message, span, expected, line, col, rule_stack: [] };
     }
 
+    /// `message` with the expected set folded in — `expected ',' or ';'; got
+    /// ")"`. Read by `Display` and by the diagnostic a pending error becomes,
+    /// so the two never drift.
+    pub fn full_message(&self) -> String {
+        if self.expected.is_empty() {
+            return self.message;
+        }
+        return `expected ${join_expected(&self.expected)}; ${self.message}`;
+    }
+
     /// Render the rule chain as `outer > ... > inner` (start rule first).
     /// `rule_stack` is stored innermost-first, so iterate it in reverse.
     /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
@@ -486,9 +501,22 @@ impl ParseError {
     }
 }
 
+/// `A`, `A or B`, `A, B or C`.
+fn join_expected(names: &List<String>) -> String {
+    let n = names.len();
+    let mut out = String::with_capacity(n * 8);
+    for let mut i = 0; i < n; i += 1 {
+        if i > 0 {
+            out.push_str(&if i == n - 1 { " or " } else { ", " });
+        }
+        out.push_str(&names[i]);
+    }
+    return out;
+}
+
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.message}`);
+        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.full_message()}`);
         if !self.rule_stack.is_empty() {
             f.write_str(&`\n  in rule: ${self.rule_path()}`);
         }
@@ -7915,6 +7943,14 @@ struct Parser {
     diagnostics: List<Diagnostic>,
 }
 
+fn kind_names(kinds: &List<i32>) -> List<String> {
+    let mut out: List<String> = List::with_capacity(kinds.len());
+    for let k of kinds {
+        out.push(token_kind_name(*k));
+    }
+    return out;
+}
+
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
@@ -7947,7 +7983,7 @@ impl Parser {
     }
 
     fn pending_message(&self) -> String {
-        if let Some(e) = &self.pending { return e.message; }
+        if let Some(e) = &self.pending { return e.full_message(); }
         return String::from("");
     }
 
@@ -8016,8 +8052,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            let name = token_kind_name(kind);
-            self.fail(`expected ${name}, got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -8065,11 +8100,10 @@ impl Parser {
             self.b.missing(_syn2);
             return _syn2;
         }
-        let name = token_kind_name(kind);
         self.fail(
-            `expected ${name}, got "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [name],
+            [token_kind_name(kind)],
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -8083,7 +8117,7 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `expected any token, got "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
             DiagnosticCode::UnexpectedToken,
@@ -8111,7 +8145,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["set complement"],
+            [] as List<String>,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -8132,9 +8166,9 @@ impl Parser {
             }
         }
         self.fail(
-            `unexpected token "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["token set"],
+            kind_names(&included),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -16124,9 +16158,9 @@ fn _parse_delim_token_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         return;
     }
     p.no_viable(
-        "expected delimTokenTree",
+        "no alternative of delimTokenTree matches",
         p.peek_span(),
-        ["TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LCURLYBRACE"],
+        [token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_LCURLYBRACE)],
     );
     return;
 }
@@ -16186,9 +16220,9 @@ fn _parse_token_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         return;
     }
     p.no_viable(
-        "expected tokenTree",
+        "no alternative of tokenTree matches",
         p.peek_span(),
-        ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_UNDERLINELIFETIME", "TK_KW_DOLLARCRATE", "TK_LIFETIME_OR_LABEL", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_MINUS", "TK_SLASH", "TK_PERCENT", "TK_CARET", "TK_NOT", "TK_AND", "TK_OR", "TK_ANDAND", "TK_OROR", "TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_CARETEQ", "TK_ANDEQ", "TK_OREQ", "TK_SHLEQ", "TK_SHREQ", "TK_EQ", "TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE", "TK_AT", "TK_UNDERSCORE", "TK_DOT", "TK_DOTDOT", "TK_DOTDOTDOT", "TK_DOTDOTEQ", "TK_COMMA", "TK_SEMI", "TK_COLON", "TK_PATHSEP", "TK_RARROW", "TK_FATARROW", "TK_POUND", "TK_STAR", "TK_PLUS", "TK_QUESTION", "TK_DOLLAR", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LCURLYBRACE"],
+        [token_kind_name(TK_KW_AS), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_CONST), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_ELSE), token_kind_name(TK_KW_ENUM), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_KW_FALSE), token_kind_name(TK_KW_FN), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_IN), token_kind_name(TK_KW_LET), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_MATCH), token_kind_name(TK_KW_MOD), token_kind_name(TK_KW_MOVE), token_kind_name(TK_KW_MUT), token_kind_name(TK_KW_PUB), token_kind_name(TK_KW_REF), token_kind_name(TK_KW_RETURN), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_STATIC), token_kind_name(TK_KW_STRUCT), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_TRAIT), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_TYPE), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_USE), token_kind_name(TK_KW_WHERE), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_AWAIT), token_kind_name(TK_KW_DYN), token_kind_name(TK_KW_ABSTRACT), token_kind_name(TK_KW_BECOME), token_kind_name(TK_KW_BOX), token_kind_name(TK_KW_DO), token_kind_name(TK_KW_FINAL), token_kind_name(TK_KW_MACRO), token_kind_name(TK_KW_OVERRIDE), token_kind_name(TK_KW_PRIV), token_kind_name(TK_KW_TYPEOF), token_kind_name(TK_KW_UNSIZED), token_kind_name(TK_KW_VIRTUAL), token_kind_name(TK_KW_YIELD), token_kind_name(TK_KW_TRY), token_kind_name(TK_KW_UNION), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_UNDERLINELIFETIME), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_MINUS), token_kind_name(TK_SLASH), token_kind_name(TK_PERCENT), token_kind_name(TK_CARET), token_kind_name(TK_NOT), token_kind_name(TK_AND), token_kind_name(TK_OR), token_kind_name(TK_ANDAND), token_kind_name(TK_OROR), token_kind_name(TK_PLUSEQ), token_kind_name(TK_MINUSEQ), token_kind_name(TK_STAREQ), token_kind_name(TK_SLASHEQ), token_kind_name(TK_PERCENTEQ), token_kind_name(TK_CARETEQ), token_kind_name(TK_ANDEQ), token_kind_name(TK_OREQ), token_kind_name(TK_SHLEQ), token_kind_name(TK_SHREQ), token_kind_name(TK_EQ), token_kind_name(TK_EQEQ), token_kind_name(TK_NE), token_kind_name(TK_GT), token_kind_name(TK_LT), token_kind_name(TK_GE), token_kind_name(TK_LE), token_kind_name(TK_AT), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_DOT), token_kind_name(TK_DOTDOT), token_kind_name(TK_DOTDOTDOT), token_kind_name(TK_DOTDOTEQ), token_kind_name(TK_COMMA), token_kind_name(TK_SEMI), token_kind_name(TK_COLON), token_kind_name(TK_PATHSEP), token_kind_name(TK_RARROW), token_kind_name(TK_FATARROW), token_kind_name(TK_POUND), token_kind_name(TK_STAR), token_kind_name(TK_PLUS), token_kind_name(TK_QUESTION), token_kind_name(TK_DOLLAR), token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_LCURLYBRACE)],
     );
     return;
 }
@@ -16275,9 +16309,9 @@ fn _parse_token_tree_token__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         return;
     }
     p.no_viable(
-        "expected tokenTreeToken",
+        "no alternative of tokenTreeToken matches",
         p.peek_span(),
-        ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_UNDERLINELIFETIME", "TK_KW_DOLLARCRATE", "TK_LIFETIME_OR_LABEL", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_MINUS", "TK_SLASH", "TK_PERCENT", "TK_CARET", "TK_NOT", "TK_AND", "TK_OR", "TK_ANDAND", "TK_OROR", "TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_CARETEQ", "TK_ANDEQ", "TK_OREQ", "TK_SHLEQ", "TK_SHREQ", "TK_EQ", "TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE", "TK_AT", "TK_UNDERSCORE", "TK_DOT", "TK_DOTDOT", "TK_DOTDOTDOT", "TK_DOTDOTEQ", "TK_COMMA", "TK_SEMI", "TK_COLON", "TK_PATHSEP", "TK_RARROW", "TK_FATARROW", "TK_POUND", "TK_STAR", "TK_PLUS", "TK_QUESTION", "TK_DOLLAR"],
+        [token_kind_name(TK_KW_AS), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_CONST), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_ELSE), token_kind_name(TK_KW_ENUM), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_KW_FALSE), token_kind_name(TK_KW_FN), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_IN), token_kind_name(TK_KW_LET), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_MATCH), token_kind_name(TK_KW_MOD), token_kind_name(TK_KW_MOVE), token_kind_name(TK_KW_MUT), token_kind_name(TK_KW_PUB), token_kind_name(TK_KW_REF), token_kind_name(TK_KW_RETURN), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_STATIC), token_kind_name(TK_KW_STRUCT), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_TRAIT), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_TYPE), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_USE), token_kind_name(TK_KW_WHERE), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_AWAIT), token_kind_name(TK_KW_DYN), token_kind_name(TK_KW_ABSTRACT), token_kind_name(TK_KW_BECOME), token_kind_name(TK_KW_BOX), token_kind_name(TK_KW_DO), token_kind_name(TK_KW_FINAL), token_kind_name(TK_KW_MACRO), token_kind_name(TK_KW_OVERRIDE), token_kind_name(TK_KW_PRIV), token_kind_name(TK_KW_TYPEOF), token_kind_name(TK_KW_UNSIZED), token_kind_name(TK_KW_VIRTUAL), token_kind_name(TK_KW_YIELD), token_kind_name(TK_KW_TRY), token_kind_name(TK_KW_UNION), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_UNDERLINELIFETIME), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_MINUS), token_kind_name(TK_SLASH), token_kind_name(TK_PERCENT), token_kind_name(TK_CARET), token_kind_name(TK_NOT), token_kind_name(TK_AND), token_kind_name(TK_OR), token_kind_name(TK_ANDAND), token_kind_name(TK_OROR), token_kind_name(TK_PLUSEQ), token_kind_name(TK_MINUSEQ), token_kind_name(TK_STAREQ), token_kind_name(TK_SLASHEQ), token_kind_name(TK_PERCENTEQ), token_kind_name(TK_CARETEQ), token_kind_name(TK_ANDEQ), token_kind_name(TK_OREQ), token_kind_name(TK_SHLEQ), token_kind_name(TK_SHREQ), token_kind_name(TK_EQ), token_kind_name(TK_EQEQ), token_kind_name(TK_NE), token_kind_name(TK_GT), token_kind_name(TK_LT), token_kind_name(TK_GE), token_kind_name(TK_LE), token_kind_name(TK_AT), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_DOT), token_kind_name(TK_DOTDOT), token_kind_name(TK_DOTDOTDOT), token_kind_name(TK_DOTDOTEQ), token_kind_name(TK_COMMA), token_kind_name(TK_SEMI), token_kind_name(TK_COLON), token_kind_name(TK_PATHSEP), token_kind_name(TK_RARROW), token_kind_name(TK_FATARROW), token_kind_name(TK_POUND), token_kind_name(TK_STAR), token_kind_name(TK_PLUS), token_kind_name(TK_QUESTION), token_kind_name(TK_DOLLAR)],
     );
     return;
 }
@@ -16503,9 +16537,9 @@ fn _parse_macro_invocation_semi__inner(p: &mut Parser, follow: &List<List<i32>> 
         }
     }
     p.no_viable(
-        "expected macroInvocationSemi",
+        "no alternative of macroInvocationSemi matches",
         p.peek_span(),
-        ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        [token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE)],
     );
     return;
 }
@@ -16565,9 +16599,9 @@ fn _parse_macro_rules_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         return;
     }
     p.no_viable(
-        "expected macroRulesDef",
+        "no alternative of macroRulesDef matches",
         p.peek_span(),
-        ["TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LCURLYBRACE"],
+        [token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_LCURLYBRACE)],
     );
     return;
 }
@@ -16749,9 +16783,9 @@ fn _parse_macro_matcher__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         return;
     }
     p.no_viable(
-        "expected macroMatcher",
+        "no alternative of macroMatcher matches",
         p.peek_span(),
-        ["TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LCURLYBRACE"],
+        [token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_LCURLYBRACE)],
     );
     return;
 }
@@ -16879,9 +16913,9 @@ fn _parse_macro_match__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         }
     }
     p.no_viable(
-        "expected macroMatch",
+        "no alternative of macroMatch matches",
         p.peek_span(),
-        ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_UNDERLINELIFETIME", "TK_KW_DOLLARCRATE", "TK_LIFETIME_OR_LABEL", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_MINUS", "TK_SLASH", "TK_PERCENT", "TK_CARET", "TK_NOT", "TK_AND", "TK_OR", "TK_ANDAND", "TK_OROR", "TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_CARETEQ", "TK_ANDEQ", "TK_OREQ", "TK_SHLEQ", "TK_SHREQ", "TK_EQ", "TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE", "TK_AT", "TK_UNDERSCORE", "TK_DOT", "TK_DOTDOT", "TK_DOTDOTDOT", "TK_DOTDOTEQ", "TK_COMMA", "TK_SEMI", "TK_COLON", "TK_PATHSEP", "TK_RARROW", "TK_FATARROW", "TK_POUND", "TK_STAR", "TK_PLUS", "TK_QUESTION", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LCURLYBRACE", "TK_DOLLAR"],
+        [token_kind_name(TK_KW_AS), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_CONST), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_ELSE), token_kind_name(TK_KW_ENUM), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_KW_FALSE), token_kind_name(TK_KW_FN), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_IN), token_kind_name(TK_KW_LET), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_MATCH), token_kind_name(TK_KW_MOD), token_kind_name(TK_KW_MOVE), token_kind_name(TK_KW_MUT), token_kind_name(TK_KW_PUB), token_kind_name(TK_KW_REF), token_kind_name(TK_KW_RETURN), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_STATIC), token_kind_name(TK_KW_STRUCT), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_TRAIT), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_TYPE), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_USE), token_kind_name(TK_KW_WHERE), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_AWAIT), token_kind_name(TK_KW_DYN), token_kind_name(TK_KW_ABSTRACT), token_kind_name(TK_KW_BECOME), token_kind_name(TK_KW_BOX), token_kind_name(TK_KW_DO), token_kind_name(TK_KW_FINAL), token_kind_name(TK_KW_MACRO), token_kind_name(TK_KW_OVERRIDE), token_kind_name(TK_KW_PRIV), token_kind_name(TK_KW_TYPEOF), token_kind_name(TK_KW_UNSIZED), token_kind_name(TK_KW_VIRTUAL), token_kind_name(TK_KW_YIELD), token_kind_name(TK_KW_TRY), token_kind_name(TK_KW_UNION), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_UNDERLINELIFETIME), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_MINUS), token_kind_name(TK_SLASH), token_kind_name(TK_PERCENT), token_kind_name(TK_CARET), token_kind_name(TK_NOT), token_kind_name(TK_AND), token_kind_name(TK_OR), token_kind_name(TK_ANDAND), token_kind_name(TK_OROR), token_kind_name(TK_PLUSEQ), token_kind_name(TK_MINUSEQ), token_kind_name(TK_STAREQ), token_kind_name(TK_SLASHEQ), token_kind_name(TK_PERCENTEQ), token_kind_name(TK_CARETEQ), token_kind_name(TK_ANDEQ), token_kind_name(TK_OREQ), token_kind_name(TK_SHLEQ), token_kind_name(TK_SHREQ), token_kind_name(TK_EQ), token_kind_name(TK_EQEQ), token_kind_name(TK_NE), token_kind_name(TK_GT), token_kind_name(TK_LT), token_kind_name(TK_GE), token_kind_name(TK_LE), token_kind_name(TK_AT), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_DOT), token_kind_name(TK_DOTDOT), token_kind_name(TK_DOTDOTDOT), token_kind_name(TK_DOTDOTEQ), token_kind_name(TK_COMMA), token_kind_name(TK_SEMI), token_kind_name(TK_COLON), token_kind_name(TK_PATHSEP), token_kind_name(TK_RARROW), token_kind_name(TK_FATARROW), token_kind_name(TK_POUND), token_kind_name(TK_STAR), token_kind_name(TK_PLUS), token_kind_name(TK_QUESTION), token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_LCURLYBRACE), token_kind_name(TK_DOLLAR)],
     );
     return;
 }
@@ -16964,9 +16998,9 @@ fn _parse_macro_match_token__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         return;
     }
     p.no_viable(
-        "expected macroMatchToken",
+        "no alternative of macroMatchToken matches",
         p.peek_span(),
-        ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_UNDERLINELIFETIME", "TK_KW_DOLLARCRATE", "TK_LIFETIME_OR_LABEL", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_MINUS", "TK_SLASH", "TK_PERCENT", "TK_CARET", "TK_NOT", "TK_AND", "TK_OR", "TK_ANDAND", "TK_OROR", "TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_CARETEQ", "TK_ANDEQ", "TK_OREQ", "TK_SHLEQ", "TK_SHREQ", "TK_EQ", "TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE", "TK_AT", "TK_UNDERSCORE", "TK_DOT", "TK_DOTDOT", "TK_DOTDOTDOT", "TK_DOTDOTEQ", "TK_COMMA", "TK_SEMI", "TK_COLON", "TK_PATHSEP", "TK_RARROW", "TK_FATARROW", "TK_POUND", "TK_STAR", "TK_PLUS", "TK_QUESTION"],
+        [token_kind_name(TK_KW_AS), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_CONST), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_ELSE), token_kind_name(TK_KW_ENUM), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_KW_FALSE), token_kind_name(TK_KW_FN), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_IN), token_kind_name(TK_KW_LET), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_MATCH), token_kind_name(TK_KW_MOD), token_kind_name(TK_KW_MOVE), token_kind_name(TK_KW_MUT), token_kind_name(TK_KW_PUB), token_kind_name(TK_KW_REF), token_kind_name(TK_KW_RETURN), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_STATIC), token_kind_name(TK_KW_STRUCT), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_TRAIT), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_TYPE), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_USE), token_kind_name(TK_KW_WHERE), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_AWAIT), token_kind_name(TK_KW_DYN), token_kind_name(TK_KW_ABSTRACT), token_kind_name(TK_KW_BECOME), token_kind_name(TK_KW_BOX), token_kind_name(TK_KW_DO), token_kind_name(TK_KW_FINAL), token_kind_name(TK_KW_MACRO), token_kind_name(TK_KW_OVERRIDE), token_kind_name(TK_KW_PRIV), token_kind_name(TK_KW_TYPEOF), token_kind_name(TK_KW_UNSIZED), token_kind_name(TK_KW_VIRTUAL), token_kind_name(TK_KW_YIELD), token_kind_name(TK_KW_TRY), token_kind_name(TK_KW_UNION), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_UNDERLINELIFETIME), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_MINUS), token_kind_name(TK_SLASH), token_kind_name(TK_PERCENT), token_kind_name(TK_CARET), token_kind_name(TK_NOT), token_kind_name(TK_AND), token_kind_name(TK_OR), token_kind_name(TK_ANDAND), token_kind_name(TK_OROR), token_kind_name(TK_PLUSEQ), token_kind_name(TK_MINUSEQ), token_kind_name(TK_STAREQ), token_kind_name(TK_SLASHEQ), token_kind_name(TK_PERCENTEQ), token_kind_name(TK_CARETEQ), token_kind_name(TK_ANDEQ), token_kind_name(TK_OREQ), token_kind_name(TK_SHLEQ), token_kind_name(TK_SHREQ), token_kind_name(TK_EQ), token_kind_name(TK_EQEQ), token_kind_name(TK_NE), token_kind_name(TK_GT), token_kind_name(TK_LT), token_kind_name(TK_GE), token_kind_name(TK_LE), token_kind_name(TK_AT), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_DOT), token_kind_name(TK_DOTDOT), token_kind_name(TK_DOTDOTDOT), token_kind_name(TK_DOTDOTEQ), token_kind_name(TK_COMMA), token_kind_name(TK_SEMI), token_kind_name(TK_COLON), token_kind_name(TK_PATHSEP), token_kind_name(TK_RARROW), token_kind_name(TK_FATARROW), token_kind_name(TK_POUND), token_kind_name(TK_STAR), token_kind_name(TK_PLUS), token_kind_name(TK_QUESTION)],
     );
     return;
 }
@@ -17066,9 +17100,9 @@ fn _parse_macro_rep_sep__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         return;
     }
     p.no_viable(
-        "expected macroRepSep",
+        "no alternative of macroRepSep matches",
         p.peek_span(),
-        ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_UNDERLINELIFETIME", "TK_KW_DOLLARCRATE", "TK_LIFETIME_OR_LABEL", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_MINUS", "TK_SLASH", "TK_PERCENT", "TK_CARET", "TK_NOT", "TK_AND", "TK_OR", "TK_ANDAND", "TK_OROR", "TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_CARETEQ", "TK_ANDEQ", "TK_OREQ", "TK_SHLEQ", "TK_SHREQ", "TK_EQ", "TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE", "TK_AT", "TK_UNDERSCORE", "TK_DOT", "TK_DOTDOT", "TK_DOTDOTDOT", "TK_DOTDOTEQ", "TK_COMMA", "TK_SEMI", "TK_COLON", "TK_PATHSEP", "TK_RARROW", "TK_FATARROW", "TK_POUND", "TK_DOLLAR"],
+        [token_kind_name(TK_KW_AS), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_CONST), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_ELSE), token_kind_name(TK_KW_ENUM), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_KW_FALSE), token_kind_name(TK_KW_FN), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_IN), token_kind_name(TK_KW_LET), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_MATCH), token_kind_name(TK_KW_MOD), token_kind_name(TK_KW_MOVE), token_kind_name(TK_KW_MUT), token_kind_name(TK_KW_PUB), token_kind_name(TK_KW_REF), token_kind_name(TK_KW_RETURN), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_STATIC), token_kind_name(TK_KW_STRUCT), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_TRAIT), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_TYPE), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_USE), token_kind_name(TK_KW_WHERE), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_AWAIT), token_kind_name(TK_KW_DYN), token_kind_name(TK_KW_ABSTRACT), token_kind_name(TK_KW_BECOME), token_kind_name(TK_KW_BOX), token_kind_name(TK_KW_DO), token_kind_name(TK_KW_FINAL), token_kind_name(TK_KW_MACRO), token_kind_name(TK_KW_OVERRIDE), token_kind_name(TK_KW_PRIV), token_kind_name(TK_KW_TYPEOF), token_kind_name(TK_KW_UNSIZED), token_kind_name(TK_KW_VIRTUAL), token_kind_name(TK_KW_YIELD), token_kind_name(TK_KW_TRY), token_kind_name(TK_KW_UNION), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_UNDERLINELIFETIME), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_MINUS), token_kind_name(TK_SLASH), token_kind_name(TK_PERCENT), token_kind_name(TK_CARET), token_kind_name(TK_NOT), token_kind_name(TK_AND), token_kind_name(TK_OR), token_kind_name(TK_ANDAND), token_kind_name(TK_OROR), token_kind_name(TK_PLUSEQ), token_kind_name(TK_MINUSEQ), token_kind_name(TK_STAREQ), token_kind_name(TK_SLASHEQ), token_kind_name(TK_PERCENTEQ), token_kind_name(TK_CARETEQ), token_kind_name(TK_ANDEQ), token_kind_name(TK_OREQ), token_kind_name(TK_SHLEQ), token_kind_name(TK_SHREQ), token_kind_name(TK_EQ), token_kind_name(TK_EQEQ), token_kind_name(TK_NE), token_kind_name(TK_GT), token_kind_name(TK_LT), token_kind_name(TK_GE), token_kind_name(TK_LE), token_kind_name(TK_AT), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_DOT), token_kind_name(TK_DOTDOT), token_kind_name(TK_DOTDOTDOT), token_kind_name(TK_DOTDOTEQ), token_kind_name(TK_COMMA), token_kind_name(TK_SEMI), token_kind_name(TK_COLON), token_kind_name(TK_PATHSEP), token_kind_name(TK_RARROW), token_kind_name(TK_FATARROW), token_kind_name(TK_POUND), token_kind_name(TK_DOLLAR)],
     );
     return;
 }
@@ -17092,9 +17126,9 @@ fn _parse_macro_rep_op__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         return;
     }
     p.no_viable(
-        "expected macroRepOp",
+        "no alternative of macroRepOp matches",
         p.peek_span(),
-        ["TK_STAR", "TK_PLUS", "TK_QUESTION"],
+        [token_kind_name(TK_STAR), token_kind_name(TK_PLUS), token_kind_name(TK_QUESTION)],
     );
     return;
 }
@@ -17391,9 +17425,9 @@ fn _parse_macro_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
     }
     p.no_viable(
-        "expected macroItem",
+        "no alternative of macroItem matches",
         p.peek_span(),
-        ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        [token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE)],
     );
     return;
 }
@@ -17528,9 +17562,9 @@ fn _parse_crate_ref__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         return;
     }
     p.no_viable(
-        "expected crateRef",
+        "no alternative of crateRef matches",
         p.peek_span(),
-        ["TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SELFVALUE"],
+        [token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SELFVALUE)],
     );
     return;
 }
@@ -17851,9 +17885,9 @@ fn _parse_use_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         }
     }
     p.no_viable(
-        "expected useTree",
+        "no alternative of useTree matches",
         p.peek_span(),
-        ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_STAR", "TK_LCURLYBRACE"],
+        [token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_STAR), token_kind_name(TK_LCURLYBRACE)],
     );
     return;
 }
@@ -17947,9 +17981,9 @@ fn _parse_abi__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
         return;
     }
     p.no_viable(
-        "expected abi",
+        "no alternative of abi matches",
         p.peek_span(),
-        ["TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL"],
+        [token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL)],
     );
     return;
 }
@@ -18104,9 +18138,9 @@ fn _parse_function_parameters__inner(p: &mut Parser, follow: &List<List<i32>> = 
         }
     }
     p.no_viable(
-        "expected functionParameters",
+        "no alternative of functionParameters matches",
         p.peek_span(),
-        ["TK_POUND", "TK_AND", "TK_KW_MUT", "TK_KW_SELFVALUE", "TK_OR", "TK_KW_TRUE", "TK_KW_FALSE", "TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_REF", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_UNDERSCORE", "TK_DOTDOT", "TK_ANDAND", "TK_PATHSEP", "TK_KW_SUPER", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LT", "TK_DOTDOTDOT", "TK_KW_IMPL", "TK_KW_DYN", "TK_QUESTION", "TK_KW_FOR", "TK_NOT", "TK_STAR", "TK_KW_UNSAFE", "TK_KW_EXTERN", "TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME"],
+        [token_kind_name(TK_POUND), token_kind_name(TK_AND), token_kind_name(TK_KW_MUT), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_OR), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_MINUS), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_REF), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_DOTDOT), token_kind_name(TK_ANDAND), token_kind_name(TK_PATHSEP), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_LT), token_kind_name(TK_DOTDOTDOT), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_DYN), token_kind_name(TK_QUESTION), token_kind_name(TK_KW_FOR), token_kind_name(TK_NOT), token_kind_name(TK_STAR), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_KW_UNDERLINELIFETIME)],
     );
     return;
 }
@@ -18469,9 +18503,9 @@ fn _parse_struct___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         }
     }
     p.no_viable(
-        "expected struct_",
+        "no alternative of struct_ matches",
         p.peek_span(),
-        ["TK_KW_STRUCT"],
+        [token_kind_name(TK_KW_STRUCT)],
     );
     return;
 }
@@ -19192,9 +19226,9 @@ fn _parse_implementation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         }
     }
     p.no_viable(
-        "expected implementation",
+        "no alternative of implementation matches",
         p.peek_span(),
-        ["TK_KW_IMPL", "TK_KW_UNSAFE"],
+        [token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_UNSAFE)],
     );
     return;
 }
@@ -19892,9 +19926,9 @@ fn _parse_where_clause_item__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         }
     }
     p.no_viable(
-        "expected whereClauseItem",
+        "no alternative of whereClauseItem matches",
         p.peek_span(),
-        ["TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME", "TK_KW_FOR", "TK_LPAREN", "TK_KW_IMPL", "TK_KW_DYN", "TK_QUESTION", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_NOT", "TK_STAR", "TK_AND", "TK_LSQUAREBRACKET", "TK_UNDERSCORE", "TK_LT", "TK_KW_UNSAFE", "TK_KW_EXTERN"],
+        [token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_KW_UNDERLINELIFETIME), token_kind_name(TK_KW_FOR), token_kind_name(TK_LPAREN), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_DYN), token_kind_name(TK_QUESTION), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_NOT), token_kind_name(TK_STAR), token_kind_name(TK_AND), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_LT), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_EXTERN)],
     );
     return;
 }
@@ -20161,9 +20195,9 @@ fn _parse_attr_input__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         return;
     }
     p.no_viable(
-        "expected attrInput",
+        "no alternative of attrInput matches",
         p.peek_span(),
-        ["TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LCURLYBRACE", "TK_EQ"],
+        [token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_LCURLYBRACE), token_kind_name(TK_EQ)],
     );
     return;
 }
@@ -20330,9 +20364,9 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         }
     }
     p.no_viable(
-        "expected statement",
+        "no alternative of statement matches",
         p.peek_span(),
-        ["TK_SEMI", "TK_POUND", "TK_KW_PUB", "TK_KW_UNSAFE", "TK_KW_MOD", "TK_KW_EXTERN", "TK_KW_USE", "TK_KW_CONST", "TK_KW_ASYNC", "TK_KW_TYPE", "TK_KW_STRUCT", "TK_KW_ENUM", "TK_KW_UNION", "TK_KW_STATIC", "TK_KW_TRAIT", "TK_KW_IMPL", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_KW_LET", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_KW_SELFTYPE", "TK_LT", "TK_AND", "TK_ANDAND", "TK_STAR", "TK_MINUS", "TK_NOT", "TK_DOTDOT", "TK_DOTDOTEQ", "TK_KW_CONTINUE", "TK_KW_BREAK", "TK_KW_RETURN", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_KW_MOVE", "TK_OROR", "TK_OR", "TK_LCURLYBRACE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        [token_kind_name(TK_SEMI), token_kind_name(TK_POUND), token_kind_name(TK_KW_PUB), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_MOD), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_KW_USE), token_kind_name(TK_KW_CONST), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_TYPE), token_kind_name(TK_KW_STRUCT), token_kind_name(TK_KW_ENUM), token_kind_name(TK_KW_UNION), token_kind_name(TK_KW_STATIC), token_kind_name(TK_KW_TRAIT), token_kind_name(TK_KW_IMPL), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_KW_LET), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_LT), token_kind_name(TK_AND), token_kind_name(TK_ANDAND), token_kind_name(TK_STAR), token_kind_name(TK_MINUS), token_kind_name(TK_NOT), token_kind_name(TK_DOTDOT), token_kind_name(TK_DOTDOTEQ), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_RETURN), token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_KW_MOVE), token_kind_name(TK_OROR), token_kind_name(TK_OR), token_kind_name(TK_LCURLYBRACE), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_MATCH)],
     );
     return;
 }
@@ -20470,9 +20504,9 @@ fn _parse_expression_statement__inner(p: &mut Parser, follow: &List<List<i32>> =
         }
     }
     p.no_viable(
-        "expected expressionStatement",
+        "no alternative of expressionStatement matches",
         p.peek_span(),
-        ["TK_POUND", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT", "TK_AND", "TK_ANDAND", "TK_STAR", "TK_MINUS", "TK_NOT", "TK_DOTDOT", "TK_DOTDOTEQ", "TK_KW_CONTINUE", "TK_KW_BREAK", "TK_KW_RETURN", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_KW_MOVE", "TK_OROR", "TK_OR", "TK_LCURLYBRACE", "TK_KW_ASYNC", "TK_KW_UNSAFE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        [token_kind_name(TK_POUND), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LT), token_kind_name(TK_AND), token_kind_name(TK_ANDAND), token_kind_name(TK_STAR), token_kind_name(TK_MINUS), token_kind_name(TK_NOT), token_kind_name(TK_DOTDOT), token_kind_name(TK_DOTDOTEQ), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_RETURN), token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_KW_MOVE), token_kind_name(TK_OROR), token_kind_name(TK_OR), token_kind_name(TK_LCURLYBRACE), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_MATCH)],
     );
     return;
 }
@@ -20964,9 +20998,9 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMP
         return;
     }
     p.no_viable(
-        "expected expression",
+        "no alternative of expression matches",
         p.peek_span(),
-        ["TK_POUND", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT", "TK_AND", "TK_ANDAND", "TK_STAR", "TK_MINUS", "TK_NOT", "TK_DOTDOT", "TK_DOTDOTEQ", "TK_KW_CONTINUE", "TK_KW_BREAK", "TK_KW_RETURN", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_KW_MOVE", "TK_OROR", "TK_OR", "TK_LCURLYBRACE", "TK_KW_ASYNC", "TK_KW_UNSAFE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        [token_kind_name(TK_POUND), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LT), token_kind_name(TK_AND), token_kind_name(TK_ANDAND), token_kind_name(TK_STAR), token_kind_name(TK_MINUS), token_kind_name(TK_NOT), token_kind_name(TK_DOTDOT), token_kind_name(TK_DOTDOTEQ), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_RETURN), token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_KW_MOVE), token_kind_name(TK_OROR), token_kind_name(TK_OR), token_kind_name(TK_LCURLYBRACE), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_MATCH)],
     );
     return;
 }
@@ -21412,9 +21446,9 @@ fn _parse_comparison_operator__inner(p: &mut Parser, follow: &List<List<i32>> = 
         return;
     }
     p.no_viable(
-        "expected comparisonOperator",
+        "no alternative of comparisonOperator matches",
         p.peek_span(),
-        ["TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE"],
+        [token_kind_name(TK_EQEQ), token_kind_name(TK_NE), token_kind_name(TK_GT), token_kind_name(TK_LT), token_kind_name(TK_GE), token_kind_name(TK_LE)],
     );
     return;
 }
@@ -21438,9 +21472,9 @@ fn _parse_compound_assign_operator__inner(p: &mut Parser, follow: &List<List<i32
         return;
     }
     p.no_viable(
-        "expected compoundAssignOperator",
+        "no alternative of compoundAssignOperator matches",
         p.peek_span(),
-        ["TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_ANDEQ", "TK_OREQ", "TK_CARETEQ", "TK_SHLEQ", "TK_SHREQ"],
+        [token_kind_name(TK_PLUSEQ), token_kind_name(TK_MINUSEQ), token_kind_name(TK_STAREQ), token_kind_name(TK_SLASHEQ), token_kind_name(TK_PERCENTEQ), token_kind_name(TK_ANDEQ), token_kind_name(TK_OREQ), token_kind_name(TK_CARETEQ), token_kind_name(TK_SHLEQ), token_kind_name(TK_SHREQ)],
     );
     return;
 }
@@ -21575,9 +21609,9 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: &List<List<i32>> 
         return;
     }
     p.no_viable(
-        "expected expressionWithBlock",
+        "no alternative of expressionWithBlock matches",
         p.peek_span(),
-        ["TK_POUND", "TK_LCURLYBRACE", "TK_KW_ASYNC", "TK_KW_UNSAFE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        [token_kind_name(TK_POUND), token_kind_name(TK_LCURLYBRACE), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_MATCH)],
     );
     return;
 }
@@ -21601,9 +21635,9 @@ fn _parse_literal_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &
         return;
     }
     p.no_viable(
-        "expected literalExpression",
+        "no alternative of literalExpression matches",
         p.peek_span(),
-        ["TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE"],
+        [token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE)],
     );
     return;
 }
@@ -21631,9 +21665,9 @@ fn _parse_path_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         return;
     }
     p.no_viable(
-        "expected pathExpression",
+        "no alternative of pathExpression matches",
         p.peek_span(),
-        ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT"],
+        [token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LT)],
     );
     return;
 }
@@ -21800,9 +21834,9 @@ fn _parse_statements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
     }
     p.no_viable(
-        "expected statements",
+        "no alternative of statements matches",
         p.peek_span(),
-        ["TK_SEMI", "TK_POUND", "TK_KW_PUB", "TK_KW_UNSAFE", "TK_KW_MOD", "TK_KW_EXTERN", "TK_KW_USE", "TK_KW_CONST", "TK_KW_ASYNC", "TK_KW_TYPE", "TK_KW_STRUCT", "TK_KW_ENUM", "TK_KW_UNION", "TK_KW_STATIC", "TK_KW_TRAIT", "TK_KW_IMPL", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_KW_LET", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_KW_SELFTYPE", "TK_LT", "TK_AND", "TK_ANDAND", "TK_STAR", "TK_MINUS", "TK_NOT", "TK_DOTDOT", "TK_DOTDOTEQ", "TK_KW_CONTINUE", "TK_KW_BREAK", "TK_KW_RETURN", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_KW_MOVE", "TK_OROR", "TK_OR", "TK_LCURLYBRACE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        [token_kind_name(TK_SEMI), token_kind_name(TK_POUND), token_kind_name(TK_KW_PUB), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_MOD), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_KW_USE), token_kind_name(TK_KW_CONST), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_TYPE), token_kind_name(TK_KW_STRUCT), token_kind_name(TK_KW_ENUM), token_kind_name(TK_KW_UNION), token_kind_name(TK_KW_STATIC), token_kind_name(TK_KW_TRAIT), token_kind_name(TK_KW_IMPL), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_KW_LET), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_LT), token_kind_name(TK_AND), token_kind_name(TK_ANDAND), token_kind_name(TK_STAR), token_kind_name(TK_MINUS), token_kind_name(TK_NOT), token_kind_name(TK_DOTDOT), token_kind_name(TK_DOTDOTEQ), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_RETURN), token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_KW_MOVE), token_kind_name(TK_OROR), token_kind_name(TK_OR), token_kind_name(TK_LCURLYBRACE), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_MATCH)],
     );
     return;
 }
@@ -21964,9 +21998,9 @@ fn _parse_array_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         }
     }
     p.no_viable(
-        "expected arrayElements",
+        "no alternative of arrayElements matches",
         p.peek_span(),
-        ["TK_POUND", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT", "TK_AND", "TK_ANDAND", "TK_STAR", "TK_MINUS", "TK_NOT", "TK_DOTDOT", "TK_DOTDOTEQ", "TK_KW_CONTINUE", "TK_KW_BREAK", "TK_KW_RETURN", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_KW_MOVE", "TK_OROR", "TK_OR", "TK_LCURLYBRACE", "TK_KW_ASYNC", "TK_KW_UNSAFE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        [token_kind_name(TK_POUND), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LT), token_kind_name(TK_AND), token_kind_name(TK_ANDAND), token_kind_name(TK_STAR), token_kind_name(TK_MINUS), token_kind_name(TK_NOT), token_kind_name(TK_DOTDOT), token_kind_name(TK_DOTDOTEQ), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_RETURN), token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_KW_MOVE), token_kind_name(TK_OROR), token_kind_name(TK_OR), token_kind_name(TK_LCURLYBRACE), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_MATCH)],
     );
     return;
 }
@@ -22121,9 +22155,9 @@ fn _parse_struct_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         }
     }
     p.no_viable(
-        "expected structExpression",
+        "no alternative of structExpression matches",
         p.peek_span(),
-        ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        [token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE)],
     );
     return;
 }
@@ -22639,9 +22673,9 @@ fn _parse_enumeration_variant_expression__inner(p: &mut Parser, follow: &List<Li
         }
     }
     p.no_viable(
-        "expected enumerationVariantExpression",
+        "no alternative of enumerationVariantExpression matches",
         p.peek_span(),
-        ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        [token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE)],
     );
     return;
 }
@@ -22807,9 +22841,9 @@ fn _parse_enum_expr_field__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         }
     }
     p.no_viable(
-        "expected enumExprField",
+        "no alternative of enumExprField matches",
         p.peek_span(),
-        ["TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_INTEGER_LITERAL"],
+        [token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_INTEGER_LITERAL)],
     );
     return;
 }
@@ -23556,9 +23590,9 @@ fn _parse_match_arm_expression__inner(p: &mut Parser, follow: &List<List<i32>> =
         }
     }
     p.no_viable(
-        "expected matchArmExpression",
+        "no alternative of matchArmExpression matches",
         p.peek_span(),
-        ["TK_POUND", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT", "TK_AND", "TK_ANDAND", "TK_STAR", "TK_MINUS", "TK_NOT", "TK_DOTDOT", "TK_DOTDOTEQ", "TK_KW_CONTINUE", "TK_KW_BREAK", "TK_KW_RETURN", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_KW_MOVE", "TK_OROR", "TK_OR", "TK_LCURLYBRACE", "TK_KW_ASYNC", "TK_KW_UNSAFE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        [token_kind_name(TK_POUND), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LT), token_kind_name(TK_AND), token_kind_name(TK_ANDAND), token_kind_name(TK_STAR), token_kind_name(TK_MINUS), token_kind_name(TK_NOT), token_kind_name(TK_DOTDOT), token_kind_name(TK_DOTDOTEQ), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_RETURN), token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_KW_MOVE), token_kind_name(TK_OROR), token_kind_name(TK_OR), token_kind_name(TK_LCURLYBRACE), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_MATCH)],
     );
     return;
 }
@@ -23740,9 +23774,9 @@ fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &
         }
     }
     p.no_viable(
-        "expected patternNoTopAlt",
+        "no alternative of patternNoTopAlt matches",
         p.peek_span(),
-        ["TK_KW_TRUE", "TK_KW_FALSE", "TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_REF", "TK_KW_MUT", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_UNDERSCORE", "TK_DOTDOT", "TK_AND", "TK_ANDAND", "TK_PATHSEP", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LT"],
+        [token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_MINUS), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_REF), token_kind_name(TK_KW_MUT), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_DOTDOT), token_kind_name(TK_AND), token_kind_name(TK_ANDAND), token_kind_name(TK_PATHSEP), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_LT)],
     );
     return;
 }
@@ -24019,9 +24053,9 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: &List<List<i32>> 
         return;
     }
     p.no_viable(
-        "expected patternWithoutRange",
+        "no alternative of patternWithoutRange matches",
         p.peek_span(),
-        ["TK_KW_TRUE", "TK_KW_FALSE", "TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_REF", "TK_KW_MUT", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_UNDERSCORE", "TK_DOTDOT", "TK_AND", "TK_ANDAND", "TK_PATHSEP", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LT"],
+        [token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_MINUS), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_REF), token_kind_name(TK_KW_MUT), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_DOTDOT), token_kind_name(TK_AND), token_kind_name(TK_ANDAND), token_kind_name(TK_PATHSEP), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_LT)],
     );
     return;
 }
@@ -24152,9 +24186,9 @@ fn _parse_literal_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         }
     }
     p.no_viable(
-        "expected literalPattern",
+        "no alternative of literalPattern matches",
         p.peek_span(),
-        ["TK_KW_TRUE", "TK_KW_FALSE", "TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL"],
+        [token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_MINUS), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL)],
     );
     return;
 }
@@ -24324,9 +24358,9 @@ fn _parse_range_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         }
     }
     p.no_viable(
-        "expected rangePattern",
+        "no alternative of rangePattern matches",
         p.peek_span(),
-        ["TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT"],
+        [token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_MINUS), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LT)],
     );
     return;
 }
@@ -24437,9 +24471,9 @@ fn _parse_range_pattern_bound__inner(p: &mut Parser, follow: &List<List<i32>> = 
         return;
     }
     p.no_viable(
-        "expected rangePatternBound",
+        "no alternative of rangePatternBound matches",
         p.peek_span(),
-        ["TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT"],
+        [token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_MINUS), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LT)],
     );
     return;
 }
@@ -24585,9 +24619,9 @@ fn _parse_struct_pattern_elements__inner(p: &mut Parser, follow: &List<List<i32>
         }
     }
     p.no_viable(
-        "expected structPatternElements",
+        "no alternative of structPatternElements matches",
         p.peek_span(),
-        ["TK_POUND", "TK_INTEGER_LITERAL", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_REF", "TK_KW_MUT", "TK_DOTDOT"],
+        [token_kind_name(TK_POUND), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_REF), token_kind_name(TK_KW_MUT), token_kind_name(TK_DOTDOT)],
     );
     return;
 }
@@ -25049,9 +25083,9 @@ fn _parse_tuple_pattern_items__inner(p: &mut Parser, follow: &List<List<i32>> = 
         }
     }
     p.no_viable(
-        "expected tuplePatternItems",
+        "no alternative of tuplePatternItems matches",
         p.peek_span(),
-        ["TK_OR", "TK_KW_TRUE", "TK_KW_FALSE", "TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_REF", "TK_KW_MUT", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_UNDERSCORE", "TK_DOTDOT", "TK_AND", "TK_ANDAND", "TK_PATHSEP", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LT"],
+        [token_kind_name(TK_OR), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_MINUS), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_REF), token_kind_name(TK_KW_MUT), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_DOTDOT), token_kind_name(TK_AND), token_kind_name(TK_ANDAND), token_kind_name(TK_PATHSEP), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LPAREN), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_LT)],
     );
     return;
 }
@@ -25163,9 +25197,9 @@ fn _parse_path_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         return;
     }
     p.no_viable(
-        "expected pathPattern",
+        "no alternative of pathPattern matches",
         p.peek_span(),
-        ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT"],
+        [token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LT)],
     );
     return;
 }
@@ -25274,9 +25308,9 @@ fn _parse_type___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         }
     }
     p.no_viable(
-        "expected type_",
+        "no alternative of type_ matches",
         p.peek_span(),
-        ["TK_LPAREN", "TK_KW_IMPL", "TK_KW_DYN", "TK_QUESTION", "TK_KW_FOR", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_NOT", "TK_STAR", "TK_AND", "TK_LSQUAREBRACKET", "TK_UNDERSCORE", "TK_LT", "TK_KW_UNSAFE", "TK_KW_EXTERN", "TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME"],
+        [token_kind_name(TK_LPAREN), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_DYN), token_kind_name(TK_QUESTION), token_kind_name(TK_KW_FOR), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_NOT), token_kind_name(TK_STAR), token_kind_name(TK_AND), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_LT), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_KW_UNDERLINELIFETIME)],
     );
     return;
 }
@@ -25560,9 +25594,9 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         return;
     }
     p.no_viable(
-        "expected typeNoBounds",
+        "no alternative of typeNoBounds matches",
         p.peek_span(),
-        ["TK_LPAREN", "TK_KW_IMPL", "TK_KW_DYN", "TK_QUESTION", "TK_KW_FOR", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_NOT", "TK_STAR", "TK_AND", "TK_LSQUAREBRACKET", "TK_UNDERSCORE", "TK_LT", "TK_KW_UNSAFE", "TK_KW_EXTERN"],
+        [token_kind_name(TK_LPAREN), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_DYN), token_kind_name(TK_QUESTION), token_kind_name(TK_KW_FOR), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_NOT), token_kind_name(TK_STAR), token_kind_name(TK_AND), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_LT), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_EXTERN)],
     );
     return;
 }
@@ -25909,9 +25943,9 @@ fn _parse_function_parameters_maybe_named_variadic__inner(p: &mut Parser, follow
         }
     }
     p.no_viable(
-        "expected functionParametersMaybeNamedVariadic",
+        "no alternative of functionParametersMaybeNamedVariadic matches",
         p.peek_span(),
-        ["TK_POUND", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_UNDERSCORE", "TK_LPAREN", "TK_KW_IMPL", "TK_KW_DYN", "TK_QUESTION", "TK_KW_FOR", "TK_PATHSEP", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_NOT", "TK_STAR", "TK_AND", "TK_LSQUAREBRACKET", "TK_LT", "TK_KW_UNSAFE", "TK_KW_EXTERN", "TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME"],
+        [token_kind_name(TK_POUND), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_LPAREN), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_DYN), token_kind_name(TK_QUESTION), token_kind_name(TK_KW_FOR), token_kind_name(TK_PATHSEP), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_NOT), token_kind_name(TK_STAR), token_kind_name(TK_AND), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_LT), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_KW_UNDERLINELIFETIME)],
     );
     return;
 }
@@ -26271,9 +26305,9 @@ fn _parse_type_param_bound__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         return;
     }
     p.no_viable(
-        "expected typeParamBound",
+        "no alternative of typeParamBound matches",
         p.peek_span(),
-        ["TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME", "TK_QUESTION", "TK_KW_FOR", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LPAREN"],
+        [token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_KW_UNDERLINELIFETIME), token_kind_name(TK_QUESTION), token_kind_name(TK_KW_FOR), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LPAREN)],
     );
     return;
 }
@@ -26315,9 +26349,9 @@ fn _parse_trait_bound__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         return;
     }
     p.no_viable(
-        "expected traitBound",
+        "no alternative of traitBound matches",
         p.peek_span(),
-        ["TK_QUESTION", "TK_KW_FOR", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LPAREN"],
+        [token_kind_name(TK_QUESTION), token_kind_name(TK_KW_FOR), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LPAREN)],
     );
     return;
 }
@@ -26384,9 +26418,9 @@ fn _parse_lifetime__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         return;
     }
     p.no_viable(
-        "expected lifetime",
+        "no alternative of lifetime matches",
         p.peek_span(),
-        ["TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME"],
+        [token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_KW_UNDERLINELIFETIME)],
     );
     return;
 }
@@ -26470,9 +26504,9 @@ fn _parse_simple_path_segment__inner(p: &mut Parser, follow: &List<List<i32>> = 
         return;
     }
     p.no_viable(
-        "expected simplePathSegment",
+        "no alternative of simplePathSegment matches",
         p.peek_span(),
-        ["TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        [token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE)],
     );
     return;
 }
@@ -26581,9 +26615,9 @@ fn _parse_path_ident_segment__inner(p: &mut Parser, follow: &List<List<i32>> = &
         return;
     }
     p.no_viable(
-        "expected pathIdentSegment",
+        "no alternative of pathIdentSegment matches",
         p.peek_span(),
-        ["TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        [token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE)],
     );
     return;
 }
@@ -26830,9 +26864,9 @@ fn _parse_generic_args__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         return _parse_generic_args__inner_alt_0(p, follow);
     }
     p.no_viable(
-        "expected genericArgs",
+        "no alternative of genericArgs matches",
         p.peek_span(),
-        ["TK_LT"],
+        [token_kind_name(TK_LT)],
     );
     return;
 }
@@ -26984,9 +27018,9 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         }
     }
     p.no_viable(
-        "expected genericArg",
+        "no alternative of genericArg matches",
         p.peek_span(),
-        ["TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME", "TK_LPAREN", "TK_KW_IMPL", "TK_KW_DYN", "TK_QUESTION", "TK_KW_FOR", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_NOT", "TK_STAR", "TK_AND", "TK_LSQUAREBRACKET", "TK_UNDERSCORE", "TK_LT", "TK_KW_UNSAFE", "TK_KW_EXTERN", "TK_LCURLYBRACE", "TK_MINUS", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE"],
+        [token_kind_name(TK_LIFETIME_OR_LABEL), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_KW_UNDERLINELIFETIME), token_kind_name(TK_LPAREN), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_DYN), token_kind_name(TK_QUESTION), token_kind_name(TK_KW_FOR), token_kind_name(TK_PATHSEP), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_NOT), token_kind_name(TK_STAR), token_kind_name(TK_AND), token_kind_name(TK_LSQUAREBRACKET), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_LT), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_LCURLYBRACE), token_kind_name(TK_MINUS), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE)],
     );
     return;
 }
@@ -27021,9 +27055,9 @@ fn _parse_generic_args_const__inner(p: &mut Parser, follow: &List<List<i32>> = &
         return;
     }
     p.no_viable(
-        "expected genericArgsConst",
+        "no alternative of genericArgsConst matches",
         p.peek_span(),
-        ["TK_LCURLYBRACE", "TK_MINUS", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        [token_kind_name(TK_LCURLYBRACE), token_kind_name(TK_MINUS), token_kind_name(TK_CHAR_LITERAL), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RAW_STRING_LITERAL), token_kind_name(TK_BYTE_LITERAL), token_kind_name(TK_BYTE_STRING_LITERAL), token_kind_name(TK_RAW_BYTE_STRING_LITERAL), token_kind_name(TK_INTEGER_LITERAL), token_kind_name(TK_FLOAT_LITERAL), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_FALSE), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_DOLLARCRATE)],
     );
     return;
 }
@@ -27501,9 +27535,9 @@ fn _parse_identifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         return;
     }
     p.no_viable(
-        "expected identifier",
+        "no alternative of identifier matches",
         p.peek_span(),
-        ["TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES"],
+        [token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES)],
     );
     return;
 }
@@ -27527,9 +27561,9 @@ fn _parse_keyword__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         return;
     }
     p.no_viable(
-        "expected keyword",
+        "no alternative of keyword matches",
         p.peek_span(),
-        ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME"],
+        [token_kind_name(TK_KW_AS), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_CONST), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_ELSE), token_kind_name(TK_KW_ENUM), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_KW_FALSE), token_kind_name(TK_KW_FN), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_IN), token_kind_name(TK_KW_LET), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_MATCH), token_kind_name(TK_KW_MOD), token_kind_name(TK_KW_MOVE), token_kind_name(TK_KW_MUT), token_kind_name(TK_KW_PUB), token_kind_name(TK_KW_REF), token_kind_name(TK_KW_RETURN), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_STATIC), token_kind_name(TK_KW_STRUCT), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_TRAIT), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_TYPE), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_USE), token_kind_name(TK_KW_WHERE), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_AWAIT), token_kind_name(TK_KW_DYN), token_kind_name(TK_KW_ABSTRACT), token_kind_name(TK_KW_BECOME), token_kind_name(TK_KW_BOX), token_kind_name(TK_KW_DO), token_kind_name(TK_KW_FINAL), token_kind_name(TK_KW_MACRO), token_kind_name(TK_KW_OVERRIDE), token_kind_name(TK_KW_PRIV), token_kind_name(TK_KW_TYPEOF), token_kind_name(TK_KW_UNSIZED), token_kind_name(TK_KW_VIRTUAL), token_kind_name(TK_KW_YIELD), token_kind_name(TK_KW_TRY), token_kind_name(TK_KW_UNION), token_kind_name(TK_KW_STATICLIFETIME)],
     );
     return;
 }
@@ -27618,9 +27652,9 @@ fn _parse_macro_identifier_like_token__inner(p: &mut Parser, follow: &List<List<
         return;
     }
     p.no_viable(
-        "expected macroIdentifierLikeToken",
+        "no alternative of macroIdentifierLikeToken matches",
         p.peek_span(),
-        ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_UNDERLINELIFETIME", "TK_KW_DOLLARCRATE", "TK_LIFETIME_OR_LABEL"],
+        [token_kind_name(TK_KW_AS), token_kind_name(TK_KW_BREAK), token_kind_name(TK_KW_CONST), token_kind_name(TK_KW_CONTINUE), token_kind_name(TK_KW_CRATE), token_kind_name(TK_KW_ELSE), token_kind_name(TK_KW_ENUM), token_kind_name(TK_KW_EXTERN), token_kind_name(TK_KW_FALSE), token_kind_name(TK_KW_FN), token_kind_name(TK_KW_FOR), token_kind_name(TK_KW_IF), token_kind_name(TK_KW_IMPL), token_kind_name(TK_KW_IN), token_kind_name(TK_KW_LET), token_kind_name(TK_KW_LOOP), token_kind_name(TK_KW_MATCH), token_kind_name(TK_KW_MOD), token_kind_name(TK_KW_MOVE), token_kind_name(TK_KW_MUT), token_kind_name(TK_KW_PUB), token_kind_name(TK_KW_REF), token_kind_name(TK_KW_RETURN), token_kind_name(TK_KW_SELFVALUE), token_kind_name(TK_KW_SELFTYPE), token_kind_name(TK_KW_STATIC), token_kind_name(TK_KW_STRUCT), token_kind_name(TK_KW_SUPER), token_kind_name(TK_KW_TRAIT), token_kind_name(TK_KW_TRUE), token_kind_name(TK_KW_TYPE), token_kind_name(TK_KW_UNSAFE), token_kind_name(TK_KW_USE), token_kind_name(TK_KW_WHERE), token_kind_name(TK_KW_WHILE), token_kind_name(TK_KW_ASYNC), token_kind_name(TK_KW_AWAIT), token_kind_name(TK_KW_DYN), token_kind_name(TK_KW_ABSTRACT), token_kind_name(TK_KW_BECOME), token_kind_name(TK_KW_BOX), token_kind_name(TK_KW_DO), token_kind_name(TK_KW_FINAL), token_kind_name(TK_KW_MACRO), token_kind_name(TK_KW_OVERRIDE), token_kind_name(TK_KW_PRIV), token_kind_name(TK_KW_TYPEOF), token_kind_name(TK_KW_UNSIZED), token_kind_name(TK_KW_VIRTUAL), token_kind_name(TK_KW_YIELD), token_kind_name(TK_KW_TRY), token_kind_name(TK_KW_UNION), token_kind_name(TK_KW_STATICLIFETIME), token_kind_name(TK_NON_KEYWORD_IDENTIFIER), token_kind_name(TK_RAW_IDENTIFIER), token_kind_name(TK_KW_MACRORULES), token_kind_name(TK_KW_UNDERLINELIFETIME), token_kind_name(TK_KW_DOLLARCRATE), token_kind_name(TK_LIFETIME_OR_LABEL)],
     );
     return;
 }
@@ -27661,9 +27695,9 @@ fn _parse_macro_punctuation_token__inner(p: &mut Parser, follow: &List<List<i32>
         return;
     }
     p.no_viable(
-        "expected macroPunctuationToken",
+        "no alternative of macroPunctuationToken matches",
         p.peek_span(),
-        ["TK_MINUS", "TK_SLASH", "TK_PERCENT", "TK_CARET", "TK_NOT", "TK_AND", "TK_OR", "TK_ANDAND", "TK_OROR", "TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_CARETEQ", "TK_ANDEQ", "TK_OREQ", "TK_SHLEQ", "TK_SHREQ", "TK_EQ", "TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE", "TK_AT", "TK_UNDERSCORE", "TK_DOT", "TK_DOTDOT", "TK_DOTDOTDOT", "TK_DOTDOTEQ", "TK_COMMA", "TK_SEMI", "TK_COLON", "TK_PATHSEP", "TK_RARROW", "TK_FATARROW", "TK_POUND"],
+        [token_kind_name(TK_MINUS), token_kind_name(TK_SLASH), token_kind_name(TK_PERCENT), token_kind_name(TK_CARET), token_kind_name(TK_NOT), token_kind_name(TK_AND), token_kind_name(TK_OR), token_kind_name(TK_ANDAND), token_kind_name(TK_OROR), token_kind_name(TK_PLUSEQ), token_kind_name(TK_MINUSEQ), token_kind_name(TK_STAREQ), token_kind_name(TK_SLASHEQ), token_kind_name(TK_PERCENTEQ), token_kind_name(TK_CARETEQ), token_kind_name(TK_ANDEQ), token_kind_name(TK_OREQ), token_kind_name(TK_SHLEQ), token_kind_name(TK_SHREQ), token_kind_name(TK_EQ), token_kind_name(TK_EQEQ), token_kind_name(TK_NE), token_kind_name(TK_GT), token_kind_name(TK_LT), token_kind_name(TK_GE), token_kind_name(TK_LE), token_kind_name(TK_AT), token_kind_name(TK_UNDERSCORE), token_kind_name(TK_DOT), token_kind_name(TK_DOTDOT), token_kind_name(TK_DOTDOTDOT), token_kind_name(TK_DOTDOTEQ), token_kind_name(TK_COMMA), token_kind_name(TK_SEMI), token_kind_name(TK_COLON), token_kind_name(TK_PATHSEP), token_kind_name(TK_RARROW), token_kind_name(TK_FATARROW), token_kind_name(TK_POUND)],
     );
     return;
 }
@@ -27724,7 +27758,7 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     if p.recovering && p.diagnostics.len() < max_errors {
         if let Some(e) = &p.pending {
             let lc = line_col(p.tokens.chars, e.span.start);
-            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
+            let mut d = Diagnostic::error(p.pending_code, e.full_message(), e.span, lc.0, lc.1);
             d.rule_stack = e.rule_stack;
             p.diagnostics.push(d);
         }

@@ -117,7 +117,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         KilnHost::emit_diagnostic(KilnDiagnostic {
             level: DiagnosticLevel::Warning,
             span: null,
-            message: `gale: ${d.rule}: ${d.message}`,
+            message: `gale: ${d.owner.label()}: ${d.message}`,
         });
     }
     let wado_source = generated.source;

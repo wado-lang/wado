@@ -1366,6 +1366,43 @@ FOO : 'x' -> totallymadeup ;";
     assert result matches { Err(_) }, "expected unknown lexer command to be rejected";
 }
 
+test "lexer command type takes a literal token type" {
+    // ANTLR4 lets `type` name a token by number (`LexerExec/TokenType0xFFFF`),
+    // so the argument check must not be identifier-only for it.
+    let input = "lexer grammar Test;
+A : 'a' -> type(65535) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules[0].type_override matches { Some(_) }, "expected a type override";
+}
+
+test "a malformed lexer command argument is rejected" {
+    // `pushMode(42)` used to intern a mode literally named `42`. A mode is
+    // named, never numbered, so this is a grammar error, not a mode; and no
+    // command takes a string.
+    let cases: List<String> = ["pushMode(42)", "mode(42)", "mode('x')", "type('x')"];
+    for let cmd of &cases {
+        let input = `lexer grammar Test;\nA : 'a' -> ${*cmd} ;`;
+        let result = parse(input);
+        assert result matches { Err(_) }, `expected ${*cmd} to be rejected`;
+    }
+}
+
+test "an empty lexer command list is rejected" {
+    // `-> ;` has no command at all; it used to be reported as an unknown
+    // command literally named `;`.
+    let input = "lexer grammar Test;
+A : 'a' -> ;";
+    let err = if let Err(e) = &parse(input) {
+        *e;
+    } else {
+        panic("expected `-> ;` to be rejected");
+    };
+    assert !err.message.contains("unknown lexer command"), err.message;
+    // The `;` is what was found; the commands are what was wanted.
+    assert err.message == `got ";"`, err.message;
+    assert err.expected.contains(&"pushMode"), `${err.expected:?}`;
+}
+
 test "unknown lexer command in combined grammar is rejected" {
     let input = "grammar Test;
 r : X ;
