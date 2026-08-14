@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786711944646,
+  "lastUpdate": 1786716999740,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47841,6 +47841,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0f41b9157cba2495937674172863e368767be2ef"
         },
         "date": 1786711944246,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2e36c7294be5d4132dff5c1ed896e5a9c87918f4",
+          "message": "Merge pull request #1808 from wado-lang/claude/reference-resolution-redesign-cb14q8\n\nrefactor(compiler): give every declaration a `DefId` and resolve references by it",
+          "timestamp": "2026-08-14T23:04:07+09:00",
+          "tree_id": "b7ae3ea078bc38a31dcadcc5faee5d6fe3e74f9d",
+          "url": "https://github.com/wado-lang/wado/commit/2e36c7294be5d4132dff5c1ed896e5a9c87918f4"
+        },
+        "date": 1786716998908,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
