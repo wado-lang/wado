@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786671673584,
+  "lastUpdate": 1786711944646,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47817,6 +47817,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 265490,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0f41b9157cba2495937674172863e368767be2ef",
+          "message": "Merge pull request #1806 from wado-lang/claude/package-gale-remaining-tasks-mzhrxg\n\nfeat(gale): structured diagnostic owners, one parse-error vocabulary, and the POSIX property surface",
+          "timestamp": "2026-08-14T21:40:19+09:00",
+          "tree_id": "d65276b8d7a6a48b69c19a69c876a9d5cd943907",
+          "url": "https://github.com/wado-lang/wado/commit/0f41b9157cba2495937674172863e368767be2ef"
+        },
+        "date": 1786711944246,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
             "unit": "bytes"
           }
         ]
