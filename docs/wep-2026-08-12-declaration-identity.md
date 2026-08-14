@@ -824,8 +824,18 @@ compiles, passes the suite, and ends with a mechanical completion check.
       `GenericInstance` arms through `decl_render_name` — they read
       `def_name` while the `Struct` arm reads `struct_head_name` — was the
       obvious candidate and changed nothing, measured, so it was reverted
-      too. The call name is built somewhere else, and the two probes above
-      are the cheapest way back to it.
+      too. `method_call`'s newtype paths were checked by reading: they go
+      through `nominal_head`, which renders correctly.
+
+      The next candidate is `TypeTable::type_name`, whose `Newtype` arm
+      (`tir.rs`, the `strip_local_item_id(self.def_name(*def))` line) hands
+      back the stripped spelling by construction — it is the *display*
+      renderer. If something on the call path reaches for it, that is the
+      seam, and it would be the fourth instance of this migration's one
+      recurring mistake: a display rendering used where an identity was
+      meant. Probe before editing — the two `eprintln!`s above show both
+      ends in a single build, and three plausible fixes in a row measured as
+      no-ops when reasoned about instead.
 
       Both attempts that changed nothing were reverted rather than kept on
       the argument that they were more correct in principle. That rule is
