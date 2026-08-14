@@ -105,10 +105,9 @@ jobs:
           cargo check -p wado-compiler --locked
           cargo check -p wado-lsp --locked
           cargo check -p wado-manifest --locked
-          # `mise run build`'s cross-target checks.
-          cargo check -p wado-compiler --locked --target wasm32-unknown-unknown
-          cargo check -p wado-lsp --locked --target wasm32-unknown-unknown
-          cargo check -p wado-manifest --locked --target wasm32-unknown-unknown
+          # No wasm32 targets: a session only reaches them through `mise run
+          # build`, which neither on-task-done nor the documented dev loop runs.
+          # ci.yml checks them against its own Actions cache instead.
           df -h /
 
       - name: Pack caches (public data only — never credentials.toml / config.toml)

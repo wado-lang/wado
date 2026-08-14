@@ -42,7 +42,9 @@ def owned_by_workspace(name: str) -> bool:
     return stem.replace("-", "_") in names
 
 
-# `target/debug` and, for a cross target, `target/<triple>/debug`.
+# `target/debug` and, for a cross target, `target/<triple>/debug`. The workflow
+# builds no cross targets today; walking for them anyway keeps the tarball a
+# function of what was built, so adding one cannot silently go unpacked.
 def profile_dirs(root: str):
     for name in sorted(os.listdir(root)):
         path = os.path.join(root, name)
