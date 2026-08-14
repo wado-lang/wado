@@ -807,6 +807,19 @@ compiles, passes the suite, and ends with a mechanical completion check.
       its type renders `UserId@AstId(N)`. Read the intern key, not the
       message.
 
+      Read directly, it says the newtype cluster is *not* a rendering
+      mismatch. Probing `synthesis/traits.rs`'s newtype loop for the failing
+      fixture prints
+
+          PROBE nt.name="UserId@2" rendered=Some("UserId@2")
+
+      — the declared-side name and the type's rendering agree, for the local
+      newtype and for every stdlib one. So `function_local` reaches this path
+      correctly and both ends of the impl registration spell the same thing.
+      Whatever declines the `Inspect` bound declines it for another reason,
+      and the whole family of spelling explanations — the one that accounts
+      for every other failure in this migration — is ruled out here.
+
       Both attempts that changed nothing were reverted rather than kept on
       the argument that they were more correct in principle. That rule is
       what makes the measurements above worth anything.
