@@ -747,14 +747,13 @@ impl<'a> WirContext<'a> {
             // A `Never`-typed expression diverges, so it leaves no value behind —
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
-            ResolvedType::Struct {
-                decl_name,
-                module_source,
-                type_args,
-            } => {
+            ResolvedType::Struct { def, type_args } => {
+                let decl_name = &type_table.struct_head_name(*def);
+                let module_source = &type_table.struct_head_module(*def).clone();
                 // The WIR struct map is keyed on the rendered spelling: each
                 // instantiation is its own struct type.
-                let name = &type_table.struct_rendered_name(decl_name, type_args);
+                let _ = decl_name;
+                let name = &type_table.struct_rendered_name(*def, type_args);
                 // String is always at ModuleSource::string().
                 let lookup_module = if name == "String" {
                     ModuleSource::string()
@@ -769,9 +768,9 @@ impl<'a> WirContext<'a> {
                 };
                 Self::ref_to(type_id)
             }
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } if name == "List" && type_args.len() == 1 => {
+            ResolvedType::GenericInstance { def, type_args }
+                if type_table.def_name(*def) == "List" && type_args.len() == 1 =>
+            {
                 let lookup_name = super::types::list_wrapper_struct_name(type_table, type_args[0]);
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
                     return Err(UnregisteredType::struct_ref(format!(
@@ -781,10 +780,9 @@ impl<'a> WirContext<'a> {
                 Self::ref_to(type_id)
             }
             ResolvedType::GenericInstance {
-                name,
+                def,
                 type_args: elements,
-                module_source,
-            } if TypeTable::is_tuple_type(name) => {
+            } if TypeTable::is_tuple_type(type_table.def_name(*def)) => {
                 // CM binding synthesis interns its own `TypeId`s for the same
                 // elements, so a miss falls back to structural matching.
                 let found =
@@ -799,11 +797,13 @@ impl<'a> WirContext<'a> {
                 };
                 Self::ref_to(&type_id)
             }
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
+                // The rendered name, which is what the registrar wrote: a
+                // function-local declaration's spelling carries its
+                // disambiguator, and two sibling functions' `struct Box<T>`
+                // are two registrations.
+                let name = &type_table.decl_render_name(*def);
+                let module_source = &type_table.def_module(*def).clone();
                 // A generic instance is either a struct or a variant, and the
                 // two live in different maps. Registration aliases the
                 // newtype-resolved spelling onto the same type, so one key each.
@@ -836,12 +836,11 @@ impl<'a> WirContext<'a> {
                 Self::ref_to(type_id)
             }
             // Option<T> is handled as GenericInstance (variant).
-            ResolvedType::Enum {
-                name,
-                module_source,
-                ..
-            } => {
-                let key = crate::name::wir_enum_type_key(module_source, name);
+            ResolvedType::Enum { def } => {
+                let key = crate::name::wir_enum_type_key(
+                    type_table.def_module(*def),
+                    type_table.def_name(*def),
+                );
                 let Some(type_id) = self.type_map.get(&key) else {
                     return Err(UnregisteredType::enum_i32(format!("enum `{key}`")));
                 };
@@ -849,12 +848,11 @@ impl<'a> WirContext<'a> {
                     type_id: type_id.clone(),
                 }
             }
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => {
-                let key = crate::name::wir_type_key(module_source, name);
+            ResolvedType::Variant { def } => {
+                let key = crate::name::wir_type_key(
+                    type_table.def_module(*def),
+                    type_table.def_name(*def),
+                );
                 let Some(type_id) = self.type_map.get(&key) else {
                     return Err(UnregisteredType::struct_ref(format!("variant `{key}`")));
                 };

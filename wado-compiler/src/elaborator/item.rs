@@ -160,6 +160,7 @@ fn check_compiler_item_placement<H: CompilerHost>(
 pub(super) fn register_struct_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -174,6 +175,7 @@ pub(super) fn register_struct_compiler_item<H: CompilerHost>(
     let resolved = Resolved::Struct {
         module_source: module_source.clone(),
         name: name.to_string(),
+        decl,
     };
     if let Err(err) = type_table
         .borrow_mut()
@@ -188,6 +190,7 @@ pub(super) fn register_struct_compiler_item<H: CompilerHost>(
 pub(super) fn register_variant_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -203,6 +206,7 @@ pub(super) fn register_variant_compiler_item<H: CompilerHost>(
     let resolved = Resolved::Variant {
         module_source: module_source.clone(),
         name: name.to_string(),
+        decl,
     };
     if let Err(err) = type_table
         .borrow_mut()
@@ -779,13 +783,14 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         // The block's name-level facts. Answered here because this is the only
         // phase standing in the block's own frame.
         let target_fq = scope.qualified_receiver_name(&scope.get_type_name(&impl_block.ty));
-        let trait_decl = impl_block.trait_type.as_ref().map(|trait_type| {
-            let head = scope.get_type_name(trait_type);
-            match crate::resolve::head_site(trait_type) {
-                Some(site) => scope.trait_decl_at(site, &head),
-                None => scope.decl_key_or_local(&head),
-            }
-        });
+        // The header's own site answers: `check_impl_trait_resolves` rejects a
+        // header whose trait reaches no declaration, so a well-formed block has
+        // an identity here and an erroneous one contributes none.
+        let trait_decl = impl_block
+            .trait_type
+            .as_ref()
+            .and_then(crate::resolve::head_site)
+            .and_then(|site| scope.tysys.resolutions.declared(site));
         let self_type = scope
             .annotate_ctx
             .trait_ctx
@@ -853,20 +858,27 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// syntax. Nothing else resolves it: every downstream index keys off the
     /// written string, so an `impl` of an undeclared name registers happily,
     /// matches no query, and reaches the back end unmentioned.
+    ///
+    /// The header's own reference site answers, and only it. A global by-name
+    /// scan would let `impl Deserialize for T;` compile in a module that never
+    /// named `Deserialize`, and the header would carry no identity — leaving
+    /// dispatch comparing spellings two modules can share.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
-        let name = super::trait_env::get_type_name_static(trait_type);
-        let key = match crate::resolve::head_site(trait_type) {
-            Some(site) => self.trait_decl_at(site, &name),
-            None => self.decl_key_or_local(&name),
-        };
-        if self.trait_decl_header_in_frame(&name).is_some()
-            || self.tysys.trait_env.declares_trait(&key)
-            || self.tysys.trait_env.declares_effect_or_resource(&key)
-        {
+        let implementable = crate::resolve::head_site(trait_type)
+            .and_then(|site| self.tysys.resolutions.declared(site))
+            .is_some_and(|def| {
+                matches!(
+                    self.tysys.resolutions.defs().kind(def),
+                    crate::defs::DefKind::Trait
+                        | crate::defs::DefKind::Effect
+                        | crate::defs::DefKind::Resource
+                )
+            });
+        if implementable {
             return;
         }
         let _ = self.emit(TypeError::UnknownTraitImpl {
-            name,
+            name: super::trait_env::get_type_name_static(trait_type),
             span: impl_block.span,
         });
     }
@@ -1217,11 +1229,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             crate::tir::ResolvedType::Newtype { base_type, .. } => {
                 self.type_contains_closure_inner(type_table, *base_type, visited)
             }
-            crate::tir::ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => {
+            crate::tir::ResolvedType::Struct { .. } => {
+                let (name, module_source) = &self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(type_id)
+                    .expect("a struct names a declaration");
                 // Recurse into the struct's field types via the elaborator's
                 // pre-built field registry. Self-recursive structs are
                 // protected by `visited`.
@@ -1233,10 +1247,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .into_iter()
                     .any(|t| self.type_contains_closure_inner(type_table, t, visited))
             }
-            crate::tir::ResolvedType::Variant {
-                name,
-                module_source,
-            } => {
+            crate::tir::ResolvedType::Variant { .. } => {
+                let (name, module_source) = &self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(type_id)
+                    .expect("a variant names a declaration");
                 // The per-case payload types live in `all_variant_cases`; look
                 // them up so a variant case payload containing a closure type
                 // fails the CM boundary check too.
@@ -1313,6 +1330,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(struct_decl.id, struct_field_types);
 
         TirStruct {
+            def: crate::tir::StructDef::Decl(
+                self.tysys
+                    .resolutions
+                    .defs()
+                    .of_ast_id(struct_decl.id)
+                    .expect("a `struct` declaration is declared"),
+            ),
+            type_args: Vec::new(),
             name: struct_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: struct_decl.visibility,
@@ -1360,11 +1385,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
             "Self".to_string(),
             vec![ast::TraitBound {
-                id: ast::AstId::fresh(),
+                // The trait's own declaration node, which the resolution walk
+                // answers for: `Self` here is bounded by this trait, and a
+                // fresh id would be a reference site nothing resolved.
+                id: trait_decl.id,
                 name: trait_decl.name.clone(),
                 assoc_types: Vec::new(),
                 span: trait_decl.span,
                 fn_signature: None,
+                resolved: None,
             }],
         );
         scope.annotate_ctx.trait_ctx.self_type = Some(self_slot);
@@ -1490,7 +1519,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // scope, so a generic resource's `GenericResource` instance can
         // reference its own `TypeParam`s (which gap-2 substitution then
         // specialises per impl-block instantiation). For non-generic
-        // resources this is just a plain `Resource { name, module }`.
+        // resources this is just a plain `Resource { def }`.
         let self_type: Option<TypeId> = resource_self.map(|(name, module)| {
             if type_params.iter().any(|p| !p.is_effect) {
                 let type_arg_ids: Vec<TypeId> = type_params
@@ -1506,19 +1535,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .expect("type param registered by register_generic_params")
                     })
                     .collect();
-                scope.tysys.type_table.borrow_mut().intern(
-                    crate::tir::ResolvedType::GenericResource {
-                        name: name.to_string(),
-                        module_source: module,
-                        type_args: type_arg_ids,
-                    },
-                )
+                let mut tt = scope.tysys.type_table.borrow_mut();
+                let def = tt
+                    .decl_named_in(name, &module)
+                    .expect("the resource declaring these operations exists");
+                tt.intern(crate::tir::ResolvedType::GenericResource {
+                    def,
+                    type_args: type_arg_ids,
+                })
             } else {
-                scope
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_resource(name.to_string(), module)
+                let mut tt = scope.tysys.type_table.borrow_mut();
+                let def = tt
+                    .decl_named_in(name, &module)
+                    .expect("the resource declaring these operations exists");
+                tt.make_resource(def)
             }
         });
 
@@ -1686,6 +1716,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .effect_ops
             .insert(decl.id, operations.clone());
         TirResource {
+            def: self
+                .tysys
+                .resolutions
+                .defs()
+                .of_ast_id(decl.id)
+                .expect("a `resource` declaration is declared"),
             name: decl.name.clone(),
             visibility: decl.visibility,
             operations,
@@ -1749,6 +1785,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         register_variant_compiler_item(
             &self.tysys.type_table,
             &variant_decl.attrs,
+            variant_decl.id,
             &variant_decl.name,
             &self.current_module_source,
             variant_decl.span,
@@ -1756,6 +1793,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         TirVariantDecl {
+            def: self
+                .tysys
+                .resolutions
+                .defs()
+                .of_ast_id(variant_decl.id)
+                .expect("a `variant` declaration is declared"),
             name: variant_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: variant_decl.visibility,

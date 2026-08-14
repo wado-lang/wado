@@ -152,16 +152,32 @@ pub(crate) struct ModuleDecls {
     pub(crate) local_flags_cases: IndexMap<String, FlagsInfo>,
     pub(crate) local_variant_cases: IndexMap<String, VariantInfo>,
 
-    /// Function-local item declarations (`Stmt::Item`), as against the
-    /// module-scoped `local_struct_fields` above. Populated sequentially as
-    /// `resolve_stmt` walks the body — no hoisting, so a local item is visible
-    /// only after its own statement, like `let` — and cleared per function, so
-    /// siblings never see each other's. `TypeLookup` consults it first.
-    pub(crate) fn_local_struct_fields: IndexMap<String, StructFieldInfo>,
-    pub(crate) fn_local_newtypes: IndexMap<String, TypeId>,
-    pub(crate) fn_local_enum_cases: IndexMap<String, EnumInfo>,
-    pub(crate) fn_local_flags_cases: IndexMap<String, FlagsInfo>,
-    pub(crate) fn_local_variant_cases: IndexMap<String, VariantInfo>,
+    /// Function-local item declarations (`Stmt::Item` — a `struct` or `type`
+    /// declared inside a function body), by their own identity, as against the
+    /// module-scoped `local_struct_fields` above. Two functions declaring the
+    /// same spelling declare two items, and these maps say so: a local item is
+    /// a declaration with a [`crate::defs::DefId`] like any other.
+    pub(crate) local_item_struct_fields: IndexMap<crate::defs::DefId, StructFieldInfo>,
+    pub(crate) local_item_newtypes: IndexMap<crate::defs::DefId, TypeId>,
+
+    /// The spelling a local item's *type* renders to, back to the declaration.
+    ///
+    /// The type is interned on its declaration and renders as `{name}@{AstId}`,
+    /// which is what keeps two functions' same-named structs apart in the
+    /// registries still keyed by a rendered name. This index is the one place
+    /// that rendering is turned back into a declaration, for the consumers that
+    /// still arrive holding a spelling.
+    pub(crate) local_item_renders: IndexMap<(String, ModuleSource), crate::defs::DefId>,
+
+    /// The local items in scope at the walk's position, by the name written in
+    /// source. Populated sequentially as `resolve_stmt` walks the body — no
+    /// hoisting, so a local item is visible only after its own statement, like
+    /// `let` — and cleared per function, so siblings never see each other's.
+    ///
+    /// It answers with an identity, not with a declaration's contents: those
+    /// are read out of the two maps above, which is what keeps this the walk's
+    /// position rather than a second scope.
+    pub(crate) fn_local_items: IndexMap<String, crate::defs::DefId>,
 }
 
 impl ModuleDecls {
@@ -185,17 +201,13 @@ impl ModuleDecls {
             })
     }
 
-    /// Clear the function-scoped local-item registries (`fn_local_*`).
+    /// Forget the local items the previous function body brought into scope.
     /// Called at the top of every function-body-walk entry point —
     /// `resolve_function`, `resolve_method`, `resolve_test_decl` — so a
     /// local item declared in one function body never leaks into the next
     /// one's resolution. A single shared call makes it impossible for a new
     /// entry point to forget this.
     pub(crate) fn clear_fn_local_items(&mut self) {
-        self.fn_local_struct_fields.clear();
-        self.fn_local_newtypes.clear();
-        self.fn_local_enum_cases.clear();
-        self.fn_local_flags_cases.clear();
-        self.fn_local_variant_cases.clear();
+        self.fn_local_items.clear();
     }
 }

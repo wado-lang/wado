@@ -32,9 +32,10 @@ pub(super) fn should_rewrite(
     let i128_name = items.struct_name(crate::compiler_item::CompilerItem::I128);
     let u128_name = items.struct_name(crate::compiler_item::CompilerItem::U128);
     let is_wide_int = match type_table.get(scrutinee_type) {
-        ResolvedType::Struct {
-            decl_name: name, ..
-        } => name == i128_name || name == u128_name,
+        ResolvedType::Struct { def, .. } => {
+            let name = type_table.struct_head_name(*def);
+            name == i128_name || name == u128_name
+        }
         _ => false,
     };
     if !is_wide_int {

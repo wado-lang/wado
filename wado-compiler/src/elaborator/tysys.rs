@@ -40,18 +40,17 @@ pub(crate) struct TypeSystem {
     /// the annotate-decls pass; read-only afterwards. [`super::types::TypeLookup`]
     /// resolves type names against these without cloning into per-module
     /// flat maps.
-    pub(crate) all_newtypes: Rc<IndexMap<ModuleSource, IndexMap<String, TypeId>>>,
-    pub(crate) all_generic_newtypes:
-        Rc<IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>>>,
-    pub(crate) all_struct_fields: Rc<IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>>,
-    pub(crate) all_variant_cases: Rc<IndexMap<ModuleSource, IndexMap<String, VariantInfo>>>,
-    pub(crate) all_enum_cases: Rc<IndexMap<ModuleSource, IndexMap<String, EnumInfo>>>,
-    pub(crate) all_flags_cases: Rc<IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>>,
-    pub(crate) all_resource_types: Rc<IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>>,
+    pub(crate) all_newtypes: Rc<IndexMap<crate::defs::DefId, TypeId>>,
+    pub(crate) all_generic_newtypes: Rc<IndexMap<crate::defs::DefId, GenericNewtypeInfo>>,
+    pub(crate) all_struct_fields: Rc<IndexMap<crate::defs::DefId, StructFieldInfo>>,
+    pub(crate) all_variant_cases: Rc<IndexMap<crate::defs::DefId, VariantInfo>>,
+    pub(crate) all_enum_cases: Rc<IndexMap<crate::defs::DefId, EnumInfo>>,
+    pub(crate) all_flags_cases: Rc<IndexMap<crate::defs::DefId, FlagsInfo>>,
+    pub(crate) all_resource_types: Rc<IndexMap<crate::defs::DefId, ResourceInfo>>,
 
     /// What every type/trait reference site in the program refers to, resolved
     /// once from the module that wrote it. The single producer of declaration
-    /// identity from written syntax (WEP 2026-08-10).
+    /// identity from written syntax (WEP 2026-08-12).
     pub(crate) resolutions: Rc<crate::resolve::Resolutions>,
 
     /// Immutable trait knowledge base: impl indices, trait declarations,
@@ -110,12 +109,14 @@ impl TypeSystem {
     /// The `TypeId` of each field of the struct `(name, module)` in declaration
     /// order, or `None` if no such struct is registered. Used by the resource
     /// move check to decide whether an aggregate transitively owns a resource.
-    pub(crate) fn struct_field_type_ids(
+    /// [`Self::struct_field_type_ids`] for a caller holding the type rather
+    /// than a spelling of it — which is every caller that reached one by
+    /// destructuring a `ResolvedType` for the pair naming its declaration.
+    pub(crate) fn struct_field_type_ids_of(
         &self,
-        name: &str,
-        module: &ModuleSource,
+        type_id: TypeId,
     ) -> Option<Vec<crate::tir::TypeId>> {
-        let info = self.all_struct_fields.get(module)?.get(name)?;
+        let info = self.all_struct_fields.get(&self.type_def(type_id)?)?;
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
 
@@ -138,16 +139,12 @@ impl TypeSystem {
         let children: Vec<TypeId> = match self.type_table.borrow().get(base).clone() {
             ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => self
-                .struct_field_type_ids(&name, &module_source)
-                .unwrap_or_default(),
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } if name == "Result" => type_args,
+            ResolvedType::Struct { .. } => self.struct_field_type_ids_of(base).unwrap_or_default(),
+            ResolvedType::GenericInstance { type_args, .. }
+                if self.type_table.borrow().is_result(base) =>
+            {
+                type_args
+            }
             _ => self.type_table.borrow().as_tuple(base).unwrap_or_default(),
         };
         children
@@ -296,12 +293,14 @@ impl TypeSystem {
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
-            ResolvedType::Struct {
-                decl_name: name, ..
-            }
-            | ResolvedType::GenericInstance { name, .. }
-            | ResolvedType::Newtype { name, .. }
-            | ResolvedType::Flags { name, .. } => Some(name.clone()),
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. } => self
+                .type_table
+                .borrow()
+                .nominal_head(type_id)
+                .map(|(n, _)| n),
             _ => None,
         }
     }
@@ -338,10 +337,12 @@ impl TypeSystem {
         let mut current = type_id;
         loop {
             match self.type_table.borrow().get(current).clone() {
-                ResolvedType::Struct {
-                    decl_name: name, ..
-                } => return name,
-                ResolvedType::GenericInstance { name, .. } => return name,
+                ResolvedType::Struct { def, .. } => {
+                    return self.type_table.borrow().struct_head_name(def);
+                }
+                ResolvedType::GenericInstance { def, .. } => {
+                    return self.type_table.borrow().def_name(def).to_string();
+                }
                 ResolvedType::Newtype { base_type, .. } => current = base_type,
                 ResolvedType::Flags { .. } => return "u32".to_string(),
                 // The raw GC array's base method-owner name is "Array"
@@ -414,11 +415,7 @@ impl TypeSystem {
             }
 
             // Generic instance (e.g., Option<T>, List<T>): substitute in type args
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
                 let new_args: Vec<TypeId> = type_args
                     .iter()
                     .map(|&arg| self.substitute_newtype_in_type(arg, base_type, newtype))
@@ -429,8 +426,7 @@ impl TypeSystem {
                     self.type_table
                         .borrow_mut()
                         .intern(ResolvedType::GenericInstance {
-                            name,
-                            module_source,
+                            def,
                             type_args: new_args,
                         })
                 }
@@ -448,12 +444,9 @@ impl TypeSystem {
         let resolved = self.type_table.borrow().get(type_id).clone();
         match resolved {
             ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
-            ResolvedType::Struct {
-                decl_name: name, ..
-            } => name,
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => {
+            ResolvedType::Struct { def, .. } => self.type_table.borrow().struct_head_name(def),
+            ResolvedType::GenericInstance { def, type_args } => {
+                let name = self.type_table.borrow().def_name(def).to_string();
                 if TypeTable::is_tuple_type(&name) {
                     let parts: Vec<String> = type_args
                         .iter()
@@ -487,18 +480,17 @@ impl TypeSystem {
             }
             ResolvedType::TypeParam { name, .. } => name,
             ResolvedType::InferVar(var) => var.to_string(),
-            ResolvedType::Enum { name, .. }
-            | ResolvedType::Resource { name, .. }
-            | ResolvedType::Variant { name, .. }
-            | ResolvedType::Newtype { name, .. }
-            | ResolvedType::Flags { name, .. } => name,
-            ResolvedType::GenericResource {
-                name, type_args, ..
-            } => {
+            ResolvedType::Enum { def }
+            | ResolvedType::Resource { def }
+            | ResolvedType::Variant { def }
+            | ResolvedType::Newtype { def, .. }
+            | ResolvedType::Flags { def } => self.type_table.borrow().def_name(def).to_string(),
+            ResolvedType::GenericResource { def, type_args } => {
                 let args: Vec<String> = type_args
                     .iter()
                     .map(|&t| self.type_id_to_string(t))
                     .collect();
+                let name = self.type_table.borrow().def_name(def).to_string();
                 format!("{}<{}>", name, args.join(", "))
             }
             ResolvedType::Reactive(inner) => {

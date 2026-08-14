@@ -31,6 +31,17 @@ use wado_compiler::niri::{
 };
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
 
+/// A struct type for a fixture.
+///
+/// An anonymous shape: a struct that names no declaration, which is exactly
+/// what a test needing *a* struct type wants — the interpreter cares that the
+/// type is struct-shaped and distinct, not which declaration it came from. The
+/// name goes into the field list so two fixture names stay two types.
+fn fixture_struct(table: &mut TypeTable, name: &str, module: ModuleSource) -> TypeId {
+    let shape = table.intern_anon_struct(module, vec![(name.to_string(), TypeTable::I32)]);
+    table.make_struct(wado_compiler::tir::StructDef::Anon(shape))
+}
+
 /// The conveniences these tests want on top of the engine's own API: a
 /// reduction that drives both halves, and the two rewrites bound to the scratch
 /// [`BodySink`].
@@ -3675,6 +3686,14 @@ fn register_seq_containers(table: &mut TypeTable) {
         (wado_compiler::compiler_item::CompilerItem::String, "String"),
         (wado_compiler::compiler_item::CompilerItem::List, "List"),
     ] {
+        // A compiler item names a declaration, so the fixture makes one: intern
+        // the struct, bind it to a declaring node, and register the item
+        // against that same node. Registering a node nothing is bound to leaves
+        // `is_string` / `is_list` answering no, which is what
+        // `is_seq_container` asks.
+        let decl = wado_compiler::ast::AstId::fresh();
+        let ty = fixture_struct(table, name, ModuleSource::default());
+        table.register_decl_type(decl, ty);
         table
             .compiler_items_mut()
             .register(
@@ -3682,6 +3701,7 @@ fn register_seq_containers(table: &mut TypeTable) {
                 wado_compiler::compiler_item::Resolved::Struct {
                     module_source: ModuleSource::default(),
                     name: name.to_string(),
+                    decl,
                 },
             )
             .expect("a struct item takes a struct");
@@ -3695,7 +3715,7 @@ fn a_constant_string_call_result_becomes_a_literal() {
     // for a source string — instead of discarding it for not being a scalar.
     let mut table = TypeTable::new();
     register_seq_containers(&mut table);
-    let string_ty = table.make_struct("String".to_string(), ModuleSource::default());
+    let string_ty = fixture_struct(&mut table, "String", ModuleSource::default());
     let greeting = make_pure_fn(
         "greeting",
         vec![],
@@ -3738,7 +3758,7 @@ fn a_container_still_copying_its_contents_becomes_a_literal_once() {
     // more to do would keep the fixed-point loop reporting changes forever.
     let mut table = TypeTable::new();
     register_seq_containers(&mut table);
-    let string_ty = table.make_struct("String".to_string(), ModuleSource::default());
+    let string_ty = fixture_struct(&mut table, "String", ModuleSource::default());
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let clone_id = next_test_func_id();
     let builtins = ctfe_builtin_map(clone_id, CtfeBuiltin::ArrayClonePrefix);
@@ -3782,7 +3802,7 @@ fn a_write_does_not_reach_a_value_copied_out_before_it() {
     // has to fork the backing: writing where it lies would reach through every
     // copy taken of it.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
     let set_id = next_test_func_id();
     let get_id = next_test_func_id();
     let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
@@ -3846,7 +3866,7 @@ fn a_write_through_a_frame_owned_place_is_read_back() {
     // so a later read of that element sees the written value rather than
     // abandoning the evaluation.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
     let set_id = next_test_func_id();
     let get_id = next_test_func_id();
     let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
@@ -3907,7 +3927,7 @@ fn a_write_through_a_place_the_frame_does_not_own_is_refused() {
     // write it did not apply — the constant the body would return does not come
     // out either.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
     let set_id = next_test_func_id();
     let builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
 
@@ -3953,7 +3973,7 @@ fn a_field_store_through_a_frame_owned_place_is_read_back() {
     // A store into a field of a container the frame built updates the frame's
     // value for it, so a later read of that field sees what was written.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
 
     let used = || {
         field_access(
@@ -3992,7 +4012,7 @@ fn a_store_through_a_projection_that_is_not_a_place_is_refused() {
     // An element position is not a field path, so the target names no place the
     // frame can update — the write is refused rather than stepped past.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
 
     let store_through_index = make_pure_fn_stmts(
         "store_through_index",
@@ -4062,7 +4082,7 @@ fn array_new_denotes_a_zero_filled_sequence() {
     // A fresh allocation is every element's default, so reading one back gives
     // zero instead of abandoning the evaluation.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let new_id = next_test_func_id();
     let get_id = next_test_func_id();
@@ -4143,7 +4163,7 @@ fn a_container_the_frame_never_filled_stays_an_allocation() {
     // trading a capacity the source asked for against nothing.
     let mut table = TypeTable::new();
     register_seq_containers(&mut table);
-    let string_ty = table.make_struct("String".to_string(), ModuleSource::default());
+    let string_ty = fixture_struct(&mut table, "String", ModuleSource::default());
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let new_id = next_test_func_id();
     let builtins = ctfe_builtin_map(new_id, CtfeBuiltin::ArrayNew);
@@ -4170,7 +4190,7 @@ fn a_copy_into_a_frame_owned_place_splices_the_source() {
     // `array_copy` at statement position lands in the frame's container, so a
     // later read of a copied element sees the source's byte.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let copy_id = next_test_func_id();
     let get_id = next_test_func_id();
@@ -4232,7 +4252,7 @@ fn a_copy_past_the_end_of_the_destination_is_refused() {
     // The run traps at run time, so the evaluation is abandoned rather than
     // producing a container the write never made.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let copy_id = next_test_func_id();
     let builtins = ctfe_builtin_map(copy_id, CtfeBuiltin::ArrayCopy);
@@ -4302,7 +4322,7 @@ fn a_call_writing_through_a_mut_ref_updates_the_caller_place() {
     // What the run produces is the caller's place: the callee returns nothing,
     // so a run whose writes went nowhere would be a run for nothing.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
 
     let bump = with_mut_ref_params(
         make_pure_fn_stmts(
@@ -4392,7 +4412,7 @@ fn a_second_argument_naming_a_mut_ref_target_declines_the_call() {
     // had. Wado has no borrow checker, so this is ordinary source: decline
     // rather than mis-run.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
     let list_ref_ty = table.make_ref(list_ty);
 
     let (add, caller) = add_through_mut_ref_and_second_arg(
@@ -4419,7 +4439,7 @@ fn a_method_call_writes_back_through_its_receiver() {
     // A method names its receiver directly rather than through `&mut`, and
     // what fills a container is always a method.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
 
     let bump = with_mut_ref_params(
         make_pure_fn_stmts(
@@ -4460,7 +4480,7 @@ fn a_mutating_call_outside_statement_position_is_not_run() {
     // land twice. Only the executor runs a mutating call, and only where it
     // runs exactly once.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
 
     let bump_get = with_mut_ref_params(
         make_pure_fn_stmts(
@@ -4501,7 +4521,7 @@ fn a_mutating_call_bound_by_a_let_writes_back() {
     // A `let` runs its value exactly once, so a call that both returns and
     // writes is at home there.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
 
     let bump_get = with_mut_ref_params(
         make_pure_fn_stmts(
@@ -4560,7 +4580,7 @@ fn a_run_that_bails_part_way_writes_nothing() {
     // perform. Stepping past that with the first write applied would hand the
     // caller a container the callee never produced.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
 
     let half = with_mut_ref_params(
         make_pure_fn_stmts(
@@ -4696,7 +4716,7 @@ fn a_shared_receiver_leaves_the_container_trackable() {
     // across the very `len()` calls a caller reads it with — and `push` reads
     // its own capacity that way on every call.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
 
     let bump = with_mut_ref_params(
         make_pure_fn_stmts(
@@ -6532,7 +6552,7 @@ fn global_const_bool_folds_via_reduce_local() {
 // ──────────────────────────────────────────────────────────────────────────────
 
 fn point_type(table: &mut TypeTable) -> TypeId {
-    table.make_struct("Point".to_string(), ModuleSource::default())
+    fixture_struct(table, "Point", ModuleSource::default())
 }
 
 fn struct_lit(type_id: TypeId, fields: Vec<(u32, &'static str, Build)>) -> Build {
@@ -6707,7 +6727,7 @@ fn field_access_projects_nested_aggregates() {
     // `Line { start: Point { x: 10, y: 32 } }.start.x` → 10.
     let mut table = TypeTable::new();
     let point = point_type(&mut table);
-    let line = table.make_struct("Line".to_string(), ModuleSource::default());
+    let line = fixture_struct(&mut table, "Line", ModuleSource::default());
     let expr = field_access(
         field_access(
             struct_lit(line, vec![(0, "start", point_lit(point))]),
@@ -6738,6 +6758,7 @@ fn field_access_on_non_const_receiver_is_non_const() {
 #[test]
 fn tuple_literal_projects_by_position() {
     let mut table = TypeTable::new();
+    table.seed_compiler_items_for_test();
     let pair = table.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
     let expr = field_access(
         tuple_lit(
@@ -7041,6 +7062,7 @@ fn an_unknown_guard_leaves_the_match_alone() {
 #[test]
 fn a_guard_over_tuple_bindings_decides_the_arm() {
     let mut table = TypeTable::new();
+    table.seed_compiler_items_for_test();
     let pair = table.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
     let expr = match_expr(
         tuple_lit(
@@ -7133,6 +7155,7 @@ fn struct_pattern_rules_an_arm_out_despite_a_binding() {
 #[test]
 fn tuple_pattern_picks_the_matching_arm() {
     let mut table = TypeTable::new();
+    table.seed_compiler_items_for_test();
     let pair = table.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
     let expr = match_expr(
         tuple_lit(
@@ -7165,6 +7188,7 @@ fn tuple_pattern_with_rest_stays_unknown() {
     // `(10, ..)` leaves the trailing sub-patterns without a fixed element
     // index, so the engine does not model it.
     let mut table = TypeTable::new();
+    table.seed_compiler_items_for_test();
     let pair = table.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
     let expr = match_expr(
         tuple_lit(
@@ -7356,7 +7380,7 @@ fn a_walk_that_performs_nothing_drops_a_container_a_call_writes() {
     // the length the push already changed — and the bounds check folds against
     // that answer.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
 
     let bump = with_mut_ref_params(
         make_pure_fn_stmts(
@@ -7513,7 +7537,7 @@ fn a_region_write_through_an_alias_lands_in_the_borrowed_local() {
     // binding, so the write must reach `c`'s value rather than a copy bound at
     // borrow time.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
     let set_id = next_test_func_id();
     let get_id = next_test_func_id();
     let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
@@ -7653,7 +7677,7 @@ fn a_region_write_behind_a_cast_still_lands() {
     // the region still folds — refusing it would cost exactly the shape the
     // inlined stdlib append path has.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
     let set_id = next_test_func_id();
     let get_id = next_test_func_id();
     let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
@@ -7710,7 +7734,7 @@ fn an_alias_read_as_a_value_does_not_become_a_copy() {
     // as a value instead would bind a copy, and the write would land in it
     // while `c` kept the constant it no longer holds.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
     let set_id = next_test_func_id();
     let get_id = next_test_func_id();
     let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
@@ -7779,8 +7803,8 @@ fn an_alias_captured_in_an_aggregate_is_not_a_constant() {
     // field would otherwise land in the copy while `c` kept a value it no
     // longer holds.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
-    let holder_ty = table.make_struct("Holder".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
+    let holder_ty = fixture_struct(&mut table, "Holder", ModuleSource::default());
     let set_id = next_test_func_id();
     let get_id = next_test_func_id();
     let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
@@ -7849,7 +7873,7 @@ fn a_deref_read_binds_a_copy_not_the_place() {
     // say otherwise: a write target wants the storage behind a deref, which is
     // why place naming peels one and this does not.
     let mut table = TypeTable::new();
-    let list_ty = table.make_struct("List<u8>".to_string(), ModuleSource::default());
+    let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
     let set_id = next_test_func_id();
     let get_id = next_test_func_id();
     let mut builtins = ctfe_builtin_map(set_id, CtfeBuiltin::ArraySet);
@@ -8062,9 +8086,9 @@ fn a_box_shaped_ref_returning_callee_does_not_fold_through_the_lost_alias() {
     // recognises the return type as a reference. The alias is just as real, and
     // `TypeTable::is_reference_shaped` is what keeps both spellings refused.
     let mut table = TypeTable::new();
-    let inner_ty = table.make_struct("Inner".to_string(), ModuleSource::default());
-    let pair_ty = table.make_struct("Pair".to_string(), ModuleSource::default());
-    let boxed_inner = table.make_struct("Box<Inner>".to_string(), ModuleSource::default());
+    let inner_ty = fixture_struct(&mut table, "Inner", ModuleSource::default());
+    let pair_ty = fixture_struct(&mut table, "Pair", ModuleSource::default());
+    let boxed_inner = fixture_struct(&mut table, "Box<Inner>", ModuleSource::default());
     table.register_box_payload(boxed_inner, inner_ty);
     let ref_pair = table.make_ref(pair_ty);
 
@@ -8140,8 +8164,8 @@ fn a_ref_returning_callee_does_not_fold_through_the_lost_alias() {
     // bound the returned reference as a value snapshot would answer 7 and
     // bake the wrong constant into every caller.
     let mut table = TypeTable::new();
-    let inner_ty = table.make_struct("Inner".to_string(), ModuleSource::default());
-    let pair_ty = table.make_struct("Pair".to_string(), ModuleSource::default());
+    let inner_ty = fixture_struct(&mut table, "Inner", ModuleSource::default());
+    let pair_ty = fixture_struct(&mut table, "Pair", ModuleSource::default());
     let ref_inner = table.make_ref(inner_ty);
     let ref_pair = table.make_ref(pair_ty);
 
@@ -8217,8 +8241,8 @@ fn a_stored_reference_parameter_does_not_fold_into_a_snapshot() {
     // `h.inner` aliases `p`, so scenario() == 9. The alias escapes inside an
     // aggregate rather than as the return type, which the sibling test covers.
     let mut table = TypeTable::new();
-    let inner_ty = table.make_struct("Inner".to_string(), ModuleSource::default());
-    let holder_ty = table.make_struct("Holder".to_string(), ModuleSource::default());
+    let inner_ty = fixture_struct(&mut table, "Inner", ModuleSource::default());
+    let holder_ty = fixture_struct(&mut table, "Holder", ModuleSource::default());
     let ref_inner = table.make_ref(inner_ty);
 
     let mut keep = make_pure_fn(
@@ -8284,7 +8308,7 @@ fn a_ref_global_alias_rebound_by_a_later_let_does_not_vouch_for_it() {
     // One index, two bindings: the flow-insensitive scan cannot say which one
     // governs the read.
     let mut table = TypeTable::new();
-    let cfg_ty = table.make_struct("Cfg".to_string(), ModuleSource::default());
+    let cfg_ty = fixture_struct(&mut table, "Cfg", ModuleSource::default());
     let module = ModuleSource::default();
     let mut fields = GlobalFieldEnv::default();
     fields.insert(
@@ -8332,7 +8356,7 @@ fn an_orphaned_ref_global_binding_does_not_vouch_for_a_live_local() {
     // A displaced `let cfg = &CONFIG` stays in the arena and cannot run, so it
     // must not speak for the binding that replaced it.
     let mut table = TypeTable::new();
-    let cfg_ty = table.make_struct("Cfg".to_string(), ModuleSource::default());
+    let cfg_ty = fixture_struct(&mut table, "Cfg", ModuleSource::default());
     let module = ModuleSource::default();
     let mut fields = GlobalFieldEnv::default();
     fields.insert(

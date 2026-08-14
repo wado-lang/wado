@@ -52,12 +52,10 @@ fn coerce_value_to_binding(
         ),
         // A `&primitive` / `&variant` / `&fn` binding type that boxing
         // has redefined to its `Box<T>` struct: build the struct literal.
-        ResolvedType::Struct {
-            decl_name,
-            type_args,
-            ..
-        } if type_table.box_payload_of(binding_type).is_some() => {
-            let struct_name = type_table.struct_rendered_name(decl_name, type_args);
+        ResolvedType::Struct { def, type_args }
+            if type_table.box_payload_of(binding_type).is_some() =>
+        {
+            let struct_name = type_table.struct_rendered_name(*def, type_args);
             TirExpr::new(
                 TirExprKind::StructLiteral {
                     struct_type: binding_type,
@@ -126,12 +124,11 @@ fn peel_refs_and_box(
 /// chains and expands or-patterns. It runs after all of `lower::plan`, so
 /// scrutinees and synthesised references alike arrive box-shaped.
 pub struct Lowering {
-    /// Map from (`variant_name`, `module_source`) to (`case_name`,
-    /// `case_index`) pairs. The `module_source` axis keeps two
-    /// modules' same-named variants distinct.
-    variant_case_map: IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
-    /// Map from (`struct_name`, `module_source`) to field definitions.
-    struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
+    /// Map from the `variant` declaration to its (`case_name`, `case_index`)
+    /// pairs.
+    variant_case_map: IndexMap<crate::defs::DefId, Vec<(String, u32)>>,
+    /// Map from a struct type's head-and-args to its field definitions.
+    struct_fields_map: IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Canonical stdlib name of the `Eq` trait.
     eq_trait_name: crate::name::FqTraitName,
     /// Canonical stdlib name of the `String` struct.
@@ -144,7 +141,7 @@ impl Lowering {
     /// Gather the package-level maps once, before the translator's
     /// per-function walk begins.
     pub fn new(flat: &FlatPackage) -> Self {
-        let mut variant_case_map: IndexMap<(String, ModuleSource), Vec<(String, u32)>> =
+        let mut variant_case_map: IndexMap<crate::defs::DefId, Vec<(String, u32)>> =
             IndexMap::default();
         for variant in &flat.variants {
             let cases: Vec<(String, u32)> = variant
@@ -152,13 +149,13 @@ impl Lowering {
                 .iter()
                 .map(|c| (c.name.clone(), c.index))
                 .collect();
-            variant_case_map.insert((variant.name.clone(), variant.module_source.clone()), cases);
+            variant_case_map.insert(variant.def, cases);
         }
 
-        let mut struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>> =
+        let mut struct_fields_map: IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>> =
             IndexMap::default();
         for s in &flat.structs {
-            struct_fields_map.insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
+            struct_fields_map.insert((s.def, s.type_args.clone()), s.fields.clone());
         }
 
         let mut const_int_globals: IndexMap<(ModuleSource, String), i128> = IndexMap::default();
@@ -230,15 +227,11 @@ struct PatternLowerer<'a> {
     /// the same registry so the receiver-type slot of the synthesised
     /// `String^Eq::eq` `LocalMethodName` tracks renames too.
     string_struct_name: FqTypeName,
-    /// Map from (`variant_name`, `module_source`) to a list of
-    /// (`case_name`, `case_index`) pairs. The `module_source` axis
-    /// is required because Wado allows two modules to each declare a
-    /// variant with the same name; lookup resolves the source from
-    /// the scrutinee's `ResolvedType::Variant.module_source` (or
-    /// `GenericInstance.module_source`).
-    variant_case_map: &'a IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
-    /// Map from (`struct_name`, `module_source`) to field definitions
-    struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,
+    /// Map from the `variant` declaration to a list of (`case_name`,
+    /// `case_index`) pairs; the scrutinee's type names the declaration.
+    variant_case_map: &'a IndexMap<crate::defs::DefId, Vec<(String, u32)>>,
+    /// Map from a struct type's head-and-args to its field definitions.
+    struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
     const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
 }
@@ -249,8 +242,8 @@ impl<'a> PatternLowerer<'a> {
         locals: Vec<TirLocal>,
         eq_trait_name: crate::name::FqTraitName,
         string_struct_name: FqTypeName,
-        variant_case_map: &'a IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
-        struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,
+        variant_case_map: &'a IndexMap<crate::defs::DefId, Vec<(String, u32)>>,
+        struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
     ) -> Self {
         Self {
@@ -265,20 +258,10 @@ impl<'a> PatternLowerer<'a> {
         }
     }
 
-    /// Look up the case index for a variant case by (variant name,
-    /// module source, case name). The module source is mandatory to
-    /// distinguish two modules' same-named variants; the legacy
-    /// name-only lookup silently overwrote one module's cases with
-    /// the other's and produced spurious "Unknown case" panics on
-    /// `if let` patterns whose target was the overwritten variant.
-    fn get_case_index(
-        &self,
-        variant_name: &str,
-        module_source: &ModuleSource,
-        case_name: &str,
-    ) -> Option<u32> {
+    /// Look up the case index for a case of `def`.
+    fn get_case_index(&self, def: crate::defs::DefId, case_name: &str) -> Option<u32> {
         self.variant_case_map
-            .get(&(variant_name.to_string(), module_source.clone()))
+            .get(&def)
             .and_then(|cases| cases.iter().find(|(name, _)| name == case_name))
             .map(|(_, index)| *index)
     }
@@ -286,16 +269,9 @@ impl<'a> PatternLowerer<'a> {
     /// Look up struct field definitions by `type_id`
     fn get_struct_fields(&self, type_id: TypeId, type_table: &TypeTable) -> Option<Vec<TirField>> {
         match type_table.get(type_id) {
-            ResolvedType::Struct {
-                decl_name,
-                module_source,
-                type_args,
-            } => self
+            ResolvedType::Struct { def, type_args } => self
                 .struct_fields_map
-                .get(&(
-                    type_table.struct_rendered_name(decl_name, type_args),
-                    module_source.clone(),
-                ))
+                .get(&(*def, type_args.clone()))
                 .cloned(),
             _ => None,
         }
@@ -617,22 +593,15 @@ impl<'a> PatternLowerer<'a> {
                 };
 
                 // Generate VariantTest condition
-                let variant_type_info = match type_table.get(*enum_type) {
-                    ResolvedType::Variant {
-                        name,
-                        module_source,
-                        ..
+                let variant_def = match type_table.get(*enum_type) {
+                    ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                        type_table.nominal_def(*enum_type)
                     }
-                    | ResolvedType::GenericInstance {
-                        name,
-                        module_source,
-                        ..
-                    } => Some((name.clone(), module_source.clone())),
                     _ => None,
                 };
 
-                if let Some((ref vt_name, ref vt_module)) = variant_type_info
-                    && let Some(case_index) = self.get_case_index(vt_name, vt_module, variant_name)
+                if let Some(def) = variant_def
+                    && let Some(case_index) = self.get_case_index(def, variant_name)
                 {
                     let cond = TirExpr::new(
                         TirExprKind::VariantTest {
@@ -1024,22 +993,14 @@ impl<'a> PatternLowerer<'a> {
                 let (variant_expr, _) =
                     peel_refs_and_box(variant_local, pattern_type, type_table, span);
 
-                let variant_type_info = match type_table.get(*enum_type) {
-                    ResolvedType::Variant {
-                        name,
-                        module_source,
-                        ..
+                let variant_def = match type_table.get(*enum_type) {
+                    ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                        type_table.nominal_def(*enum_type)
                     }
-                    | ResolvedType::GenericInstance {
-                        name,
-                        module_source,
-                        ..
-                    } => Some((name.clone(), module_source.clone())),
                     _ => None,
                 };
-                let case_index_opt = variant_type_info
-                    .as_ref()
-                    .and_then(|(vt, ms)| self.get_case_index(vt, ms, variant_name));
+                let case_index_opt =
+                    variant_def.and_then(|def| self.get_case_index(def, variant_name));
 
                 let Some(case_index) = case_index_opt else {
                     // Variant info not found; fall back to letting value be bound and

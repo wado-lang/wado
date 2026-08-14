@@ -73,9 +73,11 @@ impl Cx<'_> {
 /// resource that the fixtures exercise (`Fields::from_list`).
 fn result_args(tt: &TypeTable, type_id: TypeId) -> Option<(TypeId, TypeId)> {
     match tt.get(tt.get_ultimate_base_type(type_id)) {
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } if name == "Result" && type_args.len() == 2 => Some((type_args[0], type_args[1])),
+        ResolvedType::GenericInstance { def, type_args }
+            if tt.def_name(*def) == "Result" && type_args.len() == 2 =>
+        {
+            Some((type_args[0], type_args[1]))
+        }
         _ => None,
     }
 }
@@ -131,25 +133,18 @@ fn carries_resource_rec(
     }
     visited.push(base);
     let children: Vec<TypeId> = match tt.get(base).clone() {
-        ResolvedType::Resource {
-            name,
-            module_source,
-        } => {
+        ResolvedType::Resource { def } => {
             return reg
-                .get_resource_cm_name_by_module(&module_source.to_string(), &name)
+                .get_resource_cm_name_by_module(&tt.def_module(def).to_string(), tt.def_name(def))
                 .is_some();
         }
         ResolvedType::GenericResource { .. } | ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
             return false;
         }
-        ResolvedType::Struct {
-            decl_name,
-            module_source,
-            type_args,
-        } => sfr
+        ResolvedType::Struct { def, type_args } => sfr
             .get(&(
-                tt.struct_rendered_name(&decl_name, &type_args),
-                module_source,
+                tt.struct_rendered_name(def, &type_args),
+                tt.struct_head_module(def).clone(),
             ))
             .map(|fields| fields.iter().map(|(_, _, t)| *t).collect())
             .unwrap_or_default(),
@@ -384,12 +379,9 @@ fn drop_one(live: &Live, cx: &mut Cx) -> Vec<TirStmt> {
 fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
     let base = cx.tt.get_ultimate_base_type(type_id);
     match cx.tt.get(base).clone() {
-        ResolvedType::Resource {
-            name,
-            module_source,
-        } => match cx
+        ResolvedType::Resource { def } => match cx
             .reg
-            .get_resource_cm_name_by_module(&module_source.to_string(), &name)
+            .get_resource_cm_name_by_module(&cx.tt.def_module(def).to_string(), cx.tt.def_name(def))
         {
             Some(cm) => vec![expr_stmt(cm_canonical_call(
                 CanonicalIntrinsic::ResourceDrop(cm.to_string()),
@@ -398,17 +390,11 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
             ))],
             None => Vec::new(),
         },
-        ResolvedType::Struct {
-            decl_name,
-            module_source,
-            type_args,
-        } => {
+        ResolvedType::Struct { def, type_args } => {
+            let module_source = cx.tt.struct_head_module(def).clone();
             let fields = cx
                 .struct_fields
-                .get(&(
-                    cx.tt.struct_rendered_name(&decl_name, &type_args),
-                    module_source,
-                ))
+                .get(&(cx.tt.struct_rendered_name(def, &type_args), module_source))
                 .cloned()
                 .unwrap_or_default();
             drop_projected(scrutinee, &fields, cx)

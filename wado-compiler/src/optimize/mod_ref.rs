@@ -1135,9 +1135,10 @@ mod tests {
         // no-table path is `field_access_is_heap_read_and_may_trap`.
         use crate::tir::{ResolvedType, TypeTable};
         let mut types = TypeTable::new();
+        let def =
+            types.declare_for_test("W", ModuleSource::default(), crate::defs::DefKind::Struct);
         let struct_ty = types.intern(ResolvedType::Struct {
-            decl_name: "W".to_string(),
-            module_source: ModuleSource::default(),
+            def: crate::tir::StructDef::Decl(def),
             type_args: Vec::new(),
         });
         let mut body = Body::empty();
@@ -1170,6 +1171,7 @@ mod tests {
         // `FieldAccess`.)
         use crate::tir::TypeTable;
         let mut types = TypeTable::new();
+        types.seed_compiler_items_for_test();
         let tuple_ty = types.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
         let mut body = Body::empty();
         let base = body.exprs.push(ExprNode {

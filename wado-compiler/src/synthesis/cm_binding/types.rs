@@ -160,7 +160,12 @@ impl LiftContext<'_> {
                         .is_some()
                     {
                         let ms = self.module_source_for(&src);
-                        return tt.make_struct(n.name.clone(), ms);
+                        return {
+                            let def = tt
+                                .decl_named_in(&n.name, &ms)
+                                .expect("the declaration this type names exists");
+                            tt.make_struct(crate::tir::StructDef::Decl(def))
+                        };
                     }
                     if self
                         .cm_interface_registry
@@ -168,7 +173,12 @@ impl LiftContext<'_> {
                         .is_some()
                     {
                         let ms = self.module_source_for(&src);
-                        return tt.make_variant(n.name.clone(), ms);
+                        return {
+                            let def = tt
+                                .decl_named_in(&n.name, &ms)
+                                .expect("the declaration this type names exists");
+                            tt.make_variant(def)
+                        };
                     }
                 }
                 cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)
@@ -592,10 +602,8 @@ fn check_cm_boundary_representable_inner(
             // The handle is an i32, but its payload is lifted and lowered by
             // value, so it must be classifiable too — `()` is representable
             // yet has no payload type.
-            R::GenericResource {
-                name, type_args, ..
-            } => {
-                let name = name.clone();
+            R::GenericResource { def, type_args } => {
+                let name = type_table.def_name(*def).to_string();
                 let args = type_args.clone();
                 for &a in &args {
                     recurse(a, visited)?;
@@ -615,11 +623,11 @@ fn check_cm_boundary_representable_inner(
                 }
                 Ok(())
             }
-            R::Struct { decl_name, .. } => {
-                if decl_name == &names.string {
+            R::Struct { def, .. } => {
+                let name = type_table.struct_head_name(*def);
+                if name == names.string {
                     return Ok(());
                 }
-                let name = decl_name.clone();
                 match find_struct_decl(&name, tir_modules) {
                     Some(decl) if decl.fields.is_empty() => Err(format!(
                         "record `{name}` has no fields; an empty record has no \
@@ -640,8 +648,8 @@ fn check_cm_boundary_representable_inner(
                     None => Ok(()),
                 }
             }
-            R::Variant { name, .. } => {
-                let name = name.clone();
+            R::Variant { def } => {
+                let name = type_table.def_name(*def).to_string();
                 match find_variant_decl(&name, tir_modules) {
                     Some(decl) => {
                         let payloads: Vec<TypeId> = decl.cases.iter().map(|c| c.payload).collect();
@@ -653,9 +661,8 @@ fn check_cm_boundary_representable_inner(
                     None => Ok(()),
                 }
             }
-            R::GenericInstance {
-                name, type_args, ..
-            } => {
+            R::GenericInstance { def, type_args } => {
+                let name = &type_table.def_name(*def).to_string();
                 // Option/List/Tuple were handled above by the `as_*` accessors;
                 // `Result<T, E>` recurses into its arms. Any other generic
                 // instance has no concrete CM lowering at this boundary (it
@@ -1102,9 +1109,8 @@ fn flat_types_from_type_id_inner(
             }
         },
         ResolvedType::Unit => {} // no flat values
-        ResolvedType::Struct {
-            decl_name: name, ..
-        } => {
+        ResolvedType::Struct { def, .. } => {
+            let name = &type_table.struct_head_name(*def);
             if name == &names.string {
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
@@ -1120,16 +1126,16 @@ fn flat_types_from_type_id_inner(
         }
         ResolvedType::Resource { .. } => out.push(cm_abi::CmValType::I32),
         ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),
-        ResolvedType::Variant { name, .. } => {
+        ResolvedType::Variant { def } => {
+            let name = &type_table.def_name(*def).to_string();
             if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
                 flatten_variant_type(&variant_decl, out, tir_modules, type_table, names);
             } else {
                 out.push(cm_abi::CmValType::I32);
             }
         }
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } => {
+        ResolvedType::GenericInstance { def, type_args } => {
+            let name = &type_table.def_name(*def).to_string();
             if TypeTable::is_tuple_type(name) {
                 for &elem in type_args {
                     flat_types_from_type_id_inner(elem, out, tir_modules, type_table, names);
@@ -1357,29 +1363,21 @@ pub(super) fn type_id_to_ast_type(
     match resolved {
         ResolvedType::Primitive(p) => named_no_source(p.as_str()),
         ResolvedType::Unit => Type::Tuple(Vec::new()),
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } => cm_named(name, module_source),
-        ResolvedType::Variant {
-            name,
-            module_source,
-            ..
-        } => cm_named(name, module_source),
-        ResolvedType::Enum {
-            name,
-            module_source,
-        } => cm_named(name, module_source),
-        // Its own CM type, 1 byte at ≤8 labels, not a four-byte `i32`.
-        ResolvedType::Flags {
-            name,
-            module_source,
-        } => cm_named(name, module_source),
-        ResolvedType::Resource { name, .. } => named_no_source(name),
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } => {
+        // `Flags` joins them: its own CM type, 1 byte at <=8 labels, not a
+        // four-byte `i32`.
+        ResolvedType::Struct { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Flags { .. } => {
+            let (name, module_source) = type_table
+                .nominal_head(type_id)
+                .expect("a nominal type names a declaration");
+            cm_named(&name, &module_source)
+        }
+        ResolvedType::Resource { def } => named_no_source(type_table.def_name(*def)),
+        ResolvedType::GenericInstance { def, type_args } => {
+            let name = &type_table.def_name(*def).to_string();
+
             let args: Vec<Type> = type_args
                 .iter()
                 .map(|&tid| type_id_to_ast_type(tid, type_table, cm_interface_registry))
@@ -1398,9 +1396,8 @@ pub(super) fn type_id_to_ast_type(
                 })
             }
         }
-        ResolvedType::GenericResource {
-            name, type_args, ..
-        } => {
+        ResolvedType::GenericResource { def, type_args } => {
+            let name = &type_table.def_name(*def).to_string();
             let args: Vec<Type> = type_args
                 .iter()
                 .map(|&tid| type_id_to_ast_type(tid, type_table, cm_interface_registry))
@@ -1412,11 +1409,12 @@ pub(super) fn type_id_to_ast_type(
                 span,
             })
         }
-        ResolvedType::Newtype {
-            name,
-            module_source,
-            ..
-        } => cm_named(name, module_source),
+        ResolvedType::Newtype { .. } => {
+            let (name, module_source) = type_table
+                .nominal_head(type_id)
+                .expect("a newtype names a declaration");
+            cm_named(&name, &module_source)
+        }
         ResolvedType::Ref(inner) => Type::Reference(Box::new(type_id_to_ast_type(
             *inner,
             type_table,

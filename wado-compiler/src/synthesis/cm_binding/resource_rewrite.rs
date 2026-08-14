@@ -317,20 +317,18 @@ fn payload_ast_type(
     let id = crate::component_model::peel_newtypes(tt, payload);
     // Peeled off the TypeId, not the produced AST: a lib-local alias's
     // synthesized `NamedType` carries no source interface to look it up by.
-    if let ResolvedType::GenericInstance {
-        name, type_args, ..
-    } = tt.get(id)
-    {
+    if let ResolvedType::GenericInstance { def, type_args } = tt.get(id) {
+        let name = tt.def_name(*def).to_string();
         let args: Vec<crate::ast::Type> = type_args
             .iter()
             .map(|&a| payload_ast_type(a, tt, registry))
             .collect();
-        return if TypeTable::is_tuple_type(name) {
+        return if TypeTable::is_tuple_type(&name) {
             crate::ast::Type::Tuple(args)
         } else {
             crate::ast::Type::Generic(crate::ast::GenericType {
                 id: crate::ast::AstId::fresh(),
-                name: name.clone(),
+                name,
                 args,
                 span: synth_span(),
             })
@@ -1898,14 +1896,9 @@ fn parameterize_stream_cm_name(
             // The element's declaring interface keys the CM-name lookup. Its
             // `module_source` is the loader identity (a `.wado` path); the
             // registry bridges it to the versioned `#[cm(...)]` key.
-            let elem_source = match tt.get(tt.get_ultimate_base_type(elem)) {
-                ResolvedType::Struct { module_source, .. }
-                | ResolvedType::Variant { module_source, .. }
-                | ResolvedType::Enum { module_source, .. }
-                | ResolvedType::Flags { module_source, .. }
-                | ResolvedType::Resource { module_source, .. } => Some(module_source.to_string()),
-                _ => None,
-            };
+            let elem_source = tt
+                .nominal_head(tt.get_ultimate_base_type(elem))
+                .map(|(_, m)| m.to_string());
             let cm_elem = elem_source
                 .as_deref()
                 .and_then(|source| registered_cm_name(&elem_name, source, cm_interface_registry))

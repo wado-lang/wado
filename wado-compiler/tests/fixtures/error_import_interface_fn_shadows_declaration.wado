@@ -1,0 +1,16 @@
+// The `Iface::{fn}` import form registers its member under the bare name, like
+// a `use { name }` does, so it collides with a declaration of that name the
+// same way — and the collision check only ran on the `Simple` form.
+
+use { Greeting::{hello} } from "./sub/error_import_interface_fn_shadows_declaration_iface.wado";
+
+fn hello() -> String {
+    return "local"
+}
+
+export fn run() {
+    let g = hello();
+}
+
+__DATA__
+{"compile_error": "import of 'hello' collides with the declaration"}

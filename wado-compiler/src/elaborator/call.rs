@@ -541,11 +541,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let expected_resolved =
                             self.tysys.type_table.borrow().get(expected).clone();
                         if let ResolvedType::GenericInstance {
-                            name: expected_name,
+                            def: expected_def,
                             type_args: expected_args,
-                            ..
                         } = expected_resolved
-                            && expected_name == prefix
+                            && self.tysys.type_table.borrow().def_name(expected_def) == prefix
                             && expected_args.len() == variant_info.type_param_type_ids.len()
                         {
                             payload_type =
@@ -1019,9 +1018,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Check if this is a variant construction in the namespace
                     let ns_variant = self
                         .tysys
-                        .all_variant_cases
-                        .get(&ns_source)
-                        .and_then(|m| m.get(type_name))
+                        .resolutions
+                        .declared_in(&ns_source, type_name)
+                        .and_then(|def| self.tysys.all_variant_cases.get(&def))
                         .cloned();
                     if let Some(variant_info) = ns_variant {
                         let case_match = variant_info
@@ -1287,10 +1286,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and the `CalleeRef` come from the same resolution — this is
         // the single place the alias→defining-name translation happens.
         else if self.sem.decls.imported_functions.contains(effective_name) {
-            if let Some(symbol) = self
-                .symbols
-                .lookup(&self.current_module_source, effective_name)
-            {
+            if let Some(symbol) = self.symbol_named(&self.current_module_source, effective_name) {
                 self.record_reference_to_def(ident.id, symbol.defined_at);
                 (
                     Some(CalleeRef::from_imported_symbol(symbol)),
@@ -1705,7 +1701,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Imported functions: the canonical signature resolved in the
         // definition module's perspective, so same-named types from
         // different modules can't be confused.
-        if let Some(symbol) = self.symbols.lookup(&self.current_module_source, name) {
+        if let Some(symbol) = self.symbol_named(&self.current_module_source, name) {
             let src = symbol.module_source().clone();
             let sym_name = symbol.name.clone();
             if let Some(sig) = self.tysys.signatures.function_sig(&src, &sym_name) {
@@ -1812,10 +1808,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(self.current_module_source.clone()),
             );
         }
-        if let Some(symbol) = self
-            .symbols
-            .lookup(&self.current_module_source, &ident.name)
-        {
+        if let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(sig) = self.tysys.signatures.function_sig(&src, &name) {
@@ -1849,10 +1842,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Imported function
-        if let Some(symbol) = self
-            .symbols
-            .lookup(&self.current_module_source, &ident.name)
-        {
+        if let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(sig) = self.tysys.signatures.function_sig(&src, &name) {
@@ -2341,7 +2331,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 new_args.push(type_args[i]);
                 continue;
             }
-            let bounds = p.trait_bound_names();
+            let bounds = self.declared_bounds(p);
             // `infer_fn_type_args` already instantiated this slot, so the
             // variable standing in for it is the one to blame — minting a
             // second would orphan the first, which the sweep would then pin to
@@ -2622,10 +2612,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(sig) => sig.decl.param_types.clone(),
                 None => return Vec::new(),
             }
-        } else if let Some(symbol) = self
-            .symbols
-            .lookup(&self.current_module_source, &ident.name)
-        {
+        } else if let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             match self.tysys.signatures.function_sig(&src, &name) {
@@ -2727,14 +2714,13 @@ impl TypeSystem {
         if let Some(expected) = expected_type {
             let expected_resolved = self.type_table.borrow().get(expected).clone();
             if let ResolvedType::GenericInstance {
-                name,
-                module_source,
+                def,
                 type_args: expected_args,
             } = expected_resolved
-                && name == variant_name
+                && self.type_table.borrow().def_name(def) == variant_name
                 && expected_args.len() == variant_info.type_param_type_ids.len()
             {
-                canonical_module_source = Some(module_source);
+                canonical_module_source = Some(self.type_table.borrow().def_module(def).clone());
                 for (&param_id, &expected_arg) in variant_info
                     .type_param_type_ids
                     .iter()
@@ -2762,11 +2748,14 @@ impl TypeSystem {
                 .type_id_of_decl(variant_info.defined_at);
         }
 
-        self.type_table.borrow_mut().make_generic_instance(
-            variant_info.name.clone(),
-            module_source,
-            type_args,
-        )
+        let def = self
+            .type_table
+            .borrow()
+            .decl_named_in(&variant_info.name, &module_source)
+            .expect("the variant being instantiated is declared");
+        self.type_table
+            .borrow_mut()
+            .make_generic_instance(def, type_args)
     }
 }
 

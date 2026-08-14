@@ -1572,10 +1572,7 @@ impl CfgSet {
         assert alt + 1 < CFG_KEY_ALT_SLOT, `ATN config alt ${alt} exceeds packed-key slot`;
         assert rs + 2 < CFG_KEY_RS_SLOT, `ATN config caller-stack depth ${rs} exceeds packed-key slot`;
         assert state + 2 < CFG_KEY_STATE_SLOT, `ATN config state ${state} exceeds packed-key slot`;
-        let k = (((state + 2) as i64 * CFG_KEY_RS_SLOT as i64 + (rs + 2) as i64) * CFG_KEY_ALT_SLOT as i64
-            + (alt + 1) as i64)
-            * CFG_KEY_PR_SLOT as i64
-            + (pr + 2) as i64;
+        let k = (((state + 2) as i64 * CFG_KEY_RS_SLOT as i64 + (rs + 2) as i64) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64) * CFG_KEY_PR_SLOT as i64 + (pr + 2) as i64;
         if let Some(i) = self.index.get(k) {
             let merged = arena.merge(self.pctx[i], pctx);
             let changed = merged != self.pctx[i];

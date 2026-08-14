@@ -28,19 +28,17 @@ pub enum TypeDecl<'a> {
 /// Get type dependencies (FQ `"{module_source}//{name}"` keys) for a given type.
 fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
     match type_table.get(type_id) {
-        ResolvedType::Struct {
-            decl_name,
-            module_source,
-            type_args,
-        } => {
-            let name = type_table.struct_rendered_name(decl_name, type_args);
-            vec![crate::name::wir_type_key(module_source, &name)]
+        ResolvedType::Struct { def, type_args } => {
+            let name = type_table.struct_rendered_name(*def, type_args);
+            vec![crate::name::wir_type_key(
+                type_table.struct_head_module(*def),
+                &name,
+            )]
         }
-        ResolvedType::Variant {
-            name,
-            module_source,
-            ..
-        } => vec![crate::name::wir_type_key(module_source, name)],
+        ResolvedType::Variant { def } => vec![crate::name::wir_type_key(
+            type_table.def_module(*def),
+            type_table.def_name(*def),
+        )],
         ResolvedType::GenericInstance { type_args, .. } => {
             // Skip unresolved generic instances (containing type params or projections)
             if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
@@ -606,11 +604,10 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
         for type_id in type_table.iter_type_ids() {
             let resolved = type_table.get(type_id);
             if let ResolvedType::GenericInstance {
-                name,
+                def,
                 type_args: elements,
-                ..
             } = resolved
-                && TypeTable::is_tuple_type(name)
+                && TypeTable::is_tuple_type(type_table.def_name(*def))
             {
                 if ctx.tuple_type_map.contains_key(elements) {
                     continue;
@@ -816,14 +813,13 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
         {
             let type_table = &*ctx.package.type_table.borrow();
             for type_id in type_table.iter_type_ids() {
-                let ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                } = type_table.get(type_id)
+                let ResolvedType::GenericInstance { def, type_args } = type_table.get(type_id)
                 else {
                     continue;
                 };
+                let name = &type_table.def_name(*def).to_string();
+                let module_source = &type_table.def_module(*def).clone();
+                {};
                 // Option is now handled as a regular variant (SubtypeHierarchy).
                 // TODO: NullableRef optimization — when T is non-nullable (ref type,
                 // not another Option), skip variant registration and represent
@@ -1150,10 +1146,8 @@ fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
     {
         let type_table = &*tt_rc.borrow();
         for type_id in type_table.iter_type_ids() {
-            if let ResolvedType::GenericInstance {
-                name, type_args, ..
-            } = type_table.get(type_id)
-                && name == "List"
+            if let ResolvedType::GenericInstance { type_args, .. } = type_table.get(type_id)
+                && type_table.is_list(type_id)
                 && type_args.len() == 1
             {
                 if type_table.contains_type_param(type_args[0]) {
@@ -1183,8 +1177,7 @@ fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
     let mut leaf: Vec<(crate::tir::TypeId, String)> = Vec::new();
     let mut nested: Vec<(crate::tir::TypeId, String)> = Vec::new();
     for (elem_tid, elem_name) in &array_elem_types {
-        if matches!(tt.get(*elem_tid), ResolvedType::GenericInstance { name, .. } if name == "List")
-        {
+        if tt.is_list(*elem_tid) {
             nested.push((*elem_tid, elem_name.clone()));
         } else {
             leaf.push((*elem_tid, elem_name.clone()));
@@ -1381,11 +1374,10 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                 let type_table = &*ctx.package.type_table.borrow();
                 for type_id in type_table.iter_type_ids() {
                     if let ResolvedType::GenericInstance {
-                        name,
+                        def,
                         type_args: elements,
-                        ..
                     } = type_table.get(type_id)
-                        && TypeTable::is_tuple_type(name)
+                        && TypeTable::is_tuple_type(type_table.def_name(*def))
                         && field_idx < elements.len()
                     {
                         // Check if this tuple maps to the same WIR type

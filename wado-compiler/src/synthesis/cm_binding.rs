@@ -328,14 +328,14 @@ fn unresolvable_record_in_payload(
     registry: &crate::component_model::CmInterfaceRegistry,
     type_id: TypeId,
 ) -> Option<String> {
-    if let Some((name, module_source)) = named_decl_of(tt.get(type_id))
+    if let Some((name, module_source)) = named_decl_of(tt, tt.get(type_id))
         && matches!(
             crate::component_model::cm_payload_type_from_type_id(tt, type_id),
             Some(CmPayloadType::Named(_))
         )
         && !registry.is_named_type_registered_from(module_source, name)
     {
-        return Some(name.clone());
+        return Some(name.to_string());
     }
     // Codegen peels aliases, so check through them here too.
     if let ResolvedType::Newtype { base_type, .. } = tt.get(type_id) {
@@ -349,10 +349,8 @@ fn unresolvable_record_in_payload(
             .iter()
             .find_map(|&e| unresolvable_record_in_payload(tt, registry, e));
     }
-    if let ResolvedType::GenericInstance {
-        name, type_args, ..
-    } = tt.get(type_id)
-        && name == "Result"
+    if let ResolvedType::GenericInstance { def, type_args } = tt.get(type_id)
+        && tt.def_name(*def) == "Result"
     {
         return type_args
             .clone()
@@ -362,27 +360,17 @@ fn unresolvable_record_in_payload(
     None
 }
 
-fn named_decl_of(ty: &ResolvedType) -> Option<(&String, &ModuleSource)> {
-    match ty {
-        ResolvedType::Struct {
-            decl_name,
-            module_source,
-            ..
-        } => Some((decl_name, module_source)),
-        ResolvedType::Enum {
-            name,
-            module_source,
-        }
-        | ResolvedType::Variant {
-            name,
-            module_source,
-        }
-        | ResolvedType::Flags {
-            name,
-            module_source,
-        } => Some((name, module_source)),
-        _ => None,
-    }
+/// The declared name and module of a nominal type, or `None` for one that
+/// names no declaration.
+fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &'a ModuleSource)> {
+    let def = match ty {
+        ResolvedType::Struct { def, .. } => def.decl()?,
+        ResolvedType::Enum { def }
+        | ResolvedType::Variant { def }
+        | ResolvedType::Flags { def } => *def,
+        _ => return None,
+    };
+    Some((tt.def_name(def), tt.def_module(def)))
 }
 
 /// Phase entry point: generate CM binding functions and rewrite call sites.
@@ -1201,11 +1189,37 @@ mod tests {
     /// these up when the stdlib elaborator visits `core:prelude`.
     fn register_option_result_for_tests(tt: &mut TypeTable) {
         use crate::compiler_item::{CompilerItem, Resolved};
+        // A compiler item names a declaration, so each one gets a declaring
+        // node with its base type bound to it. Registering a node nothing is
+        // bound to leaves the identity reads this fixture exists for —
+        // `is_result`, `as_option`, `is_string`, `is_list` — answering no
+        // rather than wrong, which is the harder failure to notice.
+        // `compiler_item_def` walks the registered node back to a `DefId`, so
+        // it has to be the declaration's own.
+        let bind_variant = |tt: &mut TypeTable, name: &str, module: ModuleSource| {
+            let def = tt.declare_for_test(name, module, crate::defs::DefKind::Variant);
+            let decl = tt.defs().ast_id(def);
+            let ty = tt.make_variant(def);
+            tt.register_decl_type(decl, ty);
+            decl
+        };
+        let bind_struct = |tt: &mut TypeTable, name: &str, module: ModuleSource| {
+            let def = tt.declare_for_test(name, module, crate::defs::DefKind::Struct);
+            let decl = tt.defs().ast_id(def);
+            let ty = tt.make_struct(crate::tir::StructDef::Decl(def));
+            tt.register_decl_type(decl, ty);
+            decl
+        };
+        let option_decl = bind_variant(tt, "Option", ModuleSource::prelude());
+        let result_decl = bind_variant(tt, "Result", ModuleSource::prelude());
+        let string_decl = bind_struct(tt, "String", ModuleSource::string());
+        let list_decl = bind_struct(tt, "List", ModuleSource::list());
         let _ = tt.compiler_items_mut().register(
             CompilerItem::Option,
             Resolved::Variant {
                 module_source: ModuleSource::prelude(),
                 name: "Option".to_string(),
+                decl: option_decl,
             },
         );
         let _ = tt.compiler_items_mut().register(
@@ -1231,6 +1245,7 @@ mod tests {
             Resolved::Variant {
                 module_source: ModuleSource::prelude(),
                 name: "Result".to_string(),
+                decl: result_decl,
             },
         );
         let _ = tt.compiler_items_mut().register(
@@ -1256,6 +1271,7 @@ mod tests {
             Resolved::Struct {
                 module_source: ModuleSource::string(),
                 name: "String".to_string(),
+                decl: string_decl,
             },
         );
         let _ = tt.compiler_items_mut().register(
@@ -1263,6 +1279,20 @@ mod tests {
             Resolved::Struct {
                 module_source: ModuleSource::list(),
                 name: "List".to_string(),
+                decl: list_decl,
+            },
+        );
+        // A WASI variant payload lifts through a tuple, and `make_tuple`
+        // reads the tuple family's declaration like any other head.
+        tt.declare_for_test(
+            TypeTable::TUPLE_TYPE_NAME,
+            ModuleSource::prelude(),
+            crate::defs::DefKind::Struct,
+        );
+        let _ = tt.compiler_items_mut().register(
+            CompilerItem::Tuple,
+            Resolved::TupleFamily {
+                module_source: ModuleSource::prelude(),
             },
         );
     }
@@ -1622,9 +1652,12 @@ mod tests {
                 .resolve_cm_source_for(elem_named, Some("sockets"))
                 .expect("IpAddress resolves in the stdlib registry");
             let module_source = ctx.module_source_for(&source);
-            type_table
-                .borrow_mut()
-                .make_variant("IpAddress".to_string(), module_source);
+            let def = type_table.borrow_mut().declare_for_test(
+                "IpAddress",
+                module_source,
+                crate::defs::DefKind::Variant,
+            );
+            type_table.borrow_mut().make_variant(def);
         }
 
         let list_ty = cm_abi::generic_type("List", vec![elem_ty]);
@@ -1876,7 +1909,12 @@ mod tests {
     #[test]
     fn param_needs_lifting_string() {
         let mut tt = TypeTable::new();
-        let s = tt.make_struct("String".to_string(), ModuleSource::string());
+        let def = tt.declare_for_test(
+            "String",
+            ModuleSource::string(),
+            crate::defs::DefKind::Struct,
+        );
+        let s = tt.make_struct(crate::tir::StructDef::Decl(def));
         assert!(param_needs_lifting(s, &tt));
     }
 
@@ -1884,10 +1922,12 @@ mod tests {
     fn param_needs_lifting_resource() {
         // Resources are i32 handles — no lift.
         let mut tt = TypeTable::new();
-        let r = tt.intern(crate::tir::ResolvedType::Resource {
-            name: "Request".to_string(),
-            module_source: ModuleSource::wasi_http(),
-        });
+        let def = tt.declare_for_test(
+            "Request",
+            ModuleSource::wasi_http(),
+            crate::defs::DefKind::Resource,
+        );
+        let r = tt.intern(crate::tir::ResolvedType::Resource { def });
         assert!(!param_needs_lifting(r, &tt));
     }
 
@@ -1895,10 +1935,12 @@ mod tests {
     fn param_needs_lifting_enum() {
         let mut tt = TypeTable::new();
         let mut interner = ModuleSourceInterner::new();
-        let e = tt.intern(crate::tir::ResolvedType::Enum {
-            name: "Color".to_string(),
-            module_source: interner.entry_point("<test>"),
-        });
+        let def = tt.declare_for_test(
+            "Color",
+            interner.entry_point("<test>"),
+            crate::defs::DefKind::Enum,
+        );
+        let e = tt.intern(crate::tir::ResolvedType::Enum { def });
         assert!(!param_needs_lifting(e, &tt));
     }
 
@@ -1908,9 +1950,13 @@ mod tests {
         // (avoids `make_option`'s dependency on comp-feature registration,
         // which isn't present in a bare `TypeTable::new()`).
         let mut tt = TypeTable::new();
+        let def = tt.declare_for_test(
+            "Option",
+            ModuleSource::types(),
+            crate::defs::DefKind::Variant,
+        );
         let opt = tt.intern(crate::tir::ResolvedType::GenericInstance {
-            name: "Option".to_string(),
-            module_source: ModuleSource::types(),
+            def,
             type_args: vec![TypeTable::I32],
         });
         assert!(param_needs_lifting(opt, &tt));
@@ -1919,9 +1965,13 @@ mod tests {
     #[test]
     fn param_needs_lifting_array() {
         let mut tt = TypeTable::new();
+        let def = tt.declare_for_test(
+            "List",
+            ModuleSource::prelude(),
+            crate::defs::DefKind::Struct,
+        );
         let arr = tt.intern(crate::tir::ResolvedType::GenericInstance {
-            name: "List".to_string(),
-            module_source: ModuleSource::prelude(),
+            def,
             type_args: vec![TypeTable::I32],
         });
         assert!(param_needs_lifting(arr, &tt));
@@ -1943,9 +1993,14 @@ mod tests {
     #[test]
     fn export_needs_lifting_with_string() {
         let tt_cell = std::cell::RefCell::new(TypeTable::new());
+        let def = tt_cell.borrow_mut().declare_for_test(
+            "String",
+            ModuleSource::string(),
+            crate::defs::DefKind::Struct,
+        );
         let string_id = tt_cell
             .borrow_mut()
-            .make_struct("String".to_string(), ModuleSource::string());
+            .make_struct(crate::tir::StructDef::Decl(def));
         let params = vec![mk_param(string_id)];
         assert!(export_needs_param_lifting(&params, &tt_cell));
     }

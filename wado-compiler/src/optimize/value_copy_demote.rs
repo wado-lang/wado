@@ -289,13 +289,9 @@ fn helpers_reaching_variant_copies(
 fn is_variant_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get_pruned(type_id) {
         Some(ResolvedType::Variant { .. }) => true,
-        Some(ResolvedType::GenericInstance {
-            name,
-            module_source,
-            ..
-        }) => type_table
-            .variant_template_cases(name, module_source)
-            .is_some(),
+        Some(ResolvedType::GenericInstance { def, .. }) => {
+            type_table.variant_template_cases(*def).is_some()
+        }
         Some(_) => false,
         None => true,
     }

@@ -214,6 +214,7 @@ impl Monomorphizer {
             // free functions are keyed by their module-qualified name.
             let qualified_name = super::generic_function_name(false, module_source, name);
             let key = InstantiationKey {
+                def: None,
                 name: qualified_name,
                 module_source: module_source.clone(),
                 impl_type_args: vec![],
@@ -258,6 +259,7 @@ impl Monomorphizer {
 
             if let Some(inferred_args) = effective_type_args {
                 let key = InstantiationKey {
+                    def: None,
                     name: qualified_func_name,
                     module_source: func.module_source.clone(),
                     impl_type_args: vec![],
@@ -327,6 +329,7 @@ impl Monomorphizer {
                 let candidates = super::func_inst::receiver_candidates(Some(info), &[]);
                 for generic_method_name in names_to_try {
                     let key = InstantiationKey {
+                        def: None,
                         name: generic_method_name.clone(),
                         module_source: func.module_source.clone(),
                         impl_type_args: impl_ta.clone(),
@@ -430,6 +433,7 @@ impl Monomorphizer {
             let mut rewritten = false;
             for (full_method_name, _tn) in &names_to_try {
                 let key = InstantiationKey {
+                    def: None,
                     name: full_method_name.clone(),
                     module_source: method_func.module_source.clone(),
                     impl_type_args: vec![],
@@ -491,6 +495,7 @@ impl Monomorphizer {
                     let dg_receiver_module = receiver_module_hint(type_table, receiver.type_id);
                     for (generic_method_name, _tn) in &dg_names {
                         let combined_key = InstantiationKey {
+                            def: None,
                             name: generic_method_name.clone(),
                             module_source: method_func.module_source.clone(),
                             impl_type_args: impl_type_args.clone(),
@@ -563,6 +568,7 @@ impl Monomorphizer {
                 && info.base_struct_name() != base_struct
             {
                 possible_keys.push(InstantiationKey {
+                    def: None,
                     name: MethodName::format_local(&info.fq_base_struct_name(), None, &method_name),
                     module_source: method_func.module_source.clone(),
                     impl_type_args: impl_type_args.clone(),
@@ -576,6 +582,7 @@ impl Monomorphizer {
                 // For ref-type impls, try the ref struct name first (e.g., "&^IntoIterator::into_iter")
                 if info.base_struct_name() != base_struct {
                     possible_keys.push(InstantiationKey {
+                        def: None,
                         name: MethodName::format_local(
                             &info.fq_base_struct_name(),
                             Some(trait_name),
@@ -590,6 +597,7 @@ impl Monomorphizer {
                 let trait_method_name =
                     MethodName::format_local(&receiver_head, Some(trait_name), &method_name);
                 possible_keys.push(InstantiationKey {
+                    def: None,
                     name: trait_method_name,
                     module_source: method_func.module_source.clone(),
                     impl_type_args: impl_type_args.clone(),
@@ -599,6 +607,7 @@ impl Monomorphizer {
             }
             // Also try regular method format
             possible_keys.push(InstantiationKey {
+                def: None,
                 name: MethodName::format_local(&receiver_head, None, &method_name),
                 module_source: method_func.module_source.clone(),
                 impl_type_args,
@@ -658,6 +667,7 @@ impl Monomorphizer {
                 }
                 .unwrap_or_else(|| mono.impl_type_args.clone());
                 let key = InstantiationKey {
+                    def: None,
                     name: mono.generic_name.clone(),
                     module_source: method_func.module_source.clone(),
                     impl_type_args: impl_ta.clone(),
@@ -716,6 +726,7 @@ impl Monomorphizer {
             });
             {
                 let key = InstantiationKey {
+                    def: None,
                     name: generic_name.clone(),
                     module_source: method_func.module_source.clone(),
                     impl_type_args: impl_type_args.clone(),

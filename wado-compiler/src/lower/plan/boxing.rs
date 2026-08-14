@@ -228,15 +228,18 @@ impl TypeBuilder {
         let struct_name = mangle_generic_name("Box", &[inner_name]);
 
         // Register under the Box definition's module source (from #[compiler_item("box")]).
-        let struct_type_id = type_table.make_monomorphized_struct(
-            struct_name.clone(),
-            self.box_module_source.clone(),
-            "Box".to_string(),
-            vec![inner_type_id],
+        let head = crate::tir::StructDef::Decl(
+            type_table
+                .compiler_item_def(crate::compiler_item::CompilerItem::Box)
+                .expect("the `Box` compiler item is declared"),
         );
+        let struct_type_id =
+            type_table.make_monomorphized_struct_from_args(head, vec![inner_type_id]);
 
         // Create the TirStruct definition with a single `value` field
         let tir_struct = TirStruct {
+            def: head,
+            type_args: vec![inner_type_id],
             name: struct_name,
             module_source: self.box_module_source.clone(),
             visibility: crate::ast::Visibility::Public,
@@ -274,8 +277,8 @@ impl TypeBuilder {
     fn is_variant_type(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
         match type_table.get(type_id) {
             ResolvedType::Variant { .. } => true,
-            ResolvedType::GenericInstance { name, .. } => {
-                self.variant_names.contains(name.as_str())
+            ResolvedType::GenericInstance { def, .. } => {
+                self.variant_names.contains(type_table.def_name(*def))
             }
             _ => false,
         }
@@ -295,8 +298,8 @@ impl TypeBuilder {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                     let is_prim = matches!(type_table.get(inner), ResolvedType::Primitive(p)
                         if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128));
-                    let is_enum = matches!(type_table.get(inner), ResolvedType::Enum { name, .. }
-                        if !self.variant_names.contains(name.as_str()));
+                    let is_enum = matches!(type_table.get(inner), ResolvedType::Enum { def }
+                        if !self.variant_names.contains(type_table.def_name(*def)));
                     let is_variant = self.is_variant_type(inner, type_table);
                     let is_fn = matches!(type_table.get(inner), ResolvedType::Function { .. });
                     if is_prim || is_enum || is_variant || is_fn {

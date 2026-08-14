@@ -491,8 +491,12 @@ impl ClosureLowerer {
                 prefix = crate::name::CLOSURE_STRUCT_PREFIX,
                 id = collected.id,
             );
-            let struct_type_id =
-                type_table.make_struct(struct_name.clone(), self.module_source.clone());
+            // A closure environment names no declaration — lowering mints it
+            // — so its head is the shape, under the name lowering assigns.
+            let head = crate::tir::StructDef::Anon(
+                type_table.intern_synthetic_struct(self.module_source.clone(), struct_name.clone()),
+            );
+            let struct_type_id = type_table.make_struct(head);
 
             let fields: Vec<TirField> = collected
                 .captures
@@ -513,6 +517,8 @@ impl ClosureLowerer {
                 .collect();
 
             self.generated_structs.push(TirStruct {
+                def: head,
+                type_args: Vec::new(),
                 name: struct_name.clone(),
                 module_source: self.module_source.clone(),
                 visibility: crate::ast::Visibility::Private,
@@ -755,7 +761,12 @@ impl ClosureLowerer {
             .struct_name(CompilerItem::Formatter)
             .to_string();
         let formatter_fq = type_table.compiler_struct_fq_name(CompilerItem::Formatter);
-        let formatter_type = type_table.make_struct(formatter_name, ModuleSource::format());
+        let formatter_type = {
+            let def = type_table
+                .decl_named_in(&formatter_name, &ModuleSource::format())
+                .expect("the declaration this type names exists");
+            type_table.make_struct(crate::tir::StructDef::Decl(def))
+        };
         let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
         let string_type = type_table.make_compiler_struct(CompilerItem::String);
 

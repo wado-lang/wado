@@ -305,6 +305,7 @@ fn synthesize_dispatch_struct(
     let struct_name;
     let global_name;
     let struct_type_id;
+    let struct_head;
     let inner_ref_type_id;
     let nullable_ref_type_id;
     let mut op_field_types: Vec<TypeId> = Vec::with_capacity(meta.operations.len());
@@ -313,7 +314,13 @@ fn synthesize_dispatch_struct(
         label = instantiation_label(base_name, type_args, &tt);
         struct_name = crate::name::dispatch_struct_name(&label);
         global_name = crate::name::dispatch_global_name(&label);
-        struct_type_id = tt.make_struct(struct_name.clone(), entry_source.clone());
+        // The dispatch struct is minted here, under a name this pass assigns:
+        // it declares nothing, so its head is the shape, as a closure
+        // environment's is.
+        struct_head = crate::tir::StructDef::Anon(
+            tt.intern_synthetic_struct(entry_source.clone(), struct_name.clone()),
+        );
+        struct_type_id = tt.make_struct(struct_head);
         inner_ref_type_id = tt.make_ref(struct_type_id);
         nullable_ref_type_id = tt.make_option(inner_ref_type_id);
         for op in &meta.operations {
@@ -370,6 +377,8 @@ fn synthesize_dispatch_struct(
     }
 
     entry_module.add_struct(TirStruct {
+        def: struct_head,
+        type_args: Vec::new(),
         name: struct_name,
         module_source: entry_source.clone(),
         visibility: crate::ast::Visibility::Private,
@@ -768,13 +777,18 @@ fn build_dispatch_wrapper_function(
             let tt = type_table.borrow();
             let (string_module, string_struct_name) =
                 tt.compiler_struct_owned(crate::compiler_item::CompilerItem::String);
-            tt.find_struct_type(&string_struct_name, &string_module)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "core:prelude/string.wado String type missing from \
+            {
+                let def = tt
+                    .decl_named_in(&string_struct_name, &string_module)
+                    .expect("the declaration this type names exists");
+                tt.find_struct_type(crate::tir::StructDef::Decl(def))
+            }
+            .unwrap_or_else(|| {
+                panic!(
+                    "core:prelude/string.wado String type missing from \
                          the package type table at effect-dispatch synthesis"
-                    )
-                })
+                )
+            })
         };
         let message = TirExpr::new(
             TirExprKind::StringLiteral(format!("no handler installed for `{label}::{op_name}`")),
@@ -2433,18 +2447,19 @@ fn extract_resource_instantiation(
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 tid = *inner;
             }
-            ResolvedType::Resource {
-                name,
-                module_source,
-            } => {
-                return Some((module_source.clone(), name.clone(), Vec::new()));
+            ResolvedType::Resource { def } => {
+                return Some((
+                    type_table.def_module(*def).clone(),
+                    type_table.def_name(*def).to_string(),
+                    Vec::new(),
+                ));
             }
-            ResolvedType::GenericResource {
-                name,
-                module_source,
-                type_args,
-            } => {
-                return Some((module_source.clone(), name.clone(), type_args.clone()));
+            ResolvedType::GenericResource { def, type_args } => {
+                return Some((
+                    type_table.def_module(*def).clone(),
+                    type_table.def_name(*def).to_string(),
+                    type_args.clone(),
+                ));
             }
             _ => return None,
         }

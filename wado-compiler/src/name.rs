@@ -6,7 +6,7 @@
 
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 /// Canonical method name of the synthesised `__call` impl on every
 /// closure functor struct. Defined as a single constant so the
@@ -33,13 +33,14 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
 }
 
 /// Separator between a local item's declared name and its disambiguating
-/// `AstId` in the internal storage name a function-scoped `struct`/`type`
-/// declaration (`Stmt::Item`) is minted under (see the local-item-definitions
-/// WEP). `@` is not a valid Wado identifier character. This is the type's
-/// *storage identity*, used to key the durable, module-wide field/case
-/// tables so two sibling functions' same-named local items never collide;
-/// [`crate::tir::TypeTable::type_name`] strips it back off before the name
-/// reaches a diagnostic.
+/// `AstId` in the storage name a function-scoped `struct` / `type` declaration
+/// (`Stmt::Item`) renders to. `@` is not a valid Wado identifier character.
+///
+/// The declaration data is keyed by [`crate::defs::DefId`]; this is what keeps
+/// two sibling functions' same-named local items apart in the registries still
+/// keyed by a rendered name — the WIR struct registry above all. A diagnostic
+/// never sees it: [`crate::tir::TypeTable::type_name`] renders the declared
+/// head instead of trimming this one back off.
 pub const LOCAL_ITEM_ID_SEP: char = '@';
 
 /// Build the internal storage name for a local item declaration: the declared
@@ -49,44 +50,6 @@ pub const LOCAL_ITEM_ID_SEP: char = '@';
 /// counter, and encoding it would make mangled WIR names non-deterministic.
 pub fn mangle_local_item_name(name: &str, id: crate::ast::AstId) -> String {
     format!("{name}{LOCAL_ITEM_ID_SEP}{}", id.local())
-}
-
-/// Recover a local item's user-declared name from its internal storage name
-/// (see [`mangle_local_item_name`]). Returns `name` unchanged if it isn't a
-/// local-item storage name (no [`LOCAL_ITEM_ID_SEP`]).
-pub fn strip_local_item_id(name: &str) -> &str {
-    name.split(LOCAL_ITEM_ID_SEP).next().unwrap_or(name)
-}
-
-/// Replace every occurrence of the type name `old` inside a mangled function
-/// name (`List<Old>::with_capacity`, `Map<Old, Other>.insert`) with `new`,
-/// matching only at type-name boundaries. A raw substring replace would also
-/// rewrite names that merely contain `old` as a fragment (`Old` inside
-/// `OldExtended`); a boundary match cannot.
-pub fn replace_type_name_in_mangled(mangled: &str, old: &str, new: &str) -> String {
-    fn is_boundary(c: Option<char>) -> bool {
-        match c {
-            None => true,
-            Some(c) => !(c.is_alphanumeric() || c == '_'),
-        }
-    }
-    let mut out = String::with_capacity(mangled.len());
-    let mut rest = mangled;
-    while let Some(pos) = rest.find(old) {
-        out.push_str(&rest[..pos]);
-        // Left context comes from everything emitted so far — `rest` alone
-        // loses it once a previous match consumed the preceding characters.
-        let before = out.chars().next_back();
-        let after = rest[pos + old.len()..].chars().next();
-        if is_boundary(before) && is_boundary(after) {
-            out.push_str(new);
-        } else {
-            out.push_str(old);
-        }
-        rest = &rest[pos + old.len()..];
-    }
-    out.push_str(rest);
-    out
 }
 
 /// The name of the synthesized deep-copy helper for a value type, identified
@@ -271,41 +234,19 @@ pub const INLINE_REF_EAGER_MAX_BYTES: usize = 64;
 /// Examples:
 /// - `./geometry.wado/helper`
 /// - `core/rt/log_stdout`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FreeFunctionName {
     /// The module where the function is defined
     pub module_source: ModuleSource,
     /// The function name (e.g., `helper`)
     pub name: String,
-    /// The generic this was instantiated from (e.g. `List` for
-    /// `List<i32>::len`), or `None` for a function written as such. Being an
-    /// instantiation *is* having one, so the `is_monomorphized` flag that used
-    /// to sit beside this was a second encoding of the same fact.
-    pub base_name: Option<String>,
 }
-
-// Manually implement Hash/Eq to only use module_source and name (not metadata)
-impl Hash for FreeFunctionName {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.module_source.hash(state);
-        self.name.hash(state);
-    }
-}
-
-impl PartialEq for FreeFunctionName {
-    fn eq(&self, other: &Self) -> bool {
-        self.module_source == other.module_source && self.name == other.name
-    }
-}
-
-impl Eq for FreeFunctionName {}
 
 impl FreeFunctionName {
     pub fn new(module_source: ModuleSource, name: String) -> Self {
         Self {
             module_source,
             name,
-            base_name: None,
         }
     }
 
@@ -319,7 +260,6 @@ impl FreeFunctionName {
         Self {
             module_source: interner.from_path(module_path),
             name: name.to_string(),
-            base_name: None,
         }
     }
 
@@ -334,7 +274,6 @@ impl FreeFunctionName {
         Self {
             module_source: interner.from_path(&path),
             name: name.to_string(),
-            base_name: None,
         }
     }
 
@@ -343,20 +282,6 @@ impl FreeFunctionName {
         Self {
             module_source: module_source.clone(),
             name: name.to_string(),
-            base_name: None,
-        }
-    }
-
-    /// Create a `FreeFunctionName` with monomorphization metadata.
-    pub fn with_monomorph_info(
-        module_source: ModuleSource,
-        name: String,
-        base_name: String,
-    ) -> Self {
-        Self {
-            module_source,
-            name,
-            base_name: Some(base_name),
         }
     }
 }
@@ -478,24 +403,6 @@ impl fmt::Display for MethodName {
     }
 }
 
-/// Extract the local part of a potentially module-qualified name.
-///
-/// Given a name like `module/path/LocalName`, returns `LocalName`.
-/// If there's no module path, returns the original string.
-///
-/// Examples:
-/// - `"./main.wado/Point::sum"` → `"Point::sum"`
-/// - `"core/string/String::len"` → `"String::len"`
-/// - `"Point::sum"` → `"Point::sum"`
-pub fn extract_local_name(name: &str) -> &str {
-    // Find the last '/' which separates module path from local name
-    if let Some(slash_pos) = name.rfind('/') {
-        &name[slash_pos + 1..]
-    } else {
-        name
-    }
-}
-
 /// Parsed components of a local method name (without module path).
 ///
 /// This is used to extract struct/trait/method info from names like:
@@ -547,22 +454,6 @@ pub struct LocalMethodName {
     /// When set, synthesis generates a CM binding function and rewrites
     /// the call site to use it instead of the original resource method.
     pub cm_name: Option<String>,
-}
-
-/// Derive the bare base name from a possibly-mangled type/trait name
-/// (`Stream<u8>` → `Stream`). The canonical inverse of appending a type-arg
-/// list, kept here so no other component has to know the name format.
-pub(crate) fn split_base_name(name: &str) -> &str {
-    match name.find('<') {
-        Some(i) => &name[..i],
-        None => name,
-    }
-}
-
-/// Whether a mangled call name denotes a trait-method impl
-/// (`Type^Trait::method`); the `^` separates the receiver type from its trait.
-pub fn is_local_trait_method_name(name: &str) -> bool {
-    name.contains('^')
 }
 
 /// The reference kind of a `&` / `&mut` method receiver.
@@ -694,14 +585,6 @@ impl Receiver {
     }
 }
 
-/// Decompose `Type^Trait::method` into its `(type, trait)` parts, or `None` when
-/// the name has no `^` trait segment.
-pub fn split_trait_method_receiver(name: &str) -> Option<(&str, &str)> {
-    let (ty, rest) = name.split_once('^')?;
-    let trait_name = rest.split_once("::").map_or(rest, |(t, _)| t);
-    Some((ty, trait_name))
-}
-
 /// The reference prefix a mangled name carries, and the rest.
 /// Write a receiver's reference prefix. `&` binds directly to the pointee;
 /// `&mut` is a word and needs the separator. [`Receiver::mangle_with_ref`] and
@@ -711,143 +594,6 @@ fn push_ref_prefix(out: &mut String, kind: RefKind) {
     out.push_str(kind.prefix());
     if kind == RefKind::Mut {
         out.push(' ');
-    }
-}
-
-fn split_ref_prefix(name: &str) -> (&str, &str) {
-    for prefix in [RefKind::Mut.prefix(), RefKind::Shared.prefix()] {
-        if let Some(rest) = name.strip_prefix(prefix) {
-            let (sep, rest) = rest
-                .strip_prefix(' ')
-                .map_or(("", rest), |trimmed| (" ", trimmed));
-            return (&name[..prefix.len() + sep.len()], rest);
-        }
-    }
-    ("", name)
-}
-
-/// The head's name without its declaring module. A module may itself contain
-/// `/` (`./sub/geom.wado`), so the split is on the last one; a head never
-/// carries type arguments, which is what makes that safe here.
-fn head_simple_name(head: &str) -> &str {
-    head.rsplit('/').next().unwrap_or(head)
-}
-
-/// Split a written or mangled name into its head and its type arguments:
-/// `"Stream<u8>"` → `("Stream", ["u8"])`, `"Display"` → `("Display", [])`.
-///
-/// For callers that hold a name where they should hold the site that wrote it;
-/// the pieces go straight back into a typed name.
-#[must_use]
-pub fn split_head_and_args(name: &str) -> (&str, Vec<String>) {
-    let Some(open) = name.find('<') else {
-        return (name, Vec::new());
-    };
-    let Some(close) = name.rfind('>') else {
-        return (name, Vec::new());
-    };
-    let args = split_type_args(&name[open + 1..close])
-        .into_iter()
-        .map(|a| a.trim().to_string())
-        .collect();
-    (&name[..open], args)
-}
-
-/// Split a mangled argument list on the commas that separate arguments,
-/// ignoring those nested inside an argument's own brackets.
-fn split_type_args(inner: &str) -> Vec<&str> {
-    let mut args = Vec::new();
-    let mut depth = 0usize;
-    let mut start = 0usize;
-    for (i, c) in inner.char_indices() {
-        match c {
-            '<' | '[' => depth += 1,
-            '>' | ']' => depth = depth.saturating_sub(1),
-            ',' if depth == 0 => {
-                args.push(&inner[start..i]);
-                start = i + c.len_utf8();
-            }
-            _ => {}
-        }
-    }
-    args.push(&inner[start..]);
-    args
-}
-
-/// Render a mangled type name the way source writes it: the declaring module
-/// dropped from the head and from every type argument.
-///
-/// A diagnostic names a type the way the user typed it. The module an fq name
-/// carries is an internal identity, so printing one raw turns `Point` into
-/// `./geom.wado/Point` and `Option<String>` into
-/// `core:prelude/types.wado/Option<core:prelude/string.wado/String>`.
-#[must_use]
-pub fn display_type_name(mangled: &str) -> String {
-    let (prefix, rest) = split_ref_prefix(mangled);
-    let Some(open) = rest.find('<') else {
-        return format!("{prefix}{}", head_simple_name(rest));
-    };
-    let Some(inner) = rest[open + 1..].strip_suffix('>') else {
-        return format!("{prefix}{}", head_simple_name(rest));
-    };
-    let args: Vec<String> = split_type_args(inner)
-        .into_iter()
-        .map(display_type_name)
-        .collect();
-    format!(
-        "{prefix}{}<{}>",
-        head_simple_name(&rest[..open]),
-        args.join(",")
-    )
-}
-
-/// Decompose a local method mangle into `(receiver, trait, method)`:
-/// `Point^Display::fmt` → `("Point", Some("Display"), "fmt")`. `None` when there
-/// is no `::` separator (a bare free-function name). Splits only on `^` and
-/// `::`, so a receiver or trait keeps its type-argument mangling
-/// (`Box<i32>^Ord::cmp`).
-pub fn split_local_method_name(name: &str) -> Option<(&str, Option<&str>, &str)> {
-    let sep = name.find("::")?;
-    let (prefix, method) = (&name[..sep], &name[sep + 2..]);
-    let (receiver, trait_name) = match prefix.find('^') {
-        Some(caret) => (&prefix[..caret], Some(&prefix[caret + 1..])),
-        None => (prefix, None),
-    };
-    Some((receiver, trait_name, method))
-}
-
-/// A method mangle as source spells it: the receiver and trait lose their
-/// declaring modules, the method keeps its name.
-///
-/// - `core:prelude/string.wado/String::len` → `String::len`
-/// - `a.wado/Box<b.wado/T>^c.wado/Ord::cmp` → `Box<T>^Ord::cmp`
-///
-/// A name with no `::` is a free function, displayed by its head alone.
-#[must_use]
-pub fn display_method_name(mangled: &str) -> String {
-    let Some((receiver, trait_name, method)) = split_local_method_name(mangled) else {
-        return display_type_name(mangled);
-    };
-    let receiver = display_type_name(receiver);
-    match trait_name {
-        Some(t) => format!("{receiver}^{}::{method}", display_type_name(t)),
-        None => format!("{receiver}::{method}"),
-    }
-}
-
-/// Rebuild a monomorphized method's base-name key: replace everything up to
-/// and including the first `::` with `base::`, keeping only the method suffix.
-///
-/// - `rebase_monomorph_method("Box<i32>::get", "Box")` → `"Box::get"`
-/// - `rebase_monomorph_method("List<i32>^Ord::cmp", "List")` → `"List::cmp"`
-///
-/// When `mangled` has no `::` (a bare name), returns `base` unchanged. Used by
-/// the DCE call-graph keying to keep a monomorphized method mergeable with its
-/// generic template.
-pub fn rebase_monomorph_method(mangled: &str, base: &str) -> String {
-    match mangled.find("::") {
-        Some(pos) => format!("{base}::{}", &mangled[pos + 2..]),
-        None => base.to_string(),
     }
 }
 
@@ -1135,6 +881,45 @@ impl LocalMethodName {
             format!("{}^{}::{}", self.struct_name(), trait_name, method_part)
         } else {
             format!("{}::{}", self.struct_name(), method_part)
+        }
+    }
+
+    /// [`Self::to_mangled_name`] as source spells it: the receiver and the
+    /// trait lose their declaring modules, the method keeps its name.
+    ///
+    /// The display counterpart of the mangle, derived from the same fields —
+    /// so a reader wanting `String::len` out of
+    /// `core:prelude/string.wado/String::len` asks the structure rather than
+    /// splitting the rendering back apart.
+    #[must_use]
+    pub fn to_display_name(&self) -> String {
+        let receiver = self.fq_struct_name().to_display();
+        match &self.trait_name {
+            Some(trait_name) => format!(
+                "{receiver}^{}::{}",
+                trait_name.to_display(),
+                self.method_name
+            ),
+            None => format!("{receiver}::{}", self.method_name),
+        }
+    }
+
+    /// Replace the type `old` with `new` throughout this method's own
+    /// identity — the receiver and the receiver's type arguments.
+    ///
+    /// Here rather than on the rendered name: a monomorphized call is keyed on
+    /// `fq_base_struct_name` / `fq_struct_name`, and its `name` is overwritten
+    /// with whatever that key finds.
+    ///
+    /// `trait_name`'s arguments and `method_type_args` are still rendered
+    /// strings and are left alone — a CM type swap changes the receiver, not
+    /// the trait.
+    pub fn substitute_type(&mut self, old: &FqTypeName, new: &FqTypeName) {
+        if let Receiver::Type(fq) = &self.receiver {
+            self.receiver = Receiver::Type(fq.substitute(old, new));
+        }
+        for arg in &mut self.struct_type_args {
+            *arg = arg.substitute(old, new);
         }
     }
 
@@ -1667,6 +1452,7 @@ pub const TUPLE_TYPE_NAME: &str = "[]";
 /// a mangled name, which carries the declaring module and which no such lookup
 /// stores. Deliberately no `Deref`, `AsRef<str>` or `From<String>`: substituting
 /// one namespace for the other is the defect this type exists to stop compiling.
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DeclName(String);
 
@@ -2018,41 +1804,53 @@ pub fn test_function_name(
 mod tests {
     use super::*;
 
+    /// A type swap is a substitution over the structure, so the cases a
+    /// string rewrite had to defend against cannot arise: a type whose *name*
+    /// contains the old one is a different `FqTypeName` and never matches, and
+    /// a nested occurrence is reached by walking arguments rather than by
+    /// finding a substring.
     #[test]
-    fn replace_type_name_in_mangled_matches_boundaries_only() {
-        // Type-argument positions rewrite.
+    fn substituting_a_type_walks_the_structure_not_the_spelling() {
+        let mut interner = ModuleSourceInterner::new();
+        let m = interner.local("./a.wado");
+        let old = FqTypeName::declared(&m, "Old");
+        let new = FqTypeName::declared(&m, "New");
+        let list = |arg: FqTypeName| FqTypeName::declared(&m, "List").with_args(vec![arg]);
+
+        // The whole name, and an argument position, and a nested one.
+        assert_eq!(old.substitute(&old, &new), new);
+        assert_eq!(list(old.clone()).substitute(&old, &new), list(new.clone()));
         assert_eq!(
-            replace_type_name_in_mangled("List<Old>::with_capacity", "Old", "New"),
-            "List<New>::with_capacity"
+            list(list(old.clone())).substitute(&old, &new),
+            list(list(new.clone()))
         );
+
+        // A different declaration whose name merely contains the old one.
+        let extended = list(FqTypeName::declared(&m, "OldExtended"));
+        assert_eq!(extended.substitute(&old, &new), extended);
+
+        // Same spelling, different module — a different type, so untouched.
+        let elsewhere = interner.local("./b.wado");
+        let foreign = list(FqTypeName::declared(&elsewhere, "Old"));
+        assert_eq!(foreign.substitute(&old, &new), foreign);
+
+        // A reference substitutes its pointee and keeps the prefix.
         assert_eq!(
-            replace_type_name_in_mangled("Map<Old, Old>.insert", "Old", "New"),
-            "Map<New, New>.insert"
+            old.clone()
+                .with_reference(RefKind::Mut)
+                .substitute(&old, &new),
+            new.clone().with_reference(RefKind::Mut)
         );
-        // Nested generic old names rewrite as a unit.
-        assert_eq!(
-            replace_type_name_in_mangled(
-                "List<Tuple<String, List<u8>>>::push",
-                "Tuple<String, List<u8>>",
-                "Pair"
-            ),
-            "List<Pair>::push"
+
+        // The receiver a monomorphized call is keyed on follows the same swap.
+        let mut method = LocalMethodName::new(
+            FqTypeName::declared(&m, "List"),
+            None,
+            "with_capacity".to_string(),
         );
-        // A name merely containing the old name as a fragment is untouched.
-        assert_eq!(
-            replace_type_name_in_mangled("List<OldExtended>::push", "Old", "New"),
-            "List<OldExtended>::push"
-        );
-        assert_eq!(
-            replace_type_name_in_mangled("List<VeryOld>::push", "Old", "New"),
-            "List<VeryOld>::push"
-        );
-        // Consecutive occurrences forming one identifier stay untouched: the
-        // left context must survive across matches.
-        assert_eq!(
-            replace_type_name_in_mangled("List<OldOld>::push", "Old", "New"),
-            "List<OldOld>::push"
-        );
+        method.struct_type_args = vec![old.clone()];
+        method.substitute_type(&old, &new);
+        assert_eq!(method.struct_type_args, vec![new]);
     }
 
     #[test]
@@ -2110,8 +1908,10 @@ mod tests {
         assert_eq!(a, b, "mangled name must not encode the AstIdSpace");
         // Distinct declaration sites within a module still get distinct names.
         assert_ne!(a, mangle_local_item_name("UserId", AstId::new(space_a, 20)));
-        // The declared name is still recoverable.
-        assert_eq!(strip_local_item_id(&a), "UserId");
+        // The storage name is a rendering of the declared one, not a
+        // replacement for it: readers ask the declaration, so nothing reads
+        // the declared name back out of this string.
+        assert!(a.starts_with("UserId"));
     }
 
     #[test]
@@ -2419,6 +2219,28 @@ mod tests {
     }
 
     #[test]
+    fn the_tuple_head_has_one_spelling_whichever_side_asks() {
+        // A tuple is spelled `[a,b]`, never `[]<a,b>`. Since the tuple family
+        // became a declaration, a caller reaching it by name — `of_head`, and
+        // `ImplTargetKey::of_decl` through it — lands on `builtin`, so the
+        // decision has to live there and not only in `tuple`.
+        let elems = vec![FqTypeName::builtin("i32"), FqTypeName::builtin("f64")];
+        let by_name =
+            FqTypeName::of_head(&ModuleSource::default(), TUPLE_TYPE_NAME).with_args(elems.clone());
+        // `declared` is the route a caller takes when it read `(name, module)`
+        // off a resolved type — the family declares a module, and the spelling
+        // still must not carry it.
+        let by_decl = FqTypeName::declared(&ModuleSource::default(), TUPLE_TYPE_NAME)
+            .with_args(elems.clone());
+        let by_constructor = FqTypeName::tuple(elems);
+        assert_eq!(by_name.to_mangled(), "[i32,f64]");
+        assert_eq!(by_name.to_mangled(), by_constructor.to_mangled());
+        assert_eq!(by_decl.to_mangled(), by_constructor.to_mangled());
+        assert_eq!(by_name.to_display(), by_constructor.to_display());
+        assert_eq!(by_decl.to_display(), by_constructor.to_display());
+    }
+
+    #[test]
     fn ref_receiver_renders_one_spelling() {
         // `struct_name` goes through `Receiver::mangle_with_ref`, `fq_struct_name`
         // through `FqTypeName::to_mangled`. A ref-impl template is registered
@@ -2440,6 +2262,37 @@ mod tests {
         }
     }
 
+    /// The mangle and the display are two renderings of one structure, so a
+    /// reader that wants the source spelling asks for it rather than taking
+    /// the mangle back apart — which is what a module-qualified head and a
+    /// module-qualified argument used to require.
+    #[test]
+    fn a_method_renders_a_mangle_and_a_display_from_one_structure() {
+        let mut interner = ModuleSourceInterner::new();
+        let geom = interner.local("./geometry.wado");
+        let types = interner.local("./types.wado");
+
+        let inherent = LocalMethodName::new(
+            FqTypeName::declared(&geom, "Point"),
+            None,
+            "sum".to_string(),
+        );
+        assert_eq!(inherent.to_mangled_name(), "./geometry.wado/Point::sum");
+        assert_eq!(inherent.to_display_name(), "Point::sum");
+
+        let mut generic = LocalMethodName::new(
+            FqTypeName::declared(&geom, "Box"),
+            Some(FqTraitName::declared(&types, "Ord")),
+            "cmp".to_string(),
+        );
+        generic.struct_type_args = vec![FqTypeName::declared(&types, "T")];
+        assert_eq!(
+            generic.to_mangled_name(),
+            "./geometry.wado/Box<./types.wado/T>^./types.wado/Ord::cmp"
+        );
+        assert_eq!(generic.to_display_name(), "Box<T>^Ord::cmp");
+    }
+
     #[test]
     fn ref_prefix_binds_to_its_pointee() {
         let point = FqTypeName::declared(&ModuleSource::default(), "Point");
@@ -2452,27 +2305,6 @@ mod tests {
             "&mut Point"
         );
     }
-
-    #[test]
-    fn display_type_name_drops_modules_from_head_and_args() {
-        assert_eq!(display_type_name("./geom.wado/Point"), "Point");
-        // A naive split on the last `/` would answer `String>` here.
-        assert_eq!(
-            display_type_name("core:prelude/types.wado/Option<core:prelude/string.wado/String>"),
-            "Option<String>"
-        );
-        assert_eq!(
-            display_type_name("a.wado/Pair<b.wado/K,c.wado/Map<d.wado/V,i32>>"),
-            "Pair<K,Map<V,i32>>"
-        );
-        // Builtin shapes carry no module, and refs keep their prefix.
-        assert_eq!(display_type_name("i32"), "i32");
-        assert_eq!(display_type_name("&./geom.wado/Point"), "&Point");
-        assert_eq!(
-            display_type_name("&mut a.wado/List<b.wado/T>"),
-            "&mut List<T>"
-        );
-    }
 }
 
 /// Whether `name` names a builtin shape — one no module declares, so every
@@ -2483,9 +2315,15 @@ mod tests {
 /// are as module-less as the heads they instantiate.
 #[must_use]
 pub fn is_builtin_shape_name(name: &str) -> bool {
+    fn head_of(name: &str) -> &str {
+        match name.find('<') {
+            Some(i) => &name[..i],
+            None => name,
+        }
+    }
     name.starts_with('&')
         || matches!(
-            split_base_name(name),
+            head_of(name),
             "i8" | "i16"
                 | "i32"
                 | "i64"
@@ -2576,8 +2414,19 @@ impl FqTypeName {
     ///
     /// `name` is the declaration's own name and carries no type arguments;
     /// [`Self::with_args`] adds them once the receiver is instantiated.
+    ///
+    /// The tuple family is the one declaration whose *spelling* is not
+    /// `Module/Head<args>`: it is `[a,b]`, bare. It became a declaration in
+    /// WEP 2026-08-12, so a caller reading `(name, module)` off a resolved
+    /// type now lands here with it — and the qualified form it would produce
+    /// (`core:prelude/types.wado/[]<i32,String>`) is a name no impl is
+    /// registered under. Every other builtin spells `Head<args>` either way,
+    /// so only this one has to be caught.
     #[must_use]
     pub fn declared(module: &crate::module_source::ModuleSource, name: &str) -> Self {
+        if name == TUPLE_TYPE_NAME {
+            return Self::of_head_kind(TypeHead::Tuple);
+        }
         Self::of_head_kind(TypeHead::Declared {
             module: module.clone(),
             name: name.to_string(),
@@ -2599,10 +2448,18 @@ impl FqTypeName {
 
     /// A builtin shape — a primitive, `()`, `!`, the raw GC `Array`, a
     /// reference, a function type. No module declares one, and every mangler
-    /// spells it bare. A tuple has its own [`Self::tuple`]: it is not spelled
-    /// `Head<args>`.
+    /// spells it bare.
+    ///
+    /// The tuple head is spelled `[a,b]`, never `[]<a,b>`, so it becomes
+    /// [`TypeHead::Tuple`] here rather than depending on every caller to reach
+    /// for [`Self::tuple`]. `of_head` routes a written `[]` through this, and
+    /// so does `ImplTargetKey::of_decl` for the tuple family's declaration:
+    /// one spelling, whichever side asks.
     #[must_use]
     pub fn builtin(name: &str) -> Self {
+        if name == TUPLE_TYPE_NAME {
+            return Self::of_head_kind(TypeHead::Tuple);
+        }
         Self::of_head_kind(TypeHead::Builtin(name.to_string()))
     }
 
@@ -2711,6 +2568,40 @@ impl FqTypeName {
     /// The declaration namespace: the name as source writes it, which is what
     /// an `impl` header spells and what every by-name declaration lookup keys
     /// on. Also the form diagnostics show.
+    /// This name with every occurrence of the type `old` replaced by `new` —
+    /// the whole name when it *is* `old`, and otherwise each argument,
+    /// recursively.
+    ///
+    /// A substitution over the structure. Rewriting the rendered spelling
+    /// instead means finding `old`'s mangling inside `self`'s and splicing,
+    /// which cannot tell a type from a type whose name contains it and leaves
+    /// the identity that produced the spelling unchanged.
+    #[must_use]
+    pub fn substitute(&self, old: &FqTypeName, new: &FqTypeName) -> FqTypeName {
+        if self == old {
+            return new.clone();
+        }
+        // A reference's pointee substitutes on its own: `&T` is `T` under a
+        // prefix, and `old` naming the pointee must reach it.
+        if let Some(kind) = self.reference
+            && self.args.is_empty()
+        {
+            let bare = FqTypeName {
+                reference: None,
+                head: self.head.clone(),
+                args: Vec::new(),
+            };
+            if &bare == old {
+                return new.clone().with_reference(kind);
+            }
+        }
+        FqTypeName {
+            reference: self.reference,
+            head: self.head.clone(),
+            args: self.args.iter().map(|a| a.substitute(old, new)).collect(),
+        }
+    }
+
     ///
     /// Modules dropped from the head and,
     /// recursively, from every type argument. Diagnostics only.
@@ -2780,15 +2671,6 @@ impl FqTraitName {
             head: TypeHead::Binder(name.to_string()),
             args: Vec::new(),
         }
-    }
-
-    /// The trait a declaration key names, carrying the type arguments a
-    /// written spelling (`Stream<u8>`) supplies. For a consumer that holds the
-    /// resolved declaration alongside the spelling the site wrote.
-    #[must_use]
-    pub fn declared_as_written(module: &ModuleSource, name: &str, written: &str) -> Self {
-        let (_, args) = split_head_and_args(written);
-        Self::declared(module, name).with_args(args)
     }
 
     /// The same trait with its type arguments, each already mangled.

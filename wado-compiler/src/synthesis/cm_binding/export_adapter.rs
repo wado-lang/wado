@@ -137,9 +137,9 @@ fn lower_to_flat_inner(
                 cm_type: cm_abi::CmValType::I32,
             }]
         }
-        ResolvedType::Struct {
-            decl_name: name, ..
-        } if name == &names.string => {
+        ResolvedType::Struct { def, .. }
+            if ctx.type_table.borrow().struct_head_name(*def) == names.string =>
+        {
             // String → cm_lower_string → packed i64, split to ptr(i32) and len(i32)
             let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
             let packed_local = alloc_local(next_local, locals, TypeTable::I64);
@@ -164,9 +164,9 @@ fn lower_to_flat_inner(
             ]
         }
         ResolvedType::Unit => vec![],
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } if name == &names.array && type_args.len() == 1 => {
+        ResolvedType::GenericInstance { def, type_args }
+            if ctx.type_table.borrow().def_name(*def) == names.array && type_args.len() == 1 =>
+        {
             // List<T> flat ABI: (ptr: i32, len: i32) pointing at
             // `len * cm_size(T)` bytes of linear memory with `cm_align(T)`
             // alignment, laid out per the Canonical ABI.
@@ -350,9 +350,9 @@ fn lower_to_flat_inner(
                 },
             ]
         }
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } if name == &names.option && type_args.len() == 1 => {
+        ResolvedType::GenericInstance { def, type_args }
+            if ctx.type_table.borrow().def_name(*def) == names.option && type_args.len() == 1 =>
+        {
             // Option<T> → disc(i32) + flat(T)
             let inner_type_id = type_args[0];
             let mut result = Vec::new();
@@ -449,9 +449,9 @@ fn lower_to_flat_inner(
 
             result
         }
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } if name == &names.result && type_args.len() == 2 => {
+        ResolvedType::GenericInstance { def, type_args }
+            if ctx.type_table.borrow().def_name(*def) == names.result && type_args.len() == 2 =>
+        {
             // Result<T, E> → disc(i32) + join(flat(T), flat(E)). disc 0 = Ok,
             // 1 = Err. The active arm's payload lowers into the shared joined
             // slots (the other arm leaves them zero), per the Canonical ABI's
@@ -567,7 +567,8 @@ fn lower_to_flat_inner(
 
             result
         }
-        ResolvedType::Variant { name, .. } => {
+        ResolvedType::Variant { def } => {
+            let name = &ctx.type_table.borrow().def_name(*def).to_string();
             // Named variant → disc(i32) + join of the case payload flats, per
             // the Canonical ABI. Reuses the same discriminant-plus-Match
             // lowering the memory path uses; a payload-less variant flattens
@@ -617,9 +618,10 @@ fn lower_to_flat_inner(
                 })
                 .collect()
         }
-        ResolvedType::Struct {
-            decl_name: name, ..
-        } if name != &names.string => {
+        ResolvedType::Struct { def, .. }
+            if ctx.type_table.borrow().struct_head_name(*def) != names.string =>
+        {
+            let name = &ctx.type_table.borrow().struct_head_name(*def);
             // Struct: concatenation of field flat types
             if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
                 let mut result = Vec::new();
@@ -1147,9 +1149,13 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
         span: synth_span(),
         wire_name_override: None,
     };
+    let def = type_table
+        .compiler_item_def(crate::compiler_item::CompilerItem::Result)
+        .expect("the `Result` compiler item is declared");
     TirVariantDecl {
+        def,
         name: result_name,
-        module_source: ModuleSource::default(),
+        module_source: type_table.def_module(def).clone(),
         visibility: crate::ast::Visibility::Public,
         type_params: Vec::new(),
         cases: vec![
@@ -1996,7 +2002,8 @@ fn lower_result_arm(
     )));
 
     let payload_resolved = lift_ctx.type_table.borrow().get(payload_type_id).clone();
-    if let ResolvedType::Variant { name, .. } = &payload_resolved {
+    if let ResolvedType::Variant { def } = &payload_resolved {
+        let name = &lift_ctx.type_table.borrow().def_name(*def).to_string();
         if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
             synthesize_variant_lower_to_flat(
                 payload_local,

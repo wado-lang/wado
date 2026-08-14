@@ -119,15 +119,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name,
                     module_source,
                 } => {
-                    // `EffectRef::Concrete` already carries the canonicalised
-                    // module source resolved in `resolve_effects`; build the
-                    // decl-index key from it directly rather than walking the
-                    // import graph a second time via `canonical_decl_key`.
-                    let key = (module_source.clone(), name.clone());
-                    let is_known_effect = self.tysys.trait_env.effect_decl_index.contains_key(&key);
-                    let is_known_resource =
-                        self.tysys.trait_env.resource_decl_index.contains_key(&key);
-                    if !is_known_effect && !is_known_resource {
+                    // `EffectRef::Concrete` already carries the module that
+                    // declares it, so this asks that module about its own
+                    // declaration and then asks the declaration what it is —
+                    // rather than building a key and probing two indexes to
+                    // find out which kind it belongs to.
+                    let handles = self
+                        .tysys
+                        .resolutions
+                        .declared_in(module_source, name)
+                        .is_some_and(|def| {
+                            matches!(
+                                self.tysys.resolutions.defs().kind(def),
+                                crate::defs::DefKind::Effect | crate::defs::DefKind::Resource
+                            )
+                        });
+                    if !handles {
                         let _ = self.emit(TypeError::NotAnEffect {
                             name: name.clone(),
                             span: effect_ty.span(),
@@ -152,7 +159,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Verify the underlying struct type has `impl <Effect> for <Type>`.
         if let Some(EffectRef::Concrete {
             name: interface_name,
-            ..
+            module_source: interface_module,
         }) = &effect
         {
             // Skip the check for an unresolved handler (`Unknown` / `Error`):
@@ -171,15 +178,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 underlying,
                 ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
             );
+            // The effect reference already names its declaring module, so the
+            // declaration is looked up where it lives rather than resolved
+            // again from this frame's vantage.
+            let effect_def = self
+                .tysys
+                .resolutions
+                .declared_in(interface_module, interface_name);
             if is_real_type
                 && (is_type_param
-                    || !self.tysys.type_implements_trait(
-                        &self.annotate_ctx,
-                        &self.type_lookup(),
-                        handler_type,
-                        interface_name,
-                        None,
-                    ))
+                    || !effect_def.is_some_and(|trait_| {
+                        self.tysys.type_implements_trait(
+                            &self.annotate_ctx,
+                            &self.type_lookup(),
+                            handler_type,
+                            trait_,
+                        )
+                    }))
             {
                 let type_name = self.tysys.type_table.borrow().type_name(handler_type);
                 let _ = self.emit(TypeError::HandlerEffectNotImplemented {
@@ -278,8 +293,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Enumerate by the bare head: a generic impl `impl<T> Log for Ctx<T>`
         // is keyed under "Ctx", not the instantiated "Ctx<i32>".
         let type_name = match &resolved {
-            ResolvedType::GenericInstance { name, .. }
-            | ResolvedType::GenericResource { name, .. } => name.clone(),
+            ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => {
+                self.tysys.type_table.borrow().def_name(*def).to_string()
+            }
             _ => self.tysys.type_table.borrow().type_name(handler_type),
         };
         let effects = self.collect_effect_impls_for_type(&type_name);

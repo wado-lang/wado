@@ -1882,15 +1882,18 @@ impl FunctionTranslator<'_, '_> {
     /// inconsistency — `panic`.
     fn unresolved_trait_call_or_trap(
         &mut self,
-        name: &str,
+        func: &crate::nir::FunctionRef,
         span: crate::token::Span,
         panic_msg: impl FnOnce() -> String,
     ) -> WirInstr {
-        if crate::name::is_local_trait_method_name(name) {
+        if let Some(method) = func.method_info.as_ref()
+            && let Some(trait_name) = method.trait_name.as_ref()
+        {
             self.ctx
                 .trait_bound_violations
                 .push(crate::wir::TraitBoundViolation {
-                    call_name: name.to_string(),
+                    type_display: method.fq_struct_name().to_display(),
+                    trait_display: trait_name.to_display(),
                     span,
                 });
             WirInstr::Unreachable
@@ -2359,7 +2362,7 @@ impl FunctionTranslator<'_, '_> {
                     };
                     self.wrap_call_with_prelude(prelude, call, expr.type_id)
                 } else {
-                    self.unresolved_trait_call_or_trap(&func.name, expr.span, || {
+                    self.unresolved_trait_call_or_trap(func, expr.span, || {
                         format!(
                             "[WIR] unresolved Call: name={:?} module={} builtin={:?} method_info={:?}",
                             func.name, func.module_source, builtin, func.method_info

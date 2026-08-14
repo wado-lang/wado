@@ -55,13 +55,17 @@ fn replace_wasi_derived_type_recursive(
         } else {
             let tt = type_table.borrow();
             let new_name = tt.mangle_type_name(user_type);
+            // The two spellings differ, so a callee naming the old type has to
+            // be told about the swap — as the pair of identities, which is what
+            // its own key is built from.
+            let swap = (old_name != new_name)
+                .then(|| (tt.fq_type_name(old_type), tt.fq_type_name(user_type)));
             drop(tt);
-            if old_name == new_name {
-                replace_type_in_adapter(adapter, old_type, user_type);
-            } else {
-                replace_type_in_adapter_with_names(
-                    adapter, old_type, user_type, &old_name, &new_name,
-                );
+            match swap {
+                None => replace_type_in_adapter(adapter, old_type, user_type),
+                Some((old_fq, new_fq)) => replace_type_in_adapter_with_names(
+                    adapter, old_type, user_type, &old_fq, &new_fq,
+                ),
             }
         }
     }
@@ -248,16 +252,18 @@ fn replace_type_in_adapter(adapter: &mut TirFunction, old_type: TypeId, new_type
     }
 }
 
-/// Like `replace_type_in_adapter` but also renames function references that
-/// contain the old type name to use the new type name. This is needed when
-/// the binding body calls monomorphized functions like `List<T>::with_capacity`
-/// where T is a WASI-derived type that differs from the user's newtype alias.
+/// Like `replace_type_in_adapter` but also substitutes the old type inside a
+/// callee's own identity. This is needed when the binding body calls
+/// monomorphized functions like `List<T>::with_capacity` where `T` is a
+/// WASI-derived type that differs from the user's newtype alias: the call is
+/// keyed on the receiver its `method_info` names, so a swap that stops at the
+/// body's types leaves the call naming the type the adapter no longer uses.
 fn replace_type_in_adapter_with_names(
     adapter: &mut TirFunction,
     old_type: TypeId,
     new_type: TypeId,
-    old_name: &str,
-    new_name: &str,
+    old_fq: &crate::name::FqTypeName,
+    new_fq: &crate::name::FqTypeName,
 ) {
     if old_type == new_type {
         return;
@@ -281,29 +287,32 @@ fn replace_type_in_adapter_with_names(
         TypeReplacer {
             old_type,
             new_type,
-            rename: Some((old_name, new_name)),
+            rename: Some((old_fq, new_fq)),
         }
         .visit_block(body);
     }
 }
 
 /// Replaces every `old_type` with `new_type` throughout an adapter body, and
-/// with `rename` set also rewrites function references whose mangled name
-/// embeds `old_name` — needed for a monomorphized `List<T>::with_capacity`
-/// whose `T` is WASI-derived. Traversal rides `TirMutVisitor`, so the swap
-/// reaches every expression position.
+/// with `rename` set also substitutes the same pair inside each callee's own
+/// identity — needed for a monomorphized `List<T>::with_capacity` whose `T` is
+/// WASI-derived. Traversal rides `TirMutVisitor`, so the swap reaches every
+/// expression position.
+
 struct TypeReplacer<'a> {
     old_type: TypeId,
     new_type: TypeId,
-    rename: Option<(&'a str, &'a str)>,
+    rename: Option<(&'a crate::name::FqTypeName, &'a crate::name::FqTypeName)>,
 }
 
 impl TypeReplacer<'_> {
     /// Apply the type swap (and optional rename) to a callee `FunctionRef`'s
     /// name and monomorphization type arguments.
     fn fix_func_ref(&self, func: &mut FunctionRef) {
-        if let Some((old_name, new_name)) = self.rename {
-            func.name = crate::name::replace_type_name_in_mangled(&func.name, old_name, new_name);
+        if let Some((old_fq, new_fq)) = self.rename
+            && let Some(info) = &mut func.method_info
+        {
+            info.substitute_type(old_fq, new_fq);
         }
         if let Some(mono) = &mut func.monomorph_info {
             for ta in mono

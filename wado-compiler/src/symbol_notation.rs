@@ -28,6 +28,31 @@ pub struct Receiver {
     pub trait_name: Option<String>,
 }
 
+impl Receiver {
+    /// The head of `type_name` — what the user wrote before any `<`.
+    ///
+    /// This reads surface notation the caller typed, not a name the compiler
+    /// rendered: an `impl` header is matched by the declaration name, and
+    /// `List<String>` and `List` name the same one.
+    #[must_use]
+    pub fn base_type_name(&self) -> &str {
+        base_of(&self.type_name)
+    }
+
+    /// The head of `trait_name`, when the notation named a trait.
+    #[must_use]
+    pub fn base_trait_name(&self) -> Option<&str> {
+        self.trait_name.as_deref().map(base_of)
+    }
+}
+
+fn base_of(name: &str) -> &str {
+    match name.find('<') {
+        Some(i) => &name[..i],
+        None => name,
+    }
+}
+
 /// A parsed symbol notation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolNotation {

@@ -191,11 +191,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let members: Vec<TypeId> = field_types
                 .into_iter()
                 .map(|field_ty| {
-                    tt.make_generic_instance(
-                        field_name.clone(),
-                        field_module.clone(),
-                        vec![self_ty, field_ty],
-                    )
+                    let def = tt
+                        .decl_named_in(&field_name, &field_module)
+                        .expect("the declaration this type names exists");
+                    tt.make_generic_instance(def, vec![self_ty, field_ty])
                 })
                 .collect();
             tt.make_tuple(members)
@@ -515,16 +514,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn reflect_struct_subject(&self, self_ty: TypeId) -> Option<ReflectSubject> {
         let (base_name, module_source, type_args) =
             match self.tysys.type_table.borrow().get(self_ty).clone() {
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                } => (name, module_source, type_args),
-                ResolvedType::Struct {
-                    decl_name: name,
-                    module_source,
-                    ..
-                } => (name, module_source, Vec::new()),
+                ResolvedType::GenericInstance { type_args, .. } => {
+                    let (name, module_source) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(self_ty)
+                        .expect("a nominal type names a declaration");
+                    (name, module_source, type_args)
+                }
+                ResolvedType::Struct { .. } => {
+                    let (name, module_source) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(self_ty)
+                        .expect("a nominal type names a declaration");
+                    (name, module_source, Vec::new())
+                }
                 _ => {
                     let name = self.tysys.type_table.borrow().type_name(self_ty);
                     let module_source = self.find_struct_module_source(&name);
@@ -551,16 +558,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn reflect_variant_subject(&self, self_ty: TypeId) -> Option<ReflectSubject> {
         let (base_name, module_source, type_args) =
             match self.tysys.type_table.borrow().get(self_ty).clone() {
-                ResolvedType::Variant {
-                    name,
-                    module_source,
-                    ..
-                } => (name, module_source, Vec::new()),
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                } => (name, module_source, type_args),
+                ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                    let type_args = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .generic_type_args(self_ty)
+                        .unwrap_or_default();
+                    let (name, module_source) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(self_ty)
+                        .expect("a nominal type names a declaration");
+                    (name, module_source, type_args)
+                }
                 _ => return None,
             };
         let info = self
@@ -849,11 +861,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let members: Vec<TypeId> = payloads
                 .into_iter()
                 .map(|payload| {
-                    tt.make_generic_instance(
-                        case_name.clone(),
-                        case_module.clone(),
-                        vec![self_ty, payload],
-                    )
+                    let def = tt
+                        .decl_named_in(&case_name, &case_module)
+                        .expect("the declaration this type names exists");
+                    tt.make_generic_instance(def, vec![self_ty, payload])
                 })
                 .collect();
             tt.make_tuple(members)
@@ -1032,7 +1043,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (m.clone(), n.to_string())
         };
         let elem_param = tt.make_type_param(pack_name.clone(), pack_index);
-        let member = tt.make_generic_instance(case_name, case_module, vec![self_ty, elem_param]);
+        let member = {
+            let def = tt
+                .decl_named_in(&case_name, &case_module)
+                .expect("the declaration this type names exists");
+            tt.make_generic_instance(def, vec![self_ty, elem_param])
+        };
         let member_pack = tt.make_mapped_type_pack(pack_name, pack_index, member);
         Some(tt.make_tuple(vec![member_pack]))
     }
@@ -1070,7 +1086,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (m.clone(), n.to_string())
         };
         let elem_param = tt.make_type_param(pack_name.clone(), pack_index);
-        let member = tt.make_generic_instance(field_name, field_module, vec![self_ty, elem_param]);
+        let member = {
+            let def = tt
+                .decl_named_in(&field_name, &field_module)
+                .expect("the declaration this type names exists");
+            tt.make_generic_instance(def, vec![self_ty, elem_param])
+        };
         let member_pack = tt.make_mapped_type_pack(pack_name, pack_index, member);
         Some(tt.make_tuple(vec![member_pack]))
     }
@@ -1508,7 +1529,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let handles: Vec<TypeId> = member_types
             .iter()
             .map(|&payload| {
-                tt.make_generic_instance(name.clone(), module.clone(), vec![subject, payload])
+                let def = tt
+                    .decl_named_in(&name, &module)
+                    .expect("the declaration this type names exists");
+                tt.make_generic_instance(def, vec![subject, payload])
             })
             .collect();
         tt.make_tuple(handles)
@@ -1529,7 +1553,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let (m, n) = items.require_struct(spec.member_struct_item);
             (m.clone(), n.to_string())
         };
-        let member_type = tt.make_generic_instance(member_name, member_module, vec![self_ty]);
+        let member_type = {
+            let def = tt
+                .decl_named_in(&member_name, &member_module)
+                .expect("the declaration this type names exists");
+            tt.make_generic_instance(def, vec![self_ty])
+        };
         tt.make_tuple(std::iter::repeat_n(member_type, count).collect())
     }
 
@@ -1575,7 +1604,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let (m, n) = items.require_struct(spec.member_struct_item);
             (m.clone(), n.to_string())
         };
-        let member = tt.make_generic_instance(member_name, member_module, vec![self_ty]);
+        let member = {
+            let def = tt
+                .decl_named_in(&member_name, &member_module)
+                .expect("the declaration this type names exists");
+            tt.make_generic_instance(def, vec![self_ty])
+        };
         let member_pack = tt.make_mapped_type_pack(pack_name, pack_index, member);
         Some(tt.make_tuple(vec![member_pack]))
     }

@@ -247,21 +247,14 @@ fn variant_cases_concrete(
     type_table: &Rc<RefCell<TypeTable>>,
 ) -> Option<Vec<(String, u32, TypeId)>> {
     match resolved {
-        ResolvedType::Variant {
-            name,
-            module_source,
-        } => type_table
+        ResolvedType::Variant { def } => type_table
             .borrow()
-            .variant_template_cases(name, module_source)
+            .variant_template_cases(*def)
             .map(<[_]>::to_vec),
-        ResolvedType::GenericInstance {
-            name,
-            module_source,
-            type_args,
-        } => {
+        ResolvedType::GenericInstance { def, type_args } => {
             let cases = type_table
                 .borrow()
-                .variant_template_cases(name, module_source)
+                .variant_template_cases(*def)
                 .map(<[_]>::to_vec)?;
             let mut substitution = crate::hashmap::IndexMap::default();
             for (idx, ty) in type_args.iter().enumerate() {
@@ -387,11 +380,7 @@ fn build_copy_return_expr(
     // mangled one qualifies the head by its module and matches nothing.
     // Two same-named structs from distinct modules share that key, so the
     // copy body is built from *this* type's module, not the first match.
-    let module = match resolved {
-        ResolvedType::Struct { module_source, .. }
-        | ResolvedType::GenericInstance { module_source, .. } => Some(module_source.clone()),
-        _ => None,
-    };
+    let module = type_table.borrow().nominal_head(type_id).map(|(_, m)| m);
     let mangled = type_table
         .borrow()
         .struct_list_name(type_id)
@@ -417,10 +406,8 @@ fn build_copy_return_expr(
         .borrow()
         .compiler_struct_name(crate::compiler_item::CompilerItem::List)
         .to_string();
-    if let ResolvedType::GenericInstance {
-        name, type_args, ..
-    } = resolved
-        && name == &list_name
+    if let ResolvedType::GenericInstance { def, type_args } = resolved
+        && type_table.borrow().def_name(*def) == list_name
         && type_args.len() == 1
         && is_synth_safe_element(type_args[0], type_table, project)
     {
@@ -433,10 +420,8 @@ fn build_copy_return_expr(
             span,
         ));
     }
-    if let ResolvedType::GenericInstance {
-        name, type_args, ..
-    } = resolved
-        && TypeTable::is_tuple_type(name)
+    if let ResolvedType::GenericInstance { def, type_args } = resolved
+        && TypeTable::is_tuple_type(type_table.borrow().def_name(*def))
     {
         return Some(build_tuple_copy(
             type_id, &mangled, type_args, v_local, type_table, span,
@@ -495,15 +480,13 @@ fn is_synth_safe_element(
         | ResolvedType::TypeParam { .. }
         | ResolvedType::TypePack { .. } => false,
         ResolvedType::Variant { .. } => true,
-        ResolvedType::GenericInstance {
-            name,
-            module_source,
-            ..
-        } => {
+        ResolvedType::GenericInstance { def, .. } => {
+            let name = &type_table.borrow().def_name(def).to_string();
+            let module_source = &type_table.borrow().def_module(def).clone();
             // Tuples / String / List<T> / known struct templates are
             // safe; unknown generic-instance names whose template
             // isn't a registered struct or variant are not.
-            if TypeTable::is_tuple_type(&name) {
+            if TypeTable::is_tuple_type(name) {
                 return true;
             }
             let (list_name, string_name, box_name) = {
@@ -521,16 +504,16 @@ fn is_synth_safe_element(
                         .to_string(),
                 )
             };
-            if name == list_name || name == string_name || name == box_name {
+            if *name == list_name || *name == string_name || *name == box_name {
                 return true;
             }
             // A concrete monomorphised struct entry is the strongest
             // signal — without it WIR has no `Ref` to point at.
             let mangled = type_table.borrow().mangle_type_name(elem_type);
-            if lookup_struct(project, &mangled, Some(&module_source)).is_some() {
+            if lookup_struct(project, &mangled, Some(module_source)).is_some() {
                 return true;
             }
-            project.find_variant(&module_source, &name).is_some()
+            project.find_variant(module_source, name).is_some()
         }
         _ => true,
     }

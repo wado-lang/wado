@@ -20,10 +20,23 @@ pub(crate) struct InferHoleTable {
     solutions: IndexMap<TypeId, Option<TypeId>>,
     /// Hole `TypeId` → what it says if it is never solved.
     diags: IndexMap<TypeId, Blame>,
-    /// Hole `TypeId` → originating parameter's `(name, trait-bound names, span)`,
+    /// Hole `TypeId` → originating parameter's `(name, bounds, span)`,
     /// re-verified against the solution in [`Self::finalize_infer_holes`] (the
     /// call-site check only saw the unconstrained hole).
-    bounds: IndexMap<TypeId, (String, Vec<String>, Span)>,
+    ///
+    /// Each bound is the declaration its own reference site names, paired with
+    /// the spelling that site wrote for the diagnostic. Storing the spelling
+    /// alone loses the site, and the re-check then has no identity to enforce
+    /// against.
+    bounds: IndexMap<TypeId, (String, Vec<DeclaredBound>, Span)>,
+}
+
+/// A trait bound a slot declared: the declaration its reference site names,
+/// and the spelling that site wrote.
+#[derive(Clone, Debug)]
+pub(crate) struct DeclaredBound {
+    pub(crate) decl: crate::defs::DefId,
+    pub(crate) written: String,
 }
 
 /// What an unsolved variable reports.
@@ -68,16 +81,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         message: String,
         param_name: String,
-        bound_names: Vec<String>,
+        bounds: Vec<DeclaredBound>,
     ) -> TypeId {
         let hole = self.mint_infer_var();
         self.attach_infer_var_diag(hole, span, message);
-        if !bound_names.is_empty() {
+        if !bounds.is_empty() {
             self.infer_holes
                 .bounds
-                .insert(hole, (param_name, bound_names, span));
+                .insert(hole, (param_name, bounds, span));
         }
         hole
+    }
+
+    /// The bounds `param` declares, each as the declaration its own site names
+    /// plus the spelling that site wrote.
+    ///
+    /// A bound whose site reaches no declaration is dropped: it is diagnosed
+    /// where it was written, and there is nothing to enforce a solution
+    /// against.
+    pub(super) fn declared_bounds(&self, param: &crate::ast::GenericParam) -> Vec<DeclaredBound> {
+        param
+            .bounds
+            .iter()
+            .filter(|b| b.fn_signature.is_none())
+            .filter_map(|b| {
+                Some(DeclaredBound {
+                    decl: self.bound_trait_def(b.id)?,
+                    written: b.name.clone(),
+                })
+            })
+            .collect()
     }
 
     /// Mint a fresh inference variable carrying no diagnostic yet.
@@ -102,16 +135,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         var: TypeId,
         param_name: String,
-        bound_names: Vec<String>,
+        bounds: Vec<DeclaredBound>,
         span: Span,
     ) {
-        if bound_names.is_empty() {
+        if bounds.is_empty() {
             return;
         }
         self.infer_holes
             .bounds
             .entry(var)
-            .or_insert((param_name, bound_names, span));
+            .or_insert((param_name, bounds, span));
     }
 
     /// Set the diagnostic `var` raises if it is never solved. The first one
@@ -176,11 +209,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.mint_infer_hole(span, message.clone(), variant_name.to_string(), Vec::new())
             })
             .collect();
-        self.tysys.type_table.borrow_mut().make_generic_instance(
-            variant_info.name.clone(),
-            variant_info.module_source.clone(),
-            holes,
-        )
+        {
+            let def = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .decl_named_in(&variant_info.name, &variant_info.module_source)
+                .expect("the declaration this type names exists");
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_generic_instance(def, holes)
+        }
     }
 
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {
@@ -351,11 +391,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Collect first so the `type_implements_trait` borrow is released before
         // the mutable enforce calls.
         let tt = self.tysys.type_table.borrow();
-        let checks: Vec<(TypeId, String, String, Span)> = self
+        let checks: Vec<(TypeId, String, DeclaredBound, Span)> = self
             .infer_holes
             .bounds
             .iter()
-            .filter_map(|(hole, (param_name, trait_names, span))| {
+            .filter_map(|(hole, (param_name, bounds, span))| {
                 let solution = (*self.infer_holes.solutions.get(hole)?)?;
                 // A still-parametric solution (forwarded param, or another hole)
                 // is checked when its owner is monomorphized; re-checking here,
@@ -364,20 +404,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
                 Some(
-                    trait_names
+                    bounds
                         .iter()
-                        .map(move |t| (solution, param_name.clone(), t.clone(), *span)),
+                        .map(move |b| (solution, param_name.clone(), b.clone(), *span)),
                 )
             })
             .flatten()
             .collect();
         drop(tt);
 
-        for (solution, param_name, trait_name, span) in checks {
-            // `infer_holes` records a hole's bounds as names, so the site that
-            // wrote them is already lost here. Migrating that store to
-            // `DeclRef` is what remains of WEP 2026-08-10 on this path.
-            self.enforce_single_bound(solution, &trait_name, None, &param_name, span);
+        for (solution, param_name, bound, span) in checks {
+            self.enforce_single_bound(
+                solution,
+                &bound.written,
+                Some(bound.decl),
+                &param_name,
+                span,
+            );
         }
     }
 
@@ -563,11 +606,8 @@ fn sub_generic_instantiation(
     sub_vec(tt, &mut gi.type_args, subst);
     gi.instance_type = sub(tt, gi.instance_type, subst);
     if let Some(name) = gi.mangled_name.as_mut()
-        && let ResolvedType::GenericInstance {
-            name: base,
-            type_args,
-            ..
-        } = tt.get(gi.instance_type).clone()
+        && let ResolvedType::GenericInstance { def, type_args } = tt.get(gi.instance_type).clone()
+        && let base = tt.def_name(def).to_string()
     {
         let arg_names: Vec<String> = type_args.iter().map(|&t| tt.type_name(t)).collect();
         *name = crate::name::mangle_generic_name(&base, &arg_names);

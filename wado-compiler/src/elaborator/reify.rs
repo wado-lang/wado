@@ -267,6 +267,19 @@ pub(crate) struct CallSiteLocation {
 }
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
+    /// The symbol `name` reaches from `module` — see
+    /// [`super::Elaborator::symbol_named`], which answers the same way from the
+    /// same table, so annotate and reify cannot disagree about what a name
+    /// means.
+    pub(crate) fn symbol_named(
+        &self,
+        module: &ModuleSource,
+        name: &str,
+    ) -> Option<&'a crate::symbol::Symbol> {
+        let def = self.tysys.resolutions.declaration_named(module, name)?;
+        self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
+    }
+
     /// Look up an impl-associated constant by its use-site `Type::NAME`
     /// spelling, canonicalized the same way as
     /// `Elaborator::lookup_associated_constant` so both walkers resolve a
@@ -275,7 +288,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (type_module, canon_key) = super::trait_query::canonical_assoc_const_key(
             key,
             &self.current_module_source,
-            self.symbols,
             &self.tysys.resolutions,
         )?;
         self.tysys
@@ -394,8 +406,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn type_lookup(&self) -> TypeLookup<'_> {
         TypeLookup {
             current_module_source: &self.current_module_source,
-            imported_type_sources: &self.sem.imports.imported_type_sources,
-            import_original_names: &self.sem.imports.import_original_names,
+            resolutions: &self.tysys.resolutions,
             namespace_imports: &self.sem.imports.namespace_imports,
             all_newtypes: &self.tysys.all_newtypes,
             all_struct_fields: &self.tysys.all_struct_fields,
@@ -415,11 +426,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // recovered from `recorded_type` — see `reify_struct_literal`),
             // not through this per-function ephemeral tier, which annotate
             // clears between functions and reify never repopulates.
-            fn_local_struct_fields: &self.sem.decls.fn_local_struct_fields,
-            fn_local_newtypes: &self.sem.decls.fn_local_newtypes,
-            fn_local_enum_cases: &self.sem.decls.fn_local_enum_cases,
-            fn_local_flags_cases: &self.sem.decls.fn_local_flags_cases,
-            fn_local_variant_cases: &self.sem.decls.fn_local_variant_cases,
+            local_item_struct_fields: &self.sem.decls.local_item_struct_fields,
+            local_item_newtypes: &self.sem.decls.local_item_newtypes,
+            local_item_renders: &self.sem.decls.local_item_renders,
+            fn_local_items: &self.sem.decls.fn_local_items,
         }
     }
 
@@ -449,8 +459,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                 } else {
                     let canonical = self
-                        .symbols
-                        .lookup(&self.current_module_source, name)
+                        .symbol_named(&self.current_module_source, name)
                         .map(|sym| sym.module_source().clone())
                         .unwrap_or_else(|| self.current_module_source.clone());
                     crate::tir::EffectRef::Concrete {
@@ -691,6 +700,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// AST shape; cases keep their declared index.
     fn reify_enum(&self, enum_decl: &ast::EnumDecl) -> TirEnum {
         TirEnum {
+            def: self
+                .tysys
+                .resolutions
+                .defs()
+                .of_ast_id(enum_decl.id)
+                .expect("an `enum` declaration is declared"),
             name: enum_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: enum_decl.visibility,
@@ -716,12 +731,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `annotate_decls` interned via `make_flags`; reify reads it from
     /// `tysys.all_flags_cases`.
     fn reify_flags(&self, flags_decl: &ast::FlagsDecl) -> Option<TirFlags> {
-        let info = self
-            .tysys
-            .all_flags_cases
-            .get(&self.current_module_source)?
-            .get(&flags_decl.name)?;
+        let def = self.tysys.resolutions.defs().of_ast_id(flags_decl.id)?;
+        let info = self.tysys.all_flags_cases.get(&def)?;
         Some(TirFlags {
+            def,
             name: flags_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: flags_decl.visibility,
@@ -752,11 +765,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // module level; they materialise per-instantiation.
             return None;
         }
-        let type_id = *self
-            .tysys
-            .all_newtypes
-            .get(&self.current_module_source)?
-            .get(&newtype_decl.name)?;
+        let def = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id)?;
+        let type_id = *self.tysys.all_newtypes.get(&def)?;
         Some(TirNewtype {
             name: newtype_decl.name.clone(),
             module_source: self.current_module_source.clone(),
@@ -837,6 +847,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let wire_name_policy = wire_name_policy_of(&struct_decl.attrs);
 
         TirStruct {
+            def: crate::tir::StructDef::Decl(
+                self.tysys
+                    .resolutions
+                    .defs()
+                    .of_ast_id(struct_decl.id)
+                    .expect("a `struct` declaration is declared"),
+            ),
+            type_args: Vec::new(),
             name: struct_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: struct_decl.visibility,
@@ -864,19 +882,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Field types and type-param bounds come from `sem.decls.local_struct_fields`
-    /// — the durable, mangled-name-keyed fact `resolve_local_struct` recorded.
+    /// Field types and type-param bounds come from
+    /// `sem.decls.local_item_struct_fields` — the durable fact
+    /// `resolve_local_struct` recorded under this declaration's own identity.
     /// Field attributes (`#[wire(...)]`, `#[secret]`) and default-value
     /// expressions are read straight from the AST here, exactly matching
     /// `reify_struct`'s handling for a top-level struct — `StructFieldInfo`
     /// doesn't carry attributes, only `(name, type, visibility)`.
     fn reify_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let mangled_name = crate::name::mangle_local_item_name(&struct_decl.name, struct_decl.id);
         let Some(info) = self
-            .sem
-            .decls
-            .local_struct_fields
-            .get(&mangled_name)
+            .tysys
+            .resolutions
+            .defs()
+            .of_ast_id(struct_decl.id)
+            .and_then(|def| self.sem.decls.local_item_struct_fields.get(&def))
             .cloned()
         else {
             // `resolve_local_struct` inserts this unconditionally for every
@@ -931,7 +950,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
         self.pending_local_structs.push(TirStruct {
-            name: mangled_name,
+            def: crate::tir::StructDef::Decl(
+                self.tysys
+                    .resolutions
+                    .defs()
+                    .of_ast_id(struct_decl.id)
+                    .expect("a function-local `struct` is declared"),
+            ),
+            type_args: Vec::new(),
+            name: info.name,
             module_source: self.current_module_source.clone(),
             visibility: ast::Visibility::Private,
             type_params,
@@ -942,19 +969,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         });
     }
 
-    /// The base type comes from `sem.decls.local_newtypes` — the durable,
-    /// mangled-name-keyed fact `resolve_local_newtype` recorded.
+    /// The base type comes from `sem.decls.local_item_newtypes` — the durable
+    /// fact `resolve_local_newtype` recorded under this declaration's own
+    /// identity.
     fn reify_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
         if !newtype_decl.type_params.is_empty() {
             // Generic local newtypes are unresolved (see `resolve_local_newtype`).
             return;
         }
-        let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
-        let Some(&type_id) = self.sem.decls.local_newtypes.get(&mangled_name) else {
+        let Some(&type_id) = self
+            .tysys
+            .resolutions
+            .defs()
+            .of_ast_id(newtype_decl.id)
+            .and_then(|def| self.sem.decls.local_item_newtypes.get(&def))
+        else {
             return;
         };
         self.pending_local_newtypes.push(TirNewtype {
-            name: mangled_name,
+            name: crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id),
             module_source: self.current_module_source.clone(),
             visibility: ast::Visibility::Private,
             type_id,
@@ -966,11 +999,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// come from `tysys.all_variant_cases`; the type-param table is
     /// projected from the AST.
     fn reify_variant_decl(&mut self, variant_decl: &ast::VariantDecl) -> TirVariantDecl {
-        let case_info = self
+        let def = self
             .tysys
-            .all_variant_cases
-            .get(&self.current_module_source)
-            .and_then(|m| m.get(&variant_decl.name));
+            .resolutions
+            .defs()
+            .of_ast_id(variant_decl.id)
+            .expect("a `variant` declaration is declared");
+        let case_info = self.tysys.all_variant_cases.get(&def);
 
         let cases: Vec<tir::TirVariantCase> = variant_decl
             .cases
@@ -996,10 +1031,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self
             .ann_decl_type_params(variant_decl.id)
             .expect("resolve_variant_decl records the type params for every variant reify emits");
-
         self.tysys.type_table.borrow_mut().register_variant_cases(
-            variant_decl.name.clone(),
-            self.current_module_source.clone(),
+            def,
             cases
                 .iter()
                 .map(|c| (c.name.clone(), c.index, c.payload))
@@ -1007,6 +1040,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
 
         TirVariantDecl {
+            def,
             name: variant_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: variant_decl.visibility,
@@ -1045,6 +1079,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_effect_ops(decl.id)
             .expect("resolve_resource_decl records op signatures for every resource reify emits");
         tir::TirResource {
+            def: self
+                .tysys
+                .resolutions
+                .defs()
+                .of_ast_id(decl.id)
+                .expect("a `resource` declaration is declared"),
             name: decl.name.clone(),
             visibility: decl.visibility,
             operations,
@@ -1319,7 +1359,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let Some(trait_sig) = super::trait_query::trait_sig_by_name_with(
             &trait_decl_name,
             &self.current_module_source,
-            self.symbols,
             &self.tysys.resolutions,
             &self.tysys.trait_env,
             &self.tysys.signatures,
@@ -4707,11 +4746,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         };
 
-        let struct_type = self.tysys.type_table.borrow_mut().make_generic_instance(
-            struct_name.clone(),
-            module_source,
-            vec![element_type],
-        );
+        let struct_type = {
+            let def = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .decl_named_in(&struct_name, &module_source)
+                .expect("the declaration this type names exists");
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_generic_instance(def, vec![element_type])
+        };
 
         let mut fields = vec![
             TirStructField {
@@ -4805,16 +4851,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let tt = self.tysys.type_table.borrow();
             let peeled = tt.peel_refs(recorded_type);
             match tt.get(peeled) {
-                ResolvedType::Struct {
-                    decl_name: name,
-                    module_source,
-                    ..
-                }
-                | ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    ..
-                } => (name.clone(), module_source.clone()),
+                ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => tt
+                    .nominal_head(peeled)
+                    .expect("a nominal type names a declaration"),
                 _ => (struct_name.clone(), self.current_module_source.clone()),
             }
         };
@@ -5331,7 +5370,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 tt.as_option(inner_type).is_some(),
                 matches!(
                     tt.get(inner_type),
-                    ResolvedType::GenericInstance { name, .. } if name == "Result"
+                    ResolvedType::GenericInstance { def, .. } if tt.def_name(*def) == "Result"
                 ),
             )
         };
@@ -6112,9 +6151,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let ty = self.tysys.type_table.borrow().get(type_id).clone();
         match ty {
             ResolvedType::TypePack { .. } => true,
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } if TypeTable::is_tuple_type(&name) => {
+            ResolvedType::GenericInstance { def, type_args }
+                if TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def)) =>
+            {
                 type_args.iter().any(|e| self.type_contains_pack(*e))
             }
             _ => false,
@@ -6235,11 +6274,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         elem.span(),
                     ));
                 } else if let ResolvedType::GenericInstance {
-                    name,
+                    def,
                     type_args: inner_elems,
-                    ..
                 } = spread_type
-                    && TypeTable::is_tuple_type(&name)
+                    && TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def))
                 {
                     // Concrete tuple: expand inline via FieldAccess. Bind a
                     // non-trivial operand to a temporary for single evaluation.
@@ -7228,15 +7266,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ) = {
             let tt = self.tysys.type_table.borrow();
             match tt.get(recorded_type).clone() {
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                } => (name, module_source, recorded_type, type_args),
-                ResolvedType::Variant {
-                    name,
-                    module_source,
-                } => (name, module_source, recorded_type, Vec::new()),
+                ResolvedType::GenericInstance { type_args, .. } => {
+                    let (n, m) = tt
+                        .nominal_head(recorded_type)
+                        .expect("a generic instance names a declaration");
+                    (n, m, recorded_type, type_args)
+                }
+                ResolvedType::Variant { .. } => {
+                    let (n, m) = tt
+                        .nominal_head(recorded_type)
+                        .expect("a variant names a declaration");
+                    (n, m, recorded_type, Vec::new())
+                }
                 _ => (
                     String::new(),
                     self.current_module_source.clone(),
@@ -7537,9 +7578,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let case_name = &suffix[inner + 2..];
                 if let Some(variant_info) = self
                     .tysys
-                    .all_variant_cases
-                    .get(&ns_source)
-                    .and_then(|m| m.get(type_name))
+                    .resolutions
+                    .declared_in(&ns_source, type_name)
+                    .and_then(|def| self.tysys.all_variant_cases.get(&def))
                     .cloned()
                     && let Some((case_index, case_data)) = variant_info
                         .cases
@@ -7884,21 +7925,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .contains_key(&ident.name)
             {
                 (self.current_module_source.clone(), ident.name.clone())
-            } else if let Some(import_src) = self
-                .sem
-                .imports
-                .imported_type_sources
-                .get(&ident.name)
-                .cloned()
+            } else if let Some(def) = self
+                .tysys
+                .resolutions
+                .value_named(&self.current_module_source, &ident.name)
             {
-                let original_name = self
-                    .sem
-                    .imports
-                    .import_original_names
-                    .get(&ident.name)
-                    .cloned()
-                    .unwrap_or_else(|| ident.name.clone());
-                (import_src, original_name)
+                let defs = self.tysys.resolutions.defs();
+                (defs.module(def).clone(), defs.name(def).to_string())
             } else {
                 // The callee resolves neither as a local fn-typed
                 // value (closure-call branch above) nor as a known
@@ -8431,16 +8464,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `remote.y` onto the wrong field index.
         let (struct_name, module_source, type_args): (String, Option<ModuleSource>, Vec<TypeId>) =
             match resolved {
-                ResolvedType::Struct {
-                    decl_name: name,
-                    module_source,
-                    ..
-                } => (name, Some(module_source), vec![]),
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                } => {
+                ResolvedType::Struct { .. } => {
+                    let (n, m) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(receiver_type)
+                        .expect("a struct names a declaration");
+                    (n, Some(m), vec![])
+                }
+                ResolvedType::GenericInstance { type_args, .. } => {
+                    let (name, module_source) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(receiver_type)
+                        .expect("a generic instance names a declaration");
                     // Tuple projection (`t.0`): a tuple has no struct decl, so the
                     // struct-fields lookup below misses and the `(0, …)` fallback would
                     // collapse every `t.N` onto field 0. Resolve the numeric field name
@@ -8483,8 +8522,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let found = if let Some(info) = module_source
             .as_ref()
-            .and_then(|ms| self.tysys.all_struct_fields.get(ms))
-            .and_then(|m| m.get(&struct_name))
+            .and_then(|ms| self.tysys.resolutions.declared_in(ms, &struct_name))
+            .and_then(|def| self.tysys.all_struct_fields.get(&def))
         {
             resolve_in(info)
         } else {
@@ -8802,23 +8841,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ident.span,
             );
         }
-        if let Some(import_src) = self
-            .sem
-            .imports
-            .imported_type_sources
-            .get(&ident.name)
-            .cloned()
+        if let Some(def) = self
+            .tysys
+            .resolutions
+            .value_named(&self.current_module_source, &ident.name)
         {
-            let original_name = self
-                .sem
-                .imports
-                .import_original_names
-                .get(&ident.name)
-                .cloned()
-                .unwrap_or_else(|| ident.name.clone());
-            // Imports through `use` collapse types + functions into the
-            // same `imported_type_sources` map; the type / variant /
-            // enum / flags / resource cases were already handled
+            let (import_src, original_name) = {
+                let defs = self.tysys.resolutions.defs();
+                (defs.module(def).clone(), defs.name(def).to_string())
+            };
+            // The scope answers for types and functions alike; the type /
+            // variant / enum / flags / resource cases were already handled
             // above and would have returned. Anything left here is a
             // function import.
             let type_args = self
@@ -8842,9 +8875,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //     `resolve_func_ref_ident` → `lookup_func_ast_for_ref` and emits a
         //     `FuncRef` keyed by the function's defining module + original name.
         if self.sem.decls.imported_functions.contains(&ident.name)
-            && let Some(symbol) = self
-                .symbols
-                .lookup(&self.current_module_source, &ident.name)
+            && let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name)
             && matches!(symbol.kind, crate::symbol::SymbolKind::Function(_))
         {
             let type_args = self
@@ -8973,11 +9004,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         let target_type = choice.target_type;
         let name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            crate::tir::ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name),
+            crate::tir::ResolvedType::Struct { def, .. }
+                if matches!(
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .struct_head_name(def)
+                        .as_str(),
+                    "u128" | "i128"
+                ) =>
+            {
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .fq_base_type_name(target_type)
+            }
             _ => return None,
         };
 
@@ -9030,11 +9071,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
         let name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            crate::tir::ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } if name == "u128" || name == "i128" => FqTypeName::declared(&module_source, &name),
+            crate::tir::ResolvedType::Struct { def, .. }
+                if matches!(
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .struct_head_name(def)
+                        .as_str(),
+                    "u128" | "i128"
+                ) =>
+            {
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .fq_base_type_name(target_type)
+            }
             _ => return None,
         };
 
@@ -9152,9 +9203,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
         };
         let source_name = match self.tysys.type_table.borrow().get(source_base).clone() {
-            ResolvedType::Struct {
-                decl_name: name, ..
-            } if name == "u128" || name == "i128" => name,
+            ResolvedType::Struct { def, .. }
+                if matches!(
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .struct_head_name(def)
+                        .as_str(),
+                    "u128" | "i128"
+                ) =>
+            {
+                self.tysys.type_table.borrow().struct_head_name(def)
+            }
             _ => return None,
         };
         let signed_source = source_name == "i128";
@@ -9190,9 +9250,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | PrimitiveType::I8
                 | PrimitiveType::U8,
             ) => Lowering::LowThenCast,
-            ResolvedType::Struct {
-                decl_name: name, ..
-            } if name == source_name => {
+            ResolvedType::Struct { def, .. }
+                if self.tysys.type_table.borrow().struct_head_name(def) == source_name =>
+            {
                 if target_type == source_type {
                     Lowering::Identity
                 } else {
@@ -9202,12 +9262,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return None;
                 }
             }
-            ResolvedType::Struct {
-                decl_name: name, ..
-            } if name == "i128" => Lowering::Reinterpret(CompilerItem::I128FromU128),
-            ResolvedType::Struct {
-                decl_name: name, ..
-            } if name == "u128" => Lowering::Reinterpret(CompilerItem::U128FromI128),
+            ResolvedType::Struct { def, .. }
+                if self.tysys.type_table.borrow().struct_head_name(def) == "i128" =>
+            {
+                Lowering::Reinterpret(CompilerItem::I128FromU128)
+            }
+            ResolvedType::Struct { def, .. }
+                if self.tysys.type_table.borrow().struct_head_name(def) == "u128" =>
+            {
+                Lowering::Reinterpret(CompilerItem::U128FromI128)
+            }
             _ => return None,
         };
 
@@ -9576,7 +9640,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     ),
                 ) || matches!(
                     self.tysys.type_table.borrow().get(scrutinee_type),
-                    ResolvedType::Struct { decl_name: name, .. } if name == "u128",
+                    ResolvedType::Struct { def, .. } if self.tysys.type_table.borrow().struct_head_name(*def) == "u128",
                 );
                 if is_unsigned {
                     if let Ok(v) = super::util::parse_u128_literal(repr) {
@@ -9656,10 +9720,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // presents the scrutinee as `&Color`.
         let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
         let (decl_name, decl_module) = match self.tysys.type_table.borrow().get(peeled).clone() {
-            ResolvedType::Enum {
-                name,
-                module_source,
-            } => (name, module_source),
+            ResolvedType::Enum { .. } => self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_head(peeled)
+                .expect("an enum names a declaration"),
             _ => return None,
         };
         self.type_lookup()
@@ -9675,15 +9741,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::ResolvedType;
         let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
         let (decl_name, decl_module) = match self.tysys.type_table.borrow().get(peeled).clone() {
-            ResolvedType::Variant {
-                name,
-                module_source,
-            }
-            | ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => (name, module_source),
+            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_head(peeled)
+                .expect("a nominal type names a declaration"),
             _ => return false,
         };
         self.type_lookup()
@@ -9706,15 +9769,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
         let (decl_name, decl_module, type_args) =
             match self.tysys.type_table.borrow().get(peeled).clone() {
-                ResolvedType::Variant {
-                    name,
-                    module_source,
-                } => (name, module_source, Vec::<TypeId>::new()),
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                } => (name, module_source, type_args),
+                ResolvedType::Variant { .. } => {
+                    let (n, m) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(peeled)
+                        .expect("a variant names a declaration");
+                    (n, m, Vec::<TypeId>::new())
+                }
+                ResolvedType::GenericInstance { type_args, .. } => {
+                    let (n, m) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(peeled)
+                        .expect("a generic instance names a declaration");
+                    (n, m, type_args)
+                }
                 _ => (
                     String::new(),
                     self.current_module_source.clone(),
@@ -9879,7 +9951,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 | PrimitiveType::U64
                                 | PrimitiveType::U128
                         )
-                    ) || matches!(resolved, ResolvedType::Struct { decl_name: ref name, .. } if name == "u128")
+                    ) || matches!(resolved, ResolvedType::Struct { def, .. } if self.tysys.type_table.borrow().struct_head_name(def) == "u128")
                 };
                 let int_pattern = |value: u128| {
                     if scrutinee_is_unsigned {
@@ -10010,15 +10082,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     use crate::tir::ResolvedType;
                     let resolved = self.tysys.type_table.borrow().get(peeled_scrutinee).clone();
                     let (decl_name, type_args) = match resolved {
-                        ResolvedType::Variant {
-                            name,
-                            module_source,
-                        } => (name, (Vec::<TypeId>::new(), module_source)),
-                        ResolvedType::GenericInstance {
-                            name,
-                            module_source,
-                            type_args,
-                        } => (name, (type_args, module_source)),
+                        ResolvedType::Variant { .. } => {
+                            let (n, m) = self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .nominal_head(peeled_scrutinee)
+                                .expect("a variant names a declaration");
+                            (n, (Vec::<TypeId>::new(), m))
+                        }
+                        ResolvedType::GenericInstance { type_args, .. } => {
+                            let (n, m) = self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .nominal_head(peeled_scrutinee)
+                                .expect("a generic instance names a declaration");
+                            (n, (type_args, m))
+                        }
                         _ => (
                             String::new(),
                             (Vec::new(), self.current_module_source.clone()),
@@ -10166,10 +10247,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let peeled_scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
         let scrutinee_struct_name =
             match self.tysys.type_table.borrow().get(peeled_scrutinee).clone() {
-                ResolvedType::Struct {
-                    decl_name: name, ..
-                } => name,
-                ResolvedType::GenericInstance { name, .. } => name,
+                ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(peeled_scrutinee)
+                    .map(|(n, _)| n)
+                    .unwrap_or_default(),
                 _ => String::new(),
             };
         let lookup_name = type_name.unwrap_or(&scrutinee_struct_name);

@@ -22,18 +22,10 @@ fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<Typ
     let children: Vec<TypeId> = match sem.types.get(base) {
         ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } => {
-            let (name, module_source) = (name.clone(), module_source.clone());
-            sem.struct_field_type_ids(&name, &module_source)
-                .unwrap_or_default()
+        ResolvedType::Struct { .. } => sem.struct_field_type_ids_of(base).unwrap_or_default(),
+        ResolvedType::GenericInstance { type_args, .. } if sem.types.is_result(base) => {
+            type_args.clone()
         }
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } if name == "Result" => type_args.clone(),
         _ => sem.types.as_tuple(base).unwrap_or_default(),
     };
     children

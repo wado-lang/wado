@@ -589,12 +589,8 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
         // `element<T: Serialize>(&mut self, value: &T)` the first arg is `&T`,
         // so unwrap references (and an auto-boxed `Box<T>`) to reach T.
         let mut arg_type = self.type_table.peel_refs(first_arg.expr.type_id);
-        if let ResolvedType::GenericInstance {
-            name,
-            type_args: ta,
-            ..
-        } = self.type_table.get(arg_type)
-            && name == "Box"
+        if let ResolvedType::GenericInstance { def, type_args: ta } = self.type_table.get(arg_type)
+            && self.type_table.def_name(*def) == "Box"
             && ta.len() == 1
         {
             arg_type = ta[0];
@@ -722,6 +718,7 @@ impl Monomorphizer {
             if impl_type_args.len() + method_type_args.len() >= generic_func.impl_type_params.len()
             {
                 let key = InstantiationKey {
+                    def: None,
                     name: generic_method_name,
                     module_source: generic_func.module_source.clone(),
                     impl_type_args,
@@ -759,6 +756,7 @@ impl Monomorphizer {
                 // Check if this is a call to a generic function with explicit type args
                 if !type_args.is_empty() && generic_functions.contains_key(&qualified_func_key) {
                     let key = InstantiationKey {
+                        def: None,
                         name: qualified_func_key.1,
                         module_source: func.module_source.clone(),
                         impl_type_args: vec![],
@@ -897,6 +895,7 @@ impl Monomorphizer {
                                 let method_type_args =
                                     declared_method_type_args(&gf.borrow(), type_args);
                                 let key = InstantiationKey {
+                                    def: None,
                                     name: full_method_name.clone(),
                                     module_source: template_module,
                                     impl_type_args: vec![],
@@ -994,6 +993,7 @@ impl Monomorphizer {
                                             let template_module =
                                                 generic_func.module_source.clone();
                                             let key = InstantiationKey {
+                                                def: None,
                                                 name: generic_method_name.clone(),
                                                 module_source: template_module,
                                                 impl_type_args,
@@ -1143,6 +1143,7 @@ impl Monomorphizer {
                                 let method_info = generic_func.method_info.clone();
                                 let template_module = generic_func.module_source.clone();
                                 let key = InstantiationKey {
+                                    def: None,
                                     name: generic_method_name.clone(),
                                     module_source: template_module,
                                     impl_type_args: effective_impl_type_args,
@@ -1215,6 +1216,7 @@ impl Monomorphizer {
                                 // "module_source = body's home" invariant.
                                 let template_module = generic_func.module_source.clone();
                                 let key = InstantiationKey {
+                                    def: None,
                                     name: generic_method_name.clone(),
                                     module_source: template_module,
                                     impl_type_args,
@@ -1311,12 +1313,9 @@ impl Monomorphizer {
                                     let arg_idx = pi - 1;
                                     if let Some(arg) = args.get(arg_idx) {
                                         let mut arg_type = type_table.peel_refs(arg.expr.type_id);
-                                        if let ResolvedType::GenericInstance {
-                                            name,
-                                            type_args: ta,
-                                            ..
-                                        } = type_table.get(arg_type)
-                                            && name == "Box"
+                                        if let ResolvedType::GenericInstance { def, type_args: ta } =
+                                            type_table.get(arg_type)
+                                            && type_table.def_name(*def) == "Box"
                                             && ta.len() == 1
                                         {
                                             arg_type = ta[0];
@@ -1336,6 +1335,7 @@ impl Monomorphizer {
                     };
                     let template_module = generic_func.module_source.clone();
                     let key = InstantiationKey {
+                        def: None,
                         name: mono.generic_name.clone(),
                         module_source: template_module,
                         impl_type_args: impl_ta,
@@ -1355,8 +1355,8 @@ impl Monomorphizer {
                 let receiver_is_builtin_tuple = {
                     let inner = type_table.peel_refs(receiver.type_id);
                     match type_table.get(inner) {
-                        ResolvedType::GenericInstance { name, .. } => {
-                            TypeTable::is_tuple_type(name)
+                        ResolvedType::GenericInstance { def, .. } => {
+                            TypeTable::is_tuple_type(type_table.def_name(*def))
                         }
                         _ => false,
                     }
@@ -1406,6 +1406,7 @@ impl Monomorphizer {
                             let template_module = generic_func.module_source.clone();
                             drop(generic_func);
                             let key = InstantiationKey {
+                                def: None,
                                 name: generic_name,
                                 module_source: template_module,
                                 impl_type_args,
@@ -1436,6 +1437,7 @@ impl Monomorphizer {
                     let qualified_func_key = generic_function_key(false, module_source, name);
                     if generic_functions.contains_key(&qualified_func_key) {
                         let key = InstantiationKey {
+                            def: None,
                             name: qualified_func_key.1,
                             module_source: module_source.clone(),
                             impl_type_args: vec![],
@@ -1495,7 +1497,12 @@ impl Monomorphizer {
         let Some(trait_name) = &info.trait_name else {
             return tid;
         };
-        if self.has_own_trait_impl(type_table, tid, trait_name.base_name()) {
+        if self
+            .functions
+            .trait_env
+            .trait_def_of_fq(trait_name)
+            .is_some_and(|trait_| self.has_own_trait_impl(type_table, tid, trait_))
+        {
             return tid;
         }
         base
@@ -2601,16 +2608,11 @@ impl Monomorphizer {
 
                 // Update struct_name to match the (possibly monomorphized) struct_type
                 match type_table.get(*struct_type) {
-                    ResolvedType::Struct {
-                        decl_name,
-                        type_args,
-                        ..
-                    } => {
-                        *struct_name = type_table.struct_rendered_name(decl_name, type_args);
+                    ResolvedType::Struct { def, type_args } => {
+                        *struct_name = type_table.struct_rendered_name(*def, type_args);
                     }
-                    ResolvedType::GenericInstance {
-                        name, type_args, ..
-                    } => {
+                    ResolvedType::GenericInstance { def, type_args } => {
+                        let name = &type_table.def_name(*def).to_string();
                         if type_args.is_empty() && !substitution.is_empty() {
                             // GenericInstance with empty type_args in a substitution context
                             // Build the name using the substitution map. Type
@@ -2677,8 +2679,8 @@ impl Monomorphizer {
                 // indicating the variant is generic. Non-generic variants like
                 // `Shape { Circle(f64), Point }` have concrete payload types that aren't
                 // affected by substitution and should NOT be promoted to GenericInstance.
-                if let ResolvedType::Variant { ref name, .. } =
-                    type_table.get(*variant_type).clone()
+                if let ResolvedType::Variant { def } = type_table.get(*variant_type).clone()
+                    && let name = &type_table.def_name(def).to_string()
                     && let Some(payload_expr) = payload
                     && original_payload_type.is_some_and(|orig| orig != payload_expr.type_id)
                 {
@@ -2686,18 +2688,16 @@ impl Monomorphizer {
                     let new_id = if name == "Option" {
                         type_table.make_option(payload_expr.type_id)
                     } else {
-                        let module_source = if let ResolvedType::Variant { module_source, .. } =
-                            type_table.get(*variant_type)
+                        let module_source = type_table
+                            .nominal_head(*variant_type)
+                            .map(|(_, m)| m)
+                            .unwrap_or_else(|| unreachable!());
                         {
-                            module_source.clone()
-                        } else {
-                            unreachable!()
-                        };
-                        type_table.make_generic_instance(
-                            name.clone(),
-                            module_source,
-                            vec![payload_expr.type_id],
-                        )
+                            let def = type_table
+                                .decl_named_in(name, &module_source)
+                                .expect("the declaration this type names exists");
+                            type_table.make_generic_instance(def, vec![payload_expr.type_id])
+                        }
                     };
                     *variant_type = new_id;
                     expr.type_id = new_id;
@@ -4664,11 +4664,7 @@ impl Monomorphizer {
             return new_type;
         }
         match type_table.get(type_id).clone() {
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
                 let new_args: Vec<TypeId> = type_args
                     .iter()
                     .map(|&arg| Self::replace_type_in_generic(arg, old_type, new_type, type_table))
@@ -4677,8 +4673,7 @@ impl Monomorphizer {
                     type_id
                 } else {
                     type_table.intern(ResolvedType::GenericInstance {
-                        name,
-                        module_source,
+                        def,
                         type_args: new_args,
                     })
                 }
@@ -4709,14 +4704,13 @@ fn try_lower_comparison(
     let operand_type = type_table.get(left.type_id);
     let (impl_type_args, type_module_source): (Vec<FqTypeName>, Option<ModuleSource>) =
         match operand_type {
-            ResolvedType::Struct { module_source, .. }
-            | ResolvedType::Variant { module_source, .. } => (vec![], Some(module_source.clone())),
-            ResolvedType::GenericInstance {
-                name,
-                type_args,
-                module_source,
-                ..
-            } => {
+            ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => (
+                vec![],
+                type_table.nominal_head(left.type_id).map(|(_, m)| m),
+            ),
+            ResolvedType::GenericInstance { def, type_args } => {
+                let name = &type_table.def_name(*def).to_string();
+                let module_source = &type_table.def_module(*def).clone();
                 if TypeTable::is_tuple_type(name) {
                     // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
                     // and already lowered to method calls by the elaborator.
@@ -4812,10 +4806,10 @@ fn try_lower_comparison(
     ) {
         let receiver = make_ref(left, type_table);
         let arg_ref = make_ref(right, type_table);
-        let ordering_type_id = type_table.intern(ResolvedType::Enum {
-            name: "Ordering".to_string(),
-            module_source: ModuleSource::prelude(),
-        });
+        let ordering_def = type_table
+            .compiler_item_def(crate::compiler_item::CompilerItem::Ordering)
+            .expect("`Ordering` is a registered compiler item");
+        let ordering_type_id = type_table.intern(ResolvedType::Enum { def: ordering_def });
         let method_info =
             LocalMethodName::new(base_struct_name, Some(ord_trait), "cmp".to_string())
                 .with_struct_type_args(&impl_type_args);

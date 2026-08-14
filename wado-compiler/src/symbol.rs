@@ -411,6 +411,21 @@ impl SymbolTable {
         aliases
     }
 
+    /// Every name `module` explicitly `use`d, with the symbol it names.
+    ///
+    /// The one record of what an explicit import means: the local name (an
+    /// alias, or a namespace import's `ns$member`) paired with the declaration
+    /// it reaches, re-export chains already followed by
+    /// [`crate::analyze::Analyzer`]. A second walk over the `use` declarations
+    /// is a second answer to that question, so consumers read this instead.
+    pub fn imports_in(&self, module: &ModuleSource) -> impl Iterator<Item = (&str, &Symbol)> {
+        self.imports
+            .get(module)
+            .into_iter()
+            .flatten()
+            .filter_map(|(name, key)| Some((name.as_str(), self.symbols.get(key)?)))
+    }
+
     /// The symbol `module` explicitly `use`d under the local name `name`.
     /// Only the module's own import list — no prelude fallback and no
     /// declaration of its own — so a caller can order those layers itself.
@@ -419,22 +434,6 @@ impl SymbolTable {
             .get(module)
             .and_then(|names| names.get(name))
             .and_then(|key| self.symbols.get(key))
-    }
-
-    /// Look up a name as it resolves when referenced from `module`: the module's
-    /// own explicit imports first, then the implicit prelude. That fallback
-    /// keeps `List`, `Option`, … resolvable everywhere while confining every
-    /// other import to the module that declared it (#1298). The prelude's own
-    /// implementation files skip it, or they would recurse into themselves.
-    pub fn lookup(&self, module: &ModuleSource, name: &str) -> Option<&Symbol> {
-        if let Some(symbol) = self.imported(module, name) {
-            return Some(symbol);
-        }
-        let prelude = ModuleSource::prelude();
-        if module != &prelude {
-            return self.lookup_in_module(&prelude, name);
-        }
-        None
     }
 
     /// Look up a symbol in a specific module
@@ -612,13 +611,13 @@ mod tests {
 
         table.register_import(&importer, "println", key);
 
-        let symbol = table.lookup(&importer, "println");
+        let symbol = table.imported(&importer, "println");
         assert!(symbol.is_some());
         assert_eq!(symbol.unwrap().name, "println");
 
         // The import is scoped to `importer`; another module does not see it.
         let other = interner.local("./other.wado");
-        assert!(table.lookup(&other, "println").is_none());
+        assert!(table.imported(&other, "println").is_none());
     }
 
     #[test]

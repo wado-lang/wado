@@ -12,6 +12,7 @@ pub mod compiler_host;
 pub mod compiler_item;
 pub mod component_model;
 pub mod const_eval;
+pub mod defs;
 pub mod doc;
 pub mod effect_check;
 pub mod elaborator;
@@ -105,22 +106,22 @@ pub use token::Span;
 
 /// Build the diagnostic message for an unresolved `Type^Trait::method` call —
 /// `Type` does not implement `Trait` (see the WIR-build trait-bound check).
-fn trait_bound_violation_message(call_name: &str, display_trait_name: &str) -> String {
-    if let Some((ty, trait_name)) = name::split_trait_method_receiver(call_name) {
-        let ty = name::display_type_name(ty);
-        // Both halves of the mangle name their subject by its declaring module;
-        // a diagnostic shows what source wrote.
-        let trait_name = name::display_type_name(trait_name);
-        let mut msg = format!("type `{ty}` does not implement trait `{trait_name}`");
-        // `Display` has a ready `{x:?}` alternative; `display_trait_name` comes
-        // from the registry, not a literal.
-        if trait_name == display_trait_name {
-            msg.push_str("; use `{x:?}` for debug output, or add an `impl Display`");
-        }
-        msg
-    } else {
-        format!("unresolved generic call `{call_name}`")
+fn trait_bound_violation_message(
+    violation: &wir::TraitBoundViolation,
+    display_trait_name: &str,
+) -> String {
+    let wir::TraitBoundViolation {
+        type_display,
+        trait_display,
+        ..
+    } = violation;
+    let mut msg = format!("type `{type_display}` does not implement trait `{trait_display}`");
+    // `Display` has a ready `{x:?}` alternative; `display_trait_name` comes
+    // from the registry, not a literal.
+    if trait_display == display_trait_name {
+        msg.push_str("; use `{x:?}` for debug output, or add an `impl Display`");
     }
+    msg
 }
 
 use std::cell::RefCell;
@@ -1556,11 +1557,11 @@ fn compile_after_load<H: CompilerHost>(
         // Dedup by (call, site) so distinct sites each report their own location.
         let mut seen = crate::hashmap::IndexSet::default();
         for v in &wir_package.trait_bound_violations {
-            if seen.insert((v.call_name.clone(), v.span)) {
+            if seen.insert((v.type_display.clone(), v.trait_display.clone(), v.span)) {
                 let _ = logger.error(compiler_host::Diagnostic {
                     severity: compiler_host::Severity::Error,
                     code: compiler_host::Code::TypeMismatch,
-                    message: trait_bound_violation_message(&v.call_name, &display_trait_name),
+                    message: trait_bound_violation_message(v, &display_trait_name),
                     span: Some(compiler_host::DiagnosticSpan::from_span(
                         &v.span,
                         Some(&entry_filename),
@@ -1805,7 +1806,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 resolved_modules,
                 symbols.clone(),
                 tysys.trait_env,
-                implicit_modules.clone(),
+                        implicit_modules.clone(),
                 module_name,
                 tysys.cm_interface_registry,
                 world_registry,

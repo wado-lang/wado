@@ -892,9 +892,7 @@ impl<'a> Emitter<'a> {
                     self.classify_resolved(*inner)
                 }
             }
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => match name.as_str() {
+            ResolvedType::GenericInstance { def, type_args } => match self.types.def_name(*def) {
                 "Option" if type_args.len() == 1 => CmShape::Option(type_args[0]),
                 "List" if type_args.len() == 1 => CmShape::List(type_args[0]),
                 n if TypeTable::is_tuple_type(n) => CmShape::Tuple(type_args.clone()),
@@ -905,9 +903,7 @@ impl<'a> Emitter<'a> {
                 "AsyncCall" if type_args.len() == 1 => self.classify_resolved(type_args[0]),
                 _ => CmShape::Leaf,
             },
-            ResolvedType::GenericResource {
-                name, type_args, ..
-            } => match name.as_str() {
+            ResolvedType::GenericResource { def, type_args } => match self.types.def_name(*def) {
                 "Future" => CmShape::Future(type_args.first().copied()),
                 "Stream" => CmShape::Stream(type_args.first().copied()),
                 _ => CmShape::Leaf,
@@ -922,21 +918,24 @@ impl<'a> Emitter<'a> {
     fn map_resolved_leaf(&mut self, id: TypeId) -> Result<Type, WitEmitError> {
         match self.types.get(id) {
             ResolvedType::Primitive(p) => map_primitive(*p),
-            ResolvedType::Struct {
-                decl_name: name, ..
-            } if name == "String" => Ok(Type::String),
-            ResolvedType::Struct {
-                decl_name: name, ..
+            ResolvedType::Struct { .. } if self.types.is_string(id) => Ok(Type::String),
+            ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Newtype { .. } => {
+                let name = self
+                    .types
+                    .nominal_head(id)
+                    .expect("a nominal type names a declaration")
+                    .0;
+                Ok(self.named(&name, id))
             }
-            | ResolvedType::Enum { name, .. }
-            | ResolvedType::Variant { name, .. }
-            | ResolvedType::Flags { name, .. }
-            | ResolvedType::Newtype { name, .. } => Ok(self.named(name, id)),
-            ResolvedType::Resource { name, .. } => Ok(Type::named(to_kebab(name))),
+            ResolvedType::Resource { def } => Ok(Type::named(to_kebab(self.types.def_name(*def)))),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner = *inner;
-                if let ResolvedType::Resource { name, .. } = self.types.get(inner) {
-                    Ok(Type::borrow(to_kebab(name)))
+                if let ResolvedType::Resource { def } = self.types.get(inner) {
+                    Ok(Type::borrow(to_kebab(self.types.def_name(*def))))
                 } else {
                     self.map_type(inner)
                 }

@@ -261,10 +261,14 @@ pub(super) fn try_lift_wasi_variant_or_enum(
     {
         let cases = cases.to_vec();
         let module_source = ctx.module_source_for(source);
-        let variant_type = ctx
-            .type_table
-            .borrow_mut()
-            .make_variant(named.name.clone(), module_source);
+        let variant_type = {
+            let def = ctx
+                .type_table
+                .borrow_mut()
+                .decl_named_in(&named.name, &module_source)
+                .expect("the declaration this type names exists");
+            ctx.type_table.borrow_mut().make_variant(def)
+        };
         return Some(synthesize_lift_wasi_variant(
             &named.name,
             variant_type,
@@ -282,10 +286,14 @@ pub(super) fn try_lift_wasi_variant_or_enum(
     {
         let case_names = case_names.to_vec();
         let module_source = ctx.module_source_for(source);
-        let enum_type = ctx
-            .type_table
-            .borrow_mut()
-            .make_enum(named.name.clone(), module_source);
+        let enum_type = {
+            let def = ctx
+                .type_table
+                .borrow_mut()
+                .decl_named_in(&named.name, &module_source)
+                .expect("the declaration this type names exists");
+            ctx.type_table.borrow_mut().make_enum(def)
+        };
         return Some(synthesize_lift_wasi_enum(
             &named.name,
             enum_type,
@@ -335,9 +343,16 @@ fn try_lift_wasi_struct(
     // `wir_build::types::register_struct` registered.
     let struct_type_id = {
         let module_source = ctx.module_source_for(source);
-        ctx.type_table
-            .borrow_mut()
-            .make_struct(named.name.clone(), module_source)
+        {
+            let def = ctx
+                .type_table
+                .borrow_mut()
+                .decl_named_in(&named.name, &module_source)
+                .expect("the declaration this type names exists");
+            ctx.type_table
+                .borrow_mut()
+                .make_struct(crate::tir::StructDef::Decl(def))
+        }
     };
 
     // Lift each field — Wado field names come directly from this interface's

@@ -167,18 +167,10 @@ fn collect_resource_refs(
     }
     let ty = tt.get(type_id);
     match ty {
-        ResolvedType::Resource {
-            name,
-            module_source,
-        }
-        | ResolvedType::GenericResource {
-            name,
-            module_source,
-            ..
-        } => {
+        ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } => {
             out.insert(EffectRef::Concrete {
-                name: name.clone(),
-                module_source: module_source.clone(),
+                name: tt.def_name(*def).to_string(),
+                module_source: tt.def_module(*def).clone(),
             });
             if let ResolvedType::GenericResource { type_args, .. } = ty {
                 for ta in type_args {
@@ -224,22 +216,21 @@ fn collect_resource_refs(
                 visited,
             );
         }
-        ResolvedType::Struct {
-            decl_name: name,
-            module_source,
-            ..
-        } => {
-            if let Some(fields) = struct_fields.get(&(module_source.clone(), name.clone())) {
+        ResolvedType::Struct { def, .. } => {
+            let (name, module_source) = tt
+                .nominal_head(type_id)
+                .expect("a struct names a declaration");
+            let _ = def;
+            if let Some(fields) = struct_fields.get(&(module_source, name)) {
                 for ft in fields {
                     collect_resource_refs(*ft, tt, struct_fields, variant_payloads, out, visited);
                 }
             }
         }
-        ResolvedType::Variant {
-            name,
-            module_source,
-        } => {
-            if let Some(payloads) = variant_payloads.get(&(module_source.clone(), name.clone())) {
+        ResolvedType::Variant { def } => {
+            if let Some(payloads) =
+                variant_payloads.get(&(tt.def_module(*def).clone(), tt.def_name(*def).to_string()))
+            {
                 for pt in payloads {
                     collect_resource_refs(*pt, tt, struct_fields, variant_payloads, out, visited);
                 }
@@ -418,13 +409,11 @@ impl OwnedEffectData {
         // detection descends into variant case payloads.
         let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
             IndexMap::default();
-        for (module, variants) in state.tysys.all_variant_cases.iter() {
-            for (variant_name, info) in variants {
-                variant_payloads.insert(
-                    (module.clone(), variant_name.clone()),
-                    info.cases.iter().map(|case| case.payload).collect(),
-                );
-            }
+        for info in state.tysys.all_variant_cases.values() {
+            variant_payloads.insert(
+                (info.module_source.clone(), info.name.clone()),
+                info.cases.iter().map(|case| case.payload).collect(),
+            );
         }
 
         // Effect / resource propagation closure: holding effect `E` admits the
@@ -1406,8 +1395,8 @@ fn build_returns(
         }
     }
 
-    for variants in state.tysys.all_variant_cases.values() {
-        for info in variants.values() {
+    for info in state.tysys.all_variant_cases.values() {
+        {
             for case in &info.cases {
                 let mut positions = IndexSet::default();
                 if !matches!(sem.types.get(case.payload), ResolvedType::Unit) {
@@ -1639,13 +1628,11 @@ impl TypeRefCtx {
         }
         let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
             IndexMap::default();
-        for (module, variants) in state.tysys.all_variant_cases.iter() {
-            for (variant_name, info) in variants {
-                variant_payloads.insert(
-                    (module.clone(), variant_name.clone()),
-                    info.cases.iter().map(|case| case.payload).collect(),
-                );
-            }
+        for info in state.tysys.all_variant_cases.values() {
+            variant_payloads.insert(
+                (info.module_source.clone(), info.name.clone()),
+                info.cases.iter().map(|case| case.payload).collect(),
+            );
         }
         Self {
             struct_fields,
@@ -1676,20 +1663,16 @@ impl TypeRefCtx {
                 type_args.iter().any(|t| self.walk(tt, *t, visited))
             }
             ResolvedType::Newtype { base_type, .. } => self.walk(tt, *base_type, visited),
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => self
+            ResolvedType::Struct { def, .. } => self
                 .struct_fields
-                .get(&(module_source.clone(), name.clone()))
+                .get(&(
+                    tt.struct_head_module(*def).clone(),
+                    tt.struct_head_name(*def),
+                ))
                 .is_some_and(|fields| fields.iter().any(|t| self.walk(tt, *t, visited))),
-            ResolvedType::Variant {
-                name,
-                module_source,
-            } => self
+            ResolvedType::Variant { def } => self
                 .variant_payloads
-                .get(&(module_source.clone(), name.clone()))
+                .get(&(tt.def_module(*def).clone(), tt.def_name(*def).to_string()))
                 .is_some_and(|payloads| payloads.iter().any(|t| self.walk(tt, *t, visited))),
             ResolvedType::Function { .. } => false,
             ResolvedType::TypeParam { .. }

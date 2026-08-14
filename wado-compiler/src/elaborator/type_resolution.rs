@@ -431,8 +431,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Verify Option variant exists in symbol table (declared in prelude)
                 // First check local imports, then fall back to prelude module
                 let found_as_variant = self
-                    .symbols
-                    .lookup(&self.current_module_source, "Option")
+                    .symbol_named(&self.current_module_source, "Option")
                     .or_else(|| self.symbols.lookup_in_module(&prelude_source, "Option"))
                     .is_some_and(|s| matches!(s.kind, SymbolKind::Variant(_)));
 
@@ -523,33 +522,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let type_args: Vec<TypeId> =
                         args.iter().map(|t| self.resolve_type(t)).collect();
 
-                    // `info.name` is the type's storage identity — the bare
-                    // declared name for a module-level struct, or the
-                    // internal mangled name for a local one (so the
-                    // `GenericInstance` below carries a name that
-                    // `struct_fields_in` can find later, the same way a
-                    // concrete local struct's `TypeId` does — see
-                    // `resolve_local_struct`).
-                    let identity_name = struct_info
-                        .as_ref()
-                        .map(|info| info.name.clone())
-                        .unwrap_or_else(|| name.to_string());
-                    let module_source = struct_info
-                        .as_ref()
-                        .map(|info| info.module_source.clone())
-                        .unwrap_or_else(|| self.current_module_source.clone());
-
                     // Check trait bounds for each type argument
                     if let Some(info) = &struct_info {
                         for (i, (param_name, bounds)) in info.type_param_bounds.iter().enumerate() {
                             if let Some(&type_arg) = type_args.get(i) {
                                 for bound in bounds {
+                                    let Some(bound_def) = self.bound_trait_def(bound.site) else {
+                                        continue;
+                                    };
                                     if !self.tysys.type_implements_trait(
                                         &self.annotate_ctx,
                                         &self.type_lookup(),
                                         type_arg,
-                                        &bound.name,
-                                        self.tysys.resolutions.get(bound.site),
+                                        bound_def,
                                     ) {
                                         // Get the type name for the error message
                                         let type_name = self.tysys.type_id_to_string(type_arg);
@@ -572,12 +557,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
 
-                    // Create a GenericInstance type
-                    self.tysys.type_table.borrow_mut().make_generic_instance(
-                        identity_name,
-                        module_source,
-                        type_args,
-                    )
+                    // Create a GenericInstance type. The declaration is read
+                    // from the node that declares it, not from
+                    // `identity_name`: a function-local struct's storage name
+                    // is mangled, and no declaration is registered under that
+                    // spelling — asking by it could only ever miss.
+                    let def = struct_info
+                        .as_ref()
+                        .and_then(|info| self.tysys.resolutions.defs().of_ast_id(info.defined_at))
+                        .expect("the generic declaration being instantiated exists");
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_generic_instance(def, type_args)
                 } else if let Some(variant_info) = self.lookup_variant_case(name).cloned() {
                     // Check if it's a generic variant (like Result<T, E>)
                     if variant_info.type_params.is_empty() {
@@ -585,11 +577,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         let type_args: Vec<TypeId> =
                             args.iter().map(|t| self.resolve_type(t)).collect();
-                        self.tysys.type_table.borrow_mut().make_generic_instance(
-                            name.to_string(),
-                            variant_info.module_source,
-                            type_args,
-                        )
+                        let def = self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .decl_named_in(name, &variant_info.module_source)
+                            .expect("the generic variant being instantiated exists");
+                        self.tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_generic_instance(def, type_args)
                     }
                 } else if let Some(gn_info) = self.lookup_generic_newtype(name).cloned() {
                     // Generic newtype instantiation: type MyArray<T> = List<T>
@@ -600,14 +597,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Build a display name like "MyArray<i32>"
                     let resolved_args: Vec<TypeId> =
                         args.iter().map(|t| self.resolve_type(t)).collect();
-                    let arg_names: Vec<String> = resolved_args
-                        .iter()
-                        .map(|&tid| self.tysys.type_id_to_string(tid))
-                        .collect();
-                    let display_name = format!("{}<{}>", name, arg_names.join(", "));
-                    self.tysys.type_table.borrow_mut().make_newtype(
-                        display_name,
-                        gn_info.module_source,
+                    // The instantiation is named by its declaration and keeps
+                    // its arguments beside it, not fused into a rendered
+                    // `MyArray<i32>` head no `impl` header writes.
+                    let def = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .decl_named_in(name, &gn_info.module_source)
+                        .expect("the generic newtype being instantiated exists");
+                    self.tysys.type_table.borrow_mut().make_newtype_instance(
+                        def,
+                        resolved_args,
                         base_type_id,
                     )
                 } else if let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone()

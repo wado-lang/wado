@@ -44,17 +44,15 @@ pub(super) fn unify(
         // matches first.
         (
             ResolvedType::GenericInstance {
-                name: expected_name,
-                module_source: expected_module_source,
+                def: expected_def,
                 type_args: expected_elems,
             },
             ResolvedType::GenericInstance {
-                name: actual_name,
-                module_source: actual_module_source,
+                def: actual_def,
                 type_args: actual_elems,
             },
-        ) if TypeTable::is_tuple_type(expected_name)
-            && TypeTable::is_tuple_type(actual_name)
+        ) if TypeTable::is_tuple_type(type_table.borrow().def_name(*expected_def))
+            && TypeTable::is_tuple_type(type_table.borrow().def_name(*actual_def))
             && expected_elems
                 .iter()
                 .any(|e| matches!(type_table.borrow().get(*e), ResolvedType::TypePack { .. })) =>
@@ -92,16 +90,14 @@ pub(super) fn unify(
         // arguments positionally.
         (
             ResolvedType::GenericInstance {
-                name: expected_name,
+                def: expected_def,
                 type_args: expected_args,
-                ..
             },
             ResolvedType::GenericInstance {
-                name: actual_name,
+                def: actual_def,
                 type_args: actual_args,
-                ..
             },
-        ) if expected_name == actual_name && expected_args.len() == actual_args.len() => {
+        ) if expected_def == actual_def && expected_args.len() == actual_args.len() => {
             for (&exp_arg, &act_arg) in expected_args.iter().zip(actual_args.iter()) {
                 unify(type_table, exp_arg, act_arg, bindings);
             }
@@ -110,17 +106,15 @@ pub(super) fn unify(
         // tuple literal: infer `K` from the tuple element type.
         (
             ResolvedType::GenericInstance {
-                name,
+                def,
                 type_args: expected_args,
-                ..
             },
             ResolvedType::GenericInstance {
-                name: actual_name,
-                module_source: actual_module_source,
+                def: actual_def,
                 type_args: actual_elems,
             },
-        ) if name == &list_name
-            && TypeTable::is_tuple_type(actual_name)
+        ) if type_table.borrow().def_name(*def) == list_name
+            && TypeTable::is_tuple_type(type_table.borrow().def_name(*actual_def))
             && expected_args.len() == 1
             && !actual_elems.is_empty() =>
         {

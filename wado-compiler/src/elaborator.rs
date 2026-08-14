@@ -227,14 +227,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.logger.error_in(&self.current_module_source, err)
     }
 
+    /// The symbol `name` reaches from `module`.
+    ///
+    /// One scope answers, and it is the resolve pass's: the identity comes from
+    /// [`crate::resolve::Resolutions`] and the symbol row is read back off the
+    /// declaring node. Nothing here walks a module's imports a second time.
+    pub(crate) fn symbol_named(
+        &self,
+        module: &ModuleSource,
+        name: &str,
+    ) -> Option<&'a crate::symbol::Symbol> {
+        let def = self.tysys.resolutions.declaration_named(module, name)?;
+        self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
+    }
+
     /// Construct a [`TypeLookup`] view over the elaborator's current import
     /// context and shared `all_*` tables. Use this for any type-name
     /// resolution; never reach into `all_*` directly.
     pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
         TypeLookup {
             current_module_source: &self.current_module_source,
-            imported_type_sources: &self.sem.imports.imported_type_sources,
-            import_original_names: &self.sem.imports.import_original_names,
+            resolutions: &self.tysys.resolutions,
             namespace_imports: &self.sem.imports.namespace_imports,
             all_newtypes: &self.tysys.all_newtypes,
             all_struct_fields: &self.tysys.all_struct_fields,
@@ -249,11 +262,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             local_flags_cases: &self.sem.decls.local_flags_cases,
             local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
             local_variant_cases: &self.sem.decls.local_variant_cases,
-            fn_local_struct_fields: &self.sem.decls.fn_local_struct_fields,
-            fn_local_newtypes: &self.sem.decls.fn_local_newtypes,
-            fn_local_enum_cases: &self.sem.decls.fn_local_enum_cases,
-            fn_local_flags_cases: &self.sem.decls.fn_local_flags_cases,
-            fn_local_variant_cases: &self.sem.decls.fn_local_variant_cases,
+            local_item_struct_fields: &self.sem.decls.local_item_struct_fields,
+            local_item_newtypes: &self.sem.decls.local_item_newtypes,
+            local_item_renders: &self.sem.decls.local_item_renders,
+            fn_local_items: &self.sem.decls.fn_local_items,
         }
     }
 
@@ -313,12 +325,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         let scope = self.tysys.trait_env.import_scope(module);
         let saved_src = std::mem::replace(&mut self.current_module_source, module.clone());
-        let saved_imp =
-            std::mem::replace(&mut self.sem.imports.imported_type_sources, scope.sources);
-        let saved_orig = std::mem::replace(
-            &mut self.sem.imports.import_original_names,
-            scope.original_names,
-        );
         let saved_ns = std::mem::replace(
             &mut self.sem.imports.namespace_imports,
             scope.namespace_imports,
@@ -333,8 +339,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let result = body(self);
 
         self.current_module_source = saved_src;
-        self.sem.imports.imported_type_sources = saved_imp;
-        self.sem.imports.import_original_names = saved_orig;
         self.sem.imports.namespace_imports = saved_ns;
         self.sem.decls.local_struct_fields = saved_local_struct;
         self.sem.decls.local_newtypes = saved_local_newtypes;
@@ -396,11 +400,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// namespace member, etc.). Looks up the defining [`AstId`](crate::ast::AstId) through
     /// the symbol table; no-op if the name is not declared.
     pub(super) fn record_item_reference_by_name(&mut self, use_id: crate::ast::AstId, name: &str) {
-        let Some(sym) = self
-            .symbols
-            .lookup_in_module(&self.current_module_source, name)
-            .or_else(|| self.symbols.lookup(&self.current_module_source, name))
-        else {
+        let Some(sym) = self.symbol_named(&self.current_module_source, name) else {
             return;
         };
         let def_id = sym.defined_at;
@@ -485,11 +485,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut keys = vec![self.decl_key_or_local(written_name)];
         if let Some(module) = receiver_module {
             // From the receiver's own vantage, not the call site's.
-            let by_receiver = self
-                .tysys
-                .resolutions
-                .declaration_named(module, written_name, self.symbols)
-                .unwrap_or_else(|| (module.clone(), written_name.to_string()));
+            let resolutions = &self.tysys.resolutions;
+            let by_receiver = resolutions
+                .declaration_named(module, written_name)
+                .map_or_else(
+                    || (module.clone(), written_name.to_string()),
+                    |def| resolutions.decl_key(def),
+                );
             if by_receiver != keys[0] {
                 keys.push(by_receiver);
             }
@@ -802,9 +804,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// name-only caller and the site that wrote the same name cannot disagree.
     /// `None` when the name reaches no declaration; the caller decides.
     pub(crate) fn canonical_decl_key(&self, name: &str) -> Option<trait_env::DeclKey> {
-        self.tysys
-            .resolutions
-            .declaration_named(&self.current_module_source, name, self.symbols)
+        let resolutions = &self.tysys.resolutions;
+        resolutions
+            .declaration_named(&self.current_module_source, name)
+            .map(|def| resolutions.decl_key(def))
     }
 
     /// [`Self::canonical_decl_key`], then the declaration indexes, then the
@@ -843,21 +846,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> crate::name::FqTraitName {
         let resolutions = &self.tysys.resolutions;
         let answer = resolutions.get(site);
-        debug_assert!(
-            answer.is_some() || site.is_synthetic(),
-            "every reference site is resolved before elaboration, `{written}` was not"
-        );
-        if let Some(crate::resolve::DeclRef::Binder(_)) = answer {
+        if let crate::resolve::Resolution::Binder(_) = answer {
             return crate::name::FqTraitName::binder(written);
         }
-        let (base, args) = crate::name::split_head_and_args(written);
-        resolutions
-            .declared(site)
-            .map_or_else(
-                || self.fq_trait_name_undeclared(base),
-                |(module, name)| crate::name::FqTraitName::declared(module, name),
-            )
-            .with_args(args)
+        // `written` is a bound's spelling, and a bound is a bare name: the
+        // parser reads `<...>` after one as associated-type bindings, so no
+        // type argument ever reaches here to be split back out.
+        resolutions.declared(site).map_or_else(
+            || self.fq_trait_name_undeclared(written),
+            |def| {
+                let defs = resolutions.defs();
+                crate::name::FqTraitName::declared(defs.module(def), defs.name(def))
+            },
+        )
     }
 
     /// The answer for a trait reference whose site names no declaration the
@@ -898,17 +899,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let head = crate::resolve::head_site(ty)
             .and_then(|site| {
                 let resolutions = &self.tysys.resolutions;
-                debug_assert!(
-                    resolutions.get(site).is_some() || site.is_synthetic(),
-                    "every reference site is resolved before elaboration, `{written}` was not"
-                );
                 match resolutions.get(site) {
-                    Some(crate::resolve::DeclRef::Binder(_)) => {
+                    crate::resolve::Resolution::Binder(_) => {
                         Some(crate::name::FqTraitName::binder(&written))
                     }
-                    _ => resolutions
-                        .declared(site)
-                        .map(|(module, name)| crate::name::FqTraitName::declared(module, name)),
+                    _ => resolutions.declared(site).map(|def| {
+                        let defs = resolutions.defs();
+                        crate::name::FqTraitName::declared(defs.module(def), defs.name(def))
+                    }),
                 }
             })
             .unwrap_or_else(|| self.fq_trait_name_undeclared(&written));
@@ -980,17 +978,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             target_type_id,
             trait_name,
         ) {
-            let module_source = match self.tysys.type_table.borrow().get(target_type_id) {
-                tir::ResolvedType::Struct { module_source, .. }
-                | tir::ResolvedType::Enum { module_source, .. }
-                | tir::ResolvedType::Variant { module_source, .. }
-                | tir::ResolvedType::Newtype { module_source, .. }
-                | tir::ResolvedType::Flags { module_source, .. }
-                | tir::ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
-                other => unreachable!(
-                    "explicit derive marker validated for non-nominal type `{other:?}`"
-                ),
-            };
+            let module_source = self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_head(target_type_id)
+                .map(|(_, m)| m)
+                .unwrap_or_else(|| {
+                    unreachable!("explicit derive marker validated for a non-nominal type")
+                });
             // The marker's own site says which trait it names; the request is
             // keyed by that declaration, not by the spelling.
             if let Some(key) = self.fq_trait_name(trait_type).canonical() {
@@ -1002,13 +998,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
         let receiver = Receiver::Type(self.tysys.fq_receiver_head(target_type_id));
-        if self.tysys.has_real_trait_impl_for_type(
-            &self.annotate_ctx,
-            &self.type_lookup(),
-            &receiver,
-            trait_name,
-            None,
-        ) {
+        // The marker's own site says which trait it names, so an already-present
+        // impl is recognised by declaration rather than by a spelling another
+        // module's trait can share.
+        let requested = crate::resolve::head_site(trait_type)
+            .and_then(|site| self.tysys.resolutions.declared(site));
+        if requested.is_some_and(|trait_| {
+            self.tysys.has_real_trait_impl_for_type(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                &receiver,
+                trait_,
+            )
+        }) {
             return;
         }
         let reason = self.tysys.trait_unimpl_reason_chain(
@@ -1171,7 +1173,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let (type_module, canon_key) = trait_query::canonical_assoc_const_key(
             key,
             &self.current_module_source,
-            self.symbols,
             &self.tysys.resolutions,
         )?;
         self.tysys
@@ -1186,6 +1187,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         module_source: &ModuleSource,
     ) -> Option<&StructFieldInfo> {
         self.type_lookup().struct_fields_in(name, module_source)
+    }
+
+    /// Field info for the struct `def` declares.
+    pub(super) fn lookup_struct_fields_of_decl(
+        &self,
+        def: crate::defs::DefId,
+    ) -> Option<&StructFieldInfo> {
+        self.type_lookup().struct_fields_of(def)
+    }
+
+    /// Field info for a struct type's head; see `TypeLookup::struct_fields_of`.
+    pub(super) fn lookup_struct_fields_of(
+        &self,
+        head: crate::tir::StructDef,
+    ) -> Option<&StructFieldInfo> {
+        self.type_lookup().struct_fields_of_head(head, || {
+            self.tysys.type_table.borrow().struct_head_name(head)
+        })
     }
 
     /// Like [`Self::lookup_struct_fields_in`], but also considers the
@@ -1209,6 +1228,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().variant_case_in(name, module_source)
     }
 
+    /// The variant `type_id` is an instance of, or `None` when it is not one.
+    ///
+    /// Asks the type for its declaration instead of reading a `(name, module)`
+    /// pair off it: an instantiated `Option<i32>` answers with the `Option` it
+    /// was spelled from, so there is no separate generic arm and no
+    /// `contains_variant` spelling check deciding whether the pair means a
+    /// variant at all.
+    pub(super) fn variant_of_type(&self, type_id: TypeId) -> Option<&VariantInfo> {
+        let def = self.tysys.type_def(type_id)?;
+        self.tysys.all_variant_cases.get(&def)
+    }
+
     pub(super) fn lookup_enum_case_in(
         &self,
         name: &str,
@@ -1225,48 +1256,70 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().flags_case_in(name, module_source)
     }
 
-    /// Build effect name → module source map from a module's import declarations.
+    /// Build effect name → declaring module map for a module.
     ///
-    /// For `use { Stdout::{write_via_stream} } from "wasi:cli"`, maps "Stdout" → resolved("wasi:cli").
-    /// For `use { Stdout } from "core:cli"`, maps "Stdout" → resolved("core:cli").
-    /// For local effect declarations, maps name → current module source.
+    /// Three sources, applied in *increasing* precedence — each overwrites the
+    /// last, so the one written last here is the one that answers:
+    ///
+    /// 1. `use { Iface::{f} }`, which names an interface without importing it,
+    ///    so the `use` declaration is the only record of what `Iface` means;
+    /// 2. the module's explicit imports, read from the symbol table where the
+    ///    analyzer already resolved aliases and re-export chains;
+    /// 3. the module's own `interface` / `resource` declarations, which win
+    ///    over any import of the name.
+    ///
+    /// The order is what the third clause requires, and stating it as a list
+    /// of decreasing precedence read the other way round.
+    ///
+    /// An import earns an entry by *being* an effect or a resource, asked of
+    /// the declaration. Guessing from the spelling — the `PascalCase` test this
+    /// replaces — admitted every imported struct and let a same-named one
+    /// answer for an effect it has nothing to do with.
     fn build_effect_sources(
         interner: &mut ModuleSourceInterner,
         module: &Module,
         module_source: &ModuleSource,
         entry: Option<&ModuleSource>,
         invocations: &crate::kiln::InvocationIndex,
+        symbols: &crate::symbol::SymbolTable,
     ) -> IndexMap<String, ModuleSource> {
         let mut sources = IndexMap::default();
         for item in &module.items {
-            match item {
-                Item::Use(use_decl) => {
-                    // `entry` must be threaded so identities match the loader
-                    // (see `name::resolve_local_identity`). Wasm-asset imports
-                    // resolve to `ModuleSource::Wasm`, matching the loader.
-                    let source = crate::loader::resolve_use_decl_source(
-                        interner,
-                        module_source,
-                        use_decl,
-                        entry,
-                        invocations,
-                    );
-                    for use_item in &use_decl.items {
-                        match use_item {
-                            ast::UseItem::InterfaceFunctions { interface_name, .. } => {
-                                sources.insert(interface_name.clone(), source.clone());
-                            }
-                            ast::UseItem::Simple { name, alias, .. } => {
-                                // Track simple imports that look like effect names (PascalCase)
-                                let local_name = alias.as_ref().unwrap_or(name);
-                                if local_name.starts_with(|c: char| c.is_ascii_uppercase()) {
-                                    sources.insert(local_name.clone(), source.clone());
-                                }
-                            }
-                            ast::UseItem::Wildcard | ast::UseItem::Namespace { .. } => {}
-                        }
-                    }
+            let Item::Use(use_decl) = item else {
+                continue;
+            };
+            let mut interfaces = use_decl.items.iter().filter_map(|use_item| match use_item {
+                ast::UseItem::InterfaceFunctions { interface_name, .. } => Some(interface_name),
+                ast::UseItem::Simple { .. }
+                | ast::UseItem::Wildcard
+                | ast::UseItem::Namespace { .. } => None,
+            });
+            if let Some(first) = interfaces.next() {
+                // `entry` must be threaded so identities match the loader
+                // (see `name::resolve_local_identity`). Wasm-asset imports
+                // resolve to `ModuleSource::Wasm`, matching the loader.
+                let source = crate::loader::resolve_use_decl_source(
+                    interner,
+                    module_source,
+                    use_decl,
+                    entry,
+                    invocations,
+                );
+                for interface_name in std::iter::once(first).chain(interfaces) {
+                    sources.insert(interface_name.clone(), source.clone());
                 }
+            }
+        }
+        for (local_name, sym) in symbols.imports_in(module_source) {
+            if matches!(
+                sym.kind,
+                crate::symbol::SymbolKind::Effect(_) | crate::symbol::SymbolKind::Resource(_)
+            ) {
+                sources.insert(local_name.to_string(), sym.module_source().clone());
+            }
+        }
+        for item in &module.items {
+            match item {
                 Item::Interface(effect_decl) => {
                     sources.insert(effect_decl.name.clone(), module_source.clone());
                 }
@@ -1338,46 +1391,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return Some(self.decl_key_or_local(&name));
         }
         let tt = self.tysys.type_table.borrow();
+        // A nominal type's head is the declaration it carries; a newtype's
+        // arguments live beside it, so nothing here truncates a spelling at
+        // its first `<` to recover one.
         match tt.get(tt.peel_refs(type_id)) {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
+            ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::GenericResource { .. } => {
+                tt.nominal_head(tt.peel_refs(type_id)).map(|(n, m)| (m, n))
             }
-            | ResolvedType::Enum {
-                name,
-                module_source,
-            }
-            | ResolvedType::Variant {
-                name,
-                module_source,
-            }
-            | ResolvedType::Flags {
-                name,
-                module_source,
-            }
-            | ResolvedType::Resource {
-                name,
-                module_source,
-            }
-            | ResolvedType::Newtype {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            }
-            | ResolvedType::GenericResource {
-                name,
-                module_source,
-                ..
-            } => Some((
-                module_source.clone(),
-                crate::name::split_base_name(name).to_string(),
-            )),
             _ => None,
         }
     }
@@ -1464,8 +1491,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // current module. Falls through to `current_module_source`
                     // only when no symbol exists (genuinely-local declaration).
                     let canonical = self
-                        .symbols
-                        .lookup(&self.current_module_source, name)
+                        .symbol_named(&self.current_module_source, name)
                         .map(|sym| {
                             if let Some(use_id) = use_id {
                                 self.record_reference_to_def(use_id, sym.defined_at);
@@ -1524,6 +1550,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &module_source,
             Some(&self.entry_module_source),
             &self.invocations,
+            self.symbols,
         );
 
         // Record use→def edges for names that appear inside `use { ... }` specifiers.

@@ -20,7 +20,7 @@ use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::sig::InstantiatedImplSig;
 use super::synth::{ArgClass, ArgProbe};
-use super::trait_env::{DeclKey, ImplHeader, TraitEnv};
+use super::trait_env::{ImplHeader, TraitEnv};
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, MethodOwner,
@@ -516,8 +516,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check newtypes/flags — the impl block may live in the module that defines the type
         if let Some(type_id) = self.lookup_newtype(struct_name) {
             let ms = match self.tysys.type_table.borrow().get(type_id).clone() {
-                ResolvedType::Newtype { module_source, .. }
-                | ResolvedType::Flags { module_source, .. } => Some(module_source),
+                ResolvedType::Newtype { def, .. } | ResolvedType::Flags { def } => {
+                    Some(self.tysys.type_table.borrow().def_module(def).clone())
+                }
                 _ => None,
             };
             if let Some(module_source) = ms {
@@ -531,15 +532,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return first.clone();
         }
 
-        // Aliased imports (`use { Counter as CounterA }`) aren't declared
-        // as local Structs anywhere; consult `imported_type_sources` to
-        // recover the canonical declaring module. This intentionally
-        // narrower than the full `canonical_decl_key` fallback chain —
-        // synthesized lookups (e.g. `String^Inspect`) must still resolve
-        // through their well-known modules, which the full chain might
-        // route elsewhere.
-        if let Some(src) = self.sem.imports.imported_type_sources.get(struct_name) {
-            return src.clone();
+        // Aliased imports (`use { Counter as CounterA }`) aren't declared as
+        // local Structs anywhere, so the declaring module comes from what the
+        // name reaches here. Deliberately the scope and not the full
+        // `decl_key_or_local` chain: its index scans pick a module by spelling
+        // across the whole program, which is what would route a synthesized
+        // lookup (`String^Inspect`) away from its well-known module.
+        if let Some(def) = self
+            .tysys
+            .resolutions
+            .value_named(&self.current_module_source, struct_name)
+        {
+            return self.tysys.resolutions.defs().module(def).clone();
         }
         // Default to current module source
         self.current_module_source.clone()
@@ -568,22 +572,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For primitives, module_source is None to trigger "search all loaded modules" logic
         let (struct_name, struct_module_source, receiver_type_args, newtype_base) = match &base_type
         {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => (name.clone(), Some(module_source.clone()), None, None),
-            // Resource types use reference semantics - handle like struct for method lookup
-            ResolvedType::Resource {
-                name,
-                module_source,
-            } => (name.clone(), Some(module_source.clone()), None, None),
+            ResolvedType::Struct { .. } | ResolvedType::Resource { .. } => {
+                let (name, module_source) = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(base_type_id)
+                    .expect("a nominal type names a declaration");
+                (name, Some(module_source), None, None)
+            }
             // Generic instances like Box<i32> use the base name "Box" for method lookup.
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
+                let name = &self.tysys.type_table.borrow().def_name(*def).to_string();
+                let module_source = &self.tysys.type_table.borrow().def_module(*def).clone();
                 if TypeTable::is_tuple_type(name) {
                     let elems = type_args;
                     if method_name == "len" {
@@ -669,19 +670,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Newtype: first try looking up methods on the newtype itself,
             // then fall back to the base type for method inheritance
             ResolvedType::Newtype {
-                name,
-                module_source,
                 base_type,
+                type_args: newtype_args,
+                ..
             } => {
-                let (head, own_type_args) = if name.contains('<') {
+                let (name, module_source) = &self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(base_type_id)
+                    .expect("a newtype names a declaration");
+                let (head, own_type_args) = if newtype_args.is_empty() {
+                    (name.clone(), None)
+                } else {
                     let args = {
                         let tt = self.tysys.type_table.borrow();
                         let ultimate = tt.get_ultimate_base_type(base_type_id);
                         tt.generic_type_args(ultimate).filter(|a| !a.is_empty())
                     };
-                    (crate::name::split_base_name(name).to_string(), args)
-                } else {
-                    (name.clone(), None)
+                    (name.clone(), args)
                 };
                 (
                     head,
@@ -692,12 +699,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Flags: first try looking up methods on the flags type itself,
             // then fall back to u32 for method inheritance
-            ResolvedType::Flags {
-                name,
-                module_source,
-            } => (
-                name.clone(),
-                Some(module_source.clone()),
+            ResolvedType::Flags { .. } => (
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(base_type_id)
+                    .expect("a flags type names a declaration")
+                    .0,
+                Some(
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(base_type_id)
+                        .expect("a flags type names a declaration")
+                        .1,
+                ),
                 None,
                 Some(TypeTable::U32),
             ),
@@ -719,18 +735,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Unit type () - search for impl blocks in loaded modules
             ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), None, None, None),
             // Enum types - search for impl blocks by enum name
-            ResolvedType::Enum {
-                name,
-                module_source,
-            } => (name.clone(), Some(module_source.clone()), None, None),
+            ResolvedType::Enum { .. } => {
+                let (name, module_source) = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(base_type_id)
+                    .expect("an enum names a declaration");
+                (name, Some(module_source), None, None)
+            }
             // Generic resource types (Future<T>, Stream<T>, etc.)
-            ResolvedType::GenericResource {
-                name,
-                module_source,
-                type_args,
-            } => (
-                name.clone(),
-                Some(module_source.clone()),
+            ResolvedType::GenericResource { def, type_args } => (
+                self.tysys.type_table.borrow().def_name(*def).to_string(),
+                Some(self.tysys.type_table.borrow().def_module(*def).clone()),
                 if type_args.is_empty() {
                     None
                 } else {
@@ -753,14 +770,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.get_type_name(&header.ty) != struct_name {
                     continue;
                 }
+                // Whether the impl's own module means the receiver's
+                // declaration by that spelling — asked of that module, which is
+                // the only vantage the answer is a fact about.
                 let targets_receiver = impl_module == module_source
                     || self
                         .tysys
-                        .trait_env
-                        .import_scope(impl_module)
-                        .sources
-                        .get(&struct_name)
-                        .is_some_and(|m| m == module_source);
+                        .resolutions
+                        .value_named(impl_module, &struct_name)
+                        .is_some_and(|def| {
+                            self.tysys.resolutions.defs().module(def) == module_source
+                        });
                 if !targets_receiver {
                     continue;
                 }
@@ -914,12 +934,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
-        let decl_id = self
+        // `resource_module` is the declaring module, so this asks it about its
+        // own declarations rather than asking what the name means from here.
+        let def = self
             .tysys
-            .all_resource_types
-            .get(resource_module)?
-            .get(struct_name)?
-            .defined_at;
+            .resolutions
+            .declared_in(resource_module, struct_name)?;
+        let decl_id = self.tysys.all_resource_types.get(&def)?.defined_at;
         let sig = self
             .tysys
             .signatures
@@ -1400,8 +1421,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::Newtype { base_type, .. } => {
                         let base_name = match self.tysys.type_table.borrow().get(base_type).clone()
                         {
-                            ResolvedType::GenericInstance { name, .. }
-                            | ResolvedType::GenericResource { name, .. } => name,
+                            ResolvedType::GenericInstance { def, .. }
+                            | ResolvedType::GenericResource { def, .. } => {
+                                self.tysys.type_table.borrow().def_name(def).to_string()
+                            }
                             ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
                             _ => self.tysys.type_table.borrow().type_name(base_type),
                         };
@@ -1450,13 +1473,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // explicit `impl`, which the name-based lookup misses. A viable
             // blanket must survive to the authoritative `candidate_matches_receiver`.
             let bounds_satisfied = bounds.iter().all(|bound| {
+                let Some(bound_def) = bound.decl_ref else {
+                    return false;
+                };
                 if let Some(rt) = receiver_type_id
                     && self.tysys.type_implements_trait(
                         &self.annotate_ctx,
                         &type_lookup,
                         rt,
-                        &bound.name,
-                        bound.decl_ref,
+                        bound_def,
                     )
                 {
                     return true;
@@ -1466,8 +1491,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.annotate_ctx,
                         &type_lookup,
                         &target.receiver(),
-                        &bound.name,
-                        bound.decl_ref,
+                        bound_def,
                     )
                 })
             });
@@ -1546,16 +1570,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         };
         let receiver_outer = match self.tysys.type_table.borrow().get(rt) {
-            ResolvedType::GenericInstance { name, .. }
-            | ResolvedType::Struct {
-                decl_name: name, ..
-            }
-            | ResolvedType::Enum { name, .. }
-            | ResolvedType::Resource { name, .. }
-            | ResolvedType::GenericResource { name, .. }
-            | ResolvedType::Newtype { name, .. }
-            | ResolvedType::Flags { name, .. }
-            | ResolvedType::Variant { name, .. } => name.clone(),
+            ResolvedType::GenericInstance { .. }
+            | ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Variant { .. } => self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_head(rt)
+                .map(|(n, _)| n)
+                .unwrap_or_default(),
             ResolvedType::Primitive(p) => p.as_str().to_string(),
             // The raw GC array's outer constructor is "Array", so a `&Array<T>`
             // ref impl (`impl Trait for &Array<T>`) matches a `&Array<_>` receiver.
@@ -1596,13 +1624,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         };
         param.bounds.iter().all(|bound| {
+            let Some(bound_def) = self.bound_trait_def(bound.id) else {
+                return true;
+            };
             receiver_type_id.is_some_and(|rt| {
                 self.tysys.type_implements_trait(
                     &self.annotate_ctx,
                     &self.type_lookup(),
                     rt,
-                    &bound.name,
-                    self.tysys.resolutions.get(bound.id),
+                    bound_def,
                 )
             })
         })
@@ -1723,7 +1753,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // site has resolved by naming one.
         if let Some(wanted) = required_trait {
             found_traits.retain(|m| {
-                m.trait_decl == wanted.decl
+                crate::resolve::Resolution::Def(m.trait_decl) == wanted.decl
                     && wanted
                         .args
                         .as_ref()
@@ -1748,12 +1778,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys
                     .auto_derive_by_method(method_name)
                     .is_some_and(|(item, _, _)| {
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .compiler_trait_fq(item)
-                            .canonical()
-                            .is_some_and(|decl| decl == wanted.decl)
+                        self.tysys.compiler_trait_def(item).is_some_and(|decl| {
+                            crate::resolve::Resolution::Def(decl) == wanted.decl
+                        })
                     })
             })
         {
@@ -2003,18 +2030,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // module), the arguments with the impl's bound type params substituted
         // (so `impl<T> Take<T> for Wrapper<T>` on `Wrapper<i32>` reads as
         // `Take<i32>`). Spellings never carry identity (WEP 2026-07-31).
-        let trait_decl = signatures
+        // `check_impl_trait_resolves` has already rejected a header whose trait
+        // reaches no declaration, and such a block implements no trait — so it
+        // contributes no trait method here. The index still holds it, keyed on
+        // the spelling it wrote, which is how an erroneous block reaches a
+        // lookup at all; a candidate built without an identity keys on nothing.
+        let Some(trait_decl) = signatures
             .impl_sig(impl_ref.1)
             .expect("the decl pass records every impl block's declaration facts")
             .trait_decl
-            .clone()
-            .expect("a candidate reached here through the trait impl index");
+        else {
+            return found_traits;
+        };
+        let defs = scope.tysys.resolutions.defs().clone();
         let trait_args = impl_sig.trait_type_args;
 
         let mut method_found = false;
         if let Some((method_sig, method_type_params)) = method_data {
             let self_kind = method_sig.self_kind;
-            let trait_name = scope.get_type_name_full(&trait_type_for_name);
 
             // Bring the reported slots into scope, so the body resolves `T`
             // to the slot the call site binds. Effect and `fn`-bound params
@@ -2103,12 +2136,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             };
             found_traits.push(TraitMethodMatch {
-                trait_name: crate::name::FqTraitName::declared_as_written(
-                    &trait_decl.0,
-                    &trait_decl.1,
-                    &trait_name,
-                ),
-                trait_decl: trait_decl.clone(),
+                trait_name: crate::name::FqTraitName::declared(
+                    defs.module(trait_decl),
+                    defs.name(trait_decl),
+                )
+                .with_args(super::trait_env::written_type_args(&trait_type_for_name)),
+                trait_decl,
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
                     method_ast_id: Some(method_sig.ast_id),
@@ -2141,7 +2174,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // declaration for a default method with that name
         if !method_found {
             let trait_name_base = scope.get_type_name(&trait_type_for_name);
-            let trait_name_str = scope.get_type_name_full(&trait_type_for_name);
             if let Some(default_method) = scope
                 .trait_sig_by_name(&trait_name_base)
                 .and_then(|sig| sig.method(method_name))
@@ -2159,11 +2191,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = default_method.sig.self_kind;
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
-                    trait_name: crate::name::FqTraitName::declared_as_written(
-                        &trait_decl.0,
-                        &trait_decl.1,
-                        &trait_name_str,
-                    ),
+                    trait_name: crate::name::FqTraitName::declared(
+                        defs.module(trait_decl),
+                        defs.name(trait_decl),
+                    )
+                    .with_args(super::trait_env::written_type_args(&trait_type_for_name)),
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
@@ -2222,14 +2254,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Rule 1 ranks the impls of *one* trait against each other, so it must
         // not outrank locality between traits: a foreign blanket
         // `impl<T> A for T` would otherwise beat a local `impl<..T> B for [..T]`.
-        let traits_with_non_variadic: IndexSet<(DeclKey, Vec<TypeId>)> = found_traits
+        let traits_with_non_variadic: IndexSet<(crate::defs::DefId, Vec<TypeId>)> = found_traits
             .iter()
             .filter(|m| !m.is_variadic_impl)
-            .map(|m| (m.trait_decl.clone(), m.trait_args.clone()))
+            .map(|m| (m.trait_decl, m.trait_args.clone()))
             .collect();
         found_traits.retain(|m| {
             !m.is_variadic_impl
-                || !traits_with_non_variadic.contains(&(m.trait_decl.clone(), m.trait_args.clone()))
+                || !traits_with_non_variadic.contains(&(m.trait_decl, m.trait_args.clone()))
         });
 
         // Sort BEFORE dedup_by, since dedup_by only removes adjacent
@@ -2256,16 +2288,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `s.shout()` dispatches to the `Loud` in scope there). Only when
         // several colliding declarations are in scope does the cross-trait
         // ambiguity below stand.
-        let distinct: IndexSet<DeclKey> = found_traits
+        let distinct: IndexSet<crate::defs::DefId> = found_traits
             .iter()
             .filter(|m| m.blanket_type_param.is_none())
-            .map(|m| m.trait_decl.clone())
+            .map(|m| m.trait_decl)
             .collect();
         if distinct.len() > 1 {
-            let visible: IndexSet<DeclKey> = distinct
+            let visible: IndexSet<crate::defs::DefId> = distinct
                 .iter()
-                .filter(|d| self.trait_decl_in_scope(d))
-                .cloned()
+                .filter(|d| self.trait_decl_in_scope(**d))
+                .copied()
                 .collect();
             if visible.len() == 1 {
                 found_traits
@@ -2435,25 +2467,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The collision is counted on declarations, so two same-named traits
         // from different modules still collide even though their spellings
         // agree — identity is the declaration, not the name.
-        let mut seen: IndexSet<DeclKey> = IndexSet::default();
+        let mut seen: IndexSet<crate::defs::DefId> = IndexSet::default();
         for m in found_traits
             .iter()
             .filter(|m| m.blanket_type_param.is_none())
         {
-            seen.insert(m.trait_decl.clone());
+            seen.insert(m.trait_decl);
         }
         if seen.len() < 2 {
             return;
         }
         // Same-named declarations are qualified by their declaring module —
         // a bare `'Kind' and 'Kind'` names nothing the user can act on.
+        let defs = self.tysys.resolutions.defs();
         let mut bases: Vec<String> = seen
             .iter()
-            .map(|(module, name)| {
-                if seen.iter().filter(|(_, n)| n == name).count() > 1 {
-                    format!("{name} (from \"{module}\")")
+            .map(|d| {
+                let name = defs.name(*d);
+                if seen.iter().filter(|o| defs.name(**o) == name).count() > 1 {
+                    format!("{name} (from \"{}\")", defs.module(*d))
                 } else {
-                    name.clone()
+                    name.to_string()
                 }
             })
             .collect();
@@ -3066,10 +3100,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct {
-                decl_name: name, ..
-            } => name,
-            ResolvedType::GenericInstance { name, .. } => name,
+            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_head(base_type_id)
+                .map(|(n, _)| n)?,
             _ => return None, // Not a struct type
         };
 
@@ -3097,18 +3133,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(output_base_type_id)
             .clone()
         {
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                ..
-            } => (name, module_source, None),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => (
-                name,
-                module_source,
+            ResolvedType::Struct { .. } => {
+                let (n, m) = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(output_base_type_id)
+                    .expect("a struct names a declaration");
+                (n, m, None)
+            }
+            ResolvedType::GenericInstance { type_args, .. } => (
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(output_base_type_id)
+                    .expect("a generic instance names a declaration")
+                    .0,
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(output_base_type_id)
+                    .expect("a generic instance names a declaration")
+                    .1,
                 if type_args.is_empty() {
                     None
                 } else {

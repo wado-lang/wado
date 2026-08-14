@@ -177,17 +177,15 @@ pub(super) fn check_assignable(
 
     // Rule 8: Generic instances -- compare name + type args
     if let ResolvedType::GenericInstance {
-        name: actual_name,
+        def: actual_def,
         type_args: actual_args,
-        ..
     } = type_table.get(actual_inner)
         && let ResolvedType::GenericInstance {
-            name: expected_name,
+            def: expected_def,
             type_args: expected_args,
-            ..
         } = type_table.get(expected_inner)
     {
-        if actual_name != expected_name {
+        if actual_def != expected_def {
             return TypeCheckResult::Incompatible;
         }
         if actual_args.len() != expected_args.len() {

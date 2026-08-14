@@ -112,11 +112,9 @@ impl Monomorphizer {
             // Handle GenericInstance types that weren't in the direct substitution map
             // This can happen when function substitution creates new GenericInstance types
             // with different TypeIds for the type arguments
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
+                let name = type_table.def_name(def).to_string();
+                let module_source = type_table.def_module(def).clone();
                 // Skip List and Tuple - they have special codegen handling and should remain
                 // as GenericInstance, not be rewritten to Struct
                 if name == "List" || TypeTable::is_tuple_type(&name) {
@@ -129,7 +127,12 @@ impl Monomorphizer {
                     } else if TypeTable::is_tuple_type(&name) {
                         type_table.make_tuple(new_args)
                     } else {
-                        type_table.make_generic_instance(name, module_source, new_args)
+                        {
+                            let def = type_table
+                                .decl_named_in(&name, &module_source)
+                                .expect("the declaration this type names exists");
+                            type_table.make_generic_instance(def, new_args)
+                        }
                     };
                 }
 
@@ -161,12 +164,9 @@ impl Monomorphizer {
         valid_struct_names: &IndexSet<String>,
     ) {
         for id in type_table.iter_type_ids() {
-            if let ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } = type_table.get(id)
-            {
+            if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) {
+                let name = &type_table.def_name(*def).to_string();
+                let module_source = &type_table.def_module(*def).clone();
                 // Skip empty type_args (invalid generic instances)
                 if type_args.is_empty() {
                     continue;
@@ -191,6 +191,7 @@ impl Monomorphizer {
 
                 if all_concrete {
                     let key = crate::tir::InstantiationKey {
+                        def: Some(*def),
                         name: name.clone(),
                         module_source: module_source.clone(),
                         impl_type_args: type_args.clone(),
@@ -260,37 +261,25 @@ impl Monomorphizer {
             }
             // Only a param-embedding base is re-mangled; a concrete-base newtype
             // keeps its identity so its trait impls resolve. See wado-lang/wado#1626.
-            ResolvedType::Newtype {
-                name,
-                module_source,
-                base_type,
-            } if type_table.contains_type_param(base_type) => {
+            // The head stays the declaration; only the arguments move, which
+            // is why nothing here re-derives a head by truncating a spelling.
+            ResolvedType::Newtype { def, base_type, .. }
+                if type_table.contains_type_param(base_type) =>
+            {
                 let new_base = self.substitute_type(base_type, substitution, type_table);
                 if new_base == base_type {
                     return type_id;
                 }
-                let head = crate::name::split_base_name(&name).to_string();
-                let new_name = match type_table.generic_type_args(new_base) {
-                    Some(args) if !args.is_empty() => {
-                        let arg_names: Vec<String> = args
-                            .iter()
-                            .map(|&a| type_table.mangle_type_arg_for_generic(a))
-                            .collect();
-                        mangle_generic_name(&head, &arg_names)
-                    }
-                    _ => head,
-                };
+                let new_args = type_table.generic_type_args(new_base).unwrap_or_default();
                 type_table.intern(ResolvedType::Newtype {
-                    name: new_name,
-                    module_source,
+                    def,
+                    type_args: new_args,
                     base_type: new_base,
                 })
             }
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => {
+            ResolvedType::GenericInstance { def, type_args } => {
+                let name = type_table.def_name(def).to_string();
+                let module_source = type_table.def_module(def).clone();
                 if type_args.is_empty() {
                     if !substitution.is_empty() {
                         let mut indexed_args: Vec<(u32, TypeId)> =
@@ -401,7 +390,12 @@ impl Monomorphizer {
                     return tid;
                 }
 
-                type_table.make_generic_instance(name, module_source, new_args)
+                {
+                    let def = type_table
+                        .decl_named_in(&name, &module_source)
+                        .expect("the declaration this type names exists");
+                    type_table.make_generic_instance(def, new_args)
+                }
             }
             // Delegate leaf cases (TypeParam, TypePack, GenericResource,
             // AssocTypeProjection, and other non-composite types) to the
@@ -533,21 +527,16 @@ impl TirMutVisitor for TypeRewriter<'_> {
                 struct_name.clone_from(mangled_name);
             } else {
                 match self.type_table.get(new_type_id) {
-                    ResolvedType::Struct {
-                        decl_name,
-                        type_args,
-                        ..
-                    } => {
-                        *struct_name = self.type_table.struct_rendered_name(decl_name, type_args);
+                    ResolvedType::Struct { def, type_args } => {
+                        *struct_name = self.type_table.struct_rendered_name(*def, type_args);
                     }
-                    ResolvedType::GenericInstance {
-                        name, type_args, ..
-                    } => {
+                    ResolvedType::GenericInstance { def, type_args } => {
                         let type_names: Vec<String> = type_args
                             .iter()
                             .map(|&arg| self.type_table.mangle_type_arg_for_generic(arg))
                             .collect();
-                        *struct_name = mangle_generic_name(name, &type_names);
+                        *struct_name =
+                            mangle_generic_name(self.type_table.def_name(*def), &type_names);
                     }
                     _ => {}
                 }

@@ -200,9 +200,10 @@ fn is_sroa_eligible_inner_type(type_id: TypeId) -> bool {
 
 fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, ModuleSource)> {
     match type_table.get(type_id) {
-        ResolvedType::Struct { module_source, .. } => {
-            Some((type_table.struct_list_name(type_id)?, module_source.clone()))
-        }
+        ResolvedType::Struct { def, .. } => Some((
+            type_table.struct_list_name(type_id)?,
+            type_table.struct_head_module(*def).clone(),
+        )),
         _ => None,
     }
 }
@@ -305,13 +306,10 @@ fn mut_reachable_contains(
         return false;
     }
     let (inner, inner_writable) = match type_table.get(ty) {
-        ResolvedType::Struct {
-            decl_name,
-            module_source,
-            type_args,
-        } => {
+        ResolvedType::Struct { def, type_args } => {
+            let module_source = &type_table.struct_head_module(*def).clone();
             let key = (
-                type_table.struct_rendered_name(decl_name, type_args),
+                type_table.struct_rendered_name(*def, type_args),
                 module_source.clone(),
             );
             let writable_here = writable || type_table.is_mut_box(ty);

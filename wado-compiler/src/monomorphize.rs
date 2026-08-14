@@ -178,10 +178,10 @@ fn dispatch_receiver_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
 /// impls on a `flags` type are written against the flags name.
 fn dispatch_receiver_identity(tt: &TypeTable, type_id: TypeId) -> Option<crate::name::FqTypeName> {
     match tt.get_unerased(type_id) {
-        ResolvedType::Flags {
-            name,
-            module_source,
-        } => Some(crate::name::FqTypeName::declared(module_source, name)),
+        ResolvedType::Flags { def } => Some(crate::name::FqTypeName::declared(
+            tt.def_module(*def),
+            tt.def_name(*def),
+        )),
         _ => None,
     }
 }
@@ -214,12 +214,12 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
         // lookup they are.
         ResolvedType::Primitive(_) | ResolvedType::Unit => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
-        ResolvedType::Struct { module_source, .. }
-        | ResolvedType::GenericInstance { module_source, .. }
-        | ResolvedType::Enum { module_source, .. }
-        | ResolvedType::Flags { module_source, .. }
-        | ResolvedType::Resource { module_source, .. }
-        | ResolvedType::Variant { module_source, .. } => Some(module_source.clone()),
+        ResolvedType::Struct { .. }
+        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Flags { .. }
+        | ResolvedType::Resource { .. }
+        | ResolvedType::Variant { .. } => type_table.nominal_head(type_id).map(|(_, m)| m),
         // Newtypes inherit their base type's impls (`type Foo = List<u8>`
         // gets List's methods); the body of the inherited generic
         // instantiation lives in the base type's module by convention, so
@@ -249,7 +249,23 @@ impl Monomorphizer {
             }
             while let Some(key) = self.structs.pending.pop() {
                 let struct_key = (key.name.clone(), key.module_source.clone());
-                if let Some(generic_struct) = generic_structs.get(&struct_key)
+                // The template map is keyed by `TirStruct::name`, the storage
+                // spelling — mangled for a function-local declaration — while
+                // an instantiation names the declaration. When the two differ,
+                // resolve the declaration and ask again under what it renders
+                // to; otherwise a local `struct Box<T>` is never instantiated
+                // and nothing downstream is registered for it.
+                let rendered_key = {
+                    let tt = type_table.borrow();
+                    key.def
+                        .or_else(|| tt.decl_named_in(&key.name, &key.module_source))
+                        .map(|def| (tt.decl_render_name(def), key.module_source.clone()))
+                        .filter(|k| *k != struct_key)
+                };
+                let generic_struct = generic_structs
+                    .get(&struct_key)
+                    .or_else(|| rendered_key.as_ref().and_then(|k| generic_structs.get(k)));
+                if let Some(generic_struct) = generic_struct
                     && let Some(concrete) =
                         self.instantiate_struct(generic_struct, &key, &mut type_table.borrow_mut())
                 {
@@ -310,10 +326,23 @@ impl Monomorphizer {
         // Store in module for later phases
         module.generic_structs.clone_from(&generic_structs);
 
-        let valid_struct_names: IndexSet<String> = generic_structs
-            .keys()
-            .map(|(name, _)| name.clone())
-            .collect();
+        // The names instantiation sites spell — the *declared* ones. The map
+        // is keyed by storage spelling, which for a function-local generic
+        // struct carries a disambiguator no site writes, so keying the filter
+        // off the keys dropped every local generic before it could become
+        // pending. `drain_pending_structs` disambiguates by identity once a
+        // site is admitted.
+        let valid_struct_names: IndexSet<String> = {
+            let tt = module.type_table.borrow();
+            generic_structs
+                .values()
+                .map(|s| {
+                    s.def
+                        .decl()
+                        .map_or_else(|| s.name.clone(), |d| tt.def_name(d).to_string())
+                })
+                .collect()
+        };
 
         // Phase 2-4: Collect and instantiate structs iteratively
         // This is done in a loop because instantiating a struct (like TreeMap<String,i32>)

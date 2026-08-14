@@ -110,14 +110,6 @@ impl FunctionRef {
         self.monomorph_info.is_some()
     }
 
-    /// Get the base generic name if this is a monomorphized function.
-    pub fn base_struct_name(&self) -> Option<String> {
-        self.monomorph_info
-            .as_ref()
-            .and_then(|info| info.generic_name.split("::").next())
-            .map(std::string::ToString::to_string)
-    }
-
     /// Check if this is a method (instance or static) as opposed to a free function.
     pub fn is_method(&self) -> bool {
         self.method_info.is_some()
@@ -621,6 +613,10 @@ pub struct NirParam {
 
 #[derive(Debug, Clone)]
 pub struct NirStruct {
+    /// The struct type this reifies — the declaration it was written from, or
+    /// the shape it was built from. Carried down from `TirStruct` so a pass
+    /// asking which struct this is does not have to find one by `name`.
+    pub def: crate::tir::StructDef,
     pub name: String,
     pub module_source: ModuleSource,
     pub visibility: ast::Visibility,

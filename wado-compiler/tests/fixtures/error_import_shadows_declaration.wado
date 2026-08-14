@@ -1,0 +1,14 @@
+// A `use` whose local name the module also declares leaves the name meaning two
+// declarations at once, and nothing can say which. An alias resolves it.
+use { Widget } from "./sub/error_import_shadows_declaration_widget.wado";
+
+pub struct Widget {
+    here: i32,
+}
+
+export fn run() {
+    let w = Widget { here: 1 };
+}
+
+__DATA__
+{"compile_error": "import of 'Widget' collides with the declaration"}

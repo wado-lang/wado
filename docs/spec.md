@@ -3884,6 +3884,29 @@ use {Regexp} from "docs:regex";
 use {Router} from "lib:router";
 ```
 
+Implementing a trait requires naming it: `impl Trait for Type` and the bodiless
+derive form `impl Trait for Type;` both need `Trait` in scope, whether declared
+in the module, imported, or auto-imported from the prelude.
+
+```wado
+use {Deserialize} from "core:serde";
+impl Deserialize for Config;          // OK
+
+impl Deserialize for Config;          // error without the import
+```
+
+An import's local name must not collide with a declaration in the importing
+module. The name would mean two declarations at once and nothing could say
+which, so the program is rejected; an alias says which one was meant.
+
+```wado
+use {Widget} from "./other.wado";
+pub struct Widget { … }               // error: collides with the import
+
+use {Widget as Theirs} from "./other.wado";
+pub struct Widget { … }               // OK
+```
+
 ### Import Attributes (`with`)
 
 Use `with { ... }` to specify import metadata:

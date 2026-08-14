@@ -4989,6 +4989,7 @@ impl Parser {
                 assoc_types: Vec::new(),
                 span,
                 fn_signature: Some(fn_signature),
+                resolved: None,
             });
         }
 
@@ -5027,6 +5028,7 @@ impl Parser {
             assoc_types,
             span,
             fn_signature: None,
+            resolved: None,
         })
     }
 

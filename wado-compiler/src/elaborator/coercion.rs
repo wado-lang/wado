@@ -201,10 +201,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Literal::Number(repr) = &lit.value
             && !util::is_float_only_literal(repr)
         {
-            let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
-                ResolvedType::Struct {
-                    decl_name: name, ..
-                } => Some(name),
+            let struct_name = match self.tysys.type_table.borrow().get(target_type) {
+                ResolvedType::Struct { def, .. } => {
+                    Some(self.tysys.type_table.borrow().struct_head_name(*def))
+                }
                 _ => None,
             };
 
@@ -238,10 +238,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Literal::Number(repr) = &lit.value
             && !util::is_float_only_literal(repr)
         {
-            let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
-                ResolvedType::Struct {
-                    decl_name: name, ..
-                } => Some(name),
+            let struct_name = match self.tysys.type_table.borrow().get(target_type) {
+                ResolvedType::Struct { def, .. } => {
+                    Some(self.tysys.type_table.borrow().struct_head_name(*def))
+                }
                 _ => None,
             };
 
@@ -360,7 +360,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .to_string();
             let is_string_newtype = matches!(
                 self.tysys.type_table.borrow().get(base_id),
-                ResolvedType::Struct { decl_name: name, .. } if name == &string_struct_name
+                ResolvedType::Struct { def, .. }
+                    if self.tysys.type_table.borrow().struct_head_name(*def) == string_struct_name
             ) && target_type != base_id;
             if is_string_newtype {
                 // Walk the inner literal / template for fact recording.
@@ -532,16 +533,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .struct_name_for_type(builder_type)
             .unwrap_or_else(|| base_name.clone());
-        let builder_type_module = match self.tysys.type_table.borrow().get(builder_type) {
-            ResolvedType::Struct { module_source, .. }
-            | ResolvedType::GenericInstance { module_source, .. }
-            | ResolvedType::Enum { module_source, .. }
-            | ResolvedType::Variant { module_source, .. }
-            | ResolvedType::Newtype { module_source, .. }
-            | ResolvedType::Flags { module_source, .. }
-            | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
-            _ => None,
-        };
+        let builder_type_module = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_head(builder_type)
+            .map(|(_, m)| m);
         // The builder's `Trait::new_literal` body lives in the impl-block's
         // module (`KeyValueLiteralBuilder` impls in `core:prelude/internal`
         // and the like), falling back to the builder type's own module

@@ -343,12 +343,9 @@ impl<'a> CallImmutability<'a> {
                 let base = *base_type;
                 self.walk(base, stack)
             }
-            ResolvedType::Struct {
-                decl_name: name,
-                module_source,
-                type_args,
-                ..
-            } => {
+            ResolvedType::Struct { def, type_args } => {
+                let name = &self.type_table.struct_head_name(*def);
+                let module_source = &self.type_table.struct_head_module(*def).clone();
                 let is_box_or_list = (!type_args.is_empty() && *name == self.box_name)
                     || (!type_args.is_empty() && *name == self.list_name);
                 if is_box_or_list {
@@ -357,7 +354,7 @@ impl<'a> CallImmutability<'a> {
                     // `struct_fields` is keyed by the NIR struct's rendered
                     // name, so an instantiation must be spelled with its args.
                     let key = (
-                        self.type_table.struct_rendered_name(name, type_args),
+                        self.type_table.struct_rendered_name(*def, type_args),
                         module_source.clone(),
                     );
                     match self.struct_fields.get(&key) {
@@ -925,9 +922,10 @@ fn reference_pointee_struct_key(
         ResolvedType::Newtype { base_type, .. } => {
             reference_pointee_struct_key(*base_type, type_table)
         }
-        ResolvedType::Struct { module_source, .. } => {
-            Some((type_table.struct_list_name(type_id)?, module_source.clone()))
-        }
+        ResolvedType::Struct { def, .. } => Some((
+            type_table.struct_list_name(type_id)?,
+            type_table.struct_head_module(*def).clone(),
+        )),
         _ => None,
     }
 }
@@ -1014,12 +1012,16 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     let is_box_or_list_name = |n: &str| n == box_name || n == list_name;
     match type_table.get(type_id) {
         ResolvedType::Ref(_) => true,
-        ResolvedType::GenericInstance { name, .. } if is_box_or_list_name(name) => true,
-        ResolvedType::Struct {
-            decl_name,
-            type_args,
-            ..
-        } if !type_args.is_empty() && is_box_or_list_name(decl_name) => true,
+        ResolvedType::GenericInstance { def, .. }
+            if is_box_or_list_name(type_table.def_name(*def)) =>
+        {
+            true
+        }
+        ResolvedType::Struct { def, type_args }
+            if !type_args.is_empty() && is_box_or_list_name(&type_table.struct_head_name(*def)) =>
+        {
+            true
+        }
         ResolvedType::Primitive(_)
         | ResolvedType::Unit
         | ResolvedType::Never
