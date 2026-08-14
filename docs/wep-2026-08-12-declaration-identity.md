@@ -763,6 +763,20 @@ compiles, passes the suite, and ends with a mechanical completion check.
       can name a type-parameter binder or reach no declaration, so a bare
       `DefId` cannot stand for it — the answer the site already has can.
 
+- [ ] The tuple family's declaring module is not where its impls live.
+      `module_source_for_trait_impl` reads a receiver's declaring module and
+      the monomorphizer falls through to it "by convention" when no per-type
+      impl answers — the convention being that a generic `impl` for a type
+      sits in that type's own module. The tuple family breaks it: the
+      declaration and its `#[compiler_item("tuple")]` are in
+      `core:prelude/types.wado` while every variadic `impl … for [..T]` is in
+      `core:prelude/tuple.wado`. A call to `[char,char]^InspectAlt::inspect_alt`
+      is minted under `types.wado` while the definition is emitted under
+      `tuple.wado`, and lowering's stub-shadowing assertion catches it —
+      `package-gale` is the reproducer. The convention is the thing to remove:
+      a receiver's impl module is a question `TraitEnv` answers, not one a
+      declaring module stands in for.
+
 - [ ] `SymbolPath`; the mangled-name parsers deleted; DCE retention keys the
       struct's identity rather than re-deriving a name that must match one built
       elsewhere. Done when `name.rs` exports no function taking a mangled string.
