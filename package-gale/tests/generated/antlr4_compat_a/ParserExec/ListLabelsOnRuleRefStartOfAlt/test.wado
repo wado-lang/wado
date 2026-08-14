@@ -2240,8 +2240,10 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
-                let op = p.expect(TK_AND, &EMPTY_SYNC);
-                let args_item = _parse_expression(p, follow, 3);
+                _first_iter: {
+                    let op = p.expect(TK_AND, &EMPTY_SYNC);
+                    let args_item = _parse_expression(p, follow, 3);
+                }
                 while !p.recovering && (p.peek_kind() == TK_AND && !follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
                     let op = p.expect(TK_AND, &EMPTY_SYNC);
                     let args_item = _parse_expression(p, follow, 3);
@@ -2256,7 +2258,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
-                _first_iter: {
+                _first_iter_2: {
                     let op = p.expect(TK_OR, &EMPTY_SYNC);
                     let args_item = _parse_expression(p, follow, 2);
                 }

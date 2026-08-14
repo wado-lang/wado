@@ -2049,7 +2049,9 @@ fn _parse_seg__inner(p: &mut Parser) -> () {
     }
     if kind == TK_LIT_LBRACKET {
         let lbracket = p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
-        let wildcard = p.any();
+        _first_iter: {
+            let wildcard = p.any();
+        }
         while !p.recovering && (!_kind_set_2(p.peek_kind())) {
             let wildcard = p.any();
         }

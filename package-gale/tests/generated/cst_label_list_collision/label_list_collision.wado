@@ -1634,8 +1634,10 @@ pub global RK_LEADING_LIST: NodeKind = 1;
 pub global RK_TRAILING_LIST: NodeKind = 2;
 pub global RK_LIST_GROUP: NodeKind = 3;
 pub global RK_LAZY_PLUS: NodeKind = 4;
+pub global RK_LAZY_PLUS_AFTER: NodeKind = 5;
+pub global RK_LAZY_PLUS_LIST_AFTER: NodeKind = 6;
 
-global RULE_NAMES: List<String> = ["stream", "leading_list", "trailing_list", "list_group", "lazy_plus"];
+global RULE_NAMES: List<String> = ["stream", "leading_list", "trailing_list", "list_group", "lazy_plus", "lazy_plus_after", "lazy_plus_list_after"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -2002,6 +2004,78 @@ fn scan_lazy_plus(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
+fn scan_lazy_plus_after(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    sg_3_done: {
+        sg_3: {
+            if pos >= tokens.len() || tokens[pos] != TK_TAG { break sg_3; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_WORD { break sg_3; }
+            pos += 1;
+            break sg_3_done;
+        }
+        return -1;
+    }
+    while pos < tokens.len() && tokens[pos] == TK_TAG {
+        let sp = pos;
+        sg_4_done: {
+            sg_4: {
+                if pos >= tokens.len() || tokens[pos] != TK_TAG { break sg_4; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_WORD { break sg_4; }
+                pos += 1;
+                break sg_4_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_END { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_lazy_plus_list_after(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    sg_5_done: {
+        sg_5: {
+            if pos >= tokens.len() || tokens[pos] != TK_TAG { break sg_5; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_WORD { break sg_5; }
+            pos += 1;
+            break sg_5_done;
+        }
+        return -1;
+    }
+    while pos < tokens.len() && tokens[pos] == TK_TAG {
+        let sp = pos;
+        sg_6_done: {
+            sg_6: {
+                if pos >= tokens.len() || tokens[pos] != TK_TAG { break sg_6; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_WORD { break sg_6; }
+                pos += 1;
+                break sg_6_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_END { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_stream__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let tag_item = p.expect(TK_TAG, &EMPTY_SYNC);
@@ -2118,6 +2192,60 @@ fn _parse_lazy_plus(p: &mut Parser) -> () {
     }
 }
 
+fn _parse_lazy_plus_after__inner(p: &mut Parser) -> () {
+    let start = p.peek_start();
+    _first_iter: {
+        let tag = p.expect(TK_TAG, &SYNC_3);
+        let word = p.expect(TK_WORD, &EMPTY_SYNC);
+    }
+    while !p.recovering && (p.peek_kind() == TK_TAG) {
+        let tag = p.expect(TK_TAG, &SYNC_3);
+        let word = p.expect(TK_WORD, &EMPTY_SYNC);
+    }
+    let end = p.expect(TK_END, &SYNC_1);
+    let tag = p.expect(TK_TAG, &SYNC_0);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_lazy_plus_after(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_LAZY_PLUS_AFTER, _start);
+    _parse_lazy_plus_after__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("lazy_plus_after");
+    }
+}
+
+fn _parse_lazy_plus_list_after__inner(p: &mut Parser) -> () {
+    let start = p.peek_start();
+    _first_iter: {
+        let tag = p.expect(TK_TAG, &SYNC_3);
+        let word = p.expect(TK_WORD, &EMPTY_SYNC);
+    }
+    while !p.recovering && (p.peek_kind() == TK_TAG) {
+        let tag = p.expect(TK_TAG, &SYNC_3);
+        let word = p.expect(TK_WORD, &EMPTY_SYNC);
+    }
+    let end = p.expect(TK_END, &SYNC_1);
+    let tag = p.expect(TK_TAG, &SYNC_0);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_lazy_plus_list_after(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_LAZY_PLUS_LIST_AFTER, _start);
+    _parse_lazy_plus_list_after__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("lazy_plus_list_after");
+    }
+}
+
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
@@ -2157,6 +2285,14 @@ pub fn parse_list_group(input: &String, max_errors: i32 = i32::MAX) -> ParseResu
 
 pub fn parse_lazy_plus(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lazy_plus(p));
+}
+
+pub fn parse_lazy_plus_after(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lazy_plus_after(p));
+}
+
+pub fn parse_lazy_plus_list_after(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lazy_plus_list_after(p));
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {

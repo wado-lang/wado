@@ -1903,7 +1903,9 @@ fn scan_y(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_s__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let x = _parse_x(p);
+    _first_iter: {
+        let x = _parse_x(p);
+    }
     loop {
         if p.recovering { break; }
         let mut ng_exit: bool = false;

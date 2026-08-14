@@ -14535,7 +14535,9 @@ fn _parse_column_def(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 
 fn _parse_type_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let name = _parse_name(p, &EMPTY_FOLLOW);
+    _first_iter: {
+        let name = _parse_name(p, &EMPTY_FOLLOW);
+    }
     loop {
         if p.recovering { break; }
         let mut ng_exit: bool = false;
