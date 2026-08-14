@@ -2067,7 +2067,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut method_found = false;
         if let Some((method_sig, method_type_params)) = method_data {
             let self_kind = method_sig.self_kind;
-            let trait_name = scope.get_type_name_full(&trait_type_for_name);
 
             // Bring the reported slots into scope, so the body resolves `T`
             // to the slot the call site binds. Effect and `fn`-bound params
@@ -2156,11 +2155,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             };
             found_traits.push(TraitMethodMatch {
-                trait_name: crate::name::FqTraitName::declared_as_written(
+                trait_name: crate::name::FqTraitName::declared(
                     defs.module(trait_decl),
                     defs.name(trait_decl),
-                    &trait_name,
-                ),
+                )
+                .with_args(super::trait_env::written_type_args(&trait_type_for_name)),
                 trait_decl,
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
@@ -2194,7 +2193,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // declaration for a default method with that name
         if !method_found {
             let trait_name_base = scope.get_type_name(&trait_type_for_name);
-            let trait_name_str = scope.get_type_name_full(&trait_type_for_name);
             if let Some(default_method) = scope
                 .trait_sig_by_name(&trait_name_base)
                 .and_then(|sig| sig.method(method_name))
@@ -2212,11 +2210,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = default_method.sig.self_kind;
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
-                    trait_name: crate::name::FqTraitName::declared_as_written(
+                    trait_name: crate::name::FqTraitName::declared(
                         defs.module(trait_decl),
                         defs.name(trait_decl),
-                        &trait_name_str,
-                    ),
+                    )
+                    .with_args(super::trait_env::written_type_args(&trait_type_for_name)),
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {

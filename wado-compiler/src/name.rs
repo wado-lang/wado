@@ -34,7 +34,7 @@
 
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 /// Canonical method name of the synthesised `__call` impl on every
 /// closure functor struct. Defined as a single constant so the
@@ -298,41 +298,19 @@ pub const INLINE_REF_EAGER_MAX_BYTES: usize = 64;
 /// Examples:
 /// - `./geometry.wado/helper`
 /// - `core/rt/log_stdout`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FreeFunctionName {
     /// The module where the function is defined
     pub module_source: ModuleSource,
     /// The function name (e.g., `helper`)
     pub name: String,
-    /// The generic this was instantiated from (e.g. `List` for
-    /// `List<i32>::len`), or `None` for a function written as such. Being an
-    /// instantiation *is* having one, so the `is_monomorphized` flag that used
-    /// to sit beside this was a second encoding of the same fact.
-    pub base_name: Option<String>,
 }
-
-// Manually implement Hash/Eq to only use module_source and name (not metadata)
-impl Hash for FreeFunctionName {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.module_source.hash(state);
-        self.name.hash(state);
-    }
-}
-
-impl PartialEq for FreeFunctionName {
-    fn eq(&self, other: &Self) -> bool {
-        self.module_source == other.module_source && self.name == other.name
-    }
-}
-
-impl Eq for FreeFunctionName {}
 
 impl FreeFunctionName {
     pub fn new(module_source: ModuleSource, name: String) -> Self {
         Self {
             module_source,
             name,
-            base_name: None,
         }
     }
 
@@ -346,7 +324,6 @@ impl FreeFunctionName {
         Self {
             module_source: interner.from_path(module_path),
             name: name.to_string(),
-            base_name: None,
         }
     }
 
@@ -361,7 +338,6 @@ impl FreeFunctionName {
         Self {
             module_source: interner.from_path(&path),
             name: name.to_string(),
-            base_name: None,
         }
     }
 
@@ -370,20 +346,6 @@ impl FreeFunctionName {
         Self {
             module_source: module_source.clone(),
             name: name.to_string(),
-            base_name: None,
-        }
-    }
-
-    /// Create a `FreeFunctionName` with monomorphization metadata.
-    pub fn with_monomorph_info(
-        module_source: ModuleSource,
-        name: String,
-        base_name: String,
-    ) -> Self {
-        Self {
-            module_source,
-            name,
-            base_name: Some(base_name),
         }
     }
 }
@@ -699,62 +661,6 @@ fn push_ref_prefix(out: &mut String, kind: RefKind) {
     }
 }
 
-/// Split a written or mangled name into its head and its type arguments:
-/// `"Stream<u8>"` → `("Stream", ["u8"])`, `"Display"` → `("Display", [])`.
-///
-/// For callers that hold a name where they should hold the site that wrote it;
-/// the pieces go straight back into a typed name.
-#[must_use]
-pub fn split_head_and_args(name: &str) -> (&str, Vec<String>) {
-    let Some(open) = name.find('<') else {
-        return (name, Vec::new());
-    };
-    let Some(close) = name.rfind('>') else {
-        return (name, Vec::new());
-    };
-    let args = split_type_args(&name[open + 1..close])
-        .into_iter()
-        .map(|a| a.trim().to_string())
-        .collect();
-    (&name[..open], args)
-}
-
-/// Split a mangled argument list on the commas that separate arguments,
-/// ignoring those nested inside an argument's own brackets.
-fn split_type_args(inner: &str) -> Vec<&str> {
-    let mut args = Vec::new();
-    let mut depth = 0usize;
-    let mut start = 0usize;
-    for (i, c) in inner.char_indices() {
-        match c {
-            '<' | '[' => depth += 1,
-            '>' | ']' => depth = depth.saturating_sub(1),
-            ',' if depth == 0 => {
-                args.push(&inner[start..i]);
-                start = i + c.len_utf8();
-            }
-            _ => {}
-        }
-    }
-    args.push(&inner[start..]);
-    args
-}
-
-/// Rebuild a monomorphized method's base-name key: replace everything up to
-/// and including the first `::` with `base::`, keeping only the method suffix.
-///
-/// - `rebase_monomorph_method("Box<i32>::get", "Box")` → `"Box::get"`
-/// - `rebase_monomorph_method("List<i32>^Ord::cmp", "List")` → `"List::cmp"`
-///
-/// When `mangled` has no `::` (a bare name), returns `base` unchanged. Used by
-/// the DCE call-graph keying to keep a monomorphized method mergeable with its
-/// generic template.
-pub fn rebase_monomorph_method(mangled: &str, base: &str) -> String {
-    match mangled.find("::") {
-        Some(pos) => format!("{base}::{}", &mangled[pos + 2..]),
-        None => base.to_string(),
-    }
-}
 
 impl LocalMethodName {
     /// The typed receiver shape — the query consumers use to reason about the
@@ -2878,15 +2784,6 @@ impl FqTraitName {
             head: TypeHead::Binder(name.to_string()),
             args: Vec::new(),
         }
-    }
-
-    /// The trait a declaration key names, carrying the type arguments a
-    /// written spelling (`Stream<u8>`) supplies. For a consumer that holds the
-    /// resolved declaration alongside the spelling the site wrote.
-    #[must_use]
-    pub fn declared_as_written(module: &ModuleSource, name: &str, written: &str) -> Self {
-        let (_, args) = split_head_and_args(written);
-        Self::declared(module, name).with_args(args)
     }
 
     /// The same trait with its type arguments, each already mangled.

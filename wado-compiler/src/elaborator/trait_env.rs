@@ -378,11 +378,11 @@ impl ImplHeader {
     /// `None` for an inherent impl, and for a trait position filled by a
     /// binder or a name that reaches no declaration.
     pub(super) fn fq_trait(&self) -> Option<name::FqTraitName> {
-        let written = get_type_name_full_static(self.trait_type.as_ref()?);
+        let trait_type = self.trait_type.as_ref()?;
         match self.trait_key.as_ref()? {
-            ImplTargetKey::Decl((module, name)) => Some(name::FqTraitName::declared_as_written(
-                module, name, &written,
-            )),
+            ImplTargetKey::Decl((module, name)) => Some(
+                name::FqTraitName::declared(module, name).with_args(written_type_args(trait_type)),
+            ),
             ImplTargetKey::TypeParam(_, name) => Some(name::FqTraitName::binder(name)),
             ImplTargetKey::Ref(_) | ImplTargetKey::Builtin(_) => None,
         }
@@ -2667,6 +2667,24 @@ pub(super) fn receiver_decl_key(ty: &ast::Type) -> String {
 
 /// [`get_type_name_static`] keeping the written type arguments
 /// (`Stream<u8>`), for the spellings a mangled name embeds.
+/// The type arguments a written trait position supplies, each rendered the
+/// way [`get_type_name_full_static`] renders one.
+///
+/// Read off the node that wrote them. Rendering the whole position and
+/// splitting the rendering back apart answers the same for a well-formed
+/// spelling and guesses for anything else, which is the failure this WEP is
+/// about.
+pub(super) fn written_type_args(ty: &ast::Type) -> Vec<String> {
+    match ty {
+        ast::Type::Generic(generic) => generic
+            .args
+            .iter()
+            .map(get_type_name_full_static)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 pub(super) fn get_type_name_full_static(ty: &ast::Type) -> String {
     match ty {
         ast::Type::Generic(generic) => {

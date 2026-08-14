@@ -902,17 +902,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let crate::resolve::Resolution::Binder(_) = answer {
             return crate::name::FqTraitName::binder(written);
         }
-        let (base, args) = crate::name::split_head_and_args(written);
-        resolutions
-            .declared(site)
-            .map_or_else(
-                || self.fq_trait_name_undeclared(base),
-                |def| {
-                    let defs = resolutions.defs();
-                    crate::name::FqTraitName::declared(defs.module(def), defs.name(def))
-                },
-            )
-            .with_args(args)
+        // `written` is a bound's spelling, and a bound is a bare name: the
+        // parser reads `<...>` after one as associated-type bindings, so no
+        // type argument ever reaches here to be split back out.
+        resolutions.declared(site).map_or_else(
+            || self.fq_trait_name_undeclared(written),
+            |def| {
+                let defs = resolutions.defs();
+                crate::name::FqTraitName::declared(defs.module(def), defs.name(def))
+            },
+        )
     }
 
     /// The answer for a trait reference whose site names no declaration the

@@ -4263,14 +4263,6 @@ impl FunctionRef {
         self.monomorph_info.is_some()
     }
 
-    /// Get the base generic name if this is a monomorphized function.
-    pub fn base_struct_name(&self) -> Option<String> {
-        self.monomorph_info
-            .as_ref()
-            .and_then(|info| info.generic_name.split("::").next())
-            .map(std::string::ToString::to_string)
-    }
-
     /// Check if this is a method (instance or static) as opposed to a free function.
     pub fn is_method(&self) -> bool {
         self.method_info.is_some()

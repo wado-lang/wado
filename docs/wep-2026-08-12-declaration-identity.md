@@ -763,7 +763,7 @@ compiles, passes the suite, and ends with a mechanical completion check.
       can name a type-parameter binder or reach no declaration, so a bare
       `DefId` cannot stand for it — the answer the site already has can.
 
-- [ ] The flip's e2e cost, measured. Running the whole suite to completion
+- [x] The flip's e2e cost, measured. Running the whole suite to completion
       for the first time since the flip found **120 failing fixtures**, all of
       one shape: a type now renders or identifies differently than the
       registry that has to find it. Two are fixed — a synthesized effect
@@ -953,9 +953,76 @@ compiles, passes the suite, and ends with a mechanical completion check.
       a receiver's impl module is a question `TraitEnv` answers, not one a
       declaring module stands in for.
 
+      The last fixture closed, and it is the same defect one more layer
+      down. `instantiate_struct` walks the type table for the
+      `GenericInstance`s a struct instantiation stands for, and matched them
+      on `(declared name, module, type args)`. Four sibling `struct Box<T>`
+      declarations mint four distinct instances, every one of which matched
+      every `Box<i32>` key: `type_substitutions` and `type_to_mangled_name`
+      were overwritten by whichever instantiation drained last, so all four
+      literals named one struct. The two-field one wrote two values into a
+      one-field type and wasm validation reported values left on the stack.
+      Matching on the declaration fixes it. **4342 passed, 0 failed.**
+
+      The measurement that found it is worth recording, because reasoning
+      had already refuted the obvious candidate. `InstantiationKey` carrying
+      its `DefId` — the fix the entry above predicted — left the error
+      byte-identical, so the collapse was downstream of keying. `wado dump
+      --tir-resolved` and `--tir-monomorphized` showed five distinct
+      templates and five distinct monomorphized structs, and every literal
+      naming `Box@2<i32>`: the structs were right, the *literals'* names were
+      wrong. `--types` then showed four distinct `Box<i32>` instances, which
+      places the collapse after interning and before naming — one function
+      wide. Three dumps, no builds, no hypotheses.
+
 - [ ] `SymbolPath`; the mangled-name parsers deleted; DCE retention keys the
       struct's identity rather than re-deriving a name that must match one built
       elsewhere. Done when `name.rs` exports no function taking a mangled string.
+
+      Seven of the eight are gone, each because the site that parsed a name
+      already held the structure the name was rendered from:
+
+      - `split_trait_method_receiver` + `is_local_trait_method_name`. A
+        `TraitBoundViolation` stored the mangled `Type^Trait::method` and the
+        reporter split it back apart. It now stores what the message says,
+        rendered at the recording site off the `LocalMethodName`; whether a
+        call is a trait-method impl is `method_info`'s trait, not a `^`.
+      - `display_method_name` + `split_local_method_name` +
+        `display_type_name`. `LocalMethodName::to_display_name` renders the
+        source spelling from the same fields the mangle uses, so the two
+        cannot drift. The test that pinned the parser's output now asserts
+        the two renderings agree.
+      - `strip_local_item_id`. `type_name` rendered a struct through the
+        storage spelling and then cut the disambiguator back off — splitting
+        on `@` and keeping the head, which discarded the type arguments with
+        it, so a local generic struct displayed as `Box`. It renders the
+        declared head instead. The other two callers stripped `def_name`,
+        which is the declared name and has nothing to strip.
+      - `rebase_monomorph_method`. This one was pure ceremony:
+        `FreeFunctionName::base_name` is excluded from `Hash`/`Eq` and read
+        by nothing, so the DCE call graph is byte-identical without it. The
+        field, its constructor, `rebase_monomorph_method`, and the two
+        `FunctionRef::base_struct_name` helpers that fed it are deleted, and
+        the one behavioural check that used the derived base — "is the
+        receiver `Box`" — compares the compiler item's declaration instead of
+        the spelling `"Box"`.
+      - `split_head_and_args`. Its two real callers rendered an `ast::Type`
+        to a string and split the rendering to recover the type arguments the
+        node already holds; `written_type_args` reads them off the node. Its
+        third caller passed a bound's spelling, and a bound is a bare name —
+        the parser reads `<…>` after one as associated-type bindings, so no
+        argument ever reached it.
+
+      What remains is the part `SymbolPath` is actually for.
+      `replace_type_name_in_mangled` rewrites a callee's mangled name after a
+      CM type swap (`List<T>::with_capacity` where `T` is WASI-derived).
+      Doing that structurally means substituting inside the callee's
+      `LocalMethodName` and re-rendering its name — which is only safe once a
+      function's name *is* a rendering of its identity rather than a string
+      that has to agree with one. That is `SymbolPath`, and it is the whole
+      of the remaining work here, along with subsuming `FqTypeName`,
+      `FqTraitName`, `Receiver`, `TypeHead`, `DeclName` and `DeclPath` into
+      it.
 
 The storage came before the scope because it is what the scope was for.
 `TypeLookup::lookup_ref` walked fn-local, module-local, current module and
@@ -967,11 +1034,15 @@ registries at once, which it cannot: a query that misses in one registry must
 fall through rather than shadow, and one flat answer cannot both shadow and fall
 through.
 
-Function-local items are what still keeps two name-keyed tiers above the
-registries. A local `struct` has no `DefId`, and its durable entry is keyed by a
-mangled storage name that no declaration carries, so `TypeLookup` reads those two
-maps directly. They go when a local item gets an identity scoped to its declaring
-function.
+Function-local items kept two name-keyed tiers above the registries for as long
+as a local `struct` had no `DefId` and its durable entry was keyed by a mangled
+storage name no declaration carried. It has one now: `declare_local_item` gives
+every `Stmt::Item` a declaration, `local_item_struct_fields` keys on it, and
+`Def::function_local` is what `decl_render_name` reads to append the
+disambiguator — so the declared name and the storage spelling are finally two
+renderings rather than two namespaces sharing a string. The tiers that remain
+are the walk's own position (`fn_local_items`, visible only after the statement
+that declares) and the rendered-name index a spelling still arrives through.
 
 Unifying the scope was the step with a real risk of behaviour change, and the
 disagreements it surfaced were settled rather than absorbed. Two of them are
@@ -1025,15 +1096,15 @@ The numbers this design is aimed at, measured over `wado-compiler/src`:
 
 | quantity                                            | at the start | now     |
 | --------------------------------------------------- | ------------ | ------- |
-| `*name: &str` parameters                            | 867          | 880     |
+| `*name: &str` parameters                            | 867          | 845     |
 | independent walks over the `use` declarations       | 3            | 1       |
 | implementations of "what does this name mean in M"  | 5            | 1       |
 | name-keyed per-module declaration registries        | 7            | 0       |
 | `type_implements_trait` callers passing no identity | 16 of 30     | 0 of 30 |
 | spelling comparisons in trait dispatch              | 2            | 0       |
 | synthesised references a consumer re-resolves       | 2            | 0       |
-| mangled-name parsing functions                      | 7            | 5       |
-| `decl_named_in` callers — the name-keyed residue     | 121          | 47      |
+| mangled-name parsing functions                      | 7            | 1       |
+| `decl_named_in` callers — the name-keyed residue     | 121          | 49      |
 | `decl_key_or_local` occurrences — the fabrication   | 26           | 30      |
 
 Each row reaches zero — or one, for the rows counting implementations — when its
@@ -1064,12 +1135,23 @@ design. `SymbolTable::lookup` was the last one and is deleted; what remains
 there is `lookup_in_module`, which answers what a module declares, not what a
 spelling means from a vantage.
 
-Two rows have gone _up_, and both say the same thing. `decl_key_or_local` sat at
-24 for one commit, when a qualified call's required trait was made a `DefId`, and
-came back — now 30 — when that turned out to be wrong: the required trait can
-name a type-parameter binder or a name that reaches no declaration at all, and a
-`DefId` cannot stand for either. `RequiredTrait` carries a `Resolution` now, and
-the row still climbed, because what it counts is the pair a consumer *renders*
-to reach a name-keyed neighbour, and those neighbours are in `ResolvedType`. The
-`*name: &str` row moves for the same reason. Both rows fall when the types carry
-identity, not before, and neither is evidence about the steps that have landed.
+One row has gone _up_. `decl_key_or_local` sat at 24 for one commit, when a
+qualified call's required trait was made a `DefId`, and came back — now 30 —
+when that turned out to be wrong: the required trait can name a type-parameter
+binder or a name that reaches no declaration at all, and a `DefId` cannot stand
+for either. `RequiredTrait` carries a `Resolution` now, and the row still
+climbed, because what it counts is the pair a consumer *renders* to reach a
+name-keyed neighbour, and those neighbours are in `ResolvedType`. It falls when
+the types carry identity, not before, and it is not evidence about the steps
+that have landed.
+
+The parser row is at one, and the last entry is `replace_type_name_in_mangled`
+— see `#8`'s checkbox for why it is the one that needs `SymbolPath` rather than
+a caller that already holds the structure. The `*name: &str` row turned over
+with it: 880 at its peak, 845 now.
+
+`decl_named_in` sits at 49 rather than the 47 recorded a few commits earlier.
+Both new callers are fallbacks beside a `DefId` the site now prefers — a
+monomorphization's template lookup and its rendered name — kept because a
+synthesized instantiation can still arrive carrying no declaration. They go with
+the same step the row's remainder does.

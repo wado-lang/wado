@@ -15,7 +15,7 @@ use crate::hashmap::IndexSet;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTypeName, FreeFunctionName, FunctionId, MethodName, mangle_generic_name, mangle_local_method,
+    FqTypeName, FreeFunctionName, FunctionId, MethodName, mangle_generic_name,
     mangle_local_trait_method, mangle_method_generic,
 };
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport};
@@ -960,11 +960,13 @@ fn collect_inspectable_signatures_from_reachable(
 fn function_id_for(func: &NirFunction) -> FunctionId {
     let module_source = &func.module_source;
     if let Some(ref info) = func.method_info {
-        if let Some(monomorph_info) = &func.monomorph_info {
-            FunctionId::Free(FreeFunctionName::with_monomorph_info(
+        if func.monomorph_info.is_some() {
+            // A monomorphized method keys as a free function: its mangled
+            // name already carries the receiver, the trait and every type
+            // argument, so nothing more identifies it.
+            FunctionId::Free(FreeFunctionName::new(
                 module_source.clone(),
                 func.name.clone(),
-                monomorph_info.generic_name.clone(),
             ))
         } else {
             // Type arguments are part of a method's identity: `field<T>` and
@@ -976,12 +978,6 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
                 info.full_method_name(),
             ))
         }
-    } else if let Some(monomorph_info) = &func.monomorph_info {
-        FunctionId::Free(FreeFunctionName::with_monomorph_info(
-            module_source.clone(),
-            func.name.clone(),
-            monomorph_info.generic_name.clone(),
-        ))
     } else {
         FunctionId::Free(FreeFunctionName::from_module_source(
             module_source,
@@ -1101,14 +1097,9 @@ impl<'a> DceWalker<'a> {
             // Static method call (e.g. `Box::get`, `String^Display::fmt`):
             // `func_name` is `"Struct::method"` or `"Struct^Trait::method"`.
             let callee_id = if func.is_monomorphized() {
-                let base_name = func
-                    .base_struct_name()
-                    .map(|base| crate::name::rebase_monomorph_method(&func_name, &base))
-                    .unwrap_or_else(|| func_name.clone());
-                FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                FunctionId::Free(FreeFunctionName::new(
                     func.module_source.clone(),
                     func_name.clone(),
-                    base_name,
                 ))
             } else {
                 // `full_method_name`, not `method_name`: `function_id_for` keys
@@ -1160,18 +1151,10 @@ impl<'a> DceWalker<'a> {
         // their concrete name on `func`; non-monomorphized methods are
         // dispatched by `receiver`'s type below.
         if func.is_monomorphized() {
-            let base_name = func
-                .base_struct_name()
-                .map(|base| crate::name::rebase_monomorph_method(&func_name, &base))
-                .unwrap_or_else(|| func_name.clone());
-
             // Use the func's actual module_source — monomorphized functions
             // are placed in the module that uses them.
-            let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                func.module_source.clone(),
-                func_name,
-                base_name,
-            ));
+            let callee_id =
+                FunctionId::Free(FreeFunctionName::new(func.module_source.clone(), func_name));
             self.analysis.callees.insert(callee_id);
             return;
         }
@@ -1243,28 +1226,19 @@ impl<'a> DceWalker<'a> {
                 ref def,
                 ref type_args,
             } if !type_args.is_empty() => {
-                let base_struct = &self.type_table.struct_head_name(*def);
                 let module_source = self.type_table.struct_head_module(*def);
                 let name = &self.type_table.struct_rendered_name(*def, type_args);
                 // Monomorphized struct method (e.g. `Box<i32>::get`):
                 // monomorphized functions live in the *using* module, so
-                // route the callee id through `current_module`. The base
-                // method name uses the original generic struct name so
-                // the inlining-induced graph stays mergeable.
+                // route the callee id through `current_module`.
                 let mangled_func_name = MethodName::format_local(
                     &FqTypeName::declared(module_source, name),
                     trait_name.as_ref(),
                     &method_name,
                 );
-                let base_method_name = MethodName::format_local(
-                    &FqTypeName::declared(module_source, base_struct),
-                    trait_name.as_ref(),
-                    &method_name,
-                );
-                let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                let callee_id = FunctionId::Free(FreeFunctionName::new(
                     self.current_module.clone(),
                     mangled_func_name,
-                    base_method_name,
                 ));
                 self.analysis.callees.insert(callee_id);
 
@@ -1272,7 +1246,14 @@ impl<'a> DceWalker<'a> {
                 // actually defined on the inner type (e.g., i32^Ord::cmp, not
                 // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
                 // method target as reachable.
-                if base_struct == "Box"
+                let boxed = def
+                    .decl()
+                    .is_some_and(|d| {
+                        self.type_table
+                            .compiler_item_def(crate::compiler_item::CompilerItem::Box)
+                            == Some(d)
+                    });
+                if boxed
                     && let Some(info) = func.method_info.clone()
                 {
                     let original_method_id = FunctionId::Method(MethodName::new(
@@ -1362,21 +1343,15 @@ impl<'a> DceWalker<'a> {
                     .iter()
                     .map(|t| self.type_table.mangle_type_name(*t))
                     .collect();
-                let (mangled_func_name, base_name) = if let Some(ref trait_n) = trait_name {
-                    let trait_n = trait_n.to_mangled();
+                let mangled_func_name = if let Some(ref trait_n) = trait_name {
                     let generic_name = mangle_generic_name(&name, &type_arg_names);
-                    let mangled = mangle_local_trait_method(&generic_name, &trait_n, &method_name);
-                    let base = mangle_local_trait_method(&name, &trait_n, &method_name);
-                    (mangled, base)
+                    mangle_local_trait_method(&generic_name, &trait_n.to_mangled(), &method_name)
                 } else {
-                    let mangled = mangle_method_generic(&name, &type_arg_names, &method_name);
-                    let base = mangle_local_method(&name, &method_name);
-                    (mangled, base)
+                    mangle_method_generic(&name, &type_arg_names, &method_name)
                 };
-                let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                let callee_id = FunctionId::Free(FreeFunctionName::new(
                     self.current_module.clone(),
                     mangled_func_name,
-                    base_name,
                 ));
                 self.analysis.callees.insert(callee_id);
             }
