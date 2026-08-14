@@ -1,12 +1,5 @@
 #![generated(by = "gale", sources = ["tests/antlr4-compat/grammars/LeftRecursion/ReturnValueAndActionsAndLabels_4.g4"])]
 
-//! Core lexing vocabulary shared by every generated parser and by Gale's
-//! own front end: source spans, lazy token-text slices, tokens, and the
-//! parse-error type. Prelude-only and self-contained so it can be both
-//! imported as a module (by Gale's `token`/`lexer`/`parser`/`ir`) and
-//! `#include_str`'d verbatim into generated parsers.
-
-/// Span represents a byte range in source text.
 pub struct Span {
     pub start: i32,
     pub end: i32,
@@ -34,8 +27,6 @@ impl Eq for Span {
     }
 }
 
-/// LexerSlice is a lazy reference to a range of characters in the source input.
-/// It avoids allocating a String for every token during tokenization.
 pub struct LexerSlice {
     pub chars: &List<char>,
     pub start: i32,
@@ -120,11 +111,6 @@ impl Eq for LexerSlice {
     }
 }
 
-/// The 0-based column of char index `i`: the number of chars since the last
-/// newline. ANTLR4's `getCharPositionInLine()` (over the live match cursor) and
-/// `_tokenStartCharPositionInLine` (over the token's start) are both this.
-/// Scans back to the line start, so the cost is the column, not the offset —
-/// a lexer predicate may call it once per candidate rule per token.
 pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     let mut j = if i < chars.len() { i } else { chars.len() };
     let mut col = 0;
@@ -135,10 +121,6 @@ pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     return col;
 }
 
-/// Token represents a lexed token with its kind, text, and position.
-/// Leading trivia (whitespace, comments) is attached to each token.
-/// `channel` is the ANTLR4 channel id (0 = default, 1 = HIDDEN; named
-/// channels resolve to integer ids declared in the grammar).
 pub struct Token {
     pub kind: i32,
     pub text: LexerSlice,
@@ -161,45 +143,12 @@ impl Token {
     }
 }
 
-// Note: Token Eq is intentionally omitted. Auto-derived Eq on recursive structs
-// with reference-containing fields triggers a compiler bug
-// (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
-
-/// Per-token recovery flags (a bitset stored in `TokenStream.flags`). A normal
-/// lexed token has `none()`. The bits mark tokens the error-resilient parser
-/// created or set aside during recovery, so the tree builder and diagnostics can
-/// render them without a side table:
-///
-/// - `Synthetic` — a zero-width token the parser *inserted* to stand in for
-///   a required terminal that was absent (its `kinds[i]` is the expected kind).
-/// - `Skipped` — a real lexed token the parser *deleted* during recovery
-///   (it belongs to no rule; preserved for lossless round-trip).
-/// - `LexError` — a fast mirror of the `TK_ERROR` kind: a char run that
-///   matched no lexer rule.
 pub flags TokenFlags {
     Synthetic,
     Skipped,
     LexError,
 }
 
-/// TokenStream is the struct-of-arrays token storage for generated parsers.
-/// A "token" is an `i32` index into these parallel arrays; no per-token
-/// aggregate is ever allocated. The hot fields (`kinds` / `starts` / `ends`)
-/// are read on every scan/dispatch step as a single `array.get i32`; the
-/// trivia and source-char data are cold, materialised on demand only by the
-/// diagnostic / round-trip paths.
-///
-/// `Token` above stays the value-typed vocabulary for Gale's own `.g4` front
-/// end; the generated-parser runtime uses `TokenStream` instead.
-///
-/// Layout invariant: the per-token arrays (`kinds` / `starts` / `ends` /
-/// `triv_lo` / `triv_hi` / `flags`) always share a length and capacity:
-/// `push_token_flagged` is the only writer, advancing and growing them
-/// together behind one capacity check. The trivia columns (`triv_kinds` /
-/// `triv_starts` / `triv_ends` / `triv_chans`) form a second such lockstep
-/// group under `push_trivia`. Hidden / skip tokens ("trivia") live in the
-/// flat `triv_*` arrays in source order; each parser token owns the half-open
-/// range `[triv_lo[i], triv_hi[i])`.
 pub struct TokenStream {
     pub kinds: List<i32>,
     pub starts: List<i32>,
@@ -212,17 +161,10 @@ pub struct TokenStream {
     pub triv_ends: List<i32>,
     pub triv_chans: List<i32>,
     pub flags: List<TokenFlags>,
-    /// Text the lexer's executed actions printed, in tokenization order
-    /// (Stage C). Empty unless the lexer was generated with action execution
-    /// on. Defaulted so existing construction sites keep compiling.
     pub output: String = "",
 }
 
 impl TokenStream {
-    /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size every array — trivia included — to ~one token
-    /// per four chars; trivia tracks token count, so `[]` would re-grow from
-    /// zero every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -244,14 +186,10 @@ impl TokenStream {
         return self.kinds.len();
     }
 
-    /// The next trivia index — the lexer records this as a token's `triv_lo`
-    /// before accumulating that token's leading trivia, and again as `triv_hi`
-    /// after.
     pub fn trivia_mark(&self) -> i32 {
         return self.triv_kinds.len();
     }
 
-    /// Append one hidden / skip token to the flat trivia arrays.
     pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
         if self.triv_kinds.len() >= self.triv_kinds.capacity() {
             builtin::cold_path();
@@ -269,14 +207,10 @@ impl TokenStream {
         self.triv_chans.push_within_capacity(channel);
     }
 
-    /// Append one parser (default-channel) token. The sole writer of the
-    /// per-token arrays, so their lengths stay in lockstep by construction.
     pub fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
         self.push_token_flagged(kind, start, end, triv_lo, triv_hi, TokenFlags::none());
     }
 
-    /// Append a token carrying recovery `flags`, returning its index. The
-    /// real lockstep writer; `push_token` is the `flags = 0` common case.
     pub fn push_token_flagged(
         &mut self,
         kind: i32,
@@ -310,9 +244,6 @@ impl TokenStream {
         return idx;
     }
 
-    /// Append a zero-width synthetic token at byte offset `at`, standing in for
-    /// a required terminal of kind `expected_kind` that the parser inserted
-    /// during recovery. Returns the new token index. The token owns no trivia.
     pub fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
         let m = self.trivia_mark();
         return self.push_token_flagged(expected_kind, at, at, m, m, TokenFlags::Synthetic);
@@ -326,14 +257,10 @@ impl TokenStream {
         self.flags[i] = self.flags[i] | flag;
     }
 
-    /// Mark token `i` as deleted by recovery (preserved, but bound to no rule).
     pub fn mark_skipped(&mut self, i: i32) {
         self.set_flag(i, TokenFlags::Skipped);
     }
 
-    /// Mark token `i` as a lexer error (a char run that matched no rule). The
-    /// lexer sets this alongside the `TK_ERROR` kind so consumers can test the
-    /// flag without knowing the grammar's `TK_ERROR` id.
     pub fn mark_lex_error(&mut self, i: i32) {
         self.set_flag(i, TokenFlags::LexError);
     }
@@ -362,14 +289,12 @@ impl TokenStream {
         return self.starts[i] >= self.ends[i];
     }
 
-    /// Append `chars[start..end]` to `out` (no allocation).
     pub fn push_text(&self, out: &mut String, start: i32, end: i32) {
         for let mut j = start; j < end; j += 1 {
             out.push(self.chars[j]);
         }
     }
 
-    /// Materialise token `i`'s text as an owned `String` (cold path).
     pub fn token_text(&self, i: i32) -> String {
         let start = self.starts[i];
         let end = self.ends[i];
@@ -378,14 +303,10 @@ impl TokenStream {
         return s;
     }
 
-    /// Append token `i`'s text to `out` (no allocation).
     pub fn push_token_text(&self, out: &mut String, i: i32) {
         self.push_text(out, self.starts[i], self.ends[i]);
     }
 
-    /// Append token `i`'s text with whitespace rendered as escapes, matching
-    /// ANTLR4's `Trees.toStringTree` node text (spaces are left alone). Used by
-    /// tree rendering only; `$text` and friends keep the raw text.
     pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
         for let mut j = self.starts[i]; j < self.ends[i]; j += 1 {
             match self.chars[j] {
@@ -397,18 +318,12 @@ impl TokenStream {
         }
     }
 
-    /// Append the text of token `i`'s leading trivia, in source order.
     pub fn push_leading_trivia_text(&self, out: &mut String, i: i32) {
         for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
             self.push_text(out, self.triv_starts[j], self.triv_ends[j]);
         }
     }
 
-    /// `$text` for a rule spanning tokens `[start_tok, end_tok]`: the token
-    /// texts with each token's leading *hidden-channel* trivia interleaved
-    /// (`triv_chans != 0`), matching ANTLR's `TokenStream.getText(interval)`.
-    /// `skip` trivia (channel 0, removed from the stream) is excluded, and so is
-    /// the start token's own leading trivia (the interval begins at the token).
     pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
         let mut out = String::new();
         for let mut i = start_tok; i <= end_tok; i += 1 {
@@ -425,19 +340,6 @@ impl TokenStream {
     }
 }
 
-
-/// ParseError represents a parse failure with location and expected tokens.
-///
-/// `message` is the local "expected X, got Y" description, kept free of
-/// position and rule context so it stays composable. `line`/`col` are a
-/// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
-/// from `span.start` against the source at error-construction time;
-/// `Parser::error` fills them in. `rule_stack` records the chain of parser
-/// rules that were active when the error was raised, innermost first — each
-/// rule entry wrapper pushes its own name as the `Err` propagates outward,
-/// so the last element is the start rule and the first is the rule the
-/// failing token sat in. The `Display` impl renders all of this into a
-/// human-readable diagnostic.
 pub struct ParseError {
     pub message: String,
     pub span: Span,
@@ -452,17 +354,17 @@ impl ParseError {
         return ParseError { message, span, expected };
     }
 
-    /// Construct a ParseError whose position is already resolved. Used by
-    /// `Parser::error`, which has the source on hand to compute line/col.
     pub fn at(message: String, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
         return ParseError { message, span, expected, line, col, rule_stack: [] };
     }
 
-    /// Render the rule chain as `outer > ... > inner` (start rule first).
-    /// `rule_stack` is stored innermost-first, so iterate it in reverse.
-    /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
-    /// itself once per precedence level, which would otherwise print
-    /// `expr > expr > expr` for a deep expression.
+    pub fn full_message(&self) -> String {
+        if self.expected.is_empty() {
+            return self.message;
+        }
+        return `expected ${join_expected(&self.expected)}; ${self.message}`;
+    }
+
     pub fn rule_path(&self) -> String {
         let mut out = String::with_capacity(self.rule_stack.len() * 8);
         let n = self.rule_stack.len();
@@ -482,19 +384,26 @@ impl ParseError {
     }
 }
 
+fn join_expected(names: &List<String>) -> String {
+    let n = names.len();
+    let mut out = String::with_capacity(n * 8);
+    for let mut i = 0; i < n; i += 1 {
+        if i > 0 {
+            out.push_str(&if i == n - 1 { " or " } else { ", " });
+        }
+        out.push_str(&names[i]);
+    }
+    return out;
+}
+
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.message}`);
+        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.full_message()}`);
         if !self.rule_stack.is_empty() {
             f.write_str(&`\n  in rule: ${self.rule_path()}`);
         }
     }
 }
-//! Diagnostics emitted by the error-resilient parser. A parse always returns a
-//! tree; `Diagnostic`s say where and how it was repaired. Inlined into every
-//! generated parser alongside the recovery runtime. Imports `Span` from
-//! `lex.wado`; that import is stripped at `#include_str` time.
-
 
 pub enum Severity {
     Error,
@@ -514,15 +423,13 @@ impl Severity {
     }
 }
 
-/// What went wrong, independent of the specific tokens. Tooling can switch on
-/// this without parsing the human message.
 pub enum DiagnosticCode {
-    UnexpectedToken,  // a token that fits nowhere in the current rule
-    MissingToken,  // a required terminal was absent (one was inserted)
-    ExtraToken,  // a spurious terminal was deleted
-    NoViableAlternative,  // alternative dispatch found no match
-    UnterminatedConstruct,  // EOF reached inside a rule (missing closer)
-    LexError,  // a char run matched no lexer rule (TK_ERROR)
+    UnexpectedToken,
+    MissingToken,
+    ExtraToken,
+    NoViableAlternative,
+    UnterminatedConstruct,
+    LexError,
 }
 
 impl DiagnosticCode {
@@ -538,26 +445,19 @@ impl DiagnosticCode {
     }
 }
 
-/// The repair the parser applied at this site, so a fixit/IDE can describe it.
 pub enum RecoveryAction {
-    Inserted,  // synthesised a missing terminal
-    Deleted,  // skipped one spurious terminal
-    SkippedTo,  // skipped a run up to a synchronizing token
-    FilledMissing,  // hit EOF; filled remaining required terminals
-    None,  // reported only, no edit
+    Inserted,
+    Deleted,
+    SkippedTo,
+    FilledMissing,
+    None,
 }
 
-/// A secondary location attached to a diagnostic, e.g. "'(' opened here" for an
-/// unterminated group.
 pub struct RelatedInfo {
     pub message: String,
     pub span: Span,
 }
 
-/// A single parse diagnostic. `expected`/`found` carry token-kind ids (not
-/// names) so tooling reuses the grammar's own name tables; `message` is the
-/// pre-rendered human text. `line`/`col` are 1-based line and 0-based column
-/// (ANTLR4 `Token` convention) resolved from `span.start`.
 pub struct Diagnostic {
     pub severity: Severity,
     pub code: DiagnosticCode,
@@ -573,8 +473,6 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    /// A bare error diagnostic with position resolved; callers fill the
-    /// optional fields (`expected`, `rule_stack`, `related`, ...) as needed.
     pub fn error(code: DiagnosticCode, message: String, span: Span, line: i32, col: i32) -> Diagnostic {
         return Diagnostic {
             severity: Severity::Error,
@@ -600,9 +498,6 @@ impl Display for Diagnostic {
     }
 }
 
-/// Resolve a char index to (line, column): 1-based line, 0-based column
-/// (ANTLR4 `Token` convention). A linear scan; the parser resolves at most a
-/// handful of positions per parse, so this stays off the hot path.
 pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
     let mut line = 1;
     let mut col = 0;
@@ -617,68 +512,16 @@ pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
     }
     return [line, col];
 }
-//! The single (untyped) concrete syntax tree produced by every generated
-//! error-resilient parser, stored as a flat columnar event stream that is
-//! itself the tree (the single source of truth), the `TreeBuilder` the parser
-//! drives to construct it, and the `ParseResult` the parser returns.
-//!
-//! The parser records a flat pre-order event stream directly into parallel
-//! columns (an `EventTag` tag plus `i32` payloads); there is no per-node object
-//! tree and no walk/convert
-//! step. `finish()` runs one linear pass (`finalize`) that fills the derived
-//! columns (`span.end`, `flags`, subtree extent) so every query stays O(1).
-//! Consumers read the store as a cursor — a `(&CstStore, index)` pair threaded
-//! as unbundled scalars — so traversal allocates nothing and copies nothing.
-//!
-//! A node is the row index of its `Open`; the root is row 0. The store holds
-//! no reference to the token stream, so `ParseResult` owns both the store and
-//! the stream it indexes without a self-referential borrow. Functions that need
-//! terminal text or kinds take a `&TokenStream` argument.
-//!
-//! Error tokens are first-class and lossless: `Miss` (an inserted synthetic
-//! terminal), `Skip` (a real terminal deleted during recovery), and a
-//! `<error>` region node (kind `K_ERROR`) together capture every recovery edit
-//! (insert / delete / region) so the original input round-trips. The token-
-//! stream flags (`TokenFlags::Synthetic` / `Skipped`, see `lex.wado`) carry the same
-//! facts at the terminal level.
-//!
-//! Imports `TokenStream` from `lex.wado` and `Diagnostic` from `diag.wado`;
-//! those imports are stripped at `#include_str` time (see `gen_runtime` in
-//! `codegen.wado`), where the fragments are concatenated into one module.
 
-
-/// A node's kind: a parser-rule id (`0..num_rules`, in grammar declaration
-/// order) or the reserved `K_ERROR` sentinel for a recovery region node. A
-/// newtype over `i32` so the generated parser can give it a name-aware
-/// `Display` (`Inspect` shows `name(id)`); the name table is grammar-specific,
-/// so codegen emits those impls.
 pub type NodeKind = i32;
 
-/// The reserved kind for a `<error>` region node — a run of skipped tokens or
-/// a partial sub-parse swept up during panic-mode recovery. Never collides with
-/// a real rule id (those are non-negative).
 pub global K_ERROR: NodeKind = -1;
 
-/// Derived per-node condition bits (the `flags` column, valid on an `Open` row).
-///
-/// - `Error` — this node, or some descendant, contains a recovery edit (a
-///   missing/skipped terminal or an error region). Bubbles up so a consumer can
-///   prune clean subtrees in one check.
-/// - `Incomplete` — this node is missing a required terminal that the parser
-///   had to insert (it has a `Miss` child).
 pub flags NodeFlags {
     Error,
     Incomplete,
 }
 
-/// Event-stream row tag. Every row is a triple `(tag, a, b)`; `a` / `b` carry
-/// the tag-specific payload below.
-///
-/// - `Open`  — `a` = node kind, `b` = start byte offset (also the finalized
-///   `span.start`).
-/// - `Close` — `a` = end byte offset; `b` is stamped with the matching open's
-///   kind during `finalize`, so a linear walk knows whether to exit a rule.
-/// - `Tok` / `Miss` / `Skip` — `a` = token index into the `TokenStream`.
 pub enum EventTag {
     Open,
     Close,
@@ -687,32 +530,16 @@ pub enum EventTag {
     Skip,
 }
 
-/// The flat CST: parallel columns, one row per event, in pre-order. `tag`,
-/// `a`, `b` and `alt` are written during the parse; `end`, `flags` and `next`
-/// are derived by `finalize` (in `TreeBuilder::finish`). A node is addressed by
-/// the row index of its `Open` row. Columns are `pub` so a linear walk
-/// (`highlight_walk`) can read them in a tight loop; external consumers use the
-/// `impl CstStore` cursor methods below for O(1) queries and child navigation.
 pub struct CstStore {
     pub tag: List<EventTag>,
     pub a: List<i32>,
     pub b: List<i32>,
-    /// The matched labeled-alternative index for an `Open` row (grammar
-    /// declaration order), or -1 when unlabeled / unset / non-open.
     alt: List<i32>,
-    /// `span.end` for an `Open` row (max of its close offset and every child
-    /// end); derived.
     end: List<i32>,
-    /// The `NodeFlags` for an `Open` row; derived.
     flags: List<NodeFlags>,
-    /// Row index just past this `Open` node's whole subtree, so a random-
-    /// access consumer skips a subtree in O(1); derived.
     next: List<i32>,
 }
 
-/// What a direct child slot is. A plain discriminant enum (no payload), so it
-/// is an `i32` — matching over it allocates nothing. `child_kind` yields it
-/// so a consumer can `match` a child instead of chaining `is_node` / `is_token`.
 pub enum ChildKind {
     Node,
     Token,
@@ -720,53 +547,44 @@ pub enum ChildKind {
     Skipped,
 }
 
-/// The read cursor over the flat store. Every method is `&self` over an `i32`
-/// row index — no node / cursor value is constructed, so traversal allocates
-/// nothing. The raw `tag` / `a` / `b` columns stay `pub` for the internal
-/// `highlight_walk` flat scan; external consumers use these methods.
 impl CstStore {
-    /// Number of event rows (upper bound for a flat scan; row 0 is the root).
     pub fn row_count(&self) -> i32 {
         return self.tag.len();
     }
 
-    /// Kind of the node at row `i`.
     pub fn kind(&self, i: i32) -> NodeKind {
         return self.a[i] as NodeKind;
     }
 
-    /// Byte span of the node at row `i`.
+    pub fn close_kind(&self, i: i32) -> NodeKind {
+        return self.b[i] as NodeKind;
+    }
+
     pub fn span(&self, i: i32) -> Span {
         return Span::new(self.b[i], self.end[i]);
     }
 
-    /// Matched labeled-alternative index of the node at row `i` (-1 when unset).
     pub fn alt(&self, i: i32) -> i32 {
         return self.alt[i];
     }
 
-    /// True when the node at row `i`, or some descendant, carries a recovery edit.
     pub fn is_error(&self, i: i32) -> bool {
         return self.flags[i] & NodeFlags::Error != NodeFlags::none();
     }
 
-    /// True when the node at row `i` is missing a required terminal.
     pub fn is_incomplete(&self, i: i32) -> bool {
         return self.flags[i] & NodeFlags::Incomplete != NodeFlags::none();
     }
 
-    /// True when row `i` is a rule / error node (has a kind, span, children).
     pub fn is_node(&self, i: i32) -> bool {
         return self.tag[i] matches { Open };
     }
 
-    /// True when row `i` is a terminal (real, missing, or skipped).
     pub fn is_token(&self, i: i32) -> bool {
         let t = self.tag[i];
         return t matches { Tok | Miss | Skip };
     }
 
-    /// The `ChildKind` of the (child) row `i`.
     pub fn child_kind(&self, i: i32) -> ChildKind {
         return match self.tag[i] {
             Open => ChildKind::Node,
@@ -776,14 +594,10 @@ impl CstStore {
         };
     }
 
-    /// Token-stream index of the terminal at row `i` (valid when `is_token`).
     pub fn token_index(&self, i: i32) -> i32 {
         return self.a[i];
     }
 
-    /// Row of the first direct child of node `i` (a node or a terminal), or -1
-    /// when `i` has no children. Pair with `next_sibling` to walk children:
-    /// `for let mut c = s.first_child(i); c >= 0; c = s.next_sibling(c) { … }`.
     pub fn first_child(&self, i: i32) -> i32 {
         let c = i + 1;
         if c >= self.tag.len() || self.tag[c] matches { Close } {
@@ -792,10 +606,6 @@ impl CstStore {
         return c;
     }
 
-    /// Row of the next direct child after `child`, or -1 when `child` is the
-    /// last (the next row is the parent's close). A child node is skipped in
-    /// O(1) via its subtree extent. Returns -1 for a row with no parent (the
-    /// root), rather than indexing past the columns.
     pub fn next_sibling(&self, child: i32) -> i32 {
         let c = if self.tag[child] matches { Open } { self.next[child] } else { child + 1 };
         if c >= self.tag.len() || self.tag[c] matches { Close } {
@@ -804,26 +614,16 @@ impl CstStore {
         return c;
     }
 
-    /// Row of the first direct child node of rule `kind` under row `i`, or -1.
-    /// Used by sub-tree rendering (an ANTLR4 descriptor whose `[output]` is a
-    /// labelled child subtree, not the start rule's full tree).
     pub fn find_child(&self, i: i32, kind: NodeKind) -> i32 {
         let k = kind as i32;
         for let mut c = self.first_child(i); c >= 0; c = self.next_sibling(c) {
-            if self.tag[c] matches { Open } && self.a[c] == k {
+            if self.tag[c] matches { Open } && self.kind(c) as i32 == k {
                 return c;
             }
         }
         return -1;
     }
 
-    /// ANTLR4-style S-expression for the subtree at row `i`: `(name child ...)`,
-    /// tokens as their text with whitespace escaped (`\n`, `\r`, `\t`, as
-    /// `Trees.toStringTree` does); a childless node renders as its bare name, no
-    /// parens (ANTLR4's `Trees.toStringTree`). `rule_names[kind]` names rule
-    /// nodes (`K_ERROR` renders `<error>`); `token_names[kind]` names missing
-    /// terminals. Real terminals with empty text (e.g. EOF) are omitted;
-    /// missing/skipped terminals render markers.
     pub fn to_string_tree(
         &self,
         i: i32,
@@ -845,7 +645,8 @@ fn cst_to_string_tree_impl(
     rule_names: &List<String>,
     token_names: &List<String>,
 ) {
-    let name = if s.a[i] == K_ERROR as i32 { "<error>" } else { rule_names[s.a[i]] };
+    let node_kind = s.kind(i) as i32;
+    let name = if node_kind == K_ERROR as i32 { "<error>" } else { rule_names[node_kind] };
     if i + 1 >= s.tag.len() || s.tag[i + 1] matches { Close } {
         out.push_str(&name);
         return;
@@ -861,19 +662,19 @@ fn cst_to_string_tree_impl(
                 c = s.next[c];
             },
             Tok => {
-                if !toks.is_empty_text(s.a[c]) {
+                if !toks.is_empty_text(s.token_index(c)) {
                     out.push_str(&" ");
-                    toks.push_token_text_escaped(out, s.a[c]);
+                    toks.push_token_text_escaped(out, s.token_index(c));
                 }
                 c += 1;
             },
             Miss => {
-                out.push_str(&` <missing ${token_names[toks.kind_at(s.a[c])]}>`);
+                out.push_str(&` <missing ${token_names[toks.kind_at(s.token_index(c))]}>`);
                 c += 1;
             },
             Skip => {
                 out.push_str(&" <skip ");
-                toks.push_token_text_escaped(out, s.a[c]);
+                toks.push_token_text_escaped(out, s.token_index(c));
                 out.push_str(&">");
                 c += 1;
             },
@@ -883,18 +684,10 @@ fn cst_to_string_tree_impl(
     out.push_str(&")");
 }
 
-/// What a parse returns: the flat CST store, the token stream its terminal
-/// indices point into, and any diagnostics. A clean parse leaves `diagnostics`
-/// empty. Owns both `cst` and `tokens` outright (the store borrows nothing), so
-/// the result is a freely movable value. The root node is row 0 of `cst`.
 pub struct ParseResult {
     pub cst: CstStore,
     pub tokens: TokenStream,
     pub diagnostics: List<Diagnostic>,
-    /// Text emitted by executed actions via `p.emit(...)`, in execution
-    /// order (Stage C). Empty unless the parser was generated with action
-    /// execution on. Defaulted so existing construction sites and tests keep
-    /// compiling.
     pub output: String = "",
 }
 
@@ -903,14 +696,11 @@ impl ParseResult {
         return self.diagnostics.iter().any(|d| d.is_error());
     }
 
-    /// True when the parse produced no error-severity diagnostics.
     pub fn ok(&self) -> bool {
         return !self.has_errors();
     }
 }
 
-/// Widen the parent open's span end and error bit from a just-closed child.
-/// `stack` must already have the child popped, so its top is the parent (if any).
 fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<NodeFlags>, child: i32) {
     if stack.len() > 0 {
         let parent = stack[stack.len() - 1];
@@ -921,23 +711,12 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
     }
 }
 
-/// The builder the generated parser drives. It appends events into the flat
-/// columns (`start_node` / `token` / `missing` / `skip` / `finish_node`) and
-/// finalises them in `finish()`. It is purely structural — it stores token
-/// *indices*, never the stream itself; the parser owns the `TokenStream`,
-/// appending synthetic "missing" tokens and marking skipped ones on its own
-/// copy. `open` is the stack of currently-open row indices (`set_alt` targets
-/// the innermost).
 pub struct TreeBuilder {
     tag: List<EventTag>,
     a: List<i32>,
     b: List<i32>,
     alt: List<i32>,
     open: List<i32>,
-    /// Row of the most recently closed node (`-1` before any). Backs
-    /// `$ctx.toStringTree()` in a left-recursive rule's `@after`: precedence
-    /// climbing folds each level shut before `@after` runs, so the current
-    /// context is the just-finished node, not anything still on `open`.
     last_finished: i32,
 }
 
@@ -946,11 +725,6 @@ impl TreeBuilder {
         return TreeBuilder { tag: [], a: [], b: [], alt: [], open: [], last_finished: -1 };
     }
 
-    /// Pre-size the event columns to `rows`, avoiding the grow-from-empty
-    /// reallocations (each column would otherwise double `log2(rows)` times).
-    /// The parser passes ~`4 × tokens` — measured `rows ≈ 3.44 × tokens`, so this
-    /// sizes just above the final length: no grow, and only ~16% over-fill (a
-    /// doubling grow from under-sizing over-fills far more). Right-size, not big.
     pub fn with_capacity(rows: i32) -> TreeBuilder {
         return TreeBuilder {
             tag: List::with_capacity(rows),
@@ -962,9 +736,6 @@ impl TreeBuilder {
         };
     }
 
-    /// The four event columns share length and capacity: `push_row` (and
-    /// `start_node_at` / `truncate`) always advance them together, so one
-    /// capacity check covers the whole row.
     fn push_row(&mut self, tag: EventTag, a: i32, b: i32) {
         if self.tag.len() >= self.tag.capacity() {
             builtin::cold_path();
@@ -982,42 +753,26 @@ impl TreeBuilder {
         self.alt.push_within_capacity(-1);
     }
 
-    /// Open a rule node of `kind` starting at byte offset `start`.
     pub fn start_node(&mut self, kind: NodeKind, start: i32) {
         let row = self.tag.len();
         self.push_row(EventTag::Open, kind as i32, start);
         self.open.push(row);
     }
 
-    /// Open a `<error>` region node (kind `K_ERROR`) at byte offset `start`.
     pub fn start_error(&mut self, start: i32) {
         let row = self.tag.len();
         self.push_row(EventTag::Open, K_ERROR as i32, start);
         self.open.push(row);
     }
 
-    /// Stamp the matched labeled-alternative index on the innermost currently
-    /// open node. The generated parser calls this once it commits to a labeled
-    /// alternative; it is a no-op shape for unlabeled rules (never emitted).
     pub fn set_alt(&mut self, alt: i32) {
         self.alt[self.open[self.open.len() - 1]] = alt;
     }
 
-    /// A position in the event stream to retro-open a node at. Used for
-    /// left-associative wrapping (precedence climbing): capture a checkpoint
-    /// before the first operand, then `start_node_at` to make a new node whose
-    /// first child is everything recorded since the checkpoint.
     pub fn checkpoint(&self) -> i32 {
         return self.tag.len();
     }
 
-    /// Retro-open a node of `kind` (starting at byte offset `start`) at a
-    /// previously captured `checkpoint`, so all events recorded since wrap
-    /// inside it. Close it with the matching `finish_node`. Re-using the same
-    /// checkpoint across loop iterations nests left-associatively. At the call
-    /// site every row in `[checkpoint, len)` is balanced and the open stack
-    /// holds only ancestors with index `< checkpoint`, so the insert never
-    /// shifts a live open index and pushing `checkpoint` keeps `open` monotonic.
     pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
         self.tag.insert(checkpoint, EventTag::Open);
         self.a.insert(checkpoint, kind as i32);
@@ -1026,11 +781,6 @@ impl TreeBuilder {
         self.open.push(checkpoint);
     }
 
-    /// Discard every event recorded since `checkpoint`, rolling the builder
-    /// back to that point. Used by a *speculative* parse that runs only to
-    /// localise a deep error (and then restores the cursor): under the emitter
-    /// the speculative subtree must not leak into the real tree, so the caller
-    /// brackets it with `checkpoint()` / `truncate()`.
     pub fn truncate(&mut self, checkpoint: i32) {
         while self.tag.len() > checkpoint {
             let _ = self.tag.pop();
@@ -1043,38 +793,24 @@ impl TreeBuilder {
         }
     }
 
-    /// Close the innermost open node at byte offset `end`.
     pub fn finish_node(&mut self, end: i32) {
         self.push_row(EventTag::Close, end, 0);
         self.last_finished = self.open[self.open.len() - 1];
         let _ = self.open.pop();
     }
 
-    /// Append a real terminal (`idx` into the stream) to the open node.
     pub fn token(&mut self, idx: i32) {
         self.push_row(EventTag::Tok, idx, 0);
     }
 
-    /// Append an inserted synthetic terminal. `syn_idx` is the index returned
-    /// by `TokenStream::push_synthetic`.
     pub fn missing(&mut self, syn_idx: i32) {
         self.push_row(EventTag::Miss, syn_idx, 0);
     }
 
-    /// Append a skipped real terminal. The caller marks `idx` with
-    /// `TokenStream::mark_skipped` first.
     pub fn skip(&mut self, idx: i32) {
         self.push_row(EventTag::Skip, idx, 0);
     }
 
-    /// Finalise the store: one linear pass that fills `end` / `flags` / `next`
-    /// and stamps each `Close` row with its open's kind. Deferring all
-    /// aggregation to here (rather than patching in `finish_node`) is what makes
-    /// the retro-open `start_node_at` correct: the pass sees the final structure,
-    /// so a wrapped subtree's error bit bubbles into the wrap node even though
-    /// the wrap was inserted after its children closed. Valid once the root node
-    /// has been closed; an open left unterminated by a truncated stream is folded
-    /// to the stream end (its `next` never stays 0), so traversal terminates.
     pub fn finish(&self) -> CstStore {
         let n = self.tag.len();
         let mut b = self.b;
@@ -1085,10 +821,12 @@ impl TreeBuilder {
         for let mut r = 0; r < n; r += 1 {
             match self.tag[r] {
                 Open => {
-                    if self.a[r] == K_ERROR as i32 {
+                    let node_kind = self.a[r];
+                    let start_offset = self.b[r];
+                    if node_kind == K_ERROR as i32 {
                         flags[r] = NodeFlags::Error;
                     }
-                    end[r] = self.b[r];
+                    end[r] = start_offset;
                     stack.push(r);
                 },
                 Miss => {
@@ -1102,10 +840,12 @@ impl TreeBuilder {
                 Close => {
                     let oi = stack[stack.len() - 1];
                     let _ = stack.pop();
-                    if self.a[r] > end[oi] {
-                        end[oi] = self.a[r];
+                    let close_offset = self.a[r];
+                    let open_kind = self.a[oi];
+                    if close_offset > end[oi] {
+                        end[oi] = close_offset;
                     }
-                    b[r] = self.a[oi];
+                    b[r] = open_kind;
                     next[oi] = r + 1;
                     bubble_to_parent(&stack, &mut end, &mut flags, oi);
                 },
@@ -1122,11 +862,6 @@ impl TreeBuilder {
         return CstStore { tag: self.tag, a: self.a, b, alt: self.alt, end, flags, next };
     }
 
-    /// Render the S-expression of the innermost currently-open node — the rule
-    /// under construction — from the raw (not-yet-finalised) events. Backs
-    /// `$ctx.toStringTree()` in a non-LR rule's `@after`, which runs after the
-    /// body but before `finish_node`, so the node is still open and its children
-    /// are complete.
     pub fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
         if self.open.len() == 0 {
             return String::new();
@@ -1134,9 +869,6 @@ impl TreeBuilder {
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
-    /// Render the most recently closed node. Backs `$ctx.toStringTree()` in a
-    /// left-recursive rule's `@after`, where the level's node is already folded
-    /// shut (see `last_finished`).
     pub fn render_last_finished(
         &self,
         toks: &TokenStream,
@@ -1162,12 +894,6 @@ impl TreeBuilder {
     }
 }
 
-/// Render the subtree rooted at the `Open` row `i`, returning the row after
-/// its `Close`. Events are balanced (`start_node` / `finish_node` pair), so a
-/// linear walk with recursion at each child `Open` stands in for the finalised
-/// `next` column. Works for a closed root (stops at its `Close`) and for a
-/// still-open root (no `Close`, so the walk closes it at the event end) —
-/// mirrors `cst_to_string_tree_impl`.
 fn render_builder_node(
     out: &mut String,
     tag: &List<EventTag>,
@@ -1220,75 +946,9 @@ fn render_builder_node(
     out.push_str(&")");
     return c;
 }
-//! Consumer-facing tree / token utilities exposed by every generated
-//! parser: S-expression normalisation (`normalize_tree`) and the
-//! ANTLR4-format token-stream dump (`to_lexer_string`) used by the
-//! compatibility suite. Always emitted. The generated parser code never calls
-//! these itself; consumers (driver tests, the ANTLR4-compat suite) import them
-//! from the generated module. The `./lex.wado` import is stripped at
-//! `#include_str` time.
 
-
-/// Normalize a multi-line S-expression string for comparison.
-/// Collapses whitespace runs to single spaces and trims, while preserving
-/// whitespace inside double-quoted strings.
-pub fn normalize_tree(s: &String) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut in_string = false;
-    let mut space_pending = false;
-    for let c of s.chars() {
-        if in_string {
-            out.push(c);
-            if c == '"' {
-                in_string = false;
-            }
-        } else if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
-            if out.len() > 0 {
-                space_pending = true;
-            }
-        } else {
-            if space_pending {
-                out.push(' ');
-                space_pending = false;
-            }
-            if c == '"' {
-                in_string = true;
-            }
-            out.push(c);
-        }
-    }
-    return out;
-}
-
-/// Produce an ANTLR4-style `Token.toString()` dump of the token stream:
-///
-///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]\n  (per token)
-///
-/// Used by Stage L (token-stream equivalence) tests against the upstream
-/// `LexerExec` / etc. `[output]` blocks.
-///
-/// - `tokens` is the `TokenStream` returned by the generated
-///   `tokenize(input)`. Skip-channel trivia (channel 0) is discarded; only
-///   non-default-channel trivia is interleaved.
-/// - `eof_kind` is the value of the generated `TK_EOF` constant; EOF
-///   tokens print as `<EOF>` text with type id `-1`.
-///
-/// Type IDs are remapped from Gale's 0-based numbering to ANTLR4's
-/// 1-based: `kind + 1` for explicit lexer rules, `-1` for EOF. Lexer-only
-/// grammars never introduce implicit literals, so the contiguous
-/// `0..num_lexer_rules` range maps directly onto ANTLR4's
-/// `1..num_lexer_rules+1`.
-///
-/// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
-/// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
-/// escaped; backslashes and quotes pass through unchanged.
-///
-/// Whatever the lexer's actions printed precedes the dump, as it does on
-/// ANTLR4's stdout.
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
     let chars = tokens.chars;
-    // Char index where each line begins; built once so each token's `line:col`
-    // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
     let mut line_starts: List<i32> = [0];
     for let mut i = 0; i < chars.len(); i += 1 {
         if chars[i] == '\n' {
@@ -1299,11 +959,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
     out.push_str(&tokens.output);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
-        // Non-default-channel trivia (`-> channel(HIDDEN)`) is parked in this
-        // token's trivia range; ANTLR4 still dumps it in source order with a
-        // `channel=N` attribute, so interleave it ahead of the host token.
-        // Skip trivia (channel 0) is discarded — neither printed nor indexed
-        // (matching ANTLR4's `Lexer.skip()`).
         let lo = tokens.triv_lo[i];
         let hi = tokens.triv_hi[i];
         for let mut t = lo; t < hi; t += 1 {
@@ -1338,10 +993,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
     return out;
 }
 
-/// Renders a single token in ANTLR4's `CommonToken.toString` format, used by
-/// `to_lexer_string` for both main-stream tokens and interleaved
-/// non-default-channel trivia. `channel=N` is printed only for non-default
-/// channels, matching ANTLR4.
 fn emit_lexer_token(
     out: &mut String,
     tokens: &TokenStream,
@@ -1377,10 +1028,6 @@ fn emit_lexer_token(
     out.push_str(&`[@${index},${start}:${end_inclusive}='${text_buf}',<${type_id}>,${channel_attr}${line}:${col}]\n`);
 }
 
-/// Compute (line, column) from the precomputed `line_starts` table (char
-/// index where each line begins). Binary search for the greatest
-/// `line_starts[j] <= pos`: that line is `j + 1` and the column is the
-/// offset past its start. O(log lines) per call.
 fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     let mut lo = 0;
     let mut hi = line_starts.len() - 1;
@@ -1596,12 +1243,12 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_STAR => "TK_LIT_STAR",
-        TK_LIT_PLUS => "TK_LIT_PLUS",
-        TK_LIT_LPAREN => "TK_LIT_LPAREN",
-        TK_LIT_RPAREN => "TK_LIT_RPAREN",
-        TK_LIT_PLUSPLUS => "TK_LIT_PLUSPLUS",
-        TK_LIT_MINUSMINUS => "TK_LIT_MINUSMINUS",
+        TK_LIT_STAR => "'*'",
+        TK_LIT_PLUS => "'+'",
+        TK_LIT_LPAREN => "'('",
+        TK_LIT_RPAREN => "')'",
+        TK_LIT_PLUSPLUS => "'++'",
+        TK_LIT_MINUSMINUS => "'--'",
         _ => "Unknown",
     };
 }
@@ -1665,6 +1312,14 @@ struct Parser {
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
     output: String,
+}
+
+fn kind_names(kinds: &List<i32>) -> List<String> {
+    let mut out: List<String> = List::with_capacity(kinds.len());
+    for let k of kinds {
+        out.push(token_kind_name(*k));
+    }
+    return out;
 }
 
 impl Parser {
@@ -1782,7 +1437,7 @@ impl Parser {
     }
 
     fn pending_message(&self) -> String {
-        if let Some(e) = &self.pending { return e.message; }
+        if let Some(e) = &self.pending { return e.full_message(); }
         return String::from("");
     }
 
@@ -1851,8 +1506,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            let name = token_kind_name(kind);
-            self.fail(`expected ${name}, got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -1900,11 +1554,10 @@ impl Parser {
             self.b.missing(_syn2);
             return _syn2;
         }
-        let name = token_kind_name(kind);
         self.fail(
-            `expected ${name}, got "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [name],
+            [token_kind_name(kind)],
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1918,7 +1571,7 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `expected any token, got "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
             DiagnosticCode::UnexpectedToken,
@@ -1946,7 +1599,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["set complement"],
+            [] as List<String>,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1967,9 +1620,9 @@ impl Parser {
             }
         }
         self.fail(
-            `unexpected token "${self.tokens.token_text(self.pos)}"`,
+            `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["token set"],
+            kind_names(&included),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -2160,9 +1813,9 @@ fn _parse_e__inner_atom(p: &mut Parser, vals: EVals = EVals {}, min_prec: i32 = 
         return vals;
     }
     p.no_viable(
-        "expected e",
+        "no alternative of e matches",
         p.peek_span(),
-        ["TK_INT", "TK_LIT_LPAREN", "TK_ID"],
+        [token_kind_name(TK_INT), token_kind_name(TK_LIT_LPAREN), token_kind_name(TK_ID)],
     );
     return vals;
 }
@@ -2274,7 +1927,7 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     if p.recovering && p.diagnostics.len() < max_errors {
         if let Some(e) = &p.pending {
             let lc = line_col(p.tokens.chars, e.span.start);
-            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
+            let mut d = Diagnostic::error(p.pending_code, e.full_message(), e.span, lc.0, lc.1);
             d.rule_stack = e.rule_stack;
             p.diagnostics.push(d);
         }

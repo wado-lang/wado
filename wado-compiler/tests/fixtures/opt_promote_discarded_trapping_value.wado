@@ -1,0 +1,28 @@
+// A discarded statement whose value was promoted into the `ValuePool` still has
+// to run its trap. `let _ = 1 / 0` lowers to a bare `Expr` statement, operand
+// promotion freezes the division into `Operand::Value`, and the deletion
+// predicates then read the operand — which carries no `ExprId`, so the per-node
+// `may_trap` walk never sees the division. Promotion moves a value out of the
+// skeleton; it does not make it non-trapping.
+//
+// The statement must not be the body's tail (a tail `Expr` is the block's value,
+// which the eliders keep on sight), so a `return` follows it.
+//
+// Sibling of `opt_promote_no_speculative_trap.wado`: that one covers hoisting a
+// trapping value above its guard, this one covers deleting it outright.
+
+use { println, Stdout } from "core:cli";
+
+fn discard_div() -> i32 {
+    let _ = 1 / 0;
+    return 7;
+}
+
+export fn run() with Stdout {
+    println(`${discard_div()}`);
+}
+
+__DATA__
+{
+    "trapped": true
+}

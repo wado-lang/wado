@@ -1167,11 +1167,44 @@ C : 'c' ;
     assert generated.source.len() > 0;
     assert generated.diagnostics.len() == 1, `expected 1 diagnostic, got ${generated.diagnostics.len()}`;
     let d = &generated.diagnostics[0];
-    assert str_contains(&d.rule, &"r"), `expected rule label to mention "r", got "${d.rule}"`;
+    assert d.owner.rule == "r", `expected the diagnostic to own rule "r", got "${d.owner.rule}"`;
     if let OverlapTournament = &d.kind {
     } else {
         panic("expected DiagnosticKind::OverlapTournament");
     }
+}
+
+test "both error paths name tokens through one vocabulary" {
+    // `expect` and the no-viable fallback both report through
+    // `token_kind_name`, so one token never reads `A` on one path and `TK_A`
+    // on the other.
+    let input = "grammar Test;
+r : A B | A C ;
+s : r ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let out = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert str_contains(&out, &"p.no_viable("), out;
+    assert str_contains(&out, &"token_kind_name(TK_A)"), out;
+    assert !str_contains(&out, &"\"TK_A\""), `a kind constant leaked into a user-facing list:\n${out}`;
+}
+
+test "the vocabulary names a literal by its source form" {
+    // ANTLR4's `Vocabulary.getDisplayName` shows a literal as it appears in
+    // the grammar, so `expected` sets and `<missing X>` read `'+'` rather than
+    // the `TK_LIT_PLUS` constant Gale interned it under.
+    let input = "grammar Test;
+r : A '+' ;
+A : 'a' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let out = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert str_contains(&out, &"TK_LIT_PLUS => \"'+'\""), out;
+    // A lexer rule still answers with its rule name.
+    assert str_contains(&out, &"TK_A => \"A\""), out;
 }
 
 test "generate raises no diagnostics for disjoint alts" {

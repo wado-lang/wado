@@ -89,6 +89,27 @@ impl LexerCommands {
     }
 }
 
+/// Every lexer command ANTLR4 defines. Doubles as the wanted set each
+/// lexer-command diagnostic reports, so the list is stated once.
+global LEXER_COMMAND_NAMES: List<String> = ["skip", "more", "channel", "type", "pushMode", "popMode", "mode"];
+
+/// The "what was found" half of a parse error; the wanted set travels
+/// separately in `ParseError.expected`. A token the lexer could not form names
+/// its own lexical problem — quoting its raw text would show a truncated
+/// fragment and say nothing about why the lexer stopped.
+fn found_desc(tok: &Token) -> String {
+    if tok.kind == G4Token::UnterminatedString as i32 {
+        return String::from("unterminated string literal");
+    }
+    if tok.kind == G4Token::UnterminatedCharClass as i32 {
+        return String::from("unterminated character set");
+    }
+    if tok.kind == G4Token::UnexpectedChar as i32 {
+        return `unexpected character "${tok.text}"`;
+    }
+    return `got "${tok.text}"`;
+}
+
 fn first_char(s: &String) -> Option<char> {
     let mut iter = s.chars();
     return iter.next();
@@ -177,7 +198,7 @@ impl G4Parser {
         }
         let expected: List<String> = [kind.name()];
         return Result::<&Token, ParseError>::Err(
-            ParseError::new(`expected ${kind.name()}, got "${tok.text}"`, tok.span, expected),
+            ParseError::new(found_desc(tok), tok.span, expected),
         );
     }
 
@@ -649,7 +670,7 @@ impl G4Parser {
                 if !valid {
                     return Result::<List<GrammarOption>, ParseError>::Err(
                         ParseError::new(
-                            `invalid <assoc=...> value: only "left" or "right" are accepted`,
+                            `invalid <assoc=...> value`,
                             value_span,
                             ["left", "right"],
                         ),
@@ -961,7 +982,7 @@ impl G4Parser {
         let tok = self.peek();
         let expected: List<String> = ["identifier", "string", "(", ".", "~"];
         return Result::<Element, ParseError>::Err(
-            ParseError::new(`unexpected token "${tok.text}"`, tok.span, expected),
+            ParseError::new(found_desc(tok), tok.span, expected),
         );
     }
 
@@ -1060,12 +1081,41 @@ impl G4Parser {
         );
     }
 
+    /// The `(<arg>)` of a lexer command that takes one. `allow_int` is for
+    /// `type`, which ANTLR4 lets you give as a literal type number
+    /// (`-> type(65535)`); a `mode` / `pushMode` argument names a declared
+    /// mode, where a number means nothing.
+    fn parse_lexer_command_arg(&mut self, command: &String, allow_int: bool) -> Result<String, ParseError> {
+        self.expect(G4Token::LParen)?;
+        let ok = self.is_kind(G4Token::Identifier) || allow_int && self.is_kind(G4Token::IntLit);
+        if !ok {
+            let tok = self.peek();
+            let expected: List<String> = if allow_int { ["identifier", "int"] } else { ["identifier"] };
+            return Result::<String, ParseError>::Err(
+                ParseError::new(
+                    `${found_desc(tok)} as the argument of \`${*command}\``,
+                    tok.span,
+                    expected,
+                ),
+            );
+        }
+        let arg = self.advance().text.to_string();
+        self.expect(G4Token::RParen)?;
+        return Result::<String, ParseError>::Ok(arg);
+    }
+
     fn parse_lexer_actions(
         &mut self,
         actions: &mut LexerCommands,
         mode_names: &mut List<String>,
     ) -> Result<(), ParseError> {
         loop {
+            if !self.is_kind(G4Token::Identifier) {
+                let tok = self.peek();
+                return Result::<(), ParseError>::Err(
+                    ParseError::new(found_desc(tok), tok.span, LEXER_COMMAND_NAMES),
+                );
+            }
             let action_tok = self.advance();
             let action_span = action_tok.span;
             let action_name = action_tok.text.to_string();
@@ -1074,19 +1124,15 @@ impl G4Parser {
                     actions.skip = true;
                 },
                 "pushMode" => {
-                    self.expect(G4Token::LParen)?;
-                    let mode_name = self.advance();
-                    self.expect(G4Token::RParen)?;
-                    actions.push_mode = intern_mode(mode_names, &mode_name.text.to_string());
+                    let mode_name = self.parse_lexer_command_arg(&"pushMode", false)?;
+                    actions.push_mode = intern_mode(mode_names, &mode_name);
                 },
                 "popMode" => {
                     actions.pop_mode = true;
                 },
                 "mode" => {
-                    self.expect(G4Token::LParen)?;
-                    let mode_name = self.advance();
-                    self.expect(G4Token::RParen)?;
-                    actions.set_mode = intern_mode(mode_names, &mode_name.text.to_string());
+                    let mode_name = self.parse_lexer_command_arg(&"mode", false)?;
+                    actions.set_mode = intern_mode(mode_names, &mode_name);
                 },
                 "channel" => {
                     self.expect(G4Token::LParen)?;
@@ -1120,10 +1166,9 @@ impl G4Parser {
                     }
                 },
                 "type" => {
-                    self.expect(G4Token::LParen)?;
-                    let target = self.advance();
-                    self.expect(G4Token::RParen)?;
-                    actions.type_override = Option::<String>::Some(target.text.to_string());
+                    actions.type_override = Option::<String>::Some(
+                        self.parse_lexer_command_arg(&"type", true)?,
+                    );
                 },
                 "more" => {
                     actions.more = true;
@@ -1131,9 +1176,9 @@ impl G4Parser {
                 _ => {
                     return Result::<(), ParseError>::Err(
                         ParseError::new(
-                            `unknown lexer command "${action_name}" — expected one of: skip, more, channel, type, pushMode, popMode, mode`,
+                            `unknown lexer command "${action_name}"`,
                             action_span,
-                            ["skip", "more", "channel", "type", "pushMode", "popMode", "mode"],
+                            LEXER_COMMAND_NAMES,
                         ),
                     );
                 },
@@ -1282,7 +1327,7 @@ impl G4Parser {
         let tok = self.peek();
         let expected: List<String> = ["string", "char-class", "identifier", "(", "~", "."];
         return Result::<LexerElement, ParseError>::Err(
-            ParseError::new(`unexpected token "${tok.text}" in lexer rule`, tok.span, expected),
+            ParseError::new(`${found_desc(tok)} in a lexer rule`, tok.span, expected),
         );
     }
 
@@ -1322,6 +1367,33 @@ fn resolve_char_code(chars: &List<char>, pos: &mut i32) -> i32 {
     };
 }
 
+/// True when `\p{` / `\P{` opens at `pos`, inside a class ending at `end`.
+fn at_property_escape(chars: &List<char>, pos: i32, end: i32) -> bool {
+    return pos + 2 < end
+        && chars[pos] == '\\'
+        && (chars[pos + 1] == 'p' || chars[pos + 1] == 'P')
+        && chars[pos + 2] == '{';
+}
+
+/// True when the `-` at `pos` joins two bounds rather than standing for
+/// itself. A `-` last in the set has nothing to its right, so it is an
+/// ordinary character — the line ANTLR4 draws too (`[\p{Nd}-]` is fine).
+fn opens_char_range(chars: &List<char>, pos: i32, end: i32) -> bool {
+    return pos < end && chars[pos] == '-' && pos + 1 < end;
+}
+
+/// The error for a `\p{...}` used as a range bound. ANTLR4 reports the same
+/// shape (`error(182)`); there is no range from one property to another, so
+/// accepting it would mean inventing a meaning for it.
+fn property_range_error(span: Span) -> ParseError {
+    let expected: List<String> = ["a single character"];
+    return ParseError::new(
+        "a Unicode property escape cannot be a bound of a character range",
+        span,
+        expected,
+    );
+}
+
 fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> {
     let chars = text.chars().collect();
     let end = chars.len() - 1;
@@ -1335,10 +1407,7 @@ fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> 
     }
 
     while pos < end {
-        if pos + 2 < end
-            && chars[pos] == '\\'
-            && (chars[pos + 1] == 'p' || chars[pos + 1] == 'P')
-            && chars[pos + 2] == '{' {
+        if at_property_escape(&chars, pos, end) {
             let complement = chars[pos + 1] == 'P';
             pos += 3;
             let mut prop = String::with_capacity(16);
@@ -1360,6 +1429,9 @@ fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> 
                     ),
                 );
             }
+            if opens_char_range(&chars, pos, end) {
+                return Result::<CharClass, ParseError>::Err(property_range_error(span));
+            }
             let items = if complement { complement_char_ranges(&prop_ranges) } else { prop_ranges };
             for let r of &items {
                 ranges.push(*r);
@@ -1368,8 +1440,11 @@ fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> 
         }
 
         let c = resolve_char_code(&chars, &mut pos);
-        if pos < end && chars[pos] == '-' && pos + 1 < end {
+        if opens_char_range(&chars, pos, end) {
             advance_char(&chars, &mut pos);
+            if at_property_escape(&chars, pos, end) {
+                return Result::<CharClass, ParseError>::Err(property_range_error(span));
+            }
             let c2 = resolve_char_code(&chars, &mut pos);
             clip_to_scalars(&mut ranges, c, c2);
         } else {
@@ -1451,11 +1526,13 @@ fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
 /// Expand a `\p{...}` property into its ranges. False for a property with no
 /// table, so the caller can reject rather than yield a set matching nothing.
 ///
-/// Bare names are resolved general category → script → binary property →
-/// block, which is what makes a block need the `In` prefix ANTLR4 documents
-/// (`\p{InGreek}`); a name that happens to start with `in` (the
-/// `Inscriptional_*` scripts) is answered by an earlier table. The
-/// `Property=Value` form names its table instead.
+/// Bare names are resolved POSIX → general category → script → binary
+/// property → block, which is what makes a block need the `In` prefix ANTLR4
+/// documents (`\p{InGreek}`); a name that happens to start with `in` (the
+/// `Inscriptional_*` scripts) is answered by an earlier table. The POSIX names
+/// go first so their meaning stays the measured one even if a future UCD grows
+/// a property that spells the same. The `Property=Value` form names its table
+/// instead.
 fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool {
     let key = normalize_property_name(name);
     let mut parts = key.split("=");
@@ -1468,8 +1545,12 @@ fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool 
             "generalcategory" | "gc" => expand_general_category(&value, ranges),
             "script" | "sc" => push_property_ranges(&script_ranges(&value), ranges),
             "block" | "blk" => push_property_ranges(&block_ranges(&value), ranges),
+            "emojipresentation" => expand_emoji_presentation(&value, ranges),
             _ => false,
         };
+    }
+    if expand_posix_property(&key, ranges) {
+        return true;
     }
     if expand_general_category(&key, ranges) {
         return true;
@@ -1482,6 +1563,132 @@ fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool 
     }
     if key.starts_with("in") {
         return push_property_ranges(&block_ranges(&drop_prefix(&key, 2)), ranges);
+    }
+    return false;
+}
+
+/// `a - b`, via De Morgan (`!(!a | b)`) so the only set primitive here is the
+/// complement `\P` already needs.
+fn subtract_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange> {
+    let mut acc = complement_char_ranges(a);
+    for let r of b {
+        acc.push(*r);
+    }
+    return complement_char_ranges(&acc);
+}
+
+/// `a & b`, as `a - !b`.
+fn intersect_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange> {
+    return subtract_char_ranges(a, &complement_char_ranges(b));
+}
+
+fn union_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange> {
+    let mut out = *a;
+    for let r of b {
+        out.push(*r);
+    }
+    return out;
+}
+
+/// Ranges for a table entry this file names literally. The key is a constant,
+/// so an empty entry is generator drift, not user input — except `gc=Cs`,
+/// whose surrogates `clip_to_scalars` drops on the way in.
+fn required_ranges(encoded: &String, name: &String) -> List<CharRange> {
+    assert !encoded.is_empty(), `unicode_tables.wado has no entry for '${*name}'`;
+    let mut out: List<CharRange> = [];
+    push_encoded_ranges(encoded, &mut out);
+    return out;
+}
+
+fn gc_set(key: &String) -> List<CharRange> {
+    return required_ranges(&general_category_ranges(key), key);
+}
+
+fn binary_set(key: &String) -> List<CharRange> {
+    return required_ranges(&binary_property_ranges(key), key);
+}
+
+/// The POSIX compatibility properties (UTS #18 Annex C) ANTLR4 answers through
+/// ICU. None is a UCD property, so each is derived here from tables Gale
+/// already has — the derivation, not a table, is what can be wrong. `\P{...}`
+/// complements whatever comes back, so a definition that is merely close
+/// admits characters rather than missing them; every one below is measured
+/// against the published jar and pinned character-by-character in
+/// `parser_test.wado`.
+///
+/// `Alpha`, `Lower`, `Upper` and `Space` are POSIX names too, but each is a
+/// UCD alias (`Alphabetic`, `Lowercase`, `Uppercase`, `White_Space`) the
+/// binary-property table already answers with the same set.
+fn expand_posix_property(key: &String, ranges: &mut List<CharRange>) -> bool {
+    if let Some(set) = posix_property_ranges(key) {
+        for let r of &set {
+            ranges.push(*r);
+        }
+        return true;
+    }
+    return false;
+}
+
+fn posix_property_ranges(key: &String) -> Option<List<CharRange>> {
+    return match key {
+        "cntrl" => Option::Some(gc_set(&"cc")),
+        "digit" => Option::Some(gc_set(&"nd")),
+        "alnum" => Option::Some(union_char_ranges(&binary_set(&"alphabetic"), &gc_set(&"nd"))),
+        "xdigit" => Option::Some(union_char_ranges(&gc_set(&"nd"), &binary_set(&"hexdigit"))),
+        "blank" => Option::Some(posix_blank_ranges()),
+        "graph" => Option::Some(posix_graph_ranges()),
+        "print" => Option::Some(posix_print_ranges()),
+        _ => null,
+    };
+}
+
+/// Horizontal whitespace: `White_Space` less the characters that end a line.
+fn posix_blank_ranges() -> List<CharRange> {
+    let mut vertical = union_char_ranges(&gc_set(&"zl"), &gc_set(&"zp"));
+    for let c of ['\n', '\u{000B}', '\u{000C}', '\r', '\u{0085}'] {
+        vertical.push(CharRange::single(c));
+    }
+    return subtract_char_ranges(&binary_set(&"whitespace"), &vertical);
+}
+
+/// Everything with a visible glyph: not whitespace, not a control, not a
+/// surrogate, not unassigned. Format characters (`Cf`) stay in — ANTLR4 keeps
+/// them, and `gc=Cs` is empty here anyway since no `char` is a surrogate.
+fn posix_graph_ranges() -> List<CharRange> {
+    let mut invisible = binary_set(&"whitespace");
+    for let key of ["cc", "cs", "cn"] {
+        invisible = union_char_ranges(&invisible, &gc_set(&key));
+    }
+    return complement_char_ranges(&invisible);
+}
+
+/// `graph` plus horizontal whitespace, less the controls — so a space prints
+/// but a tab, being `Cc`, does not.
+fn posix_print_ranges() -> List<CharRange> {
+    let visible = union_char_ranges(&posix_graph_ranges(), &posix_blank_ranges());
+    return subtract_char_ranges(&visible, &gc_set(&"cc"));
+}
+
+/// `EmojiPresentation=<value>`, ANTLR4's own extension over the UCD (its
+/// `lexer-rules.md` defines the three values). Derived from `Emoji` and
+/// `Emoji_Presentation`, both of which `emoji-data.txt` already gives the
+/// table; measured against the jar like the POSIX set.
+fn expand_emoji_presentation(value: &String, ranges: &mut List<CharRange>) -> bool {
+    let emoji = binary_set(&"emoji");
+    let set = match value {
+        // Colourful by default.
+        "emojidefault" => Option::Some(intersect_char_ranges(&emoji, &binary_set(&"emojipresentation"))),
+        // Emoji-capable, but drawn as text unless asked otherwise.
+        "textdefault" => Option::Some(subtract_char_ranges(&emoji, &binary_set(&"emojipresentation"))),
+        // Text-only: never emoji at all.
+        "text" => Option::Some(complement_char_ranges(&emoji)),
+        _ => null,
+    };
+    if let Some(items) = set {
+        for let r of &items {
+            ranges.push(*r);
+        }
+        return true;
     }
     return false;
 }
@@ -1728,7 +1935,7 @@ pub fn assemble_grammar(inputs: &List<[String, String]>) -> Result<Grammar, Asse
                 grammars.push(g);
             },
             Err(e) => {
-                return Result::Err(AssembleError::Parse([inp.0, e.message]));
+                return Result::Err(AssembleError::Parse([inp.0, e.full_message()]));
             },
         }
     }
@@ -1737,7 +1944,7 @@ pub fn assemble_grammar(inputs: &List<[String, String]>) -> Result<Grammar, Asse
         Ok(_) => {
         },
         Err(e) => {
-            return Result::Err(AssembleError::Check(e.message));
+            return Result::Err(AssembleError::Check(e.full_message()));
         },
     }
     return Result::Ok(merged);
