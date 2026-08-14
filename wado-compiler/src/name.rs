@@ -565,14 +565,6 @@ pub struct LocalMethodName {
     pub cm_name: Option<String>,
 }
 
-/// Derive the bare base name from a possibly-mangled type/trait name.
-///
-/// Whether a mangled call name denotes a trait-method impl
-/// (`Type^Trait::method`); the `^` separates the receiver type from its trait.
-pub fn is_local_trait_method_name(name: &str) -> bool {
-    name.contains('^')
-}
-
 /// The reference kind of a `&` / `&mut` method receiver.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum RefKind {
@@ -700,14 +692,6 @@ impl Receiver {
     pub fn is_assoc_projection(&self) -> bool {
         matches!(self, Receiver::Projection { .. })
     }
-}
-
-/// Decompose `Type^Trait::method` into its `(type, trait)` parts, or `None` when
-/// the name has no `^` trait segment.
-pub fn split_trait_method_receiver(name: &str) -> Option<(&str, &str)> {
-    let (ty, rest) = name.split_once('^')?;
-    let trait_name = rest.split_once("::").map_or(rest, |(t, _)| t);
-    Some((ty, trait_name))
 }
 
 /// The reference prefix a mangled name carries, and the rest.

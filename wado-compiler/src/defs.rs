@@ -484,11 +484,12 @@ impl DefTable {
     /// Mint a declaration for a unit test that needs one without parsing a
     /// module.
     ///
-    /// `#[cfg(test)]`, so production code still has no constructor — which is
-    /// the property this design rests on. A test that wants a *struct type*
-    /// rather than a declaration should use an anonymous shape instead.
-    #[cfg(test)]
-    pub(crate) fn declare_for_test(
+    /// Gated on `test` / the `test-util` feature, so production code still has
+    /// no constructor — which is the property this design rests on. A test that
+    /// wants a *struct type* rather than a declaration should use an anonymous
+    /// shape instead.
+    #[cfg(any(test, feature = "test-util"))]
+    pub fn declare_for_test(
         &mut self,
         module: &ModuleSource,
         name: &str,

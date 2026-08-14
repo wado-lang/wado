@@ -1201,8 +1201,8 @@ impl TypeTable {
     /// Mint a declaration in this table's own `DefTable`, for a unit test that
     /// builds a type without parsing a module. See
     /// [`crate::defs::DefTable::declare_for_test`].
-    #[cfg(test)]
-    pub(crate) fn declare_for_test(
+    #[cfg(any(test, feature = "test-util"))]
+    pub fn declare_for_test(
         &mut self,
         name: &str,
         module: ModuleSource,
@@ -1224,8 +1224,8 @@ impl TypeTable {
     /// A test that builds types without loading the stdlib has no annotate
     /// pass to record what `#[compiler_item("…")]` marks, and those
     /// constructors answer from the declaration rather than from a spelling.
-    #[cfg(test)]
-    pub(crate) fn seed_compiler_items_for_test(&mut self) {
+    #[cfg(any(test, feature = "test-util"))]
+    pub fn seed_compiler_items_for_test(&mut self) {
         use crate::compiler_item::{CompilerItem, Resolved};
         use crate::defs::DefKind;
 

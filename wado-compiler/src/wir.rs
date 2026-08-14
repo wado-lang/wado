@@ -145,7 +145,12 @@ pub struct WirPackage {
 /// earlier checks.
 #[derive(Debug, Clone)]
 pub struct TraitBoundViolation {
-    pub call_name: String,
+    /// The receiver and the trait as source spells them, rendered at the
+    /// call site off the structure it holds. A diagnostic says what the
+    /// programmer wrote; reading it back out of the mangled call name meant
+    /// re-deriving both halves from a string built for Wasm.
+    pub type_display: String,
+    pub trait_display: String,
     pub span: crate::token::Span,
 }
 

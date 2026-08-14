@@ -6758,6 +6758,7 @@ fn field_access_on_non_const_receiver_is_non_const() {
 #[test]
 fn tuple_literal_projects_by_position() {
     let mut table = TypeTable::new();
+    table.seed_compiler_items_for_test();
     let pair = table.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
     let expr = field_access(
         tuple_lit(
@@ -7061,6 +7062,7 @@ fn an_unknown_guard_leaves_the_match_alone() {
 #[test]
 fn a_guard_over_tuple_bindings_decides_the_arm() {
     let mut table = TypeTable::new();
+    table.seed_compiler_items_for_test();
     let pair = table.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
     let expr = match_expr(
         tuple_lit(
@@ -7153,6 +7155,7 @@ fn struct_pattern_rules_an_arm_out_despite_a_binding() {
 #[test]
 fn tuple_pattern_picks_the_matching_arm() {
     let mut table = TypeTable::new();
+    table.seed_compiler_items_for_test();
     let pair = table.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
     let expr = match_expr(
         tuple_lit(
@@ -7185,6 +7188,7 @@ fn tuple_pattern_with_rest_stays_unknown() {
     // `(10, ..)` leaves the trailing sub-patterns without a fixed element
     // index, so the engine does not model it.
     let mut table = TypeTable::new();
+    table.seed_compiler_items_for_test();
     let pair = table.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
     let expr = match_expr(
         tuple_lit(
