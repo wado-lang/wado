@@ -261,7 +261,22 @@ impl Monomorphizer {
             }
             while let Some(key) = self.structs.pending.pop() {
                 let struct_key = (key.name.clone(), key.module_source.clone());
-                if let Some(generic_struct) = generic_structs.get(&struct_key)
+                // The template map is keyed by `TirStruct::name`, the storage
+                // spelling — mangled for a function-local declaration — while
+                // an instantiation names the declaration. When the two differ,
+                // resolve the declaration and ask again under what it renders
+                // to; otherwise a local `struct Box<T>` is never instantiated
+                // and nothing downstream is registered for it.
+                let rendered_key = {
+                    let tt = type_table.borrow();
+                    tt.decl_named_in(&key.name, &key.module_source)
+                        .map(|def| (tt.decl_render_name(def), key.module_source.clone()))
+                        .filter(|k| *k != struct_key)
+                };
+                let generic_struct = generic_structs
+                    .get(&struct_key)
+                    .or_else(|| rendered_key.as_ref().and_then(|k| generic_structs.get(k)));
+                if let Some(generic_struct) = generic_struct
                     && let Some(concrete) =
                         self.instantiate_struct(generic_struct, &key, &mut type_table.borrow_mut())
                 {
