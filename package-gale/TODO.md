@@ -33,10 +33,6 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 
 - [ ] A rule-argument action whose host type contains `[]` (`r[int[] arr]`) ends early and its remainder leaks into the grammar text: the action stripper ends a `[...]` at the first unescaped `]`, which is right for the char sets the corpus does exercise. No corpus grammar hits this.
 
-### Deleted-terminal rendering
-
-`to_string_tree` matches ANTLR4's `Trees.toStringTree` everywhere except a deleted terminal: Gale prints `<skip z>` where ANTLR4 prints the bare token (`<missing X>` already matches). The marker is a deliberate extension — it is what makes Gale's own error-recovery fixtures able to tell recovery from a clean parse — so `ParseTrees/ExtraToken` sits in `[stage_b_skip]` rather than being forced to pass. Decide once: either the corpus gets an ANTLR-identical rendering mode, or the marker becomes opt-in and the recovery fixtures read the `Skip` rows structurally. This is a decision, not an implementation task — nothing else moves until it is made.
-
 ## Stage C — action / predicate execution
 
 Design in [`action.md`](./action.md). The largest remaining block, and a hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `superClass` / `tokenVocab`. It also unblocks composite-descriptor output comparison and parser descriptors whose output is purely action-print stdout.

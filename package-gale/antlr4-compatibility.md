@@ -66,6 +66,28 @@ only ever dropped in tail position (followed by closing parens /
 whitespace), so an `<EOF>` that is genuine token _text_ mid-tree is left
 untouched.
 
+### Deleted terminals in parse trees
+
+`toStringTree()` prints a token deleted by single-token recovery as a bare
+child (ANTLR4) but Gale wraps it in `<skip x>`. Like `<EOF>` this is a
+**rendering** difference over an identical tree — both keep the token as a
+child, and both report the deletion outside the tree (ANTLR4 on the error
+stream, Gale as an `ExtraToken` diagnostic at the same position). Unlike
+`<EOF>` the divergence is Gale saying _more_, which is the point: the marker
+is what lets a consumer tell a recovered parse from a clean one at a glance,
+and Gale is a superset, so the renderer keeps it.
+
+So the normalisation runs the other way here: the compare drops the wrapper
+from **Gale's** output via `strip_skip_markers`, leaving the token. The
+extractor emits that call only for descriptors whose own `[errors]` report an
+`extraneous input` — i.e. where ANTLR4 deleted a token too. That gate is what
+keeps the normalisation honest: a deletion Gale invents on its own has no
+counterpart in the expected tree and still fails, and deleting a _different_
+token leaves different text behind, which also still fails. What the compare
+asks is exactly "did Gale delete what ANTLR4 deleted, in the same place".
+
+`<missing X>` needs no normalisation — Gale's rendering already matches.
+
 ## Stages of Compatibility
 
 The contract is verified at layered stages — A, B, C. Higher

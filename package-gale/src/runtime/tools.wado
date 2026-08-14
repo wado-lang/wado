@@ -39,6 +39,69 @@ pub fn normalize_tree(s: &String) -> String {
     return out;
 }
 
+/// True when ` <skip ` opens at `i`.
+fn opens_skip_marker(chars: &List<char>, i: i32) -> bool {
+    return i + 7 <= chars.len()
+        && chars[i] == ' '
+        && chars[i + 1] == '<'
+        && chars[i + 2] == 's'
+        && chars[i + 3] == 'k'
+        && chars[i + 4] == 'i'
+        && chars[i + 5] == 'p'
+        && chars[i + 6] == ' ';
+}
+
+/// Index of the `>` closing the marker opened at `open`, or -1 when no `>`
+/// in the rest of the string sits in closing position.
+fn skip_marker_close(chars: &List<char>, open: i32) -> i32 {
+    let n = chars.len();
+    for let mut j = open + 7; j < n; j += 1 {
+        if chars[j] != '>' {
+            continue;
+        }
+        if j + 1 >= n || chars[j + 1] == ' ' || chars[j + 1] == ')' {
+            return j;
+        }
+    }
+    return -1;
+}
+
+/// Drop Gale's `<skip …>` markers, leaving the deleted terminal bare — the
+/// shape ANTLR4's `Trees.toStringTree` prints, which keeps an extraneous token
+/// as a plain error node and reports the deletion on the error stream instead.
+///
+/// The marker is a deliberate superset extension (see the recovery table in
+/// the README), so the compatibility suite normalises it away here rather than
+/// the renderer dropping it: `to_string_tree()` goes on saying more than
+/// ANTLR4 does. The suite applies this only to descriptors whose own
+/// `[errors]` report an extraneous token, so the compare asks "did Gale delete
+/// what ANTLR4 deleted" and cannot hide a deletion ANTLR4 never made. The
+/// token's text survives, so deleting a *different* token still shows up.
+///
+/// A marker closes at the first `>` followed by a space, `)`, or end of input.
+/// A deleted token whose own text holds such a `>` therefore cuts early and
+/// leaves a stray `>`, which surfaces as a mismatch rather than a false match.
+pub fn strip_skip_markers(s: &String) -> String {
+    let chars: List<char> = s.chars().collect();
+    let n = chars.len();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < n {
+        let close = if opens_skip_marker(&chars, i) { skip_marker_close(&chars, i) } else { -1 };
+        if close < 0 {
+            out.push(chars[i]);
+            i += 1;
+            continue;
+        }
+        out.push(' ');
+        for let mut k = i + 7; k < close; k += 1 {
+            out.push(chars[k]);
+        }
+        i = close + 1;
+    }
+    return out;
+}
+
 /// Produce an ANTLR4-style `Token.toString()` dump of the token stream:
 ///
 ///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]\n  (per token)
