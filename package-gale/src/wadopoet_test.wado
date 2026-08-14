@@ -11,6 +11,7 @@ use {
     Vis,
     str_lit,
     char_lit,
+    lit_name,
     char_range_pat,
 } from "./wadopoet.wado";
 
@@ -526,4 +527,25 @@ test "struct + impl trait composition" {
 
     let expected = "pub struct Article {\n    pub name: String,\n}\n\nimpl Summary for Article {\n    fn title(&self) -> String {\n        return self.name;\n    }\n}\n";
     assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "lit_name renders a grammar literal the way ANTLR4's vocabulary does" {
+    assert `${lit_name("+")}` == "'+'";
+    assert `${lit_name("and")}` == "'and'";
+    // Printable non-ASCII stays verbatim, same as `str_lit`.
+    assert `${lit_name("あ")}` == "'あ'";
+    // `LitToken.text` has its escapes resolved, so a real newline goes back to
+    // `\n` — a readable rendering, not a round-trip.
+    let mut nl = String::new();
+    nl.push('\n');
+    assert `${lit_name(nl)}` == "'\\n'";
+    // The delimiter it escapes is `'`, not `"`.
+    let mut apos = String::new();
+    apos.push('i');
+    apos.push('\'');
+    apos.push('s');
+    assert `${lit_name(apos)}` == "'i\\'s'";
+    let mut quote = String::new();
+    quote.push('"');
+    assert `${lit_name(quote)}` == "'\"'";
 }

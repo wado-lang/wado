@@ -20,7 +20,18 @@ use {
 } from "./ir.wado";
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
 use { translate_lexer_predicate, translate_lexer_action } from "./action_translate.wado";
-use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_lit, char_range_pat } from "./wadopoet.wado";
+use {
+    CodeWriter,
+    StructSpec,
+    ImplSpec,
+    FnSpec,
+    GlobalSpec,
+    Vis,
+    char_lit,
+    char_range_pat,
+    lit_name,
+    str_lit,
+} from "./wadopoet.wado";
 use { SuperOp, gen_super_interface, lexer_rule_calls_super } from "./superclass.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
@@ -4286,9 +4297,12 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit
     if !rule_name_exists(lexer_rules, &"ERROR") {
         w.line(&"TK_ERROR => \"Error\",");
     }
+    // A literal names itself by its source form, as ANTLR4's
+    // `Vocabulary.getDisplayName` does — `'+'`, not the `TK_LIT_PLUS` constant
+    // Gale interned it under. This is the one vocabulary every user-facing
+    // name is read from: `expected` sets and `<missing X>` alike.
     for let lit of lit_tokens {
-        let name = lit.const_name;
-        w.line(&`${name} => "${name}",`);
+        w.line(&`${lit.const_name} => ${str_lit(`${lit_name(lit.text)}`)},`);
     }
     w.line(&"_ => \"Unknown\",");
     w.dedent();

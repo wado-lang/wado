@@ -165,6 +165,17 @@ pub fn char_lit(value: char) -> CharLit {
     return value as CharLit;
 }
 
+/// A grammar literal rendered the way ANTLR4's vocabulary shows it: the source
+/// form, single-quoted. A newtype over `String` with its own `Display`.
+pub type LitName = String;
+
+/// Tag `text` as a grammar literal's display name: `lit_name("+")` formats to
+/// `'+'`. `LitToken.text` holds the literal with its escapes already resolved,
+/// so this puts them back — a readable rendering, not a round-trip.
+pub fn lit_name(text: String) -> LitName {
+    return text as LitName;
+}
+
 /// Write `c` as the body of a Wado literal delimited by `quote` (`'"'` for a
 /// string, `'\''` for a char). Escapes the delimiter, the backslash, and
 /// control characters; passes every other scalar through unchanged so
@@ -210,6 +221,16 @@ impl Display for CharLit {
     pub fn fmt(&self, f: &mut Formatter) {
         f.write_char('\'');
         write_literal_char(f, *self as char, '\'');
+        f.write_char('\'');
+    }
+}
+
+impl Display for LitName {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f.write_char('\'');
+        for let c of self.chars() {
+            write_literal_char(f, c, '\'');
+        }
         f.write_char('\'');
     }
 }

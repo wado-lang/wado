@@ -37,10 +37,6 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 
 `to_string_tree` matches ANTLR4's `Trees.toStringTree` everywhere except a deleted terminal: Gale prints `<skip z>` where ANTLR4 prints the bare token (`<missing X>` already matches). The marker is a deliberate extension — it is what makes Gale's own error-recovery fixtures able to tell recovery from a clean parse — so `ParseTrees/ExtraToken` sits in `[stage_b_skip]` rather than being forced to pass. Decide once: either the corpus gets an ANTLR-identical rendering mode, or the marker becomes opt-in and the recovery fixtures read the `Skip` rows structurally. This is a decision, not an implementation task — nothing else moves until it is made.
 
-### Diagnostics and minor
-
-- [ ] A literal token names itself with its own kind constant (`TK_LIT_PLUS`) everywhere the vocabulary is read — `expected` lists and `<missing X>` alike — where ANTLR4's `getDisplayName` shows the literal text (`'+'`). One vocabulary, so this is a single change in `token_kind_name`; it moves `<missing X>` rendering, so it needs a corpus run rather than a local fixture. No committed expected tree contains a `<missing>` on a literal today.
-
 ## Stage C — action / predicate execution
 
 Design in [`action.md`](./action.md). The largest remaining block, and a hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `superClass` / `tokenVocab`. It also unblocks composite-descriptor output comparison and parser descriptors whose output is purely action-print stdout.

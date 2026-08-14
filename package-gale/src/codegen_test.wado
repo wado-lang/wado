@@ -1192,6 +1192,21 @@ C : 'c' ;
     assert !str_contains(&out, &"\"TK_A\""), `a kind constant leaked into a user-facing list:\n${out}`;
 }
 
+test "the vocabulary names a literal by its source form" {
+    // ANTLR4's `Vocabulary.getDisplayName` shows a literal as it appears in
+    // the grammar, so `expected` sets and `<missing X>` read `'+'` rather than
+    // the `TK_LIT_PLUS` constant Gale interned it under.
+    let input = "grammar Test;
+r : A '+' ;
+A : 'a' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let out = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert str_contains(&out, &"TK_LIT_PLUS => \"'+'\""), out;
+    // A lexer rule still answers with its rule name.
+    assert str_contains(&out, &"TK_A => \"A\""), out;
+}
+
 test "generate raises no diagnostics for disjoint alts" {
     // `r : A | B ;` has disjoint first sets, so lowering dispatches
     // directly with nothing to warn about — `GeneratedOutput.diagnostics`
