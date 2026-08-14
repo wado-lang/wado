@@ -1,16 +1,7 @@
-//! Parser rule-body emit: one `_parse_<rule>` / `scan_<rule>` per rule.
-//!
-//! Given a `LoweredGrammar` — every codegen decision already committed by
-//! `lower` — this module walks each rule and writes its recursive-descent
-//! body, its static-scan twin, the multi-alt dispatch, and the LR
-//! precedence climb.
-//!
-//! What does not belong here:
-//!
-//! * the generated parser's fixed scaffolding — `parser_runtime_gen.wado`
-//! * actions, predicates, and the value channel — `action_gen.wado`
-//! * token-set tables and lookahead conditions — `kind_set_gen.wado`
-//! * naming, classification, and set helpers — `gen_util.wado`
+//! Parser rule-body emit: recursive descent, static scan, multi-alt
+//! dispatch, and the LR climb, per rule of a `LoweredGrammar`.
+//! Not here: scaffolding (`parser_runtime_gen`), actions (`action_gen`),
+//! token-set tables (`kind_set_gen`), naming leaves (`gen_util`).
 
 use {
     Grammar,

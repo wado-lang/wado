@@ -89,19 +89,6 @@ A `superClass` grammar has no behaviour without its hand-written base class, so 
 
 To add an e2e grammar: drop the `.g4` in `tests/grammars/` (with `// Source:` / `// License:` headers), add a parse test in `src/g4/integration_test.wado`, and a driver test that imports it via the generator.
 
-## Emit modules
-
-`codegen.wado` drives the generated module. The emit is split by concern, and the split is the contract — new code goes where its concern already lives:
-
-- `parser_gen.wado` — parser rule bodies: recursive descent, static scan, multi-alt dispatch, LR precedence climb.
-- `parser_runtime_gen.wado` — the scaffolding every generated parser carries regardless of grammar: the `Parser` struct and its recognizer API, the `parse` / `parse_<rule>` entries, trace helpers, fragment recovery.
-- `action_gen.wado` — actions and predicates, predicate-gated dispatch, the `<Rule>Vals` channel, `@members`, threaded rule arguments, span capture.
-- `kind_set_gen.wado` — token-set tables (`_kind_set_<id>`, `FOLLOW_MASK_<id>`, `SYNC_<id>`) and the lookahead conditions that read them.
-- `lexer_gen.wado` / `cst_gen.wado` / `highlight_gen.wado` — the lexer, the CST scaffolding, the highlighter.
-- `gen_util.wado` / `wadopoet.wado` — naming and classification leaves; `CodeWriter` and the declaration builders.
-
-Dependencies run one way — `parser_gen` → `action_gen` / `parser_runtime_gen` / `kind_set_gen` → `gen_util` — and no two emit modules import each other. A helper both sides need belongs in `gen_util` (or `prediction`, for a decision that never touches `CodeWriter`), not in a back-import.
-
 ## Inlined runtime
 
 The generated parser inlines the runtime fragments in `src/runtime/*.wado` (`lex`, `diag`, `tree`, `tools` always; `follow` / `highlight` / `atn` / `latn` gated per-feature). Each fragment is also a real module for dev / test.

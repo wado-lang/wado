@@ -1,13 +1,6 @@
-//! Semantic actions, predicate gates, and the value channel.
-//!
-//! The emit side of `.g4` actions: `{...}` action and `{...}?` predicate
-//! bodies (translated by `java2wado` / `action_translate`), the `<Rule>Vals`
-//! value channel they read and write, `@members`, threaded rule arguments,
-//! rule-span capture, and the predicate-gated dispatch that turns
-//! alt-initial predicates into a decision.
-//!
-//! All of it is inert when `ctx.emit_actions()` is false, so a grammar
-//! without actions gets byte-identical output with none of this reached.
+//! Actions and predicates: their bodies, predicate-gated dispatch, the
+//! `<Rule>Vals` channel, `@members`, threaded rule arguments, span
+//! capture. All inert when `emit_actions()` is off.
 
 use { ActionSource, AltAction, Alternative, AttrDecl, Element, Grammar, ParserRule } from "./ir.wado";
 use { DiagnosticKind, Op, Rule, RuleCallOp } from "./gir.wado";

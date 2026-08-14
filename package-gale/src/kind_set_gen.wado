@@ -1,10 +1,7 @@
-//! Token-set tables and the lookahead conditions that read them.
-//!
-//! Module-level emit, not rule-body emit: the `_kind_set_<id>` membership
-//! helpers, the `FOLLOW_MASK_<id>` / `SYNC_<id>` globals, and the
-//! `p.peek_at(d)` / `tokens[pos + d]` condition strings that test them.
-//! `codegen` emits the tables once at the end of the generated module; rule
-//! bodies only intern sets (`sync_set_ref`) and build conditions.
+//! Token-set tables — `_kind_set_<id>` helpers, `FOLLOW_MASK_<id>` and
+//! `SYNC_<id>` globals — and the lookahead conditions that read them.
+//! Module-level emit: `codegen` writes the tables once, rule bodies only
+//! intern sets and build conditions.
 
 use { LoweredGrammar } from "./gir.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";

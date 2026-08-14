@@ -1,17 +1,8 @@
-//! The generated parser's fixed scaffolding.
-//!
-//! Everything a generated parser carries regardless of what the grammar
-//! says: the `Parser` struct and its recognizer API (`expect` / `advance` /
-//! `fail` / the `report_*` recovery edits), the `parse` / `parse_<rule>`
-//! entries over the shared `_run_parse_entry`, the trace helpers, and the
-//! `_recover_fragment` descent. The emit varies over the feature switches
-//! (`trace`, `needs_atn`, `emit_actions`, fragment recovery) and the
-//! grammar's `@members` fields — never over rules, alternatives, or
-//! elements.
-//!
-//! Sibling of `src/runtime/*.wado`, which the same generated module inlines
-//! verbatim; this half is a builder because the feature switches select
-//! which fields and methods exist.
+//! The scaffolding every generated parser carries whatever the grammar:
+//! the `Parser` struct and its recognizer API, the `parse` entries, trace,
+//! fragment recovery. Varies over the feature switches and `@members`,
+//! never over rules. Sibling of `src/runtime/*.wado`, a builder because
+//! the switches select which fields and methods exist.
 
 use { Grammar } from "./ir.wado";
 use { DiagnosticKind, LoweredGrammar, Rule, rule_header } from "./gir.wado";
