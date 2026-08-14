@@ -834,6 +834,16 @@ compiles, passes the suite, and ends with a mechanical completion check.
       is a spelling mismatch after all, on the call-minting side, and one end
       of it is now known precisely.
 
+      Read back from the pinned site, the chain is: `lib.rs`'s violation
+      report ← `wir_package.trait_bound_violations` ←
+      `wir_build::translate`'s `unresolved_trait_call_or_trap`, whose `name`
+      is a NIR `FunctionRef` that resolved to nothing ← minted during
+      elaboration. `assert id == 42` builds its message through the
+      Formatter / `Inspect` / `String` stack, so the producer is the
+      template-formatting path — `elaborator::assert` is only the capture
+      scanner and mints nothing. Probe where that call's `FunctionRef` is
+      built and compare its receiver spelling against `UserId@2`.
+
       What is not yet known is which producer mints that call. Routing
       `TypeTable::fq_type_name`'s `Newtype` / `Enum` / `Variant` / `Flags` /
       `GenericInstance` arms through `decl_render_name` — they read
