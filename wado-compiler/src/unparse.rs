@@ -4177,6 +4177,7 @@ pub fn unparse_struct_field(struct_name: &str, field: &StructField) -> String {
 }
 
 use crate::lexer::is_valid_ident;
+use crate::name::LocalMethodName;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal,
     TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
@@ -4875,10 +4876,14 @@ impl<'a> TirUnparser<'a> {
                     self.output.push('.');
                     // Name the resolved method (e.g. `Type::method`) so the
                     // output captures which impl was selected, spelled as
-                    // source writes it.
-                    self.output.push_str(&Self::quote_if_needed(
-                        &crate::name::display_method_name(&func.name),
-                    ));
+                    // source writes it — off the method's own structure, not
+                    // by taking its mangled name back apart.
+                    let displayed = func
+                        .method_info
+                        .as_ref()
+                        .map_or_else(|| func.name.clone(), LocalMethodName::to_display_name);
+                    self.output
+                        .push_str(&Self::quote_if_needed(&displayed));
                     rest
                 } else {
                     let func_name = func.name.clone();

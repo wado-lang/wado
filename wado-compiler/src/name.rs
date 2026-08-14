@@ -699,25 +699,6 @@ fn push_ref_prefix(out: &mut String, kind: RefKind) {
     }
 }
 
-fn split_ref_prefix(name: &str) -> (&str, &str) {
-    for prefix in [RefKind::Mut.prefix(), RefKind::Shared.prefix()] {
-        if let Some(rest) = name.strip_prefix(prefix) {
-            let (sep, rest) = rest
-                .strip_prefix(' ')
-                .map_or(("", rest), |trimmed| (" ", trimmed));
-            return (&name[..prefix.len() + sep.len()], rest);
-        }
-    }
-    ("", name)
-}
-
-/// The head's name without its declaring module. A module may itself contain
-/// `/` (`./sub/geom.wado`), so the split is on the last one; a head never
-/// carries type arguments, which is what makes that safe here.
-fn head_simple_name(head: &str) -> &str {
-    head.rsplit('/').next().unwrap_or(head)
-}
-
 /// Split a written or mangled name into its head and its type arguments:
 /// `"Stream<u8>"` → `("Stream", ["u8"])`, `"Display"` → `("Display", [])`.
 ///
@@ -757,72 +738,6 @@ fn split_type_args(inner: &str) -> Vec<&str> {
     }
     args.push(&inner[start..]);
     args
-}
-
-/// Render a mangled type name the way source writes it: the declaring module
-/// dropped from the head and from every type argument.
-///
-/// A diagnostic names a type the way the user typed it. The module an fq name
-/// carries is an internal identity, so printing one raw turns `Point` into
-/// `./geom.wado/Point` and `Option<String>` into
-/// `core:prelude/types.wado/Option<core:prelude/string.wado/String>`.
-#[must_use]
-pub fn display_type_name(mangled: &str) -> String {
-    let (prefix, rest) = split_ref_prefix(mangled);
-    let Some(open) = rest.find('<') else {
-        return format!("{prefix}{}", head_simple_name(rest));
-    };
-    let Some(inner) = rest[open + 1..].strip_suffix('>') else {
-        return format!("{prefix}{}", head_simple_name(rest));
-    };
-    let args: Vec<String> = split_type_args(inner)
-        .into_iter()
-        .map(display_type_name)
-        .collect();
-    format!(
-        "{prefix}{}<{}>",
-        head_simple_name(&rest[..open]),
-        args.join(",")
-    )
-}
-
-/// Decompose a local method mangle into `(receiver, trait, method)`.
-///
-/// - `Point::sum` → `("Point", None, "sum")`
-/// - `Point^Display::fmt` → `("Point", Some("Display"), "fmt")`
-/// - `Stdout::write_via_stream` → `("Stdout", None, "write_via_stream")`
-///
-/// Returns `None` when there is no `::` method separator (a bare
-/// free-function name). The receiver / trait may still carry type-argument
-/// mangling (`Box<i32>^Ord::cmp`); this splits only on the `^` and `::`
-/// separators and does not strip type args.
-pub fn split_local_method_name(name: &str) -> Option<(&str, Option<&str>, &str)> {
-    let sep = name.find("::")?;
-    let (prefix, method) = (&name[..sep], &name[sep + 2..]);
-    let (receiver, trait_name) = match prefix.find('^') {
-        Some(caret) => (&prefix[..caret], Some(&prefix[caret + 1..])),
-        None => (prefix, None),
-    };
-    Some((receiver, trait_name, method))
-}
-
-/// A method mangle as source spells it: the receiver and trait lose their
-/// declaring modules, the method keeps its name.
-///
-/// - `core:prelude/string.wado/String::len` → `String::len`
-/// - `a.wado/Box<b.wado/T>^c.wado/Ord::cmp` → `Box<T>^Ord::cmp`
-///
-/// A name with no `::` is a free function, displayed by its head alone.
-#[must_use]
-pub fn display_method_name(mangled: &str) -> String {
-    let Some((receiver, trait_name, method)) = split_local_method_name(mangled) else {
-        return display_type_name(mangled);
-    };
-    let receiver = display_type_name(receiver);
-    match trait_name {
-        Some(t) => format!("{receiver}^{}::{method}", display_type_name(t)),
-        None => format!("{receiver}::{method}"),
-    }
 }
 
 /// Rebuild a monomorphized method's base-name key: replace everything up to
@@ -1124,6 +1039,26 @@ impl LocalMethodName {
             format!("{}^{}::{}", self.struct_name(), trait_name, method_part)
         } else {
             format!("{}::{}", self.struct_name(), method_part)
+        }
+    }
+
+    /// [`Self::to_mangled_name`] as source spells it: the receiver and the
+    /// trait lose their declaring modules, the method keeps its name.
+    ///
+    /// The display counterpart of the mangle, derived from the same fields —
+    /// so a reader wanting `String::len` out of
+    /// `core:prelude/string.wado/String::len` asks the structure rather than
+    /// splitting the rendering back apart.
+    #[must_use]
+    pub fn to_display_name(&self) -> String {
+        let receiver = self.fq_struct_name().to_display();
+        match &self.trait_name {
+            Some(trait_name) => format!(
+                "{receiver}^{}::{}",
+                trait_name.to_display(),
+                self.method_name
+            ),
+            None => format!("{receiver}::{}", self.method_name),
         }
     }
 
@@ -2544,6 +2479,37 @@ mod tests {
         }
     }
 
+    /// The mangle and the display are two renderings of one structure, so a
+    /// reader that wants the source spelling asks for it rather than taking
+    /// the mangle back apart — which is what a module-qualified head and a
+    /// module-qualified argument used to require.
+    #[test]
+    fn a_method_renders_a_mangle_and_a_display_from_one_structure() {
+        let mut interner = ModuleSourceInterner::new();
+        let geom = interner.local("./geometry.wado");
+        let types = interner.local("./types.wado");
+
+        let inherent = LocalMethodName::new(
+            FqTypeName::declared(&geom, "Point"),
+            None,
+            "sum".to_string(),
+        );
+        assert_eq!(inherent.to_mangled_name(), "./geometry.wado/Point::sum");
+        assert_eq!(inherent.to_display_name(), "Point::sum");
+
+        let mut generic = LocalMethodName::new(
+            FqTypeName::declared(&geom, "Box"),
+            Some(FqTraitName::declared(&types, "Ord")),
+            "cmp".to_string(),
+        );
+        generic.struct_type_args = vec![FqTypeName::declared(&types, "T")];
+        assert_eq!(
+            generic.to_mangled_name(),
+            "./geometry.wado/Box<./types.wado/T>^./types.wado/Ord::cmp"
+        );
+        assert_eq!(generic.to_display_name(), "Box<T>^Ord::cmp");
+    }
+
     #[test]
     fn ref_prefix_binds_to_its_pointee() {
         let point = FqTypeName::declared(&ModuleSource::default(), "Point");
@@ -2557,26 +2523,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn display_type_name_drops_modules_from_head_and_args() {
-        assert_eq!(display_type_name("./geom.wado/Point"), "Point");
-        // A naive split on the last `/` would answer `String>` here.
-        assert_eq!(
-            display_type_name("core:prelude/types.wado/Option<core:prelude/string.wado/String>"),
-            "Option<String>"
-        );
-        assert_eq!(
-            display_type_name("a.wado/Pair<b.wado/K,c.wado/Map<d.wado/V,i32>>"),
-            "Pair<K,Map<V,i32>>"
-        );
-        // Builtin shapes carry no module, and refs keep their prefix.
-        assert_eq!(display_type_name("i32"), "i32");
-        assert_eq!(display_type_name("&./geom.wado/Point"), "&Point");
-        assert_eq!(
-            display_type_name("&mut a.wado/List<b.wado/T>"),
-            "&mut List<T>"
-        );
-    }
 }
 
 /// Whether `name` names a builtin shape — one no module declares, so every
