@@ -26,13 +26,22 @@ impl Monomorphizer {
             .make_monomorphized_struct_from_args(generic.def, key.impl_type_args.clone());
 
         // Find the GenericInstance TypeId and record the substitution early
-        // so that substitute_type can use it for self-references
+        // so that substitute_type can use it for self-references.
+        //
+        // The declaration is the key. `(name, module)` is not: sibling
+        // functions each declaring a `struct Box<T>` mint one
+        // `GenericInstance` apiece, and matching on the spelling claimed all
+        // of them for whichever instantiation was drained last — every
+        // literal then named that one struct, and one carrying more fields
+        // than it declares left values on the stack.
+        let head_def = key
+            .def
+            .or_else(|| generic.def.decl())
+            .expect("a generic struct template is a declaration");
         let mut instance_ids = Vec::new();
         for id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id)
-                && type_table.def_name(*def) == key.name
-                && let module_source = type_table.def_module(*def)
-                && module_source == &key.module_source
+                && *def == head_def
                 && type_args == &key.impl_type_args
             {
                 self.structs.type_substitutions.insert(id, concrete_type_id);
@@ -55,9 +64,11 @@ impl Monomorphizer {
         // that projections like `I::Item` (where `I` is later substituted with
         // this monomorphized struct, which carries no type args) can still be
         // resolved by `resolve_assoc_type`.
-        let base_decl = type_table
-            .find_decl_type_by_name(&key.name, &key.module_source)
-            .and_then(|base| type_table.symbol_of_type(base).copied());
+        // Same identity, same reason: the base declaration is `head_def`'s
+        // own node, kept conditional on the declaration having been interned
+        // (what the `(name, module)` type lookup this replaced tested for).
+        let head_ast_id = type_table.defs().ast_id(head_def);
+        let base_decl = type_table.type_of_symbol(&head_ast_id).map(|_| head_ast_id);
         if let Some(base_decl) = base_decl {
             type_table.register_mono_type(base_decl, concrete_type_id);
             type_table.register_monomorphized_assoc_types(
