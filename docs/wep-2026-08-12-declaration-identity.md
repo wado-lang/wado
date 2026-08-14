@@ -433,6 +433,3 @@ caller of the same first-wins index. A removed mechanism takes one fix.
       arguments stored as text. Blocked by the first item: `written_type_args`
       renders an `ast::Type` by spelling because the arguments' own reference
       sites are not resolved where it stands.
-- [ ] `module_import_scope` deleted. It no longer answers what a name means, but
-      still computes a set of visible spellings for `module_visible_types`,
-      which is a heuristic rather than a resolution and does not belong here.

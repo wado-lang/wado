@@ -14,68 +14,23 @@ use crate::name;
 use crate::tir::TypeTable;
 use crate::token::Span;
 
-/// A module's type-name import scope, derived once from its `use`
-/// declarations. The single source of truth for how a module resolves a type
-/// name, shared by its body walk and by sites that reconstruct its perspective.
-#[derive(Clone, Default, Debug)]
-pub(crate) struct ModuleImportScope {
-    /// In-scope type name → declaring module, including `ns$Type` aliases for
-    /// each namespace import's public type members.
-    pub(super) sources: IndexMap<String, ModuleSource>,
-    /// Aliased local name → original declaration name (`use { A as B }` and the
-    /// `ns$Type` → `Type` namespace-member aliases).
-    pub(super) original_names: IndexMap<String, String>,
-    /// Namespace-import alias (`use ns from "…"`) → the namespace's module.
-    /// Drives `ns::Type` resolution (issue #1415).
-    pub(super) namespace_imports: IndexMap<String, ModuleSource>,
-}
+/// Namespace-import alias (`use ns from "…"`) → the namespace's module.
+/// Drives `ns::Type` resolution (issue #1415).
+pub(crate) type NamespaceImports = IndexMap<String, ModuleSource>;
 
-/// Compute a module's import scope from its `use` declarations. Pure over
-/// `(module, from_module, entry_module, invocations, symbols)` plus the
-/// (idempotent, loader-warmed) interner; safe to memoize per module. This is
-/// the body behind `Elaborator::build_imported_type_sources`, lifted to a free
-/// function so [`TraitEnv::build`] can pre-compute the per-module scopes
-/// without an `Elaborator`/host in hand. `symbols` is needed to enumerate a
-/// namespace import's public type members.
-pub(super) fn module_import_scope(
+/// Which module each of `module`'s namespace aliases stands for.
+///
+/// The one import fact the symbol table does not record — it registers the
+/// members, not the alias — so the `use` declarations still answer for it.
+/// What a *name* means is [`crate::resolve`]'s answer and is not asked here.
+pub(super) fn namespace_imports_of(
     interner: &mut ModuleSourceInterner,
     module: &Module,
     from_module: &ModuleSource,
     entry_module: Option<&ModuleSource>,
     invocations: &InvocationIndex,
-    symbols: &SymbolTable,
-) -> ModuleImportScope {
-    let mut scope = ModuleImportScope::default();
-    // Case (variant/enum/flags) names brought in by imported types. Applied
-    // after every type name is in scope, so a type always shadows a same-named
-    // case (e.g. a `FieldKind::List` case must not hide the prelude `List`
-    // type). Collected here, inserted with `or_insert` at the end.
-    let mut pending_cases: Vec<(String, ModuleSource)> = Vec::new();
-
-    // What an explicit `use` means is decided once, by the analyzer, and
-    // recorded in the symbol table: the local name (an alias, or a namespace
-    // import's `ns$member`) paired with the declaration it reaches, re-export
-    // chains already followed (issue #1416). Re-walking the `use` declarations
-    // here answered the same question a second way, with its own module-path
-    // resolution and its own alias handling, and the two could disagree.
-    for (local_name, sym) in symbols.imports_in(from_module) {
-        let def_source = sym.module_source().clone();
-        scope
-            .sources
-            .insert(local_name.to_string(), def_source.clone());
-        if local_name != sym.name {
-            scope
-                .original_names
-                .insert(local_name.to_string(), sym.name.clone());
-        }
-        // Importing a variant/enum/flags type brings its case names into scope
-        // so bare `Some` / `Ok` / enum cases resolve through the import branch.
-        collect_case_names(&mut pending_cases, sym, &def_source);
-    }
-
-    // Which module a namespace alias stands for is the one import fact the
-    // symbol table does not record — it registers the members, not the alias —
-    // so the `use` declarations still answer for it.
+) -> NamespaceImports {
+    let mut out = NamespaceImports::default();
     for item in &module.items {
         if let Item::Use(use_decl) = item {
             let namespaces = use_decl.items.iter().filter_map(|use_item| match use_item {
@@ -92,80 +47,14 @@ pub(super) fn module_import_scope(
                     entry_module,
                     invocations,
                 );
-                scope.namespace_imports.insert(ns.clone(), source);
+                out.insert(ns.clone(), source);
             }
         }
     }
-
-    // Auto-import the prelude: inject `core:prelude`'s exported type names into
-    // the scope so prelude types (`String`, `List`, `Option`, …) resolve
-    // through the import branch like any `use`. Modules opting out
-    // (`#![no_prelude]` — the prelude sub-modules and
-    // `core:rt`/`builtin`/`allocator`) import explicitly. Explicit `use`
-    // items above take precedence, so they are not overwritten.
-    if !module.has_no_prelude() {
-        let prelude = ModuleSource::prelude();
-        for name in symbols.reexport_names(&prelude) {
-            if scope.sources.contains_key(&name) {
-                continue;
-            }
-            let Some(sym) = symbols.lookup_in_module(&prelude, &name) else {
-                continue;
-            };
-            if !matches!(
-                sym.kind,
-                crate::symbol::SymbolKind::Struct(_)
-                    | crate::symbol::SymbolKind::Enum(_)
-                    | crate::symbol::SymbolKind::Flags(_)
-                    | crate::symbol::SymbolKind::Variant(_)
-                    | crate::symbol::SymbolKind::Newtype(_)
-                    | crate::symbol::SymbolKind::Resource(_)
-                    | crate::symbol::SymbolKind::BuiltinType
-                    | crate::symbol::SymbolKind::Trait(_)
-            ) {
-                continue;
-            }
-            let def_source = sym.module_source().clone();
-            scope.sources.insert(name.clone(), def_source.clone());
-            if name != *sym.name {
-                scope.original_names.insert(name, sym.name.clone());
-            }
-            collect_case_names(&mut pending_cases, sym, &def_source);
-        }
-    }
-
-    // Apply case names last, never overwriting a type name: a type always wins
-    // a name clash with a case (see `pending_cases`).
-    for (case, src) in pending_cases {
-        scope.sources.entry(case).or_insert(src);
-    }
-
-    scope
-}
-
-/// Collect a variant/enum/flags symbol's case (or member) names so they can
-/// resolve unqualified (`Some`, `Ok`, an enum case used bare), pointing at the
-/// type's defining module. Other symbol kinds are ignored. Cases cannot be
-/// aliased, so each name maps to itself.
-fn collect_case_names(
-    pending: &mut Vec<(String, ModuleSource)>,
-    sym: &crate::symbol::Symbol,
-    def_source: &ModuleSource,
-) {
-    use crate::symbol::SymbolKind;
-    let cases: &[String] = match &sym.kind {
-        SymbolKind::Variant(v) => &v.cases,
-        SymbolKind::Enum(e) => &e.cases,
-        SymbolKind::Flags(f) => &f.members,
-        _ => return,
-    };
-    for case in cases {
-        pending.push((case.clone(), def_source.clone()));
-    }
+    out
 }
 
 use super::types::TypeError;
-use crate::symbol::SymbolTable;
 
 /// Pick a `ModuleSource` from the AST and synthesised candidate lists: a
 /// `prefer` hint wins wherever it appears, else the first AST entry, else the
@@ -861,12 +750,10 @@ pub struct TraitEnv {
     /// Type name → modules declaring a `newtype` of that name, in build order.
     /// The fallback half of `find_struct_module_source`'s module lookup.
     pub(super) newtype_decl_modules: IndexMap<String, Vec<ModuleSource>>,
-    /// Per-module import scope (`use`-derived `imported_type_sources` /
-    /// `import_original_names`), pre-computed once. Dispatch-core queries that
-    /// resolve type names in a foreign impl/callee signature read this instead
-    /// of rebuilding it from the module AST in `loaded_modules`. See
-    /// [`module_import_scope`].
-    pub(super) module_import_scopes: IndexMap<ModuleSource, ModuleImportScope>,
+    /// Per-module namespace-import aliases, pre-computed once, so a query
+    /// standing in a foreign module's perspective reads them instead of
+    /// re-walking its `use` declarations. See [`namespace_imports_of`].
+    pub(super) module_namespace_imports: IndexMap<ModuleSource, NamespaceImports>,
     /// Associated-type name → the declaring trait's bounds for it, first
     /// declaration wins (matching the previous whole-program scan order).
     /// Consumed by `find_assoc_type_bounds` without an AST scan.
@@ -957,32 +844,24 @@ impl SynthesisedImpls {
 impl TraitEnv {
     /// Build the trait indices from all loaded modules, once, before per-module
     /// resolution begins, and check the orphan rule on local impl blocks. Every
-    /// receiver-type and trait-name reference in an `impl` header is
-    /// canonicalised through `symbols` against that module's own import context,
-    /// so two modules' same-named traits produce distinct [`DeclKey`]s.
+    /// receiver-type and trait-name reference in an `impl` header is resolved
+    /// from the module that wrote it, so two modules' same-named traits produce
+    /// distinct [`DeclKey`]s.
     pub(super) fn build(
         modules: &IndexMap<ModuleSource, Module>,
-        symbols: &SymbolTable,
         interner: &mut ModuleSourceInterner,
         entry_module: Option<&ModuleSource>,
         invocations: &InvocationIndex,
         resolutions: &crate::resolve::Resolutions,
     ) -> (Arc<Self>, Vec<(ModuleSource, TypeError)>) {
-        // Pre-compute every module's `use`-derived import scope so dispatch
-        // queries read it instead of rebuilding from the module AST.
-        let mut module_import_scopes: IndexMap<ModuleSource, ModuleImportScope> =
+        // Pre-compute every module's namespace aliases so dispatch queries read
+        // them instead of re-walking the module AST.
+        let mut module_namespace_imports: IndexMap<ModuleSource, NamespaceImports> =
             IndexMap::default();
         for (module_source, module) in modules {
-            module_import_scopes.insert(
+            module_namespace_imports.insert(
                 module_source.clone(),
-                module_import_scope(
-                    interner,
-                    module,
-                    module_source,
-                    entry_module,
-                    invocations,
-                    symbols,
-                ),
+                namespace_imports_of(interner, module, module_source, entry_module, invocations),
             );
         }
         let mut impl_index: TraitImplIndex = IndexMap::default();
@@ -1409,7 +1288,7 @@ impl TraitEnv {
                 function_type_params,
                 struct_like_decl_modules,
                 newtype_decl_modules,
-                module_import_scopes,
+                module_namespace_imports,
                 assoc_type_bound_index,
                 blanket_impls,
                 static_method_index,
@@ -1422,12 +1301,11 @@ impl TraitEnv {
         )
     }
 
-    /// The pre-computed import scope for `module`, cloned for callers that
-    /// install it via `with_module_perspective_for` (which takes the maps by
-    /// value). Returns empty maps for a module with no recorded scope,
-    /// matching the previous `…unwrap_or_default()` behaviour.
-    pub(super) fn import_scope(&self, module: &ModuleSource) -> ModuleImportScope {
-        self.module_import_scopes
+    /// The pre-computed namespace aliases for `module`, cloned for callers that
+    /// install them via `with_module_perspective_for` (which takes the map by
+    /// value). Empty for a module with no recorded aliases.
+    pub(super) fn namespace_imports(&self, module: &ModuleSource) -> NamespaceImports {
+        self.module_namespace_imports
             .get(module)
             .cloned()
             .unwrap_or_default()

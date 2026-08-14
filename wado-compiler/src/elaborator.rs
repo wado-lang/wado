@@ -323,12 +323,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if self.current_module_source == *module {
             return body(self);
         }
-        let scope = self.tysys.trait_env.import_scope(module);
+        let namespaces = self.tysys.trait_env.namespace_imports(module);
         let saved_src = std::mem::replace(&mut self.current_module_source, module.clone());
-        let saved_ns = std::mem::replace(
-            &mut self.sem.imports.namespace_imports,
-            scope.namespace_imports,
-        );
+        let saved_ns = std::mem::replace(&mut self.sem.imports.namespace_imports, namespaces);
         let saved_local_struct = std::mem::take(&mut self.sem.decls.local_struct_fields);
         let saved_local_newtypes = std::mem::take(&mut self.sem.decls.local_newtypes);
         let saved_local_enum = std::mem::take(&mut self.sem.decls.local_enum_cases);

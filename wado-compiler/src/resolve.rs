@@ -275,6 +275,18 @@ impl Resolutions {
             .copied()
     }
 
+    /// Every declaration `module` explicitly `use`d, by the local name it
+    /// wrote — an alias where it wrote one, and the `ns$member` name a
+    /// namespace import registers.
+    pub fn imports_in(&self, module: &ModuleSource) -> impl Iterator<Item = (&str, DefId)> {
+        self.scopes
+            .imports
+            .get(module)
+            .into_iter()
+            .flatten()
+            .map(|(name, def)| (name.as_str(), *def))
+    }
+
     /// The declaration `module` explicitly `use`d under the local name `name`.
     ///
     /// The import tier alone, so an alias answers with what it aliases and a
@@ -730,7 +742,38 @@ mod tests {
         assert_eq!(r.defs().module(list), &entry);
     }
 
-    /// An alias names what it aliases, not itself.
+    /// An alias names what it aliases, not itself, and the import tier answers
+    /// under the name the module wrote. It holds no cases — those ride a tier
+    /// of their own — so a visibility set read off this tier answers for type
+    /// position alone.
+    #[test]
+    fn imports_in_answers_under_the_local_name_and_holds_no_cases() {
+        let (r, entry, other) = resolve(
+            r#"use { FieldKind as FK } from "./other.wado";"#,
+            "pub variant FieldKind { List(i32), Leaf }",
+        );
+        let imports: Vec<(&str, DefId)> = r.imports_in(&entry).collect();
+        assert_eq!(imports.len(), 1, "{imports:?}");
+        let (local_name, def) = imports[0];
+        assert_eq!(local_name, "FK");
+        assert_eq!(r.defs().name(def), "FieldKind");
+        assert_eq!(r.defs().module(def), &other);
+        // The variant's cases reach value position without entering this tier.
+        assert!(r.value_named(&entry, "Leaf").is_some());
+    }
+
+    /// A namespace import enters its members under the qualification the
+    /// module can name them by, which is the local name the tier records.
+    #[test]
+    fn imports_in_records_a_namespace_member_qualified() {
+        let (r, entry, _) = resolve(
+            r#"use ns from "./other.wado";"#,
+            "pub struct Widget { a: i32 }",
+        );
+        let names: Vec<&str> = r.imports_in(&entry).map(|(name, _)| name).collect();
+        assert!(names.contains(&"ns$Widget"), "{names:?}");
+    }
+
     /// A `struct` declared in a function body shadows a module-level one of
     /// the same name for the rest of that body, and nowhere else.
     #[test]

@@ -338,15 +338,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if stdlib_set.contains(module_source) {
                     continue;
                 }
-                let import_scope = Self::build_imported_type_sources(
+                let namespace_imports = super::trait_env::namespace_imports_of(
                     &mut interner.borrow_mut(),
                     module,
                     module_source,
                     Some(entry_module_source),
                     &invocations,
-                    symbols,
                 );
-                let namespace_imports = import_scope.namespace_imports;
                 let empty_struct: IndexMap<String, StructFieldInfo> = IndexMap::default();
                 let empty_newtype: IndexMap<String, TypeId> = IndexMap::default();
                 let empty_enum: IndexMap<String, EnumInfo> = IndexMap::default();
@@ -441,15 +439,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // Stdlib fields are already resolved in the seeded maps.
                 continue;
             }
-            let import_scope = Self::build_imported_type_sources(
+            let namespace_imports = super::trait_env::namespace_imports_of(
                 &mut interner.borrow_mut(),
                 module,
                 module_source,
                 Some(entry_module_source),
                 &invocations,
-                symbols,
             );
-            let namespace_imports = import_scope.namespace_imports;
 
             // Helper closure: build a fresh TypeLookup pointed at the
             // current state of the shared tables. Recreated per call site so
@@ -797,7 +793,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _span = logger.span("elaborate/trait_env");
             super::trait_env::TraitEnv::build(
                 modules,
-                symbols,
                 &mut interner.borrow_mut(),
                 Some(entry_module_source),
                 &invocations,
@@ -992,8 +987,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
 
+            let defs = resolutions.defs();
             let mut visible: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
-            for (ms, module) in modules {
+            for ms in modules.keys() {
                 let mut set: IndexSet<String> = IndexSet::default();
                 for prim in crate::tir::PrimitiveType::all_primitive_names() {
                     set.insert(prim.to_string());
@@ -1002,22 +998,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     set.extend(own.iter().cloned());
                 }
                 set.extend(prelude_types.iter().cloned());
-                // Types brought in by this module's `use` declarations.
-                let import_scope = Self::build_imported_type_sources(
-                    &mut interner.borrow_mut(),
-                    module,
-                    ms,
-                    Some(entry_module_source),
-                    &invocations,
-                    symbols,
-                );
-                for (local_name, src) in &import_scope.sources {
-                    let original = import_scope
-                        .original_names
-                        .get(local_name)
-                        .unwrap_or(local_name);
-                    if local.get(src).is_some_and(|s| s.contains(original)) {
-                        set.insert(local_name.clone());
+                // Types brought in by this module's `use` declarations, under
+                // the local name it wrote — which is the alias where it wrote
+                // one. What each import reaches is the analyzer's answer, read
+                // off the resolution table rather than re-derived here.
+                for (local_name, def) in resolutions.imports_in(ms) {
+                    if local
+                        .get(defs.module(def))
+                        .is_some_and(|s| s.contains(defs.name(def)))
+                    {
+                        set.insert(local_name.to_string());
                     }
                 }
                 visible.insert(ms.clone(), set);
@@ -1318,17 +1308,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             let module = modules.get(module_source).expect("module should exist");
 
-            // Full import scope; namespace *type* members are already expanded
-            // here, namespace *function* members into `imported_functions` below.
-            let import_scope = Self::build_imported_type_sources(
+            let namespace_imports = super::trait_env::namespace_imports_of(
                 &mut state.interner.borrow_mut(),
                 module,
                 module_source,
                 Some(&entry_module_source),
                 &state.invocations,
-                symbols,
             );
-            let namespace_imports = import_scope.namespace_imports;
             // Imported function names (namespace type members already in scope).
             let mut imported_functions = IndexSet::default();
             for item in &module.items {
@@ -1749,29 +1735,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
         imported
-    }
-
-    /// Build a map of imported names to their source modules from use declarations.
-    /// Build a mapping from local import names to their source modules and original names.
-    ///
-    /// Returns `(local_name -> module_source, local_name -> original_name)`.
-    /// The `original_name` is different from `local_name` when `use { Foo as Bar }` is used.
-    pub(super) fn build_imported_type_sources(
-        interner: &mut ModuleSourceInterner,
-        module: &Module,
-        from_module: &ModuleSource,
-        entry_module: Option<&ModuleSource>,
-        invocations: &crate::kiln::InvocationIndex,
-        symbols: &crate::symbol::SymbolTable,
-    ) -> super::trait_env::ModuleImportScope {
-        super::trait_env::module_import_scope(
-            interner,
-            module,
-            from_module,
-            entry_module,
-            invocations,
-            symbols,
-        )
     }
 
     /// Topologically sort modules based on struct field type dependencies.
