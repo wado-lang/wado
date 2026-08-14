@@ -403,9 +403,11 @@ fn synthesize_dispatch_struct(
         label = instantiation_label(base_name, type_args, &tt);
         struct_name = crate::name::dispatch_struct_name(&label);
         global_name = crate::name::dispatch_global_name(&label);
-        struct_head = crate::tir::StructDef::Decl(
-            tt.decl_named_in(&struct_name, &entry_source)
-                .expect("the declaration this type names exists"),
+        // The dispatch struct is minted here, under a name this pass assigns:
+        // it declares nothing, so its head is the shape, as a closure
+        // environment's is.
+        struct_head = crate::tir::StructDef::Anon(
+            tt.intern_synthetic_struct(entry_source.clone(), struct_name.clone()),
         );
         struct_type_id = tt.make_struct(struct_head);
         inner_ref_type_id = tt.make_ref(struct_type_id);
