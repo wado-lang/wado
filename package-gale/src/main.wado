@@ -15,6 +15,7 @@ use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { lower } from "./lower.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
 use { GenContext } from "./gen_context.wado";
+use { build_diagnostics } from "./gir.wado";
 use { render_dump } from "./dump.wado";
 use { render_lexer_dump } from "./lexer_dump.wado";
 use { build_atn, dump_atn } from "./atn.wado";
@@ -125,7 +126,7 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with Stdou
     // pass to keep in sync. Warnings are advisory; generation still
     // proceeds and must succeed.
     let generated = generate(&mut merged, &options);
-    for let d of &generated.diagnostics {
+    for let d of &build_diagnostics(&generated.diagnostics) {
         eprintln(`gale: warning: ${d.owner.label()}: ${d.message}`);
     }
 

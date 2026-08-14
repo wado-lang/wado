@@ -21,6 +21,7 @@ use { Request, Response, Error, OutputFile, KilnHost, Diagnostic as KilnDiagnost
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
 use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
+use { build_diagnostics } from "./gir.wado";
 use { to_snake_case } from "./gen_util.wado";
 
 /// Generator-side options. Surfaced under `options = { ... }` at a
@@ -113,7 +114,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
     // production entry (the `gale gen` CLI prints the same warnings on
     // stderr), so a grammar built either way gets identical visibility. Gale
     // diagnostics carry no source span yet, so the rule label leads the text.
-    for let d of &generated.diagnostics {
+    for let d of &build_diagnostics(&generated.diagnostics) {
         KilnHost::emit_diagnostic(KilnDiagnostic {
             level: DiagnosticLevel::Warning,
             span: null,

@@ -742,8 +742,7 @@ fn tree_import_names(strip: bool) -> List<String> {
 fn strip_doc_lines(strip: bool) -> List<String> {
     if strip {
         return [
-            "//",
-            "// The descriptor deletes a token, which ANTLR4 renders bare and Gale",
+            "//", "// The descriptor deletes a token, which ANTLR4 renders bare and Gale",
             "// wraps in `<skip …>`. `strip_skip_markers` drops the wrapper (not the",
             "// token) so the compare is over the recovery decision, not the marker.",
         ];
@@ -825,8 +824,7 @@ fn emit_stage_sub_b_test_file(
     triage: &Triage,
 ) -> String {
     let mut doc_lines: List<String> = [
-        triage_doc_line(&"stage_b"), "//",
-        `// Stage B sub-tree: [output] is the labelled child '${*sub_rule}' subtree,`,
+        triage_doc_line(&"stage_b"), "//", `// Stage B sub-tree: [output] is the labelled child '${*sub_rule}' subtree,`,
         "// not the start rule's full tree. Navigate via find_first_child_node.",
     ];
     for let line of &strip_doc_lines(strip) {

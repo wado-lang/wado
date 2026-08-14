@@ -94,8 +94,10 @@ pub struct LoweredGrammar {
     /// spot where Gale could not decide an alternative cleanly (today:
     /// overlapping alts resolved by a scan tournament) so a grammar
     /// author can question their own grammar before blaming Gale.
-    /// Surfaced on stderr by `gale gen` and inline by `gale dump`. In
-    /// the order lowering raised them, deduped on `(rule, message)`.
+    /// Inlined under its owning rule by `gale dump`, which renders all of
+    /// them; `gale gen` and Kiln report the `build_diagnostics` subset on
+    /// stderr. In the order lowering raised them, deduped on
+    /// `(owner, message)`.
     pub diagnostics: List<Diagnostic>,
 }
 
@@ -209,6 +211,35 @@ pub variant DiagnosticKind {
     /// A `fragment_entries` option names a parser rule that does not exist. The
     /// name is skipped; other entries still apply.
     FragmentEntry,
+}
+
+/// Whether a build reports `kind` on its warning stream.
+///
+/// `OptionalScanGuardFallback` describes a shape, not a mistake: every `e?`
+/// whose body leads with a rule reference resolves that way, and most cannot
+/// be rewritten token-led (`expression?`, `param_list?`). It outnumbers the
+/// kinds that do name something to fix by about five to one on a real
+/// grammar, which buries them — so it stays in `gale dump`'s prediction
+/// report, where "what is prediction doing here" is the question being asked,
+/// and off `gale gen` / Kiln's stderr.
+pub fn surfaces_on_build(kind: &DiagnosticKind) -> bool {
+    return match *kind {
+        OptionalScanGuardFallback => false,
+        OverlapTournament | UnsupportedAction | HighlightQuery | FragmentEntry => true,
+    };
+}
+
+/// The diagnostics a build reports, in the order lowering raised them.
+/// `gale dump` renders the whole list; a build drops the kinds
+/// `surfaces_on_build` marks as shape descriptions.
+pub fn build_diagnostics(all: &List<Diagnostic>) -> List<Diagnostic> {
+    let mut out: List<Diagnostic> = [];
+    for let d of all {
+        if surfaces_on_build(&d.kind) {
+            out.push(*d);
+        }
+    }
+    return out;
 }
 
 // ==========================================================================

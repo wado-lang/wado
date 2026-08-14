@@ -91,15 +91,7 @@ impl LexerCommands {
 
 /// Every lexer command ANTLR4 defines. Doubles as the wanted set each
 /// lexer-command diagnostic reports, so the list is stated once.
-global LEXER_COMMAND_NAMES: List<String> = [
-    "skip",
-    "more",
-    "channel",
-    "type",
-    "pushMode",
-    "popMode",
-    "mode",
-];
+global LEXER_COMMAND_NAMES: List<String> = ["skip", "more", "channel", "type", "pushMode", "popMode", "mode"];
 
 /// The "what was found" half of a parse error; the wanted set travels
 /// separately in `ParseError.expected`. A token the lexer could not form names
@@ -1096,7 +1088,7 @@ impl G4Parser {
     /// named `42` rather than being rejected.
     fn parse_lexer_command_arg(&mut self, command: &String, allow_int: bool) -> Result<String, ParseError> {
         self.expect(G4Token::LParen)?;
-        let ok = self.is_kind(G4Token::Identifier) || (allow_int && self.is_kind(G4Token::IntLit));
+        let ok = self.is_kind(G4Token::Identifier) || allow_int && self.is_kind(G4Token::IntLit);
         if !ok {
             let tok = self.peek();
             let expected: List<String> = if allow_int { ["identifier", "int"] } else { ["identifier"] };

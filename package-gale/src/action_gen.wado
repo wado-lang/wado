@@ -448,7 +448,10 @@ fn predicate_selects_alternative(before: i32, ctx: &GenContext) -> bool {
 /// being emitted so `gale dump` inlines it there. Outside a rule context the
 /// rule stays empty and the diagnostic surfaces in the summary only.
 fn action_owner(id: i32, ctx: &GenContext) -> DiagnosticOwner {
-    return DiagnosticOwner { rule: ctx.current_rule_name(), site: DiagnosticSite::Action(id) };
+    return DiagnosticOwner {
+        rule: ctx.current_rule_name(),
+        site: DiagnosticSite::Action(id),
+    };
 }
 
 fn warn_unsupported_prediction_predicate(src: &ActionSource, ctx: &mut GenContext) {
