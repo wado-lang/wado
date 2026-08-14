@@ -522,22 +522,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let type_args: Vec<TypeId> =
                         args.iter().map(|t| self.resolve_type(t)).collect();
 
-                    // `info.name` is the type's storage identity — the bare
-                    // declared name for a module-level struct, or the
-                    // internal mangled name for a local one (so the
-                    // `GenericInstance` below carries a name that
-                    // `struct_fields_in` can find later, the same way a
-                    // concrete local struct's `TypeId` does — see
-                    // `resolve_local_struct`).
-                    let identity_name = struct_info
-                        .as_ref()
-                        .map(|info| info.name.clone())
-                        .unwrap_or_else(|| name.to_string());
-                    let module_source = struct_info
-                        .as_ref()
-                        .map(|info| info.module_source.clone())
-                        .unwrap_or_else(|| self.current_module_source.clone());
-
                     // Check trait bounds for each type argument
                     if let Some(info) = &struct_info {
                         for (i, (param_name, bounds)) in info.type_param_bounds.iter().enumerate() {
@@ -573,12 +557,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
 
-                    // Create a GenericInstance type
-                    let def = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .decl_named_in(&identity_name, &module_source)
+                    // Create a GenericInstance type. The declaration is read
+                    // from the node that declares it, not from
+                    // `identity_name`: a function-local struct's storage name
+                    // is mangled, and no declaration is registered under that
+                    // spelling — asking by it could only ever miss.
+                    let def = struct_info
+                        .as_ref()
+                        .and_then(|info| self.tysys.resolutions.defs().of_ast_id(info.defined_at))
                         .expect("the generic declaration being instantiated exists");
                     self.tysys
                         .type_table
