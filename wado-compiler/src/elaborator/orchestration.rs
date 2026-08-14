@@ -3312,8 +3312,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 // `ns::Type` namespace-import alias in type position: resolve
                 // the `ns$Type` alias via the `Named` / `Generic` arms, which
-                // route through `imported_type_sources` to the namespace's own
-                // module. Mirrors the dynamic resolver's namespace-alias branch.
+                // route through the import tier to the namespace's own module.
+                // Mirrors the dynamic resolver's namespace-alias branch.
                 if lookup
                     .namespace_imports
                     .contains_key(namespaced.namespace.as_str())

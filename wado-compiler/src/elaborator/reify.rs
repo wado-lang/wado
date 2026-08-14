@@ -8871,7 +8871,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // 5b. Imported free function reference resolved through the symbol
         //     table (covers namespace-import functions, whose `ns$fn` aliases
-        //     are not in `imported_type_sources`). Mirrors annotate's
+        //     name functions rather than types). Mirrors annotate's
         //     `resolve_func_ref_ident` → `lookup_func_ast_for_ref` and emits a
         //     `FuncRef` keyed by the function's defining module + original name.
         if self.sem.decls.imported_functions.contains(&ident.name)

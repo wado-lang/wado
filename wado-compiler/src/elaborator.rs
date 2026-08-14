@@ -311,10 +311,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Run `body` in `module`'s perspective, swapping the current module and its
-    /// import scope — type sources and namespace imports both — and clearing
-    /// locals, which describe in-progress resolution rather than the target's
-    /// definitions. For callee-scope work only, such as a parameter default;
-    /// already being there skips the swap, keeping the locals in reach.
+    /// namespace imports and clearing locals, which describe in-progress
+    /// resolution rather than the target's definitions. For callee-scope work
+    /// only, such as a parameter default; already being there skips the swap,
+    /// keeping the locals in reach.
     pub(super) fn with_module_perspective_for<R>(
         &mut self,
         module: &ModuleSource,
