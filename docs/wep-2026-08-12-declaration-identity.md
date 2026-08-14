@@ -772,9 +772,12 @@ compiles, passes the suite, and ends with a mechanical completion check.
       remain, and each is the pair surviving on one side of a boundary the
       identity already crossed:
 
-      - a tuple renders `[]<i32,String>` through the generic mangler rather
-        than `[i32,String]`, because `def_name` of the family is now `"[]"`;
-        one downstream parser then splits it into `String]`;
+      - tuple trait dispatch cannot resolve `[a,b]^Trait::method` at all.
+        Half of it was the spelling: `FqTypeName::tuple` knew a tuple is
+        `[a,b]`, `FqTypeName::builtin` did not, and every by-name route
+        reaches the family through `builtin` now that it is a declaration —
+        fixed, with a test that the two routes agree. The other half is the
+        module, and it is the same shape one level up: see the entry below;
       - an anonymous struct's synthesized impl registers under a key the
         bound check does not ask for, now that its head is a shape;
       - a function-local struct's type renders as its plain declared name
@@ -788,7 +791,8 @@ compiles, passes the suite, and ends with a mechanical completion check.
       states, and it was still underestimated: the constructors are the work.
       Every one of these is a construction site that kept its spelling.
 
-- [ ] The tuple family's declaring module is not where its impls live.
+- [ ] The tuple family's declaring module is not where its impls live, and a
+      receiver's impl module is read off the declaration.
       `module_source_for_trait_impl` reads a receiver's declaring module and
       the monomorphizer falls through to it "by convention" when no per-type
       impl answers — the convention being that a generic `impl` for a type
