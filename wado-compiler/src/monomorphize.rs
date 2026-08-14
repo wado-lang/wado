@@ -337,10 +337,23 @@ impl Monomorphizer {
         // Store in module for later phases
         module.generic_structs.clone_from(&generic_structs);
 
-        let valid_struct_names: IndexSet<String> = generic_structs
-            .keys()
-            .map(|(name, _)| name.clone())
-            .collect();
+        // The names instantiation sites spell — the *declared* ones. The map
+        // is keyed by storage spelling, which for a function-local generic
+        // struct carries a disambiguator no site writes, so keying the filter
+        // off the keys dropped every local generic before it could become
+        // pending. `drain_pending_structs` disambiguates by identity once a
+        // site is admitted.
+        let valid_struct_names: IndexSet<String> = {
+            let tt = module.type_table.borrow();
+            generic_structs
+                .values()
+                .map(|s| {
+                    s.def
+                        .decl()
+                        .map_or_else(|| s.name.clone(), |d| tt.def_name(d).to_string())
+                })
+                .collect()
+        };
 
         // Phase 2-4: Collect and instantiate structs iteratively
         // This is done in a loop because instantiating a struct (like TreeMap<String,i32>)

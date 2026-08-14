@@ -391,7 +391,14 @@ impl Monomorphizer {
             .iter()
             .map(|&t| type_table.mangle_type_arg_for_generic(t))
             .collect();
-        mangle_generic_name(&key.name, &args)
+        // The declaration's *rendered* head, which is what every reader of
+        // this instantiation spells — a function-local generic struct carries
+        // its disambiguator, so two sibling functions' `struct Pair<A, B>` do
+        // not register as one wasm-GC type.
+        let head = type_table
+            .decl_named_in(&key.name, &key.module_source)
+            .map_or_else(|| key.name.clone(), |def| type_table.decl_render_name(def));
+        mangle_generic_name(&head, &args)
     }
 
     /// Generate instantiated function name: `identity` + `[i32]` -> `"identity<i32>"`
