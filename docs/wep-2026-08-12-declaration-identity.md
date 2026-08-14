@@ -763,6 +763,31 @@ compiles, passes the suite, and ends with a mechanical completion check.
       can name a type-parameter binder or reach no declaration, so a bare
       `DefId` cannot stand for it — the answer the site already has can.
 
+- [ ] The flip's e2e cost, measured. Running the whole suite to completion
+      for the first time since the flip found **120 failing fixtures**, all of
+      one shape: a type now renders or identifies differently than the
+      registry that has to find it. Two are fixed — a synthesized effect
+      dispatch struct asked the declaration index for itself (59), and a
+      struct literal naming nothing `expect`ed a declaration (6). Three
+      remain, and each is the pair surviving on one side of a boundary the
+      identity already crossed:
+
+      - a tuple renders `[]<i32,String>` through the generic mangler rather
+        than `[i32,String]`, because `def_name` of the family is now `"[]"`;
+        one downstream parser then splits it into `String]`;
+      - an anonymous struct's synthesized impl registers under a key the
+        bound check does not ask for, now that its head is a shape;
+      - a function-local struct's type renders as its plain declared name
+        while the WIR registry still keys the mangled `Point@AstId(N)`
+        storage spelling — which also means two sibling `test` blocks
+        declaring `struct Point` would collide there. That registry needs the
+        identity, not the spelling, and it is the last name-keyed store in
+        the pipeline.
+
+      The lesson for the budget is the one the migration section already
+      states, and it was still underestimated: the constructors are the work.
+      Every one of these is a construction site that kept its spelling.
+
 - [ ] The tuple family's declaring module is not where its impls live.
       `module_source_for_trait_impl` reads a receiver's declaring module and
       the monomorphizer falls through to it "by convention" when no per-type
