@@ -144,9 +144,11 @@ incidental fallbacks:
    same name always shadows.
 
 `Scope` is private to `crate::resolve`. `SymbolTable`'s name-keyed accessors,
-`module_import_scope`, `ModuleImports` and `TypeLookup`'s import branch are
-deleted. The facts they carried that are not scope — a module's re-export list, an
-interface's members — stay, keyed by `DefId`.
+`ModuleImports` and `TypeLookup`'s import branch are deleted, and with them the
+name-scope half of `module_import_scope`; what survives it is `namespace_imports_of`,
+answering the one import fact the symbol table does not record — which module a
+namespace alias stands for. The facts they carried that are not scope — a module's
+re-export list, an interface's members — stay, keyed by `DefId`.
 
 What an explicit `use` means is the analyzer's answer and only its answer: it
 resolves aliases and re-export chains once and records them, and every consumer

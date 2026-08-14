@@ -21,8 +21,8 @@ pub(crate) type NamespaceImports = IndexMap<String, ModuleSource>;
 /// Which module each of `module`'s namespace aliases stands for.
 ///
 /// The one import fact the symbol table does not record — it registers the
-/// members, not the alias — so the `use` declarations still answer for it.
-/// What a *name* means is [`crate::resolve`]'s answer and is not asked here.
+/// members, not the alias. What a *name* means is [`crate::resolve`]'s answer
+/// and is not asked here.
 pub(super) fn namespace_imports_of(
     interner: &mut ModuleSourceInterner,
     module: &Module,
@@ -854,8 +854,6 @@ impl TraitEnv {
         invocations: &InvocationIndex,
         resolutions: &crate::resolve::Resolutions,
     ) -> (Arc<Self>, Vec<(ModuleSource, TypeError)>) {
-        // Pre-compute every module's namespace aliases so dispatch queries read
-        // them instead of re-walking the module AST.
         let mut module_namespace_imports: IndexMap<ModuleSource, NamespaceImports> =
             IndexMap::default();
         for (module_source, module) in modules {
@@ -1301,9 +1299,8 @@ impl TraitEnv {
         )
     }
 
-    /// The pre-computed namespace aliases for `module`, cloned for callers that
-    /// install them via `with_module_perspective_for` (which takes the map by
-    /// value). Empty for a module with no recorded aliases.
+    /// The pre-computed namespace aliases for `module`. Empty for a module
+    /// with none.
     pub(super) fn namespace_imports(&self, module: &ModuleSource) -> NamespaceImports {
         self.module_namespace_imports
             .get(module)

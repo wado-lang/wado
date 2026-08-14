@@ -998,10 +998,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     set.extend(own.iter().cloned());
                 }
                 set.extend(prelude_types.iter().cloned());
-                // Types brought in by this module's `use` declarations, under
-                // the local name it wrote — which is the alias where it wrote
-                // one. What each import reaches is the analyzer's answer, read
-                // off the resolution table rather than re-derived here.
+                // The import tier alone: cases ride a tier only value position
+                // consults, so this one holds exactly the names asked for here.
                 for (local_name, def) in resolutions.imports_in(ms) {
                     if local
                         .get(defs.module(def))

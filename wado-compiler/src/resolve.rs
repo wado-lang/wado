@@ -742,10 +742,8 @@ mod tests {
         assert_eq!(r.defs().module(list), &entry);
     }
 
-    /// An alias names what it aliases, not itself, and the import tier answers
-    /// under the name the module wrote. It holds no cases — those ride a tier
-    /// of their own — so a visibility set read off this tier answers for type
-    /// position alone.
+    /// The import tier answers under the name the module wrote, and holds no
+    /// cases — those ride a tier only value position consults.
     #[test]
     fn imports_in_answers_under_the_local_name_and_holds_no_cases() {
         let (r, entry, other) = resolve(
@@ -763,7 +761,7 @@ mod tests {
     }
 
     /// A namespace import enters its members under the qualification the
-    /// module can name them by, which is the local name the tier records.
+    /// module can name them by.
     #[test]
     fn imports_in_records_a_namespace_member_qualified() {
         let (r, entry, _) = resolve(
