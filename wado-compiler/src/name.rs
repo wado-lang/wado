@@ -85,7 +85,6 @@ pub fn mangle_local_item_name(name: &str, id: crate::ast::AstId) -> String {
     format!("{name}{LOCAL_ITEM_ID_SEP}{}", id.local())
 }
 
-
 /// The name of the synthesized deep-copy helper for a value type, identified
 /// by its module-qualified structural mangle
 /// (`TypeTable::mangle_type_arg_for_generic`). The mangle is a stable,

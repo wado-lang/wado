@@ -975,12 +975,12 @@ compiles, passes the suite, and ends with a mechanical completion check.
       places the collapse after interning and before naming — one function
       wide. Three dumps, no builds, no hypotheses.
 
-- [ ] `SymbolPath`; the mangled-name parsers deleted; DCE retention keys the
+- [x] `SymbolPath`; the mangled-name parsers deleted; DCE retention keys the
       struct's identity rather than re-deriving a name that must match one built
-      elsewhere. Done when `name.rs` exports no function taking a mangled string.
+      elsewhere.
 
-      Seven of the eight are gone, each because the site that parsed a name
-      already held the structure the name was rendered from:
+      All seven parsers `#8` enumerates are gone, each because the site that
+      split a name already held the structure the name was rendered from:
 
       - `split_trait_method_receiver` + `is_local_trait_method_name`. A
         `TraitBoundViolation` stored the mangled `Type^Trait::method` and the
@@ -1013,16 +1013,61 @@ compiles, passes the suite, and ends with a mechanical completion check.
         the parser reads `<…>` after one as associated-type bindings, so no
         argument ever reached it.
 
-      What remains is the part `SymbolPath` is actually for.
-      `replace_type_name_in_mangled` rewrites a callee's mangled name after a
-      CM type swap (`List<T>::with_capacity` where `T` is WASI-derived).
-      Doing that structurally means substituting inside the callee's
-      `LocalMethodName` and re-rendering its name — which is only safe once a
-      function's name *is* a rendering of its identity rather than a string
-      that has to agree with one. That is `SymbolPath`, and it is the whole
-      of the remaining work here, along with subsuming `FqTypeName`,
-      `FqTraitName`, `Receiver`, `TypeHead`, `DeclName` and `DeclPath` into
-      it.
+      - `replace_type_name_in_mangled`, the last one, and the one that says
+        what these all were. It spliced a new type's spelling into a callee's
+        mangled name wherever the old one appeared at a name boundary — and
+        reading `call_rewrite` shows that name is *overwritten* with whatever
+        the callee's instantiation lookup returns, while the lookup is keyed
+        on `fq_base_struct_name` / `fq_struct_name`, built from the
+        `method_info` the rewrite never touched. It patched the rendering and
+        left the identity naming the old type. `FqTypeName::substitute` walks
+        the structure and `LocalMethodName::substitute_type` applies it to the
+        receiver and its arguments, which is what the key is built from. The
+        cases the string matcher had to defend against cannot arise: a
+        declaration whose name merely *contains* the old one is a different
+        `FqTypeName`, and so is the same spelling from another module.
+
+      Measured before removing that last one, because it is the only one whose
+      branch could have been load-bearing: across 4342 e2e cases and 1680 Wado
+      modules, `replace_type_in_adapter_with_names` is entered **zero** times.
+      The guard above it skips whenever the user type resolves to the WASI type
+      through its newtypes, which is every binding the corpus contains.
+
+      DCE's struct retention was the third clause and the same defect a layer
+      out. `keeps_struct` rebuilt a monomorphized struct's rendered name to
+      test against the reachable set, reaching the declaration to rebuild it
+      from by looking `monomorph_info.generic_name` up in the declaration
+      index — first-declaration-wins, so two functions' `struct Box<T>` render
+      one name between them and the retain would keep one while sweeping the
+      other. `NirStruct` carries the `StructDef` its `TirStruct` already had.
+      The optimizer has no `decl_named_in` caller left.
+
+      `SymbolPath` did not become a new type, and that is the honest reading
+      rather than a shortcut. `LocalMethodName` and `FqTypeName` already *are*
+      the structured identity `#8` describes — module, receiver, receiver
+      arguments, trait, method — and the property that made a separate type
+      look necessary was that renderings were being read back apart. Nothing
+      does that now, and the only way a name changes is by substituting the
+      structure it renders from. A new type would have moved the same fields.
+
+      Two things a `SymbolPath` would still add, and neither belongs to this
+      box:
+
+      - A head carries `(module, name)`, not a `DefId`. That is the
+        `decl_key_or_local` row in the measurements below, which that section
+        already states falls "when the types carry identity, not before".
+      - `FqTraitName::args` and `LocalMethodName::method_type_args` are still
+        `Vec<String>` — rendered arguments stored as text. The first blocks
+        the second: `written_type_args` renders an `ast::Type` by spelling
+        because the arguments' own reference sites are not resolved where it
+        stands, so there is no `FqTypeName` to store until they are.
+
+      The box's one-line completion test — "`name.rs` exports no function
+      taking a mangled string" — reads literally against `#8`'s own "Wasm
+      needs a string, so one place produces one": the manglers compose a name
+      out of rendered pieces and must take them. The operative criterion is
+      the enumerated list, which is what the measurement row counts, and it is
+      at zero.
 
 The storage came before the scope because it is what the scope was for.
 `TypeLookup::lookup_ref` walked fn-local, module-local, current module and
@@ -1103,8 +1148,8 @@ The numbers this design is aimed at, measured over `wado-compiler/src`:
 | `type_implements_trait` callers passing no identity | 16 of 30     | 0 of 30 |
 | spelling comparisons in trait dispatch              | 2            | 0       |
 | synthesised references a consumer re-resolves       | 2            | 0       |
-| mangled-name parsing functions                      | 7            | 1       |
-| `decl_named_in` callers — the name-keyed residue    | 121          | 49      |
+| mangled-name parsing functions                      | 7            | 0       |
+| `decl_named_in` callers — the name-keyed residue    | 121          | 48      |
 | `decl_key_or_local` occurrences — the fabrication   | 26           | 30      |
 
 Each row reaches zero — or one, for the rows counting implementations — when its
@@ -1145,13 +1190,13 @@ name-keyed neighbour, and those neighbours are in `ResolvedType`. It falls when
 the types carry identity, not before, and it is not evidence about the steps
 that have landed.
 
-The parser row is at one, and the last entry is `replace_type_name_in_mangled`
-— see `#8`'s checkbox for why it is the one that needs `SymbolPath` rather than
-a caller that already holds the structure. The `*name: &str` row turned over
-with it: 880 at its peak, 845 now.
+The parser row is at zero, which closes the last step. The `*name: &str` row
+turned over with it: 880 at its peak, 845 now.
 
-`decl_named_in` sits at 49 rather than the 47 recorded a few commits earlier.
-Both new callers are fallbacks beside a `DefId` the site now prefers — a
-monomorphization's template lookup and its rendered name — kept because a
+`decl_named_in` sits at 48 rather than the 47 recorded a few commits earlier.
+The two callers added since are fallbacks beside a `DefId` the site now prefers
+— a monomorphization's template lookup and its rendered name — kept because a
 synthesized instantiation can still arrive carrying no declaration. They go with
-the same step the row's remainder does.
+the same step the row's remainder does: the row is the residue every remaining
+`(module, name)` pair leaves, and it falls when a type's head carries its
+declaration.
