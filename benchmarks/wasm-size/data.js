@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786716999740,
+  "lastUpdate": 1786746545579,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47885,6 +47885,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2e36c7294be5d4132dff5c1ed896e5a9c87918f4"
         },
         "date": 1786716998908,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b47088c66ef4a129521e19ba7dd2746c3a2d8c5f",
+          "message": "Merge pull request #1809 from wado-lang/claude/benchmark-refresh-wasi-sdk-33\n\nchore(benchmark): refresh the results on wasi-sdk 33, and measure every row the same way",
+          "timestamp": "2026-08-15T07:17:05+09:00",
+          "tree_id": "f95fe0d488bbed73437a669d35147eb36a77f28e",
+          "url": "https://github.com/wado-lang/wado/commit/b47088c66ef4a129521e19ba7dd2746c3a2d8c5f"
+        },
+        "date": 1786746544762,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
