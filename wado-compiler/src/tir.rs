@@ -1189,6 +1189,17 @@ impl TypeTable {
         }
     }
 
+    /// The head as source spells it: the declared name, with no storage
+    /// disambiguator. [`Self::struct_head_name`]'s counterpart in the
+    /// declaration namespace — what a diagnostic shows, never a lookup key.
+    #[must_use]
+    pub fn struct_head_decl_name(&self, head: StructDef) -> String {
+        match head {
+            StructDef::Decl(def) => self.def_name(def).to_string(),
+            StructDef::Anon(id) => self.anon_struct_name(id),
+        }
+    }
+
     /// The module a struct head belongs to.
     #[must_use]
     pub fn struct_head_module(&self, head: StructDef) -> &ModuleSource {
@@ -3491,8 +3502,19 @@ impl TypeTable {
                 format!("Array<{}>", self.type_name(*elem))
             }
             ResolvedType::Struct { def, type_args } => {
-                crate::name::strip_local_item_id(&self.struct_rendered_name(*def, type_args))
-                    .to_string()
+                // The declared head, not the rendered one: a message shows
+                // `Box<i32>`, never the `Box@<local>` a local declaration is
+                // stored under.
+                let head = self.struct_head_decl_name(*def);
+                if type_args.is_empty() {
+                    head
+                } else {
+                    let args: Vec<String> = type_args
+                        .iter()
+                        .map(|&a| self.mangle_type_arg_for_generic(a))
+                        .collect();
+                    crate::name::mangle_generic_name(&head, &args)
+                }
             }
             ResolvedType::Enum { def } | ResolvedType::Resource { def } => {
                 self.def_name(*def).to_string()
@@ -3535,15 +3557,11 @@ impl TypeTable {
                 if Self::is_tuple_type(name) {
                     format!("[{}]", arg_names.join(", "))
                 } else {
-                    format!(
-                        "{}<{}>",
-                        crate::name::strip_local_item_id(name),
-                        arg_names.join(", ")
-                    )
+                    format!("{name}<{}>", arg_names.join(", "))
                 }
             }
             ResolvedType::Newtype { def, type_args, .. } => {
-                let head = crate::name::strip_local_item_id(self.def_name(*def)).to_string();
+                let head = self.def_name(*def).to_string();
                 if type_args.is_empty() {
                     head
                 } else {

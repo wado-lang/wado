@@ -85,13 +85,6 @@ pub fn mangle_local_item_name(name: &str, id: crate::ast::AstId) -> String {
     format!("{name}{LOCAL_ITEM_ID_SEP}{}", id.local())
 }
 
-/// Recover a local item's user-declared name from its internal storage name
-/// (see [`mangle_local_item_name`]). Returns `name` unchanged if it isn't a
-/// local-item storage name (no [`LOCAL_ITEM_ID_SEP`]).
-pub fn strip_local_item_id(name: &str) -> &str {
-    name.split(LOCAL_ITEM_ID_SEP).next().unwrap_or(name)
-}
-
 /// Replace every occurrence of the type name `old` inside a mangled function
 /// name (`List<Old>::with_capacity`, `Map<Old, Other>.insert`) with `new`,
 /// matching only at type-name boundaries. A raw substring replace would also
@@ -2197,8 +2190,10 @@ mod tests {
         assert_eq!(a, b, "mangled name must not encode the AstIdSpace");
         // Distinct declaration sites within a module still get distinct names.
         assert_ne!(a, mangle_local_item_name("UserId", AstId::new(space_a, 20)));
-        // The declared name is still recoverable.
-        assert_eq!(strip_local_item_id(&a), "UserId");
+        // The storage name is a rendering of the declared one, not a
+        // replacement for it: readers ask the declaration, so nothing reads
+        // the declared name back out of this string.
+        assert!(a.starts_with("UserId"));
     }
 
     #[test]

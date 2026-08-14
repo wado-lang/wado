@@ -3812,16 +3812,23 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         if ctx.has_methodful_impl_anywhere(&nt.name, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
-        let ResolvedType::Newtype { base_type, .. } = tt.get(nt.type_id) else {
+        let ResolvedType::Newtype {
+            base_type,
+            def: newtype_def,
+            ..
+        } = tt.get(nt.type_id)
+        else {
             unreachable!("module.newtypes entry {} is not a Newtype type", nt.name);
         };
         let base_type = *base_type;
+        let newtype_def = *newtype_def;
         let ref_type = tt.make_ref(nt.type_id);
         let span = synth_span();
         let as_suffix = write_str_stmt(
-            // Strip the local-item storage disambiguator: a user must see
-            // `as UserId`, never the internal `UserId@<local>` mangling.
-            format!(" as {}", crate::name::strip_local_item_id(&nt.name)),
+            // The declaration's own name: a user must see `as UserId`, never
+            // the `UserId@<local>` spelling a local declaration is stored
+            // under.
+            format!(" as {}", tt.def_name(newtype_def)),
             local_expr(1, "f", fmt_type, span),
             string_type,
             ref_string_type,
