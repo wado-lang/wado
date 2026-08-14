@@ -793,25 +793,27 @@ compiles, passes the suite, and ends with a mechanical completion check.
       states, and it was still underestimated: the constructors are the work.
       Every one of these is a construction site that kept its spelling.
 
-      Two remain, 14 fixtures at two optimization levels. A local `type
+      Two remained after the four above; one is now closed too, leaving six
+      fixtures at two optimization levels. A local `type
       UserId = …` still reports `UserId does not implement Inspect`; giving
       `synthesis/traits.rs`'s newtype loops the type's rendered name instead
       of the declared one changed nothing, measured, and was reverted. And an
       anonymous struct's synthesized `ReflectStruct` impl does not answer the
       `Serialize` bound that `core:serde`'s blanket derives it from.
 
-      Probes eliminated three of the five `TraitBoundNotSatisfied` emit sites
-      and a fourth hardcodes `Ord`, so the anonymous-struct failure is
-      `enforce_single_bound` — the primitive every bound-enforcement path
-      funnels through — failing at `check_and_register_bound`.
+      That one is fixed, and it was the gap this design predicts.
+      `walk_structural_derive_members` reached a struct's fields through
+      `def.decl()?` — `None` for a shape — so the walk bailed for every
+      anonymous struct, no bound-driven synthesis request was recorded, and
+      a `Serialize` bound the type structurally satisfies was declined.
+      Asking the head answers for both kinds. Four fixtures green.
 
-      Which points at a gap this design predicts. The bound is enforced
-      during elaboration, but `Serialize` for a struct is *derived*, by
-      `core:serde`'s blanket over `ReflectStruct`, whose impl synthesis mints
-      only afterwards. A named struct crosses that gap on the bound-driven
-      request mechanism. An anonymous struct has no declaration — so if that
-      request is keyed by one, this is the same defect one layer up, and the
-      shape is the identity it should key by instead. Measure before editing.
+      Worth recording is how it was found, because three guesses ahead of it
+      were wrong. Probes eliminated three of the five `TraitBoundNotSatisfied`
+      emit sites, and a fourth hardcodes `Ord`, leaving `enforce_single_bound`
+      — the primitive every bound-enforcement path funnels through. Reading
+      *back* from a site the measurement had pinned reached the walk in one
+      step. Reading *forward* from the symptom had missed it three times.
 
       One trap, worth naming because it caught this investigation: the
       diagnostic's spelling proves nothing about the type's. Every unresolved
