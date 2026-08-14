@@ -2522,6 +2522,21 @@ mod tests {
     }
 
     #[test]
+    fn the_tuple_head_has_one_spelling_whichever_side_asks() {
+        // A tuple is spelled `[a,b]`, never `[]<a,b>`. Since the tuple family
+        // became a declaration, a caller reaching it by name — `of_head`, and
+        // `ImplTargetKey::of_decl` through it — lands on `builtin`, so the
+        // decision has to live there and not only in `tuple`.
+        let elems = vec![FqTypeName::builtin("i32"), FqTypeName::builtin("f64")];
+        let by_name = FqTypeName::of_head(&ModuleSource::default(), TUPLE_TYPE_NAME)
+            .with_args(elems.clone());
+        let by_constructor = FqTypeName::tuple(elems);
+        assert_eq!(by_name.to_mangled(), "[i32,f64]");
+        assert_eq!(by_name.to_mangled(), by_constructor.to_mangled());
+        assert_eq!(by_name.to_display(), by_constructor.to_display());
+    }
+
+    #[test]
     fn ref_receiver_renders_one_spelling() {
         // `struct_name` goes through `Receiver::mangle_with_ref`, `fq_struct_name`
         // through `FqTypeName::to_mangled`. A ref-impl template is registered
@@ -2724,10 +2739,18 @@ impl FqTypeName {
 
     /// A builtin shape — a primitive, `()`, `!`, the raw GC `Array`, a
     /// reference, a function type. No module declares one, and every mangler
-    /// spells it bare. A tuple has its own [`Self::tuple`]: it is not spelled
-    /// `Head<args>`.
+    /// spells it bare.
+    ///
+    /// The tuple head is spelled `[a,b]`, never `[]<a,b>`, so it becomes
+    /// [`TypeHead::Tuple`] here rather than depending on every caller to reach
+    /// for [`Self::tuple`]. `of_head` routes a written `[]` through this, and
+    /// so does `ImplTargetKey::of_decl` for the tuple family's declaration:
+    /// one spelling, whichever side asks.
     #[must_use]
     pub fn builtin(name: &str) -> Self {
+        if name == TUPLE_TYPE_NAME {
+            return Self::of_head_kind(TypeHead::Tuple);
+        }
         Self::of_head_kind(TypeHead::Builtin(name.to_string()))
     }
 
