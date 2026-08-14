@@ -860,7 +860,13 @@ impl TypeSystem {
             // A bitmask has no members to recurse into, like a plain `enum`.
             ResolvedType::Flags { .. } => Some(true),
             ResolvedType::Struct { def, .. } => {
-                let info = scope.struct_fields_of(def.decl()?)?;
+                // An anonymous struct has fields to walk like any other; it
+                // just has no declaration to reach them through. Asking the
+                // head answers for both, which is what lets a `{ ..ctx, x }`
+                // literal satisfy a structural bound at all.
+                let info = scope.struct_fields_of_head(*def, || {
+                    self.type_table.borrow().struct_head_name(*def)
+                })?;
                 Some(walk_struct(info, &[], visit))
             }
             ResolvedType::Variant { def } => {
