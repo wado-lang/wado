@@ -2,9 +2,24 @@
 // SessionStart hook: restore the shared cargo caches from GCS.
 //
 // Two objects are restored (both produced by .github/workflows/cargo-cache.yml):
-//   registry  -> $CARGO_HOME (index, .crate files, unpacked sources)
-//   sccache   -> $SCCACHE_DIR (content-addressed compile cache; the `warm-cache`
-//                mise task turns it into a warm target/)
+//   registry    -> $CARGO_HOME (index, .crate files, unpacked sources)
+//   target-deps -> $CARGO_TARGET_DIR (the dependency half of target/)
+//
+// The target-deps object makes the session warm by unpacking, not by
+// rebuilding: it carries the compiled registry dependencies for the
+// configurations the dev loop uses, so cargo only ever compiles the workspace
+// crates. Workspace artifacts are deliberately absent -- see
+// scripts/pack-target-deps.sh for why shipping them is unsound.
+//
+// PATH PARITY IS A CORRECTNESS REQUIREMENT, NOT A HIT-RATE ONE. Dependency
+// build scripts record absolute paths (`cargo:rustc-link-search=<abs>` and
+// friends, e.g. aws-lc-sys, ring, libmimalloc-sys), and cargo REPLAYS those
+// recordings instead of re-running the script. Restored under a different
+// absolute path, they point at directories that do not exist -- and cargo still
+// considers the units fresh, so nothing self-heals. Hence the manifest check
+// below, which fails closed: a mismatch skips the target restore entirely and
+// leaves the session to a cold (but correct) build.
+//
 // Neither object contains credentials.
 //
 // Best-effort: any failure (no key, no object yet, network) is logged and the
@@ -15,24 +30,31 @@
 //   WADO_CACHE_SA_KEY       inline service-account JSON, or
 //   WADO_CACHE_SA_KEY_FILE  path to the JSON key file
 // Optional overrides: WADO_CACHE_BUCKET, WADO_CACHE_OBJECT (registry),
-//   WADO_CACHE_SCCACHE_OBJECT, SCCACHE_DIR.
+//   WADO_CACHE_TARGET_OBJECT, WADO_CACHE_TARGET_MANIFEST.
 
 import { createSign } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync, openSync, rmSync } from "node:fs";
-import { spawn } from "node:child_process";
+import { readFileSync, writeFileSync, mkdirSync, openSync, rmSync, existsSync, renameSync } from "node:fs";
+import { spawn, execFileSync } from "node:child_process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { homedir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 process.env.NODE_USE_ENV_PROXY ??= "1";
 
 const BUCKET = process.env.WADO_CACHE_BUCKET ?? "wado-lang-cache";
 const REGISTRY_OBJECT = process.env.WADO_CACHE_OBJECT ?? "cargo/registry/linux-x86_64.tar.gz";
-const SCCACHE_OBJECT = process.env.WADO_CACHE_SCCACHE_OBJECT ?? "cargo/sccache/linux-x86_64.tar.gz";
+const TARGET_OBJECT = process.env.WADO_CACHE_TARGET_OBJECT ?? "cargo/target-deps/linux-x86_64.tar.gz";
+const TARGET_MANIFEST =
+  process.env.WADO_CACHE_TARGET_MANIFEST ?? "cargo/target-deps/linux-x86_64.manifest.json";
 const CARGO_HOME = process.env.CARGO_HOME ?? join(homedir(), ".cargo");
-const SCCACHE_DIR = process.env.SCCACHE_DIR ?? join(CARGO_HOME, "sccache");
+// This file sits at <repo>/.claude/hooks/, so its own location pins the repo
+// root without depending on the cwd a hook happens to be invoked with
+// (CLAUDE_PROJECT_DIR is not always set).
+const REPO_ROOT =
+  process.env.CLAUDE_PROJECT_DIR ?? resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const TARGET_DIR = process.env.CARGO_TARGET_DIR ?? join(REPO_ROOT, "target");
 const SCOPE = "https://www.googleapis.com/auth/devstorage.read_only";
 const TIMEOUT_MS = 60_000;
 // `AbortSignal.timeout` covers the streamed body, not just the response
@@ -40,6 +62,14 @@ const TIMEOUT_MS = 60_000;
 const DOWNLOAD_TIMEOUT_MS = 900_000;
 
 type ServiceAccountKey = { client_email: string; private_key: string; token_uri: string };
+type CacheManifest = {
+  schema: number;
+  repo_root: string;
+  cargo_home: string;
+  cargo_target_dir: string;
+  rustc: string;
+  commit: string;
+};
 
 const log = (m: string): void => console.error(`[cargo-cache] ${m}`);
 
@@ -78,6 +108,22 @@ async function accessToken({ client_email, private_key, token_uri }: ServiceAcco
   return (await res.json()).access_token;
 }
 
+const objectUrl = (object: string): string =>
+  `https://storage.googleapis.com/storage/v1/b/${BUCKET}/o/${encodeURIComponent(object)}?alt=media`;
+
+async function fetchObject(token: string, object: string, timeout: number): Promise<Response | null> {
+  const res = await fetch(objectUrl(object), {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (res.status === 404) {
+    log(`no cache object yet (gs://${BUCKET}/${object}); skipping`);
+    return null;
+  }
+  if (!res.ok) throw new Error(`download failed: HTTP ${res.status} ${await res.text()}`);
+  return res;
+}
+
 // Unpack straight from the network into destDir. Staging the tarball first
 // would double the peak draw on the session's fixed disk allowance, which is
 // the resource under pressure here.
@@ -90,46 +136,76 @@ async function untar(body: ReadableStream<Uint8Array>, destDir: string): Promise
   await Promise.all([pipeline(Readable.fromWeb(body), tar.stdin!), exited]);
 }
 
-async function restore(token: string, object: string, destDir: string): Promise<boolean> {
-  const url =
-    `https://storage.googleapis.com/storage/v1/b/${BUCKET}` +
-    `/o/${encodeURIComponent(object)}?alt=media`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-  });
-  if (res.status === 404) {
-    log(`no cache object yet (gs://${BUCKET}/${object}); skipping`);
-    return false;
-  }
-  if (!res.ok) throw new Error(`download failed: HTTP ${res.status} ${await res.text()}`);
-
-  mkdirSync(destDir, { recursive: true });
-  await untar(res.body!, destDir);
-  log(`restored gs://${BUCKET}/${object} into ${destDir}`);
-  return true;
+async function restoreRegistry(token: string): Promise<void> {
+  const res = await fetchObject(token, REGISTRY_OBJECT, DOWNLOAD_TIMEOUT_MS);
+  if (!res) return;
+  mkdirSync(CARGO_HOME, { recursive: true });
+  await untar(res.body!, CARGO_HOME);
+  log(`restored gs://${BUCKET}/${REGISTRY_OBJECT} into ${CARGO_HOME}`);
 }
 
-// Reconstruct target/ from the just-restored sccache cache, in the background,
-// so the session is warm without anyone needing to run on-task-started first.
-// Detached and non-blocking; warm-cache-bg.sh waits for the parallel mise-setup
-// hook to install mise + sccache before it builds.
-function launchBackgroundWarm(): void {
-  if (process.env.CLAUDE_CODE_REMOTE !== "true") return;
+function rustcVersion(): string {
+  const out = execFileSync("rustc", ["-vV"], { encoding: "utf8" });
+  return out.split("\n").find((l) => l.startsWith("release: "))?.slice("release: ".length) ?? "";
+}
+
+// Fails closed: every mismatch means the artifacts encode paths this container
+// does not have, which cargo would replay without ever rebuilding.
+function manifestMismatch(m: CacheManifest): string | null {
+  if (m.schema !== 1) return `unknown manifest schema ${m.schema}`;
+  if (m.repo_root !== REPO_ROOT) return `repo root ${m.repo_root} != ${REPO_ROOT}`;
+  if (m.cargo_home !== CARGO_HOME) return `CARGO_HOME ${m.cargo_home} != ${CARGO_HOME}`;
+  if (m.cargo_target_dir !== TARGET_DIR) return `target dir ${m.cargo_target_dir} != ${TARGET_DIR}`;
+  const local = rustcVersion();
+  if (m.rustc !== local) return `rustc ${m.rustc} != ${local}`;
+  return null;
+}
+
+async function restoreTargetDeps(token: string): Promise<void> {
+  // A target/ that already exists is a build this session started; merging a
+  // tarball into it underneath a running cargo is not worth the hazard.
+  if (existsSync(TARGET_DIR)) {
+    log(`${TARGET_DIR} already exists; skipping target restore`);
+    return;
+  }
+
+  const manifestRes = await fetchObject(token, TARGET_MANIFEST, TIMEOUT_MS);
+  if (!manifestRes) return;
+  const manifest = (await manifestRes.json()) as CacheManifest;
+  const mismatch = manifestMismatch(manifest);
+  if (mismatch) {
+    log(`target cache does not match this container (${mismatch}); skipping — cold build`);
+    return;
+  }
+
+  const res = await fetchObject(token, TARGET_OBJECT, DOWNLOAD_TIMEOUT_MS);
+  if (!res) return;
+
+  // Unpack beside the destination and rename in: a directory rename is atomic,
+  // so a cargo that starts mid-restore either sees no target/ or a complete
+  // one, never a half-written tree.
+  const staging = `${TARGET_DIR}.incoming`;
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging, { recursive: true });
   try {
-    const script = join(dirname(fileURLToPath(import.meta.url)), "warm-cache-bg.sh");
-    const child = spawn("bash", [script], { detached: true, stdio: "ignore" });
-    child.unref();
-    log("launched warm-cache in the background");
+    await untar(res.body!, staging);
+    renameSync(staging, TARGET_DIR);
+    log(`restored gs://${BUCKET}/${TARGET_OBJECT} into ${TARGET_DIR} (built at ${manifest.commit})`);
   } catch (e) {
-    log(`warm-cache launch skipped: ${(e as Error).message}`);
+    rmSync(staging, { recursive: true, force: true });
+    // A build that won the race owns target/; losing it is the correct outcome.
+    if ((e as NodeJS.ErrnoException).code === "ENOTEMPTY" || (e as NodeJS.ErrnoException).code === "EEXIST") {
+      log("a build created target/ during the restore; skipping");
+      return;
+    }
+    throw e;
   }
 }
 
 const DETACH_MARKER = "WADO_CACHE_RESTORE_DETACHED";
-const LOG_FILE = join(homedir(), ".cache", "wado", "warm-cache.log");
-// Read by a second SessionStart and by the `warm-cache` task. A pid rather
-// than a flag keeps a killed restore from wedging either of them.
+const LOG_FILE = join(homedir(), ".cache", "wado", "cargo-cache.log");
+// Read by a second SessionStart. A pid rather than a flag keeps a killed
+// restore from wedging it.
 const RESTORE_MARKER = join(homedir(), ".cache", "wado", "cargo-cache-restore.running");
 
 function restoreInFlight(): boolean {
@@ -180,22 +256,16 @@ async function main(): Promise<void> {
   const token = await accessToken(key);
   mkdirSync(dirname(RESTORE_MARKER), { recursive: true });
   writeFileSync(RESTORE_MARKER, String(process.pid));
-  let sccacheRestored = false;
   try {
-    // Independent and best-effort: a missing sccache object must not stop the
-    // registry restore, and vice versa.
-    const [registry, sccache] = await Promise.allSettled([
-      restore(token, REGISTRY_OBJECT, CARGO_HOME),
-      restore(token, SCCACHE_OBJECT, SCCACHE_DIR),
-    ]);
-    for (const r of [registry, sccache]) {
+    // The registry must land before the target tree is usable for anything
+    // cargo has to resolve, but neither restore depends on the other's success.
+    const results = await Promise.allSettled([restoreRegistry(token), restoreTargetDeps(token)]);
+    for (const r of results) {
       if (r.status === "rejected") log(`skipped: ${(r.reason as Error).message}`);
     }
-    sccacheRestored = sccache.status === "fulfilled" && sccache.value;
   } finally {
     rmSync(RESTORE_MARKER, { force: true });
   }
-  if (sccacheRestored) launchBackgroundWarm();
 }
 
 main().catch((e: Error) => log(`skipped: ${e.message}`));
