@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786661054537,
+  "lastUpdate": 1786671673584,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47753,6 +47753,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/83a07601b4283bf1178628b6890f2b1059d90b0a"
         },
         "date": 1786661054202,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265490,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a8266dba0708d400d6a76a5a26913d56f1a91b21",
+          "message": "Merge pull request #1805 from wado-lang/claude/parser-gen-wado-refactor-25xy7p\n\nrefactor(gale): separate the concerns that do not belong in parser_gen",
+          "timestamp": "2026-08-14T10:28:34+09:00",
+          "tree_id": "264d9c97c590d21aa7c0a0993e9d43ed712d35e9",
+          "url": "https://github.com/wado-lang/wado/commit/a8266dba0708d400d6a76a5a26913d56f1a91b21"
+        },
+        "date": 1786671673227,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
