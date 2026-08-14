@@ -794,12 +794,18 @@ compiles, passes the suite, and ends with a mechanical completion check.
       Every one of these is a construction site that kept its spelling.
 
       Two remain, 14 fixtures at two optimization levels. A local `type
-      UserId = …` still reports `UserId does not implement Inspect`, and the
-      diagnostic spells it plainly — so that path does not run through
-      `decl_render_name`, and giving `synthesis/traits.rs`'s newtype loops
-      the rendered name changed nothing, measured. And an anonymous struct's
-      synthesized `ReflectStruct` impl does not answer the `Serialize` bound
-      that `core:serde`'s blanket derives it from.
+      UserId = …` still reports `UserId does not implement Inspect`; giving
+      `synthesis/traits.rs`'s newtype loops the type's rendered name instead
+      of the declared one changed nothing, measured, and was reverted. And an
+      anonymous struct's synthesized `ReflectStruct` impl does not answer the
+      `Serialize` bound that `core:serde`'s blanket derives it from.
+
+      One trap, worth naming because it caught this investigation: the
+      diagnostic's spelling proves nothing about the type's. Every unresolved
+      -bound message runs through `display_type_name`, which calls
+      `strip_local_item_id` — so a local item prints `UserId` whether or not
+      its type renders `UserId@AstId(N)`. Read the intern key, not the
+      message.
 
       Both attempts that changed nothing were reverted rather than kept on
       the argument that they were more correct in principle. That rule is
