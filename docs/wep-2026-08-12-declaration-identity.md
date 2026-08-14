@@ -800,9 +800,18 @@ compiles, passes the suite, and ends with a mechanical completion check.
 
       Its lookup side is now right: `type_id_to_wir_type` and the manglers
       render through `decl_render_name`, so the key asked for is
-      `Box@2<i32>` rather than `Box<i32>`. The registrar still writes the
-      other spelling, and is not `monomorphize::instantiation_name` —
-      aligning that changed nothing.
+      `Box@2<i32>` rather than `Box<i32>`. Reading back from there found the
+      cause, and it is this design's own subject one layer up: the
+      monomorphizer keys its generic-template map by name. The insert uses
+      `TirStruct::name` — the mangled storage spelling for a function-local
+      declaration — and the lookup uses `InstantiationKey::name`, the plain
+      declared one. They miss, no concrete struct is instantiated, and
+      nothing is registered under any key.
+
+      That map is `FlatPackage::generic_structs`, and it is the last
+      name-keyed declaration registry in the pipeline — the one `#5` above
+      is about. `TirStruct` already carries its `StructDef`; the
+      instantiation key needs one too.
 
       The lesson so far is about measurement, not identity. The WIR panic
       names the type through whatever the *lookup* renders with, so before
