@@ -798,13 +798,20 @@ compiles, passes the suite, and ends with a mechanical completion check.
       block, which reaches WIR build and fails to find its instantiation
       registered.
 
-      Its lesson is about measurement, not identity. The WIR panic names the
-      type through `mangle_type_name`, whose `GenericInstance` arm reads
-      `def_name` — the *declared* name — so it prints `Box` whether or not
-      the declaration is flagged function-local. Two rounds were spent
-      inferring "the flag is unset" from that message; probing the flag
-      directly showed it set. A diagnostic rendered through a different path
-      than the one under test is not evidence about that path. A local `type
+      Its lookup side is now right: `type_id_to_wir_type` and the manglers
+      render through `decl_render_name`, so the key asked for is
+      `Box@2<i32>` rather than `Box<i32>`. The registrar still writes the
+      other spelling, and is not `monomorphize::instantiation_name` —
+      aligning that changed nothing.
+
+      The lesson so far is about measurement, not identity. The WIR panic
+      names the type through whatever the *lookup* renders with, so before
+      that side was fixed it printed `Box` whether or not the declaration
+      was flagged function-local. Two rounds were spent inferring "the flag
+      is unset" from that message; probing the flag directly showed it set,
+      on the fixture's local `Box`, beside a second `Box` — the compiler
+      item — carrying `false`. A diagnostic rendered through a different
+      path than the one under test is not evidence about that path. A local `type
       UserId = …` still reports `UserId does not implement Inspect`; giving
       `synthesis/traits.rs`'s newtype loops the type's rendered name instead
       of the declared one changed nothing, measured, and was reverted. And an
