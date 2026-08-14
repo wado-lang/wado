@@ -274,16 +274,13 @@ fn generate_field_schema(
             .clone();
         let base = {
             let def = tt
-                .decl_named_in(&"ArraySlice".to_string(), &slice_module)
+                .decl_named_in("ArraySlice", &slice_module)
                 .expect("the declaration this type names exists");
             tt.make_generic_instance(def, vec![TypeTable::U8])
         };
         {
             let def = tt
-                .decl_named_in(
-                    &"ByteSlice".to_string(),
-                    &crate::module_source::ModuleSource::bytes(),
-                )
+                .decl_named_in("ByteSlice", &crate::module_source::ModuleSource::bytes())
                 .expect("the declaration this type names exists");
             tt.make_newtype(def, base)
         }

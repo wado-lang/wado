@@ -688,15 +688,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .nominal_head(base_type_id)
                     .expect("a newtype names a declaration");
-                let (head, own_type_args) = if !newtype_args.is_empty() {
+                let (head, own_type_args) = if newtype_args.is_empty() {
+                    (name.clone(), None)
+                } else {
                     let args = {
                         let tt = self.tysys.type_table.borrow();
                         let ultimate = tt.get_ultimate_base_type(base_type_id);
                         tt.generic_type_args(ultimate).filter(|a| !a.is_empty())
                     };
                     (name.clone(), args)
-                } else {
-                    (name.clone(), None)
                 };
                 (
                     head,

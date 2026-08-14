@@ -1055,7 +1055,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .expect("a function-local `struct` is declared"),
             ),
             type_args: Vec::new(),
-            name: info.name.clone(),
+            name: info.name,
             module_source: self.current_module_source.clone(),
             visibility: ast::Visibility::Private,
             type_params,

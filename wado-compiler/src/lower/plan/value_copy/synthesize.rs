@@ -513,7 +513,7 @@ fn is_synth_safe_element(
             // Tuples / String / List<T> / known struct templates are
             // safe; unknown generic-instance names whose template
             // isn't a registered struct or variant are not.
-            if TypeTable::is_tuple_type(&name) {
+            if TypeTable::is_tuple_type(name) {
                 return true;
             }
             let (list_name, string_name, box_name) = {
@@ -537,10 +537,10 @@ fn is_synth_safe_element(
             // A concrete monomorphised struct entry is the strongest
             // signal — without it WIR has no `Ref` to point at.
             let mangled = type_table.borrow().mangle_type_name(elem_type);
-            if lookup_struct(project, &mangled, Some(&module_source)).is_some() {
+            if lookup_struct(project, &mangled, Some(module_source)).is_some() {
                 return true;
             }
-            project.find_variant(&module_source, &name).is_some()
+            project.find_variant(module_source, name).is_some()
         }
         _ => true,
     }

@@ -4882,8 +4882,7 @@ impl<'a> TirUnparser<'a> {
                         .method_info
                         .as_ref()
                         .map_or_else(|| func.name.clone(), LocalMethodName::to_display_name);
-                    self.output
-                        .push_str(&Self::quote_if_needed(&displayed));
+                    self.output.push_str(&Self::quote_if_needed(&displayed));
                     rest
                 } else {
                     let func_name = func.name.clone();

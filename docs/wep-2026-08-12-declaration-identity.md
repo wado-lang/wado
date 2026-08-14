@@ -394,7 +394,7 @@ no `DefId` and needs none; each is already its own variant. Primitives are not
 special: `i32`, `()` and `!` are `internal type` declarations in
 `core:prelude/primitive.wado` and get `DefId`s like anything else.
 
-An anonymous struct is such a shape and is *not* already its own variant, which
+An anonymous struct is such a shape and is _not_ already its own variant, which
 is the one place this rule needs a decision rather than an application. A struct
 literal with no type name interns as a `Struct` today, under a spelling
 synthesized from its fields, and two literals of the same shape deliberately
@@ -404,7 +404,7 @@ it by.
 It does not become a ninth variant. Measured: adding one breaks twelve exhaustive
 matches, and that number is the trap — an anonymous struct rides the `Struct`
 path through field access, layout and codegen at every one of the 121 sites that
-match `Struct` today, and those sites would stop matching it *silently*. The
+match `Struct` today, and those sites would stop matching it _silently_. The
 compiler would report the twelve it can see and none of the rest, which is the
 opposite of what this design asks of a migration.
 
@@ -539,7 +539,7 @@ compiles, passes the suite, and ends with a mechanical completion check.
 - [x] `Scope` — one implementation of what a name means in a module. The
       per-name import maps are deleted, `SymbolTable::lookup` is deleted, and
       nothing outside `Scopes` answers what a name means. The symbol table
-      keeps `lookup_in_module`, which asks a module what it *declares* rather
+      keeps `lookup_in_module`, which asks a module what it _declares_ rather
       than what a spelling means from some vantage — the question
       `Resolutions::declared_in` exposes, and the one `Scopes` is built out of.
       A caller that wants the declaration's symbol row reaches it through the
@@ -918,7 +918,7 @@ compiles, passes the suite, and ends with a mechanical completion check.
       which one must be wrong.
 
 - [x] Tuple trait dispatch resolves again. The tuple family becoming a
-      declaration gave it a *module*, and three of the four routes into
+      declaration gave it a _module_, and three of the four routes into
       `FqTypeName` then spelled it `core:prelude/types.wado/[]<i32,String>` —
       a name no impl is registered under and no other mangler produces. Trait
       dispatch resolved to nothing: WIR build reported `[i32,String]` does
@@ -1104,7 +1104,7 @@ The numbers this design is aimed at, measured over `wado-compiler/src`:
 | spelling comparisons in trait dispatch              | 2            | 0       |
 | synthesised references a consumer re-resolves       | 2            | 0       |
 | mangled-name parsing functions                      | 7            | 1       |
-| `decl_named_in` callers — the name-keyed residue     | 121          | 49      |
+| `decl_named_in` callers — the name-keyed residue    | 121          | 49      |
 | `decl_key_or_local` occurrences — the fabrication   | 26           | 30      |
 
 Each row reaches zero — or one, for the rows counting implementations — when its
@@ -1140,7 +1140,7 @@ qualified call's required trait was made a `DefId`, and came back — now 30 —
 when that turned out to be wrong: the required trait can name a type-parameter
 binder or a name that reaches no declaration at all, and a `DefId` cannot stand
 for either. `RequiredTrait` carries a `Resolution` now, and the row still
-climbed, because what it counts is the pair a consumer *renders* to reach a
+climbed, because what it counts is the pair a consumer _renders_ to reach a
 name-keyed neighbour, and those neighbours are in `ResolvedType`. It falls when
 the types carry identity, not before, and it is not evidence about the steps
 that have landed.

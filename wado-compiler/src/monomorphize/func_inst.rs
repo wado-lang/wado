@@ -2767,7 +2767,7 @@ impl Monomorphizer {
                             .unwrap_or_else(|| unreachable!());
                         {
                             let def = type_table
-                                .decl_named_in(&name, &module_source)
+                                .decl_named_in(name, &module_source)
                                 .expect("the declaration this type names exists");
                             type_table.make_generic_instance(def, vec![payload_expr.type_id])
                         }

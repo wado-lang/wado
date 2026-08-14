@@ -2676,11 +2676,7 @@ pub(super) fn receiver_decl_key(ty: &ast::Type) -> String {
 /// about.
 pub(super) fn written_type_args(ty: &ast::Type) -> Vec<String> {
     match ty {
-        ast::Type::Generic(generic) => generic
-            .args
-            .iter()
-            .map(get_type_name_full_static)
-            .collect(),
+        ast::Type::Generic(generic) => generic.args.iter().map(get_type_name_full_static).collect(),
         _ => Vec::new(),
     }
 }

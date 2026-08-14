@@ -289,11 +289,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         if let Some(def) = resolutions.defs().of_ast_id(enum_decl.id) {
                             all_enum_cases.insert(
                                 def,
-                                EnumInfo::new(
-                                    module_source.clone(),
-                                    enum_decl.id,
-                                    Vec::new(),
-                                ),
+                                EnumInfo::new(module_source.clone(), enum_decl.id, Vec::new()),
                             );
                         }
                         super::item::register_enum_compiler_item(
@@ -732,11 +728,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         if let Some(def) = resolutions.defs().of_ast_id(enum_decl.id) {
                             all_enum_cases.insert(
                                 def,
-                                EnumInfo::new(
-                                    module_source.clone(),
-                                    enum_decl.id,
-                                    cases,
-                                ),
+                                EnumInfo::new(module_source.clone(), enum_decl.id, cases),
                             );
                         }
                     }

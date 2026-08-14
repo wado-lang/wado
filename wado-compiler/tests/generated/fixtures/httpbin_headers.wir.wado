@@ -569,23 +569,23 @@ struct core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wad
     mut used: i32,
 }
 
-struct core:prelude//List<[core:prelude/string.wado/String,core:value/Value]> {  // TypeId(105)
+struct core:prelude//List<core:prelude/list.wado/List<u8>> {  // TypeId(105)
+    mut repr: ref "Array<core:prelude/list.wado/List<u8>>",
+    mut used: i32,
+}
+
+struct core:prelude//List<[core:prelude/string.wado/String,core:value/Value]> {  // TypeId(106)
     mut repr: ref "Array<[core:prelude/string.wado/String,core:value/Value]>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>> {  // TypeId(106)
+struct core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>> {  // TypeId(107)
     mut repr: ref "Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>> {  // TypeId(107)
+struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>> {  // TypeId(108)
     mut repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>",
-    mut used: i32,
-}
-
-struct core:prelude//List<core:prelude/list.wado/List<u8>> {  // TypeId(108)
-    mut repr: ref "Array<core:prelude/list.wado/List<u8>>",
     mut used: i32,
 }
 
@@ -2232,7 +2232,7 @@ fn "httpbin_headers.wado/$value_copy$core:value/Value"(v) {
         struct.new "core:value//Value::Float" { discriminant: 6, payload_0: __vc_payload_6 };
     } else if ref.test "core:value//Value::String"(v) -> ref "core:value//Value" {
         __vc_payload_7 = ref.cast "core:value//Value::String"(v).payload_0;
-        struct.new "core:value//Value::String" { discriminant: 7, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = __vc_payload_7.repr; let __array_clone_len_13: i32; __array_clone_len_13 = __vc_payload_7.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: __vc_payload_7.used } };
+        struct.new "core:value//Value::String" { discriminant: 7, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = __vc_payload_7.repr; let __array_clone_len_13: i32; __array_clone_len_13 = builtin::array_len(__array_clone_src_13); let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: __vc_payload_7.used } };
     } else if ref.test "core:value//Value::Bytes"(v) -> ref "core:value//Value" {
         __vc_payload_8 = ref.cast "core:value//Value::Bytes"(v).payload_0;
         struct.new "core:value//Value::Bytes" { discriminant: 8, payload_0: struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = __vc_payload_8.repr; let __array_clone_len_13: i32; __array_clone_len_13 = __vc_payload_8.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: __vc_payload_8.used } };
@@ -2359,7 +2359,7 @@ fn "./sub/httpbin_handler.wado/headers_to_json"(headers) with Fields {
                 entry = ref.as_non_null(__match_7);
                 name = entry.0;
                 value_6 = entry.1;
-                key = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = name.repr; let __array_clone_len_13: i32; __array_clone_len_13 = name.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: name.used };
+                key = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = name.repr; let __array_clone_len_13: i32; __array_clone_len_13 = builtin::array_len(__array_clone_src_13); let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: name.used };
                 value_15 = struct.new "core:value//Value::String" { discriminant: 7, payload_0: ref.as_non_null("core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_lossy<wasi:http/types.wado/FieldValue>"(value_6)) };
                 "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert"(map, key, value_15);
             } else {
@@ -2467,9 +2467,9 @@ fn "./sub/httpbin_handler.wado/build_request_json"(method, path, query, headers,
     obj = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(0), used: 0 }, entries: struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(0), used: 0 }, size: 0, deleted_count: 0 };
     value_10 = struct.new "core:value//Value::String" { discriminant: 7, payload_0: method };
     "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert"(obj, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("method"), used: 6 }, value_10);
-    value_13 = struct.new "core:value//Value::String" { discriminant: 7, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = path.repr; let __array_clone_len_13: i32; __array_clone_len_13 = path.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: path.used } };
+    value_13 = struct.new "core:value//Value::String" { discriminant: 7, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = path.repr; let __array_clone_len_13: i32; __array_clone_len_13 = builtin::array_len(__array_clone_src_13); let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: path.used } };
     "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert"(obj, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 97, 116, 104), used: 4 }, value_13);
-    value_17 = struct.new "core:value//Value::Object" { discriminant: 10, payload_0: ref.as_non_null("./sub/httpbin_handler.wado/parse_query_params"(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = query.repr; let __array_clone_len_13: i32; __array_clone_len_13 = query.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: query.used })) };
+    value_17 = struct.new "core:value//Value::Object" { discriminant: 10, payload_0: ref.as_non_null("./sub/httpbin_handler.wado/parse_query_params"(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = query.repr; let __array_clone_len_13: i32; __array_clone_len_13 = builtin::array_len(__array_clone_src_13); let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: query.used })) };
     "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert"(obj, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 114, 103, 115), used: 4 }, value_17);
     value_21 = "./sub/httpbin_handler.wado/headers_to_json"(headers);
     "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert"(obj, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("headers"), used: 7 }, value_21);
@@ -2480,7 +2480,7 @@ fn "./sub/httpbin_handler.wado/build_request_json"(method, path, query, headers,
     } else {
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(path, global:./sub/httpbin_handler.wado::__const_obj_9), query);
     });
-    url = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = v_25.repr; let __array_clone_len_13: i32; __array_clone_len_13 = v_25.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: v_25.used };
+    url = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = v_25.repr; let __array_clone_len_13: i32; __array_clone_len_13 = builtin::array_len(__array_clone_src_13); let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: v_25.used };
     value_29 = struct.new "core:value//Value::String" { discriminant: 7, payload_0: url };
     "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert"(obj, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 114, 108), used: 3 }, value_29);
     if ref.is_null(body) == 0 {
@@ -2671,7 +2671,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unknown"), used: 7 };
         } else {
             origin;
-        }); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = v_60.repr; let __array_clone_len_13: i32; __array_clone_len_13 = v_60.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: v_60.used }) };
+        }); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = v_60.repr; let __array_clone_len_13: i32; __array_clone_len_13 = builtin::array_len(__array_clone_src_13); let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: v_60.used }) };
         "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert"(obj_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("origin"), used: 6 }, value_58);
         __drop_spill_39 = struct.new "tuple//[i32, core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: 200, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, 2: ref.as_non_null("core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(let self_61_mv_0: i32; let self_61_mv_1: ref null "core:prelude/string.wado//String"; let self_61_mv_2: ref null "core:serde//SerializeError"; multivalue_bind [self_61_mv_0, self_61_mv_1, self_61_mv_2] = "core:json/core/json/to_string<core:value/Value>"(struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_16 } }, struct.new "core:prelude/types.wado//Option<char>" { 1 }); (if @likely(self_61_mv_0 == 0) -> ref "core:prelude/string.wado//String" {
             v_62 = ref.as_non_null(self_61_mv_1);
@@ -4692,7 +4692,7 @@ fn "core:json/core/json/to_string<core:value/Value>"(value, trailing_char) {
         "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf, c);
     } else {
     }
-    return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = buf.repr; let __array_clone_len_13: i32; __array_clone_len_13 = buf.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: buf.used }, ref.null none;
+    return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = buf.repr; let __array_clone_len_13: i32; __array_clone_len_13 = builtin::array_len(__array_clone_src_13); let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: buf.used }, ref.null none;
 }
 
 fn "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:serde/SerializeError>"(msg, value) {
@@ -5503,7 +5503,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[core:prelude/stri
         return ref.null none;
     }
     v_2 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:value/Value]">(self.repr, self.index);
-    item = struct.new "tuple//[core:prelude/string.wado/String, core:value/Value]" { 0: ref.as_non_null(v_3 = v_2.0; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = v_3.repr; let __array_clone_len_13: i32; __array_clone_len_13 = v_3.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: v_3.used }), 1: ref.as_non_null("httpbin_headers.wado/$value_copy$core:value/Value"(v_2.1)) };
+    item = struct.new "tuple//[core:prelude/string.wado/String, core:value/Value]" { 0: ref.as_non_null(v_3 = v_2.0; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = v_3.repr; let __array_clone_len_13: i32; __array_clone_len_13 = builtin::array_len(__array_clone_src_13); let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: v_3.used }), 1: ref.as_non_null("httpbin_headers.wado/$value_copy$core:value/Value"(v_2.1)) };
     self.index = self.index + 1;
     return item;
 }
@@ -5684,7 +5684,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[wasi:http/types.w
         return ref.null none;
     }
     v_2 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(self.repr, self.index);
-    item = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: ref.as_non_null(v_3 = v_2.0; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = v_3.repr; let __array_clone_len_13: i32; __array_clone_len_13 = v_3.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: v_3.used }), 1: ref.as_non_null(v_4 = v_2.1; struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = v_4.repr; let __array_clone_len_13: i32; __array_clone_len_13 = v_4.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: v_4.used }) };
+    item = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: ref.as_non_null(v_3 = v_2.0; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = v_3.repr; let __array_clone_len_13: i32; __array_clone_len_13 = builtin::array_len(__array_clone_src_13); let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: v_3.used }), 1: ref.as_non_null(v_4 = v_2.1; struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = v_4.repr; let __array_clone_len_13: i32; __array_clone_len_13 = v_4.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: v_4.used }) };
     self.index = self.index + 1;
     return item;
 }
@@ -5696,7 +5696,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    existing_index = "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::find_index"(self, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = key.repr; let __array_clone_len_13: i32; __array_clone_len_13 = key.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: key.used });
+    existing_index = "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::find_index"(self, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = key.repr; let __array_clone_len_13: i32; __array_clone_len_13 = builtin::array_len(__array_clone_src_13); let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: key.used });
     if existing_index >= 0 {
         __v1 = self.entries.used; if @unlikely(existing_index >= __v1) {
             cold_path;
@@ -5706,7 +5706,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
         return;
     }
     new_index = self.entries.used;
-    entry = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>" { key: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = key.repr; let __array_clone_len_13: i32; __array_clone_len_13 = key.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: key.used }, value: value, deleted: 0 };
+    entry = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>" { key: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = key.repr; let __array_clone_len_13: i32; __array_clone_len_13 = builtin::array_len(__array_clone_src_13); let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: key.used }, value: value, deleted: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>::push"(self.entries, entry);
     self.root = ref.as_non_null("core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert_node"(self, self.root, key, new_index));
     self.size = self.size + 1;
@@ -5983,7 +5983,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:collections/T
         return ref.null none;
     }
     v_2 = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(self.repr, self.index);
-    item = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>" { key: ref.as_non_null(v_3 = v_2.key; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = v_3.repr; let __array_clone_len_13: i32; __array_clone_len_13 = v_3.used; let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: v_3.used }), value: ref.as_non_null("httpbin_headers.wado/$value_copy$core:value/Value"(v_2.value)), deleted: v_2.deleted };
+    item = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>" { key: ref.as_non_null(v_3 = v_2.key; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<u8>; __array_clone_src_13 = v_3.repr; let __array_clone_len_13: i32; __array_clone_len_13 = builtin::array_len(__array_clone_src_13); let __array_clone_dst_13: ref Array<u8>; __array_clone_dst_13 = builtin::array_new<u8>(__array_clone_len_13); builtin::array_copy<u8>(__array_clone_dst_13, 0, __array_clone_src_13, 0, __array_clone_len_13); __array_clone_dst_13), used: v_3.used }), value: ref.as_non_null("httpbin_headers.wado/$value_copy$core:value/Value"(v_2.value)), deleted: v_2.deleted };
     self.index = self.index + 1;
     return item;
 }

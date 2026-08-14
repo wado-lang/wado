@@ -1320,8 +1320,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .nominal_def(struct_type)
                     .and_then(|def| self.lookup_struct_fields_of_decl(def).cloned());
-                let fields_clone = by_def
-                    .or_else(|| self.lookup_struct_fields_in(&name, &module_source).cloned());
+                let fields_clone =
+                    by_def.or_else(|| self.lookup_struct_fields_in(&name, &module_source).cloned());
                 if let Some(struct_info) = fields_clone {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
@@ -3840,22 +3840,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let defined_at = self
                 .lookup_struct_fields_in(&struct_name, &struct_module_source)
                 .map(|info| info.defined_at);
-            let struct_type = match defined_at {
-                Some(defined_at) => self.tysys.type_table.borrow().type_id_of_decl(defined_at),
-                None => {
-                    let def = self
+            let struct_type = if let Some(defined_at) = defined_at {
+                self.tysys.type_table.borrow().type_id_of_decl(defined_at)
+            } else {
+                let def = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .decl_named_in(&struct_name, &struct_module_source);
+                match def {
+                    Some(def) => self
                         .tysys
                         .type_table
-                        .borrow()
-                        .decl_named_in(&struct_name, &struct_module_source);
-                    match def {
-                        Some(def) => self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_struct(crate::tir::StructDef::Decl(def)),
-                        None => TypeTable::UNKNOWN,
-                    }
+                        .borrow_mut()
+                        .make_struct(crate::tir::StructDef::Decl(def)),
+                    None => TypeTable::UNKNOWN,
                 }
             };
             (struct_type, struct_name, fields)

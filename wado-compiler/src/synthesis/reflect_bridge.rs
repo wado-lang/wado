@@ -62,8 +62,7 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             let mut tt = flat.type_table.borrow_mut();
             // The instantiation's own head and arguments are the intern key, so
             // this is a lookup that happens to mint when the type was pruned.
-            let subject =
-                tt.make_monomorphized_struct_from_args(decl.def, decl.type_args.clone());
+            let subject = tt.make_monomorphized_struct_from_args(decl.def, decl.type_args.clone());
             let ref_subject = tt.make_ref(subject);
             (subject, ref_subject)
         };

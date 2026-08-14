@@ -661,7 +661,6 @@ fn push_ref_prefix(out: &mut String, kind: RefKind) {
     }
 }
 
-
 impl LocalMethodName {
     /// The typed receiver shape — the query consumers use to reason about the
     /// receiver instead of parsing its mangled identity.
@@ -2348,13 +2347,13 @@ mod tests {
         // `ImplTargetKey::of_decl` through it — lands on `builtin`, so the
         // decision has to live there and not only in `tuple`.
         let elems = vec![FqTypeName::builtin("i32"), FqTypeName::builtin("f64")];
-        let by_name = FqTypeName::of_head(&ModuleSource::default(), TUPLE_TYPE_NAME)
-            .with_args(elems.clone());
+        let by_name =
+            FqTypeName::of_head(&ModuleSource::default(), TUPLE_TYPE_NAME).with_args(elems.clone());
         // `declared` is the route a caller takes when it read `(name, module)`
         // off a resolved type — the family declares a module, and the spelling
         // still must not carry it.
-        let by_decl =
-            FqTypeName::declared(&ModuleSource::default(), TUPLE_TYPE_NAME).with_args(elems.clone());
+        let by_decl = FqTypeName::declared(&ModuleSource::default(), TUPLE_TYPE_NAME)
+            .with_args(elems.clone());
         let by_constructor = FqTypeName::tuple(elems);
         assert_eq!(by_name.to_mangled(), "[i32,f64]");
         assert_eq!(by_name.to_mangled(), by_constructor.to_mangled());
@@ -2428,7 +2427,6 @@ mod tests {
             "&mut Point"
         );
     }
-
 }
 
 /// Whether `name` names a builtin shape — one no module declares, so every

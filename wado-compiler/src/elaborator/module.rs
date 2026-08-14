@@ -220,11 +220,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .collect();
                     self.sem.decls.local_enum_cases.insert(
                         enum_decl.name.clone(),
-                        EnumInfo::new(
-                            self.current_module_source.clone(),
-                            enum_decl.id,
-                            cases,
-                        ),
+                        EnumInfo::new(self.current_module_source.clone(), enum_decl.id, cases),
                     );
                     // Mirror the variant / trait paths: register the enum's
                     // `#[compiler_item("...")]` annotation here so a future

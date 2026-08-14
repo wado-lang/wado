@@ -626,9 +626,7 @@ fn generate_struct_reflect_methods(
         let slots_tuple_type = tt.make_tuple(slot_types.clone());
         let member_types: Vec<TypeId> = fields
             .iter()
-            .map(|f| {
-                tt.make_generic_instance(env.member_struct_def, vec![struct_type, f.type_id])
-            })
+            .map(|f| tt.make_generic_instance(env.member_struct_def, vec![struct_type, f.type_id]))
             .collect();
         let members_tuple_type = tt.make_tuple(member_types.clone());
         register_reflect_assoc_types(
@@ -2281,9 +2279,7 @@ fn generate_enum_reflect_methods(
         let enum_type = tt.make_enum(target.def);
         let ref_enum_type = tt.make_ref(enum_type);
         let option_enum_type = tt.make_option(enum_type);
-        let member_type = {
-            tt.make_generic_instance(env.member_struct_def, vec![enum_type])
-        };
+        let member_type = { tt.make_generic_instance(env.member_struct_def, vec![enum_type]) };
         let members_tuple_type =
             tt.make_tuple(std::iter::repeat_n(member_type, target.cases.len()).collect());
         let reflect_enum = tt.compiler_items().require_trait(CompilerItem::ReflectEnum);
@@ -2727,9 +2723,8 @@ fn generate_flags_reflect_methods(
         let mut tt = type_table.borrow_mut();
         let ref_flags_type = tt.make_ref(target.flags_type);
         let option_flags_type = tt.make_option(target.flags_type);
-        let member_type = {
-            tt.make_generic_instance(env.member_struct_def, vec![target.flags_type])
-        };
+        let member_type =
+            { tt.make_generic_instance(env.member_struct_def, vec![target.flags_type]) };
         let members_tuple_type =
             tt.make_tuple(std::iter::repeat_n(member_type, target.members.len()).collect());
         let reflect_flags = tt
@@ -3227,7 +3222,13 @@ fn collect_struct_fields(
 /// Collect generic struct info for trait synthesis.
 fn collect_generic_struct_fields(
     module: &TirModule,
-) -> Vec<(String, Vec<TirTypeParam>, Vec<FieldInfo>, Span, crate::defs::DefId)> {
+) -> Vec<(
+    String,
+    Vec<TirTypeParam>,
+    Vec<FieldInfo>,
+    Span,
+    crate::defs::DefId,
+)> {
     module
         .structs
         .iter()
@@ -3243,7 +3244,9 @@ fn collect_generic_struct_fields(
                 s.type_params.clone(),
                 fields,
                 s.span,
-                s.def.decl().expect("a generic struct names its declaration"),
+                s.def
+                    .decl()
+                    .expect("a generic struct names its declaration"),
             )
         })
         .collect()
@@ -3271,7 +3274,13 @@ fn collect_variant_cases(
 /// Collect generic variant info for trait synthesis.
 fn collect_generic_variant_cases(
     module: &TirModule,
-) -> Vec<(String, Vec<TirTypeParam>, Vec<VariantCaseInfo>, Span, crate::defs::DefId)> {
+) -> Vec<(
+    String,
+    Vec<TirTypeParam>,
+    Vec<VariantCaseInfo>,
+    Span,
+    crate::defs::DefId,
+)> {
     module
         .variants
         .iter()
@@ -3311,7 +3320,14 @@ fn collect_struct_visible_fields(
 /// Collect generic struct info for Inspect/InspectAlt synthesis (excludes secret fields).
 fn collect_generic_struct_visible_fields(
     module: &TirModule,
-) -> Vec<(String, Vec<TirTypeParam>, Vec<FieldInfo>, bool, Span, crate::defs::DefId)> {
+) -> Vec<(
+    String,
+    Vec<TirTypeParam>,
+    Vec<FieldInfo>,
+    bool,
+    Span,
+    crate::defs::DefId,
+)> {
     module
         .structs
         .iter()
@@ -3330,7 +3346,9 @@ fn collect_generic_struct_visible_fields(
                 fields,
                 has_secret,
                 s.span,
-                s.def.decl().expect("a generic struct names its declaration"),
+                s.def
+                    .decl()
+                    .expect("a generic struct names its declaration"),
             )
         })
         .collect()
@@ -3606,8 +3624,12 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
         .compiler_trait_fq(CompilerItem::Default);
     let mut tt = module.type_table.borrow_mut();
 
-    let infos: Vec<(String, Vec<(String, TypeId, u32, TirExpr)>, Span, crate::tir::StructDef)> =
-        module
+    let infos: Vec<(
+        String,
+        Vec<(String, TypeId, u32, TirExpr)>,
+        Span,
+        crate::tir::StructDef,
+    )> = module
         .structs
         .iter()
         .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
@@ -3791,9 +3813,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         .collect();
 
     let mut tt = module.type_table.borrow_mut();
-    let formatter_type = {
-        tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter)
-    };
+    let formatter_type = { tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter) };
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
@@ -3980,9 +4000,7 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
         .collect();
 
     let mut tt = module.type_table.borrow_mut();
-    let formatter_type = {
-        tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter)
-    };
+    let formatter_type = { tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter) };
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
@@ -4350,9 +4368,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let mut generated = Vec::new();
 
     let mut tt = module.type_table.borrow_mut();
-    let formatter_type = {
-        tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter)
-    };
+    let formatter_type = { tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter) };
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
@@ -5298,9 +5314,7 @@ fn generate_fallback_impls(
         tt.compiler_struct_name(CompilerItem::Formatter).to_string()
     };
     let mut tt = module.type_table.borrow_mut();
-    let formatter_type = {
-        tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter)
-    };
+    let formatter_type = { tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter) };
     let fmt_type = tt.make_mut_ref(formatter_type);
 
     let needs_fallback = |name: &str, ctx: &SynthesisCtx<'_, '_, '_>| -> bool {
@@ -5398,7 +5412,9 @@ fn generate_fallback_impls(
             (
                 s.name.clone(),
                 s.type_params.clone(),
-                s.def.decl().expect("a generic struct names its declaration"),
+                s.def
+                    .decl()
+                    .expect("a generic struct names its declaration"),
             )
         })
         .collect();

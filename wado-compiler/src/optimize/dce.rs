@@ -1246,16 +1246,12 @@ impl<'a> DceWalker<'a> {
                 // actually defined on the inner type (e.g., i32^Ord::cmp, not
                 // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
                 // method target as reachable.
-                let boxed = def
-                    .decl()
-                    .is_some_and(|d| {
-                        self.type_table
-                            .compiler_item_def(crate::compiler_item::CompilerItem::Box)
-                            == Some(d)
-                    });
-                if boxed
-                    && let Some(info) = func.method_info.clone()
-                {
+                let boxed = def.decl().is_some_and(|d| {
+                    self.type_table
+                        .compiler_item_def(crate::compiler_item::CompilerItem::Box)
+                        == Some(d)
+                });
+                if boxed && let Some(info) = func.method_info.clone() {
                     let original_method_id = FunctionId::Method(MethodName::new(
                         func.module_source.clone(),
                         info.fq_struct_name(),
@@ -1271,7 +1267,7 @@ impl<'a> DceWalker<'a> {
                 // Non-monomorphized struct method.
                 let method_id = FunctionId::Method(MethodName::new(
                     module_source.clone(),
-                    FqTypeName::declared(&module_source, &name),
+                    FqTypeName::declared(module_source, &name),
                     trait_name,
                     method_name,
                 ));

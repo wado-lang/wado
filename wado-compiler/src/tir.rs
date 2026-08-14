@@ -1241,11 +1241,12 @@ impl TypeTable {
         use crate::defs::DefKind;
 
         let prelude = ModuleSource::prelude();
-        let _ = self
-            .compiler_items
-            .register(CompilerItem::Tuple, Resolved::TupleFamily {
+        let _ = self.compiler_items.register(
+            CompilerItem::Tuple,
+            Resolved::TupleFamily {
                 module_source: prelude.clone(),
-            });
+            },
+        );
         self.declare_for_test(Self::TUPLE_TYPE_NAME, prelude.clone(), DefKind::Struct);
 
         for (item, name) in [
@@ -1254,11 +1255,14 @@ impl TypeTable {
         ] {
             let def = self.declare_for_test(name, prelude.clone(), DefKind::Struct);
             let decl = self.defs.ast_id(def);
-            let _ = self.compiler_items.register(item, Resolved::Struct {
-                module_source: prelude.clone(),
-                name: name.to_string(),
-                decl,
-            });
+            let _ = self.compiler_items.register(
+                item,
+                Resolved::Struct {
+                    module_source: prelude.clone(),
+                    name: name.to_string(),
+                    decl,
+                },
+            );
         }
 
         for (item, name) in [
@@ -1267,11 +1271,14 @@ impl TypeTable {
         ] {
             let def = self.declare_for_test(name, prelude.clone(), DefKind::Variant);
             let decl = self.defs.ast_id(def);
-            let _ = self.compiler_items.register(item, Resolved::Variant {
-                module_source: prelude.clone(),
-                name: name.to_string(),
-                decl,
-            });
+            let _ = self.compiler_items.register(
+                item,
+                Resolved::Variant {
+                    module_source: prelude.clone(),
+                    name: name.to_string(),
+                    decl,
+                },
+            );
         }
     }
 
@@ -3622,7 +3629,8 @@ impl TypeTable {
                 if Self::is_tuple_type(name) {
                     crate::name::mangle_tuple_type(&args)
                 } else {
-                    let unqualified = crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
+                    let unqualified =
+                        crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
                     format!("{module_source}/{unqualified}")
                 }
             }
@@ -3798,7 +3806,8 @@ impl TypeTable {
                 if Self::is_tuple_type(name) {
                     return crate::name::mangle_tuple_type(&args);
                 }
-                let unqualified = crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
+                let unqualified =
+                    crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
                 format!("{module_source}/{unqualified}")
             }
             // Ref / MutRef are preserved in the mangled output so that
@@ -3861,7 +3870,8 @@ impl TypeTable {
                 if Self::is_tuple_type(name) {
                     return crate::name::mangle_tuple_type(&args);
                 }
-                let unqualified = crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
+                let unqualified =
+                    crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
                 format!("{}/{unqualified}", self.def_module(*def))
             }
             ResolvedType::Ref(inner) => format!("&{}", self.mangle_type_arg_erased(*inner)),
@@ -6110,7 +6120,7 @@ mod tests {
         let first = crate::ast::AstId::new(space, 10);
         let second = crate::ast::AstId::new(space, 20);
 
-        let point = table.declare_for_test("Point", module.clone(), crate::defs::DefKind::Struct);
+        let point = table.declare_for_test("Point", module, crate::defs::DefKind::Struct);
         let first_type = table.make_struct(StructDef::Decl(point));
         table.register_decl_type(first, first_type);
 

@@ -489,12 +489,7 @@ impl DefTable {
     /// wants a *struct type* rather than a declaration should use an anonymous
     /// shape instead.
     #[cfg(any(test, feature = "test-util"))]
-    pub fn declare_for_test(
-        &mut self,
-        module: &ModuleSource,
-        name: &str,
-        kind: DefKind,
-    ) -> DefId {
+    pub fn declare_for_test(&mut self, module: &ModuleSource, name: &str, kind: DefKind) -> DefId {
         self.declare(Def {
             ast_id: AstId::fresh(),
             module: module.clone(),

@@ -814,7 +814,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow_mut()
-                        .decl_named_in(&fallback.to_string(), &module)
+                        .decl_named_in(fallback, &module)
                         .expect("the declaration this type names exists");
                     self.tysys
                         .type_table
