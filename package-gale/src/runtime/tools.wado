@@ -1,129 +1,7 @@
-//! Consumer-facing tree / token utilities exposed by every generated
-//! parser: S-expression normalisation (`normalize_tree`) and the
-//! ANTLR4-format token-stream dump (`to_lexer_string`) used by the
-//! compatibility suite. Always emitted. The generated parser code never calls
-//! these itself; consumers (driver tests, the ANTLR4-compat suite) import them
-//! from the generated module. The `./lex.wado` import is stripped at
-//! `#include_str` time.
-
 use { TokenStream } from "./lex.wado";
 
-/// Normalize a multi-line S-expression string for comparison.
-/// Collapses whitespace runs to single spaces and trims, while preserving
-/// whitespace inside double-quoted strings.
-pub fn normalize_tree(s: &String) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut in_string = false;
-    let mut space_pending = false;
-    for let c of s.chars() {
-        if in_string {
-            out.push(c);
-            if c == '"' {
-                in_string = false;
-            }
-        } else if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
-            if out.len() > 0 {
-                space_pending = true;
-            }
-        } else {
-            if space_pending {
-                out.push(' ');
-                space_pending = false;
-            }
-            if c == '"' {
-                in_string = true;
-            }
-            out.push(c);
-        }
-    }
-    return out;
-}
-
-/// True when ` <skip ` opens at `i`.
-fn opens_skip_marker(chars: &List<char>, i: i32) -> bool {
-    return i + 7 <= chars.len()
-        && chars[i] == ' '
-        && chars[i + 1] == '<'
-        && chars[i + 2] == 's'
-        && chars[i + 3] == 'k'
-        && chars[i + 4] == 'i'
-        && chars[i + 5] == 'p'
-        && chars[i + 6] == ' ';
-}
-
-/// Index of the `>` closing the marker opened at `open`, or -1 when no `>`
-/// in the rest of the string sits in closing position.
-fn skip_marker_close(chars: &List<char>, open: i32) -> i32 {
-    let n = chars.len();
-    for let mut j = open + 7; j < n; j += 1 {
-        if chars[j] != '>' {
-            continue;
-        }
-        if j + 1 >= n || chars[j + 1] == ' ' || chars[j + 1] == ')' {
-            return j;
-        }
-    }
-    return -1;
-}
-
-/// Drop Gale's `<skip …>` markers, leaving the deleted terminal bare — the
-/// shape ANTLR4's `Trees.toStringTree` prints. Used by the compatibility
-/// compare, so `to_string_tree()` goes on saying more than ANTLR4 does; see
-/// "Deleted terminals in parse trees" in `antlr4-compatibility.md`.
-///
-/// A marker closes at the first `>` followed by a space, `)`, or end of input.
-/// A deleted token whose own text holds such a `>` therefore cuts early and
-/// leaves a stray `>`, which surfaces as a mismatch rather than a false match.
-pub fn strip_skip_markers(s: &String) -> String {
-    let chars: List<char> = s.chars().collect();
-    let n = chars.len();
-    let mut out = String::with_capacity(s.len());
-    let mut i = 0;
-    while i < n {
-        let close = if opens_skip_marker(&chars, i) { skip_marker_close(&chars, i) } else { -1 };
-        if close < 0 {
-            out.push(chars[i]);
-            i += 1;
-            continue;
-        }
-        out.push(' ');
-        for let mut k = i + 7; k < close; k += 1 {
-            out.push(chars[k]);
-        }
-        i = close + 1;
-    }
-    return out;
-}
-
-/// Produce an ANTLR4-style `Token.toString()` dump of the token stream:
-///
-///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]\n  (per token)
-///
-/// Used by Stage L (token-stream equivalence) tests against the upstream
-/// `LexerExec` / etc. `[output]` blocks.
-///
-/// - `tokens` is the `TokenStream` returned by the generated
-///   `tokenize(input)`. Skip-channel trivia (channel 0) is discarded; only
-///   non-default-channel trivia is interleaved.
-/// - `eof_kind` is the value of the generated `TK_EOF` constant; EOF
-///   tokens print as `<EOF>` text with type id `-1`.
-///
-/// Type IDs are remapped from Gale's 0-based numbering to ANTLR4's
-/// 1-based: `kind + 1` for explicit lexer rules, `-1` for EOF. Lexer-only
-/// grammars never introduce implicit literals, so the contiguous
-/// `0..num_lexer_rules` range maps directly onto ANTLR4's
-/// `1..num_lexer_rules+1`.
-///
-/// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
-/// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
-/// escaped; backslashes and quotes pass through unchanged.
-///
-/// Whatever the lexer's actions printed precedes the dump, as it does on
-/// ANTLR4's stdout.
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
     let chars = tokens.chars;
-    // Char index where each line begins; built once so each token's `line:col`
-    // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
     let mut line_starts: List<i32> = [0];
     for let mut i = 0; i < chars.len(); i += 1 {
         if chars[i] == '\n' {
@@ -134,11 +12,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
     out.push_str(&tokens.output);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
-        // Non-default-channel trivia (`-> channel(HIDDEN)`) is parked in this
-        // token's trivia range; ANTLR4 still dumps it in source order with a
-        // `channel=N` attribute, so interleave it ahead of the host token.
-        // Skip trivia (channel 0) is discarded — neither printed nor indexed
-        // (matching ANTLR4's `Lexer.skip()`).
         let lo = tokens.triv_lo[i];
         let hi = tokens.triv_hi[i];
         for let mut t = lo; t < hi; t += 1 {
@@ -173,10 +46,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
     return out;
 }
 
-/// Renders a single token in ANTLR4's `CommonToken.toString` format, used by
-/// `to_lexer_string` for both main-stream tokens and interleaved
-/// non-default-channel trivia. `channel=N` is printed only for non-default
-/// channels, matching ANTLR4.
 fn emit_lexer_token(
     out: &mut String,
     tokens: &TokenStream,
@@ -212,10 +81,6 @@ fn emit_lexer_token(
     out.push_str(&`[@${index},${start}:${end_inclusive}='${text_buf}',<${type_id}>,${channel_attr}${line}:${col}]\n`);
 }
 
-/// Compute (line, column) from the precomputed `line_starts` table (char
-/// index where each line begins). Binary search for the greatest
-/// `line_starts[j] <= pos`: that line is `j + 1` and the column is the
-/// offset past its start. O(log lines) per call.
 fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     let mut lo = 0;
     let mut hi = line_starts.len() - 1;

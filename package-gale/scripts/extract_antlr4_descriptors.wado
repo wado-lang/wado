@@ -669,6 +669,8 @@ struct TestFileSpec {
     output_subdir: String,
     /// Runtime symbols imported from the grammar module; empty for none.
     import_names: List<String>,
+    /// Comparison helpers imported from `tests/support/tree_compare.wado`.
+    tree_helpers: List<String> = [],
     test_label: String,
     triage: Triage,
 }
@@ -691,14 +693,10 @@ fn emit_test_file(spec: &TestFileSpec, body: fn(&mut CodeWriter)) -> String {
     w.line(&"        },");
     w.line(&"    };");
     if !spec.import_names.is_empty() {
-        let mut syms = String::new();
-        for let mut i = 0; i < spec.import_names.len(); i += 1 {
-            if i > 0 {
-                syms.push_str(&", ");
-            }
-            syms.push_str(&spec.import_names[i]);
-        }
-        w.line(&`use \{ ${syms} \} from "../../grammars/${spec.category}/${spec.name}.g4";`);
+        w.line(&`use \{ ${join_names(&spec.import_names)} \} from "../../grammars/${spec.category}/${spec.name}.g4";`);
+    }
+    if !spec.tree_helpers.is_empty() {
+        w.line(&`use \{ ${join_names(&spec.tree_helpers)} \} from "../../../support/tree_compare.wado";`);
     }
     w.blank();
     if let Todo(reason) = &spec.triage {
@@ -735,6 +733,17 @@ fn actual_expr(inner: &String, strip: bool) -> String {
         return `strip_skip_markers(&${*inner})`;
     }
     return *inner;
+}
+
+fn join_names(names: &List<String>) -> String {
+    let mut out = String::new();
+    for let mut i = 0; i < names.len(); i += 1 {
+        if i > 0 {
+            out.push_str(&", ");
+        }
+        out.push_str(&names[i]);
+    }
+    return out;
 }
 
 fn tree_import_names(strip: bool) -> List<String> {
@@ -793,7 +802,8 @@ fn emit_stage_b_test_file(
         attr: generator_attr(),
         doc_lines: doc_lines,
         output_subdir: "antlr4_compat_b",
-        import_names: tree_import_names(strip),
+        import_names: [],
+        tree_helpers: tree_import_names(strip),
         test_label: "stage_b",
         triage: *triage,
     };
@@ -842,7 +852,8 @@ fn emit_stage_sub_b_test_file(
         attr: generator_attr(),
         doc_lines: doc_lines,
         output_subdir: "antlr4_compat_b",
-        import_names: tree_import_names(strip),
+        import_names: [],
+        tree_helpers: tree_import_names(strip),
         test_label: "stage_b_sub",
         triage: *triage,
     };
@@ -947,7 +958,8 @@ fn emit_stage_c_output_test_file(
         attr: generator_attr(),
         doc_lines: doc_lines,
         output_subdir: "antlr4_compat_a",
-        import_names: if strip { ["strip_skip_markers"] } else { [] as List<String> },
+        import_names: [],
+        tree_helpers: if strip { ["strip_skip_markers"] } else { [] as List<String> },
         test_label: "stage_c_output",
         triage: *triage,
     };

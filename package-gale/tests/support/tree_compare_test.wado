@@ -1,0 +1,45 @@
+use { normalize_tree, strip_skip_markers } from "./tree_compare.wado";
+
+test "normalize_tree collapses whitespace" {
+    let input = "
+        (json
+          (value 42))
+    ";
+    assert normalize_tree(&input) == "(json (value 42))";
+}
+
+test "normalize_tree preserves quoted strings" {
+    let input = "
+        (pair \"hello  world\" : (value 1))
+    ";
+    assert normalize_tree(&input) == "(pair \"hello  world\" : (value 1))";
+}
+
+test "normalize_tree single line passthrough" {
+    let input = "(a (b x) + (b y))";
+    assert normalize_tree(&input) == "(a (b x) + (b y))";
+}
+
+test "strip_skip_markers leaves a deleted terminal bare" {
+    // ANTLR4 renders an extraneous token as a plain child and reports the
+    // deletion on the error stream; Gale wraps it. The compat compare drops
+    // the wrapper, never the token.
+    assert strip_skip_markers(&"(a x <skip z> y)") == "(a x z y)";
+    assert strip_skip_markers(&"(s ${ (v <skip ?> a) <skip ?> })") == "(s ${ (v ? a) ? })";
+}
+
+test "strip_skip_markers is a no-op on a clean tree" {
+    assert strip_skip_markers(&"(json (value 42))") == "(json (value 42))";
+    // A `<missing X>` marker stays: it already matches ANTLR4's rendering.
+    assert strip_skip_markers(&"(item let x <missing ID> ;)") == "(item let x <missing ID> ;)";
+    // So does an `<error>` region, which no descriptor compares.
+    assert strip_skip_markers(&"(s (<error> <skip }>))") == "(s (<error> }))";
+}
+
+test "strip_skip_markers closes a marker at a delimiter" {
+    // Trailing position: the `>` ends the string.
+    assert strip_skip_markers(&"(a x <skip z>") == "(a x z";
+    // A token whose text holds `>` cuts at the first delimiter-terminated
+    // `>`, so a stray one is left rather than a wrong match being invented.
+    assert strip_skip_markers(&"(a <skip ->> b)") == "(a -> b)";
+}

@@ -216,7 +216,7 @@ to leave the grammar loadable, not be reproducible.
 
 Stage B and Stage B′ share the generated parser under
 `tests/generated/antlr4_compat_b/`, but not the comparator. Stage B
-compares through `normalize_tree`, which collapses whitespace runs so a
+compares through `normalize_tree` (`tests/support/tree_compare.wado`), which collapses whitespace runs so a
 hand-written expected tree can be indented. Stage B′ compares verbatim:
 the oracle's tree is already one line, so collapsing can only lose
 information — and it does whenever a token's own text carries

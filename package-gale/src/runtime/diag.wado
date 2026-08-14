@@ -1,8 +1,3 @@
-//! Diagnostics emitted by the error-resilient parser. A parse always returns a
-//! tree; `Diagnostic`s say where and how it was repaired. Inlined into every
-//! generated parser alongside the recovery runtime. Imports `Span` from
-//! `lex.wado`; that import is stripped at `#include_str` time.
-
 use { Span } from "./lex.wado";
 
 pub enum Severity {
@@ -23,15 +18,13 @@ impl Severity {
     }
 }
 
-/// What went wrong, independent of the specific tokens. Tooling can switch on
-/// this without parsing the human message.
 pub enum DiagnosticCode {
-    UnexpectedToken,  // a token that fits nowhere in the current rule
-    MissingToken,  // a required terminal was absent (one was inserted)
-    ExtraToken,  // a spurious terminal was deleted
-    NoViableAlternative,  // alternative dispatch found no match
-    UnterminatedConstruct,  // EOF reached inside a rule (missing closer)
-    LexError,  // a char run matched no lexer rule (TK_ERROR)
+    UnexpectedToken,
+    MissingToken,
+    ExtraToken,
+    NoViableAlternative,
+    UnterminatedConstruct,
+    LexError,
 }
 
 impl DiagnosticCode {
@@ -47,26 +40,19 @@ impl DiagnosticCode {
     }
 }
 
-/// The repair the parser applied at this site, so a fixit/IDE can describe it.
 pub enum RecoveryAction {
-    Inserted,  // synthesised a missing terminal
-    Deleted,  // skipped one spurious terminal
-    SkippedTo,  // skipped a run up to a synchronizing token
-    FilledMissing,  // hit EOF; filled remaining required terminals
-    None,  // reported only, no edit
+    Inserted,
+    Deleted,
+    SkippedTo,
+    FilledMissing,
+    None,
 }
 
-/// A secondary location attached to a diagnostic, e.g. "'(' opened here" for an
-/// unterminated group.
 pub struct RelatedInfo {
     pub message: String,
     pub span: Span,
 }
 
-/// A single parse diagnostic. `expected`/`found` carry token-kind ids (not
-/// names) so tooling reuses the grammar's own name tables; `message` is the
-/// pre-rendered human text. `line`/`col` are 1-based line and 0-based column
-/// (ANTLR4 `Token` convention) resolved from `span.start`.
 pub struct Diagnostic {
     pub severity: Severity,
     pub code: DiagnosticCode,
@@ -82,8 +68,6 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    /// A bare error diagnostic with position resolved; callers fill the
-    /// optional fields (`expected`, `rule_stack`, `related`, ...) as needed.
     pub fn error(code: DiagnosticCode, message: String, span: Span, line: i32, col: i32) -> Diagnostic {
         return Diagnostic {
             severity: Severity::Error,
@@ -109,9 +93,6 @@ impl Display for Diagnostic {
     }
 }
 
-/// Resolve a char index to (line, column): 1-based line, 0-based column
-/// (ANTLR4 `Token` convention). A linear scan; the parser resolves at most a
-/// handful of positions per parse, so this stays off the hot path.
 pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
     let mut line = 1;
     let mut col = 0;

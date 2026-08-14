@@ -1,11 +1,3 @@
-//! Highlight walk. A single generic pass over the flat CST store: enter each
-//! rule on its `Open`, classify each terminal (`hl_visit_token`), exit on the
-//! matching `Close`. Because the store is uniform there is one walk regardless
-//! of grammar, and it works on a *partial* tree too (broken input still
-//! highlights). A `K_ERROR` recovery region contributes no rule context. The
-//! walk is a flat forward scan threading `&CstStore` — it constructs no node or
-//! cursor value, so it allocates nothing.
-
 use { TokenStream } from "./lex.wado";
 use { CstStore, EventTag, K_ERROR } from "./tree.wado";
 use { HighlightVisitor } from "./highlight.wado";
@@ -14,16 +6,16 @@ pub fn highlight_walk(visitor: &mut HighlightVisitor, toks: &TokenStream, s: &Cs
     for let mut r = 0; r < s.row_count(); r += 1 {
         match s.tag[r] {
             Open => {
-                if s.a[r] != K_ERROR as i32 {
-                    visitor.hl_enter(s.a[r]);
+                if s.kind(r) as i32 != K_ERROR as i32 {
+                    visitor.hl_enter(s.kind(r) as i32);
                 }
             },
             Close => {
-                if s.b[r] != K_ERROR as i32 {
+                if s.close_kind(r) as i32 != K_ERROR as i32 {
                     visitor.hl_exit();
                 }
             },
-            _ => visitor.hl_visit_token(toks, s.a[r]),
+            _ => visitor.hl_visit_token(toks, s.token_index(r)),
         }
     }
 }

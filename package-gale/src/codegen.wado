@@ -529,8 +529,10 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
 ///
 /// - `lex` / `diag` / `tree` / `tools` are always emitted: the core lexing
 ///   vocabulary, the diagnostics types, the flat CST store + `TreeBuilder`,
-///   and the consumer-facing tree/token utilities (`normalize_tree`,
-///   `to_lexer_string`).
+///   and the ANTLR4-format token-stream dump (`to_lexer_string`), which
+///   takes the generated `TokenStream` and so cannot live outside the
+///   generated module. Comparison helpers that take only strings are not
+///   bundled — see `tests/support/tree_compare.wado`.
 /// - `follow` only when lowering built a caller-FOLLOW gate (`emit_follow`).
 /// - `highlight` (`highlight` + `highlight_walk`) only when the `highlight`
 ///   generator option is on.
