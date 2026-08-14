@@ -2157,6 +2157,27 @@ impl<'a> TypeLookup<'a> {
         self.all_struct_fields.get(&def?)
     }
 
+    /// Field info for a struct type's own head.
+    ///
+    /// A declaration answers by its identity, which is the only way a
+    /// function-local `struct` can answer at all: its durable entry is keyed
+    /// by the declaration, and the spelling `nominal_head` renders is the
+    /// plain declared name, which names the enclosing module's struct of that
+    /// name — or nothing.
+    ///
+    /// An anonymous shape has no declaration; `anon_name` is what the literal
+    /// registered it under.
+    pub(super) fn struct_fields_of_head(
+        &self,
+        head: crate::tir::StructDef,
+        anon_name: impl FnOnce() -> String,
+    ) -> Option<&'a StructFieldInfo> {
+        match head {
+            crate::tir::StructDef::Decl(def) => self.struct_fields_of(def),
+            crate::tir::StructDef::Anon(_) => self.local_struct_fields.get(&anon_name()),
+        }
+    }
+
     /// Resolve `(name, module_source)` — an already-known type identity,
     /// never a name written in source — to its field info. Deliberately
     /// does *not* consult the function-local tier; see `fn_local_first`.

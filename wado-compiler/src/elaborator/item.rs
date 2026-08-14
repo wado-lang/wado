@@ -1742,6 +1742,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .effect_ops
             .insert(decl.id, operations.clone());
         TirResource {
+            def: self
+                .tysys
+                .resolutions
+                .defs()
+                .of_ast_id(decl.id)
+                .expect("a `resource` declaration is declared"),
             name: decl.name.clone(),
             visibility: decl.visibility,
             operations,

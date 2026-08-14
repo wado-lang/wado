@@ -567,21 +567,6 @@ pub struct LocalMethodName {
 
 /// Derive the bare base name from a possibly-mangled type/trait name.
 ///
-/// `Receiver::mangle` and friends produce names like `Stream<u8>` or
-/// `From<i32>` by appending the type-arg list to the base name; the
-/// reverse — recovering the base by truncating at the first `<` — is
-/// the canonical inverse and lives here so other components stay
-/// agnostic to name-format details (per the wado-compiler CLAUDE
-/// rules: "Use utilities in name.rs to handle name mangling and
-/// monomorphization. Other components must not know the details of
-/// name formats.").
-pub(crate) fn split_base_name(name: &str) -> &str {
-    match name.find('<') {
-        Some(i) => &name[..i],
-        None => name,
-    }
-}
-
 /// Whether a mangled call name denotes a trait-method impl
 /// (`Type^Trait::method`); the `^` separates the receiver type from its trait.
 pub fn is_local_trait_method_name(name: &str) -> bool {
@@ -2601,9 +2586,15 @@ mod tests {
 /// are as module-less as the heads they instantiate.
 #[must_use]
 pub fn is_builtin_shape_name(name: &str) -> bool {
+    fn head_of(name: &str) -> &str {
+        match name.find('<') {
+            Some(i) => &name[..i],
+            None => name,
+        }
+    }
     name.starts_with('&')
         || matches!(
-            split_base_name(name),
+            head_of(name),
             "i8" | "i16"
                 | "i32"
                 | "i64"

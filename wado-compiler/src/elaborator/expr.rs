@@ -1174,8 +1174,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         use_id: AstId,
     ) {
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
+        let mut struct_head = None;
         let (struct_name, module_source) = match resolved {
-            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => self
+            ResolvedType::Struct { def, .. } => {
+                struct_head = Some(def);
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(receiver_type)
+                    .expect("a nominal type names a declaration")
+            }
+            ResolvedType::GenericInstance { .. } => self
                 .tysys
                 .type_table
                 .borrow()
@@ -1189,7 +1198,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => return,
         };
-        if let Some(info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
+        if let Some(info) = struct_head
+            .and_then(|head| self.lookup_struct_fields_of(head))
+            .or_else(|| self.lookup_struct_fields_in(&struct_name, &module_source))
+        {
             for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
                 if fname == field_name {
                     self.record_reference_to_def(use_id, *fid);
@@ -1244,14 +1256,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
         match resolved {
             // Struct field access
-            ResolvedType::Struct { .. } => {
+            ResolvedType::Struct { def, .. } => {
                 let (name, module_source) = self
                     .tysys
                     .type_table
                     .borrow()
                     .nominal_head(struct_type)
                     .expect("a struct names a declaration");
-                let declared = self.lookup_struct_fields_in(&name, &module_source);
+                let declared = self
+                    .lookup_struct_fields_of(def)
+                    .or_else(|| self.lookup_struct_fields_in(&name, &module_source));
                 let hit = declared.map(|info| {
                     info.fields
                         .iter()

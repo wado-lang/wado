@@ -527,6 +527,9 @@ struct ReflectFieldInfo {
 /// a plain struct; a generic one gets a single impl over `S<T, …>`.
 struct ReflectTarget {
     name: String,
+    /// The declaration selected, carried from the `TirStruct` rather than
+    /// looked back up by `name`.
+    def: crate::tir::StructDef,
     type_params: Vec<TirTypeParam>,
     fields: Vec<ReflectFieldInfo>,
     wire_name_policy: Option<String>,
@@ -543,6 +546,7 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
         .filter(|s| s.monomorph_info.is_none())
         .map(|s| ReflectTarget {
             name: s.name.clone(),
+            def: s.def,
             type_params: s.type_params.clone(),
             fields: s
                 .fields
@@ -575,6 +579,7 @@ fn generate_struct_reflect_methods(
 ) -> Vec<TirFunction> {
     let ReflectTarget {
         name,
+        def,
         type_params,
         fields,
         wire_name_policy: name_policy,
@@ -608,15 +613,12 @@ fn generate_struct_reflect_methods(
         let mut tt = type_table.borrow_mut();
         let struct_type = if is_generic {
             let param_ids = make_type_param_ids(type_params, &mut tt);
-            let def = tt
-                .decl_named_in(name, module_source)
-                .expect("the struct being reflected is declared");
-            tt.make_generic_instance(def, param_ids)
+            tt.make_generic_instance(
+                def.decl().expect("a generic struct names its declaration"),
+                param_ids,
+            )
         } else {
-            let def = tt
-                .decl_named_in(name, module_source)
-                .expect("the struct being reflected is declared");
-            tt.make_struct(crate::tir::StructDef::Decl(def))
+            tt.make_struct(*def)
         };
         let ref_struct_type = tt.make_ref(struct_type);
         let fields_tuple_type = tt.make_tuple(fields.iter().map(|f| f.type_id).collect());
@@ -625,10 +627,7 @@ fn generate_struct_reflect_methods(
         let member_types: Vec<TypeId> = fields
             .iter()
             .map(|f| {
-                let def = tt
-                    .decl_named_in(&env.member_struct_name, &env.member_struct_module)
-                    .expect("the Member compiler item is declared");
-                tt.make_generic_instance(def, vec![struct_type, f.type_id])
+                tt.make_generic_instance(env.member_struct_def, vec![struct_type, f.type_id])
             })
             .collect();
         let members_tuple_type = tt.make_tuple(member_types.clone());
@@ -777,7 +776,9 @@ struct ReflectSynthEnv {
     string_type: TypeId,
     case_style_type: TypeId,
     member_struct_name: String,
-    member_struct_module: ModuleSource,
+    /// The declaration `member_struct_name` spells; the name is only rendered
+    /// into the synthesised bodies.
+    member_struct_def: crate::defs::DefId,
     type_name_method: String,
     members_method: String,
     from_fields_method: String,
@@ -790,15 +791,18 @@ impl ReflectSynthEnv {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
-        let (member_struct_module, member_struct_name) = {
-            let (m, n) = items.require_struct(CompilerItem::ReflectStructField);
-            (m.clone(), n.to_string())
+        let member_struct_name = {
+            let (_, n) = items.require_struct(CompilerItem::ReflectStructField);
+            n.to_string()
         };
+        let member_struct_def = tt
+            .compiler_item_def(CompilerItem::ReflectStructField)
+            .expect("the Member compiler item is declared");
         Self {
             string_type,
             case_style_type,
             member_struct_name,
-            member_struct_module,
+            member_struct_def,
             type_name_method: items
                 .method_name(CompilerItem::ReflectStructTypeName)
                 .to_string(),
@@ -1456,6 +1460,8 @@ fn generate_variant_reflect_impls(
 /// for a plain variant; a generic one gets a single impl over `V<T, …>`.
 struct ReflectVariantTarget {
     name: String,
+    /// The declaration selected, carried from the `TirVariantDecl`.
+    def: crate::defs::DefId,
     type_params: Vec<TirTypeParam>,
     /// Per-case `(name, index, payload type, #[wire(name)])`; unit cases
     /// carry `()` as their payload.
@@ -1477,6 +1483,7 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
         })
         .map(|v| ReflectVariantTarget {
             name: v.name.clone(),
+            def: v.def,
             type_params: v.type_params.clone(),
             cases: v
                 .cases
@@ -1501,7 +1508,9 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
 struct ReflectVariantSynthEnv {
     string_type: TypeId,
     member_struct_name: String,
-    member_struct_module: ModuleSource,
+    /// The declaration `member_struct_name` spells; the name is only rendered
+    /// into the synthesised bodies.
+    member_struct_def: crate::defs::DefId,
     type_name_method: String,
     discriminant_method: String,
     cases_method: String,
@@ -1514,14 +1523,17 @@ impl ReflectVariantSynthEnv {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
-        let (member_struct_module, member_struct_name) = {
-            let (m, n) = items.require_struct(CompilerItem::ReflectVariantCase);
-            (m.clone(), n.to_string())
+        let member_struct_name = {
+            let (_, n) = items.require_struct(CompilerItem::ReflectVariantCase);
+            n.to_string()
         };
+        let member_struct_def = tt
+            .compiler_item_def(CompilerItem::ReflectVariantCase)
+            .expect("the Member compiler item is declared");
         Self {
             string_type,
             member_struct_name,
-            member_struct_module,
+            member_struct_def,
             type_name_method: items
                 .method_name(CompilerItem::ReflectVariantTypeName)
                 .to_string(),
@@ -1571,25 +1583,16 @@ fn generate_variant_reflect_methods(
         let mut tt = type_table.borrow_mut();
         let variant_type = if is_generic {
             let param_ids = make_type_param_ids(&target.type_params, &mut tt);
-            let def = tt
-                .decl_named_in(&target.name, &module_source)
-                .expect("the variant being reflected is declared");
-            tt.make_generic_instance(def, param_ids)
+            tt.make_generic_instance(target.def, param_ids)
         } else {
-            let def = tt
-                .decl_named_in(&target.name, &module_source)
-                .expect("the variant being reflected is declared");
-            tt.make_variant(def)
+            tt.make_variant(target.def)
         };
         let ref_variant_type = tt.make_ref(variant_type);
         let member_types: Vec<TypeId> = target
             .cases
             .iter()
             .map(|(_, _, payload, _)| {
-                let def = tt
-                    .decl_named_in(&env.member_struct_name, &env.member_struct_module)
-                    .expect("the Member compiler item is declared");
-                tt.make_generic_instance(def, vec![variant_type, *payload])
+                tt.make_generic_instance(env.member_struct_def, vec![variant_type, *payload])
             })
             .collect();
         let members_tuple_type = tt.make_tuple(member_types.clone());
@@ -2156,6 +2159,7 @@ fn generate_enum_reflect_impls(
         .filter(|e| e.type_params.is_empty())
         .map(|e| ReflectEnumTarget {
             name: e.name.clone(),
+            def: e.def,
             cases: e
                 .cases
                 .iter()
@@ -2191,6 +2195,8 @@ fn generate_enum_reflect_impls(
 /// An enum selected for `ReflectEnum` synthesis.
 struct ReflectEnumTarget {
     name: String,
+    /// The declaration selected, carried from the `TirEnum`.
+    def: crate::defs::DefId,
     /// Per-case `(name, index, #[wire(name)])`; a case's discriminant is
     /// its index.
     cases: Vec<(String, u32, Option<String>)>,
@@ -2203,7 +2209,9 @@ struct ReflectEnumTarget {
 struct ReflectEnumSynthEnv {
     string_type: TypeId,
     member_struct_name: String,
-    member_struct_module: ModuleSource,
+    /// The declaration `member_struct_name` spells; the name is only rendered
+    /// into the synthesised bodies.
+    member_struct_def: crate::defs::DefId,
     type_name_method: String,
     discriminant_method: String,
     from_discriminant_method: String,
@@ -2217,14 +2225,17 @@ impl ReflectEnumSynthEnv {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
-        let (member_struct_module, member_struct_name) = {
-            let (m, n) = items.require_struct(CompilerItem::ReflectEnumCase);
-            (m.clone(), n.to_string())
+        let member_struct_name = {
+            let (_, n) = items.require_struct(CompilerItem::ReflectEnumCase);
+            n.to_string()
         };
+        let member_struct_def = tt
+            .compiler_item_def(CompilerItem::ReflectEnumCase)
+            .expect("the Member compiler item is declared");
         Self {
             string_type,
             member_struct_name,
-            member_struct_module,
+            member_struct_def,
             type_name_method: items
                 .method_name(CompilerItem::ReflectEnumTypeName)
                 .to_string(),
@@ -2267,17 +2278,11 @@ fn generate_enum_reflect_methods(
 
     let (enum_type, ref_enum_type, option_enum_type, member_type, members_tuple_type) = {
         let mut tt = type_table.borrow_mut();
-        let enum_def = tt
-            .decl_named_in(&target.name, &module_source)
-            .expect("the enum being reflected is declared");
-        let enum_type = tt.make_enum(enum_def);
+        let enum_type = tt.make_enum(target.def);
         let ref_enum_type = tt.make_ref(enum_type);
         let option_enum_type = tt.make_option(enum_type);
         let member_type = {
-            let def = tt
-                .decl_named_in(&env.member_struct_name, &env.member_struct_module)
-                .expect("the Member compiler item is declared");
-            tt.make_generic_instance(def, vec![enum_type])
+            tt.make_generic_instance(env.member_struct_def, vec![enum_type])
         };
         let members_tuple_type =
             tt.make_tuple(std::iter::repeat_n(member_type, target.cases.len()).collect());
@@ -2600,11 +2605,7 @@ fn generate_flags_reflect_impls(
         .flags
         .iter()
         .filter_map(|f| {
-            let flags_type = module
-                .type_table
-                .borrow()
-                .decl_named_in(&f.name, &module_source)
-                .and_then(|def| module.type_table.borrow().find_flags_type(def))?;
+            let flags_type = module.type_table.borrow().find_flags_type(f.def)?;
             Some(ReflectFlagsTarget {
                 name: f.name.clone(),
                 flags_type,
@@ -2655,7 +2656,9 @@ struct ReflectFlagsTarget {
 struct ReflectFlagsSynthEnv {
     string_type: TypeId,
     member_struct_name: String,
-    member_struct_module: ModuleSource,
+    /// The declaration `member_struct_name` spells; the name is only rendered
+    /// into the synthesised bodies.
+    member_struct_def: crate::defs::DefId,
     type_name_method: String,
     bits_method: String,
     from_bits_method: String,
@@ -2669,14 +2672,17 @@ impl ReflectFlagsSynthEnv {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
-        let (member_struct_module, member_struct_name) = {
-            let (m, n) = items.require_struct(CompilerItem::ReflectFlagsBit);
-            (m.clone(), n.to_string())
+        let member_struct_name = {
+            let (_, n) = items.require_struct(CompilerItem::ReflectFlagsBit);
+            n.to_string()
         };
+        let member_struct_def = tt
+            .compiler_item_def(CompilerItem::ReflectFlagsBit)
+            .expect("the Member compiler item is declared");
         Self {
             string_type,
             member_struct_name,
-            member_struct_module,
+            member_struct_def,
             type_name_method: items
                 .method_name(CompilerItem::ReflectFlagsTypeName)
                 .to_string(),
@@ -2722,10 +2728,7 @@ fn generate_flags_reflect_methods(
         let ref_flags_type = tt.make_ref(target.flags_type);
         let option_flags_type = tt.make_option(target.flags_type);
         let member_type = {
-            let def = tt
-                .decl_named_in(&env.member_struct_name, &env.member_struct_module)
-                .expect("the Member compiler item is declared");
-            tt.make_generic_instance(def, vec![target.flags_type])
+            tt.make_generic_instance(env.member_struct_def, vec![target.flags_type])
         };
         let members_tuple_type =
             tt.make_tuple(std::iter::repeat_n(member_type, target.members.len()).collect());
@@ -3203,7 +3206,9 @@ type FieldInfo = (String, TypeId, u32);
 type VariantCaseInfo = (String, u32, TypeId);
 
 /// Collect non-generic struct info for trait synthesis.
-fn collect_struct_fields(module: &TirModule) -> Vec<(String, Vec<FieldInfo>, Span)> {
+fn collect_struct_fields(
+    module: &TirModule,
+) -> Vec<(String, Vec<FieldInfo>, Span, crate::tir::StructDef)> {
     module
         .structs
         .iter()
@@ -3214,7 +3219,7 @@ fn collect_struct_fields(module: &TirModule) -> Vec<(String, Vec<FieldInfo>, Spa
                 .iter()
                 .map(|f| (f.name.clone(), f.type_id, f.index))
                 .collect();
-            (s.name.clone(), fields, s.span)
+            (s.name.clone(), fields, s.span, s.def)
         })
         .collect()
 }
@@ -3222,7 +3227,7 @@ fn collect_struct_fields(module: &TirModule) -> Vec<(String, Vec<FieldInfo>, Spa
 /// Collect generic struct info for trait synthesis.
 fn collect_generic_struct_fields(
     module: &TirModule,
-) -> Vec<(String, Vec<TirTypeParam>, Vec<FieldInfo>, Span)> {
+) -> Vec<(String, Vec<TirTypeParam>, Vec<FieldInfo>, Span, crate::defs::DefId)> {
     module
         .structs
         .iter()
@@ -3233,13 +3238,21 @@ fn collect_generic_struct_fields(
                 .iter()
                 .map(|f| (f.name.clone(), f.type_id, f.index))
                 .collect();
-            (s.name.clone(), s.type_params.clone(), fields, s.span)
+            (
+                s.name.clone(),
+                s.type_params.clone(),
+                fields,
+                s.span,
+                s.def.decl().expect("a generic struct names its declaration"),
+            )
         })
         .collect()
 }
 
 /// Collect non-generic variant info for trait synthesis.
-fn collect_variant_cases(module: &TirModule) -> Vec<(String, Vec<VariantCaseInfo>, Span)> {
+fn collect_variant_cases(
+    module: &TirModule,
+) -> Vec<(String, Vec<VariantCaseInfo>, Span, crate::defs::DefId)> {
     module
         .variants
         .iter()
@@ -3250,7 +3263,7 @@ fn collect_variant_cases(module: &TirModule) -> Vec<(String, Vec<VariantCaseInfo
                 .iter()
                 .map(|c| (c.name.clone(), c.index, c.payload))
                 .collect();
-            (v.name.clone(), cases, v.span)
+            (v.name.clone(), cases, v.span, v.def)
         })
         .collect()
 }
@@ -3258,7 +3271,7 @@ fn collect_variant_cases(module: &TirModule) -> Vec<(String, Vec<VariantCaseInfo
 /// Collect generic variant info for trait synthesis.
 fn collect_generic_variant_cases(
     module: &TirModule,
-) -> Vec<(String, Vec<TirTypeParam>, Vec<VariantCaseInfo>, Span)> {
+) -> Vec<(String, Vec<TirTypeParam>, Vec<VariantCaseInfo>, Span, crate::defs::DefId)> {
     module
         .variants
         .iter()
@@ -3269,13 +3282,15 @@ fn collect_generic_variant_cases(
                 .iter()
                 .map(|c| (c.name.clone(), c.index, c.payload))
                 .collect();
-            (v.name.clone(), v.type_params.clone(), cases, v.span)
+            (v.name.clone(), v.type_params.clone(), cases, v.span, v.def)
         })
         .collect()
 }
 
 /// Collect non-generic struct info for Inspect/InspectAlt synthesis (excludes secret fields).
-fn collect_struct_visible_fields(module: &TirModule) -> Vec<(String, Vec<FieldInfo>, bool, Span)> {
+fn collect_struct_visible_fields(
+    module: &TirModule,
+) -> Vec<(String, Vec<FieldInfo>, bool, Span, crate::tir::StructDef)> {
     module
         .structs
         .iter()
@@ -3288,7 +3303,7 @@ fn collect_struct_visible_fields(module: &TirModule) -> Vec<(String, Vec<FieldIn
                 .map(|f| (f.name.clone(), f.type_id, f.index))
                 .collect();
             let has_secret = s.fields.iter().any(|f| f.is_secret);
-            (s.name.clone(), fields, has_secret, s.span)
+            (s.name.clone(), fields, has_secret, s.span, s.def)
         })
         .collect()
 }
@@ -3296,7 +3311,7 @@ fn collect_struct_visible_fields(module: &TirModule) -> Vec<(String, Vec<FieldIn
 /// Collect generic struct info for Inspect/InspectAlt synthesis (excludes secret fields).
 fn collect_generic_struct_visible_fields(
     module: &TirModule,
-) -> Vec<(String, Vec<TirTypeParam>, Vec<FieldInfo>, bool, Span)> {
+) -> Vec<(String, Vec<TirTypeParam>, Vec<FieldInfo>, bool, Span, crate::defs::DefId)> {
     module
         .structs
         .iter()
@@ -3315,6 +3330,7 @@ fn collect_generic_struct_visible_fields(
                 fields,
                 has_secret,
                 s.span,
+                s.def.decl().expect("a generic struct names its declaration"),
             )
         })
         .collect()
@@ -3339,19 +3355,14 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
     let enum_infos: Vec<_> = module
         .enums
         .iter()
-        .map(|e| (e.name.clone(), e.span))
+        .map(|e| (e.name.clone(), e.span, e.def))
         .collect();
 
     let mut generated_functions = Vec::new();
 
-    for (enum_name, span) in &enum_infos {
+    for (enum_name, span, def) in &enum_infos {
         let mut type_table = module.type_table.borrow_mut();
-        let enum_type = {
-            let def = type_table
-                .decl_named_in(&enum_name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            type_table.make_enum(def)
-        };
+        let enum_type = type_table.make_enum(*def);
         let ref_enum_type = type_table.make_ref(enum_type);
 
         if ctx.should_synthesize(enum_name, &eq_trait_name.canonical().expect(KEYED)) {
@@ -3409,19 +3420,14 @@ fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let flags_infos: Vec<_> = module
         .flags
         .iter()
-        .map(|f| (f.name.clone(), f.span))
+        .map(|f| (f.name.clone(), f.span, f.def))
         .collect();
 
     let mut generated_functions = Vec::new();
 
-    for (flags_name, span) in &flags_infos {
+    for (flags_name, span, def) in &flags_infos {
         let mut type_table = module.type_table.borrow_mut();
-        let flags_type = {
-            let def = type_table
-                .decl_named_in(&flags_name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            type_table.make_flags(def)
-        };
+        let flags_type = type_table.make_flags(*def);
         let ref_flags_type = type_table.make_ref(flags_type);
 
         if ctx.should_synthesize(flags_name, &eq_trait_name.canonical().expect(KEYED)) {
@@ -3484,13 +3490,8 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
     let mut tt = module.type_table.borrow_mut();
 
     let struct_infos = collect_struct_fields(module);
-    for (name, fields, span) in &struct_infos {
-        let struct_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_struct(crate::tir::StructDef::Decl(def))
-        };
+    for (name, fields, span, def) in &struct_infos {
+        let struct_type = tt.make_struct(*def);
         let ref_struct_type = tt.make_ref(struct_type);
 
         if ctx.should_synthesize(name, &eq_trait_name.canonical().expect(KEYED)) {
@@ -3530,14 +3531,9 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
     }
 
     let generic_struct_infos = collect_generic_struct_fields(module);
-    for (name, type_params, fields, span) in &generic_struct_infos {
+    for (name, type_params, fields, span, def) in &generic_struct_infos {
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let struct_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_generic_instance(def, type_param_ids)
-        };
+        let struct_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_struct_type = tt.make_ref(struct_type);
 
         if ctx.should_synthesize(name, &eq_trait_name.canonical().expect(KEYED)) {
@@ -3610,7 +3606,8 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
         .compiler_trait_fq(CompilerItem::Default);
     let mut tt = module.type_table.borrow_mut();
 
-    let infos: Vec<(String, Vec<(String, TypeId, u32, TirExpr)>, Span)> = module
+    let infos: Vec<(String, Vec<(String, TypeId, u32, TirExpr)>, Span, crate::tir::StructDef)> =
+        module
         .structs
         .iter()
         .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
@@ -3624,20 +3621,15 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
                         .map(|e| (f.name.clone(), f.type_id, f.index, (**e).clone()))
                 })
                 .collect();
-            fields.map(|fields| (s.name.clone(), fields, s.span))
+            fields.map(|fields| (s.name.clone(), fields, s.span, s.def))
         })
         .collect();
 
-    for (name, fields, span) in &infos {
+    for (name, fields, span, def) in &infos {
         if !ctx.should_synthesize(name, &default_trait_name.canonical().expect(KEYED)) {
             continue;
         }
-        let struct_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_struct(crate::tir::StructDef::Decl(def))
-        };
+        let struct_type = tt.make_struct(*def);
         let func = generate_struct_default_fn(
             &module_source,
             name,
@@ -3727,16 +3719,11 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
     let mut tt = module.type_table.borrow_mut();
 
     let variant_infos = collect_variant_cases(module);
-    for (name, cases, span) in &variant_infos {
+    for (name, cases, span, def) in &variant_infos {
         if !ctx.should_synthesize(name, &eq_trait_name.canonical().expect(KEYED)) {
             continue;
         }
-        let variant_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_variant(def)
-        };
+        let variant_type = tt.make_variant(*def);
         let ref_variant_type = tt.make_ref(variant_type);
         let func = generate_variant_eq_fn(
             name,
@@ -3754,17 +3741,12 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
     }
 
     let generic_variant_infos = collect_generic_variant_cases(module);
-    for (name, type_params, cases, span) in &generic_variant_infos {
+    for (name, type_params, cases, span, def) in &generic_variant_infos {
         if !ctx.should_synthesize(name, &eq_trait_name.canonical().expect(KEYED)) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let variant_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_generic_instance(def, type_param_ids)
-        };
+        let variant_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_variant_type = tt.make_ref(variant_type);
         let func = generate_variant_eq_fn(
             name,
@@ -3795,26 +3777,22 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
 fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let module_source = module.module_source.clone();
     let mut generated = Vec::new();
-    let formatter_name = ctx.names.formatter.clone();
     let formatter_fq = ctx.names.formatter_fq.clone();
     let inspect_method = ctx.names.inspect_method.clone();
     let inspect_fq = ctx.names.inspect_fq.clone();
     let lower_hex_fq = ctx.names.lower_hex_fq.clone();
     let lower_hex_method = ctx.names.lower_hex_method.clone();
 
-    let resource_infos: Vec<(String, Span)> = module
+    let resource_infos: Vec<(String, Span, crate::defs::DefId)> = module
         .resources
         .iter()
         .filter(|r| !r.is_generic)
-        .map(|r| (r.name.clone(), r.span))
+        .map(|r| (r.name.clone(), r.span, r.def))
         .collect();
 
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = {
-        let def = tt
-            .decl_named_in(&formatter_name, &ModuleSource::format())
-            .expect("the declaration being synthesised for exists");
-        tt.make_struct(crate::tir::StructDef::Decl(def))
+        tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter)
     };
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
@@ -3919,16 +3897,11 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         }
     }
 
-    for (name, rspan) in &resource_infos {
+    for (name, rspan, def) in &resource_infos {
         if ctx.has_methodful_impl_anywhere(name, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
-        let resource_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_resource(def)
-        };
+        let resource_type = tt.make_resource(*def);
         let ref_type = tt.make_ref(resource_type);
         generated.push(Rc::new(RefCell::new(generate_opaque_inspect_fn(
             name,
@@ -3988,7 +3961,6 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
     let module_source = module.module_source.clone();
     let display_fq = ctx.names.display_fq.clone();
     let display_method = ctx.names.display_method.clone();
-    let formatter_name = ctx.names.formatter.clone();
     let formatter_fq = ctx.names.formatter_fq.clone();
 
     let enum_infos: Vec<_> = module
@@ -3996,32 +3968,24 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
         .iter()
         .map(|e| {
             let cases: Vec<_> = e.cases.iter().map(|c| (c.name.clone(), c.index)).collect();
-            (e.name.clone(), cases, e.span)
+            (e.name.clone(), cases, e.span, e.def)
         })
         .collect();
 
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = {
-        let def = tt
-            .decl_named_in(&formatter_name, &ModuleSource::format())
-            .expect("the declaration being synthesised for exists");
-        tt.make_struct(crate::tir::StructDef::Decl(def))
+        tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter)
     };
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
 
     let mut generated = Vec::new();
-    for (name, cases, espan) in &enum_infos {
+    for (name, cases, espan, def) in &enum_infos {
         if ctx.has_methodful_impl_anywhere(name, &display_fq.canonical().expect(KEYED)) {
             continue;
         }
-        let enum_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_enum(def)
-        };
+        let enum_type = tt.make_enum(*def);
         let ref_type = tt.make_ref(enum_type);
         generated.push(Rc::new(RefCell::new(generate_enum_display_fn(
             &module_source,
@@ -4380,10 +4344,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
 
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = {
-        let def = tt
-            .decl_named_in(&formatter_name, &ModuleSource::format())
-            .expect("the declaration being synthesised for exists");
-        tt.make_struct(crate::tir::StructDef::Decl(def))
+        tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter)
     };
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
@@ -4423,21 +4384,16 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     };
 
     // Enums — delegate to Inspect (no multiline needed for enum names)
-    for name in module
+    for (name, def) in module
         .enums
         .iter()
-        .map(|e| e.name.clone())
+        .map(|e| (e.name.clone(), e.def))
         .collect::<Vec<_>>()
     {
         if ctx.has_methodful_impl_anywhere(&name, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
-        let enum_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_enum(def)
-        };
+        let enum_type = tt.make_enum(def);
         if !has_inspect(&name, enum_type, ctx, &mut tt) {
             continue;
         }
@@ -4460,7 +4416,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // Non-generic structs — pretty-print with begin_block/end_block
     let struct_infos = collect_struct_visible_fields(module);
 
-    for (name, fields, has_secret, sspan) in &struct_infos {
+    for (name, fields, has_secret, sspan, def) in &struct_infos {
         if name == tt.compiler_struct_name(crate::compiler_item::CompilerItem::String)
             || name == &formatter_name
         {
@@ -4469,12 +4425,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         if ctx.has_methodful_impl_anywhere(name, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
-        let struct_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_struct(crate::tir::StructDef::Decl(def))
-        };
+        let struct_type = tt.make_struct(*def);
         let ref_type = tt.make_ref(struct_type);
         generated.push(Rc::new(RefCell::new(generate_struct_inspect_alt_fn(
             name,
@@ -4497,17 +4448,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     }
 
     let generic_struct_infos = collect_generic_struct_visible_fields(module);
-    for (name, type_params, fields, has_secret, sspan) in &generic_struct_infos {
+    for (name, type_params, fields, has_secret, sspan, def) in &generic_struct_infos {
         if ctx.has_methodful_impl_anywhere(name, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let struct_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_generic_instance(def, type_param_ids)
-        };
+        let struct_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_type = tt.make_ref(struct_type);
         generated.push(Rc::new(RefCell::new(generate_struct_inspect_alt_fn(
             name,
@@ -4530,16 +4476,11 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     }
 
     let variant_infos = collect_variant_cases(module);
-    for (name, cases, vspan) in &variant_infos {
+    for (name, cases, vspan, def) in &variant_infos {
         if ctx.has_methodful_impl_anywhere(name, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
-        let variant_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_variant(def)
-        };
+        let variant_type = tt.make_variant(*def);
         let ref_type = tt.make_ref(variant_type);
         generated.push(Rc::new(RefCell::new(generate_variant_inspect_alt_fn(
             name,
@@ -4562,17 +4503,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     }
 
     let generic_variant_infos = collect_generic_variant_cases(module);
-    for (name, type_params, cases, vspan) in &generic_variant_infos {
+    for (name, type_params, cases, vspan, def) in &generic_variant_infos {
         if ctx.has_methodful_impl_anywhere(name, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let variant_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_generic_instance(def, type_param_ids)
-        };
+        let variant_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_type = tt.make_ref(variant_type);
         generated.push(Rc::new(RefCell::new(generate_variant_inspect_alt_fn(
             name,
@@ -5356,10 +5292,7 @@ fn generate_fallback_impls(
     };
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = {
-        let def = tt
-            .decl_named_in(&formatter_struct_name, &ModuleSource::format())
-            .expect("the declaration being synthesised for exists");
-        tt.make_struct(crate::tir::StructDef::Decl(def))
+        tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter)
     };
     let fmt_type = tt.make_mut_ref(formatter_type);
 
@@ -5416,17 +5349,16 @@ fn generate_fallback_impls(
         )))
     };
 
-    let enum_names: Vec<_> = module.enums.iter().map(|e| e.name.clone()).collect();
-    for name in &enum_names {
+    let enum_names: Vec<_> = module
+        .enums
+        .iter()
+        .map(|e| (e.name.clone(), e.def))
+        .collect();
+    for (name, def) in &enum_names {
         if !needs_fallback(name, ctx) {
             continue;
         }
-        let enum_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_enum(def)
-        };
+        let enum_type = tt.make_enum(*def);
         let ref_type = tt.make_ref(enum_type);
         generated.push(make_fallback(name, ref_type, enum_type, vec![], &mut tt));
         ctx.record_impl(name, &pair.target_trait.canonical().expect(KEYED));
@@ -5436,21 +5368,16 @@ fn generate_fallback_impls(
         .structs
         .iter()
         .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
-        .map(|s| s.name.clone())
+        .map(|s| (s.name.clone(), s.def))
         .collect();
-    for name in &struct_names {
+    for (name, def) in &struct_names {
         if name == &string_name || name == &formatter_struct_name {
             continue;
         }
         if !needs_fallback(name, ctx) {
             continue;
         }
-        let struct_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_struct(crate::tir::StructDef::Decl(def))
-        };
+        let struct_type = tt.make_struct(*def);
         let ref_type = tt.make_ref(struct_type);
         generated.push(make_fallback(name, ref_type, struct_type, vec![], &mut tt));
         ctx.record_impl(name, &pair.target_trait.canonical().expect(KEYED));
@@ -5460,9 +5387,15 @@ fn generate_fallback_impls(
         .structs
         .iter()
         .filter(|s| !s.type_params.is_empty() && s.monomorph_info.is_none())
-        .map(|s| (s.name.clone(), s.type_params.clone()))
+        .map(|s| {
+            (
+                s.name.clone(),
+                s.type_params.clone(),
+                s.def.decl().expect("a generic struct names its declaration"),
+            )
+        })
         .collect();
-    for (name, type_params) in &generic_struct_infos {
+    for (name, type_params, def) in &generic_struct_infos {
         if name == &list_name {
             continue;
         }
@@ -5470,12 +5403,7 @@ fn generate_fallback_impls(
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let struct_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_generic_instance(def, type_param_ids)
-        };
+        let struct_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_type = tt.make_ref(struct_type);
         generated.push(make_fallback(
             name,
@@ -5491,18 +5419,13 @@ fn generate_fallback_impls(
         .variants
         .iter()
         .filter(|v| v.type_params.is_empty())
-        .map(|v| v.name.clone())
+        .map(|v| (v.name.clone(), v.def))
         .collect();
-    for name in &variant_names {
+    for (name, def) in &variant_names {
         if !needs_fallback(name, ctx) {
             continue;
         }
-        let variant_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_variant(def)
-        };
+        let variant_type = tt.make_variant(*def);
         let ref_type = tt.make_ref(variant_type);
         generated.push(make_fallback(name, ref_type, variant_type, vec![], &mut tt));
         ctx.record_impl(name, &pair.target_trait.canonical().expect(KEYED));
@@ -5512,19 +5435,14 @@ fn generate_fallback_impls(
         .variants
         .iter()
         .filter(|v| !v.type_params.is_empty())
-        .map(|v| (v.name.clone(), v.type_params.clone()))
+        .map(|v| (v.name.clone(), v.type_params.clone(), v.def))
         .collect();
-    for (name, type_params) in &generic_variant_infos {
+    for (name, type_params, def) in &generic_variant_infos {
         if !needs_fallback(name, ctx) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
-        let variant_type = {
-            let def = tt
-                .decl_named_in(&name, &module_source)
-                .expect("the declaration being synthesised for exists");
-            tt.make_generic_instance(def, type_param_ids)
-        };
+        let variant_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_type = tt.make_ref(variant_type);
         generated.push(make_fallback(
             name,

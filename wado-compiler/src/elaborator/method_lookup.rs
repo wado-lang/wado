@@ -694,7 +694,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let ultimate = tt.get_ultimate_base_type(base_type_id);
                         tt.generic_type_args(ultimate).filter(|a| !a.is_empty())
                     };
-                    (crate::name::split_base_name(name).to_string(), args)
+                    (name.clone(), args)
                 } else {
                     (name.clone(), None)
                 };

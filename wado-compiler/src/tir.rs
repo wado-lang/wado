@@ -5460,6 +5460,8 @@ pub struct TirField {
 
 #[derive(Debug, Clone)]
 pub struct TirEnum {
+    /// The declaration this was reified from.
+    pub def: crate::defs::DefId,
     pub name: String,
     pub module_source: ModuleSource,
     pub visibility: crate::ast::Visibility,
@@ -5489,6 +5491,8 @@ pub struct TirEnumCase {
 /// Represented as `ResolvedType::Flags`; each member is a bitmask value (1 << index).
 #[derive(Debug, Clone)]
 pub struct TirFlags {
+    /// The declaration this was reified from.
+    pub def: crate::defs::DefId,
     pub name: String,
     pub module_source: ModuleSource,
     pub visibility: crate::ast::Visibility,
@@ -5611,6 +5615,8 @@ pub struct TirEffectOp {
 /// effects and resources uniformly.
 #[derive(Debug, Clone)]
 pub struct TirResource {
+    /// The declaration this was reified from.
+    pub def: crate::defs::DefId,
     pub name: String,
     pub visibility: crate::ast::Visibility,
     pub operations: Vec<TirEffectOp>,

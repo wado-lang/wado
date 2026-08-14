@@ -675,11 +675,8 @@ impl Semantics {
             .modules
             .get(module)
             .ok_or(SymbolResolveError::ModuleNotLoaded)?;
-        let want_type = crate::name::split_base_name(&receiver.type_name);
-        let want_trait = receiver
-            .trait_name
-            .as_deref()
-            .map(crate::name::split_base_name);
+        let want_type = receiver.base_type_name();
+        let want_trait = receiver.base_trait_name();
 
         for item in &ast.items {
             match item {
@@ -722,11 +719,8 @@ impl Semantics {
         let Some(ast) = self.modules.get(module) else {
             return names;
         };
-        let want_type = crate::name::split_base_name(&receiver.type_name);
-        let want_trait = receiver
-            .trait_name
-            .as_deref()
-            .map(crate::name::split_base_name);
+        let want_type = receiver.base_type_name();
+        let want_trait = receiver.base_trait_name();
         for item in &ast.items {
             match item {
                 Item::Impl(b) if receiver_matches_impl(b, want_type, want_trait) => {

@@ -1,0 +1,31 @@
+// A local struct's fields must be reachable from its *type*, not only from
+// its name in scope. When a local struct reaches a use site through a generic
+// instantiation, the walk holds the type and no spelling: field lookup keyed
+// on the rendered name asked the enclosing module for a `Point`, found none,
+// and typed every field `unknown` — `core:args::parse::<Options>()` on a local
+// `Options` failed with "operator `==` cannot be applied to types `unknown`
+// and `String`".
+
+fn wrap<T>(value: T) -> Option<T> {
+    return Some(value)
+}
+
+fn first<T>(values: List<T>) -> Option<T> {
+    for v of values {
+        return Some(v)
+    }
+    return None
+}
+
+test "field access on a local struct reached through a generic instantiation" {
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+
+    let wrapped = wrap(Point { x: 1, y: 2 });
+    assert wrapped matches { Some(p) && p.x == 1 && p.y == 2 };
+
+    let listed = first([Point { x: 3, y: 4 }]);
+    assert listed matches { Some(p) && p.x == 3 && p.y == 4 };
+}

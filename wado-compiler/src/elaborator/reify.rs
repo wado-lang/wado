@@ -797,6 +797,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// AST shape; cases keep their declared index.
     fn reify_enum(&self, enum_decl: &ast::EnumDecl) -> TirEnum {
         TirEnum {
+            def: self
+                .tysys
+                .resolutions
+                .defs()
+                .of_ast_id(enum_decl.id)
+                .expect("an `enum` declaration is declared"),
             name: enum_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: enum_decl.visibility,
@@ -825,6 +831,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let def = self.tysys.resolutions.defs().of_ast_id(flags_decl.id)?;
         let info = self.tysys.all_flags_cases.get(&def)?;
         Some(TirFlags {
+            def,
             name: flags_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: flags_decl.visibility,
@@ -1169,6 +1176,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_effect_ops(decl.id)
             .expect("resolve_resource_decl records op signatures for every resource reify emits");
         tir::TirResource {
+            def: self
+                .tysys
+                .resolutions
+                .defs()
+                .of_ast_id(decl.id)
+                .expect("a `resource` declaration is declared"),
             name: decl.name.clone(),
             visibility: decl.visibility,
             operations,

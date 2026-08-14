@@ -1,0 +1,13 @@
+use { parse } from "core:args";
+use { Deserialize } from "core:serde";
+
+test {
+    struct Options {
+        #[wire(positional)]
+        input: String,
+        verbose: bool = false,
+    }
+    impl Deserialize for Options;
+
+    assert parse::<Options>(["in.txt", "--verbose"]) matches { Ok(opts) && opts.input == "in.txt" };
+}

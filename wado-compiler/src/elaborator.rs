@@ -1243,6 +1243,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().struct_fields_in(name, module_source)
     }
 
+    /// Field info for a struct type's head; see `TypeLookup::struct_fields_of`.
+    pub(super) fn lookup_struct_fields_of(
+        &self,
+        head: crate::tir::StructDef,
+    ) -> Option<&StructFieldInfo> {
+        self.type_lookup().struct_fields_of_head(head, || {
+            self.tysys.type_table.borrow().struct_head_name(head)
+        })
+    }
+
     /// Like [`Self::lookup_struct_fields_in`], but also considers the
     /// current function's own local structs — for resolving a
     /// source-written struct-literal name against a module, not an

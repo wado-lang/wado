@@ -593,7 +593,7 @@ compiles, passes the suite, and ends with a mechanical completion check.
       synthesised reference carries an `AstId::fresh` every consumer must
       tolerate a missing answer for. It did not gate it, for the reason above,
       and totality landed first.
-- [ ] `ResolvedType` nominal variants carry `DefId`. Done when `ResolvedType`
+- [x] `ResolvedType` nominal variants carry `DefId`. Done when `ResolvedType`
       holds no `(name, module_source)` pair.
 
       The sites that read the pair as an *identity* are the ones that change
@@ -705,7 +705,7 @@ compiles, passes the suite, and ends with a mechanical completion check.
         twelve exhaustive matches and silently orphans the anonymous struct at
         the other 121 sites that match `Struct` today.
 
-  - [ ] TIR declarations carry identity. This is the part that is structural
+  - [x] TIR declarations carry identity. This is the part that is structural
         rather than mechanical. `Lowering` keys its variant-case and
         struct-field maps by `TirVariant` / `TirStruct`'s own
         `(name, module_source)`, so the pattern translator reaches a case index
@@ -713,6 +713,52 @@ compiles, passes the suite, and ends with a mechanical completion check.
         declaration carries one, which reaches to codegen — and it is what
         `ResolvedType` losing the pair forces, since a downstream consumer will
         have nothing to read off the type.
+
+        What a struct's identity is, here, is the same pair the type carries:
+        `TirStruct` holds `(StructDef, Vec<TypeId>)`, not a bare `DefId`. A
+        `DefId` alone cannot key the field map, because `TreeMap<String, i32>`
+        and `TreeMap<K, V>` share a declaration and not a field list; the
+        head-and-args pair is the type's own intern key, so keying on it is
+        the same question the map was asking, minus the rendering step. The
+        variant map does take a bare `DefId`: case names and indices belong to
+        the declaration, and an instantiation adds nothing to them.
+
+        Carrying the identity is what emptied most of `synthesis/traits.rs`,
+        which held 33 of the 80 remaining `decl_named_in` callers and now
+        holds none. Every one had the same shape: a `collect_*` pass walks
+        `module.structs` / `.variants` / `.enums`, keeps the name and drops
+        the declaration, and the consumer asks for the declaration back. The
+        fix is to keep it — the collectors return it, and the synthesis
+        targets (`ReflectTarget`, `ReflectVariantTarget`, `ReflectEnumTarget`)
+        carry it too.
+
+        That collapse is also what surfaced the defect the design predicts.
+        A function-local `struct` has no module-level declaration, so every
+        name-keyed lookup for one answers `None` — and `lookup_field_type`
+        was name-keyed. A local struct's fields were reachable while its name
+        was in scope (a struct literal resolves through the function-local
+        tier), and unreachable once its type arrived through a generic
+        instantiation carrying no spelling: `parse::<Options>(…)` on a local
+        `Options` typed every field `unknown`. Field lookup now asks the
+        struct's head, and the two paths that had disagreed became one.
+
+        What is left of that residue is a different question, and a smaller
+        one. Ten of the forty-seven are `TypeTable`'s own stdlib constructors
+        — `make_future`, `make_stream`, `make_byte_list` — each spelling a
+        prelude type with a string literal and a guessed module. They are
+        fabrications by the same definition, but they name types the compiler
+        itself owns, which is what the compiler-item registry is for; they
+        close by gaining a `CompilerItem`, not by carrying an identity from
+        somewhere upstream.
+
+        Carrying the identity is what made four more `decl_named_in` callers
+        collapse — `reify_variant_decl`, the `Box` plan, `instantiate_struct`
+        and the reflect bridge each already held the declaration they were
+        asking for by name — and it exposed one site that was asking for a
+        declaration that never existed: an anonymous struct literal looked up
+        `__anon_{a:i32}` in the declaration index, which only answered because
+        the literal path had registered its own rendered spelling there first.
+        Interning the shape removes both halves.
 - [x] `RequiredTrait` carries a `Resolution`. A qualified call's trait prefix
       can name a type-parameter binder or reach no declaration, so a bare
       `DefId` cannot stand for it — the answer the site already has can.
@@ -796,7 +842,8 @@ The numbers this design is aimed at, measured over `wado-compiler/src`:
 | `type_implements_trait` callers passing no identity | 16 of 30     | 0 of 30 |
 | spelling comparisons in trait dispatch              | 2            | 0       |
 | synthesised references a consumer re-resolves       | 2            | 0       |
-| mangled-name parsing functions                      | 7            | 6       |
+| mangled-name parsing functions                      | 7            | 5       |
+| `decl_named_in` callers — the name-keyed residue     | 121          | 47      |
 | `decl_key_or_local` occurrences — the fabrication   | 26           | 30      |
 
 Each row reaches zero — or one, for the rows counting implementations — when its

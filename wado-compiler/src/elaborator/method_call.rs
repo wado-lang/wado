@@ -922,8 +922,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ultimate = tt.get_ultimate_base_type(method_impl_type_id);
                     tt.generic_type_args(ultimate).unwrap_or_default()
                 };
-                let head =
-                    FqTypeName::declared(&module_source, crate::name::split_base_name(&name));
+                let head = FqTypeName::declared(&module_source, &name);
                 let type_arg_names: Vec<FqTypeName> = type_args
                     .iter()
                     .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
