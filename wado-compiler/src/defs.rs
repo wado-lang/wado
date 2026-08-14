@@ -160,6 +160,15 @@ struct Def {
     parent: Option<DefId>,
     /// Members declared inside this one, in source order.
     members: Vec<DefId>,
+    /// Declared inside a function body rather than at module level.
+    ///
+    /// Two sibling functions may each declare a `struct Point`, and both are
+    /// this module's `Point`, so the declared name alone cannot tell them
+    /// apart. Every registry keyed by a rendered name — the WIR struct
+    /// registry above all — needs the distinction, which is why
+    /// [`crate::name::mangle_local_item_name`] exists; this is how a renderer
+    /// knows to apply it.
+    function_local: bool,
 }
 
 /// Every declaration in the program, by [`DefId`].
@@ -214,6 +223,7 @@ impl DefTable {
                 visibility: symbol.visibility,
                 span: symbol.span,
                 parent: None,
+                function_local: false,
                 members: Vec::new(),
             });
         }
@@ -234,6 +244,7 @@ impl DefTable {
                         visibility: decl.visibility,
                         span: Some(decl.span),
                         parent: None,
+                        function_local: false,
                         members: Vec::new(),
                     });
                 }
@@ -298,6 +309,7 @@ impl DefTable {
             visibility: item.visibility().unwrap_or(Visibility::Private),
             span: Some(item.span()),
             parent: None,
+            function_local: true,
             members: Vec::new(),
         });
         self.declare_item_members(module, item);
@@ -379,6 +391,7 @@ impl DefTable {
                     visibility: member.visibility.unwrap_or(owner_visibility),
                     span: Some(member.span),
                     parent: Some(owner),
+                    function_local: false,
                     members: Vec::new(),
                 })
             });
@@ -402,6 +415,16 @@ impl DefTable {
     #[must_use]
     pub fn name(&self, def: DefId) -> &str {
         &self.get(def).name
+    }
+
+    /// Whether `def` was declared inside a function body.
+    ///
+    /// A renderer needs this: two sibling functions' `struct Point` are two
+    /// declarations with one name, and a name-keyed registry downstream cannot
+    /// tell them apart unless the rendering does.
+    #[must_use]
+    pub fn is_function_local(&self, def: DefId) -> bool {
+        self.defs[def.0 as usize].function_local
     }
 
     /// The node that declares `def`.
@@ -479,6 +502,7 @@ impl DefTable {
             visibility: Visibility::Public,
             span: None,
             parent: None,
+            function_local: false,
             members: Vec::new(),
         })
     }

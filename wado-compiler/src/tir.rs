@@ -1092,6 +1092,25 @@ impl TypeTable {
         self.defs.name(def)
     }
 
+    /// The name `def` renders to — its declared name, with a function-local
+    /// declaration's disambiguator applied.
+    ///
+    /// [`Self::def_name`] is the *declared* name, which is what an `impl`
+    /// header spells and what a by-name declaration lookup keys on. This is
+    /// the *rendered* one, which is what a mangle embeds and what every
+    /// name-keyed downstream registry stores. They differ for exactly one kind
+    /// of declaration: two sibling functions may each declare a `struct
+    /// Point`, and a registry keyed on the declared name would hold one entry
+    /// for two types.
+    #[must_use]
+    pub fn decl_render_name(&self, def: crate::defs::DefId) -> String {
+        let name = self.defs.name(def);
+        if self.defs.is_function_local(def) {
+            return crate::name::mangle_local_item_name(name, self.defs.ast_id(def));
+        }
+        name.to_string()
+    }
+
     /// The module that declares `def`.
     #[must_use]
     pub fn def_module(&self, def: crate::defs::DefId) -> &ModuleSource {
@@ -1165,7 +1184,7 @@ impl TypeTable {
     #[must_use]
     pub fn struct_head_name(&self, head: StructDef) -> String {
         match head {
-            StructDef::Decl(def) => self.def_name(def).to_string(),
+            StructDef::Decl(def) => self.decl_render_name(def),
             StructDef::Anon(id) => self.anon_struct_name(id),
         }
     }
@@ -1273,10 +1292,9 @@ impl TypeTable {
             | ResolvedType::Flags { def }
             | ResolvedType::Newtype { def, .. }
             | ResolvedType::GenericInstance { def, .. }
-            | ResolvedType::GenericResource { def, .. } => Some((
-                self.def_name(*def).to_string(),
-                self.def_module(*def).clone(),
-            )),
+            | ResolvedType::GenericResource { def, .. } => {
+                Some((self.decl_render_name(*def), self.def_module(*def).clone()))
+            }
             _ => None,
         }
     }

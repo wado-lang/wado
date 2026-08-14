@@ -791,28 +791,29 @@ compiles, passes the suite, and ends with a mechanical completion check.
       states, and it was still underestimated: the constructors are the work.
       Every one of these is a construction site that kept its spelling.
 
-- [ ] Tuple trait dispatch cannot resolve `[a,b]^Trait::method`. Half of it
-      was the spelling, and that half is fixed. The other half is not the
-      module: the theory that `module_source_for_trait_impl` answering with
-      the family's declaring module (`core:prelude/types.wado`) rather than
-      its impls' (`core:prelude/tuple.wado`) was the cause was tested and
-      refuted — making it answer `None` changed nothing, 64/16 before and
-      after, and the edit was reverted rather than left in on a hunch.
+- [x] Tuple trait dispatch resolves again. The tuple family becoming a
+      declaration gave it a *module*, and three of the four routes into
+      `FqTypeName` then spelled it `core:prelude/types.wado/[]<i32,String>` —
+      a name no impl is registered under and no other mangler produces. Trait
+      dispatch resolved to nothing: WIR build reported `[i32,String]` does
+      not implement `Inspect`, lowering minted an extern stub for a name the
+      package defines, and `package-gale` failed on the latter.
 
-      What is left is one observation, from a single diagnostic:
+      The tuple is the one declaration whose spelling is not
+      `Module/Head<args>` — it is `[a,b]`, bare — so the decision belongs at
+      every constructor, not just at `tuple`. `builtin`, `of_head` and
+      `declared` now agree with it, and the unit test walks all four routes.
+      80 fixtures across `inspect_*`, `tuple_*`, `serde_json_tuple` and
+      `variadic_tuple_literal_index`, at O0 and O2, were 64/16 and are now
+      80/0.
 
-          type `[]<i32,String,bool>` does not implement trait `Inspect`;
-          type `[f64,f64]` does not implement trait `Inspect`
-
-      Two tuple receivers, one message, two spellings — *after* the `builtin`
-      fix. So the wrong one is not minted through `FqTypeName` at all. Find
-      who builds a call name for a tuple receiver by another route, and the
-      cluster goes with it.
-
-      The older entry this replaces is worth keeping only as a warning: the
-      declaring module and the impl module genuinely do differ for the tuple
-      family, and that is genuinely against the convention the monomorphizer
-      falls back on. It is still not what breaks this.
+      One refuted theory is worth recording so it is not re-run. The
+      declaring module and the impl module genuinely do differ for this
+      family — the declaration is in `types.wado`, every `impl … for [..T]`
+      in `tuple.wado` — and that genuinely violates the convention
+      `module_source_for_trait_impl` falls back on. Making it answer `None`
+      for a tuple changed nothing, 64/16 before and after. The module was
+      never the problem; the spelling was, twice.
       `module_source_for_trait_impl` reads a receiver's declaring module and
       the monomorphizer falls through to it "by convention" when no per-type
       impl answers — the convention being that a generic `impl` for a type
