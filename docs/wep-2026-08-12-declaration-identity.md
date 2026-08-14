@@ -794,7 +794,17 @@ compiles, passes the suite, and ends with a mechanical completion check.
       Every one of these is a construction site that kept its spelling.
 
       All but one are now closed, leaving a single fixture at two
-      optimization levels. A local `type
+      optimization levels — a generic `struct` declared inside a `test`
+      block, which reaches WIR build and fails to find its instantiation
+      registered.
+
+      Its lesson is about measurement, not identity. The WIR panic names the
+      type through `mangle_type_name`, whose `GenericInstance` arm reads
+      `def_name` — the *declared* name — so it prints `Box` whether or not
+      the declaration is flagged function-local. Two rounds were spent
+      inferring "the flag is unset" from that message; probing the flag
+      directly showed it set. A diagnostic rendered through a different path
+      than the one under test is not evidence about that path. A local `type
       UserId = …` still reports `UserId does not implement Inspect`; giving
       `synthesis/traits.rs`'s newtype loops the type's rendered name instead
       of the declared one changed nothing, measured, and was reverted. And an
