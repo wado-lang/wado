@@ -118,10 +118,11 @@ fn classify(
             } else if deletable(engine, value, effects) {
                 Action::Drop
             } else {
-                // Effectful or trap-capable ⟹ a skeleton expr (a promoted value
-                // is pure and non-trapping → Drop above). Demote keeps it as a
-                // bare `Expr(value)` so any trap it carries still fires.
-                value.as_expr().map_or(Action::Drop, Action::Demote)
+                // Effectful or trap-capable. A skeleton expr demotes to a bare
+                // `Expr(value)`, which still runs its trap; a promoted value has
+                // no `ExprId` to demote to, so the binding stays as the thing
+                // that runs it.
+                value.as_expr().map_or(Action::Keep, Action::Demote)
             }
         }
         // `x = value;` (Assign at stmt position) where `x` is unread. This
@@ -165,9 +166,9 @@ fn classify(
                     return if deletable(engine, value, effects) {
                         Action::Drop
                     } else {
-                        // Effectful or trap-capable ⟹ a skeleton expr (a promoted
-                        // value is pure and non-trapping → Drop above).
-                        value.as_expr().map_or(Action::Drop, Action::Demote)
+                        // Effectful or trap-capable; see the `Let` arm above for
+                        // why a promoted value is kept rather than demoted.
+                        value.as_expr().map_or(Action::Keep, Action::Demote)
                     };
                 }
             }
