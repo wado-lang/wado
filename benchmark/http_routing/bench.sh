@@ -122,16 +122,16 @@ echo "=== Starting servers ==="
 "${SERVER_PIN[@]}" "$WADO_BIN" serve --addr "$WADO_ADDR" \
   --workers "$SERVER_CORE_COUNT" app.wado >/dev/null 2>&1 &
 PIDS+=($!)
-register "wado serve" "http://${WADO_ADDR}"
+register "Wado (wado serve)" "http://${WADO_ADDR}"
 
 PORT="$HONO_PORT" "${SERVER_PIN[@]}" node app.js >/dev/null 2>&1 &
 PIDS+=($!)
-register "Hono (Node)" "http://127.0.0.1:${HONO_PORT}"
+register "JavaScript (Hono on Node)" "http://127.0.0.1:${HONO_PORT}"
 
 if command -v bun >/dev/null 2>&1; then
   PORT="$BUN_PORT" "${SERVER_PIN[@]}" bun run app.bun.js >/dev/null 2>&1 &
   PIDS+=($!)
-  register "Hono (Bun)" "http://127.0.0.1:${BUN_PORT}"
+  register "JavaScript (Hono on Bun)" "http://127.0.0.1:${BUN_PORT}"
 else
   echo "  SKIP: bun not found (install bun or add it to benchmark/mise.toml)"
 fi
@@ -139,7 +139,7 @@ fi
 PORT="$AXUM_PORT" TOKIO_WORKER_THREADS="$SERVER_CORE_COUNT" \
   "${SERVER_PIN[@]}" ./target/release/axum_server >/dev/null 2>&1 &
 PIDS+=($!)
-register "Axum (native)" "http://127.0.0.1:${AXUM_PORT}"
+register "Rust (Axum)" "http://127.0.0.1:${AXUM_PORT}"
 
 for url in "${SERVER_URLS[@]}"; do
   wait_ready "${url}/status"
@@ -172,13 +172,13 @@ echo
 echo "=== Results: max req/s over ${ROUNDS} rounds (higher is better) ==="
 printf '%-44s' "Request"
 for name in "${SERVER_NAMES[@]}"; do
-  printf '%15s' "$name"
+  printf '%26s' "$name"
 done
 printf '\n'
 for ri in "${!REQUESTS[@]}"; do
   printf '%-44s' "${REQUESTS[$ri]}"
   for si in "${!SERVER_NAMES[@]}"; do
-    printf '%15s' "${BEST[${si}|${ri}]:-0}"
+    printf '%26s' "${BEST[${si}|${ri}]:-0}"
   done
   printf '\n'
 done
