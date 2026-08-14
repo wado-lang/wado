@@ -4,23 +4,19 @@
 # Run `mise install` to install managed tools.
 # C compiler (cc) is expected from the system for native C benchmarks.
 #
-# Optional: wasi-sdk (clang + wasi-sysroot) for the C zlib Wasm benchmark.
-# The mise-managed entry is currently commented out below to avoid
-# GitHub API rate-limit failures during artifact install on shared CI
-# runners. To enable C Wasm zlib measurements, either:
-#   * Uncomment the `wasi-sdk` line in `[tools]` and re-run `mise install`
-#     (works when GH artifact attestations are reachable), or
-#   * Install via apt (Ubuntu/Debian):
-#       apt install wasi-libc libclang-rt-18-dev-wasm32
-# The zlib task skips the C Wasm step gracefully if neither is available.
+# wasi-sdk (clang + wasi-sysroot) builds the C zlib Wasm benchmark. Its install
+# verifies GitHub artifact attestations, so a rate-limited runner can fail to
+# fetch it; an apt wasi-sysroot works too (`apt install wasi-libc
+# libclang-rt-18-dev-wasm32`), and the zlib task skips the C Wasm step when
+# neither is available.
 
 [settings]
 lockfile = true
 
 [tools]
 node = "latest"
-# bun = "latest"  # temp: skip for benchmark-all (403 on pinned download)
-# "github:WebAssembly/wasi-sdk" = "latest" # clang + wasm-ld + wasi-sysroot for C zlib Wasm (disabled: GH rate limit)
+bun = "latest"
+"github:WebAssembly/wasi-sdk" = "latest" # clang + wasm-ld + wasi-sysroot for C zlib Wasm
 
 [tasks.count-prime]
 description = "Run count_prime benchmark (integer arithmetic)"
@@ -123,7 +119,7 @@ if [ -n "$WASM_CLANG" ]; then
     eval $WASM_CLANG -O3 -I$ZLIB_SRC -o zlib/zlib_c.wasm zlib/zlib_c.c $ZLIB_SRCS $WASI_CRT1 $WASI_LIBC
     HAVE_C_WASM=1
 else
-    echo "SKIP: C Wasm (uncomment wasi-sdk in mise.toml + 'mise install', or apt install wasi-libc libclang-rt-dev-wasm32)"
+    echo "SKIP: C Wasm (run 'mise install' for wasi-sdk, or apt install wasi-libc libclang-rt-dev-wasm32)"
     HAVE_C_WASM=0
 fi
 
@@ -131,8 +127,12 @@ echo "=== zlib-rs (native Rust) ==="
 ./zlib/target/release/zlib_rs_bench
 
 if [ "$HAVE_C_WASM" -eq 1 ]; then
-    echo "=== C zlib (Wasm/wasmtime) ==="
-    wasmtime --dir .::. zlib/zlib_c.wasm
+    if command -v wasmtime >/dev/null 2>&1; then
+        echo "=== C zlib (Wasm/wasmtime) ==="
+        wasmtime --dir .::. zlib/zlib_c.wasm
+    else
+        echo "SKIP: C zlib Wasm run (wasmtime CLI not found; run 'mise run build-wasmtime')"
+    fi
 fi
 
 echo "=== JavaScript (Node) ==="
