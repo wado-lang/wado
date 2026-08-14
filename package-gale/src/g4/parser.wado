@@ -1782,7 +1782,7 @@ pub fn assemble_grammar(inputs: &List<[String, String]>) -> Result<Grammar, Asse
                 grammars.push(g);
             },
             Err(e) => {
-                return Result::Err(AssembleError::Parse([inp.0, e.message]));
+                return Result::Err(AssembleError::Parse([inp.0, e.full_message()]));
             },
         }
     }
@@ -1791,7 +1791,7 @@ pub fn assemble_grammar(inputs: &List<[String, String]>) -> Result<Grammar, Asse
         Ok(_) => {
         },
         Err(e) => {
-            return Result::Err(AssembleError::Check(e.message));
+            return Result::Err(AssembleError::Check(e.full_message()));
         },
     }
     return Result::Ok(merged);

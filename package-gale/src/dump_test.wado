@@ -316,29 +316,62 @@ INT : '1' ;
 STR : '\"' ;";
     let report = dump_source(&g);
 
-    let head = section_of(&report, &"rule r");
+    let head = section_of(&report, &"r");
     assert str_contains(&head, &"warning: overlap-tournament"), report;
     assert str_contains(&head, &"TK_ID"), report;
     // And it is still listed once in the summary, under the group's label.
     assert str_contains(&report, &"General group rGroup0:"), report;
 }
 
-/// The slice of `report` from the line introducing `header` to the next
-/// top-level rule header, so a per-rule assertion cannot pass on text that
-/// belongs to a different rule or to the trailing summary.
-fn section_of(report: &String, header: &String) -> String {
+/// The `rule <name>` section of a dump report: from its header line to the
+/// next rule header or the trailing summary, whichever comes first. A per-rule
+/// assertion run against this cannot pass on text belonging to another rule or
+/// to the summary, which repeats every diagnostic.
+///
+/// The header is matched whole (`rule r — Simple`, never a prefix of
+/// `rule r2 — …`) and the summary opens with `warnings`, which is what bounds
+/// the last rule's section.
+fn section_of(report: &String, rule_name: &String) -> String {
+    let header = `rule ${*rule_name} — `;
     let mut out = String::new();
     let mut inside = false;
     for let line of report.split("\n") {
         if line.starts_with("rule ") {
-            inside = line.starts_with(*header);
+            inside = line.starts_with(header);
+        } else if line.starts_with("warnings") {
+            inside = false;
         }
         if inside {
             out.push_str(&line);
             out.push('\n');
         }
     }
+    assert !out.is_empty(), `no '${header}' section in:\n${*report}`;
     return out;
+}
+
+test "section_of isolates one rule from its neighbours and the summary" {
+    // `r2` must not be swallowed by a `r` lookup, and the summary — which
+    // repeats every diagnostic — must not leak into the last rule's section.
+    let g = "grammar G;
+r : (ID INT | ID STR) ;
+r2 : ID ;
+ID : 'a' ;
+INT : '1' ;
+STR : '\"' ;";
+    let report = dump_source(&g);
+
+    let r = section_of(&report, &"r");
+    assert str_contains(&r, &"rule r — "), r;
+    assert !str_contains(&r, &"rule r2 — "), r;
+    assert !str_contains(&r, &"warnings ("), r;
+
+    // The last rule's section still stops before the summary.
+    let r2 = section_of(&report, &"r2");
+    assert str_contains(&r2, &"rule r2 — "), r2;
+    assert !str_contains(&r2, &"warnings ("), r2;
+    // ... which is where the group-scoped diagnostic is also listed.
+    assert str_contains(&report, &"General group rGroup0:"), report;
 }
 
 test "render_dump keeps an at-end alt out of an expanded opaque dispatch" {

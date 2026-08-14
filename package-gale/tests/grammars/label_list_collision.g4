@@ -12,8 +12,11 @@
 // - `leading_list` / `trailing_list` — a non-Repeat list label next to a label
 //   that wants the list element's own natural name, in both orders.
 // - `list_group` — the same, with a group as the list label's inner.
-// - `lazy_plus` — a label next to a non-greedy `+`, whose mandatory first
-//   iteration runs before the loop and so cannot be emitted inside it.
+// - `lazy_plus` / `lazy_plus_after` — a label next to a non-greedy `+`, whose
+//   mandatory first iteration runs before the loop and so cannot be emitted
+//   inside it. Both orders: emit can rebind against a name the alternative has
+//   already bound, but not against one it binds later, so the iteration needs
+//   a scope of its own either way.
 
 grammar label_list_collision;
 
@@ -35,6 +38,14 @@ list_group
 
 lazy_plus
     : tag = TAG  (TAG WORD)+? END EOF
+    ;
+
+lazy_plus_after
+    : (TAG WORD)+? END  tag = TAG EOF
+    ;
+
+lazy_plus_list_after
+    : items += (TAG WORD)+? END  tag = TAG EOF
     ;
 
 TAG  : 'tag' ;

@@ -711,24 +711,6 @@ fn emit_test_file(spec: &TestFileSpec, body: fn(&mut CodeWriter)) -> String {
     return w.to_string();
 }
 
-/// Emit one Stage B driver test file for a single descriptor.
-///
-/// The file lives at
-/// `tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado` so each
-/// descriptor's grammar can be imported via Kiln (`use ... with {
-/// generator: ... }`) under its own `output_dir`, which avoids the
-/// one-grammar-per-file aliasing that a single per-category test file
-/// would require.
-///
-/// The emitted test:
-///   1. Imports the descriptor's `.g4` through Gale's generator,
-///   2. Runs the generated parser on `[input]`,
-///   3. Compares `to_string_tree()` against the normalised `[output]`.
-///
-/// Triage (`[stage_b_todo]` / `[stage_b_skip]`) decorates the emission:
-/// `Skip` callers should not invoke this function at all; `Todo` causes
-/// the test to be `#[TODO]`-marked so a known-failing assertion is
-/// recorded on a separate axis from real failures (matches Stage A).
 /// True when the descriptor's own `[errors]` report a single-token deletion.
 ///
 /// ANTLR4 keeps the deleted token in the tree as a bare error node and puts
@@ -769,6 +751,24 @@ fn strip_doc_lines(strip: bool) -> List<String> {
     return [];
 }
 
+/// Emit one Stage B driver test file for a single descriptor.
+///
+/// The file lives at
+/// `tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado` so each
+/// descriptor's grammar can be imported via Kiln (`use ... with {
+/// generator: ... }`) under its own `output_dir`, which avoids the
+/// one-grammar-per-file aliasing that a single per-category test file
+/// would require.
+///
+/// The emitted test:
+///   1. Imports the descriptor's `.g4` through Gale's generator,
+///   2. Runs the generated parser on `[input]`,
+///   3. Compares `to_string_tree()` against the normalised `[output]`.
+///
+/// Triage (`[stage_b_todo]` / `[stage_b_skip]`) decorates the emission:
+/// `Skip` callers should not invoke this function at all; `Todo` causes
+/// the test to be `#[TODO]`-marked so a known-failing assertion is
+/// recorded on a separate axis from real failures (matches Stage A).
 fn emit_stage_b_test_file(
     category: &String,
     name: &String,

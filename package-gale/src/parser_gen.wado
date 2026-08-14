@@ -2790,79 +2790,23 @@ fn op_is_leaf(op: &Op) -> bool {
     };
 }
 
-/// Open a scope for a `Plus`'s mandatory first iteration, if it needs one.
+/// Open the scope for a `Plus`'s mandatory first iteration.
 ///
 /// That iteration has to run before the loop's exit test, so it cannot sit
 /// inside the loop body — but its bindings are still iteration-local: lower
 /// names a repeat body in the body's own table, blind to the surrounding
-/// alternative. Emitted bare they can redeclare what the alternative already
-/// bound (`b=B (B C)+?` would emit `let b` twice in one scope). Nothing
-/// outside the iteration reads those locals — the tree builder holds the
-/// matched values — so a block of their own is enough.
+/// alternative. Emitted bare they redeclare whatever the alternative binds
+/// under the same name, in either order — `b=B (B C)+?` collides with the
+/// label before it and `(B C)+? D b=B` with the one after it. Only the
+/// iteration's own scope settles both, so it always gets one rather than the
+/// emitter trying to predict a name the alternative has not bound yet.
 ///
-/// Returns whether a scope was opened; the caller closes it with `w.end()`.
-/// A body that collides with nothing is emitted bare, so a grammar that never
-/// hits the case keeps byte-identical output.
-fn begin_plus_first_iteration(w: &mut CodeWriter, body: &Op, name_counts: &mut List<[String, i32]>) -> bool {
-    if !op_binding_is_taken(body, name_counts) {
-        return false;
-    }
+/// Nothing outside the iteration reads those locals — the tree builder holds
+/// the matched values — so a block is enough. Caller closes it with `w.end()`.
+fn begin_plus_first_iteration(w: &mut CodeWriter, name_counts: &mut List<[String, i32]>) {
     w.begin(&`${dedup_name(&"_first_iter", name_counts)}:`);
-    return true;
 }
 
-fn end_plus_first_iteration(w: &mut CodeWriter, opened: bool) {
-    if opened {
-        w.end();
-    }
-}
-
-/// True when emitting `op`'s own bindings into the scope `name_counts`
-/// describes would redeclare a name that scope already holds. Only the
-/// bindings `op` places at this level count — a nested `Repeat` binds its own
-/// field here and emits its body inside its loop.
-fn op_binding_is_taken(op: &Op, name_counts: &List<[String, i32]>) -> bool {
-    return match op {
-        Token(t) => name_is_taken(&t.field, name_counts),
-        Literal(l) => name_is_taken(&l.field, name_counts),
-        RuleCall(r) => name_is_taken(&r.field, name_counts),
-        Wildcard(wop) => name_is_taken(&wop.field, name_counts),
-        Excluded(e) => name_is_taken(&e.field, name_counts),
-        Repeat(rep) => name_is_taken(&rep.field, name_counts),
-        ListLabel(ll) => op_binding_is_taken(&ll.inner, name_counts),
-        Group(g) => group_binding_is_taken(g, name_counts),
-    };
-}
-
-/// A group's own field plus everything its alternatives bind. Transparent and
-/// single-alt groups inline their inner ops at the group's own level, so those
-/// names land in this scope too; a dispatching group puts each alt in its own
-/// branch, where the answer only over-approximates — and only for a name the
-/// scope really does hold.
-fn group_binding_is_taken(g: &GroupOp, name_counts: &List<[String, i32]>) -> bool {
-    let own = match &g.shape {
-        Transparent => false,
-        TokenOnly(to) => name_is_taken(&to.field, name_counts),
-        SimpleCst(scst) => name_is_taken(&scst.field, name_counts),
-        SingleAlt(sa) => name_is_taken(&sa.field, name_counts),
-        General(gen) => name_is_taken(&gen.field, name_counts),
-    };
-    if own {
-        return true;
-    }
-    for let a of &g.alts {
-        for let inner of &a.ops {
-            if op_binding_is_taken(inner, name_counts) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-fn name_is_taken(name: &String, counts: &List<[String, i32]>) -> bool {
-    return peek_dedup_name(name, counts) != *name;
-}
 
 /// Emit `p.atn_ret_pending = <state>;` immediately before a `_parse_X` call
 /// so the callee's entry wrapper pushes the call's exact ATN return state
@@ -3481,9 +3425,9 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCon
     let cond = compute_non_greedy_condition(r, &r.caller_follow_first, &r.caller_follow_second, ctx);
     if non_greedy_probe_decides(r, ctx) {
         if let Plus = r.kind {
-            let scoped = begin_plus_first_iteration(w, &r.body, nc);
+            begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
-            end_plus_first_iteration(w, scoped);
+            w.end();
         }
         begin_non_greedy_probe_loop(w, r, ctx, nc);
         gen_op(w, &r.body, ctx, nc);
@@ -3493,9 +3437,9 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCon
     let loops = cond != "false";
     match r.kind {
         Plus => {
-            let scoped = begin_plus_first_iteration(w, &r.body, nc);
+            begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
-            end_plus_first_iteration(w, scoped);
+            w.end();
             if loops {
                 w.begin(&`while !p.recovering && (${cond})`);
                 gen_op(w, &r.body, ctx, nc);
@@ -3613,9 +3557,9 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
         };
         if !is_opt {
             if let Plus = r.kind {
-                let scoped = begin_plus_first_iteration(w, &r.body, nc);
+                begin_plus_first_iteration(w, nc);
                 gen_op(w, &r.body, ctx, nc);
-                end_plus_first_iteration(w, scoped);
+                w.end();
             }
             w.begin(&"loop");
             w.line(&"if p.recovering { break; }");
@@ -3645,9 +3589,9 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             w.end();
         },
         Plus => {
-            let scoped = begin_plus_first_iteration(w, &r.body, nc);
+            begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
-            end_plus_first_iteration(w, scoped);
+            w.end();
             w.begin(&`while !p.recovering && (${cond})`);
             gen_op(w, &r.body, ctx, nc);
             w.end();
@@ -4695,10 +4639,10 @@ fn gen_op_repeat_non_greedy_storable(
     let _ = dedup_name(&list_field, name_counts);
     // The body appends to the builder, so there is no `List<T>` to accumulate.
     if is_plus {
-        let scoped = begin_plus_first_iteration(w, &rep_op.body, name_counts);
+        begin_plus_first_iteration(w, name_counts);
         let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
-        end_plus_first_iteration(w, scoped);
+        w.end();
     }
     if non_greedy_probe_decides(rep_op, ctx) {
         begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
@@ -4748,10 +4692,10 @@ fn gen_op_repeat_non_greedy_transparent(
     };
     let _ = dedup_name(&rep_op.field, name_counts);
     if is_plus {
-        let scoped = begin_plus_first_iteration(w, &rep_op.body, name_counts);
+        begin_plus_first_iteration(w, name_counts);
         let mut nc: List<[String, i32]> = [];
         gen_op_group(w, g_op, inner, ctx, &mut nc);
-        end_plus_first_iteration(w, scoped);
+        w.end();
     }
     if non_greedy_probe_decides(rep_op, ctx) {
         begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
@@ -5090,9 +5034,9 @@ fn gen_op_repeat_star_plus_non_storable_group(
             // explicitly (no `_plus_first` flag) and then a `while first`
             // loop. The K-prefix gate goes inside the while loop (after
             // the mandatory first iter ran above).
-            let scoped = begin_plus_first_iteration(w, &rep_op.body, name_counts);
+            begin_plus_first_iteration(w, name_counts);
             gen_op_group(w, g_op, inner, ctx, name_counts);
-            end_plus_first_iteration(w, scoped);
+            w.end();
             w.begin(&`while !p.recovering && (${ctx.first_check_str(&inner_first)})`);
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];

@@ -55,3 +55,19 @@ test "non-greedy plus: mandatory first iteration keeps its own scope" {
         &"(lazy_plus tag tag word tag word end)",
     );
 }
+
+test "non-greedy plus: a label after the repeat keeps its own name" {
+    // The mirror of the case above: emit cannot rebind against a name the
+    // alternative has not bound yet, so the first iteration is scoped either
+    // way rather than only when a collision is already visible.
+    assert_tree_of(
+        &g::parse_lazy_plus_after(&"tag word end tag"),
+        &"tag word end tag",
+        &"(lazy_plus_after tag word end tag)",
+    );
+    assert_tree_of(
+        &g::parse_lazy_plus_list_after(&"tag word end tag"),
+        &"tag word end tag",
+        &"(lazy_plus_list_after tag word end tag)",
+    );
+}
