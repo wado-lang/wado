@@ -5774,6 +5774,13 @@ pub struct TirImport {
 /// `method_info` is auxiliary metadata for name formatting.
 #[derive(Debug, Clone)]
 pub struct InstantiationKey {
+    /// The generic declaration being instantiated, where the site holds one.
+    ///
+    /// `name` cannot stand in for it: two sibling functions may each declare a
+    /// `struct Box<T>` in one module, and a `(name, module)` lookup answers
+    /// with whichever was declared first — collapsing two distinct types onto
+    /// one. `None` for a function or enum instantiation, which key by name.
+    pub def: Option<crate::defs::DefId>,
     /// Name of the generic item (struct, function, or enum)
     pub name: String,
     /// Module where the generic item is defined.
@@ -5790,7 +5797,8 @@ pub struct InstantiationKey {
 
 impl PartialEq for InstantiationKey {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+        self.def == other.def
+            && self.name == other.name
             && self.module_source == other.module_source
             && self.impl_type_args == other.impl_type_args
             && self.method_type_args == other.method_type_args
@@ -5801,6 +5809,7 @@ impl Eq for InstantiationKey {}
 
 impl std::hash::Hash for InstantiationKey {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.def.hash(state);
         self.name.hash(state);
         self.module_source.hash(state);
         self.impl_type_args.hash(state);

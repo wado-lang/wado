@@ -269,7 +269,8 @@ impl Monomorphizer {
                 // and nothing downstream is registered for it.
                 let rendered_key = {
                     let tt = type_table.borrow();
-                    tt.decl_named_in(&key.name, &key.module_source)
+                    key.def
+                        .or_else(|| tt.decl_named_in(&key.name, &key.module_source))
                         .map(|def| (tt.decl_render_name(def), key.module_source.clone()))
                         .filter(|k| *k != struct_key)
                 };

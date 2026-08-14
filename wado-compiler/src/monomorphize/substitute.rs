@@ -199,6 +199,7 @@ impl Monomorphizer {
 
                 if all_concrete {
                     let key = crate::tir::InstantiationKey {
+                        def: Some(*def),
                         name: name.clone(),
                         module_source: module_source.clone(),
                         impl_type_args: type_args.clone(),

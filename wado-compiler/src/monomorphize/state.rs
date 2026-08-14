@@ -295,6 +295,7 @@ impl Monomorphizer {
             return false;
         }
         let base_key = InstantiationKey {
+            def: None,
             method_type_args: Vec::new(),
             ..key.clone()
         };
@@ -395,8 +396,9 @@ impl Monomorphizer {
         // this instantiation spells — a function-local generic struct carries
         // its disambiguator, so two sibling functions' `struct Pair<A, B>` do
         // not register as one wasm-GC type.
-        let head = type_table
-            .decl_named_in(&key.name, &key.module_source)
+        let head = key
+            .def
+            .or_else(|| type_table.decl_named_in(&key.name, &key.module_source))
             .map_or_else(|| key.name.clone(), |def| type_table.decl_render_name(def));
         mangle_generic_name(&head, &args)
     }

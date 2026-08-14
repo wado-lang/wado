@@ -761,6 +761,7 @@ impl Monomorphizer {
             if impl_type_args.len() + method_type_args.len() >= generic_func.impl_type_params.len()
             {
                 let key = InstantiationKey {
+                    def: None,
                     name: generic_method_name,
                     module_source: generic_func.module_source.clone(),
                     impl_type_args,
@@ -798,6 +799,7 @@ impl Monomorphizer {
                 // Check if this is a call to a generic function with explicit type args
                 if !type_args.is_empty() && generic_functions.contains_key(&qualified_func_key) {
                     let key = InstantiationKey {
+                        def: None,
                         name: qualified_func_key.1,
                         module_source: func.module_source.clone(),
                         impl_type_args: vec![],
@@ -936,6 +938,7 @@ impl Monomorphizer {
                                 let method_type_args =
                                     declared_method_type_args(&gf.borrow(), type_args);
                                 let key = InstantiationKey {
+                                    def: None,
                                     name: full_method_name.clone(),
                                     module_source: template_module,
                                     impl_type_args: vec![],
@@ -1033,6 +1036,7 @@ impl Monomorphizer {
                                             let template_module =
                                                 generic_func.module_source.clone();
                                             let key = InstantiationKey {
+                                                def: None,
                                                 name: generic_method_name.clone(),
                                                 module_source: template_module,
                                                 impl_type_args,
@@ -1187,6 +1191,7 @@ impl Monomorphizer {
                                 let method_info = generic_func.method_info.clone();
                                 let template_module = generic_func.module_source.clone();
                                 let key = InstantiationKey {
+                                    def: None,
                                     name: generic_method_name.clone(),
                                     module_source: template_module,
                                     impl_type_args: effective_impl_type_args,
@@ -1259,6 +1264,7 @@ impl Monomorphizer {
                                 // "module_source = body's home" invariant.
                                 let template_module = generic_func.module_source.clone();
                                 let key = InstantiationKey {
+                                    def: None,
                                     name: generic_method_name.clone(),
                                     module_source: template_module,
                                     impl_type_args,
@@ -1377,6 +1383,7 @@ impl Monomorphizer {
                     };
                     let template_module = generic_func.module_source.clone();
                     let key = InstantiationKey {
+                        def: None,
                         name: mono.generic_name.clone(),
                         module_source: template_module,
                         impl_type_args: impl_ta,
@@ -1447,6 +1454,7 @@ impl Monomorphizer {
                             let template_module = generic_func.module_source.clone();
                             drop(generic_func);
                             let key = InstantiationKey {
+                                def: None,
                                 name: generic_name,
                                 module_source: template_module,
                                 impl_type_args,
@@ -1477,6 +1485,7 @@ impl Monomorphizer {
                     let qualified_func_key = generic_function_key(false, module_source, name);
                     if generic_functions.contains_key(&qualified_func_key) {
                         let key = InstantiationKey {
+                            def: None,
                             name: qualified_func_key.1,
                             module_source: module_source.clone(),
                             impl_type_args: vec![],
