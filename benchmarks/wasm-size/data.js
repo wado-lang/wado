@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786746545579,
+  "lastUpdate": 1786751488609,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47929,6 +47929,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b47088c66ef4a129521e19ba7dd2746c3a2d8c5f"
         },
         "date": 1786746544762,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5c475beb75854b0953bca1d0922ff779a35e02af",
+          "message": "Merge pull request #1811 from wado-lang/claude/module-visible-types-from-resolutions\n\nrefactor(elaborator): read a module's visible type names off the resolution table",
+          "timestamp": "2026-08-15T08:40:41+09:00",
+          "tree_id": "8173e8cacf5e08ac3235817745d556c4bc87d4fa",
+          "url": "https://github.com/wado-lang/wado/commit/5c475beb75854b0953bca1d0922ff779a35e02af"
+        },
+        "date": 1786751488268,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
