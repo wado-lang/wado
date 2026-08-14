@@ -101,11 +101,11 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
 
     // For `try_expand_deref_aggregate_assign`.
     let mut struct_fields_map: IndexMap<
-        (String, crate::module_source::ModuleSource),
+        (crate::tir::StructDef, Vec<crate::tir::TypeId>),
         Vec<crate::tir::TirField>,
     > = IndexMap::default();
     for s in &structs {
-        struct_fields_map.insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
+        struct_fields_map.insert((s.def, s.type_args.clone()), s.fields.clone());
     }
     // Pre-register every in-package function's canonical `FuncId` (its position,
     // 1:1 with the final function list). Calls stamp against this at construction.
@@ -224,7 +224,7 @@ struct Translator<'a> {
     closure: &'a closure::ClosurePlan,
     type_table: Rc<RefCell<TypeTable>>,
     struct_fields_map:
-        IndexMap<(String, crate::module_source::ModuleSource), Vec<crate::tir::TirField>>,
+        IndexMap<(crate::tir::StructDef, Vec<crate::tir::TypeId>), Vec<crate::tir::TirField>>,
     /// Mints each call's canonical `FuncId` at construction ("born resolved"),
     /// so the call node never carries a `FunctionRef`. In-package callees resolve
     /// against the pre-built `FunctionId → FuncId` map (positions in
@@ -843,20 +843,9 @@ impl FunctionTranslator<'_, '_> {
         let inner_resolved = self.base.type_table.borrow().get(inner_type_id).clone();
         let fields: Vec<(String, u32, tir::TypeId)> =
             if let crate::tir::ResolvedType::Struct { def, type_args } = inner_resolved {
-                let module_source = self
-                    .base
-                    .type_table
-                    .borrow()
-                    .struct_head_module(def)
-                    .clone();
-                let name = self
-                    .base
-                    .type_table
-                    .borrow()
-                    .struct_rendered_name(def, &type_args);
                 self.base
                     .struct_fields_map
-                    .get(&(name, module_source))?
+                    .get(&(def, type_args))?
                     .iter()
                     .map(|f| (f.name.clone(), f.index, f.type_id))
                     .collect()
@@ -1793,10 +1782,7 @@ impl FunctionTranslator<'_, '_> {
                         {
                             self.base
                                 .struct_fields_map
-                                .get(&(
-                                    tt.struct_rendered_name(*def, type_args),
-                                    tt.struct_head_module(*def).clone(),
-                                ))
+                                .get(&(*def, type_args.clone()))
                                 .and_then(|fields| fields.first())
                                 .map(|f| f.type_id)
                         }
@@ -2091,14 +2077,16 @@ impl FunctionTranslator<'_, '_> {
     /// into `struct_fields_map`, but `String` is guaranteed present.
     fn seq_u8_repr_type(&self) -> tir::TypeId {
         use crate::compiler_item::{CompilerItem, SeqField};
-        let (string_module, string_name) = self
-            .base
-            .type_table
-            .borrow()
-            .compiler_struct_owned(CompilerItem::String);
+        let string_head = crate::tir::StructDef::Decl(
+            self.base
+                .type_table
+                .borrow()
+                .compiler_item_def(CompilerItem::String)
+                .expect("the `String` compiler item is declared"),
+        );
         self.base
             .struct_fields_map
-            .get(&(string_name, string_module))
+            .get(&(string_head, Vec::new()))
             .and_then(|fields| {
                 fields
                     .iter()

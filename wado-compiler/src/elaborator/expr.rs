@@ -4063,31 +4063,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect()
         };
 
-        // Generate a deterministic name from field names and types
-        let anon_name = {
-            let mut parts = Vec::new();
-            for (fname, fty) in &effective_fields {
-                let type_name = self.tysys.type_table.borrow().type_name(*fty);
-                parts.push(format!("{fname}:{type_name}"));
-            }
-            format!("__anon_{{{}}}", parts.join(","))
-        };
+        // An anonymous struct literal names no declaration: its head is the
+        // shape its fields make, so two literals of one shape intern to one
+        // type, and the rendered spelling is derived from that shape.
+        let shape = self.tysys.type_table.borrow_mut().intern_anon_struct(
+            self.current_module_source.clone(),
+            effective_fields
+                .iter()
+                .map(|(fname, fty)| (fname.clone(), *fty))
+                .collect(),
+        );
+        let head = crate::tir::StructDef::Anon(shape);
+        let anon_name = self.tysys.type_table.borrow().anon_struct_name(shape);
 
         let module_source = self.current_module_source.clone();
 
-        // Check if this anonymous struct type already exists (structural equivalence)
-        let existing_type = {
-            let def = self
-                .tysys
-                .type_table
-                .borrow()
-                .decl_named_in(&anon_name, &module_source)
-                .expect("the declaration this type names exists");
-            self.tysys
-                .type_table
-                .borrow()
-                .find_struct_type(crate::tir::StructDef::Decl(def))
-        };
+        let existing_type = self.tysys.type_table.borrow().find_struct_type(head);
         if let Some(existing_type) = existing_type {
             self.record_generic_instantiation_with_mangle(
                 struct_lit.id,
@@ -4101,19 +4092,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return existing_type;
         }
 
-        // Register the new anonymous struct type
-        let struct_type = {
-            let def = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .decl_named_in(&anon_name, &module_source)
-                .expect("the declaration this type names exists");
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_struct(crate::tir::StructDef::Decl(def))
-        };
+        let struct_type = self.tysys.type_table.borrow_mut().make_struct(head);
 
         // Register field info so field access works
         let field_info = super::types::StructFieldInfo {
@@ -4156,6 +4135,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         self.sem.decls.pending_anonymous_structs.push(TirStruct {
+            def: head,
+            type_args: Vec::new(),
             name: anon_name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: crate::ast::Visibility::Private,

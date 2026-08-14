@@ -394,6 +394,7 @@ fn synthesize_dispatch_struct(
     let struct_name;
     let global_name;
     let struct_type_id;
+    let struct_head;
     let inner_ref_type_id;
     let nullable_ref_type_id;
     let mut op_field_types: Vec<TypeId> = Vec::with_capacity(meta.operations.len());
@@ -402,12 +403,11 @@ fn synthesize_dispatch_struct(
         label = instantiation_label(base_name, type_args, &tt);
         struct_name = crate::name::dispatch_struct_name(&label);
         global_name = crate::name::dispatch_global_name(&label);
-        struct_type_id = {
-            let def = tt
-                .decl_named_in(&struct_name, &entry_source)
-                .expect("the declaration this type names exists");
-            tt.make_struct(crate::tir::StructDef::Decl(def))
-        };
+        struct_head = crate::tir::StructDef::Decl(
+            tt.decl_named_in(&struct_name, &entry_source)
+                .expect("the declaration this type names exists"),
+        );
+        struct_type_id = tt.make_struct(struct_head);
         inner_ref_type_id = tt.make_ref(struct_type_id);
         nullable_ref_type_id = tt.make_option(inner_ref_type_id);
         for op in &meta.operations {
@@ -464,6 +464,8 @@ fn synthesize_dispatch_struct(
     }
 
     entry_module.add_struct(TirStruct {
+        def: struct_head,
+        type_args: Vec::new(),
         name: struct_name,
         module_source: entry_source.clone(),
         visibility: crate::ast::Visibility::Private,

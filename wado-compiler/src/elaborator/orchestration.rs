@@ -290,7 +290,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             all_enum_cases.insert(
                                 def,
                                 EnumInfo::new(
-                                    enum_decl.name.clone(),
                                     module_source.clone(),
                                     enum_decl.id,
                                     Vec::new(),
@@ -734,7 +733,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             all_enum_cases.insert(
                                 def,
                                 EnumInfo::new(
-                                    enum_decl.name.clone(),
                                     module_source.clone(),
                                     enum_decl.id,
                                     cases,

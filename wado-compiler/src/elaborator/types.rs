@@ -91,11 +91,6 @@ pub(super) struct EnumCaseData {
 /// Enum info: module source and cases (enums have no type parameters or payloads)
 #[derive(Clone)]
 pub(crate) struct EnumInfo {
-    /// Canonical type name (original declaration name, not import alias).
-    /// Needed by the `resolve_type_static*` bootstrap path, which resolves
-    /// types before `collect_types` has registered `defined_at` with the
-    /// `TypeTable` and so cannot use it yet.
-    pub(super) name: String,
     pub(super) module_source: ModuleSource,
     /// `AstId` of the `enum` declaration (`EnumDecl::id`).
     pub(super) defined_at: AstId,
@@ -106,14 +101,12 @@ pub(crate) struct EnumInfo {
 
 impl EnumInfo {
     pub(super) fn new(
-        name: String,
         module_source: ModuleSource,
         defined_at: AstId,
         cases: Vec<EnumCaseData>,
     ) -> Self {
         let case_index = cases.iter().map(|c| (c.name.clone(), c.index)).collect();
         Self {
-            name,
             module_source,
             defined_at,
             cases,

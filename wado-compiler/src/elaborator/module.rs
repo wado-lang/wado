@@ -221,7 +221,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.sem.decls.local_enum_cases.insert(
                         enum_decl.name.clone(),
                         EnumInfo::new(
-                            enum_decl.name.clone(),
                             self.current_module_source.clone(),
                             enum_decl.id,
                             cases,

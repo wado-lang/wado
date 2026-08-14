@@ -937,6 +937,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let wire_name_policy = wire_name_policy_of(&struct_decl.attrs);
 
         TirStruct {
+            def: crate::tir::StructDef::Decl(
+                self.tysys
+                    .resolutions
+                    .defs()
+                    .of_ast_id(struct_decl.id)
+                    .expect("a `struct` declaration is declared"),
+            ),
+            type_args: Vec::new(),
             name: struct_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: struct_decl.visibility,
@@ -1032,6 +1040,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
         self.pending_local_structs.push(TirStruct {
+            def: crate::tir::StructDef::Decl(
+                self.tysys
+                    .resolutions
+                    .defs()
+                    .of_ast_id(struct_decl.id)
+                    .expect("a function-local `struct` is declared"),
+            ),
+            type_args: Vec::new(),
             name: info.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: ast::Visibility::Private,
@@ -1073,12 +1089,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// come from `tysys.all_variant_cases`; the type-param table is
     /// projected from the AST.
     fn reify_variant_decl(&mut self, variant_decl: &ast::VariantDecl) -> TirVariantDecl {
-        let case_info = self
+        let def = self
             .tysys
             .resolutions
             .defs()
             .of_ast_id(variant_decl.id)
-            .and_then(|def| self.tysys.all_variant_cases.get(&def));
+            .expect("a `variant` declaration is declared");
+        let case_info = self.tysys.all_variant_cases.get(&def);
 
         let cases: Vec<tir::TirVariantCase> = variant_decl
             .cases
@@ -1104,23 +1121,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self
             .ann_decl_type_params(variant_decl.id)
             .expect("resolve_variant_decl records the type params for every variant reify emits");
-        {
-            let def = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .decl_named_in(&variant_decl.name, &self.current_module_source)
-                .expect("the declaration this type names exists");
-            self.tysys.type_table.borrow_mut().register_variant_cases(
-                def,
-                cases
-                    .iter()
-                    .map(|c| (c.name.clone(), c.index, c.payload))
-                    .collect(),
-            )
-        };
+        self.tysys.type_table.borrow_mut().register_variant_cases(
+            def,
+            cases
+                .iter()
+                .map(|c| (c.name.clone(), c.index, c.payload))
+                .collect(),
+        );
 
         TirVariantDecl {
+            def,
             name: variant_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: variant_decl.visibility,

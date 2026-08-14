@@ -844,8 +844,6 @@ impl<'a> WirContext<'a> {
                 def,
                 type_args: elements,
             } if TypeTable::is_tuple_type(type_table.def_name(*def)) => {
-                let name = &type_table.def_name(*def).to_string();
-                let module_source = &type_table.def_module(*def).clone();
                 // CM binding synthesis interns its own `TypeId`s for the same
                 // elements, so a miss falls back to structural matching.
                 let found =

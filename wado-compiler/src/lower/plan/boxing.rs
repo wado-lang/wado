@@ -233,19 +233,18 @@ impl TypeBuilder {
         let struct_name = mangle_generic_name("Box", &[inner_name]);
 
         // Register under the Box definition's module source (from #[compiler_item("box")]).
-        let struct_type_id = {
-            let def = type_table
-                .decl_named_in(&"Box".to_string(), &self.box_module_source)
-                .expect("the declaration this type names exists");
-            type_table.make_monomorphized_struct(
-                struct_name.clone(),
-                crate::tir::StructDef::Decl(def),
-                vec![inner_type_id],
-            )
-        };
+        let head = crate::tir::StructDef::Decl(
+            type_table
+                .compiler_item_def(crate::compiler_item::CompilerItem::Box)
+                .expect("the `Box` compiler item is declared"),
+        );
+        let struct_type_id =
+            type_table.make_monomorphized_struct_from_args(head, vec![inner_type_id]);
 
         // Create the TirStruct definition with a single `value` field
         let tir_struct = TirStruct {
+            def: head,
+            type_args: vec![inner_type_id],
             name: struct_name,
             module_source: self.box_module_source.clone(),
             visibility: crate::ast::Visibility::Public,

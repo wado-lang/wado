@@ -1343,6 +1343,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(struct_decl.id, struct_field_types);
 
         TirStruct {
+            def: crate::tir::StructDef::Decl(
+                self.tysys
+                    .resolutions
+                    .defs()
+                    .of_ast_id(struct_decl.id)
+                    .expect("a `struct` declaration is declared"),
+            ),
+            type_args: Vec::new(),
             name: struct_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: struct_decl.visibility,
@@ -1805,6 +1813,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         TirVariantDecl {
+            def: self
+                .tysys
+                .resolutions
+                .defs()
+                .of_ast_id(variant_decl.id)
+                .expect("a `variant` declaration is declared"),
             name: variant_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: variant_decl.visibility,

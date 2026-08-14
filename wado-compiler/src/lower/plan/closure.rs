@@ -519,11 +519,10 @@ impl ClosureLowerer {
             );
             // A closure environment names no declaration — lowering mints it
             // — so its head is the shape, under the name lowering assigns.
-            let struct_type_id = {
-                let shape = type_table
-                    .intern_synthetic_struct(self.module_source.clone(), struct_name.clone());
-                type_table.make_struct(crate::tir::StructDef::Anon(shape))
-            };
+            let head = crate::tir::StructDef::Anon(
+                type_table.intern_synthetic_struct(self.module_source.clone(), struct_name.clone()),
+            );
+            let struct_type_id = type_table.make_struct(head);
 
             let fields: Vec<TirField> = collected
                 .captures
@@ -544,6 +543,8 @@ impl ClosureLowerer {
                 .collect();
 
             self.generated_structs.push(TirStruct {
+                def: head,
+                type_args: Vec::new(),
                 name: struct_name.clone(),
                 module_source: self.module_source.clone(),
                 visibility: crate::ast::Visibility::Private,

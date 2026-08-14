@@ -414,7 +414,7 @@ pub enum ResolvedType {
         def: crate::defs::DefId,
     },
     // NOTE: Option<T> is no longer a dedicated type variant.
-    // It is represented as GenericInstance { name: "Option", module_source: types(), type_args: [T] }.
+    // It is represented as GenericInstance { def: <the `Option` declaration>, type_args: [T] }.
     // Use TypeTable::as_option() to check if a type is Option<T>.
     //
     // TODO: Re-add NullableRef optimization for Option<T> where T is non-nullable.
@@ -425,7 +425,7 @@ pub enum ResolvedType {
     // See wep-2026-02-09-variant-independent-types.md for the general optimization strategy.
     //
     // NOTE: Future<T>, Stream<T>, FutureWritable<T>, StreamWritable<T> are no longer dedicated
-    // type variants. They are represented as GenericResource { name: "Future", ... }.
+    // type variants. They are represented as GenericResource { def: <the declaration>, .. }.
     // Use TypeTable::make_future() / as_future() etc. to create and inspect them.
     /// Generic resource instantiation (e.g., `Future<i32>`, `Stream<String>`).
     /// Represents opaque i32 handles to Component Model resources with type parameters.
@@ -2011,31 +2011,9 @@ impl TypeTable {
         crate::name::mangle_generic_name(&decl_name, &args)
     }
 
-    /// Create a monomorphized struct type (e.g., "Box<i32>")
-    ///
-    /// - `name`: The fully mangled name (e.g., "`TreeMap`<String,i32>")
-    /// - `base_name`: The original generic struct name (e.g., "`TreeMap`")
-    /// - `type_args`: what it was instantiated with. Must be the arguments
-    ///   `name` renders from — passing an empty list for an instantiated type
-    ///   interns the *declaration* instead, a different type that spells itself
-    ///   the same way. The `debug_assert` below is that contract.
-    pub fn make_monomorphized_struct(
-        &mut self,
-        name: String,
-        def: StructDef,
-        type_args: Vec<TypeId>,
-    ) -> TypeId {
-        debug_assert_eq!(
-            name,
-            self.struct_rendered_name(def, &type_args),
-            "the caller's rendering must be what `struct_rendered_name` derives"
-        );
-        let _ = name;
-        self.intern(ResolvedType::Struct { def, type_args })
-    }
-
-    /// Intern the instantiation of `base_name` with `type_args`, deriving its
-    /// rendered spelling rather than taking one from the caller.
+    /// Intern the instantiation of `def` with `type_args`, deriving its
+    /// rendered spelling rather than taking one from the caller. An empty
+    /// `type_args` interns the *declaration* — a different type.
     pub fn make_monomorphized_struct_from_args(
         &mut self,
         def: StructDef,
@@ -2125,7 +2103,7 @@ impl TypeTable {
     /// returns whichever registered first.
     #[must_use]
     pub fn find_named_type_by_module_name(&self, name: &str, module_name: &str) -> Option<TypeId> {
-        for (type_id, resolved) in self.all_types() {
+        for (type_id, _) in self.all_types() {
             let Some((n, ms)) = self.nominal_head(type_id) else {
                 continue;
             };
@@ -2163,7 +2141,7 @@ impl TypeTable {
     /// [`crate::world_registry::WorldInfo::package`].
     pub fn find_named_type_by_cm_package(&self, name: &str, cm_package: &str) -> Option<TypeId> {
         let prefix = format!("{cm_package}/");
-        for (type_id, resolved) in self.all_types() {
+        for (type_id, _) in self.all_types() {
             let Some((n, ms)) = self.nominal_head(type_id) else {
                 continue;
             };
@@ -2904,7 +2882,6 @@ impl TypeTable {
             }
             ResolvedType::GenericInstance { def, type_args } => {
                 let name = self.def_name(def).to_string();
-                let module_source = self.def_module(def).clone();
                 if Self::is_tuple_type(&name) {
                     // Tuples need TypePack expansion: splice pack elements
                     // into the tuple's type-arg list.
@@ -5439,6 +5416,12 @@ pub struct TirParam {
 
 #[derive(Debug, Clone)]
 pub struct TirStruct {
+    /// The struct type this reifies, as its head plus what it was
+    /// instantiated with — the same pair `ResolvedType::Struct` carries, so a
+    /// consumer keys on it instead of re-rendering a spelling to match one
+    /// built elsewhere.
+    pub def: StructDef,
+    pub type_args: Vec<TypeId>,
     pub name: String,
     pub module_source: ModuleSource,
     pub visibility: crate::ast::Visibility,
@@ -5529,6 +5512,9 @@ pub struct TirFlagsMember {
 /// e.g., `variant Shape { Circle(f64), Rectangle(f64, f64), Point }`
 #[derive(Debug, Clone)]
 pub struct TirVariantDecl {
+    /// The declaration this was reified from. Case indices are looked up
+    /// through it, so a same-named variant in another module cannot answer.
+    pub def: crate::defs::DefId,
     pub name: String,
     pub module_source: ModuleSource,
     pub visibility: crate::ast::Visibility,

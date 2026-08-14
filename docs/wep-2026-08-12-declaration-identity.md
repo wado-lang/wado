@@ -691,7 +691,7 @@ compiles, passes the suite, and ends with a mechanical completion check.
         until it is: every consumer that stops reading `(name, module_source)`
         off a type starts depending on `decl_of_type` instead.
 
-  - [ ] An anonymous struct is a shape, not a nameless declaration.
+  - [x] An anonymous struct is a shape, not a nameless declaration.
         `ResolvedType::Struct` is reached two ways: from a `struct`
         declaration, and from a struct literal with no type name, which
         `resolve_struct_literal` interns under a synthesized `__anon_{…}`

@@ -1176,9 +1176,13 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
         span: synth_span(),
         wire_name_override: None,
     };
+    let def = type_table
+        .compiler_item_def(crate::compiler_item::CompilerItem::Result)
+        .expect("the `Result` compiler item is declared");
     TirVariantDecl {
+        def,
         name: result_name,
-        module_source: ModuleSource::default(),
+        module_source: type_table.def_module(def).clone(),
         visibility: crate::ast::Visibility::Public,
         type_params: Vec::new(),
         cases: vec![
