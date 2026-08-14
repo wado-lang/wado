@@ -859,7 +859,11 @@ impl<'a> WirContext<'a> {
                 Self::ref_to(&type_id)
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                let name = &type_table.def_name(*def).to_string();
+                // The rendered name, which is what the registrar wrote: a
+                // function-local declaration's spelling carries its
+                // disambiguator, and two sibling functions' `struct Box<T>`
+                // are two registrations.
+                let name = &type_table.decl_render_name(*def);
                 let module_source = &type_table.def_module(*def).clone();
                 // A generic instance is either a struct or a variant, and the
                 // two live in different maps. Registration aliases the

@@ -3569,7 +3569,7 @@ impl TypeTable {
                 if Self::is_tuple_type(name) {
                     crate::name::mangle_tuple_type(&args)
                 } else {
-                    let unqualified = crate::name::mangle_generic_name(name, &args);
+                    let unqualified = crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
                     format!("{module_source}/{unqualified}")
                 }
             }
@@ -3745,7 +3745,7 @@ impl TypeTable {
                 if Self::is_tuple_type(name) {
                     return crate::name::mangle_tuple_type(&args);
                 }
-                let unqualified = crate::name::mangle_generic_name(name, &args);
+                let unqualified = crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
                 format!("{module_source}/{unqualified}")
             }
             // Ref / MutRef are preserved in the mangled output so that
@@ -3808,7 +3808,7 @@ impl TypeTable {
                 if Self::is_tuple_type(name) {
                     return crate::name::mangle_tuple_type(&args);
                 }
-                let unqualified = crate::name::mangle_generic_name(name, &args);
+                let unqualified = crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
                 format!("{}/{unqualified}", self.def_module(*def))
             }
             ResolvedType::Ref(inner) => format!("&{}", self.mangle_type_arg_erased(*inner)),
@@ -3860,7 +3860,7 @@ impl TypeTable {
                 Some(if Self::is_tuple_type(name) {
                     crate::name::mangle_tuple_type(&args)
                 } else {
-                    crate::name::mangle_generic_name(name, &args)
+                    crate::name::mangle_generic_name(&self.decl_render_name(*def), &args)
                 })
             }
             _ => None,
@@ -4072,7 +4072,7 @@ impl TypeTable {
                     return TypeNameInfo::Tuple(args);
                 }
                 TypeNameInfo::Generic {
-                    name: format!("{module_source}/{name}"),
+                    name: format!("{module_source}/{}", self.decl_render_name(*def)),
                     args,
                 }
             }
