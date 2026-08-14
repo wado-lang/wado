@@ -3790,15 +3790,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // A literal may name nothing: the undefined-struct diagnostic is
-            // emitted above, and the walk continues on `unknown` rather than
-            // stopping at the first unresolved name.
+            // The declaration comes from the node that declares it where the
+            // walk can see one — a function-local generic struct's storage
+            // name is mangled, and no declaration is registered under that
+            // spelling. A literal may still name nothing at all: the
+            // undefined-struct diagnostic is emitted above, and the walk
+            // continues on `unknown` rather than stopping at the first
+            // unresolved name.
+            let declared_at = self
+                .lookup_struct_fields_in(&struct_name, &struct_module_source)
+                .map(|info| info.defined_at);
             let struct_type = {
-                let def = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .decl_named_in(&struct_name, &struct_module_source);
+                let def = declared_at
+                    .and_then(|ast| self.tysys.resolutions.defs().of_ast_id(ast))
+                    .or_else(|| {
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .decl_named_in(&struct_name, &struct_module_source)
+                    });
                 match def {
                     Some(def) => self
                         .tysys
