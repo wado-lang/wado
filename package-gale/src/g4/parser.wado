@@ -1497,11 +1497,13 @@ fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
 /// Expand a `\p{...}` property into its ranges. False for a property with no
 /// table, so the caller can reject rather than yield a set matching nothing.
 ///
-/// Bare names are resolved general category → script → binary property →
-/// block, which is what makes a block need the `In` prefix ANTLR4 documents
-/// (`\p{InGreek}`); a name that happens to start with `in` (the
-/// `Inscriptional_*` scripts) is answered by an earlier table. The
-/// `Property=Value` form names its table instead.
+/// Bare names are resolved POSIX → general category → script → binary
+/// property → block, which is what makes a block need the `In` prefix ANTLR4
+/// documents (`\p{InGreek}`); a name that happens to start with `in` (the
+/// `Inscriptional_*` scripts) is answered by an earlier table. The POSIX names
+/// go first so their meaning stays the measured one even if a future UCD grows
+/// a property that spells the same. The `Property=Value` form names its table
+/// instead.
 fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool {
     let key = normalize_property_name(name);
     let mut parts = key.split("=");
@@ -1514,8 +1516,12 @@ fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool 
             "generalcategory" | "gc" => expand_general_category(&value, ranges),
             "script" | "sc" => push_property_ranges(&script_ranges(&value), ranges),
             "block" | "blk" => push_property_ranges(&block_ranges(&value), ranges),
+            "emojipresentation" => expand_emoji_presentation(&value, ranges),
             _ => false,
         };
+    }
+    if expand_posix_property(&key, ranges) {
+        return true;
     }
     if expand_general_category(&key, ranges) {
         return true;
@@ -1528,6 +1534,132 @@ fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool 
     }
     if key.starts_with("in") {
         return push_property_ranges(&block_ranges(&drop_prefix(&key, 2)), ranges);
+    }
+    return false;
+}
+
+/// `a - b`, via De Morgan (`!(!a | b)`) so the only set primitive here is the
+/// complement `\P` already needs.
+fn subtract_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange> {
+    let mut acc = complement_char_ranges(a);
+    for let r of b {
+        acc.push(*r);
+    }
+    return complement_char_ranges(&acc);
+}
+
+/// `a & b`, as `a - !b`.
+fn intersect_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange> {
+    return subtract_char_ranges(a, &complement_char_ranges(b));
+}
+
+fn union_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange> {
+    let mut out = *a;
+    for let r of b {
+        out.push(*r);
+    }
+    return out;
+}
+
+/// Ranges for a table entry this file names literally. The key is a constant,
+/// so an empty entry is generator drift, not user input — except `gc=Cs`,
+/// whose surrogates `clip_to_scalars` drops on the way in.
+fn required_ranges(encoded: &String, name: &String) -> List<CharRange> {
+    assert !encoded.is_empty(), `unicode_tables.wado has no entry for '${*name}'`;
+    let mut out: List<CharRange> = [];
+    push_encoded_ranges(encoded, &mut out);
+    return out;
+}
+
+fn gc_set(key: &String) -> List<CharRange> {
+    return required_ranges(&general_category_ranges(key), key);
+}
+
+fn binary_set(key: &String) -> List<CharRange> {
+    return required_ranges(&binary_property_ranges(key), key);
+}
+
+/// The POSIX compatibility properties (UTS #18 Annex C) ANTLR4 answers through
+/// ICU. None is a UCD property, so no table names them; each is derived here
+/// from tables Gale already has, which makes the derivation — not a table —
+/// the thing that can be wrong. `\P{...}` complements whatever comes back, so
+/// a definition that is merely close admits characters rather than missing
+/// them; every one below is measured against the published jar and pinned
+/// character-by-character in `parser_test.wado`.
+///
+/// `Alpha`, `Lower`, `Upper` and `Space` are POSIX names too, but each is a
+/// UCD alias (`Alphabetic`, `Lowercase`, `Uppercase`, `White_Space`) the
+/// binary-property table already answers with the same set.
+fn expand_posix_property(key: &String, ranges: &mut List<CharRange>) -> bool {
+    if let Some(set) = posix_property_ranges(key) {
+        for let r of &set {
+            ranges.push(*r);
+        }
+        return true;
+    }
+    return false;
+}
+
+fn posix_property_ranges(key: &String) -> Option<List<CharRange>> {
+    return match key {
+        "cntrl" => Option::Some(gc_set(&"cc")),
+        "digit" => Option::Some(gc_set(&"nd")),
+        "alnum" => Option::Some(union_char_ranges(&binary_set(&"alphabetic"), &gc_set(&"nd"))),
+        "xdigit" => Option::Some(union_char_ranges(&gc_set(&"nd"), &binary_set(&"hexdigit"))),
+        "blank" => Option::Some(posix_blank_ranges()),
+        "graph" => Option::Some(posix_graph_ranges()),
+        "print" => Option::Some(posix_print_ranges()),
+        _ => null,
+    };
+}
+
+/// Horizontal whitespace: `White_Space` less the characters that end a line.
+fn posix_blank_ranges() -> List<CharRange> {
+    let mut vertical = union_char_ranges(&gc_set(&"zl"), &gc_set(&"zp"));
+    for let c of ['\n', '\u{000B}', '\u{000C}', '\r', '\u{0085}'] {
+        vertical.push(CharRange::single(c));
+    }
+    return subtract_char_ranges(&binary_set(&"whitespace"), &vertical);
+}
+
+/// Everything with a visible glyph: not whitespace, not a control, not a
+/// surrogate, not unassigned. Format characters (`Cf`) stay in — ANTLR4 keeps
+/// them, and `gc=Cs` is empty here anyway since no `char` is a surrogate.
+fn posix_graph_ranges() -> List<CharRange> {
+    let mut invisible = binary_set(&"whitespace");
+    for let key of ["cc", "cs", "cn"] {
+        invisible = union_char_ranges(&invisible, &gc_set(&key));
+    }
+    return complement_char_ranges(&invisible);
+}
+
+/// `graph` plus horizontal whitespace, less the controls — so a space prints
+/// but a tab, being `Cc`, does not.
+fn posix_print_ranges() -> List<CharRange> {
+    let visible = union_char_ranges(&posix_graph_ranges(), &posix_blank_ranges());
+    return subtract_char_ranges(&visible, &gc_set(&"cc"));
+}
+
+/// `EmojiPresentation=<value>`, ANTLR4's own extension over the UCD (its
+/// `lexer-rules.md` defines the three values). Derived from `Emoji` and
+/// `Emoji_Presentation`, both of which `emoji-data.txt` already gives the
+/// table; measured against the jar like the POSIX set.
+fn expand_emoji_presentation(value: &String, ranges: &mut List<CharRange>) -> bool {
+    let emoji = binary_set(&"emoji");
+    let set = match value {
+        // Colourful by default.
+        "emojidefault" => Option::Some(intersect_char_ranges(&emoji, &binary_set(&"emojipresentation"))),
+        // Emoji-capable, but drawn as text unless asked otherwise.
+        "textdefault" => Option::Some(subtract_char_ranges(&emoji, &binary_set(&"emojipresentation"))),
+        // Text-only: never emoji at all.
+        "text" => Option::Some(complement_char_ranges(&emoji)),
+        _ => null,
+    };
+    if let Some(items) = set {
+        for let r of &items {
+            ranges.push(*r);
+        }
+        return true;
     }
     return false;
 }

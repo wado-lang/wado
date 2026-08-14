@@ -1998,3 +1998,117 @@ test "a non-left-recursive grammar with nullable rules is accepted" {
     let g = "grammar N;\nprog : e EOF ;\ne : g t ('+' t)* ;\ng : A? ;\nt : INT ;\nINT : [0-9]+ ;\nA : 'a' ;\nWS : [ \\t]+ -> skip ;";
     assert parse_checked(g) matches { Ok(_) }, "a plain grammar with nullable rules must be accepted";
 }
+
+// The POSIX compatibility properties and ANTLR4's `EmojiPresentation=` values.
+// Neither is a UCD property, so each is derived from tables Gale already has —
+// which makes the derivation, not a table, the thing that can be wrong. `\P`
+// complements whatever comes back, so a definition that is merely close admits
+// characters rather than missing them. Every assertion below is a character
+// measured against the published jar, chosen where two plausible definitions
+// disagree.
+
+test "POSIX alnum is Alphabetic plus Nd, not L plus N" {
+    let cc = class_of(&"grammar Test;
+X : [\\p{Alnum}] ;");
+    assert class_admits(&cc, 'A');
+    assert class_admits(&cc, '0');
+    assert class_admits(&cc, 'あ');
+    assert class_admits(&cc, '٣'), "U+0663 is Nd";
+    assert class_admits(&cc, 'Ⅳ'), "U+2163 is Nl, which is Alphabetic";
+    assert !class_admits(&cc, '½'), "U+00BD is No — neither Alphabetic nor Nd";
+    assert !class_admits(&cc, '_');
+    assert !class_admits(&cc, ' ');
+}
+
+test "POSIX digit is Nd alone" {
+    let cc = class_of(&"grammar Test;
+X : [\\p{Digit}] ;");
+    assert class_admits(&cc, '0');
+    assert class_admits(&cc, '٣');
+    assert !class_admits(&cc, 'Ⅳ'), "Nl is not a decimal digit";
+    assert !class_admits(&cc, '½');
+    assert !class_admits(&cc, 'A');
+}
+
+test "POSIX xdigit is Nd plus Hex_Digit" {
+    let cc = class_of(&"grammar Test;
+X : [\\p{XDigit}] ;");
+    assert class_admits(&cc, '0');
+    assert class_admits(&cc, 'F');
+    assert class_admits(&cc, 'f');
+    assert class_admits(&cc, '٣'), "any Nd counts, not just the ASCII hex digits";
+    assert !class_admits(&cc, 'G');
+    assert !class_admits(&cc, 'é');
+}
+
+test "POSIX blank is horizontal whitespace only" {
+    let cc = class_of(&"grammar Test;
+X : [\\p{Blank}] ;");
+    assert class_admits(&cc, ' ');
+    assert class_admits(&cc, '\t');
+    assert class_admits(&cc, '\u{00A0}'), "NBSP is Zs";
+    assert !class_admits(&cc, '\n');
+    assert !class_admits(&cc, '\r');
+    assert !class_admits(&cc, '\u{000B}'), "VT is vertical";
+    assert !class_admits(&cc, '\u{0085}'), "NEL is vertical";
+    assert !class_admits(&cc, '\u{2028}'), "LINE SEPARATOR is Zl";
+}
+
+test "POSIX cntrl is Cc" {
+    let cc = class_of(&"grammar Test;
+X : [\\p{Cntrl}] ;");
+    assert class_admits(&cc, '\t');
+    assert class_admits(&cc, '\n');
+    assert class_admits(&cc, '\u{0000}');
+    assert class_admits(&cc, '\u{007F}'), "DEL is Cc";
+    assert class_admits(&cc, '\u{0085}'), "NEL is Cc";
+    assert !class_admits(&cc, ' ');
+    assert !class_admits(&cc, '\u{00A0}');
+}
+
+test "POSIX graph excludes whitespace but keeps format characters" {
+    let cc = class_of(&"grammar Test;
+X : [\\p{Graph}] ;");
+    assert class_admits(&cc, 'A');
+    assert class_admits(&cc, '!');
+    assert class_admits(&cc, '½');
+    assert class_admits(&cc, '\u{1F600}');
+    assert class_admits(&cc, '\u{200B}'), "ZWSP is Cf, which graph does not exclude";
+    assert class_admits(&cc, '\u{00AD}'), "SOFT HYPHEN is Cf too";
+    assert !class_admits(&cc, ' ');
+    assert !class_admits(&cc, '\t');
+    assert !class_admits(&cc, '\u{00A0}'), "NBSP is White_Space";
+    assert !class_admits(&cc, '\u{2028}');
+}
+
+test "POSIX print is graph plus blank, less the controls" {
+    let cc = class_of(&"grammar Test;
+X : [\\p{Print}] ;");
+    assert class_admits(&cc, 'A');
+    assert class_admits(&cc, ' '), "space is blank and not a control";
+    assert class_admits(&cc, '\u{00A0}');
+    assert !class_admits(&cc, '\t'), "TAB is blank but also Cc";
+    assert !class_admits(&cc, '\n');
+    assert !class_admits(&cc, '\u{2028}');
+}
+
+test "EmojiPresentation splits Emoji by its default presentation" {
+    let colourful = class_of(&"grammar Test;
+X : [\\p{EmojiPresentation=EmojiDefault}] ;");
+    assert class_admits(&colourful, '\u{1F600}');
+    assert !class_admits(&colourful, '0'), "the keycap base is Emoji but text by default";
+    assert !class_admits(&colourful, 'A');
+
+    let textual = class_of(&"grammar Test;
+X : [\\p{EmojiPresentation=TextDefault}] ;");
+    assert class_admits(&textual, '0');
+    assert !class_admits(&textual, '\u{1F600}');
+    assert !class_admits(&textual, 'A'), "A is not Emoji at all";
+
+    let not_emoji = class_of(&"grammar Test;
+X : [\\p{EmojiPresentation=Text}] ;");
+    assert class_admits(&not_emoji, 'A');
+    assert class_admits(&not_emoji, ' ');
+    assert !class_admits(&not_emoji, '0'), "a keycap base is still Emoji";
+    assert !class_admits(&not_emoji, '\u{1F600}');
+}
