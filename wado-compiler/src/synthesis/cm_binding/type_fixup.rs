@@ -298,7 +298,6 @@ fn replace_type_in_adapter_with_names(
 /// identity — needed for a monomorphized `List<T>::with_capacity` whose `T` is
 /// WASI-derived. Traversal rides `TirMutVisitor`, so the swap reaches every
 /// expression position.
-
 struct TypeReplacer<'a> {
     old_type: TypeId,
     new_type: TypeId,
