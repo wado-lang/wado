@@ -1368,6 +1368,33 @@ fn resolve_char_code(chars: &List<char>, pos: &mut i32) -> i32 {
     };
 }
 
+/// True when `\p{` / `\P{` opens at `pos`, inside a class ending at `end`.
+fn at_property_escape(chars: &List<char>, pos: i32, end: i32) -> bool {
+    return pos + 2 < end
+        && chars[pos] == '\\'
+        && (chars[pos + 1] == 'p' || chars[pos + 1] == 'P')
+        && chars[pos + 2] == '{';
+}
+
+/// True when the `-` at `pos` joins two bounds rather than standing for
+/// itself. A `-` last in the set has nothing to its right, so it is an
+/// ordinary character — the line ANTLR4 draws too (`[\p{Nd}-]` is fine).
+fn opens_char_range(chars: &List<char>, pos: i32, end: i32) -> bool {
+    return pos < end && chars[pos] == '-' && pos + 1 < end;
+}
+
+/// The error for a `\p{...}` used as a range bound. ANTLR4 reports the same
+/// shape (`error(182)`); there is no range from one property to another, so
+/// accepting it would mean inventing a meaning for it.
+fn property_range_error(span: Span) -> ParseError {
+    let expected: List<String> = ["a single character"];
+    return ParseError::new(
+        "a Unicode property escape cannot be a bound of a character range",
+        span,
+        expected,
+    );
+}
+
 fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> {
     let chars = text.chars().collect();
     let end = chars.len() - 1;
@@ -1381,10 +1408,7 @@ fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> 
     }
 
     while pos < end {
-        if pos + 2 < end
-            && chars[pos] == '\\'
-            && (chars[pos + 1] == 'p' || chars[pos + 1] == 'P')
-            && chars[pos + 2] == '{' {
+        if at_property_escape(&chars, pos, end) {
             let complement = chars[pos + 1] == 'P';
             pos += 3;
             let mut prop = String::with_capacity(16);
@@ -1406,6 +1430,9 @@ fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> 
                     ),
                 );
             }
+            if opens_char_range(&chars, pos, end) {
+                return Result::<CharClass, ParseError>::Err(property_range_error(span));
+            }
             let items = if complement { complement_char_ranges(&prop_ranges) } else { prop_ranges };
             for let r of &items {
                 ranges.push(*r);
@@ -1414,8 +1441,11 @@ fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> 
         }
 
         let c = resolve_char_code(&chars, &mut pos);
-        if pos < end && chars[pos] == '-' && pos + 1 < end {
+        if opens_char_range(&chars, pos, end) {
             advance_char(&chars, &mut pos);
+            if at_property_escape(&chars, pos, end) {
+                return Result::<CharClass, ParseError>::Err(property_range_error(span));
+            }
             let c2 = resolve_char_code(&chars, &mut pos);
             clip_to_scalars(&mut ranges, c, c2);
         } else {

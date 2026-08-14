@@ -2112,3 +2112,31 @@ X : [\\p{EmojiPresentation=Text}] ;");
     assert !class_admits(&not_emoji, '0'), "a keycap base is still Emoji";
     assert !class_admits(&not_emoji, '\u{1F600}');
 }
+
+test "a property escape cannot be a bound of a character range" {
+    // There is no range from one property to another, so accepting these would
+    // mean inventing a meaning — ANTLR4 rejects each with error(182). The
+    // third form appears commented out in RustLexer.g4, where it is Rust's
+    // set-difference notation rather than anything ANTLR4 has.
+    let bad: List<String> = [
+        "grammar Test;\nX : [\\p{L}-z] ;", "grammar Test;\nX : [a-\\p{L}] ;", "grammar Test;\nX : [\\p{L}-\\p{Nd}] ;",
+        "grammar Test;\nX : [\\p{L}\\p{Nl}-\\p{Pattern_Syntax}] ;",
+    ];
+    for let src of &bad {
+        let result = parse(*src);
+        assert result matches { Err(_) }, `expected a rejection for ${*src}`;
+    }
+}
+
+test "a dash beside a property escape is a literal, not a range" {
+    // A `-` first or last in the set is an ordinary character, so neither of
+    // these is a range and both stay accepted — the same line ANTLR4 draws.
+    let trailing = class_of(&"grammar Test;
+X : [\\p{Nd}-] ;");
+    assert class_admits(&trailing, '0');
+    assert class_admits(&trailing, '-');
+    let leading = class_of(&"grammar Test;
+X : [-\\p{Nd}] ;");
+    assert class_admits(&leading, '0');
+    assert class_admits(&leading, '-');
+}
