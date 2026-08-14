@@ -1060,6 +1060,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                         &lookup_name,
                                         use_decl.span,
                                     )?;
+                                    // Registered under the bare member name
+                                    // like a `Simple` import, so it collides
+                                    // with a declaration the same way.
+                                    self.reject_import_collision(
+                                        from_module_source,
+                                        import_name,
+                                        use_decl.span,
+                                    )?;
                                     self.symbols.register_import(
                                         from_module_source,
                                         import_name,

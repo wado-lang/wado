@@ -102,9 +102,18 @@ impl Scopes {
     }
 
     /// The cases the declarations in `from` bring into scope with them.
+    ///
+    /// A namespace import contributes none. `use ns from "m"` enters `m`'s
+    /// declarations under `ns$Name` aliases so that `ns::Name` resolves, and
+    /// those are reachable *only* through that qualification — letting their
+    /// cases into this tier would answer a bare `Name` with a case the module
+    /// can only name as `ns::Name`.
     fn collect_cases(defs: &DefTable, from: &IndexMap<String, DefId>) -> IndexMap<String, DefId> {
         let mut out: IndexMap<String, DefId> = IndexMap::default();
-        for def in from.values() {
+        for (name, def) in from {
+            if name.contains(crate::name::NAMESPACE_MEMBER_SEP) {
+                continue;
+            }
             if !matches!(
                 defs.kind(*def),
                 crate::defs::DefKind::Variant

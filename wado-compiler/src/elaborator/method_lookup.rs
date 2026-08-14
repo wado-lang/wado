@@ -2056,11 +2056,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // module), the arguments with the impl's bound type params substituted
         // (so `impl<T> Take<T> for Wrapper<T>` on `Wrapper<i32>` reads as
         // `Take<i32>`). Spellings never carry identity (WEP 2026-07-31).
-        let trait_decl = signatures
+        // `check_impl_trait_resolves` has already rejected a header whose trait
+        // reaches no declaration, and such a block implements no trait — so it
+        // contributes no trait method here. The index still holds it, keyed on
+        // the spelling it wrote, which is how an erroneous block reaches a
+        // lookup at all; a candidate built without an identity keys on nothing.
+        let Some(trait_decl) = signatures
             .impl_sig(impl_ref.1)
             .expect("the decl pass records every impl block's declaration facts")
             .trait_decl
-            .expect("a candidate reached here through the trait impl index");
+        else {
+            return found_traits;
+        };
         let defs = scope.tysys.resolutions.defs().clone();
         let trait_args = impl_sig.trait_type_args;
 

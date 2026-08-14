@@ -1311,12 +1311,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Build effect name → declaring module map for a module.
     ///
-    /// Three sources, in precedence order: `use { Iface::{f} }`, which names an
-    /// interface without importing it, so the `use` declaration is the only
-    /// record of what `Iface` means; the module's explicit imports, read from
-    /// the symbol table where the analyzer already resolved aliases and
-    /// re-export chains; and the module's own `interface` / `resource`
-    /// declarations, which win over any import of the name.
+    /// Three sources, applied in *increasing* precedence — each overwrites the
+    /// last, so the one written last here is the one that answers:
+    ///
+    /// 1. `use { Iface::{f} }`, which names an interface without importing it,
+    ///    so the `use` declaration is the only record of what `Iface` means;
+    /// 2. the module's explicit imports, read from the symbol table where the
+    ///    analyzer already resolved aliases and re-export chains;
+    /// 3. the module's own `interface` / `resource` declarations, which win
+    ///    over any import of the name.
+    ///
+    /// The order is what the third clause requires, and stating it as a list
+    /// of decreasing precedence read the other way round.
     ///
     /// An import earns an entry by *being* an effect or a resource, asked of
     /// the declaration. Guessing from the spelling — the `PascalCase` test this

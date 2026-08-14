@@ -406,13 +406,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let Item::Newtype(newtype_decl) = item else {
                         continue;
                     };
+                    // One lookup for both branches: each records its progress
+                    // under this identity, and `newly_resolved` claims progress
+                    // was made. Reading it per branch let the generic arm claim
+                    // progress it had not recorded, which is a loop that never
+                    // converges rather than a missing entry.
+                    let def = resolutions
+                        .defs()
+                        .of_ast_id(newtype_decl.id)
+                        .expect("a newtype declaration has an identity");
                     if newtype_decl.type_params.is_empty() {
                         // Skip if already resolved (fixpoint convergence).
-                        if resolutions
-                            .defs()
-                            .of_ast_id(newtype_decl.id)
-                            .is_some_and(|def| all_newtypes.contains_key(&def))
-                        {
+                        if all_newtypes.contains_key(&def) {
                             continue;
                         }
                         let lookup = TypeLookup {
@@ -442,38 +447,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             &mut type_table.borrow_mut(),
                             &lookup,
                         );
-                        let def = resolutions
-                            .defs()
-                            .of_ast_id(newtype_decl.id)
-                            .expect("a newtype declaration has an identity");
                         let newtype_id = type_table.borrow_mut().make_newtype(def, base_type_id);
                         type_table
                             .borrow_mut()
                             .register_decl_type(newtype_decl.id, newtype_id);
-                        if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
-                            all_newtypes.insert(def, newtype_id);
-                        }
+                        all_newtypes.insert(def, newtype_id);
                         newly_resolved = true;
-                    } else if !resolutions
-                        .defs()
-                        .of_ast_id(newtype_decl.id)
-                        .is_some_and(|def| all_generic_newtypes.contains_key(&def))
-                    {
+                    } else if !all_generic_newtypes.contains_key(&def) {
                         let type_params = newtype_decl
                             .type_params
                             .iter()
                             .map(|p| p.name.clone())
                             .collect();
-                        if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
-                            all_generic_newtypes.insert(
-                                def,
-                                GenericNewtypeInfo {
-                                    module_source: module_source.clone(),
-                                    type_params,
-                                    base_type_ast: newtype_decl.ty.clone(),
-                                },
-                            );
-                        }
+                        all_generic_newtypes.insert(
+                            def,
+                            GenericNewtypeInfo {
+                                module_source: module_source.clone(),
+                                type_params,
+                                base_type_ast: newtype_decl.ty.clone(),
+                            },
+                        );
                         newly_resolved = true;
                     }
                 }

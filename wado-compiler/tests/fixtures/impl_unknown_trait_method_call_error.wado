@@ -1,0 +1,26 @@
+// An `impl` header naming a trait that reaches no declaration is rejected,
+// and calling one of its methods must report that too — not crash.
+//
+// The block records no trait identity (nothing resolved), yet it still enters
+// the trait impl index, so method lookup reached a candidate whose trait it
+// then `expect`ed. The header diagnostic was printed and the compiler panicked
+// straight after it, which also took the language server down on a half-typed
+// `impl`.
+
+struct Point {
+    x: i32,
+}
+
+impl Nope for Point {
+    fn foo(&self) -> i32 {
+        return self.x
+    }
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    let n = p.foo();
+}
+
+__DATA__
+{"compile_error": "cannot implement `Nope`"}
