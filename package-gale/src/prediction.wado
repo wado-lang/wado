@@ -1001,22 +1001,10 @@ fn sll_find_common_terminal(configs: &List<SllConfig>) -> Option<Element> {
 fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
     return match [*a, *b] {
         [Leaf(ai), Leaf(bi)] => ai == bi,
-        [Ambiguous(aa), Ambiguous(ba)] => {
-            // Compare only the alt set, not the halt reason: dispatch
-            // branch merging (`find_merge_branch`) must keep folding
-            // same-alt Ambiguous children together regardless of which
-            // edge produced them, or the tree shape — and the codegen
-            // that reads it — would change.
-            if aa.alts.len() != ba.alts.len() {
-                return false;
-            }
-            for let mut i = 0; i < aa.alts.len(); i += 1 {
-                if aa.alts[i] != ba.alts[i] {
-                    return false;
-                }
-            }
-            true;
-        },
+        // Compare only the alt set, not the halt reason: branch merging
+        // must keep folding same-alt Ambiguous children together whichever
+        // edge produced them, or the tree shape would change.
+        [Ambiguous(aa), Ambiguous(ba)] => aa.alts == ba.alts,
         [Consume(ca), Consume(cb)] => element_eq(&ca.element, &cb.element) && prediction_node_eq(&ca.child, &cb.child),
         _ => false,
     };

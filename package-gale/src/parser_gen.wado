@@ -36,7 +36,6 @@ use {
     rule_alts_labeled,
     follow_sep,
     join_kinds,
-    i32_arrays_equal,
     elements_match,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
@@ -1071,7 +1070,7 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &
         }
         let mut found: i32 = -1;
         for let mut g = 0; g < groups_alts.len(); g += 1 {
-            if i32_arrays_equal(&groups_alts[g], &claiming) {
+            if groups_alts[g] == claiming {
                 found = g;
                 break;
             }
