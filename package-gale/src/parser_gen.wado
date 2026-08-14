@@ -4422,6 +4422,14 @@ fn gen_op_list_label(
     } else {
         panic("gen_op_list_label: ListLabel op mapped to non-Label element");
     };
+    if !op_is_leaf(&ll.inner) && !ll.inner matches { Group(_) } {
+        // Inner of shape `Op::Repeat` / nested `Op::ListLabel` — rare; routes
+        // through the surface walker, which reserves the label's name itself,
+        // so this returns before the reservation below. Phase 2-C migrates the
+        // Op::Repeat arm.
+        gen_element(w, elem, ctx, name_counts);
+        return;
+    }
     // The label itself binds nothing here (the builder holds the matched
     // values), but reserve its name so a sibling on the surface walker sees
     // lower-consistent dedup state. The inner's own name was deduped against
@@ -4433,13 +4441,6 @@ fn gen_op_list_label(
         // there is no `List<T>` container and no `.push` — only the
         // group's own `let <shape.field> = …;`.
         gen_op_group(w, g_op, &lab.element, ctx, name_counts);
-        return;
-    }
-    if !op_is_leaf(&ll.inner) {
-        // Inner of shape `Op::Repeat` / nested `Op::ListLabel` —
-        // rare; routes through the surface walker. Phase 2-C migrates
-        // the Op::Repeat arm.
-        gen_element(w, elem, ctx, name_counts);
         return;
     }
     gen_op_leaf(w, &ll.inner, ctx, name_counts);

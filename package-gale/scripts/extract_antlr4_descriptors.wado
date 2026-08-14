@@ -722,6 +722,15 @@ fn descriptor_deletes_tokens(parsed: &ParsedDescriptor) -> bool {
     return parsed.errors.contains("extraneous input");
 }
 
+/// True when `[output]` is a printed parse tree — the only shape a `<skip …>`
+/// marker can appear in. Stage B compares one by construction, but Stage C
+/// compares whatever the grammar's actions printed, and a tree normaliser let
+/// loose on arbitrary action text is a category error: it would rewrite any
+/// ` <skip … >` the actions themselves emit.
+fn output_is_tree_print(output: &String) -> bool {
+    return output.trim().starts_with("(");
+}
+
 /// The expression a tree compare reads its actual value from, wrapped in the
 /// marker normaliser when the descriptor deletes a token.
 fn actual_expr(inner: &String, strip: bool) -> String {
@@ -1722,7 +1731,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                                 &parsed.input,
                                 &parsed.output,
                                 &parsed.start,
-                                descriptor_deletes_tokens(&parsed),
+                                descriptor_deletes_tokens(&parsed) && output_is_tree_print(&parsed.output),
                                 &stage_c_triage,
                             );
                             if let Err(_) = write_file_string(&stage_c_cat_dir, &stage_c_filename, &src) {
