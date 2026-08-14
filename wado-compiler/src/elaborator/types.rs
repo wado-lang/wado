@@ -2100,9 +2100,9 @@ pub(crate) struct TypeLookup<'a> {
     pub(crate) resolutions: &'a crate::resolve::Resolutions,
     /// Namespace-import aliases (`use ns from "..."`). A `ns::Type` reference
     /// in type position is canonicalized to its `ns$Type` alias before any
-    /// registry lookup (see `lookup_ref`). Collection passes that have no
-    /// import context pass an empty map (ns-qualified type references only
-    /// appear in resolved bodies).
+    /// registry lookup (`sem::imports::canonical_ns_ref`). Collection passes
+    /// that have no import context pass an empty map (ns-qualified type
+    /// references only appear in resolved bodies).
     pub(crate) namespace_imports: &'a IndexMap<String, ModuleSource>,
     pub(crate) all_newtypes: &'a IndexMap<crate::defs::DefId, TypeId>,
     pub(crate) all_struct_fields: &'a IndexMap<crate::defs::DefId, StructFieldInfo>,

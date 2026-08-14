@@ -3707,11 +3707,9 @@ impl TypeTable {
         }
     }
 
-    /// Return the base type name without type arguments.
-    ///
-    /// For `GenericInstance { name: "Option", type_args: [String] }` → `"Option"`.
-    /// For monomorphized `Struct { base_name: Some("Option"), .. }` → `"Option"`.
-    /// For everything else, falls back to `mangle_type_name`.
+    /// The base type name without type arguments: the head's own name, so
+    /// `Option<String>` and a monomorphized `Option<String>` both answer
+    /// `"Option"`. Everything else falls back to `mangle_type_name`.
     #[must_use]
     pub fn base_type_name(&self, id: TypeId) -> String {
         match self.get(id) {

@@ -1519,7 +1519,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // scope, so a generic resource's `GenericResource` instance can
         // reference its own `TypeParam`s (which gap-2 substitution then
         // specialises per impl-block instantiation). For non-generic
-        // resources this is just a plain `Resource { name, module }`.
+        // resources this is just a plain `Resource { def }`.
         let self_type: Option<TypeId> = resource_self.map(|(name, module)| {
             if type_params.iter().any(|p| !p.is_effect) {
                 let type_arg_ids: Vec<TypeId> = type_params

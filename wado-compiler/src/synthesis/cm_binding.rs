@@ -333,9 +333,9 @@ fn unresolvable_record_in_payload(
             crate::component_model::cm_payload_type_from_type_id(tt, type_id),
             Some(CmPayloadType::Named(_))
         )
-        && !registry.is_named_type_registered_from(&module_source, &name)
+        && !registry.is_named_type_registered_from(module_source, name)
     {
-        return Some(name);
+        return Some(name.to_string());
     }
     // Codegen peels aliases, so check through them here too.
     if let ResolvedType::Newtype { base_type, .. } = tt.get(type_id) {
@@ -362,7 +362,7 @@ fn unresolvable_record_in_payload(
 
 /// The declared name and module of a nominal type, or `None` for one that
 /// names no declaration.
-fn named_decl_of(tt: &TypeTable, ty: &ResolvedType) -> Option<(String, ModuleSource)> {
+fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &'a ModuleSource)> {
     let def = match ty {
         ResolvedType::Struct { def, .. } => def.decl()?,
         ResolvedType::Enum { def }
@@ -370,7 +370,7 @@ fn named_decl_of(tt: &TypeTable, ty: &ResolvedType) -> Option<(String, ModuleSou
         | ResolvedType::Flags { def } => *def,
         _ => return None,
     };
-    Some((tt.def_name(def).to_string(), tt.def_module(def).clone()))
+    Some((tt.def_name(def), tt.def_module(def)))
 }
 
 /// Phase entry point: generate CM binding functions and rewrite call sites.
@@ -1194,10 +1194,8 @@ mod tests {
         // bound to leaves the identity reads this fixture exists for —
         // `is_result`, `as_option`, `is_string`, `is_list` — answering no
         // rather than wrong, which is the harder failure to notice.
-        // The node a compiler item records must be the declaration's own,
-        // not a second fresh one: `compiler_item_def` walks the registered
-        // node back to a `DefId`, and a node no declaration carries walks
-        // back to nothing.
+        // `compiler_item_def` walks the registered node back to a `DefId`, so
+        // it has to be the declaration's own.
         let bind_variant = |tt: &mut TypeTable, name: &str, module: ModuleSource| {
             let def = tt.declare_for_test(name, module, crate::defs::DefKind::Variant);
             let decl = tt.defs().ast_id(def);
