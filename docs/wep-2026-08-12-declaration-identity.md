@@ -793,8 +793,8 @@ compiles, passes the suite, and ends with a mechanical completion check.
       states, and it was still underestimated: the constructors are the work.
       Every one of these is a construction site that kept its spelling.
 
-      Two remained after the four above; one is now closed too, leaving six
-      fixtures at two optimization levels. A local `type
+      All but one are now closed, leaving a single fixture at two
+      optimization levels. A local `type
       UserId = …` still reports `UserId does not implement Inspect`; giving
       `synthesis/traits.rs`'s newtype loops the type's rendered name instead
       of the declared one changed nothing, measured, and was reverted. And an
