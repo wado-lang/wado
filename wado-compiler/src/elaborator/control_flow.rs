@@ -1,21 +1,8 @@
-//! Control-flow analyses for missing-return diagnosis (WEP 2026-05-26).
-//!
-//! These walks consume the parsed AST and look up types from
-//! [`crate::elaborator::sem::types::TypeAnnotations::expression_types`].
-//! They replace the equivalent `block_always_exits` /
-//! `find_return_type_in_block` TIR walkers in `expr.rs`, freeing the
-//! combined walk to stop producing body TIR.
-//!
-//! Both phases consult identical analyses: the combined walk's
-//! diagnostic point (via [`super::Elaborator`]) and reify's closure
-//! return-type derivation (via [`super::reify::Reify`]) construct a
-//! [`CtrlFlowCtx`] over their respective `expression_types` map and
-//! current module key, then dispatch to the free walker functions.
-//!
-//! The shape mirrors the TIR walkers exactly: an `ast::Block` /
-//! `ast::Stmt` / `ast::Expr` arm corresponds 1:1 to the TIR arm.
-//! NEVER detection (TIR walker's `expr.type_id == TypeTable::NEVER`)
-//! becomes an `expression_types[(module, expr.id)] == NEVER` lookup.
+//! Control-flow analyses for missing-return diagnosis (WEP 2026-05-26): walks
+//! over the parsed AST reading types from `TypeAnnotations::expression_types`,
+//! replacing the TIR walkers so the combined walk need not produce body TIR.
+//! Both the diagnostic point and reify's closure return-type derivation build a
+//! [`CtrlFlowCtx`] and dispatch to the same free functions, arm for arm.
 
 use std::cell::RefCell;
 
@@ -121,25 +108,11 @@ pub(super) fn expr_always_exits(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr) -> bool 
     }
 }
 
-/// Result type of `block` — the type of its trailing expression, or
-/// `Unit`. AST mirror of [`crate::tir::block_result_type`] (which reads
-/// the built `TirBlock`); this reads `expression_types[(module, id)]`
-/// instead so the combined walk can compute a block's value type without
-/// inspecting the body TIR it builds.
-///
-/// Unlike the missing-return walk this does NOT filter `contains_unknown`:
-/// an unresolved-`null` tail is `Option<UNKNOWN>` here exactly as the TIR
-/// walker saw `null_tir.type_id`, so the if/match result-type inference
-/// (which special-cases `contains_unknown` branches) behaves identically.
-///
-/// The arm-to-arm correspondence with the TIR walker:
-/// - trailing `Stmt::Expr(e)` ↔ `TirStmtKind::Expr` — the recorded type of
-///   `e` (an `if`/`match`/block tail keeps its already-recorded result
-///   type here).
-/// - trailing `Stmt::If` with an `else` ↔ `TirStmtKind::If` — the branches
-///   agree via [`crate::tir::agree_branch_types`].
-/// - trailing `Return`/`Break`/`Continue` ↔ the diverging arms — `Never`.
-/// - anything else ↔ the TIR walker's `_ => None` — `Unit`.
+/// Result type of `block` — its trailing expression's type, or `Unit`. The AST
+/// mirror of [`crate::tir::block_result_type`], reading
+/// `expression_types[(module, id)]` so a block's value type needs no body TIR.
+/// Unlike the missing-return walk it does *not* filter `contains_unknown`: an
+/// unresolved-`null` tail stays `Option<UNKNOWN>`, as the TIR walker saw it.
 pub(super) fn block_result_type(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> TypeId {
     block
         .stmts

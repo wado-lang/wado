@@ -1,43 +1,12 @@
-//! Per-function identity and dirty-set gating for the optimizer fixed-point
-//! loop (WEP: NIR Optimizer Architecture).
+//! Per-function dirty-set gating for the optimizer fixed-point loop, so a pass
+//! skips what has not changed since it last ran. Each function carries a
+//! monotonic `revision` and each pass a per-function `watermark`;
+//! [`FunctionGate::mark_changed`] bumps the revision and, conservatively, its
+//! 1-hop callers and callees. Keyed by [`FuncId`], the index in `functions`.
 //!
-//! The loop runs every pass over every function each iteration, even though
-//! after the first few rounds only a handful of functions still change. This
-//! module lets a pass skip functions that have not changed since it last
-//! processed them.
-//!
-//! # Identity
-//!
-//! The gate keys on the canonical [`FuncId`],
-//! which equals a function's index in `NirPackage::functions`: `lower` mints
-//! `id = index`, and `dce` marks dead in place without renumbering (Phase 4), so
-//! `FuncId == position` holds for the whole pipeline. The call graph reads each
-//! call node's stamped `func_id` directly — no per-edge name resolution — and the
-//! dense side-tables below index by `FuncId.index()`.
-//!
-//! # Model
-//!
-//! Each function has a monotonic `revision`. Each gated pass keeps a per-
-//! function `watermark`: it processes a function only when
-//! `revision > watermark`, then catches the watermark up. A pass that changes a
-//! function calls [`FunctionGate::mark_changed`], bumping that function's
-//! revision and — conservatively, along the 1-hop call graph — its callers and
-//! callees (a callee shrinking enables inlining / constant folding in callers; a
-//! call site appearing or vanishing changes a callee's dead-argument analysis).
-//!
-//! Every fixed-point loop pass is gate-aware, so every change is reported at
-//! function granularity: a per-function pass skips functions it has already
-//! processed at their current revision (via [`FunctionGate::run_gated`]); an
-//! interprocedural pass pulls its candidate worklist from the dirty set (via
-//! [`FunctionGate::dirty_funcs`]) and reports exactly the ones it touched (via
-//! [`FunctionGate::mark_changed`]).
-//!
-//! # Safety
-//!
-//! Every loop pass is an optimization; the IR is valid without it. So an
-//! imprecise gate can only cost optimization *quality* (a missed rewrite),
-//! never correctness. The propagation is therefore tuned conservative: when in
-//! doubt, mark dirty.
+//! Every loop pass is optional, the IR being valid without it, so an imprecise
+//! gate costs optimization quality and never correctness. When in doubt, the
+//! propagation marks dirty.
 
 use cranelift_entity::EntityRef;
 
@@ -78,21 +47,11 @@ impl GatedPass {
     const COUNT: usize = 16;
 }
 
-/// Static call graph over [`FuncId`]s, built once at loop start.
-///
-/// Each edge comes from a call node's stamped `func_id` (an unstamped in-package
-/// call falls back to name resolution). Indirect calls (`ExprKind::IndirectCall`)
-/// and calls to functions outside the package have no static edge and are simply
-/// absent — conservative for propagation, which only risks under-optimizing.
-///
-/// The graph is built once and not refreshed as bodies change. A pass that
-/// restructures calls (`inline` copies a callee body in; `container_sroa` /
-/// `value_copy_demote` retarget calls to per-field / shallow-copy callees)
-/// leaves the rewritten function's out-edges stale. That only reduces the
-/// precision of 1-hop dirty propagation — a quality knob, never correctness,
-/// since every loop pass is optional (see the module safety note) — and the
-/// rewritten function is itself reported dirty regardless. Incremental refresh
-/// could improve propagation precision but is not needed for soundness.
+/// Static call graph over [`FuncId`]s, built once at loop start from each call
+/// node's stamped `func_id`. An indirect or out-of-package call has no edge, and
+/// a pass that restructures calls leaves its out-edges stale — both only cost
+/// 1-hop propagation precision, never correctness, and the rewritten function is
+/// reported dirty regardless.
 struct CallGraph {
     callees: Vec<Vec<FuncId>>,
     callers: Vec<Vec<FuncId>>,

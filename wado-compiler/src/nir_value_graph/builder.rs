@@ -1,33 +1,8 @@
-//! Per-function `ValueGraph` builder.
-//!
-//! Walks the `SkelTree` (`Body`) once and assigns a [`ValueId`] to every pure
-//! [`ExprId`]. Impure or allocation-bearing expressions (calls, struct/array
-//! literals, control flow, etc.) get no entry in `value_of`.
-//!
-//! Consumed lazily by [`crate::nir_engine::Engine::value`]; see the WEP at
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
-//!
-//! # Flow handling
-//!
-//! - Parameters seed `current_value` with a fresh `Opaque` each.
-//! - `Let` / `Assign`-to-bare-`Local` updates `current_value[local_idx]` to
-//!   the RHS's value (or `Opaque` if the RHS is impure).
-//! - `If` snapshots `current_value`, walks both branches, then merges:
-//!   diverging locals hash-cons a [`ValueKind::Select`] keyed on the
-//!   condition's value, falling back to `Opaque` if the condition is impure.
-//!   Heap state joins per arm over fall-through arms only ([`Builder::join_heap`]).
-//! - `Match` / `Switch` walk every arm and merge n-ary: if every arm agrees
-//!   on a local, that value carries; otherwise the local goes `Opaque`.
-//!   N-ary `Select` chains are not yet constructed.
-//! - `Loop` pre-scans the body for locals it may write, snapshots
-//!   `current_value` into [`ValueGraphBuild::loop_entry_values`], and
-//!   reassigns each written local to a fresh `Opaque` before walking the
-//!   body; post-loop those locals stay `Opaque`.
-//! - `LabeledBlock` marks every local written in its subtree `Opaque` on
-//!   exit, since `break` paths can carry writes the fall-through state
-//!   never observes.
-//! - Pattern bindings (`LetDestructure`, `Match` arm bindings) are seeded
-//!   with `Opaque`.
+//! Per-function `ValueGraph` builder: one walk of the `Body` assigning a
+//! [`ValueId`] to every pure [`ExprId`], leaving impure and allocation-bearing
+//! expressions out of `value_of`. Locals carry their RHS's value forward, and
+//! anything a branch, loop, or `break` path can disagree on goes `Opaque`.
+//! Consumed lazily by [`crate::nir_engine::Engine::value`]; see WEP 2026-06-05.
 
 use crate::const_eval;
 use crate::hashmap::IndexMap;
@@ -38,29 +13,11 @@ use crate::nir_arena::{
 
 use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
 
-/// Per-function heap-version tracker. The builder threads one `HeapState`
-/// through the walk; on every Skel node that may write the heap, the
-/// appropriate generation bumps to a fresh value. A read's effective
-/// version is the max of every generation that could cover it
-/// ([`HeapState::version_of`]); `field_store` keys carry that version, so a
-/// stale seed is naturally unreachable once any covering generation bumps.
-///
-/// Granularity is per-`(receiver-root, field)`:
-/// - `per_slot[(root, field)]` — bumped by a direct `root.field = …` store
-///   on a non-aliased bare-`Local` receiver, so a write to `a.f` leaves
-///   `b.f` (a different object, same `field_index`) untouched.
-/// - `per_local[root]` — bumped when every field of `root` may have changed:
-///   a call while `root` is reference-aliased (the callee can reach its
-///   object). Non-aliased locals' fields survive a call.
-/// - `field_global[field]` — bumped by a write to `field` through an
-///   aliased or non-bare-`Local` receiver (`a.b.f`, `r.f` for a reference
-///   `r`): every alias of that field is invalidated without tracking which
-///   locals alias which.
-/// - `default_version` — covers everything; [`HeapState::bump_all`] advances
-///   it for truly opaque writes (deref / index store, global set, indirect
-///   call, loop entry).
-///
-/// Branch endpoints join per arm instead of bumping ([`Builder::join_heap`]).
+/// Per-function heap-version tracker: every node that may write the heap bumps
+/// the covering generation, and a read's effective version is the max over all
+/// of them ([`HeapState::version_of`]). Granularity runs from
+/// `per_slot[(root, field)]` through `per_local` / `field_global` to
+/// `default_version`. Branch endpoints join instead ([`Builder::join_heap`]).
 struct HeapState {
     /// Next fresh version to hand out.
     next: HeapVersion,
@@ -219,31 +176,11 @@ pub struct ValueGraphBuild {
     pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
 }
 
-/// Build the `ValueGraph` for one function body.
-///
-/// `param_locals` are the local indices of the function's parameters; each
-/// seeds `current_value` with one fresh `Opaque`, so a `Local` read returns
-/// that Opaque every time until the parameter is reassigned (which the
-/// builder picks up the same way as any other `Assign`). An unseeded local's
-/// first read mints an equivalent fallback `Opaque`, but only up-front
-/// seeding makes parameters visible in the loop-entry snapshots
-/// (`loop_entry_values`), which are taken before any in-loop read.
-///
-/// `aliased` are locals whose object is reference-aliased — address-taken,
-/// `with stores[p]`, or reference-typed (`let r = &x`, `Box`, `List`, `&T`).
-/// A write to such a local's field, or a call that may reach its object,
-/// invalidates the field through the conservative `field_global` / `per_local`
-/// generations rather than the precise `per_slot` one. `untrackable` is the
-/// `stores`-aliased subset whose fields are never seeded (their aliasing
-/// escapes entirely). A non-aliased local's object is reachable only through
-/// that local, so its `per_slot` fields survive calls and other objects'
-/// same-`field_index` writes (see [`HeapState`]).
-///
-/// `mut_escaped` is the subset of `aliased` a call may actually mutate (locals
-/// with a *mutable* escape — `&mut v`, a mut-ref argument, a `&mut self`
-/// receiver, or a `stores` stash). [`Builder::bump_call_effects`] bumps only
-/// these across a call; a reference-aliased local whose every escape is an
-/// immutable `&v` keeps its forwarded fields, since no callee can mutate it.
+/// Build the `ValueGraph` for one function body. Each parameter in
+/// `param_locals` seeds a fresh `Opaque` up front, which is what makes them
+/// visible in the loop-entry snapshots taken before any in-loop read. An
+/// `aliased` local invalidates through the coarse generations, `untrackable`
+/// ones are never seeded, and `mut_escaped` narrows `aliased` to real mutation.
 #[allow(clippy::too_many_arguments)]
 pub fn build(
     body: &mut Body,
@@ -272,25 +209,12 @@ pub fn build(
     ValueGraphBuild { loop_entry_values }
 }
 
-/// Scoped re-valuation of one self-contained inlined block, seeded with the
-/// call site's `param → value` map (Method A — splice-point growth). Walks only
-/// `block` after its first `skip` param-binding statements (params pre-seeded),
-/// with a fresh heap (a field read on a param is conservatively fresh), using
-/// `body`'s existing pool so produced values share ids with the graph. Returns
-/// only **constant-literal** entries: a scoped walk's non-constant values carry
-/// context local to the walk (a `FieldAccess`'s `HeapVersion` numbers from the
-/// fresh heap and would over-merge; an `Opaque` of a remapped local is
-/// walk-local), while a constant equals what a fresh build assigns. Never walks
-/// the caller's untouched remainder, so it adds no `builder::build`
-/// (`rebuilds = 0`) and parks no cache.
-///
-/// `scratch` is a pool the caller clones from `body.values` once and reuses
-/// across every inlined block of the function: the walk stamps types
-/// (`set_type`) on the values it interns, and doing that on a value the main
-/// graph shares would mutate its main-graph type and perturb the structural
-/// passes — so the walk runs in `scratch`, leaving `body.values` untouched
-/// (seeded `ValueId`s stay valid; the clone preserves ids). Only the constant
-/// *literals* are re-interned into the main pool, which is idempotent.
+/// Scoped re-valuation of one inlined block, seeded with the call site's
+/// `param → value` map and a heap seeded from `heap_seed` — a fresh one would
+/// over-merge. Returns every caller-rooted re-emittable value (constants, plus
+/// arithmetic / field reads over the call-site args); the caller filters. Runs in
+/// `scratch`, cloned from `body.values` with ids preserved, so the shared graph
+/// is not perturbed.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_scoped(
     body: &mut Body,
@@ -306,43 +230,87 @@ pub(crate) fn build_scoped(
     heap_seed: Option<&HeapSnapshot>,
     live_base: u32,
 ) -> IndexMap<ExprId, ValueId> {
-    let scoped: Vec<(ExprId, ValueId)> = {
-        let pool = std::mem::take(scratch);
-        let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, pool);
-        b.pure_builtin_callees.clone_from(pure_builtin_callees);
-        b.current_value.clone_from(seed);
-        // Seed the heap with the caller's version state at the call site so a
-        // spliced field read carries the version a fresh whole-function build
-        // would assign (a fresh `INITIAL` heap collapses distinct versions — e.g.
-        // a `pop()`-shrunk `.used` — and would over-merge).
-        if let Some(h) = heap_seed {
-            b.heap_state.seed_from(h);
-        }
-        let stmts: Vec<StmtId> = b.body.blocks[block]
-            .stmts
-            .iter()
-            .skip(skip)
-            .copied()
-            .collect();
-        for s in stmts {
-            b.walk_stmt(s);
-        }
-        let scoped = b.value_of.iter().map(|(&e, &v)| (e, v)).collect();
-        *scratch = b.pool;
-        scoped
-    };
+    let scoped = walk_scoped(
+        body,
+        block,
+        skip,
+        seed,
+        aliased,
+        untrackable,
+        mut_escaped,
+        type_table,
+        pure_builtin_callees,
+        scratch,
+        heap_seed,
+    );
     // Surface every caller-rooted re-emittable value (constants, plus
     // `FieldAccess` / arithmetic over the call-site args at their true version),
     // re-interned into the live pool. A walk-local value (an `Opaque` of a
     // remapped callee local) is dropped — it has no caller-pool identity.
     let mut out = IndexMap::default();
-    for (e, sv) in scoped {
+    for (e, sv) in scoped.values {
         if let Some(lv) = reintern_live_rooted(scratch, &mut body.values, sv, live_base, type_table)
         {
             out.insert(e, lv);
         }
     }
     out
+}
+
+/// The walk half of [`build_scoped`], stopping before the re-intern: every
+/// `(expr, value)` the scratch walk produced, with the values living in
+/// `scratch`. A caller that only needs to know **which reads see the same
+/// value** wants this — the equivalence is what the walk establishes, while the
+/// scratch ids themselves mean nothing in the live pool (see
+/// `Engine::scoped_field_values`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn walk_scoped(
+    body: &Body,
+    block: BlockId,
+    skip: usize,
+    seed: &IndexMap<u32, ValueId>,
+    aliased: &crate::hashmap::IndexSet<u32>,
+    untrackable: &crate::hashmap::IndexSet<u32>,
+    mut_escaped: &crate::hashmap::IndexSet<u32>,
+    type_table: Option<&crate::tir::TypeTable>,
+    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    scratch: &mut ValuePool,
+    heap_seed: Option<&HeapSnapshot>,
+) -> ScopedWalk {
+    let pool = std::mem::take(scratch);
+    let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table, pool);
+    b.pure_builtin_callees.clone_from(pure_builtin_callees);
+    b.current_value.clone_from(seed);
+    // Seed the heap with the caller's version state at the call site so a
+    // spliced field read carries the version a fresh whole-function build
+    // would assign (a fresh `INITIAL` heap collapses distinct versions — e.g.
+    // a `pop()`-shrunk `.used` — and would over-merge).
+    if let Some(h) = heap_seed {
+        b.heap_state.seed_from(h);
+    }
+    let stmts: Vec<StmtId> = b.body.blocks[block]
+        .stmts
+        .iter()
+        .skip(skip)
+        .copied()
+        .collect();
+    for s in stmts {
+        b.walk_stmt(s);
+    }
+    let values = b.value_of.iter().map(|(&e, &v)| (e, v)).collect();
+    let stmt_entry_version = std::mem::take(&mut b.stmt_entry_version);
+    *scratch = b.pool;
+    ScopedWalk {
+        values,
+        stmt_entry_version,
+    }
+}
+
+/// What a [`walk_scoped`] pass observed: each expression's scratch value, and
+/// the version counter as each statement began.
+pub(crate) struct ScopedWalk {
+    pub values: Vec<(ExprId, ValueId)>,
+    pub stmt_entry_version: IndexMap<StmtId, HeapVersion>,
 }
 
 /// Whether `id`'s value is a build-context-free constant safe to freeze into an
@@ -375,19 +343,11 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
     }
 }
 
-/// Re-intern a value computed in a [`build_scoped`] `scratch` pool into the live
-/// `live` pool, when it is rooted entirely in **caller** values — every leaf an
-/// id below `live_base` (the pool length the scratch was cloned at, so those ids
-/// are shared and valid in `live`). Such a value is a constant, or a
-/// `FieldAccess` / arithmetic / `Select` tree over the call-site argument values,
-/// and it carries the caller's heap version (from the seeded heap), so it equals
-/// what a fresh whole-function build assigns the spliced node — sound to surface.
-///
-/// Returns `None` for a walk-local `Opaque` (a remapped callee local with no seed
-/// value) or a `LoopPhi`: those have no meaning in the caller pool. The recursion
-/// is the cross-pool copy [`build_scoped`]'s constant case did, widened past
-/// constants to the re-emittable caller-rooted values (WEP: promote the spliced
-/// `FieldAccess` at its true version).
+/// Re-intern a [`build_scoped`] scratch value into `live`, when every leaf is an
+/// id below `live_base` and so already shared. Such a value is a constant or a
+/// tree over the call-site arguments, so it equals what a fresh whole-function
+/// build would assign the spliced node. `None` for a walk-local `Opaque` or
+/// `LoopPhi`, which mean nothing in the caller pool.
 fn reintern_live_rooted(
     scratch: &ValuePool,
     live: &mut ValuePool,
@@ -480,6 +440,10 @@ struct Builder<'a> {
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
+    /// The version counter as each statement began: a `FieldAccess` below a
+    /// statement's mark was last written before it, so pinning the load there
+    /// still sees it.
+    stmt_entry_version: IndexMap<StmtId, HeapVersion>,
     /// `ExprId` indices of calls that mutate no caller local. See
     /// [`BuildConfig::pure_calls`].
     pure_calls: crate::hashmap::IndexSet<ExprId>,
@@ -519,19 +483,12 @@ impl<'a> Builder<'a> {
             ref_targets: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
+            stmt_entry_version: IndexMap::default(),
             pure_calls: crate::hashmap::IndexSet::default(),
             pure_builtin_callees: crate::hashmap::IndexSet::default(),
         }
     }
 
-    /// If both operands are constant literals and `op` is a const-foldable
-    /// pure arithmetic / comparison / bitwise op, fold it exactly as niri's
-    /// CTFE would ([`crate::const_eval::eval_binary`]) and intern the resulting
-    /// literal `ValueId`. Each operand's `PrimitiveType` is read from its own
-    /// NIR type, so integer wrapping matches the runtime width and a
-    /// mixed-prim op (which niri refuses) is not folded. Returns `None` when an
-    /// operand is non-constant, a type is unavailable, or the op is not
-    /// foldable — the caller then builds the structural `Binary` node.
     /// Type of an operand during the build: from the skeleton expr, or from the
     /// build pool for a promoted constant (its source type was seeded there).
     fn operand_type(&self, op: Operand) -> crate::tir::TypeId {
@@ -544,6 +501,11 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// Fold two constant-literal operands exactly as niri's CTFE would
+    /// ([`crate::const_eval::eval_binary`]) and intern the resulting literal.
+    /// Each operand's `PrimitiveType` comes from its own NIR type, so integer
+    /// wrapping matches the runtime width and a mixed-prim op is not folded.
+    /// `None` leaves the caller to build the structural `Binary` node.
     fn fold_binary_const(
         &mut self,
         op: NirBinaryOp,
@@ -702,20 +664,11 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// A direct / method call may mutate any field of a local the callee can
-    /// reach *and* mutate — one with a mutable escape (`&mut v`, a mut-ref
-    /// argument, a `&mut self` receiver, or a `stores` stash). The callee
-    /// reaches such an object via an escaped mutable reference or a global, and
-    /// a mutable reference may have been retained, so any later call is a
-    /// potential mutation point — bump every `mut_escaped` local, not only this
-    /// call's arguments. Non-`mut_escaped` locals (non-aliased, or aliased only
-    /// through an immutable `&v`) cannot be mutated by any callee, so their
-    /// fields survive the call.
-    /// Invalidate the locals a call at `call` may mutate. A call proven to mutate
-    /// no caller local ([`BuildConfig::pure_calls`]) bumps only the `untrackable`
-    /// (stashed) locals any call can reach; otherwise every `mut_escaped` local is
-    /// bumped (conservative). Skipping the bump for a pure accessor keeps a
-    /// `mut_escaped` receiver's field version stable across it.
+    /// Invalidate the locals a call may mutate. One proven to mutate nothing
+    /// ([`BuildConfig::pure_calls`]) bumps only the `untrackable` locals any call
+    /// can reach; otherwise every `mut_escaped` local is bumped — not just this
+    /// call's arguments, since a mutable reference that escaped earlier may have
+    /// been retained.
     fn bump_call_effects(&mut self, call: ExprId) {
         let pure = self.pure_calls.contains(&call);
         // Iterate ascending local index, not `mut_escaped`'s insertion order:
@@ -749,6 +702,7 @@ impl<'a> Builder<'a> {
     }
 
     fn walk_stmt(&mut self, stmt: StmtId) {
+        self.stmt_entry_version.insert(stmt, self.heap_state.next);
         match self.body.stmts[stmt].kind.clone() {
             StmtKind::Let {
                 local_index, value, ..
@@ -1607,18 +1561,11 @@ impl<'a> Builder<'a> {
             .retain(|src, pointee| !writes.contains(src) && !writes.contains(pointee));
     }
 
-    /// Join the heap state at a branch endpoint: each overlay generation
-    /// keeps its pre-branch version iff every fall-through arm left it
-    /// unchanged; otherwise it bumps fresh. Non-fall-through arms (terminated
-    /// by `break` / `return` / `continue`) are excluded — their writes never
-    /// reach code after the branch. No fall-through arm ⇒ post-state is `pre`.
-    ///
-    /// Each of `per_slot` / `per_local` / `field_global` joins independently
-    /// (an absent overlay entry contributes the snapshot's `default_version`
-    /// in [`HeapState::version_of`], so the per-overlay join mirrors the
-    /// single-map case sharing the joined default). `version_of` maxes the
-    /// overlays, so a join that is too coarse only raises a read's version —
-    /// never lowers it below an arm's — keeping the join sound.
+    /// Join the heap state at a branch endpoint: a generation keeps its
+    /// pre-branch version iff every fall-through arm left it unchanged, else
+    /// bumps fresh. Arms terminated by `break` / `return` / `continue` are
+    /// excluded, their writes never reaching past the branch; with none left the
+    /// post-state is `pre`. Each overlay joins independently.
     fn join_heap(&mut self, pre: &HeapSnapshot, arms: &[(HeapSnapshot, bool)]) {
         let live: Vec<&HeapSnapshot> = arms
             .iter()
@@ -1797,16 +1744,11 @@ impl<'a> Builder<'a> {
     }
 
     /// Reassign every local the body may write to a fresh `Opaque`, and
-    /// invalidate the heap fields the body may write, before and after the
-    /// walk. The body may run 0..N times, so in-body reads must not share
-    /// `ValueId`s with pre-loop reads, and post-loop reads must not share them
-    /// with in-body reads. (Locals declared inside the loop need no pre-seed:
-    /// they get fresh `Opaque`s as the body walks.)
-    ///
-    /// Heap invalidation is selective ([`collect_loop_heap_effects`]): a field
-    /// the body never writes — directly, through a reference, or via a
-    /// non-builtin call — keeps its pre-loop version, so a `table.used = 256`
-    /// before a builtin-only loop still forwards inside and after it.
+    /// invalidate the heap fields it may write, both before and after the walk:
+    /// the body runs 0..N times, so in-body reads must share `ValueId`s with
+    /// neither pre- nor post-loop reads. Heap invalidation is selective
+    /// ([`collect_loop_heap_effects`]) — a field the body never writes keeps its
+    /// pre-loop version, so a store before a builtin-only loop still forwards.
     fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
         let writes = writes_of_block(self.body, body_block, &mut self.block_writes);
         let heap_effects =
@@ -1860,17 +1802,11 @@ impl<'a> Builder<'a> {
         self.apply_loop_heap_effects(&heap_effects);
     }
 
-    /// Invalidate the heap generations a loop body may write (see
-    /// [`collect_loop_heap_effects`]). A written `local.field` bumps that
-    /// local's `per_slot` (or `field_global` when the local is aliased); a
-    /// `&mut`/method/mut-arg borrow bumps the local's `per_local`; an external
-    /// write (non-builtin call, indirect call, opaque store) invalidates every
-    /// `mut_escaped` local's fields. Non-touched fields survive — and an
-    /// *immutably*-`&`-escaped local (`&config` passed to `fn process(&Config)`)
-    /// is **not** `mut_escaped`, so its fields survive the call, matching the
-    /// per-call [`Builder::bump_call_effects`] (which the loop path must agree
-    /// with — using the wider `aliased` here lost the forward for an immutable
-    /// reference field read across a loop call: `opt_licm_immut_ref`).
+    /// Invalidate the heap generations a loop body may write: a written
+    /// `local.field` bumps `per_slot`, or `field_global` when aliased; a borrow
+    /// bumps `per_local`; an external write invalidates every `mut_escaped`
+    /// local. Keyed on `mut_escaped` to agree with the per-call
+    /// [`Builder::bump_call_effects`]; untouched fields survive.
     fn apply_loop_heap_effects(&mut self, eff: &LoopHeapEffects) {
         for &(local, field) in &eff.written_fields {
             if self.aliased.contains(&local) {

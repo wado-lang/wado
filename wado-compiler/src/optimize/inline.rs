@@ -335,16 +335,11 @@ fn is_inline_eligible(
         return false;
     }
 
-    // The size threshold applies even to functions with a single call site.
-    // "One call site ⇒ inlining is always a size win" is *false* here: if the
-    // sole call site sits inside a function that is itself duplicated by
-    // threshold inlining (or nested inlining) at N sites, the large callee is
-    // copied N times instead of being shared. Bypassing the threshold for
-    // single-call-site functions measured +87% (pi_approx) / +186% (zlib) at
-    // -Os, and regressed already at -O1, so it is not a stale-DCE artifact.
-    //
-    // `#[inline]` hint raises the threshold by 5x, allowing functions up to 50
-    // expressions (at the default threshold of 10) to be inlined.
+    // The threshold applies even at a single call site: if that site sits inside
+    // a function itself duplicated at N sites, the large callee is copied N
+    // times rather than shared. Bypassing it measured +87% (pi_approx) / +186%
+    // (zlib) at -Os and regressed already at -O1. An `#[inline]` hint raises the
+    // threshold 5x.
     let effective_threshold = if func.inline_hint == InlineHint::Hint {
         inline_threshold * 5
     } else {
@@ -653,16 +648,11 @@ pub fn inline_functions(
     changed
 }
 
-/// Inline function calls in a block (arena). Each statement is processed in
-/// place (1:1); a `Let` / `Expr` / `Return` value gets a top-level inline
-/// attempt (which then re-scans the inlined body), while other statements
-/// recurse into their sub-expressions and sub-blocks.
-///
-/// `cold` marks a cold call-site context: once a `cold_path()` marker is seen,
-/// the rest of the block (and everything nested in it) is cold, mirroring
-/// [`block_cut`]. Calls at cold sites are not inlined (the callee body would
-/// bloat the hot caller with code that rarely runs) unless the callee is
-/// `#[inline(always)]`.
+/// Inline function calls in a block, each statement processed in place: a
+/// `Let` / `Expr` / `Return` value gets a top-level attempt that then re-scans
+/// the inlined body, while others recurse. `cold` marks a cold call-site
+/// context, spreading to the rest of the block once a `cold_path()` marker is
+/// seen; a cold call is inlined only when the callee is `#[inline(always)]`.
 #[allow(clippy::too_many_arguments)]
 fn inline_calls_in_block(
     body: &mut Body,
@@ -1591,10 +1581,10 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                 has_receiver,
             }
         }
-        ExprKind::CmRawCall { local_name, args } => {
-            let (ln, args) = (local_name.clone(), args.clone());
+        ExprKind::CmRawCall { target, args } => {
+            let (target, args) = (target.clone(), args.clone());
             ExprKind::CmRawCall {
-                local_name: ln,
+                target,
                 args: args
                     .into_iter()
                     .map(|a| splice_operand(caller, callee, a, ctx))

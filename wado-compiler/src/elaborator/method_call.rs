@@ -32,22 +32,11 @@ fn static_call_symbol_name(static_call: &ast::StaticMethodCallExpr) -> String {
 }
 
 /// Inputs to [`Elaborator::resolve_method_call_with`], the TIR-level method-call
-/// dispatcher. The AST-driven [`Elaborator::resolve_method_call`] is a thin
-/// wrapper that resolves the receiver / type args / args from the
-/// [`ast::MethodCallExpr`] and forwards here; sites that synthesise method
-/// calls without a backing AST node (e.g. the for-of loop's `into_iter()` /
-/// `next()` dispatches) call this directly with their already-resolved
-/// receiver and an empty `args` slice.
-///
-/// `method_id == None` signals a synthetic call: no use→def edge is
-/// recorded against any AST node for the method name token. This is what
-/// keeps internal helper calls out of LSP jump-to-definition.
-///
-/// `call_id == None` likewise suppresses recording the dispatch decision
-/// in [`super::sem::TypeAnnotations::method_dispatch`]: the future
-/// `reify` pass (WEP 2026-05-26) only walks source-level
-/// `MethodCallExpr` nodes, so a synthesised call has no AST id under which
-/// to file an entry.
+/// dispatcher. [`Elaborator::resolve_method_call`] wraps it for AST-driven calls;
+/// a synthesised one (for-of's `into_iter()` / `next()`) calls it directly with
+/// an already-resolved receiver. Both ids are then `None`, which suppresses the
+/// use→def edge — keeping internal helpers out of jump-to-definition — and the
+/// `method_dispatch` entry, since reify walks source-level nodes only.
 pub(super) struct MethodCallInput<'a> {
     pub receiver: TirExpr,
     /// The receiver's source AST when the call comes from user syntax.
@@ -1095,19 +1084,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info: Some(method_info),
         };
 
-        // WEP 2026-05-26: record the dispatch decision so the
-        // future `reify` pass can emit the same method-call TIR without
-        // re-running trait lookup / method-name mangling. Skipped when:
-        //  - `call_id == None` (synthetic call: for-of's `.into_iter()`
-        //    / `.next()`),
-        //  - The early-returning short-circuits above (tuple `.len()` /
-        //    `.zip()`, static-method-as-instance error) returned before
-        //    reaching here, or
-        //  - Method lookup failed and we are in the error-recovery
-        //    placeholder path (`method_found == false`).
-        // Only the trait-qualified caller reads the signature facts back
-        // (`required_trait` is its marker); ordinary method calls skip the
-        // four vector clones, incl. deep default-expression ASTs.
+        // Record the dispatch decision so reify can emit the same TIR without
+        // re-running trait lookup or mangling. Skipped for a synthetic call, for
+        // the short-circuits that returned above, and on the error-recovery path.
+        // Only a trait-qualified caller reads the signature facts back, so an
+        // ordinary call skips the four vector clones and their default ASTs.
         let signature = (method_found && required_trait.is_some()).then(|| MethodSignatureFacts {
             param_is_mut: param_is_mut.clone(),
             param_names: param_names.clone(),
@@ -2768,16 +2749,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Keys of the *trait* impl blocks whose target head is written
-    /// `struct_name`, current-module-first.
-    ///
-    /// A written name reaches two receiver namespaces. It usually names a
-    /// declaration, but an impl that bound it as its own type parameter
-    /// (`impl<V: Bound> Trait for V`) keys under that parameter's *binder*,
-    /// which no declaration lookup can reach. Both are searched inside the
-    /// current module, where a bare name may mean either; outside it only the
-    /// declaration namespace is, since a foreign impl's type parameter is not
-    /// this name. Consumers re-check the impl's own spelling, so the widening
-    /// cannot over-match.
+    /// `struct_name`, current-module-first. A written name reaches two receiver
+    /// namespaces: usually a declaration, but an impl binding it as its own type
+    /// parameter (`impl<V: Bound> Trait for V`) keys under that binder instead.
+    /// Both are searched in the current module, only the declaration namespace
+    /// outside it. Consumers re-check the impl's spelling.
     fn trait_impl_keys_current_first(&self, struct_name: &str) -> Vec<(ModuleSource, AstId)> {
         let env = &self.tysys.trait_env;
         let declared = env.entries_by_receiver_vec(&self.impl_target(struct_name).receiver());
@@ -3022,24 +2998,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.keys_declare_static_method(&keys, method_name)
     }
 
-    /// The argument preselect over a receiver's conversion impls
-    /// (WEP 2026-07-31) — this DOES decide calls: `Selected` / `Ambiguous`
-    /// short-circuit resolution.
-    ///
-    /// Selection must run before the argument is elaborated: the expected
-    /// type that shapes a literal comes from the selected impl, and picking
-    /// it afterwards is the circular ordering the WEP diagnoses. Every class
-    /// that carries information participates — a synthesized type selects by
-    /// `TypeId` rather than through the name hint's spelling comparison, which
-    /// is what that mechanism's aliasing ceiling asks for. An `Opaque` argument
-    /// carries nothing and passes through, and so does a class several impls
-    /// answer without contradiction (see `Head` below).
-    ///
-    /// Admissibility is [`Elaborator::class_admits`] over each impl's
-    /// *resolved* source type — the same table argument-directed selection
-    /// uses — so an integer newtype admits an integer literal here exactly as
-    /// it does there. A spelling table would under-admit newtypes, and
-    /// under-admission selects wrongly (the forbidden direction).
+    /// The argument preselect over a receiver's conversion impls: `Selected` and
+    /// `Ambiguous` short-circuit resolution, so it decides calls. It must run
+    /// *before* the argument is elaborated — the expected type shaping a literal
+    /// comes from the selected impl. Admissibility is [`Elaborator::class_admits`]
+    /// over each impl's *resolved* source type, since spelling under-admits.
     pub(super) fn conversion_preselect(
         &mut self,
         struct_name: &str,
@@ -3145,11 +3108,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (candidates, has_blanket)
     }
 
-    /// Locate a static trait method impl, returning the resolved identity
-    /// (`module`, `type_name`, `method_name`, `trait_name`). Used so that
-    /// `FunctionRef` gets the correct `module_source` — especially when a
-    /// user defines `impl From<MyType> for i32` in the entry module (or
-    /// another module), so DCE and WIR building can find it.
     /// The original (un-aliased) name `name` resolves to *within `module`* — its
     /// `use { Original as name }` original, or `name` itself when not aliased.
     /// Resolving in the impl's own module (not the call site) makes `From`-impl

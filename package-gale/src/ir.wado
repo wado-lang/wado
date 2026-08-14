@@ -1102,6 +1102,10 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
     };
 }
 
+pub fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
+    return all_rules.iter().find(|r: &LexerRule| r.name == *name);
+}
+
 fn find_or_add_mode(modes: &mut List<String>, name: &String) -> i32 {
     for let mut i = 0; i < modes.len(); i += 1 {
         if modes[i] == *name {
@@ -1170,6 +1174,103 @@ pub fn canonicalize_empty_alt_groups(grammar: &mut Grammar) {
         let canon_alts = canon_empty_alt_alternatives(&grammar.parser_rules[ri].alternatives);
         grammar.parser_rules[ri].alternatives = canon_alts;
     }
+}
+
+/// The fixed text a lexer rule aliases, or `null`.
+///
+/// ANTLR4 aliases a parser literal only to a rule whose entire body is that
+/// one string literal: `K : 'k' 'w' ;` and `K : ('kw') ;` do not alias
+/// `'kw'`. An action does not block it, and must not — `is_literal_duplicate`
+/// would then dedup the rule away and drop the action with it.
+pub fn lexer_alias_text(rule: &LexerRule) -> Option<String> {
+    if rule.is_fragment || rule.is_virtual || rule.mode != DEFAULT_MODE || rule.body.len() != 1 {
+        return null;
+    }
+    let alt = &rule.body[0];
+    if alt.elements.len() != 1 {
+        return null;
+    }
+    if let Literal(text) = &alt.elements[0] {
+        return Option::<String>::Some(*text);
+    }
+    return null;
+}
+
+/// Rewrite every parser `Literal(t)` that a lexer rule aliases into a
+/// reference to that rule, so the two spellings denote one token type as they
+/// do in ANTLR4. Runs before `collect_literal_tokens`, which then never sees
+/// `t` and mints no anonymous token to dedup the rule against.
+pub fn alias_parser_literals(grammar: &mut Grammar) {
+    let mut texts: List<String> = [];
+    let mut names: List<String> = [];
+    for let rule of &grammar.lexer_rules {
+        if let Some(t) = lexer_alias_text(rule) {
+            // First rule wins; a later duplicate is already unreachable.
+            if index_of_text(&texts, &t) < 0 {
+                texts.push(t);
+                names.push(rule.name);
+            }
+        }
+    }
+    if texts.is_empty() {
+        return;
+    }
+    for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
+        let aliased = alias_alternatives(&grammar.parser_rules[ri].alternatives, &texts, &names);
+        grammar.parser_rules[ri].alternatives = aliased;
+    }
+}
+
+fn index_of_text(texts: &List<String>, text: &String) -> i32 {
+    for let mut i = 0; i < texts.len(); i += 1 {
+        if texts[i] == *text {
+            return i;
+        }
+    }
+    return -1;
+}
+
+fn alias_alternatives(alts: &List<Alternative>, texts: &List<String>, names: &List<String>) -> List<Alternative> {
+    let mut out: List<Alternative> = [];
+    for let alt of alts {
+        let mut elems: List<Element> = [];
+        for let e of &alt.elements {
+            elems.push(alias_element(e, texts, names));
+        }
+        out.push(Alternative { label: alt.label, options: alt.options, elements: elems, actions: alt.actions });
+    }
+    return out;
+}
+
+fn alias_element(elem: &Element, texts: &List<String>, names: &List<String>) -> Element {
+    return match *elem {
+        Literal(l) => {
+            let i = index_of_text(texts, &l.text);
+            if i < 0 {
+                *elem;
+            } else {
+                Element::TokenRef(TokenRefElement::with_options(names[i], l.options));
+            }
+        },
+        Repeat(rep) => Element::Repeat(RepeatElement {
+            kind: rep.kind,
+            element: alias_element(&rep.element, texts, names),
+            non_greedy: rep.non_greedy,
+        }),
+        Not(n) => Element::Not(NotElement { element: alias_element(&n.element, texts, names) }),
+        Label(lab) => Element::Label(LabelElement {
+            name: lab.name,
+            list: lab.list,
+            element: alias_element(&lab.element, texts, names),
+            snake_name: lab.snake_name,
+            field_name: lab.field_name,
+        }),
+        Group(g) => Element::Group(GroupElement {
+            alternatives: alias_alternatives(&g.alternatives, texts, names),
+            options: g.options,
+        }),
+        _ => *elem,
+    };
 }
 
 /// Strip the syntactic `( … )` wrappers off a labelled element: `x=(ID)` binds

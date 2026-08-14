@@ -760,11 +760,11 @@ impl<'a> NirUnparser<'a> {
                 self.unparse_type_args(&type_args);
                 self.delimited("(", ")", arg_ops, |s, op| s.unparse_operand(body, op));
             }
-            ExprKind::CmRawCall { local_name, args } => {
-                let local_name = local_name.clone();
+            ExprKind::CmRawCall { target, args } => {
+                let name = target.import_name().into_owned();
                 let args = args.clone();
                 self.output.push_str("cm_raw_call ");
-                self.output.push_str(&local_name);
+                self.output.push_str(&name);
                 self.delimited("(", ")", args, |s, aid| s.unparse_operand(body, aid));
             }
             ExprKind::FieldAccess {

@@ -903,12 +903,7 @@ pub struct ParseResult {
 
 impl ParseResult {
     pub fn has_errors(&self) -> bool {
-        for let d of &self.diagnostics {
-            if d.is_error() {
-                return true;
-            }
-        }
-        return false;
+        return self.diagnostics.iter().any(|d| d.is_error());
     }
 
     /// True when the parse produced no error-severity diagnostics.
@@ -1608,20 +1603,6 @@ pub global TK_Function_: i32 = 62;
 pub global TK_UnexpectedCharacter: i32 = 63;
 pub global TK_EOF: i32 = 64;
 pub global TK_ERROR: i32 = 65;
-pub global TK_LIT_SEMI: i32 = 66;
-pub global TK_LIT_LPAREN: i32 = 67;
-pub global TK_LIT_COLON: i32 = 68;
-pub global TK_LIT_RPAREN: i32 = 69;
-pub global TK_LIT_LBRACE: i32 = 70;
-pub global TK_LIT_RBRACE: i32 = 71;
-pub global TK_LIT_STAR: i32 = 72;
-pub global TK_LIT_PIPE: i32 = 73;
-pub global TK_LIT_DOT: i32 = 74;
-pub global TK_LIT_LBRACKET: i32 = 75;
-pub global TK_LIT_EQ: i32 = 76;
-pub global TK_LIT_RBRACKET: i32 = 77;
-pub global TK_LIT_SLASH: i32 = 78;
-pub global TK_LIT_U5f: i32 = 79;
 
 struct Lexer {
     chars: List<char>,
@@ -1640,6 +1621,97 @@ impl Lexer {
     fn slice(&self, start: i32, end: i32) -> LexerSlice with stores[self] {
         return LexerSlice::new(&self.chars, start, end);
     }
+}
+
+fn try_OpenBracket(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '[' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_CloseBracket(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != ']' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_OpenParen(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '(' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_CloseParen(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != ')' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_OpenBrace(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '{' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_CloseBrace(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '}' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_SemiColon(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != ';' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_Equal(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_Colon(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != ':' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_Dot(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '.' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_Multiply(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '*' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_Divide(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '/' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_Pipe(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '|' { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn try_Comment(chars: &List<char>, start: i32) -> i32 {
@@ -27231,90 +27303,6 @@ fn try_UnexpectedCharacter(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_semi(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != ';' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_lparen(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '(' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_colon(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != ':' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_rparen(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != ')' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_lbrace(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '{' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_rbrace(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '}' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_star(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_pipe(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '|' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_dot(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '.' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_lbracket(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '[' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_eq(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '=' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_rbracket(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != ']' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_slash(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '/' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_u5f(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '_' { return -1; }
-    return pos + 1;
-}
-
 fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
     let len = end - start;
     if len == 1 {
@@ -27410,8 +27398,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '(' } {
-            end = try_lit_lparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; best_channel = 0; }
+            end = try_OpenParen(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OpenParen; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27425,8 +27413,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { ')' } {
-            end = try_lit_rparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; best_channel = 0; }
+            end = try_CloseParen(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_CloseParen; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27440,8 +27428,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '*' } {
-            end = try_lit_star(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_STAR; best_channel = 0; }
+            end = try_Multiply(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Multiply; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27506,8 +27494,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '.' } {
-            end = try_lit_dot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_DOT; best_channel = 0; }
+            end = try_Dot(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dot; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27523,8 +27511,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '/' } {
-            end = try_lit_slash(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; best_channel = 0; }
+            end = try_Divide(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Divide; best_channel = 0; }
             end = try_Comment(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Comment; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27540,8 +27528,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { ':' } {
-            end = try_lit_colon(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_COLON; best_channel = 0; }
+            end = try_Colon(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Colon; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27557,8 +27545,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { ';' } {
-            end = try_lit_semi(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; best_channel = 0; }
+            end = try_SemiColon(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SemiColon; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27587,8 +27575,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '=' } {
-            end = try_lit_eq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_EQ; best_channel = 0; }
+            end = try_Equal(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Equal; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27748,8 +27736,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '[' } {
-            end = try_lit_lbracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; best_channel = 0; }
+            end = try_OpenBracket(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OpenBracket; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27790,8 +27778,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { ']' } {
-            end = try_lit_rbracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; best_channel = 0; }
+            end = try_CloseBracket(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_CloseBracket; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27813,21 +27801,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_PrefixMatch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PrefixMatch; best_channel = 0; }
-            end = try_Ident(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_Function_(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-            end = try_UnexpectedCharacter(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
-        } else if first_char matches { '_' } {
-            end = try_lit_u5f(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_U5f; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27899,8 +27872,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '{' } {
-            end = try_lit_lbrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; best_channel = 0; }
+            end = try_OpenBrace(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OpenBrace; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -27914,8 +27887,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '|' } {
-            end = try_lit_pipe(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; best_channel = 0; }
+            end = try_Pipe(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Pipe; best_channel = 0; }
             end = try_DashMatch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DashMatch; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
@@ -27933,8 +27906,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '}' } {
-            end = try_lit_rbrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; best_channel = 0; }
+            end = try_CloseBrace(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_CloseBrace; best_channel = 0; }
             end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Dimension(&lexer.chars, start);
@@ -28089,20 +28062,6 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_UnexpectedCharacter => "UnexpectedCharacter",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_SEMI => "TK_LIT_SEMI",
-        TK_LIT_LPAREN => "TK_LIT_LPAREN",
-        TK_LIT_COLON => "TK_LIT_COLON",
-        TK_LIT_RPAREN => "TK_LIT_RPAREN",
-        TK_LIT_LBRACE => "TK_LIT_LBRACE",
-        TK_LIT_RBRACE => "TK_LIT_RBRACE",
-        TK_LIT_STAR => "TK_LIT_STAR",
-        TK_LIT_PIPE => "TK_LIT_PIPE",
-        TK_LIT_DOT => "TK_LIT_DOT",
-        TK_LIT_LBRACKET => "TK_LIT_LBRACKET",
-        TK_LIT_EQ => "TK_LIT_EQ",
-        TK_LIT_RBRACKET => "TK_LIT_RBRACKET",
-        TK_LIT_SLASH => "TK_LIT_SLASH",
-        TK_LIT_U5f => "TK_LIT_U5f",
         _ => "Unknown",
     };
 }
@@ -28841,7 +28800,7 @@ fn scan_charset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_3, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break try_0; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
@@ -28904,7 +28863,7 @@ fn scan_imports(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                 if pos < 0 { break try_0; }
                 pos = scan_media_query_list(tokens, pos, &FOLLOW_MASK_3, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break try_0; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
@@ -28937,7 +28896,7 @@ fn scan_imports(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                 }
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_3, 0);
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break try_1; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_1; }
@@ -29060,7 +29019,7 @@ fn scan_namespace_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
                 }
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_3, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break try_0; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
@@ -29237,7 +29196,7 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_LPAREN {
+        } else if alt_kind == TK_OpenParen {
             pos = start;
             try_1: {
                 pos = scan_media_expression(tokens, pos, follow, 0);
@@ -29280,17 +29239,17 @@ fn scan_media_type(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
 
 fn scan_media_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_8, 0);
     if pos < 0 { return -1; }
     pos = scan_media_feature(tokens, pos, &FOLLOW_MASK_10, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_LIT_COLON {
+    if pos < tokens.len() && tokens[pos] == TK_Colon {
         let sp = pos;
         sg_21_done: {
             sg_21: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { break sg_21; }
+                if pos >= tokens.len() || tokens[pos] != TK_Colon { break sg_21; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_11, 0);
                 if pos < 0 { break sg_21; }
@@ -29302,7 +29261,7 @@ fn scan_media_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
         }
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -29326,12 +29285,12 @@ fn scan_page(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_12, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_LIT_COLON {
+    if pos < tokens.len() && tokens[pos] == TK_Colon {
         let sp = pos;
         pos = scan_pseudo_page(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_13, 0);
     if pos < 0 { return -1; }
@@ -29340,11 +29299,11 @@ fn scan_page(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
         pos = scan_declaration(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI {
+    while pos < tokens.len() && tokens[pos] == TK_SemiColon {
         let sp = pos;
         sg_22_done: {
             sg_22: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_22; }
+                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_22; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break sg_22; }
@@ -29360,7 +29319,7 @@ fn scan_page(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -29369,7 +29328,7 @@ fn scan_page(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
 
 fn scan_pseudo_page(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Colon { return -1; }
     pos += 1;
     pos = scan_ident(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -29696,7 +29655,7 @@ fn scan_type_namespace_prefix(tokens: &Array<i32>, pos: i32, follow: &List<List<
                 }
                 pos = gp_29;
                 sg_29_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_29_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_Multiply { break sg_29_1; }
                     pos += 1;
                     break sg_29;
                 }
@@ -29707,7 +29666,7 @@ fn scan_type_namespace_prefix(tokens: &Array<i32>, pos: i32, follow: &List<List<
         }
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Pipe { return -1; }
     pos += 1;
     return pos;
 }
@@ -29732,7 +29691,7 @@ fn scan_universal(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
             let bp = pos;
             let mut opt_ok: bool = false;
             opt_probe: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break opt_probe; }
+                if pos >= tokens.len() || tokens[pos] != TK_Multiply { break opt_probe; }
                 pos += 1;
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if (follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)) && (_kind_set_35(probe_kind)) { opt_ok = true; }
@@ -29740,14 +29699,14 @@ fn scan_universal(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
             pos = if opt_ok { bp } else { sp };
         }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Multiply { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_class_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Dot { return -1; }
     pos += 1;
     pos = scan_ident(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -29756,7 +29715,7 @@ fn scan_class_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
 
 fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_15, 0);
     if pos < 0 { return -1; }
@@ -29801,7 +29760,7 @@ fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
                                     }
                                     pos = gp_31;
                                     sg_31_3: {
-                                        if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sg_31_3; }
+                                        if pos >= tokens.len() || tokens[pos] != TK_Equal { break sg_31_3; }
                                         pos += 1;
                                         break sg_31;
                                     }
@@ -29851,7 +29810,7 @@ fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
                     }
                     if pos < 0 { pos = sp; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break opt_probe; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { break opt_probe; }
                 pos += 1;
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if (follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)) && (_kind_set_35(probe_kind)) { opt_ok = true; }
@@ -29891,7 +29850,7 @@ fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
                         }
                         pos = gp_34;
                         sg_34_3: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sg_34_3; }
+                            if pos >= tokens.len() || tokens[pos] != TK_Equal { break sg_34_3; }
                             pos += 1;
                             break sg_34;
                         }
@@ -29941,18 +29900,18 @@ fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
         }
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_pseudo(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Colon { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos] == TK_LIT_COLON {
+    if pos < tokens.len() && tokens[pos] == TK_Colon {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens[pos] != TK_Colon { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
     let gp_36 = pos;
@@ -29985,7 +29944,7 @@ fn scan_functional_pseudo(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
     if pos < 0 { return -1; }
     pos = scan_expression(tokens, pos, &FOLLOW_MASK_20, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     return pos;
 }
@@ -30126,7 +30085,7 @@ fn scan_negation(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_20, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     return pos;
 }
@@ -30160,7 +30119,7 @@ fn scan_negation_arg(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_DOT {
+        } else if alt_kind == TK_Dot {
             pos = start;
             try_3: {
                 pos = scan_class_name(tokens, pos, follow, 0);
@@ -30168,7 +30127,7 @@ fn scan_negation_arg(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_LBRACKET {
+        } else if alt_kind == TK_OpenBracket {
             pos = start;
             try_4: {
                 pos = scan_attrib(tokens, pos, follow, 0);
@@ -30176,7 +30135,7 @@ fn scan_negation_arg(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_COLON {
+        } else if alt_kind == TK_Colon {
             pos = start;
             try_5: {
                 pos = scan_pseudo(tokens, pos, follow, 0);
@@ -30196,10 +30155,10 @@ fn scan_operator_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if alt_kind == TK_LIT_SLASH {
+        if alt_kind == TK_Divide {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASH { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_Divide { break try_0; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
@@ -30226,10 +30185,10 @@ fn scan_operator_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_EQ {
+        } else if alt_kind == TK_Equal {
             pos = start;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break try_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_Equal { break try_3; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_3; }
@@ -30268,20 +30227,20 @@ fn scan_property_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_STAR {
+        } else if alt_kind == TK_Multiply {
             pos = start;
             try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break try_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_Multiply { break try_2; }
                 pos += 1;
                 pos = scan_ident(tokens, pos, follow, 0);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_U5f {
+        } else if alt_kind == TK_Underscore {
             pos = start;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_U5f { break try_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_Underscore { break try_3; }
                 pos += 1;
                 pos = scan_ident(tokens, pos, follow, 0);
                 if pos < 0 { break try_3; }
@@ -30310,7 +30269,7 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break try_1; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_13, 0);
                 if pos < 0 { break try_1; }
@@ -30319,7 +30278,7 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                     pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break try_1; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_1; }
@@ -30329,7 +30288,7 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
             try_0: {
                 pos = scan_selector_group(tokens, pos, &FOLLOW_MASK_7, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break try_0; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_13, 0);
                 if pos < 0 { break try_0; }
@@ -30338,7 +30297,7 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                     pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break try_0; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
@@ -30351,7 +30310,7 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
             try_0: {
                 pos = scan_selector_group(tokens, pos, &FOLLOW_MASK_7, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break try_0; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_13, 0);
                 if pos < 0 { break try_0; }
@@ -30360,7 +30319,7 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                     pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break try_0; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
@@ -30376,7 +30335,7 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break try_1; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_13, 0);
                 if pos < 0 { break try_1; }
@@ -30385,7 +30344,7 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                     pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break try_1; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_1; }
@@ -30402,11 +30361,11 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
 fn scan_declaration_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI {
+    while pos < tokens.len() && tokens[pos] == TK_SemiColon {
         let sp = pos;
         sg_41_done: {
             sg_41: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_41; }
+                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_41; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break sg_41; }
@@ -30421,11 +30380,11 @@ fn scan_declaration_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_SemiColon && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_42_done: {
             sg_42: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_42; }
+                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_42; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break sg_42; }
@@ -30456,7 +30415,7 @@ fn scan_declaration(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
             try_0: {
                 pos = scan_property_(tokens, pos, &FOLLOW_MASK_22, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_Colon { break try_0; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_11, 0);
                 if pos < 0 { break try_0; }
@@ -30473,7 +30432,7 @@ fn scan_declaration(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
             try_1: {
                 pos = scan_property_(tokens, pos, &FOLLOW_MASK_22, 0);
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_Colon { break try_1; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_23, 0);
                 if pos < 0 { break try_1; }
@@ -30770,7 +30729,7 @@ fn scan_function_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     if pos < 0 { return -1; }
     pos = scan_expr(tokens, pos, &FOLLOW_MASK_20, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -30785,7 +30744,7 @@ fn scan_dx_image_transform(tokens: &Array<i32>, pos: i32, follow: &List<List<i32
     if pos < 0 { return -1; }
     pos = scan_expr(tokens, pos, &FOLLOW_MASK_20, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -31080,10 +31039,10 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_COLON {
+        } else if alt_kind == TK_Colon {
             pos = start;
             try_11: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { break try_11; }
+                if pos >= tokens.len() || tokens[pos] != TK_Colon { break try_11; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_11; }
@@ -31123,17 +31082,17 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_12; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseParen { break try_12; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_12; }
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_LPAREN {
+        } else if alt_kind == TK_OpenParen {
             pos = start;
             try_13: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_13; }
+                if pos >= tokens.len() || tokens[pos] != TK_OpenParen { break try_13; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_24, 0);
                 if pos < 0 { break try_13; }
@@ -31163,17 +31122,17 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_13; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseParen { break try_13; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_13; }
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_LBRACKET {
+        } else if alt_kind == TK_OpenBracket {
             pos = start;
             try_14: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break try_14; }
+                if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { break try_14; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_25, 0);
                 if pos < 0 { break try_14; }
@@ -31203,7 +31162,7 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break try_14; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { break try_14; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_14; }
@@ -31241,7 +31200,7 @@ fn scan_at_rule(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
             }
             pos = gp_53;
             sg_53_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_53_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_53_1; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break sg_53_1; }
@@ -31258,7 +31217,7 @@ fn scan_unused(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if alt_kind == TK_LIT_LBRACE {
+        if alt_kind == TK_OpenBrace {
             pos = start;
             try_0: {
                 pos = scan_block(tokens, pos, follow, 0);
@@ -31276,10 +31235,10 @@ fn scan_unused(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_SEMI {
+        } else if alt_kind == TK_SemiColon {
             pos = start;
             try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break try_2; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_2; }
@@ -31315,7 +31274,7 @@ fn scan_unused(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
 
 fn scan_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_27, 0);
     if pos < 0 { return -1; }
@@ -31360,7 +31319,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
                 }
                 pos = gp_54;
                 sg_54_5: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_54_5; }
+                    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_54_5; }
                     pos += 1;
                     pos = scan_ws(tokens, pos, follow, 0);
                     if pos < 0 { break sg_54_5; }
@@ -31375,7 +31334,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -31476,7 +31435,7 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
 
 fn scan_group_rule_body(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_28, 0);
     if pos < 0 { return -1; }
@@ -31486,7 +31445,7 @@ fn scan_group_rule_body(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -31555,11 +31514,11 @@ fn scan_supports_condition_in_parens(tokens: &Array<i32>, pos: i32, follow: &Lis
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if alt_kind == TK_LIT_LPAREN {
+        if alt_kind == TK_OpenParen {
             let mut best: i32 = -1;
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_OpenParen { break try_0; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_29, 0);
                 if pos < 0 { break try_0; }
@@ -31567,7 +31526,7 @@ fn scan_supports_condition_in_parens(tokens: &Array<i32>, pos: i32, follow: &Lis
                 if pos < 0 { break try_0; }
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_20, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseParen { break try_0; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -31729,13 +31688,13 @@ fn scan_supports_disjunction(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 
 fn scan_supports_declaration_condition(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_34, 0);
     if pos < 0 { return -1; }
     pos = scan_declaration(tokens, pos, &FOLLOW_MASK_20, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     return pos;
 }
@@ -31754,7 +31713,7 @@ fn scan_general_enclosed(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
             }
             pos = gp_59;
             sg_59_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sg_59_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_OpenParen { break sg_59_1; }
                 pos += 1;
                 break sg_59;
             }
@@ -31789,7 +31748,7 @@ fn scan_general_enclosed(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     return pos;
 }
@@ -31810,7 +31769,7 @@ fn scan_url(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOL
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_20, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseParen { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
@@ -31840,7 +31799,7 @@ fn scan_var_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_20, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -31855,7 +31814,7 @@ fn scan_calc(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     if pos < 0 { return -1; }
     pos = scan_calc_sum(tokens, pos, &FOLLOW_MASK_20, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -31928,7 +31887,7 @@ fn scan_calc_product(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
             sg_63: {
                 pos = gp_63;
                 sg_63_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_63_0; }
+                    if pos >= tokens.len() || tokens[pos] != TK_Multiply { break sg_63_0; }
                     pos += 1;
                     pos = scan_ws(tokens, pos, &FOLLOW_MASK_36, 0);
                     if pos < 0 { break sg_63_0; }
@@ -31938,7 +31897,7 @@ fn scan_calc_product(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                 }
                 pos = gp_63;
                 sg_63_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASH { break sg_63_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_Divide { break sg_63_1; }
                     pos += 1;
                     pos = scan_ws(tokens, pos, &FOLLOW_MASK_38, 0);
                     if pos < 0 { break sg_63_1; }
@@ -32041,16 +32000,16 @@ fn scan_calc_value(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_LPAREN {
+        } else if alt_kind == TK_OpenParen {
             pos = start;
             try_4: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_4; }
+                if pos >= tokens.len() || tokens[pos] != TK_OpenParen { break try_4; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_36, 0);
                 if pos < 0 { break try_4; }
                 pos = scan_calc_sum(tokens, pos, &FOLLOW_MASK_20, 0);
                 if pos < 0 { break try_4; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_4; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseParen { break try_4; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break try_4; }
@@ -32070,7 +32029,7 @@ fn scan_font_face_rule(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_7, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_13, 0);
     if pos < 0 { return -1; }
@@ -32079,11 +32038,11 @@ fn scan_font_face_rule(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         pos = scan_font_face_declaration(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI {
+    while pos < tokens.len() && tokens[pos] == TK_SemiColon {
         let sp = pos;
         sg_64_done: {
             sg_64: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_64; }
+                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_64; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break sg_64; }
@@ -32099,7 +32058,7 @@ fn scan_font_face_rule(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -32117,7 +32076,7 @@ fn scan_font_face_declaration(tokens: &Array<i32>, pos: i32, follow: &List<List<
             try_0: {
                 pos = scan_property_(tokens, pos, &FOLLOW_MASK_22, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_Colon { break try_0; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_11, 0);
                 if pos < 0 { break try_0; }
@@ -32129,7 +32088,7 @@ fn scan_font_face_declaration(tokens: &Array<i32>, pos: i32, follow: &List<List<
             try_1: {
                 pos = scan_property_(tokens, pos, &FOLLOW_MASK_22, 0);
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_Colon { break try_1; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_23, 0);
                 if pos < 0 { break try_1; }
@@ -32160,7 +32119,7 @@ fn scan_keyframes_rule(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_7, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_39, 0);
     if pos < 0 { return -1; }
@@ -32170,7 +32129,7 @@ fn scan_keyframes_rule(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -32183,7 +32142,7 @@ fn scan_keyframe_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         sg_65: {
             pos = scan_keyframe_selector(tokens, pos, &FOLLOW_MASK_7, 0);
             if pos < 0 { break sg_65; }
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { break sg_65; }
+            if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break sg_65; }
             pos += 1;
             pos = scan_ws(tokens, pos, &FOLLOW_MASK_13, 0);
             if pos < 0 { break sg_65; }
@@ -32192,7 +32151,7 @@ fn scan_keyframe_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
                 pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
                 if pos < 0 { pos = sp; }
             }
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { break sg_65; }
+            if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break sg_65; }
             pos += 1;
             pos = scan_ws(tokens, pos, follow, 0);
             if pos < 0 { break sg_65; }
@@ -32287,7 +32246,7 @@ fn scan_viewport(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_7, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_13, 0);
     if pos < 0 { return -1; }
@@ -32296,7 +32255,7 @@ fn scan_viewport(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
         pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -32313,7 +32272,7 @@ fn scan_counter_style(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_7, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_13, 0);
     if pos < 0 { return -1; }
@@ -32322,7 +32281,7 @@ fn scan_counter_style(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
         pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -32339,7 +32298,7 @@ fn scan_font_feature_values_rule(tokens: &Array<i32>, pos: i32, follow: &List<Li
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_7, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_41, 0);
     if pos < 0 { return -1; }
@@ -32349,7 +32308,7 @@ fn scan_font_feature_values_rule(tokens: &Array<i32>, pos: i32, follow: &List<Li
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -32433,7 +32392,7 @@ fn scan_feature_value_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_7, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_43, 0);
     if pos < 0 { return -1; }
@@ -32448,7 +32407,7 @@ fn scan_feature_value_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
             sg_71: {
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_3, 0);
                 if pos < 0 { break sg_71; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_71; }
+                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_71; }
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break sg_71; }
@@ -32464,7 +32423,7 @@ fn scan_feature_value_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -32484,7 +32443,7 @@ fn scan_feature_value_definition(tokens: &Array<i32>, pos: i32, follow: &List<Li
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_22, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Colon { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_38, 0);
     if pos < 0 { return -1; }
@@ -32983,7 +32942,7 @@ fn _parse_charset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let ws = _parse_ws(p, &FOLLOW_MASK_2);
     let string_ = p.expect(TK_String_, &SYNC_0);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_3);
-    let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
+    let semicolon = p.expect(TK_SemiColon, &SYNC_0);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -32998,7 +32957,7 @@ fn _parse_charset__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -33085,7 +33044,7 @@ fn _parse_imports__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_5);
     let media_query_list = _parse_media_query_list(p, &FOLLOW_MASK_3);
-    let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
+    let semicolon = p.expect(TK_SemiColon, &SYNC_0);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -33119,7 +33078,7 @@ fn _parse_imports__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     if pos < 0 { return -1; }
     pos = scan_media_query_list(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -33138,7 +33097,7 @@ fn _parse_imports__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let url = _parse_url(p, follow);
     }
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_3);
-    let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
+    let semicolon = p.expect(TK_SemiColon, &SYNC_0);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -33170,7 +33129,7 @@ fn _parse_imports__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     }
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -33356,7 +33315,7 @@ fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
         let url = _parse_url(p, follow);
     }
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_3);
-    let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
+    let semicolon = p.expect(TK_SemiColon, &SYNC_0);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -33402,7 +33361,7 @@ fn _parse_namespace___inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<
     }
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -33702,7 +33661,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         }
         return;
     }
-    if kind == TK_LIT_LPAREN {
+    if kind == TK_OpenParen {
         let media_expression = _parse_media_expression(p, follow);
         loop {
             if p.recovering { break; }
@@ -33736,7 +33695,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     p.no_viable(
         "expected mediaQuery",
         p.peek_span(),
-        ["TK_MediaOnly", "TK_Not", "TK_Comment", "TK_Space", "TK_LIT_LPAREN"],
+        ["TK_MediaOnly", "TK_Not", "TK_Comment", "TK_Space", "TK_OpenParen"],
     );
     return;
 }
@@ -33771,15 +33730,15 @@ fn _parse_media_type(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 
 fn _parse_media_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
+    let openparen = p.expect(TK_OpenParen, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_8);
     let media_feature = _parse_media_feature(p, &FOLLOW_MASK_10);
-    if p.peek_kind() == TK_LIT_COLON {
-        let colon = p.expect(TK_LIT_COLON, &SYNC_0);
+    if p.peek_kind() == TK_Colon {
+        let colon = p.expect(TK_Colon, &SYNC_0);
         let ws = _parse_ws(p, &FOLLOW_MASK_11);
         let expr = _parse_expr(p, follow);
     }
-    let rparen = p.expect(TK_LIT_RPAREN, &SYNC_0);
+    let closeparen = p.expect(TK_CloseParen, &SYNC_0);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -33817,10 +33776,10 @@ fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     let start = p.peek_start();
     let page = p.expect(TK_Page, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_12);
-    if p.peek_kind() == TK_LIT_COLON {
+    if p.peek_kind() == TK_Colon {
         let pseudo_page = _parse_pseudo_page(p, &EMPTY_FOLLOW);
     }
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_0);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_8(p.peek_kind()) {
         let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
@@ -33833,7 +33792,7 @@ fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             let mut pos: i32 = p.pos;
             sg_99_done: {
                 sg_99: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_99; }
+                    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_99; }
                     pos += 1;
                     pos = scan_ws(tokens, pos, follow, 0);
                     if pos < 0 { break sg_99; }
@@ -33850,13 +33809,13 @@ fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
+        let semicolon = p.expect(TK_SemiColon, &SYNC_0);
         let ws = _parse_ws(p, follow);
         if _kind_set_8(p.peek_kind()) {
             let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
         }
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &SYNC_0);
+    let closebrace = p.expect(TK_CloseBrace, &SYNC_0);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -33874,7 +33833,7 @@ fn _parse_page(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 
 fn _parse_pseudo_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let colon = p.expect(TK_LIT_COLON, &SYNC_1);
+    let colon = p.expect(TK_Colon, &SYNC_1);
     let ident = _parse_ident(p, follow);
     let ws = _parse_ws(p, follow);
     return;
@@ -34118,11 +34077,11 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
             if rep_scan_pos < 0 { break; }
             if p.peek_kind() == TK_Hash {
                 let hash = p.expect(TK_Hash, &EMPTY_SYNC);
-            } else if p.peek_kind() == TK_LIT_DOT {
+            } else if p.peek_kind() == TK_Dot {
                 let class_name = _parse_class_name(p, follow);
-            } else if p.peek_kind() == TK_LIT_LBRACKET {
+            } else if p.peek_kind() == TK_OpenBracket {
                 let attrib = _parse_attrib(p, follow);
-            } else if p.peek_kind() == TK_LIT_COLON {
+            } else if p.peek_kind() == TK_Colon {
                 let pseudo = _parse_pseudo(p, follow);
             } else {
                 let negation = _parse_negation(p, follow);
@@ -34185,11 +34144,11 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
             _plus_first = false;
             if p.peek_kind() == TK_Hash {
                 let hash = p.expect(TK_Hash, &EMPTY_SYNC);
-            } else if p.peek_kind() == TK_LIT_DOT {
+            } else if p.peek_kind() == TK_Dot {
                 let class_name = _parse_class_name(p, follow);
-            } else if p.peek_kind() == TK_LIT_LBRACKET {
+            } else if p.peek_kind() == TK_OpenBracket {
                 let attrib = _parse_attrib(p, follow);
-            } else if p.peek_kind() == TK_LIT_COLON {
+            } else if p.peek_kind() == TK_Colon {
                 let pseudo = _parse_pseudo(p, follow);
             } else {
                 let negation = _parse_negation(p, follow);
@@ -34200,7 +34159,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
     p.no_viable(
         "expected simpleSelectorSequence",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON", "TK_PseudoNot"],
+        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Multiply", "TK_Pipe", "TK_Hash", "TK_Dot", "TK_OpenBracket", "TK_Colon", "TK_PseudoNot"],
     );
     return;
 }
@@ -34267,7 +34226,7 @@ fn _parse_type_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> 
                 }
                 pos = gp_104;
                 sg_104_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_104_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_Multiply { break sg_104_1; }
                     pos += 1;
                     break sg_104;
                 }
@@ -34282,10 +34241,10 @@ fn _parse_type_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> 
         if _kind_set_4(p.peek_kind()) {
             let ident = _parse_ident(p, follow);
         } else {
-            let star = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+            let multiply = p.expect(TK_Multiply, &EMPTY_SYNC);
         }
     }
-    let pipe = p.expect(TK_LIT_PIPE, &EMPTY_SYNC);
+    let pipe = p.expect(TK_Pipe, &EMPTY_SYNC);
     return;
 }
 
@@ -34326,7 +34285,7 @@ fn _parse_universal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             let mut pos: i32 = p.pos;
             pos = scan_type_namespace_prefix(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break opt_enter_scan; }
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break opt_enter_scan; }
+            if pos >= tokens.len() || tokens[pos] != TK_Multiply { break opt_enter_scan; }
             pos += 1;
             let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             if (follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)) && (_kind_set_35(probe_kind)) { opt_enter = true; }
@@ -34335,7 +34294,7 @@ fn _parse_universal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if opt_enter {
         let type_namespace_prefix = _parse_type_namespace_prefix(p, &EMPTY_FOLLOW);
     }
-    let star = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+    let multiply = p.expect(TK_Multiply, &EMPTY_SYNC);
     return;
 }
 
@@ -34352,7 +34311,7 @@ fn _parse_universal(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 
 fn _parse_class_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let dot = p.expect(TK_LIT_DOT, &SYNC_1);
+    let dot = p.expect(TK_Dot, &SYNC_1);
     let ident = _parse_ident(p, follow);
     return;
 }
@@ -34370,7 +34329,7 @@ fn _parse_class_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 
 fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_0);
+    let openbracket = p.expect(TK_OpenBracket, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_15);
     let mut opt_enter: bool = false;
     if _kind_set_10(p.peek_kind()) {
@@ -34411,7 +34370,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
                                 }
                                 pos = gp_106;
                                 sg_106_3: {
-                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sg_106_3; }
+                                    if pos >= tokens.len() || tokens[pos] != TK_Equal { break sg_106_3; }
                                     pos += 1;
                                     break sg_106;
                                 }
@@ -34461,7 +34420,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
                 }
                 if pos < 0 { pos = sp; }
             }
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break opt_enter_scan; }
+            if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { break opt_enter_scan; }
             pos += 1;
             let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             if (follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)) && (_kind_set_35(probe_kind)) { opt_enter = true; }
@@ -34500,7 +34459,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
                 }
                 pos = gp_108;
                 sg_108_3: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sg_108_3; }
+                    if pos >= tokens.len() || tokens[pos] != TK_Equal { break sg_108_3; }
                     pos += 1;
                     break sg_108;
                 }
@@ -34547,7 +34506,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch = p.expect_set([TK_PrefixMatch, TK_SuffixMatch, TK_SubstringMatch, TK_LIT_EQ, TK_Includes, TK_DashMatch]);
+        let prefixmatch_or_suffixmatch_or_substringmatch_or_equal_or_includes_or_dashmatch = p.expect_set([TK_PrefixMatch, TK_SuffixMatch, TK_SubstringMatch, TK_Equal, TK_Includes, TK_DashMatch]);
         let ws = _parse_ws(p, &FOLLOW_MASK_18);
         let grp_kind = p.peek_kind();
         if _kind_set_4(grp_kind) {
@@ -34557,7 +34516,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         }
         let ws_2 = _parse_ws(p, follow);
     }
-    let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
+    let closebracket = p.expect(TK_CloseBracket, &EMPTY_SYNC);
     return;
 }
 
@@ -34574,9 +34533,9 @@ fn _parse_attrib(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 
 fn _parse_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let colon = p.expect(TK_LIT_COLON, &SYNC_2);
-    if p.peek_kind() == TK_LIT_COLON {
-        let colon = p.expect(TK_LIT_COLON, &EMPTY_SYNC);
+    let colon = p.expect(TK_Colon, &SYNC_2);
+    if p.peek_kind() == TK_Colon {
+        let colon = p.expect(TK_Colon, &EMPTY_SYNC);
     }
     let grp_kind = p.peek_kind();
     if _kind_set_4(grp_kind) {
@@ -34603,7 +34562,7 @@ fn _parse_functional_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     let function_ = p.expect(TK_Function_, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_19);
     let expression = _parse_expression(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+    let closeparen = p.expect(TK_CloseParen, &EMPTY_SYNC);
     return;
 }
 
@@ -34730,7 +34689,7 @@ fn _parse_negation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     let ws = _parse_ws(p, &FOLLOW_MASK_21);
     let negation_arg = _parse_negation_arg(p, &FOLLOW_MASK_16);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+    let closeparen = p.expect(TK_CloseParen, &EMPTY_SYNC);
     return;
 }
 
@@ -34797,10 +34756,10 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 return _parse_negation_arg__inner_alt_1(p, follow);
             }
             return _parse_negation_arg__inner_alt_1(p, follow);
-        } else if p.peek_kind() == TK_LIT_PIPE {
+        } else if p.peek_kind() == TK_Pipe {
             if _kind_set_4(p.peek_at(1)) {
                 return _parse_negation_arg__inner_alt_0(p, follow);
-            } else if p.peek_at(1) == TK_LIT_STAR {
+            } else if p.peek_at(1) == TK_Multiply {
                 return _parse_negation_arg__inner_alt_1(p, follow);
             } else {
                 let _sd_tokens = &p.kinds;
@@ -34833,22 +34792,22 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         let hash = p.expect(TK_Hash, &EMPTY_SYNC);
         return;
     }
-    if kind == TK_LIT_DOT {
+    if kind == TK_Dot {
         let class_name = _parse_class_name(p, follow);
         return;
     }
-    if kind == TK_LIT_LBRACKET {
+    if kind == TK_OpenBracket {
         let attrib = _parse_attrib(p, follow);
         return;
     }
-    if kind == TK_LIT_COLON {
+    if kind == TK_Colon {
         let pseudo = _parse_pseudo(p, follow);
         return;
     }
     p.no_viable(
         "expected negationArg",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON"],
+        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Multiply", "TK_Pipe", "TK_Hash", "TK_Dot", "TK_OpenBracket", "TK_Colon"],
     );
     return;
 }
@@ -34867,9 +34826,9 @@ fn _parse_negation_arg(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if kind == TK_LIT_SLASH {
+    if kind == TK_Divide {
         p.b.set_alt(0);
-        let slash = p.expect(TK_LIT_SLASH, &SYNC_0);
+        let divide = p.expect(TK_Divide, &SYNC_0);
         let ws = _parse_ws(p, follow);
         return;
     }
@@ -34885,16 +34844,16 @@ fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         let ws = _parse_ws(p, follow);
         return;
     }
-    if kind == TK_LIT_EQ {
+    if kind == TK_Equal {
         p.b.set_alt(3);
-        let eq = p.expect(TK_LIT_EQ, &SYNC_0);
+        let equal = p.expect(TK_Equal, &SYNC_0);
         let ws = _parse_ws(p, follow);
         return;
     }
     p.no_viable(
         "expected operator_",
         p.peek_span(),
-        ["TK_LIT_SLASH", "TK_Comma", "TK_Space", "TK_LIT_EQ"],
+        ["TK_Divide", "TK_Comma", "TK_Space", "TK_Equal"],
     );
     return;
 }
@@ -34925,22 +34884,22 @@ fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         let ws = _parse_ws(p, follow);
         return;
     }
-    if kind == TK_LIT_STAR {
+    if kind == TK_Multiply {
         p.b.set_alt(2);
-        let star = p.expect(TK_LIT_STAR, &SYNC_1);
+        let multiply = p.expect(TK_Multiply, &SYNC_1);
         let ident = _parse_ident(p, follow);
         return;
     }
-    if kind == TK_LIT_U5f {
+    if kind == TK_Underscore {
         p.b.set_alt(3);
-        let lit_u5f = p.expect(TK_LIT_U5f, &SYNC_1);
+        let underscore = p.expect(TK_Underscore, &SYNC_1);
         let ident = _parse_ident(p, follow);
         return;
     }
     p.no_viable(
         "expected property_",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
+        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_Multiply", "TK_Underscore"],
     );
     return;
 }
@@ -34987,12 +34946,12 @@ fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         }
         let any_ = _parse_any_(p, &EMPTY_FOLLOW);
     }
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &SYNC_0);
+    let closebrace = p.expect(TK_CloseBrace, &SYNC_0);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -35005,7 +34964,7 @@ fn _parse_ruleset__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_13, 0);
     if pos < 0 { return -1; }
@@ -35014,7 +34973,7 @@ fn _parse_ruleset__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
         pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -35025,12 +34984,12 @@ fn _parse_ruleset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let start = p.peek_start();
     p.b.set_alt(0);
     let selector_group = _parse_selector_group(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &SYNC_0);
+    let closebrace = p.expect(TK_CloseBrace, &SYNC_0);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -35039,7 +34998,7 @@ fn _parse_ruleset__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     let mut pos = pos;
     pos = scan_selector_group(tokens, pos, &FOLLOW_MASK_7, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_13, 0);
     if pos < 0 { return -1; }
@@ -35048,7 +35007,7 @@ fn _parse_ruleset__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
         pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -35089,7 +35048,7 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     p.no_viable(
         "expected ruleset",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON", "TK_PseudoNot", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Function_", "TK_LIT_LPAREN", "TK_LIT_LBRACE"],
+        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Multiply", "TK_Pipe", "TK_Hash", "TK_Dot", "TK_OpenBracket", "TK_Colon", "TK_PseudoNot", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Function_", "TK_OpenParen", "TK_OpenBrace"],
     );
     return;
 }
@@ -35115,7 +35074,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             let mut pos: i32 = p.pos;
             sg_112_done: {
                 sg_112: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_112; }
+                    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_112; }
                     pos += 1;
                     pos = scan_ws(tokens, pos, follow, 0);
                     if pos < 0 { break sg_112; }
@@ -35127,7 +35086,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
+        let semicolon = p.expect(TK_SemiColon, &SYNC_0);
         let ws = _parse_ws(p, follow);
     }
     let declaration = _parse_declaration(p, follow);
@@ -35141,7 +35100,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             let mut pos: i32 = p.pos;
             sg_113_done: {
                 sg_113: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_113; }
+                    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_113; }
                     pos += 1;
                     pos = scan_ws(tokens, pos, follow, 0);
                     if pos < 0 { break sg_113; }
@@ -35158,7 +35117,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
+        let semicolon = p.expect(TK_SemiColon, &SYNC_0);
         let ws = _parse_ws(p, follow);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
             let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
@@ -35182,7 +35141,7 @@ fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &E
     let start = p.peek_start();
     p.b.set_alt(0);
     let property_ = _parse_property_(p, &FOLLOW_MASK_22);
-    let colon = p.expect(TK_LIT_COLON, &SYNC_0);
+    let colon = p.expect(TK_Colon, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_11);
     let expr = _parse_expr(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Important) {
@@ -35195,7 +35154,7 @@ fn _parse_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List
     let mut pos = pos;
     pos = scan_property_(tokens, pos, &FOLLOW_MASK_22, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Colon { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_11, 0);
     if pos < 0 { return -1; }
@@ -35213,7 +35172,7 @@ fn _parse_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &E
     let start = p.peek_start();
     p.b.set_alt(1);
     let property_ = _parse_property_(p, &FOLLOW_MASK_22);
-    let colon = p.expect(TK_LIT_COLON, &SYNC_0);
+    let colon = p.expect(TK_Colon, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_23);
     let value = _parse_value(p, follow);
     return;
@@ -35223,7 +35182,7 @@ fn _parse_declaration__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List
     let mut pos = pos;
     pos = scan_property_(tokens, pos, &FOLLOW_MASK_22, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Colon { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_23, 0);
     if pos < 0 { return -1; }
@@ -35262,7 +35221,7 @@ fn _parse_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     p.no_viable(
         "expected declaration",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
+        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_Multiply", "TK_Underscore"],
     );
     return;
 }
@@ -35342,7 +35301,7 @@ fn _parse_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         _plus_first = false;
         if _kind_set_20(p.peek_kind()) {
             let any_ = _parse_any_(p, follow);
-        } else if p.peek_kind() == TK_LIT_LBRACE {
+        } else if p.peek_kind() == TK_OpenBrace {
             let block = _parse_block(p, follow);
         } else {
             let atkeyword = p.expect(TK_AtKeyword, &SYNC_0);
@@ -35664,7 +35623,7 @@ fn _parse_function___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     let function_ = p.expect(TK_Function_, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_11);
     let expr = _parse_expr(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN, &SYNC_0);
+    let closeparen = p.expect(TK_CloseParen, &SYNC_0);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -35685,7 +35644,7 @@ fn _parse_dx_image_transform__inner(p: &mut Parser, follow: &List<List<i32>> = &
     let dximagetransform = p.expect(TK_DxImageTransform, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_11);
     let expr = _parse_expr(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN, &SYNC_0);
+    let closeparen = p.expect(TK_CloseParen, &SYNC_0);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -36120,8 +36079,8 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         let ws = _parse_ws(p, follow);
         return;
     }
-    if kind == TK_LIT_COLON {
-        let colon = p.expect(TK_LIT_COLON, &SYNC_0);
+    if kind == TK_Colon {
+        let colon = p.expect(TK_Colon, &SYNC_0);
         let ws = _parse_ws(p, follow);
         return;
     }
@@ -36163,12 +36122,12 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                 let unused = _parse_unused(p, &EMPTY_FOLLOW);
             }
         }
-        let rparen = p.expect(TK_LIT_RPAREN, &SYNC_0);
+        let closeparen = p.expect(TK_CloseParen, &SYNC_0);
         let ws_2 = _parse_ws(p, follow);
         return;
     }
-    if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
+    if kind == TK_OpenParen {
+        let openparen = p.expect(TK_OpenParen, &SYNC_0);
         let ws = _parse_ws(p, &FOLLOW_MASK_24);
         loop {
             if p.recovering { break; }
@@ -36205,12 +36164,12 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                 let unused = _parse_unused(p, &EMPTY_FOLLOW);
             }
         }
-        let rparen = p.expect(TK_LIT_RPAREN, &SYNC_0);
+        let closeparen = p.expect(TK_CloseParen, &SYNC_0);
         let ws_2 = _parse_ws(p, follow);
         return;
     }
-    if kind == TK_LIT_LBRACKET {
-        let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_0);
+    if kind == TK_OpenBracket {
+        let openbracket = p.expect(TK_OpenBracket, &SYNC_0);
         let ws = _parse_ws(p, &FOLLOW_MASK_25);
         loop {
             if p.recovering { break; }
@@ -36247,14 +36206,14 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                 let unused = _parse_unused(p, &EMPTY_FOLLOW);
             }
         }
-        let rbracket = p.expect(TK_LIT_RBRACKET, &SYNC_0);
+        let closebracket = p.expect(TK_CloseBracket, &SYNC_0);
         let ws_2 = _parse_ws(p, follow);
         return;
     }
     p.no_viable(
         "expected any_",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_Hash", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_LIT_COLON", "TK_Function_", "TK_LIT_LPAREN", "TK_LIT_LBRACKET"],
+        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_Hash", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Colon", "TK_Function_", "TK_OpenParen", "TK_OpenBracket"],
     );
     return;
 }
@@ -36304,10 +36263,10 @@ fn _parse_at_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         let any_ = _parse_any_(p, &EMPTY_FOLLOW);
     }
     let grp_kind = p.peek_kind();
-    if grp_kind == TK_LIT_LBRACE {
+    if grp_kind == TK_OpenBrace {
         let block = _parse_block(p, follow);
-    } else if grp_kind == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
+    } else if grp_kind == TK_SemiColon {
+        let semicolon = p.expect(TK_SemiColon, &SYNC_0);
         let ws = _parse_ws(p, follow);
     }
     return;
@@ -36327,7 +36286,7 @@ fn _parse_at_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if kind == TK_LIT_LBRACE {
+    if kind == TK_OpenBrace {
         let block = _parse_block(p, follow);
         return;
     }
@@ -36336,8 +36295,8 @@ fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         let ws = _parse_ws(p, follow);
         return;
     }
-    if kind == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
+    if kind == TK_SemiColon {
+        let semicolon = p.expect(TK_SemiColon, &SYNC_0);
         let ws = _parse_ws(p, follow);
         return;
     }
@@ -36354,7 +36313,7 @@ fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     p.no_viable(
         "expected unused",
         p.peek_span(),
-        ["TK_LIT_LBRACE", "TK_AtKeyword", "TK_LIT_SEMI", "TK_Cdo", "TK_Cdc"],
+        ["TK_OpenBrace", "TK_AtKeyword", "TK_SemiColon", "TK_Cdo", "TK_Cdc"],
     );
     return;
 }
@@ -36372,7 +36331,7 @@ fn _parse_unused(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 
 fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_27);
     loop {
         if p.recovering { break; }
@@ -36419,7 +36378,7 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
                     }
                     pos = gp_123;
                     sg_123_5: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_123_5; }
+                        if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_123_5; }
                         pos += 1;
                         pos = scan_ws(tokens, pos, follow, 0);
                         if pos < 0 { break sg_123_5; }
@@ -36519,7 +36478,7 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
                 gd_scan_6: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break gd_scan_6; }
+                    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break gd_scan_6; }
                     pos += 1;
                     pos = scan_ws(tokens, pos, follow, 0);
                     if pos < 0 { break gd_scan_6; }
@@ -36537,7 +36496,7 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
                 let atkeyword = p.expect(TK_AtKeyword, &SYNC_0);
                 let ws = _parse_ws(p, follow);
             } else if gd_winner == 5 {
-                let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
+                let semicolon = p.expect(TK_SemiColon, &SYNC_0);
                 let ws = _parse_ws(p, follow);
             } else if gd_winner == 0 {
                 let declaration_list = _parse_declaration_list(p, follow);
@@ -36550,7 +36509,7 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             }
         }
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &SYNC_0);
+    let closebrace = p.expect(TK_CloseBrace, &SYNC_0);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -36612,7 +36571,7 @@ fn _parse_nested_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     p.no_viable(
         "expected nestedStatement",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON", "TK_PseudoNot", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Function_", "TK_LIT_LPAREN", "TK_LIT_LBRACE", "TK_Media", "TK_Page", "TK_FontFace", "TK_Keyframes", "TK_Supports", "TK_Viewport", "TK_CounterStyle", "TK_FontFeatureValues", "TK_AtKeyword"],
+        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Multiply", "TK_Pipe", "TK_Hash", "TK_Dot", "TK_OpenBracket", "TK_Colon", "TK_PseudoNot", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Function_", "TK_OpenParen", "TK_OpenBrace", "TK_Media", "TK_Page", "TK_FontFace", "TK_Keyframes", "TK_Supports", "TK_Viewport", "TK_CounterStyle", "TK_FontFeatureValues", "TK_AtKeyword"],
     );
     return;
 }
@@ -36630,7 +36589,7 @@ fn _parse_nested_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_group_rule_body__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_28);
     loop {
         if p.recovering { break; }
@@ -36660,7 +36619,7 @@ fn _parse_group_rule_body__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         }
         let nested_statement = _parse_nested_statement(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &SYNC_0);
+    let closebrace = p.expect(TK_CloseBrace, &SYNC_0);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -36779,7 +36738,7 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &
     p.no_viable(
         "expected supportsCondition",
         p.peek_span(),
-        ["TK_Not", "TK_LIT_LPAREN", "TK_Function_"],
+        ["TK_Not", "TK_OpenParen", "TK_Function_"],
     );
     return;
 }
@@ -36797,17 +36756,17 @@ fn _parse_supports_condition(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 
 fn _parse_supports_condition_in_parens__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
+    let openparen = p.expect(TK_OpenParen, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_29);
     let supports_condition = _parse_supports_condition(p, &FOLLOW_MASK_16);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+    let closeparen = p.expect(TK_CloseParen, &EMPTY_SYNC);
     return;
 }
 
 fn _parse_supports_condition_in_parens__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_29, 0);
     if pos < 0 { return -1; }
@@ -36815,7 +36774,7 @@ fn _parse_supports_condition_in_parens__inner_scan_0(tokens: &Array<i32>, pos: i
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_20, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     return pos;
 }
@@ -36849,7 +36808,7 @@ fn _parse_supports_condition_in_parens__inner_scan_2(tokens: &Array<i32>, pos: i
 fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if _kind_set_31(kind) {
-        if p.peek_kind() == TK_LIT_LPAREN {
+        if p.peek_kind() == TK_OpenParen {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_0 = _parse_supports_condition_in_parens__inner_scan_0(_sd_tokens, _sd_pos, follow);
@@ -36886,7 +36845,7 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: &List<List
     p.no_viable(
         "expected supportsConditionInParens",
         p.peek_span(),
-        ["TK_LIT_LPAREN", "TK_Function_"],
+        ["TK_OpenParen", "TK_Function_"],
     );
     return;
 }
@@ -37051,10 +37010,10 @@ fn _parse_supports_disjunction(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
 
 fn _parse_supports_declaration_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
+    let openparen = p.expect(TK_OpenParen, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_34);
     let declaration = _parse_declaration(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+    let closeparen = p.expect(TK_CloseParen, &EMPTY_SYNC);
     return;
 }
 
@@ -37071,7 +37030,7 @@ fn _parse_supports_declaration_condition(p: &mut Parser, follow: &List<List<i32>
 
 fn _parse_general_enclosed__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let function__or_lparen = p.expect_set([TK_Function_, TK_LIT_LPAREN]);
+    let function__or_openparen = p.expect_set([TK_Function_, TK_OpenParen]);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -37107,7 +37066,7 @@ fn _parse_general_enclosed__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             let unused = _parse_unused(p, &EMPTY_FOLLOW);
         }
     }
-    let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+    let closeparen = p.expect(TK_CloseParen, &EMPTY_SYNC);
     return;
 }
 
@@ -37130,7 +37089,7 @@ fn _parse_url__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
         let ws = _parse_ws(p, &FOLLOW_MASK_2);
         let string_ = p.expect(TK_String_, &SYNC_0);
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
-        let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+        let closeparen = p.expect(TK_CloseParen, &EMPTY_SYNC);
         return;
     }
     if kind == TK_Url {
@@ -37162,7 +37121,7 @@ fn _parse_var___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     let ws = _parse_ws(p, &FOLLOW_MASK_35);
     let variable = p.expect(TK_Variable, &SYNC_0);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN, &SYNC_0);
+    let closeparen = p.expect(TK_CloseParen, &SYNC_0);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -37183,7 +37142,7 @@ fn _parse_calc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     let calc = p.expect(TK_Calc, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_36);
     let calc_sum = _parse_calc_sum(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN, &SYNC_0);
+    let closeparen = p.expect(TK_CloseParen, &SYNC_0);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -37290,7 +37249,7 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 sg_129: {
                     pos = gp_129;
                     sg_129_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_129_0; }
+                        if pos >= tokens.len() || tokens[pos] != TK_Multiply { break sg_129_0; }
                         pos += 1;
                         pos = scan_ws(tokens, pos, &FOLLOW_MASK_36, 0);
                         if pos < 0 { break sg_129_0; }
@@ -37300,7 +37259,7 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     }
                     pos = gp_129;
                     sg_129_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASH { break sg_129_1; }
+                        if pos >= tokens.len() || tokens[pos] != TK_Divide { break sg_129_1; }
                         pos += 1;
                         pos = scan_ws(tokens, pos, &FOLLOW_MASK_38, 0);
                         if pos < 0 { break sg_129_1; }
@@ -37317,12 +37276,12 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        if p.peek_kind() == TK_LIT_STAR {
-            let star = p.expect(TK_LIT_STAR, &SYNC_0);
+        if p.peek_kind() == TK_Multiply {
+            let multiply = p.expect(TK_Multiply, &SYNC_0);
             let ws = _parse_ws(p, &FOLLOW_MASK_36);
             let calc_value = _parse_calc_value(p, follow);
         } else {
-            let slash = p.expect(TK_LIT_SLASH, &SYNC_0);
+            let divide = p.expect(TK_Divide, &SYNC_0);
             let ws = _parse_ws(p, &FOLLOW_MASK_38);
             let number = _parse_number(p, follow);
             let ws_2 = _parse_ws(p, follow);
@@ -37520,18 +37479,18 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             return _parse_calc_value__inner_alt_3(p, follow);
         }
     }
-    if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
+    if kind == TK_OpenParen {
+        let openparen = p.expect(TK_OpenParen, &SYNC_0);
         let ws = _parse_ws(p, &FOLLOW_MASK_36);
         let calc_sum = _parse_calc_sum(p, &FOLLOW_MASK_20);
-        let rparen = p.expect(TK_LIT_RPAREN, &SYNC_0);
+        let closeparen = p.expect(TK_CloseParen, &SYNC_0);
         let ws_2 = _parse_ws(p, follow);
         return;
     }
     p.no_viable(
         "expected calcValue",
         p.peek_span(),
-        ["TK_Plus", "TK_Minus", "TK_Number", "TK_Dimension", "TK_UnknownDimension", "TK_Percentage", "TK_LIT_LPAREN"],
+        ["TK_Plus", "TK_Minus", "TK_Number", "TK_Dimension", "TK_UnknownDimension", "TK_Percentage", "TK_OpenParen"],
     );
     return;
 }
@@ -37551,7 +37510,7 @@ fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     let start = p.peek_start();
     let fontface = p.expect(TK_FontFace, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_0);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_8(p.peek_kind()) {
         let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW);
@@ -37564,7 +37523,7 @@ fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             let mut pos: i32 = p.pos;
             sg_130_done: {
                 sg_130: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_130; }
+                    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_130; }
                     pos += 1;
                     pos = scan_ws(tokens, pos, follow, 0);
                     if pos < 0 { break sg_130; }
@@ -37581,13 +37540,13 @@ fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
+        let semicolon = p.expect(TK_SemiColon, &SYNC_0);
         let ws = _parse_ws(p, follow);
         if _kind_set_8(p.peek_kind()) {
             let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW);
         }
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &SYNC_0);
+    let closebrace = p.expect(TK_CloseBrace, &SYNC_0);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -37607,7 +37566,7 @@ fn _parse_font_face_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<
     let start = p.peek_start();
     p.b.set_alt(0);
     let property_ = _parse_property_(p, &FOLLOW_MASK_22);
-    let colon = p.expect(TK_LIT_COLON, &SYNC_0);
+    let colon = p.expect(TK_Colon, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_11);
     let expr = _parse_expr(p, follow);
     return;
@@ -37617,7 +37576,7 @@ fn _parse_font_face_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, fol
     let mut pos = pos;
     pos = scan_property_(tokens, pos, &FOLLOW_MASK_22, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Colon { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_11, 0);
     if pos < 0 { return -1; }
@@ -37630,7 +37589,7 @@ fn _parse_font_face_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<
     let start = p.peek_start();
     p.b.set_alt(1);
     let property_ = _parse_property_(p, &FOLLOW_MASK_22);
-    let colon = p.expect(TK_LIT_COLON, &SYNC_0);
+    let colon = p.expect(TK_Colon, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_23);
     let value = _parse_value(p, follow);
     return;
@@ -37640,7 +37599,7 @@ fn _parse_font_face_declaration__inner_scan_1(tokens: &Array<i32>, pos: i32, fol
     let mut pos = pos;
     pos = scan_property_(tokens, pos, &FOLLOW_MASK_22, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Colon { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, &FOLLOW_MASK_23, 0);
     if pos < 0 { return -1; }
@@ -37679,7 +37638,7 @@ fn _parse_font_face_declaration__inner(p: &mut Parser, follow: &List<List<i32>> 
     p.no_viable(
         "expected fontFaceDeclaration",
         p.peek_span(),
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
+        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_Multiply", "TK_Underscore"],
     );
     return;
 }
@@ -37703,7 +37662,7 @@ fn _parse_keyframes_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_8);
     let ident = _parse_ident(p, &FOLLOW_MASK_16);
     let ws_3 = _parse_ws(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_0);
     let ws_4 = _parse_ws(p, &FOLLOW_MASK_39);
     loop {
         if p.recovering { break; }
@@ -37733,7 +37692,7 @@ fn _parse_keyframes_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         }
         let keyframe_block = _parse_keyframe_block(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &SYNC_0);
+    let closebrace = p.expect(TK_CloseBrace, &SYNC_0);
     let ws_5 = _parse_ws(p, follow);
     return;
 }
@@ -37752,12 +37711,12 @@ fn _parse_keyframes_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 fn _parse_keyframe_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let keyframe_selector = _parse_keyframe_selector(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &SYNC_0);
+    let closebrace = p.expect(TK_CloseBrace, &SYNC_0);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -37850,12 +37809,12 @@ fn _parse_viewport__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     let start = p.peek_start();
     let viewport = p.expect(TK_Viewport, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_0);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &SYNC_0);
+    let closebrace = p.expect(TK_CloseBrace, &SYNC_0);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -37877,12 +37836,12 @@ fn _parse_counter_style__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let ws = _parse_ws(p, &FOLLOW_MASK_8);
     let ident = _parse_ident(p, &FOLLOW_MASK_16);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_0);
     let ws_3 = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &SYNC_0);
+    let closebrace = p.expect(TK_CloseBrace, &SYNC_0);
     let ws_4 = _parse_ws(p, follow);
     return;
 }
@@ -37904,7 +37863,7 @@ fn _parse_font_feature_values_rule__inner(p: &mut Parser, follow: &List<List<i32
     let ws = _parse_ws(p, &FOLLOW_MASK_18);
     let font_family_name_list = _parse_font_family_name_list(p, &FOLLOW_MASK_16);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_0);
     let ws_3 = _parse_ws(p, &FOLLOW_MASK_41);
     loop {
         if p.recovering { break; }
@@ -37934,7 +37893,7 @@ fn _parse_font_feature_values_rule__inner(p: &mut Parser, follow: &List<List<i32
         }
         let feature_value_block = _parse_feature_value_block(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &SYNC_0);
+    let closebrace = p.expect(TK_CloseBrace, &SYNC_0);
     let ws_4 = _parse_ws(p, follow);
     return;
 }
@@ -38055,7 +38014,7 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = 
     let start = p.peek_start();
     let feature_type = _parse_feature_type(p, &FOLLOW_MASK_16);
     let ws = _parse_ws(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_0);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_43);
     if _kind_set_4(p.peek_kind()) {
         let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW);
@@ -38070,7 +38029,7 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = 
                 sg_135: {
                     pos = scan_ws(tokens, pos, &FOLLOW_MASK_3, 0);
                     if pos < 0 { break sg_135; }
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_135; }
+                    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break sg_135; }
                     pos += 1;
                     pos = scan_ws(tokens, pos, follow, 0);
                     if pos < 0 { break sg_135; }
@@ -38088,13 +38047,13 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = 
         }
         if rep_scan_pos < 0 { break; }
         let ws = _parse_ws(p, &FOLLOW_MASK_3);
-        let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
+        let semicolon = p.expect(TK_SemiColon, &SYNC_0);
         let ws_2 = _parse_ws(p, follow);
         if _kind_set_4(p.peek_kind()) {
             let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW);
         }
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &SYNC_0);
+    let closebrace = p.expect(TK_CloseBrace, &SYNC_0);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -38131,7 +38090,7 @@ fn _parse_feature_value_definition__inner(p: &mut Parser, follow: &List<List<i32
     let start = p.peek_start();
     let ident = _parse_ident(p, &FOLLOW_MASK_16);
     let ws = _parse_ws(p, &FOLLOW_MASK_22);
-    let colon = p.expect(TK_LIT_COLON, &SYNC_0);
+    let colon = p.expect(TK_Colon, &SYNC_0);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_38);
     let number = _parse_number(p, follow);
     loop {
@@ -38586,16 +38545,16 @@ pub fn parse_ws(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(80);
-    for let mut k = 0; k < 80; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(66);
+    for let mut k = 0; k < 66; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(80);
-    for let mut k = 0; k < 80; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(66);
+    for let mut k = 0; k < 66; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
@@ -38617,7 +38576,7 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 fn _kind_set_1(k: i32) -> bool {
-    return k matches { TK_And | TK_AtKeyword | TK_CounterStyle | TK_DashMatch | TK_Dimension | TK_FontFace | TK_FontFeatureValues | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_Includes | TK_Keyframes | TK_LIT_COLON | TK_LIT_DOT | TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_LIT_PIPE | TK_LIT_STAR | TK_Media | TK_MediaOnly | TK_Minus | TK_Not | TK_Number | TK_Or | TK_Page | TK_Percentage | TK_Plus | TK_PseudoNot | TK_String_ | TK_Supports | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ | TK_Viewport };
+    return k matches { TK_And | TK_AtKeyword | TK_Colon | TK_CounterStyle | TK_DashMatch | TK_Dimension | TK_Dot | TK_FontFace | TK_FontFeatureValues | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_Includes | TK_Keyframes | TK_Media | TK_MediaOnly | TK_Minus | TK_Multiply | TK_Not | TK_Number | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Or | TK_Page | TK_Percentage | TK_Pipe | TK_Plus | TK_PseudoNot | TK_String_ | TK_Supports | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ | TK_Viewport };
 }
 
 fn _kind_set_2(k: i32) -> bool {
@@ -38633,7 +38592,7 @@ fn _kind_set_4(k: i32) -> bool {
 }
 
 fn _kind_set_5(k: i32) -> bool {
-    return k matches { TK_Comment | TK_LIT_LPAREN | TK_MediaOnly | TK_Not | TK_Space };
+    return k matches { TK_Comment | TK_MediaOnly | TK_Not | TK_OpenParen | TK_Space };
 }
 
 fn _kind_set_6(k: i32) -> bool {
@@ -38645,7 +38604,7 @@ fn _kind_set_7(k: i32) -> bool {
 }
 
 fn _kind_set_8(k: i32) -> bool {
-    return k matches { TK_And | TK_From | TK_Ident | TK_LIT_STAR | TK_LIT_U5f | TK_MediaOnly | TK_Not | TK_Or | TK_To | TK_Variable };
+    return k matches { TK_And | TK_From | TK_Ident | TK_MediaOnly | TK_Multiply | TK_Not | TK_Or | TK_To | TK_Underscore | TK_Variable };
 }
 
 fn _kind_set_9(k: i32) -> bool {
@@ -38653,27 +38612,27 @@ fn _kind_set_9(k: i32) -> bool {
 }
 
 fn _kind_set_10(k: i32) -> bool {
-    return k matches { TK_And | TK_From | TK_Ident | TK_LIT_PIPE | TK_LIT_STAR | TK_MediaOnly | TK_Not | TK_Or | TK_To };
+    return k matches { TK_And | TK_From | TK_Ident | TK_MediaOnly | TK_Multiply | TK_Not | TK_Or | TK_Pipe | TK_To };
 }
 
 fn _kind_set_11(k: i32) -> bool {
-    return k matches { TK_Hash | TK_LIT_COLON | TK_LIT_DOT | TK_LIT_LBRACKET | TK_PseudoNot };
+    return k matches { TK_Colon | TK_Dot | TK_Hash | TK_OpenBracket | TK_PseudoNot };
 }
 
 fn _kind_set_12(k: i32) -> bool {
-    return k matches { TK_LIT_PIPE | TK_LIT_STAR };
+    return k matches { TK_Multiply | TK_Pipe };
 }
 
 fn _kind_set_13(k: i32) -> bool {
-    return k matches { TK_And | TK_From | TK_Ident | TK_LIT_STAR | TK_MediaOnly | TK_Not | TK_Or | TK_To };
+    return k matches { TK_And | TK_From | TK_Ident | TK_MediaOnly | TK_Multiply | TK_Not | TK_Or | TK_To };
 }
 
 fn _kind_set_14(k: i32) -> bool {
-    return k matches { TK_And | TK_From | TK_Ident | TK_LIT_PIPE | TK_MediaOnly | TK_Not | TK_Or | TK_To };
+    return k matches { TK_And | TK_From | TK_Ident | TK_MediaOnly | TK_Not | TK_Or | TK_Pipe | TK_To };
 }
 
 fn _kind_set_15(k: i32) -> bool {
-    return k matches { TK_DashMatch | TK_Includes | TK_LIT_EQ | TK_PrefixMatch | TK_SubstringMatch | TK_SuffixMatch };
+    return k matches { TK_DashMatch | TK_Equal | TK_Includes | TK_PrefixMatch | TK_SubstringMatch | TK_SuffixMatch };
 }
 
 fn _kind_set_16(k: i32) -> bool {
@@ -38689,23 +38648,23 @@ fn _kind_set_18(k: i32) -> bool {
 }
 
 fn _kind_set_19(k: i32) -> bool {
-    return k matches { TK_And | TK_From | TK_Ident | TK_LIT_SEMI | TK_LIT_STAR | TK_LIT_U5f | TK_MediaOnly | TK_Not | TK_Or | TK_To | TK_Variable };
+    return k matches { TK_And | TK_From | TK_Ident | TK_MediaOnly | TK_Multiply | TK_Not | TK_Or | TK_SemiColon | TK_To | TK_Underscore | TK_Variable };
 }
 
 fn _kind_set_20(k: i32) -> bool {
-    return k matches { TK_And | TK_DashMatch | TK_Dimension | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_Includes | TK_LIT_COLON | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_MediaOnly | TK_Minus | TK_Not | TK_Number | TK_Or | TK_Percentage | TK_Plus | TK_String_ | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ };
+    return k matches { TK_And | TK_Colon | TK_DashMatch | TK_Dimension | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_Includes | TK_MediaOnly | TK_Minus | TK_Not | TK_Number | TK_OpenBracket | TK_OpenParen | TK_Or | TK_Percentage | TK_Plus | TK_String_ | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ };
 }
 
 fn _kind_set_21(k: i32) -> bool {
-    return k matches { TK_And | TK_AtKeyword | TK_DashMatch | TK_Dimension | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_Includes | TK_LIT_COLON | TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_MediaOnly | TK_Minus | TK_Not | TK_Number | TK_Or | TK_Percentage | TK_Plus | TK_String_ | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ };
+    return k matches { TK_And | TK_AtKeyword | TK_Colon | TK_DashMatch | TK_Dimension | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_Includes | TK_MediaOnly | TK_Minus | TK_Not | TK_Number | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Or | TK_Percentage | TK_Plus | TK_String_ | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ };
 }
 
 fn _kind_set_22(k: i32) -> bool {
-    return k matches { TK_Comma | TK_LIT_EQ | TK_LIT_SLASH | TK_Space };
+    return k matches { TK_Comma | TK_Divide | TK_Equal | TK_Space };
 }
 
 fn _kind_set_23(k: i32) -> bool {
-    return k matches { TK_And | TK_Calc | TK_Comma | TK_Dimension | TK_DxImageTransform | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_LIT_EQ | TK_LIT_SLASH | TK_MediaOnly | TK_Minus | TK_Not | TK_Number | TK_Or | TK_Percentage | TK_Plus | TK_Space | TK_String_ | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ | TK_Var };
+    return k matches { TK_And | TK_Calc | TK_Comma | TK_Dimension | TK_Divide | TK_DxImageTransform | TK_Equal | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_MediaOnly | TK_Minus | TK_Not | TK_Number | TK_Or | TK_Percentage | TK_Plus | TK_Space | TK_String_ | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ | TK_Var };
 }
 
 fn _kind_set_24(k: i32) -> bool {
@@ -38713,23 +38672,23 @@ fn _kind_set_24(k: i32) -> bool {
 }
 
 fn _kind_set_25(k: i32) -> bool {
-    return k matches { TK_AtKeyword | TK_Cdc | TK_Cdo | TK_LIT_LBRACE | TK_LIT_SEMI };
+    return k matches { TK_AtKeyword | TK_Cdc | TK_Cdo | TK_OpenBrace | TK_SemiColon };
 }
 
 fn _kind_set_26(k: i32) -> bool {
-    return k matches { TK_And | TK_AtKeyword | TK_Cdc | TK_Cdo | TK_DashMatch | TK_Dimension | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_Includes | TK_LIT_COLON | TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_LIT_SEMI | TK_MediaOnly | TK_Minus | TK_Not | TK_Number | TK_Or | TK_Percentage | TK_Plus | TK_String_ | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ };
+    return k matches { TK_And | TK_AtKeyword | TK_Cdc | TK_Cdo | TK_Colon | TK_DashMatch | TK_Dimension | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_Includes | TK_MediaOnly | TK_Minus | TK_Not | TK_Number | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Or | TK_Percentage | TK_Plus | TK_SemiColon | TK_String_ | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ };
 }
 
 fn _kind_set_27(k: i32) -> bool {
-    return k matches { TK_LIT_LBRACE | TK_LIT_SEMI };
+    return k matches { TK_OpenBrace | TK_SemiColon };
 }
 
 fn _kind_set_28(k: i32) -> bool {
-    return k matches { TK_And | TK_AtKeyword | TK_CounterStyle | TK_DashMatch | TK_Dimension | TK_FontFace | TK_FontFeatureValues | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_Includes | TK_Keyframes | TK_LIT_COLON | TK_LIT_DOT | TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_LIT_PIPE | TK_LIT_SEMI | TK_LIT_STAR | TK_LIT_U5f | TK_Media | TK_MediaOnly | TK_Minus | TK_Not | TK_Number | TK_Or | TK_Page | TK_Percentage | TK_Plus | TK_PseudoNot | TK_String_ | TK_Supports | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ | TK_Variable | TK_Viewport };
+    return k matches { TK_And | TK_AtKeyword | TK_Colon | TK_CounterStyle | TK_DashMatch | TK_Dimension | TK_Dot | TK_FontFace | TK_FontFeatureValues | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_Includes | TK_Keyframes | TK_Media | TK_MediaOnly | TK_Minus | TK_Multiply | TK_Not | TK_Number | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Or | TK_Page | TK_Percentage | TK_Pipe | TK_Plus | TK_PseudoNot | TK_SemiColon | TK_String_ | TK_Supports | TK_To | TK_Underscore | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ | TK_Variable | TK_Viewport };
 }
 
 fn _kind_set_29(k: i32) -> bool {
-    return k matches { TK_And | TK_DashMatch | TK_Dimension | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_Includes | TK_LIT_COLON | TK_LIT_DOT | TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_LIT_PIPE | TK_LIT_STAR | TK_MediaOnly | TK_Minus | TK_Not | TK_Number | TK_Or | TK_Percentage | TK_Plus | TK_PseudoNot | TK_String_ | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ };
+    return k matches { TK_And | TK_Colon | TK_DashMatch | TK_Dimension | TK_Dot | TK_From | TK_Function_ | TK_Hash | TK_Ident | TK_Includes | TK_MediaOnly | TK_Minus | TK_Multiply | TK_Not | TK_Number | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Or | TK_Percentage | TK_Pipe | TK_Plus | TK_PseudoNot | TK_String_ | TK_To | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ };
 }
 
 fn _kind_set_30(k: i32) -> bool {
@@ -38737,11 +38696,11 @@ fn _kind_set_30(k: i32) -> bool {
 }
 
 fn _kind_set_31(k: i32) -> bool {
-    return k matches { TK_Function_ | TK_LIT_LPAREN };
+    return k matches { TK_Function_ | TK_OpenParen };
 }
 
 fn _kind_set_32(k: i32) -> bool {
-    return k matches { TK_LIT_SLASH | TK_LIT_STAR };
+    return k matches { TK_Divide | TK_Multiply };
 }
 
 fn _kind_set_33(k: i32) -> bool {
@@ -38753,19 +38712,19 @@ fn _kind_set_34(k: i32) -> bool {
 }
 
 fn _kind_set_35(k: i32) -> bool {
-    return k matches { TK_Comma | TK_Comment | TK_Greater | TK_Hash | TK_LIT_COLON | TK_LIT_DOT | TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_RPAREN | TK_Plus | TK_PseudoNot | TK_Space | TK_Tilde };
+    return k matches { TK_CloseParen | TK_Colon | TK_Comma | TK_Comment | TK_Dot | TK_Greater | TK_Hash | TK_OpenBrace | TK_OpenBracket | TK_Plus | TK_PseudoNot | TK_Space | TK_Tilde };
 }
 
 fn _kind_set_36(k: i32) -> bool {
-    return k matches { TK_And | TK_From | TK_Hash | TK_Ident | TK_LIT_COLON | TK_LIT_LBRACKET | TK_MediaOnly | TK_Not | TK_Or | TK_To };
+    return k matches { TK_And | TK_Colon | TK_From | TK_Hash | TK_Ident | TK_MediaOnly | TK_Not | TK_OpenBracket | TK_Or | TK_To };
 }
 
 fn _kind_set_37(k: i32) -> bool {
-    return k matches { TK_LIT_DOT | TK_LIT_PIPE | TK_LIT_STAR | TK_PseudoNot };
+    return k matches { TK_Dot | TK_Multiply | TK_Pipe | TK_PseudoNot };
 }
 
 fn _kind_set_38(k: i32) -> bool {
-    return k matches { TK_DashMatch | TK_Dimension | TK_Function_ | TK_Includes | TK_LIT_LBRACE | TK_LIT_LPAREN | TK_Minus | TK_Number | TK_Percentage | TK_Plus | TK_String_ | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ };
+    return k matches { TK_DashMatch | TK_Dimension | TK_Function_ | TK_Includes | TK_Minus | TK_Number | TK_OpenBrace | TK_OpenParen | TK_Percentage | TK_Plus | TK_String_ | TK_UnicodeRange | TK_UnknownDimension | TK_Url | TK_Url_ };
 }
 
 fn _kind_set_39(k: i32) -> bool {
@@ -38775,50 +38734,50 @@ fn _kind_set_39(k: i32) -> bool {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_Comment, TK_Space];
 global SYNC_1: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
-global SYNC_2: List<i32> = [TK_And, TK_From, TK_Function_, TK_Ident, TK_LIT_COLON, TK_MediaOnly, TK_Not, TK_Or, TK_To];
+global SYNC_2: List<i32> = [TK_And, TK_Colon, TK_From, TK_Function_, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
 
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_And, TK_AtKeyword, TK_Charset, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_EOF, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Import, TK_Includes, TK_Keyframes, TK_LIT_COLON, TK_LIT_DOT, TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_LPAREN, TK_LIT_PIPE, TK_LIT_STAR, TK_Media, TK_MediaOnly, TK_Minus, TK_Namespace, TK_Not, TK_Number, TK_Or, TK_Page, TK_Percentage, TK_Plus, TK_PseudoNot, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport]];
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_And, TK_AtKeyword, TK_Charset, TK_Colon, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_EOF, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Import, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Namespace, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_Cdc, TK_Cdo, TK_Comment, TK_Space]];
 global FOLLOW_MASK_2: List<List<i32>> = [[TK_String_]];
-global FOLLOW_MASK_3: List<List<i32>> = [[TK_LIT_SEMI]];
+global FOLLOW_MASK_3: List<List<i32>> = [[TK_SemiColon]];
 global FOLLOW_MASK_4: List<List<i32>> = [[TK_String_, TK_Url, TK_Url_]];
-global FOLLOW_MASK_5: List<List<i32>> = [[TK_Comment, TK_LIT_LPAREN, TK_MediaOnly, TK_Not, TK_Space]];
+global FOLLOW_MASK_5: List<List<i32>> = [[TK_Comment, TK_MediaOnly, TK_Not, TK_OpenParen, TK_Space]];
 global FOLLOW_MASK_6: List<List<i32>> = [[TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_String_, TK_To, TK_Url, TK_Url_]];
-global FOLLOW_MASK_7: List<List<i32>> = [[TK_LIT_LBRACE]];
+global FOLLOW_MASK_7: List<List<i32>> = [[TK_OpenBrace]];
 global FOLLOW_MASK_8: List<List<i32>> = [[TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To]];
-global FOLLOW_MASK_9: List<List<i32>> = [[TK_LIT_LPAREN]];
-global FOLLOW_MASK_10: List<List<i32>> = [[TK_LIT_COLON, TK_LIT_RPAREN]];
+global FOLLOW_MASK_9: List<List<i32>> = [[TK_OpenParen]];
+global FOLLOW_MASK_10: List<List<i32>> = [[TK_CloseParen, TK_Colon]];
 global FOLLOW_MASK_11: List<List<i32>> = [[TK_And, TK_Calc, TK_Dimension, TK_DxImageTransform, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Var]];
-global FOLLOW_MASK_12: List<List<i32>> = [[TK_LIT_COLON, TK_LIT_LBRACE]];
-global FOLLOW_MASK_13: List<List<i32>> = [[TK_And, TK_From, TK_Ident, TK_LIT_RBRACE, TK_LIT_SEMI, TK_LIT_STAR, TK_LIT_U5f, TK_MediaOnly, TK_Not, TK_Or, TK_To, TK_Variable]];
-global FOLLOW_MASK_14: List<List<i32>> = [[TK_And, TK_From, TK_Hash, TK_Ident, TK_LIT_COLON, TK_LIT_DOT, TK_LIT_LBRACKET, TK_LIT_PIPE, TK_LIT_STAR, TK_MediaOnly, TK_Not, TK_Or, TK_PseudoNot, TK_To]];
-global FOLLOW_MASK_15: List<List<i32>> = [[TK_And, TK_From, TK_Ident, TK_LIT_PIPE, TK_LIT_STAR, TK_MediaOnly, TK_Not, TK_Or, TK_To]];
+global FOLLOW_MASK_12: List<List<i32>> = [[TK_Colon, TK_OpenBrace]];
+global FOLLOW_MASK_13: List<List<i32>> = [[TK_And, TK_CloseBrace, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_SemiColon, TK_To, TK_Underscore, TK_Variable]];
+global FOLLOW_MASK_14: List<List<i32>> = [[TK_And, TK_Colon, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_PseudoNot, TK_To]];
+global FOLLOW_MASK_15: List<List<i32>> = [[TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Pipe, TK_To]];
 global FOLLOW_MASK_16: List<List<i32>> = [[TK_Comment, TK_Space]];
-global FOLLOW_MASK_17: List<List<i32>> = [[TK_DashMatch, TK_Includes, TK_LIT_EQ, TK_LIT_RBRACKET, TK_PrefixMatch, TK_SubstringMatch, TK_SuffixMatch]];
+global FOLLOW_MASK_17: List<List<i32>> = [[TK_CloseBracket, TK_DashMatch, TK_Equal, TK_Includes, TK_PrefixMatch, TK_SubstringMatch, TK_SuffixMatch]];
 global FOLLOW_MASK_18: List<List<i32>> = [[TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_String_, TK_To]];
 global FOLLOW_MASK_19: List<List<i32>> = [[TK_And, TK_Dimension, TK_From, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Plus, TK_String_, TK_To, TK_UnknownDimension]];
-global FOLLOW_MASK_20: List<List<i32>> = [[TK_LIT_RPAREN]];
-global FOLLOW_MASK_21: List<List<i32>> = [[TK_And, TK_From, TK_Hash, TK_Ident, TK_LIT_COLON, TK_LIT_DOT, TK_LIT_LBRACKET, TK_LIT_PIPE, TK_LIT_STAR, TK_MediaOnly, TK_Not, TK_Or, TK_To]];
-global FOLLOW_MASK_22: List<List<i32>> = [[TK_LIT_COLON]];
-global FOLLOW_MASK_23: List<List<i32>> = [[TK_And, TK_AtKeyword, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_LIT_COLON, TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_LPAREN, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_]];
-global FOLLOW_MASK_24: List<List<i32>> = [[TK_And, TK_AtKeyword, TK_Cdc, TK_Cdo, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_LIT_COLON, TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_LPAREN, TK_LIT_RPAREN, TK_LIT_SEMI, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_]];
-global FOLLOW_MASK_25: List<List<i32>> = [[TK_And, TK_AtKeyword, TK_Cdc, TK_Cdo, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_LIT_COLON, TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_LPAREN, TK_LIT_RBRACKET, TK_LIT_SEMI, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_]];
-global FOLLOW_MASK_26: List<List<i32>> = [[TK_And, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_LIT_COLON, TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_LPAREN, TK_LIT_SEMI, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_]];
-global FOLLOW_MASK_27: List<List<i32>> = [[TK_And, TK_AtKeyword, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_LIT_COLON, TK_LIT_DOT, TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_LPAREN, TK_LIT_PIPE, TK_LIT_RBRACE, TK_LIT_SEMI, TK_LIT_STAR, TK_LIT_U5f, TK_Media, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Page, TK_Percentage, TK_Plus, TK_PseudoNot, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Variable, TK_Viewport]];
-global FOLLOW_MASK_28: List<List<i32>> = [[TK_And, TK_AtKeyword, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_LIT_COLON, TK_LIT_DOT, TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_LPAREN, TK_LIT_PIPE, TK_LIT_RBRACE, TK_LIT_STAR, TK_Media, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Page, TK_Percentage, TK_Plus, TK_PseudoNot, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport]];
-global FOLLOW_MASK_29: List<List<i32>> = [[TK_Function_, TK_LIT_LPAREN, TK_Not]];
+global FOLLOW_MASK_20: List<List<i32>> = [[TK_CloseParen]];
+global FOLLOW_MASK_21: List<List<i32>> = [[TK_And, TK_Colon, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_To]];
+global FOLLOW_MASK_22: List<List<i32>> = [[TK_Colon]];
+global FOLLOW_MASK_23: List<List<i32>> = [[TK_And, TK_AtKeyword, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_]];
+global FOLLOW_MASK_24: List<List<i32>> = [[TK_And, TK_AtKeyword, TK_Cdc, TK_Cdo, TK_CloseParen, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_SemiColon, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_]];
+global FOLLOW_MASK_25: List<List<i32>> = [[TK_And, TK_AtKeyword, TK_Cdc, TK_Cdo, TK_CloseBracket, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_SemiColon, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_]];
+global FOLLOW_MASK_26: List<List<i32>> = [[TK_And, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_SemiColon, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_]];
+global FOLLOW_MASK_27: List<List<i32>> = [[TK_And, TK_AtKeyword, TK_CloseBrace, TK_Colon, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_SemiColon, TK_String_, TK_Supports, TK_To, TK_Underscore, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Variable, TK_Viewport]];
+global FOLLOW_MASK_28: List<List<i32>> = [[TK_And, TK_AtKeyword, TK_CloseBrace, TK_Colon, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport]];
+global FOLLOW_MASK_29: List<List<i32>> = [[TK_Function_, TK_Not, TK_OpenParen]];
 global FOLLOW_MASK_30: List<List<i32>> = [[TK_Space]];
-global FOLLOW_MASK_31: List<List<i32>> = [[TK_Function_, TK_LIT_LPAREN]];
+global FOLLOW_MASK_31: List<List<i32>> = [[TK_Function_, TK_OpenParen]];
 global FOLLOW_MASK_32: List<List<i32>> = [[TK_And]];
 global FOLLOW_MASK_33: List<List<i32>> = [[TK_Or]];
-global FOLLOW_MASK_34: List<List<i32>> = [[TK_And, TK_From, TK_Ident, TK_LIT_STAR, TK_LIT_U5f, TK_MediaOnly, TK_Not, TK_Or, TK_To, TK_Variable]];
+global FOLLOW_MASK_34: List<List<i32>> = [[TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_To, TK_Underscore, TK_Variable]];
 global FOLLOW_MASK_35: List<List<i32>> = [[TK_Variable]];
-global FOLLOW_MASK_36: List<List<i32>> = [[TK_Dimension, TK_LIT_LPAREN, TK_Minus, TK_Number, TK_Percentage, TK_Plus, TK_UnknownDimension]];
+global FOLLOW_MASK_36: List<List<i32>> = [[TK_Dimension, TK_Minus, TK_Number, TK_OpenParen, TK_Percentage, TK_Plus, TK_UnknownDimension]];
 global FOLLOW_MASK_37: List<List<i32>> = [[TK_Minus, TK_Plus]];
 global FOLLOW_MASK_38: List<List<i32>> = [[TK_Minus, TK_Number, TK_Plus]];
-global FOLLOW_MASK_39: List<List<i32>> = [[TK_From, TK_LIT_RBRACE, TK_Percentage, TK_To]];
+global FOLLOW_MASK_39: List<List<i32>> = [[TK_CloseBrace, TK_From, TK_Percentage, TK_To]];
 global FOLLOW_MASK_40: List<List<i32>> = [[TK_From, TK_Percentage, TK_To]];
-global FOLLOW_MASK_41: List<List<i32>> = [[TK_AtKeyword, TK_LIT_RBRACE]];
+global FOLLOW_MASK_41: List<List<i32>> = [[TK_AtKeyword, TK_CloseBrace]];
 global FOLLOW_MASK_42: List<List<i32>> = [[TK_Comma]];
-global FOLLOW_MASK_43: List<List<i32>> = [[TK_And, TK_Comment, TK_From, TK_Ident, TK_LIT_RBRACE, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_To]];
+global FOLLOW_MASK_43: List<List<i32>> = [[TK_And, TK_CloseBrace, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_To]];
 

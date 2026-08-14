@@ -900,12 +900,7 @@ pub struct ParseResult {
 
 impl ParseResult {
     pub fn has_errors(&self) -> bool {
-        for let d of &self.diagnostics {
-            if d.is_error() {
-                return true;
-            }
-        }
-        return false;
+        return self.diagnostics.iter().any(|d| d.is_error());
     }
 
     /// True when the parse produced no error-severity diagnostics.
@@ -1418,10 +1413,6 @@ pub global TK_SEMI: i32 = 4;
 pub global TK_WS: i32 = 5;
 pub global TK_EOF: i32 = 6;
 pub global TK_ERROR: i32 = 7;
-pub global TK_LIT_SEMI: i32 = 8;
-pub global TK_LIT_BANG: i32 = 9;
-pub global TK_LIT_PIPEPIPE: i32 = 10;
-pub global TK_LIT_PIPE: i32 = 11;
 
 struct Lexer {
     chars: List<char>,
@@ -1461,6 +1452,36 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn try_PIPEPIPE(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '|' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != '|' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_PIPE(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '|' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_BANG(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '!' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_SEMI(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != ';' { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
@@ -1480,31 +1501,6 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_semi(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != ';' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_bang(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '!' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_pipepipe(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '|' { return -1; }
-    if pos + 1 >= chars.len() || chars[pos + 1] != '|' { return -1; }
-    return pos + 2;
-}
-
-fn try_lit_pipe(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '|' { return -1; }
-    return pos + 1;
-}
-
 pub fn tokenize(input: &String) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -1519,16 +1515,16 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char matches { '!' } {
-            end = try_lit_bang(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_BANG; }
+            end = try_BANG(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_BANG; }
         } else if first_char matches { ';' } {
-            end = try_lit_semi(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
+            end = try_SEMI(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SEMI; }
         } else if first_char matches { '|' } {
-            end = try_lit_pipepipe(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PIPEPIPE; }
-            end = try_lit_pipe(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
+            end = try_PIPEPIPE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PIPEPIPE; }
+            end = try_PIPE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PIPE; }
         } else if first_char matches { '0'..='9' } {
             end = try_INT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_INT; }
@@ -1566,10 +1562,6 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_SEMI => "TK_LIT_SEMI",
-        TK_LIT_BANG => "TK_LIT_BANG",
-        TK_LIT_PIPEPIPE => "TK_LIT_PIPEPIPE",
-        TK_LIT_PIPE => "TK_LIT_PIPE",
         _ => "Unknown",
     };
 }
@@ -1858,7 +1850,7 @@ fn scan_item(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             try_0: {
                 pos = scan_expr(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_SEMI { break try_0; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -1866,7 +1858,7 @@ fn scan_item(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             try_1: {
                 pos = scan_expr(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_BANG { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_BANG { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -1924,15 +1916,15 @@ fn scan_closure(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         sg_0: {
             pos = gp_0;
             sg_0_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPEPIPE { break sg_0_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_PIPEPIPE { break sg_0_0; }
                 pos += 1;
                 break sg_0;
             }
             pos = gp_0;
             sg_0_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPE { break sg_0_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_PIPE { break sg_0_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPE { break sg_0_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_PIPE { break sg_0_1; }
                 pos += 1;
                 break sg_0;
             }
@@ -1967,7 +1959,7 @@ fn _parse_prog(p: &mut Parser) -> () {
 fn _parse_item__inner_alt_0(p: &mut Parser) -> () {
     let start = p.peek_start();
     let expr = _parse_expr(p);
-    let semicolon = p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
+    let semi = p.expect(TK_SEMI, &EMPTY_SYNC);
     return;
 }
 
@@ -1975,7 +1967,7 @@ fn _parse_item__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
     return pos;
 }
@@ -1983,7 +1975,7 @@ fn _parse_item__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
 fn _parse_item__inner_alt_1(p: &mut Parser) -> () {
     let start = p.peek_start();
     let expr = _parse_expr(p);
-    let bang = p.expect(TK_LIT_BANG, &EMPTY_SYNC);
+    let bang = p.expect(TK_BANG, &EMPTY_SYNC);
     return;
 }
 
@@ -1991,7 +1983,7 @@ fn _parse_item__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_BANG { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_BANG { return -1; }
     pos += 1;
     return pos;
 }
@@ -2026,7 +2018,7 @@ fn _parse_item__inner(p: &mut Parser) -> () {
     p.no_viable(
         "expected item",
         p.peek_span(),
-        ["TK_LIT_PIPEPIPE", "TK_LIT_PIPE", "TK_INT"],
+        ["TK_PIPEPIPE", "TK_PIPE", "TK_INT"],
     );
     return;
 }
@@ -2073,7 +2065,7 @@ fn _parse_primary__inner(p: &mut Parser) -> () {
     p.no_viable(
         "expected primary",
         p.peek_span(),
-        ["TK_LIT_PIPEPIPE", "TK_LIT_PIPE", "TK_INT"],
+        ["TK_PIPEPIPE", "TK_PIPE", "TK_INT"],
     );
     return;
 }
@@ -2092,11 +2084,11 @@ fn _parse_primary(p: &mut Parser) -> () {
 fn _parse_closure__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let grp_kind = p.peek_kind();
-    if grp_kind == TK_LIT_PIPEPIPE {
-        let lit_pipepipe = p.expect(TK_LIT_PIPEPIPE, &EMPTY_SYNC);
-    } else if grp_kind == TK_LIT_PIPE {
-        let pipe = p.expect(TK_LIT_PIPE, &SYNC_0);
-        let pipe_2 = p.expect(TK_LIT_PIPE, &EMPTY_SYNC);
+    if grp_kind == TK_PIPEPIPE {
+        let pipepipe = p.expect(TK_PIPEPIPE, &EMPTY_SYNC);
+    } else if grp_kind == TK_PIPE {
+        let pipe = p.expect(TK_PIPE, &SYNC_0);
+        let pipe_2 = p.expect(TK_PIPE, &EMPTY_SYNC);
     }
     let expr = _parse_expr(p);
     return;
@@ -2155,16 +2147,16 @@ pub fn parse_closure(input: &String, max_errors: i32 = i32::MAX) -> ParseResult 
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(12);
-    for let mut k = 0; k < 12; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(8);
+    for let mut k = 0; k < 8; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(12);
-    for let mut k = 0; k < 12; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(8);
+    for let mut k = 0; k < 8; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
@@ -2182,13 +2174,13 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_PIPE | TK_LIT_PIPEPIPE };
+    return k matches { TK_PIPE | TK_PIPEPIPE };
 }
 
 fn _kind_set_1(k: i32) -> bool {
-    return k matches { TK_INT | TK_LIT_PIPE | TK_LIT_PIPEPIPE };
+    return k matches { TK_INT | TK_PIPE | TK_PIPEPIPE };
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_PIPE];
+global SYNC_0: List<i32> = [TK_PIPE];
 

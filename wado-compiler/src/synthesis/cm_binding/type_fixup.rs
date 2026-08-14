@@ -1,23 +1,8 @@
-//! Post-synthesis type fixups and call-site rewrites.
-//!
-//! After import-adapter synthesis the binding bodies use WASI-derived
-//! `TypeId`s (e.g. `List<Tuple<String, List<u8>>>`) while the call sites
-//! see the user's newtype-aliased types (e.g. `List<Tuple<FieldName,
-//! FieldValue>>`). [`rewrite_calls_in_block`] reaches every effect-style
-//! call and resource method call, swaps in the binding `FunctionRef`,
-//! flattens args to the binding's flat CM parameter shape, and runs
-//! [`fixup_wasi_derived_types_in_adapter`] to re-type the binding body.
-//! [`collect_effect_calls_in_block`] is the discovery pass that drives
-//! the same set of call sites for adapter generation.
-//!
-//! Design invariant: one binding function is shared by every call site of
-//! its import, so all sites must agree on the types the fixup applies. The
-//! rewrite records each adapter's applied return type and turns a
-//! disagreeing site into an ICE (see
-//! `fixup_adapter_return_from_call_site`) instead of silently overwriting
-//! an earlier site's typing. The longer-term direction is to synthesize
-//! bindings with call-site types up front and retire this pass; until
-//! then, the invariant is enforced, not assumed.
+//! Post-synthesis type fixups and call-site rewrites. Import-adapter binding
+//! bodies carry WASI-derived `TypeId`s while call sites see the user's
+//! newtype-aliased ones, so [`rewrite_calls_in_block`] swaps in the binding
+//! `FunctionRef`, flattens args to the flat CM shape, and re-types the body.
+//! One binding serves every call site, so a disagreeing site is an ICE.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -308,6 +293,7 @@ fn replace_type_in_adapter_with_names(
     }
 }
 
+<<<<<<< HEAD
 /// Replaces every occurrence of `old_type` with `new_type` throughout an
 /// adapter body, and — when `rename` is set — substitutes the same pair inside
 /// each callee's own identity (needed for monomorphized helpers like
@@ -318,6 +304,24 @@ fn replace_type_in_adapter_with_names(
 /// expression position — match arms, nested blocks, closures, index/assign
 /// targets — rather than the partial set the previous hand-written walkers
 /// covered.
+||||||| bad542cd7
+/// Replaces every occurrence of `old_type` with `new_type` throughout an
+/// adapter body, and — when `rename` is set — rewrites function references
+/// whose mangled name embeds `old_name` to use `new_name` (needed for
+/// monomorphized helpers like `List<T>::with_capacity` where `T` is a
+/// WASI-derived type differing from the user's newtype alias).
+///
+/// Traversal is exhaustive via `TirMutVisitor`, so the swap reaches every
+/// expression position — match arms, nested blocks, closures, index/assign
+/// targets — rather than the partial set the previous hand-written walkers
+/// covered.
+=======
+/// Replaces every `old_type` with `new_type` throughout an adapter body, and
+/// with `rename` set also rewrites function references whose mangled name
+/// embeds `old_name` — needed for a monomorphized `List<T>::with_capacity`
+/// whose `T` is WASI-derived. Traversal rides `TirMutVisitor`, so the swap
+/// reaches every expression position.
+>>>>>>> origin/main
 struct TypeReplacer<'a> {
     old_type: TypeId,
     new_type: TypeId,
@@ -687,17 +691,11 @@ impl TirMutVisitor for CallRewriteWalker<'_> {
     }
 }
 
-/// Retype a shared adapter's return from a call site. Streaming adapters keep
-/// their WIR-level i32 return (the caller-visible `Future` type stays on the
-/// call expression), so they are left untouched.
-///
-/// The adapter is shared by every call site of the import, so all sites must
-/// agree on its return type; `applied_returns` records what each adapter was
-/// typed to, and a disagreeing site is an ICE rather than a silent
-/// last-write-wins overwrite of the earlier site's typing. The map is keyed by
-/// the adapter's `Rc` identity (`adapter_key`) — not its name, which is a
-/// non-injective `interface_method` join — so two distinct adapters can never
-/// collide.
+/// Retype a shared adapter's return from a call site, leaving a streaming
+/// adapter's WIR-level i32 return alone. Every call site of the import shares
+/// the adapter, so `applied_returns` records what each was typed to and a
+/// disagreeing site is an ICE. Keyed by the adapter's `Rc` identity, its name
+/// being a non-injective `interface_method` join.
 fn fixup_adapter_return_from_call_site(
     adapter: &mut TirFunction,
     adapter_key: usize,

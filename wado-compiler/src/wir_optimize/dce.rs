@@ -1,16 +1,8 @@
-//! Dead Code Elimination (DCE) passes for WIR.
-//!
-//! - **`mark_unreachable_defined_functions`**: marks defined functions
-//!   not reachable from exports/elements as dead via
-//!   `dead_func_indices`.
-//! - **`dce_unreachable_types`**: marks GC types not referenced by any
-//!   live code as dead via `dead_type_indices`.
-//! - **`compact_dead_items`**: removes all dead-marked items and remaps
-//!   indices.
-//!
-//! All three operate on either the GC module or the memory module — the
-//! base offset between absolute `WirFuncId` indices and 0-based
-//! `module.functions` array indices is read from
+//! WIR dead-code elimination: the `mark_*` passes flag unreachable functions,
+//! globals and types into the module's `dead_*_indices`, and
+//! [`compact_dead_items`] then removes them and remaps every index. All of them
+//! work on the GC module and the memory module alike, reading the offset between
+//! absolute `WirFuncId`s and 0-based array indices from
 //! [`WirPackage::defined_func_base`].
 
 use std::rc::Rc;
@@ -84,22 +76,11 @@ fn collect_global_refs_recursive(instr: &WirInstr, out: &mut IndexSet<String>) {
     instr.for_each_child(&mut |child| collect_global_refs_recursive(child, out));
 }
 
-/// Mark globals referenced by no `GlobalGet`/`GlobalSet` (in any function body,
-/// global initializer, or active data-segment offset) and by no export as dead
-/// (`dead_global_indices`), so
-/// [`compact_dead_items`] drops them. A global read nowhere and written nowhere
-/// affects nothing observable — its value can never be seen. This reclaims the
-/// synthesized const-object globals (`const_object_globalization` lazy-fill
-/// targets) whose only uses were a now-folded cold assert/bounds-check panic
-/// branch: the peephole eliminates the dead branch (taking the `GlobalSet` fill
-/// and `GlobalGet` read with it) before `promote_const_global_inits` can turn
-/// the fill into an eager initializer, leaving an unreferenced `global mut`
-/// declaration that `dedupe_const_globals` (immutable-only) never merges.
-///
-/// Only fully-unreferenced globals are removed, so any global still read or
-/// written — including a write-only user `global mut` whose store survives —
-/// stays. `GlobalGet`/`GlobalSet` address globals by name, so removal needs no
-/// instruction patching.
+/// Mark globals reached by no `GlobalGet` / `GlobalSet` anywhere and by no
+/// export, whose value can therefore never be observed. This reclaims the
+/// const-object globals whose only uses sat in a cold panic branch the peephole
+/// folded away, leaving a `global mut` the immutable-only `dedupe_const_globals`
+/// never merges. Instructions address globals by name, so removal patches nothing.
 pub fn mark_unreferenced_globals(module: &mut WirPackage) {
     let mut referenced: IndexSet<String> = IndexSet::default();
     for (i, func) in module.functions.iter().enumerate() {
@@ -155,24 +136,11 @@ fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
     });
 }
 
-/// Mark defined functions unreachable from exports/elements as dead
-/// (`module.dead_func_indices`), so the subsequent `compact_dead_items`
-/// removes them and remaps every `WirFuncId` reference.
-///
-/// Works on both the GC module (defined function indices start at
-/// [`crate::wir_build::DEFINED_FUNC_BASE`]) and the memory module
-/// (0-based indices) by reading the offset from
-/// [`WirPackage::defined_func_base`].
-///
-/// Catches functions whose only call sites never materialized — most
-/// notably the monomorphic `List<T>::push` (and its `List<T>::grow`
-/// callee) for a single-element array literal `[v]`. NIR
-/// `optimize::array_literal` rewrites `[v]` to `ExprKind::ArrayLiteral`,
-/// which `wir_build` lowers to `array.new_fixed`, so the `push` chain is
-/// never emitted and these instantiations have no callers.
-///
-/// This pass only sets dead flags; the actual removal + reindexing
-/// happens in [`compact_dead_items`].
+/// Flag defined functions unreachable from exports and elements into
+/// `dead_func_indices`, leaving the removal and reindexing to
+/// [`compact_dead_items`]. Catches functions whose call sites never materialized
+/// — notably `List<T>::push` and `grow` for a single-element `[v]`, which
+/// `optimize::array_literal` rewrote into an `array.new_fixed`.
 pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
     let num_funcs = u32::try_from(module.functions.len()).unwrap();
     if num_funcs == 0 {
@@ -273,18 +241,11 @@ pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
     }
 }
 
-/// Mark types that are not referenced by any live function, import, or global
-/// as dead by adding them to `module.dead_type_indices`.
-///
-/// After function DCE (at TIR level) and WIR optimization, some type definitions
-/// may be registered but never actually used by any live code. This pass identifies
-/// those orphan types and marks them so the emitter skips them.
-///
-/// Types are collected transitively: a struct field type, array element type,
-/// or variant payload type that is only referenced from a dead type is also dead.
-///
-/// This is a standalone pass, separate from `optimize_wir`, so it can also run
-/// at O0 if needed. Currently called at the end of `optimize_wir`.
+/// Flag types no live function, import or global references into
+/// `dead_type_indices`, so the emitter skips the orphans left registered after
+/// function DCE. Collected transitively: a field, element or payload type reached
+/// only from a dead type is dead too. Standalone rather than part of
+/// `optimize_wir`, so it could also run at `-O0`.
 pub fn dce_unreachable_types(module: &mut WirPackage) {
     let num_types = module.types.len();
     if num_types == 0 {
@@ -414,19 +375,11 @@ fn collect_instr_type_refs(instr: &mut WirInstr, out: &mut IndexSet<u32>) {
     });
 }
 
-/// Remove all dead-marked items from the module and remap their indices.
-///
-/// Consumes `dead_func_indices`, `dead_type_indices`, and `dead_global_indices`,
-/// physically removing those items from the module's arrays and updating every
-/// reference so the module is consistent and the emitter can emit it as-is.
-///
-/// - **Functions** (`dead_func_indices`): removed; `WirFuncId` values in all bodies,
-///   exports, and element tables are remapped.
-/// - **Types** (`dead_type_indices`): removed; `WirTypeId` values in all bodies,
-///   function `type_ids`, import descriptors, globals, type definitions themselves,
-///   and `variant_case_info` are remapped.
-/// - **Globals** (`dead_global_indices`): removed from the globals array.
-///   GlobalGet/GlobalSet use string names so no instruction patching is needed.
+/// Consume the three `dead_*_indices` sets, removing those items from the
+/// module's arrays and remapping every reference so the emitter can take the
+/// result as-is: `WirFuncId`s across bodies, exports and element tables, and
+/// `WirTypeId`s across bodies, signatures, import descriptors, globals, the type
+/// definitions and `variant_case_info`. Globals are addressed by name.
 pub fn compact_dead_items(module: &mut WirPackage) {
     if module.dead_func_indices.is_empty()
         && module.dead_type_indices.is_empty()

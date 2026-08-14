@@ -3,6 +3,7 @@ pub mod ast;
 pub mod ast_index;
 pub mod bind;
 pub mod builtin_registry;
+pub mod canonical;
 pub mod cm_abi;
 pub mod codegen;
 pub mod codegen_flags;
@@ -312,22 +313,10 @@ impl Default for CompilerOptions {
     }
 }
 
-/// Compile Wado source code with a `CompilerHost` for I/O operations.
-///
-/// This is the main compilation entry point. It runs the full compilation pipeline:
-/// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
-///
-/// # Arguments
-/// * `source` - The entry module source code
-/// * `host` - `CompilerHost` for loading imported modules and emitting diagnostics
-/// * `filename` - Optional filename for error messages
-/// * `opt_level` - Optimization level
-///
-/// # Example
-/// ```ignore
-/// let host = FilesystemCompilerHost::new(base_path);
-/// let result = compile_with_host(source, &host, Some("main.wado"), OptLevel::O1).await?;
-/// ```
+/// Compile the entry module `source`, the main entry point, running the whole
+/// pipeline: lexer → parser → binder → loader → analyzer → elaborator → lower →
+/// optimize → `tir_to_wir`. `host` loads imported modules and receives
+/// diagnostics, and `filename` labels them.
 pub async fn compile_with_host<H: CompilerHost>(
     source: &str,
     host: &H,
@@ -413,12 +402,6 @@ pub fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Ve
     out
 }
 
-/// Synthesize a library [`WorldInfo`] (`--lib`) from the entry module's
-/// `export fn` signatures: one direct world export per exported function.
-///
-/// Milestone 2 is functions-only and primitives-only, so each export is a
-/// direct world function (`from_interface_fq = None`). Parameter and return
-/// types are taken straight from the AST signature.
 /// The interface FQ a `core:kiln/generator` component's synthesized world uses
 /// for `generate` and its options record (Kiln WEP revision 3). A generator's
 /// `generate` is grouped into this interface (it references the local `Options`
@@ -508,6 +491,9 @@ fn lib_type_decl_name(item: &ast::Item) -> Option<String> {
     }
 }
 
+/// Synthesize a `--lib` [`WorldInfo`] from the entry module's `export fn`
+/// signatures, one direct world export per exported function with parameter and
+/// return types taken straight from the AST.
 fn synthesize_lib_world_info(
     registry: &component_model::CmInterfaceRegistry,
     fq: &str,
@@ -973,17 +959,11 @@ fn compile_after_load<H: CompilerHost>(
     let wasm_assets = load_result.wasm_assets.clone();
 
     // === Phases 2 + 6a + 6b: Analyze + Annotate + Lower TIR ===
-    // `semantics_with_logger` performs analyze, type resolution, and
-    // body-level TIR lowering. The resulting `Semantics` carries the
-    // `TirModule`s the batch compiler needs plus the use→def reference
-    // map LSP queries need.
-    //
-    // `semantics_with_logger` always returns a `Semantics`. For batch
-    // compilation we refuse to continue when the pipeline did not fully
-    // resolve — the downstream phases assume populated `state` /
-    // `tir_modules`. Diagnostics explaining the failure have already
-    // been emitted to the host.
-    // Batch path: build TIR (reify) for codegen.
+    // `semantics_with_logger` always returns a `Semantics`, carrying the
+    // `TirModule`s the batch compiler needs plus LSP's use→def map. Batch
+    // compilation refuses to continue on an incomplete one — the downstream
+    // phases assume populated `state` / `tir_modules` — and its diagnostics have
+    // already reached the host.
     let sem = semantics::semantics_with_logger(load_result, logger, true);
     if !sem.is_complete() {
         return Err(Bail);
@@ -1977,19 +1957,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     })
 }
 
-/// Format Wado source code.
-///
-/// Returns the formatted source with canonical formatting.
-/// Preserves comments and the `__DATA__` section.
-///
-/// # Example
-/// ```
-/// let source = r#"use {println} from "core:cli";
-/// fn run() with Stdout { println("Hello!"); }
-/// "#;
-/// let formatted = wado_compiler::format(source).unwrap();
-/// assert!(formatted.contains("use { println }"));
-/// ```
+/// Format Wado source code canonically, preserving comments and the `__DATA__`
+/// section.
 pub fn format(source: &str) -> Result<String, CompileError> {
     // Formatting requires a clean parse — the first recovered lex error
     // becomes a `CompileError::Lexer`.
@@ -2084,17 +2053,11 @@ impl ParseResult {
     }
 }
 
-/// Resolve every transitive import of `parsed` and return the loaded
-/// module set.
-///
-/// Stage 2 of the compiler frontend: pair this with [`parse`] for stage 1
-/// and [`semantics::semantics_of`] for stage 3 (analyze + resolve). The
-/// convenience [`semantics::semantics`] wraps all three for callers that
-/// don't need to inspect the parsed entry between stages.
-///
-/// `invocations` redirects bare `use { … } from "<schema>"` clauses to
-/// kiln-generated entry modules. Pass [`kiln::InvocationIndex::new`] when
-/// the caller has no kiln pipeline to advertise.
+/// Resolve every transitive import of `parsed` and return the loaded module set
+/// — stage 2 of the frontend, between [`parse`] and [`semantics::semantics_of`];
+/// [`semantics::semantics`] wraps all three. `invocations` redirects bare
+/// `use { … } from "<schema>"` clauses to kiln-generated entry modules, or is
+/// [`kiln::InvocationIndex::new`] with no kiln pipeline to advertise.
 pub async fn load<H: CompilerHost>(
     parsed: ParseResult,
     filename: Option<&str>,

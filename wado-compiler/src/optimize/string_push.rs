@@ -1,41 +1,8 @@
 //! Two composed string-append rewrites over the shared peephole session:
-//!
-//! * [`ShortPushStrRule`] rewrites `buf.push_str("short_constant")` (≤8 ASCII
-//!   bytes) into a sequence of `buf.push(ch)` calls — eliminating the temporary
-//!   `String` allocation that the literal would otherwise materialize at
-//!   lowering.
-//! * [`ConstAsciiPushRule`] then retargets each `buf.push(<const char < 0x80>)`
-//!   — the ones above, plus any direct constant-ASCII `push` — to
-//!   `buf.push_ascii_unchecked(<byte>)`, skipping `encode_char`'s UTF-8 width dispatch.
-//!
-//! Must run *before* `inline`: once the inliner expands `push_str`'s body
-//! the call node is replaced by a labeled block, after which the
-//! literal-recognising rewrite no longer fires.
-//!
-//! Identifies the methods via their [`crate::compiler_item::CompilerItem`]
-//! markers (`StringPushStr` / `StringPushChar` / `StringPushAscii`) so the pass
-//! does not depend on the canonical paths of `String::push_str` /
-//! `String::push` / `String::push_ascii_unchecked`.
-//!
-//! The receiver is duplicated once per output `push` call. We only rewrite
-//! when the receiver is one of the syntactically pure forms accepted by
-//! [`is_duplicable_receiver`] — anything that could allocate, trap, or
-//! observe state is left alone.
-//!
-//! ASCII-only: each output `push` is given a `CharLiteral` whose code point
-//! equals the source byte. For byte ≥ 0x80 that would push raw UTF-8
-//! continuation bytes through `push`, which expects a Unicode scalar and
-//! would re-encode them — corrupting the string. We therefore skip any
-//! literal containing a non-ASCII byte.
-//!
-//! Empty literals are also skipped: `push_str("")` is a no-op already.
-//!
-//! Runs on the worklist rewrite engine (see
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a block-level
-//! [`Rule`]: `push_str` is a `&mut self` method whose result is dropped, so it
-//! always appears as a statement, and expanding it produces N statements — a
-//! statement-list edit (`set_block_stmts`). Nested blocks are separate worklist
-//! nodes, so the rule only ever rewrites one block's direct statement list.
+//! [`ShortPushStrRule`] expands `buf.push_str("short_constant")` (≤8 ASCII bytes)
+//! into per-byte `buf.push(ch)` calls, and [`ConstAsciiPushRule`] retargets each
+//! constant-ASCII `push` to `push_ascii_unchecked`. Must run *before* `inline`,
+//! which replaces the call node the literal-recogniser matches.
 
 use crate::compiler_item::CompilerItem;
 use crate::nir::NirUnaryOp;
@@ -130,14 +97,9 @@ impl Rule for ShortPushStrRule {
 
 /// Retarget `buf.push(<const char < 0x80>)` to
 /// `buf.push_ascii_unchecked(<byte>)`, skipping `encode_char`'s UTF-8 width
-/// dispatch: a constant ASCII scalar is always a one-byte sequence. Composes
-/// with [`ShortPushStrRule`] — the per-byte `push(ch)` calls it emits for a
-/// short constant `push_str` are all ASCII, so they flow straight into this
-/// rule on the shared worklist.
-///
-/// `push` is `&mut self`-returning-unit, so its call is always a statement
-/// expression; the rewrite is an in-place call edit (swap the callee
-/// and coerce the `char` argument to its `u8` byte).
+/// dispatch: a constant ASCII scalar is always one byte. Composes with
+/// [`ShortPushStrRule`], whose per-byte output is all ASCII. The rewrite is an
+/// in-place call edit — swap the callee, coerce the `char` to its `u8`.
 pub(super) struct ConstAsciiPushRule {
     push_char_id: crate::nir::FuncId,
     push_ascii_id: crate::nir::FuncId,
@@ -287,17 +249,11 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
     Some(stmts)
 }
 
-/// Receivers we are willing to clone N times. The set is intentionally
-/// narrow: anything that may allocate, trap, or be observably stateful is
-/// excluded so duplicating it cannot change semantics.
-///
-/// `String::push_str`'s `&mut self` parameter constrains what a NIR
-/// call receiver can syntactically be: it must be a place, so
-/// in practice we only ever see `Local`, an `&mut`-wrapped `Local`, or
-/// a `FieldAccess` chain rooted at a `Local`. The broader leaves
-/// (`GlobalVarGet`) are accepted defensively because they are pure reads
-/// with no observable side effects of their own — were they to appear
-/// here, cloning them would still be sound.
+/// Receivers safe to clone N times — deliberately narrow, excluding anything
+/// that may allocate, trap, or be observably stateful. `push_str`'s `&mut self`
+/// already forces a place, so in practice only a `Local`, an `&mut`-wrapped one,
+/// or a `FieldAccess` chain rooted at one appears; `GlobalVarGet` is accepted
+/// defensively, being a pure read.
 fn is_duplicable_receiver(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } => true,

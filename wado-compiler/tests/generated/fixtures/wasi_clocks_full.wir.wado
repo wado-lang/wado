@@ -291,10 +291,14 @@ fn "wasi_clocks_full.wado/__test_8_system_clock__two_reads_are_consistent"() {
     let __v1: u32;
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
+    let _av_10: i64;
+    let _av_11: i64;
     t1 = "wasi_clocks_full.wado/__cm_binding__SystemClock_now"();
     t2 = "wasi_clocks_full.wado/__cm_binding__SystemClock_now"();
-    if t2.seconds > t1.seconds {
-    } else if t2.seconds == t1.seconds {
+    _av_10 = t2.seconds;
+    _av_11 = t1.seconds;
+    if _av_10 > _av_11 {
+    } else if _av_10 == _av_11 {
         __v0 = t2.nanoseconds;
         __v1 = t1.nanoseconds;
         if @unlikely(__v0 <u __v1) {
@@ -942,6 +946,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -951,10 +956,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);

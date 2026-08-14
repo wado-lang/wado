@@ -1,16 +1,8 @@
-//! Box-local elimination passes for WIR.
-//!
-//! - **Adjacent-use box elision** (`elide_adjacent_box_locals`): substitutes a
-//!   single-field `StructNew` local's `inner` at its one `StructGet` use, even
-//!   for a heap-reading `inner`, sound because it moves `inner` only into a
-//!   single-use site whose preceding ops are all pure and unconditional. Targets
-//!   the `Box<T>` locals lowering mints for `&primitive` payload bindings
-//!   (`match r { Token(i) => f(*i) }`); these are born during NIR->WIR lowering
-//!   (`lower::plan::boxing`), so NIR's `elide_box_local` never sees them.
-//! - **Flatten seq assignments**: canonicalizes `LocalSet(x, Seq([preamble, final]))`.
-//!
-//! Struct locals NIR can see are decomposed there, by `sroa` / `sroa_param` /
-//! `elide_box_local`.
+//! Box-local elimination for WIR: `elide_adjacent_box_locals` substitutes a
+//! single-field `StructNew` local's `inner` at its one `StructGet` use — sound
+//! even for a heap-reading `inner`, the preceding ops all being pure and
+//! unconditional — targeting the `Box<T>` locals minted during NIR→WIR lowering,
+//! which NIR's own `elide_box_local` never sees.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage};

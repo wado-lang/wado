@@ -1,6 +1,7 @@
 //! Function collection — gathers all reachable functions from the `NirPackage`,
 //! registers their types and creates `WirFunction` stubs (bodies filled later).
 
+use crate::canonical::CanonicalIntrinsic;
 use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -10,9 +11,7 @@ use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
 use crate::nir_value_graph::ValueKind;
 use crate::tir::{PrimitiveType, TypeTable};
-use crate::wir::{
-    CanonicalIntrinsic, WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType,
-};
+use crate::wir::{WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType};
 
 use super::context::{PendingFunctionBody, WirContext};
 
@@ -99,17 +98,14 @@ fn register_imports(ctx: &mut WirContext<'_>) {
         // Track "wasi" namespace imports as needed canonical intrinsics.
         // This ensures they appear in WirPackage::needed_canonicals, which is
         // the single source of truth for component codegen.
+        // A payload-parameterized future annotation (`#[canonical("wasi",
+        // "future-read")]`) states no payload, so it does not parse and is not
+        // tracked here. WIR translation registers it with the payload the call
+        // site's `Future<T>` gives.
         if import.namespace == "wasi"
             && let Some(intrinsic) = CanonicalIntrinsic::from_import_name(&import.canonical_name)
         {
-            // Future-related canonicals with default Trailers payload are not tracked here.
-            // They are registered with the correct CmFuturePayload during WIR translation
-            // via CM method dispatch (cm_future_payload), which has access to the actual
-            // Future<T> type parameter. Tracking them with the wrong payload would force
-            // unnecessary HTTP type definitions.
-            if intrinsic.future_payload().is_none() {
-                ctx.needed_canonicals.insert(intrinsic, func_id.clone());
-            }
+            ctx.needed_canonicals.insert(intrinsic, func_id.clone());
         }
 
         // Also register under the TIR builtin function name so call sites can resolve.
@@ -575,17 +571,11 @@ fn register_literal_data(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Every `PackedArray` payload in the program that needs a segment.
-///
-/// The lower phase's recorded literal lists are not the whole set: the
-/// optimizer writes literals back that no source literal accounts for — a
-/// compile-time call producing a constant `String` becomes one — so the NIR is
-/// the authority. Registering after the recorded lists keeps their segment
-/// indices, appending only what they missed.
-///
-/// Only what the module will emit counts: a dead function is never lowered,
-/// and the arena keeps every node an in-place rewrite displaced. Counting
-/// either would put a segment in the binary that nothing reads.
+/// Every `PackedArray` payload in the program that needs a segment. The lower
+/// phase's recorded lists are not the whole set — the optimizer writes back
+/// literals no source literal accounts for — so NIR is the authority, appended
+/// after the recorded lists to keep their indices. Only what the module emits
+/// counts: a dead function or a displaced arena node would leave a dead segment.
 fn synthesized_packed_payloads(
     package: &crate::nir_package::NirPackage,
     threshold: usize,
@@ -905,16 +895,11 @@ fn translate_global_init(
 
 /// Build a mangled function name from TIR function and module source.
 fn build_mangled_name(tir_func: &NirFunction, _module_source: &ModuleSource) -> String {
-    // For monomorphized functions, prefer `tir_func.name` because the
-    // monomorphizer set it to the canonical mangled name produced by
-    // `function_instantiation_name` / `method_instantiation_name`. The
-    // string-typed `method_info.method_type_args` field is populated by
-    // elaborator/monomorphizer call sites that historically used
-    // `mangle_type_name` (unqualified for `Variant`/`Newtype`/etc.); calling
-    // `method_info.to_mangled_name()` on a monomorphized function would
-    // therefore drop the module qualification that the call-rewrite path
-    // already baked into `tir_func.name`, leaving the func_map registered
-    // under a name no call site looks up.
+    // For a monomorphized function prefer `tir_func.name`, which the
+    // monomorphizer set to the canonical mangled name. `method_info`'s type args
+    // are strings mangled unqualified, so `to_mangled_name()` would drop the
+    // module qualification the call-rewrite path baked into `tir_func.name` and
+    // register the func_map under a name no call site looks up.
     if tir_func.monomorph_info.is_some() {
         return tir_func.name.clone();
     }

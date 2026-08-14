@@ -900,12 +900,7 @@ pub struct ParseResult {
 
 impl ParseResult {
     pub fn has_errors(&self) -> bool {
-        for let d of &self.diagnostics {
-            if d.is_error() {
-                return true;
-            }
-        }
-        return false;
+        return self.diagnostics.iter().any(|d| d.is_error());
     }
 
     /// True when the parse produced no error-severity diagnostics.
@@ -1412,7 +1407,6 @@ pub global TK_WS: i32 = 1;
 pub global TK_WORD: i32 = 2;
 pub global TK_EOF: i32 = 3;
 pub global TK_ERROR: i32 = 4;
-pub global TK_LIT_LBRACE: i32 = 5;
 
 struct Lexer {
     chars: List<char>,
@@ -1431,6 +1425,13 @@ impl Lexer {
     fn slice(&self, start: i32, end: i32) -> LexerSlice with stores[self] {
         return LexerSlice::new(&self.chars, start, end);
     }
+}
+
+fn try_LBRACE(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '{' { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
@@ -1471,12 +1472,6 @@ fn try_WORD(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_lbrace(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '{' { return -1; }
-    return pos + 1;
-}
-
 pub fn tokenize(input: &String) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -1492,8 +1487,8 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_push_mode: i32 = -1;
         let mut best_pop_mode = false;
         if current_mode == 0 {
-            end = try_lit_lbrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; best_push_mode = 1; best_pop_mode = false; }
+            end = try_LBRACE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LBRACE; best_push_mode = 1; best_pop_mode = false; }
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; }
         } else if current_mode == 1 {
@@ -1541,7 +1536,6 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WORD => "WORD",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_LBRACE => "TK_LIT_LBRACE",
         _ => "Unknown",
     };
 }
@@ -1808,7 +1802,7 @@ impl Parser {
 
 fn scan_prog(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LBRACE { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_WORD { return -1; }
     pos += 1;
@@ -1819,7 +1813,7 @@ fn scan_prog(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_prog__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let lbrace = p.expect(TK_LBRACE, &SYNC_0);
     let word = p.expect(TK_WORD, &SYNC_1);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
@@ -1862,16 +1856,16 @@ pub fn parse_prog(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(5);
+    for let mut k = 0; k < 5; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(5);
+    for let mut k = 0; k < 5; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;

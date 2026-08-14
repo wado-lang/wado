@@ -773,6 +773,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -782,10 +783,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
@@ -884,10 +886,12 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:collections/T
     let v_4: ref "./sub/cross_module_treemap_variant_helper.wado//Value";
     let __vc_payload_0: ref "core:prelude/string.wado//String";
     let __vc_payload_1: ref "core:collections//TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>";
-    if self.index >= self.end {
+    let _av_8: i32;
+    _av_8 = self.index;
+    if _av_8 >= self.end {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>">(self.repr, self.index);
+    v_2 = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>">(self.repr, _av_8);
     item = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>" { key: ref.as_non_null(v_3 = v_2.key; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = v_3.repr; let __array_clone_len_5: i32; __array_clone_len_5 = v_3.used; let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: v_3.used }), value: ref.as_non_null(v_4 = v_2.value; (if ref.test "./sub/cross_module_treemap_variant_helper.wado//Value::Str"(v_4) -> ref "./sub/cross_module_treemap_variant_helper.wado//Value" {
         __vc_payload_0 = ref.cast "./sub/cross_module_treemap_variant_helper.wado//Value::Str"(v_4).payload_0;
         struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Str" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = __vc_payload_0.repr; let __array_clone_len_5: i32; __array_clone_len_5 = __vc_payload_0.used; let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: __vc_payload_0.used } };
@@ -895,7 +899,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:collections/T
         __vc_payload_1 = ref.cast "./sub/cross_module_treemap_variant_helper.wado//Value::Obj"(v_4).payload_0;
         struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Obj" { discriminant: 1, payload_0: ref.as_non_null("cross_module_treemap_variant.wado/$value_copy$core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>"(__vc_payload_1)) };
     })), deleted: v_2.deleted };
-    self.index = self.index + 1;
+    self.index = _av_8 + 1;
     return item;
 }
 

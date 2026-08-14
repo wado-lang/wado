@@ -205,7 +205,7 @@ impl<'a> Unparser<'a> {
         Self::default()
     }
 
-    /// Attach a parser-populated [`TriviaMap`]. Builder-style so the
+    /// Attach a parser-populated [`TriviaMap`](crate::comment::TriviaMap). Builder-style so the
     /// formatter pipeline can opt in with
     /// `Unparser::new().with_trivia(&trivia)`, while paths that don't
     /// care about comments (e.g. AST dump) just call `Unparser::new()`.
@@ -2006,25 +2006,11 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_call(&mut self, c: &CallExpr) {
-        // Parenthesize callee shapes that would re-parse differently
-        // without parens. The rule of thumb: anything whose precedence
-        // sits above the postfix level (call/index/field/method), plus a
-        // couple of postfix-level shapes that are still syntactically
-        // ambiguous with call syntax.
-        //
-        // - `FieldAccess`: `self.f(args)` would re-parse as a method call.
-        // - `Closure`: a closure with an expression body greedily
-        //   consumes the rest of the line, so `|x| x + 1(41)` re-parses
-        //   as `|x| (x + 1(41))` rather than calling the closure.
-        // - `Cast`: `f as T(args)` does not re-parse — `T(args)` is not a
-        //   valid type and the trailing `(` becomes a stray token.
-        // - `Unary` / `Binary` / `Assign` / `CompoundAssign` /
-        //   `ComparisonChain` / `Range`: all live above postfix, so the
-        //   call `(args)` would bind tighter on re-parse.
-        //
-        // `If` / `Match` / `Block` / `LabeledBlock` / `WithHandler` are
-        // explicitly excluded: they end with `}` which terminates the
-        // expression cleanly before the call's `(`.
+        // Parenthesize a callee that would re-parse differently bare: anything
+        // above the postfix level, whose `(args)` would bind tighter, plus
+        // `FieldAccess` (re-parses as a method call), `Closure` (an expression
+        // body swallows the call), and `Cast`. `If` / `Match` / `Block` and
+        // friends end with `}`, which terminates the expression cleanly.
         let needs_parens = matches!(
             &c.callee,
             Expr::FieldAccess(_)
@@ -3925,20 +3911,10 @@ pub fn unparse_assoc_const_signature(c: &AssociatedConst) -> String {
     out
 }
 
-/// Render an `impl` block as Wado with member **signatures** only (bodies
-/// omitted), for type overviews:
-///
-/// ```text
-/// impl<T> Trait for Type {
-///     const C: T
-///     fn m(&self) -> T
-/// }
-/// ```
-///
-/// With `public_only`, an inherent `impl` (no trait) shows only `pub` members;
-/// a trait `impl`'s members are always shown (they are the trait's public
-/// surface). Returns an empty string when no member is visible, so callers can
-/// drop the block.
+/// Render an `impl` block as Wado with member **signatures** only, for type
+/// overviews. Under `public_only` an inherent `impl` shows only `pub` members,
+/// while a trait `impl`'s are always shown, being the trait's public surface.
+/// Empty when nothing is visible, so the caller can drop the block.
 pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String {
     let inherent = b.trait_type.is_none();
     let visible = |visibility| crate::semantics::member_visible(public_only, inherent, visibility);
@@ -4897,9 +4873,9 @@ impl<'a> TirUnparser<'a> {
                 self.unparse_type_args(type_args);
                 self.delimited("(", ")", rest, |s, arg| s.unparse_expr(&arg.expr));
             }
-            TirExprKind::CmRawCall { local_name, args } => {
+            TirExprKind::CmRawCall { target, args } => {
                 self.output.push_str("cm_raw_call ");
-                self.output.push_str(local_name);
+                self.output.push_str(&target.import_name());
                 self.delimited("(", ")", args, TirUnparser::unparse_expr);
             }
             TirExprKind::FieldAccess {
@@ -5206,20 +5182,11 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
     }
 }
 
-/// Unparse a TIR closure as `|name: Type, ...| body` (or `|name: Type, ...|
-/// captures[...] body` when the closure captures locals) source text.
-///
-/// Used by `lower::plan::closure` to bake the per-literal source string into
-/// `__Closure_N^InspectAlt::inspect_alt` without requiring every TIR
-/// `Closure` node to carry an unparsed-AST string.
-///
-/// The `captures[name1, name2, ...]` clause has no surface-syntax
-/// counterpart in Wado (closures capture implicitly), but is shown in
-/// the `:#?` debug output by design: it makes captured-environment
-/// dependencies visible at inspect time, which is the whole point of
-/// pretty-printing a closure in the first place. Non-capturing closures
-/// produce output that round-trips through the parser; capturing
-/// closures intentionally do not.
+/// Unparse a TIR closure as `|name: Type, …| body`, or `|…| captures[…] body`
+/// when it captures. `lower::plan::closure` bakes the result into
+/// `__Closure_N^InspectAlt::inspect_alt`. The `captures[…]` clause has no
+/// surface syntax — closures capture implicitly — but is shown deliberately, so
+/// only a non-capturing closure round-trips through the parser.
 pub fn unparse_tir_closure_source(
     params: &[(String, TypeId)],
     captures: &[crate::tir::TirCapture],

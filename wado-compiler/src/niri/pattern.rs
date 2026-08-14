@@ -12,17 +12,11 @@ use crate::tir::PrimitiveType;
 use super::{Interpreter, PatBindings};
 
 impl Interpreter<'_> {
-    /// Whether `value` matches `pat`, recording into `binds` the locals the
-    /// pattern binds and the sub-values they take. `binds` is only meaningful
-    /// on [`PatternMatch::Yes`]; a rejected alternative may have left entries
-    /// behind.
-    ///
-    /// An `Or` alternative preceded by an undecided one binds nothing: the
-    /// earlier alternative is tried first at run time and would bind from its
-    /// own positions.
-    ///
-    /// A tuple rest (`(a, ..)`) leaves its trailing sub-patterns without a
-    /// fixed element index, so only the exact-arity form is decided.
+    /// Whether `value` matches `pat`, recording into `binds` the locals it binds
+    /// and the sub-values they take — meaningful only on [`PatternMatch::Yes`],
+    /// a rejected alternative having possibly left entries behind. An `Or`
+    /// alternative after an undecided one binds nothing, and a tuple rest leaves
+    /// its trailing sub-patterns unindexed, so only exact arity decides.
     pub(super) fn pattern_matches(
         &self,
         body: &Body,

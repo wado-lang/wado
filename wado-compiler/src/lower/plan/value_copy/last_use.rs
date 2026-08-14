@@ -1,42 +1,9 @@
-//! TIR-level move-eligibility for the value-copy fold (WEP 2026-05-21).
-//!
-//! A local qualifies to be *moved* rather than copied when moving its storage
-//! is provably unobservable: every read of it is a final use, and its storage
-//! traces back — through other locals that are themselves dead at the hand-off
-//! — to a fresh allocation (an owned call, a construction, a literal) that
-//! nothing else still references. This reaches *synthesized* function bodies —
-//! serde `deserialize`, `Default` / `Clone` derives — which have no AST and are
-//! invisible to the source-level last-use pass (`elaborator::liveness`) that
-//! feeds `moved_local_spans`. Their temporaries (a field parsed into a local,
-//! carried through an `Ok`-binding into the returned struct) are the fold's
-//! remaining hot copies. The two are unioned at the fold.
-//!
-//! # Two facts, one backward liveness pass
-//!
-//! - *final read* — a read after which the local is dead on every live path. A
-//!   local all of whose reads are final can be moved at each without a later
-//!   observation. Backward liveness computes this precisely: divergent `match`
-//!   arms (`… => return Err(e)`) contribute to a local's live-*in* but not its
-//!   live-*out*, and a loop body reaches a fixpoint, so a value produced and
-//!   consumed within one iteration is dead across the back-edge.
-//! - *no live alias* — at the point a local is bound, none of the locals its
-//!   value derives from are still live. A match-arm binding
-//!   (`if let Some(s) = opt`) aliases its scrutinee's interior; if `opt` is
-//!   read again, moving `s` would corrupt it, so the de-aliasing copy must
-//!   stay. Checked against the live set *after* the binding (live-out), which
-//!   excludes reads that only happen on divergent arms — so a once-consumed
-//!   deserialize temporary passes while a re-read `opt` does not.
-//!
-//! Owned storage is then a least fixpoint: a local exclusively owns fresh
-//! storage when it has no live alias and every source is owned given the locals
-//! proven so far (`is_owned_value` resolves a `Local` reference through that
-//! set). A function containing a closure, effect handler, or `resume` is
-//! skipped wholesale — a captured local or a resumed continuation can
-//! re-observe a local this pass does not model.
-//!
-//! Soundness rests on `live` being an over-approximation of the true live set
-//! everywhere: an unknown control target keeps every local live (never a spurious
-//! final read), so at worst a copy is kept.
+//! TIR-level move-eligibility for the value-copy fold (WEP 2026-05-21), run over
+//! every body and unioned with the source-level pass's `moved_local_spans`. One
+//! backward liveness pass yields both facts a move needs: every read is a final
+//! use, and nothing the value derives from is still live at the binding. A
+//! function containing a closure, handler or `resume` is skipped, either being
+//! able to re-observe.
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
@@ -202,26 +169,11 @@ pub fn compute_move_eligible(
     a.walk_block(body, &mut live, true);
     a.resolve_pending_mut_aliases();
 
-    // Structural freshness: the locals that *hold* an owned (unaliased) value,
-    // regardless of how many times they are read. A least fixpoint — start with
-    // every sourced local and drop those whose source is not owned given the
-    // rest. `is_owned_value` resolves a `Local` reference through this set, so a
-    // deserialize temporary read twice (the `?` tag-test + payload-extract, or a
-    // re-wrapped `Err` arm) still counts, propagating freshness up the chain to
-    // the field that is finally moved.
-    // By-value (non-reference) parameters are owned storage the function holds
-    // exclusively: the caller either deep-copied the argument in, or move-elided
-    // a fresh-and-dead one (whose source is then dead), so nothing live aliases
-    // the parameter. Consuming it at its final use is therefore a move — a
-    // `build(self) -> Self { return self }` returns its receiver without a copy.
-    // Multi-use or borrow-escaping parameters are still held back by `non_final`
-    // / `borrow_escaped`, so this only frees genuinely final consumptions.
-    // Reference parameters (`&self`) borrow the caller's storage and are never
-    // seeded. The interprocedural return convention (`ownership.rs`) seeds
-    // by-value params the same way and for the same reason: a returned parameter
-    // is never confined, so the caller always deep-copies it in, and returning it
-    // (a stored-then-returned parameter's store copied it too, since it is live at
-    // the return) yields a value that aliases only the callee's own copy.
+    // Structural freshness: the locals *holding* an owned value, however often
+    // read. A least fixpoint — seed every sourced local, drop those whose source
+    // is not owned given the rest. By-value params are seeded too, the caller
+    // having deep-copied or move-elided the argument; reference params borrow
+    // the caller's storage and never are.
     let mut fresh: IndexSet<u32> = a
         .let_sources
         .keys()
@@ -852,16 +804,10 @@ impl Analyzer<'_> {
     }
 
     /// The positions an indirect (functor) callee may store, from its functor
-    /// type's declared `stores` clause. `None` is conservative: every position
-    /// may be stored.
-    ///
-    /// Only a call through a functor *parameter* is trusted. A parameter's
-    /// declared `stores` is a sound upper bound of every value bound to it: the
-    /// frontend checks each call argument (closure / function) against the
-    /// parameter's `stores`, rejecting one that would store more. A functor
-    /// value from any other source (a `let`-bound closure whose synthesized type
-    /// records no `stores`, a returned functor) carries no such guarantee, so it
-    /// stays conservative and its `&`/`&mut` arguments keep their copies.
+    /// type's declared `stores` clause; `None` means every position may be.
+    /// Only a call through a functor *parameter* is trusted, the frontend having
+    /// checked each argument against that parameter's `stores`. A functor from
+    /// any other source carries no such guarantee and keeps its copies.
     fn functor_stores(&self, callee: &TirExpr) -> Option<IndexSet<u32>> {
         let TirExprKind::Local { index, .. } = &callee.kind else {
             return None;
@@ -1058,20 +1004,11 @@ impl Analyzer<'_> {
         }
     }
 
-    /// Record place-level move candidates at a struct/tuple literal or a `let`
-    /// binding. A direct child that materializes a whole value / clean field of
-    /// an aggregate root `base` aliases it out of the aggregate instead of
-    /// deep-copying, when:
-    ///
-    /// - `base` is dead after the literal (`!live_out.contains(base)`);
-    /// - the materialization sites of `base` are non-overlapping owners (one
-    ///   whole move, or field moves with distinct top-level fields); and
-    /// - no *other* use of `base` in the literal mutates or moves its storage
-    ///   (`conflict`). Read-only borrows (`&self` method, field read) and
-    ///   independent deep copies are harmless because `base` dies right after.
-    ///
-    /// The owned-storage guards (fresh / no live alias / no escaped borrow) are
-    /// applied later, once the fixpoint is known.
+    /// Record place-level move candidates at a struct/tuple literal or `let`. A
+    /// direct child materializing a whole value or clean field of an aggregate
+    /// root aliases it out instead of deep-copying, provided the root is dead
+    /// after the literal, its materialization sites are non-overlapping owners,
+    /// and no other use in the literal mutates or moves its storage.
     fn collect_place_moves(&mut self, children: &[&TirExpr], live_out: &IndexSet<u32>) {
         let mut mats: IndexMap<u32, Vec<(Option<u32>, crate::token::Span)>> = IndexMap::default();
         let mut conflict: IndexSet<u32> = IndexSet::default();
@@ -1511,12 +1448,6 @@ impl Analyzer<'_> {
     }
 }
 
-/// The local whose storage this expression's *result* shares, if any. A
-/// whole-value `Local` or a projection of one (`.field`, `[i]`, `*ref`, a
-/// transparent cast) aliases that root local; a fresh allocation — a call, a
-/// construction, a literal, an arithmetic result — aliases nothing observable,
-/// so returns `None`. Errs toward `Some` for unmodelled projection-like nodes
-/// (over-flagging only keeps a copy).
 /// The top-level field a borrow place reaches off its root local: `Some(f)` for a
 /// clean projection `local.f…`, `None` for a whole-local (`local`) or an
 /// imprecise place (through an index / deref / cast / variant payload), which
@@ -1538,6 +1469,11 @@ fn borrow_top_field(place: &TirExpr) -> Option<u32> {
     }
 }
 
+/// The local whose storage this expression's *result* shares, if any: a
+/// whole-value `Local` or a projection of one aliases that root, while a fresh
+/// allocation — a call, a construction, a literal, an arithmetic result —
+/// aliases nothing observable and gives `None`. Errs toward `Some` for an
+/// unmodelled projection-like node, where over-flagging only keeps a copy.
 pub(crate) fn alias_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
@@ -1597,7 +1533,7 @@ fn as_materialize(expr: &TirExpr) -> Option<(u32, Option<u32>)> {
 /// A newtype shares its base type's runtime representation (WEP 2026-01-29), so
 /// `bytes as ByteArray` hands over the same storage the local holds — it is the
 /// same materialization, not a new value. Freshness already reads through a cast
-/// ([`super::analyze::is_owned_value`]); the move side has to agree, or a
+/// (`super::analyze::is_owned_value`); the move side has to agree, or a
 /// conversion as thin as `String { repr: bytes as ByteArray, used: len }` forces
 /// a deep copy of what the caller just built.
 pub fn strip_casts(mut expr: &TirExpr) -> &TirExpr {

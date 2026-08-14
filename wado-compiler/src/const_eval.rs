@@ -29,17 +29,11 @@ pub enum Value {
     Null,
     /// The unit value, `()`.
     Unit,
-    /// A struct or tuple whose every field is itself a compile-time value.
-    ///
-    /// Fields are keyed by `field_index` — the key `FieldAccess`,
-    /// `StructLiteral`, and struct patterns all carry — and kept sorted by it,
-    /// so structural equality is independent of literal field order. A NIR
-    /// aggregate literal always lists every field (the elaborator fills
-    /// defaults and rejects omissions), so the field list is complete and
-    /// equality is exact.
-    ///
-    /// Aggregates exist only inside the interpreter: the value pool holds pure
-    /// *scalars*, so what reaches the IR is the scalars projected out of them.
+    /// A struct or tuple whose every field is itself a compile-time value, keyed
+    /// by `field_index` and kept sorted, so structural equality ignores literal
+    /// field order. A NIR aggregate literal always lists every field, so the
+    /// list is complete and equality exact. Aggregates exist only inside the
+    /// interpreter; what reaches the IR is the scalars projected out of them.
     Aggregate {
         type_id: TypeId,
         fields: Rc<[(u32, Value)]>,
@@ -358,8 +352,9 @@ impl Value {
         }
     }
 
-    /// Project an [`Operand`] to the constant it denotes. Constants live in
-    /// the `ValuePool`, so only `Operand::Value` can be one.
+    /// Project an [`Operand`](crate::nir_arena::Operand) to the constant it
+    /// denotes. Constants live in the `ValuePool`, so only `Operand::Value`
+    /// can be one.
     #[must_use]
     pub fn from_operand(
         body: &Body,
@@ -425,29 +420,11 @@ pub(crate) fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
     }
 }
 
-/// Evaluate an `as` cast at compile time.
-///
-/// Source values are the lattice-resolved [`Value`] of the cast input;
-/// `target` is the destination primitive (resolved from the cast node's
-/// `type_id`). Returns `None` for unsupported pairs — the caller maps
-/// that to [`Lattice::NonConst`] so the runtime cast still happens, no
-/// bogus value gets folded in.
-///
-/// The supported set mirrors what the elaborator permits in source:
-///
-/// - `Int` source ↦ Int (already supported), Float, Char (only when
-///   source is `U8` per [`expr.rs`]'s `u8 as char` carve-out).
-/// - `Float` source ↦ Float, Int (saturating, matching Wasm's
-///   `*.trunc_sat_*` semantics — Rust's `as` since 1.45 implements the
-///   same rounding/saturation rules so we forward to it).
-/// - `Bool` source ↦ Int (0/1), Float (0.0/1.0). Bool → Bool is the
-///   identity.
-/// - `Char` source ↦ Int (codepoint, then truncated). Char → Char is the
-///   identity.
-///
-/// 128-bit (`I128`/`U128`) and SIMD (`V128`) targets are reachable here
-/// (they are valid `Primitive` variants) but currently unsupported and
-/// fall through to `None`.
+/// Evaluate an `as` cast at compile time, from the lattice-resolved [`Value`] of
+/// the input to the `target` primitive. The supported set mirrors what the
+/// elaborator permits in source; a float → int cast saturates, matching Wasm's
+/// `trunc_sat` and Rust's own `as`. `None` for an unsupported pair, including a
+/// 128-bit or SIMD target, leaving the caller to keep the runtime cast.
 pub(crate) fn eval_cast(source: Value, target: PrimitiveType) -> Option<Value> {
     let int_target = is_int_prim(target);
     let float_target = matches!(target, PrimitiveType::F32 | PrimitiveType::F64);

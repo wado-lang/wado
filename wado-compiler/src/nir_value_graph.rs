@@ -1,16 +1,8 @@
-//! NIR Value Graph (Layer 2 — hash-consed pure-value DAG).
-//!
-//! Hash-consed DAG of pure values. Each value has a [`ValueId`] (newtype
-//! over `u32`); two structurally-equivalent values share one `ValueId`. CSE is
-//! pure hash-consing — there are no e-class merges, so a `ValueId` is stable
-//! once allocated. The
-//! `SkelTree` (Layer 1 — see [`crate::nir_arena`]) references pure operands by
-//! `ValueId`; pure values live exclusively here.
-//!
-//! Consumed by [`crate::nir_engine::Engine::value`] (which lazily builds the
-//! per-function graph via [`builder::build`]) and through that by the CSE
-//! and store-load-forward rules. See
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
+//! NIR Value Graph (Layer 2): a hash-consed DAG where structurally-equivalent
+//! values share one [`ValueId`]. CSE is pure hash-consing, with no e-class
+//! merges, so an id is stable once allocated; the `SkelTree` references pure
+//! operands by id and holds none itself. Built lazily per function by
+//! [`crate::nir_engine::Engine::value`]. See WEP 2026-06-05.
 
 pub mod builder;
 
@@ -829,18 +821,11 @@ impl ValuePool {
         }
     }
 
-    /// Remap every `OpaqueSource::Local` index through `remap` (old → new).
-    /// A pass that renumbers a body's locals must call this so a promoted
-    /// `Opaque` value (extracted as `local.get idx`) still names the right slot.
-    ///
-    /// A `None` entry marks a dropped local. The pool is append-only, so a
-    /// source naming one is the residue of a promoted read that folded away —
-    /// the caller drops a local only when no reachable operand reads it
-    /// ([`crate::optimize::arena_query::promoted_local_reads`]). Such a source
-    /// is cleared rather than remapped: the value is unreachable, and clearing
-    /// it turns any use into the "no recorded extraction source" panic at WIR
-    /// build instead of a silent read of the wrong slot. The canonical-local
-    /// cache is keyed by index, so it renumbers alongside.
+    /// Remap every `OpaqueSource::Local` index through `remap` (old → new), which
+    /// a pass renumbering a body's locals must call so a promoted `Opaque` still
+    /// names the right slot. A `None` entry marks a dropped local, whose source
+    /// is cleared rather than remapped: any use then hits the "no recorded
+    /// extraction source" panic instead of silently reading the wrong slot.
     pub fn remap_opaque_locals(&mut self, remap: &[Option<u32>]) {
         self.canonical_locals = self
             .canonical_locals
@@ -859,24 +844,15 @@ impl ValuePool {
         });
     }
 
-    /// Whether `id`'s value can be re-emitted by the extractor purely from the
-    /// graph + side-effect-free, position-independent leaves: literal constants
-    /// and `Local`-sourced opaques (a `local.get`), composed by `Binary` /
-    /// `Unary` / `Cast`. Excludes `Opaque(Expr)` (effectful / unscheduled),
-    /// `Select` / `LoopPhi` (flow merges — extraction-unsupported), `FieldAccess`,
-    /// etc.
-    ///
-    /// A `Local` opaque is only sound when the local is **single-assignment**: a
-    /// `local.get idx` at the frozen node's position must read the same value
-    /// the opaque denotes. A reassigned (`is_mut`) local fails this — its value
-    /// at an extraction point can differ from the opaque's version (e.g. a
-    /// `mut` param read after `x = x*2`, or a loop counter), so `mut_locals`
-    /// (the reassignable indices) are rejected. This also excludes loop-variant
-    /// locals, since loop counters are `mut`.
+    /// Whether `id`'s value can be re-emitted purely from the graph and
+    /// position-independent leaves: literal constants and `Local`-sourced
+    /// opaques, composed by `Binary` / `Unary` / `Cast`. A `Local` opaque is
+    /// sound only when the local holds **one value**, so the caller rejects every
+    /// index in `multi_version_locals` (`Engine::local_has_one_version`).
     pub fn value_fully_reemittable_locally(
         &mut self,
         id: ValueId,
-        mut_locals: &IndexSet<u32>,
+        multi_version_locals: &IndexSet<u32>,
     ) -> bool {
         match self.kind(id).clone() {
             ValueKind::Int(_, _)
@@ -884,7 +860,7 @@ impl ValuePool {
             | ValueKind::Bool(_)
             | ValueKind::Char(_) => true,
             ValueKind::Opaque(op) => match self.opaque_source(op) {
-                Some(OpaqueSource::Local(idx)) => !mut_locals.contains(&idx),
+                Some(OpaqueSource::Local(idx)) => !multi_version_locals.contains(&idx),
                 _ => false,
             },
             // Arithmetic is width-uniform: a `Binary`/`Unary` and its operands
@@ -892,20 +868,20 @@ impl ValuePool {
             // frozen node. `Cast` is excluded — its operand carries the *source*
             // type, unrecoverable from the type-erased value tree.
             ValueKind::Binary { lhs, rhs, .. } => {
-                self.value_fully_reemittable_locally(lhs, mut_locals)
-                    && self.value_fully_reemittable_locally(rhs, mut_locals)
+                self.value_fully_reemittable_locally(lhs, multi_version_locals)
+                    && self.value_fully_reemittable_locally(rhs, multi_version_locals)
             }
             ValueKind::Unary { operand, .. } => {
-                self.value_fully_reemittable_locally(operand, mut_locals)
+                self.value_fully_reemittable_locally(operand, multi_version_locals)
             }
             // A `Select` extracts as a value-producing `if` over its pure arms;
             // re-emittable when the condition and both arms are. The
             // duplication guard keeps a multi-use `Select` from recomputing the
             // `if` at each use.
             ValueKind::Select { cond, then, else_ } => {
-                self.value_fully_reemittable_locally(cond, mut_locals)
-                    && self.value_fully_reemittable_locally(then, mut_locals)
-                    && self.value_fully_reemittable_locally(else_, mut_locals)
+                self.value_fully_reemittable_locally(cond, multi_version_locals)
+                    && self.value_fully_reemittable_locally(then, multi_version_locals)
+                    && self.value_fully_reemittable_locally(else_, multi_version_locals)
             }
             // `FieldAccess` is **never** inline-reemittable: re-emitting a load at
             // an arbitrary use is unsound once a pass moves the operand, and a value
@@ -1024,16 +1000,10 @@ impl ValuePool {
     }
 
     /// [`ValuePool::binary`], collapsed to a literal when both operands are
-    /// already constants.
-    ///
-    /// Interning is where every producer meets — the builder, the engine's
-    /// maintenance re-derivation, and the scratch-pool reintern inlining runs —
-    /// so folding here is what holds the invariant that no node in the pool is
-    /// a foldable operation. A nested constant depends on it: the outer
-    /// operation's operand is the inner operation's node, so a node interned
-    /// raw is one no later reader can fold.
-    ///
-    /// Folding needs operand widths; without a `TypeTable` nothing folds.
+    /// already constants. Interning is where every producer meets, so folding
+    /// here is what holds the invariant that no node in the pool is a foldable
+    /// operation — a nested constant depends on it, an outer operand being the
+    /// inner node. Folding needs operand widths, so a `TypeTable` is required.
     pub fn binary_folded(
         &mut self,
         op: NirBinaryOp,
@@ -1164,6 +1134,22 @@ impl ValuePool {
             ref k => panic!("set_loop_phi_body_iter on non-phi {k:?}"),
         };
         self.values[phi.0 as usize] = ValueKind::LoopPhi { entry, body_iter };
+    }
+
+    /// The highest [`HeapVersion`] any interned `FieldAccess` carries. A caller
+    /// minting field values from a **different** version numbering — a scratch
+    /// re-walk's fresh heap — starts above this, so no triple it mints can
+    /// collide with one already in the pool and silently merge two loads that
+    /// see different heaps.
+    pub fn max_heap_version(&self) -> HeapVersion {
+        self.values
+            .iter()
+            .filter_map(|k| match k {
+                ValueKind::FieldAccess { heap_ver, .. } => Some(*heap_ver),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(HeapVersion::INITIAL)
     }
 
     #[inline]

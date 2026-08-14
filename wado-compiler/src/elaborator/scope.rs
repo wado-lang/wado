@@ -75,17 +75,11 @@ pub(super) struct Scope {
     pub(super) default_scope_module: Option<ModuleSource>,
 }
 
-/// RAII guard that restores `Elaborator::trait_ctx` to its saved value on drop.
-///
-/// Implements `Deref<Target = Elaborator>` so it can be used as a transparent
-/// elaborator handle inside the scope. Restoration is panic-safe: even if the
-/// scope body panics, drop still runs and the parent context is reinstated.
-///
-/// Use [`Elaborator::enter_inherited_type_param_scope`] to enter a new scope.
-/// It preserves the current `trait_ctx` so the child scope can register new
-/// entries on top of the parent's. Callers that want a clean slate for a
-/// specific field (matching the legacy `mem::take` pattern) should clear that
-/// field on `scope.annotate_ctx.trait_ctx` after entering.
+/// RAII guard restoring `Elaborator::trait_ctx` on drop, panic-safe. Derefs to
+/// the `Elaborator`, so it reads as a transparent handle inside the scope.
+/// Entered through [`Elaborator::enter_inherited_type_param_scope`], which keeps
+/// the parent's `trait_ctx` in place; a caller wanting a clean slate for one
+/// field clears it on `scope.annotate_ctx.trait_ctx` after entering.
 pub(super) struct TypeParamScope<'r, 'a, H: CompilerHost> {
     elaborator: &'r mut Elaborator<'a, H>,
     saved: TraitContext,
@@ -120,16 +114,11 @@ impl<H: CompilerHost> Drop for TypeParamScope<'_, '_, H> {
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
-    /// Enter an inherited type-param scope. The current `trait_ctx` is cloned
-    /// into the saved slot, but left in place so the inner work can register
-    /// additional type params on top of what the parent already had. The
-    /// original context is restored when the returned guard is dropped.
-    ///
-    /// Callers that want a clean slate (matching the legacy
-    /// `mem::take(&mut self.annotate_ctx.trait_ctx.type_params)` pattern) should clear the
-    /// specific fields they want to reset on `scope.annotate_ctx.trait_ctx` after entering
-    /// the scope — only the fields they touch need to be cleared, all others
-    /// are inherited from the parent scope.
+    /// Enter an inherited type-param scope: the current `trait_ctx` is cloned
+    /// into the saved slot but left in place, so the inner work registers
+    /// additional type params on top of the parent's. A caller wanting a clean
+    /// slate clears the specific fields it resets on `scope.annotate_ctx
+    /// .trait_ctx` after entering; everything else stays inherited.
     pub(super) fn enter_inherited_type_param_scope(&mut self) -> TypeParamScope<'_, 'a, H> {
         let saved = self.annotate_ctx.trait_ctx.clone();
         TypeParamScope {
@@ -193,25 +182,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Expand a written bound list to include every bound's supertraits, so a
     /// declared `T: Ord` also demands `Eq`. For the sites that *check* a bound;
     /// what a parameter is known to satisfy is elaborated on read instead, by
-    /// [`super::tysys::TypeSystem::bound_implies`]. `fn(...)` bounds name no
-    /// trait and pass through untouched.
-    ///
-    /// One declaration is one bound, however it is spelled: `T: B + Derived`
-    /// where `B` aliases the `Base` that `Derived` implies is a two-bound list,
-    /// and keeping both would report the alias and the original as competitors
-    /// for a method only one of them can own.
+    /// [`super::tysys::TypeSystem::bound_implies`]. One declaration stays one
+    /// bound however spelled, so an alias never competes with its original.
     pub(super) fn elaborate_bounds(&self, bounds: &[ast::TraitBound]) -> Vec<ast::TraitBound> {
         self.elaborate_bounds_with(bounds, &IndexMap::default())
     }
 
-    /// [`Self::elaborate_bounds`] for bounds that carry no reference site of
-    /// their own.
-    ///
-    /// `known` maps a bound's id to the declaration it means, answered where
-    /// the bound was first read. A projection's bounds are rebuilt here with
-    /// fresh ids that the table cannot answer for, so without `known` the
-    /// dedup would fall back to the spelling and collapse two same-named
-    /// traits into one.
+    /// [`Self::elaborate_bounds`] for bounds carrying no reference site of their
+    /// own. `known` maps a bound's id to the declaration it means, answered where
+    /// the bound was first read: a projection's bounds are rebuilt here with
+    /// fresh ids the table cannot answer for, and without `known` the dedup would
+    /// fall back to the spelling and collapse two same-named traits.
     pub(super) fn elaborate_bounds_with(
         &self,
         bounds: &[ast::TraitBound],
@@ -307,19 +288,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> u32 {
         let mut idx = offset;
         for tp in params.iter().filter(|p| !p.is_effect) {
-            // `<F: fn(...)>` / `<F: fn mut(...)>` binds the parameter directly
-            // to the bound's function type. The closure-type bound is just
-            // surface syntax for "F is exactly this signature" — eager
-            // substitution lets `f: F` be callable inside the body and folds
-            // every callsite onto the same shared canonical closure shape.
-            //
-            // Fn-bound params do NOT consume a `TypeParam` index slot. This
-            // keeps the index space dense for real type params so the
-            // substitution map in `substitute_type_params` (which is keyed by
-            // `TypeParam.index`) lines up with the positional order used by
-            // the inference cache. Without this, mixed declarations like
-            // `<F: fn(...), T>` would leave `T` at `TypeParam(_, 1)` while
-            // the cache placed it at position 0, breaking substitution.
+            // `<F: fn(...)>` binds the parameter directly to the bound's function
+            // type: the bound is surface syntax for "F is exactly this
+            // signature". Such params consume no `TypeParam` index slot, keeping
+            // the space dense so `substitute_type_params` — keyed by
+            // `TypeParam.index` — agrees with the inference cache's positions.
             let fn_bound_sig = if tp.is_pack {
                 None
             } else {
@@ -370,16 +343,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Bind a trait's declared type parameters to the impl's concrete trait
-    /// arguments in the current scope. Given `trait Foo<T, U>` and an impl
-    /// instance `Foo<i32, String>`, this registers `T → i32` and `U → String`
-    /// in `trait_ctx.type_params` together with their declared bounds.
-    ///
-    /// Callers must have any impl-level type params already registered because
-    /// the trait args may reference them (e.g., `impl<X> Foo<Container<X>>`).
-    /// Trait args are resolved in the current scope before being inserted.
-    ///
-    /// Entries already present in `type_params` (e.g., re-used impl-level
-    /// names) are left untouched.
+    /// arguments: `trait Foo<T, U>` against `Foo<i32, String>` registers
+    /// `T → i32` and `U → String` with their bounds. Impl-level type params must
+    /// already be registered, the trait args being able to name them
+    /// (`impl<X> Foo<Container<X>>`). Existing entries are left untouched.
     pub(super) fn bind_trait_type_params_from_impl(&mut self, trait_type: &ast::Type) {
         let trait_name = self.get_type_name(trait_type);
         let Some(trait_decl_type_params) = self.find_trait_decl_type_params(&trait_name) else {

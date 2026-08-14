@@ -5,7 +5,7 @@
 //! rule named `ERROR` claims the id. Captures and overrides come from the
 //! highlight query.
 
-use { Grammar } from "./ir.wado";
+use { Grammar, alias_parser_literals } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
@@ -20,7 +20,9 @@ fn parse_grammar(input: String) -> Grammar {
 }
 
 fn highlight_output_q(input: String, query_src: String) -> String {
-    let g = parse_grammar(input);
+    let mut g = parse_grammar(input);
+    // Mirror `generate()`, whose `lit_tokens` never see an aliased text.
+    alias_parser_literals(&mut g);
     let lits = collect_literal_tokens(&g.parser_rules);
     let query = parse_highlight_query(&query_src).unwrap();
     let mut ctx = GenContext::new(&g.parser_rules, &lits);
@@ -129,17 +131,26 @@ B : 'b' ;
     assert index_of(&out, "capture: \"string\"") >= 0, out;
 }
 
-test "default on a literal-shadowed named token maps the shadowing literal kind" {
-    // LP is `'('` and the parser also uses '(' inline, so the lexer emits the
-    // literal token, not TK_LP. Mapping (LP) must still colour '(' by also
-    // targeting the literal kind, otherwise the mapping is a silent no-op.
+test "default on a named token the parser also writes inline maps that token" {
     let out = highlight_output_q("grammar T;
 r : '(' B ')' ;
 B : 'b' ;
 LP : '(' ;
 RP : ')' ;
 ", "(LP) @punctuation.bracket");
-    assert index_of(&out, "\"punctuation.bracket\",  // TK_LIT") >= 0, out;
+    assert index_of(&out, "\"punctuation.bracket\",  // TK_LP") >= 0, out;
+}
+
+test "default on an action-bearing named token the parser also writes inline" {
+    let out = highlight_output_q("grammar T;
+options { language = Wado; }
+r : '(' B ')' ;
+B : 'b' ;
+LP : '(' { lx.count += 1 } ;
+RP : ')' ;
+", "(LP) @punctuation.bracket");
+    assert index_of(&out, "\"punctuation.bracket\",  // TK_LP") >= 0, out;
+    assert index_of(&out, "TK_LIT_LP") < 0, out;
 }
 
 test "later override for the same rule and token wins (last-wins)" {

@@ -283,12 +283,7 @@ pub struct ParseResult {
 
 impl ParseResult {
     pub fn has_errors(&self) -> bool {
-        for let d of &self.diagnostics {
-            if d.is_error() {
-                return true;
-            }
-        }
-        return false;
+        return self.diagnostics.iter().any(|d| d.is_error());
     }
 
     /// True when the parse produced no error-severity diagnostics.

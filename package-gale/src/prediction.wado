@@ -228,12 +228,7 @@ fn prediction_contains_ambiguous(node: &PredictionNode) -> bool {
         Ambiguous(_) => true,
         Consume(c) => prediction_contains_ambiguous(&c.child),
         Dispatch(d) => {
-            for let b of &d.branches {
-                if prediction_contains_ambiguous(&b.child) {
-                    return true;
-                }
-            }
-            return false;
+            return d.branches.iter().any(|b| prediction_contains_ambiguous(&b.child));
         },
         Leaf(_) => false,
     };
@@ -1006,22 +1001,10 @@ fn sll_find_common_terminal(configs: &List<SllConfig>) -> Option<Element> {
 fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
     return match [*a, *b] {
         [Leaf(ai), Leaf(bi)] => ai == bi,
-        [Ambiguous(aa), Ambiguous(ba)] => {
-            // Compare only the alt set, not the halt reason: dispatch
-            // branch merging (`find_merge_branch`) must keep folding
-            // same-alt Ambiguous children together regardless of which
-            // edge produced them, or the tree shape — and the codegen
-            // that reads it — would change.
-            if aa.alts.len() != ba.alts.len() {
-                return false;
-            }
-            for let mut i = 0; i < aa.alts.len(); i += 1 {
-                if aa.alts[i] != ba.alts[i] {
-                    return false;
-                }
-            }
-            true;
-        },
+        // Compare only the alt set, not the halt reason: branch merging
+        // must keep folding same-alt Ambiguous children together whichever
+        // edge produced them, or the tree shape would change.
+        [Ambiguous(aa), Ambiguous(ba)] => aa.alts == ba.alts,
         [Consume(ca), Consume(cb)] => element_eq(&ca.element, &cb.element) && prediction_node_eq(&ca.child, &cb.child),
         _ => false,
     };
@@ -1033,4 +1016,13 @@ fn element_eq(a: &Element, b: &Element) -> bool {
         [Literal(ta), Literal(tb)] => ta.text == tb.text,
         _ => false,
     };
+}
+
+/// Whether an `Ambiguous` node's decision is emitted as a runtime-ATN
+/// prediction (`atn_predict_with_stack`). Shared by the marking pass and
+/// `gen_prediction_code_inner`'s `route_via_atn` so the two cannot disagree
+/// about which nodes take the ATN path.
+pub fn ambiguous_node_routes_via_atn(a: &AmbiguousNode, rule_name: &String, ctx: &GenContext) -> bool {
+    return a.reason matches { AtEndConflict }
+        && ctx.emits_at_end_conflict_via_atn(ctx.current_rule_index(), rule_name, &a.branch_tokens);
 }

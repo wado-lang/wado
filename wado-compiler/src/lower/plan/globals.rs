@@ -143,17 +143,10 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
 }
 
 /// Extract non-constant global initializers into a per-module
-/// `__initialize_module` function (one per source module; the
-/// functions share a name and are disambiguated by their
-/// `module_source` field). For each lazy-init global the original
-/// initializer is replaced with a default value, and the original
-/// expression is moved into the module's `__initialize_module` body.
-///
-/// Must run before `boxing` because the extracted initializer code
-/// may contain `&primitive` / closure expressions that boxing /
-/// closure rewrite. The top-level `__initialize_modules` aggregator
-/// that calls each module's `__initialize_module` is built later by
-/// [`build_initialize_modules`].
+/// `__initialize_module` function, the globals keeping a default value in their
+/// place. Must run before `boxing`, the extracted code being able to contain the
+/// `&primitive` and closure expressions boxing rewrites; the top-level
+/// aggregator calling each one is built later by [`build_initialize_modules`].
 pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bail> {
     let type_table = flat.type_table.borrow();
 

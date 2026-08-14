@@ -3,7 +3,13 @@ use { Deserialize } from "core:serde";
 use { parse, ArgsError } from "core:args";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
-use { Grammar, normalize_caches, canonicalize_empty_alt_groups, unwrap_labeled_transparent_groups } from "./ir.wado";
+use {
+    Grammar,
+    normalize_caches,
+    alias_parser_literals,
+    canonicalize_empty_alt_groups,
+    unwrap_labeled_transparent_groups,
+} from "./ir.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { lower } from "./lower.wado";
@@ -161,6 +167,7 @@ fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) with Stdout, Stderr, Pr
     // `dump` reports what the emitter sees, so it runs `generate`'s surface
     // normalizations too — otherwise it can report a shape no parser is
     // built from.
+    alias_parser_literals(&mut merged);
     canonicalize_empty_alt_groups(&mut merged);
     unwrap_labeled_transparent_groups(&mut merged);
 

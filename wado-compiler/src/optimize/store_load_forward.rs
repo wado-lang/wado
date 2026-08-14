@@ -1,22 +1,8 @@
-//! Store-to-Load Forwarding optimization for Wado NIR.
-//!
-//! Replace a value-position read — a `Local` read or a `FieldAccess` read —
-//! with the literal that reaches it. The engine's `ValueGraph` handles
-//! flow-sensitive reaching-defs, branch merges, loop and heap-write
-//! invalidation, and field store→load seeding, so this rule only inspects
-//! each read's `ValueKind` and substitutes when it is a literal.
-//!
-//! For `Local` reads, address-taken and `stores`-aliased locals are excluded
-//! here — the builder does not model writes through references for bare
-//! locals. For `FieldAccess` reads the alias safety is upstream: the builder
-//! seeds a field store only for a non-aliased, non-address-taken receiver, so
-//! an aliased field read never carries a literal `ValueId` to begin with.
-//! Particularly useful after SROA decomposes struct fields into scalar
-//! locals, and now also folds reads of fields whose stored value the builder
-//! forwarded (`obj.f = 5; … obj.f …` and `let x = S { f: 5 }; … x.f …`).
-//!
-//! Runs as a per-function standalone engine session whose `apply_block`
-//! fires once at the body root.
+//! Store-to-Load Forwarding: replace a value-position `Local` or `FieldAccess`
+//! read with the literal reaching it. The `ValueGraph` handles reaching-defs,
+//! branch merges, and heap-write invalidation, so this rule only inspects each
+//! read's `ValueKind`. Address-taken and `stores`-aliased locals are excluded;
+//! a field read is safe already, its store seeded only for an unaliased receiver.
 
 use std::cell::Cell;
 

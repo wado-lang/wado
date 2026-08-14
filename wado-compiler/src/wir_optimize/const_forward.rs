@@ -218,18 +218,11 @@ fn collect_aliased_locals(
     aliased
 }
 
-/// Recursively collect aliased locals.
-///
-/// `in_non_stores_arg`: when true, we are inside a Call argument whose callee
-/// does not declare `stores` for this parameter position. In this context,
-/// `RefAsNonNull(LocalGet)` and bare `LocalGet` do not create persistent aliases.
-///
-/// A plain `LocalSet(b, LocalGet a)` copy does NOT alias either side: the two
-/// names share the object (value semantics emit explicit `value_copy` calls
-/// where deep copies are required), but the copy itself creates no untracked
-/// mutation channel — `copy_field_knowledge` transfers the facts and every
-/// mutation channel (`StructSet`, call argument, escaped reference)
-/// invalidates the whole copy group.
+/// Recursively collect aliased locals. `in_non_stores_arg` marks a Call argument
+/// whose callee declares no `stores` for that position, where `LocalGet` — bare
+/// or under `RefAsNonNull` — creates no persistent alias. A plain
+/// `LocalSet(b, LocalGet a)` copy aliases neither side: it opens no untracked
+/// mutation channel, and every real one invalidates the whole copy group.
 fn collect_aliased_in_instr(
     instr: &WirInstr,
     aliased: &mut IndexSet<String>,
@@ -497,11 +490,13 @@ fn is_forwardable(instr: &WirInstr) -> bool {
 fn forward_fields_in_body(body: &mut [WirInstr], known: &mut FieldKnowledge<'_>) -> bool {
     let mut changed = false;
     for i in 0..body.len() {
+        invalidate_call_effects_before_rewrite(&body[i], known);
         changed |= forward_fields_in_instr(&mut body[i], known);
         if may_exit_enclosing_block(&body[i]) {
             let mut tail_known = known.fork();
             update_knowledge_from_instr(&body[i], &mut tail_known);
             for j in (i + 1)..body.len() {
+                invalidate_call_effects_before_rewrite(&body[j], &mut tail_known);
                 changed |= forward_fields_in_instr(&mut body[j], &mut tail_known);
                 update_knowledge_from_instr(&body[j], &mut tail_known);
             }
@@ -569,6 +564,44 @@ fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
             found
         }
     }
+}
+
+/// Invalidate what a **call** inside `instr` may mutate, before the statement is
+/// rewritten. [`update_knowledge_from_instr`] runs *after*, which is right for a
+/// statement's own store but wrong for a call, whose arguments evaluate in
+/// order: `total(bump(&mut c), c.n, c.n)`. Conservative within the statement,
+/// and stops at a nested body, whose own recursion pre-invalidates in turn.
+fn invalidate_call_effects_before_rewrite(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
+    match instr {
+        WirInstr::Call { args, .. } => {
+            for arg in args {
+                if let WirInstr::LocalGet { name, .. } = arg {
+                    known.invalidate_mutated_local(name);
+                }
+            }
+        }
+        WirInstr::CallRef { args, .. } | WirInstr::CallIndirect { args, .. } => {
+            let mut names = IndexSet::default();
+            for arg in args {
+                collect_local_gets_deep(arg, &mut names);
+            }
+            for name in &names {
+                known.invalidate_mutated_local(name);
+            }
+        }
+        WirInstr::RefAsNonNull(inner) => {
+            if let WirInstr::LocalGet { name, .. } = inner.as_ref() {
+                known.invalidate_mutated_local(name);
+            }
+        }
+        WirInstr::Block { .. } | WirInstr::Seq(_) | WirInstr::Loop { .. } => return,
+        WirInstr::If { condition, .. } => {
+            invalidate_call_effects_before_rewrite(condition, known);
+            return;
+        }
+        _ => {}
+    }
+    instr.for_each_child(&mut |child| invalidate_call_effects_before_rewrite(child, known));
 }
 
 /// Update field knowledge from a statement (after its rewrite): first
@@ -809,16 +842,11 @@ fn skip_trailing_unreachable(body: &[WirInstr]) -> &[WirInstr] {
     &body[..end]
 }
 
-/// Extract the local name from a block's result value.
-/// Matches patterns like: `[..., LocalGet { name }, Br { depth: 0 }]`
-/// or `[..., Seq([LocalGet { name }, Br { depth: 0 }])]`.
-///
-/// Only safe when the block has a single exit point (one `Br { depth: 0 }`):
-/// with multiple exits, another path may hand out a different local.
-///
-/// Trailing `Unreachable` instructions are ignored — the code generator
-/// may append `unreachable` after a `Br` so the Wasm validator accepts
-/// the typed block even when the fallthrough path is dead.
+/// Extract the local name from a block's result value:
+/// `[..., LocalGet { name }, Br { depth: 0 }]`, possibly inside a `Seq`. Only
+/// safe with a single exit, since another path may hand out a different local.
+/// A trailing `Unreachable` is ignored — codegen appends one after a `Br` so the
+/// validator accepts the typed block with a dead fallthrough.
 fn extract_block_result_local(body: &[WirInstr]) -> Option<String> {
     if count_br_depth_zero(body) != 1 {
         return None;
@@ -846,18 +874,11 @@ fn extract_block_result_local(body: &[WirInstr]) -> Option<String> {
     None
 }
 
-/// Extract a `StructNew` from a block's result value.
-/// Matches patterns like: `[..., StructNew { ... }, Br { depth: 0 }]`
-/// or `[..., Seq([StructNew { ... }, Br { depth: 0 }])]`.
-/// Returns the (`type_id`, fields) cloned from the `StructNew`.
-///
-/// Only safe when the block has a single exit point (one `Br { depth: 0 }`).
-/// Blocks with multiple exits (e.g., early `break` inside branches) may
-/// produce different `StructNew` values on different paths.
-///
-/// Trailing `Unreachable` instructions are ignored — the code generator
-/// may append `unreachable` after a `Br` so the Wasm validator accepts
-/// the typed block even when the fallthrough path is dead.
+/// Extract a `StructNew` from a block's result value:
+/// `[..., StructNew { … }, Br { depth: 0 }]`, possibly inside a `Seq`, returning
+/// its cloned (`type_id`, fields). Only safe with a single exit, since multiple
+/// exits may produce different values. A trailing `Unreachable` is ignored —
+/// codegen appends one after a `Br` for the validator.
 fn extract_block_result_struct_new(body: &[WirInstr]) -> Option<(WirTypeId, Vec<WirInstr>)> {
     // Count Br { depth: 0 } in the block body. If there are multiple, the
     // block result is ambiguous and we cannot safely forward fields.

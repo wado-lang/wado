@@ -1,18 +1,11 @@
-//! Branch-hint passes: trap-based hint inference and `br_if` selection.
+//! Branch-hint passes. `infer_branch_hints` derives hints from control flow
+//! rather than source markers: an `if` arm always reaching an `unreachable` is
+//! cold, a `br_if` whose fall-through always traps is likely taken. Divergence
+//! alone never counts — only a trap does — and an explicit `cold_path()` hint
+//! always wins. Runs at every `-O`, so hints stay level-independent.
 //!
-//! `infer_branch_hints` derives branch hints from control flow instead of
-//! source markers: an `if` arm that always reaches an `unreachable` trap is
-//! cold, and a `br_if` whose fall-through always traps is likely taken.
-//! Divergence alone (`br` / `return`) never counts as cold — a `break` or an
-//! early `return` is ordinary control flow, only a trap is. Explicit hints
-//! (synthesized from `builtin::cold_path()` at WIR build) always win over
-//! inference. The pass runs at every optimization level so hints stay
-//! independent of `-O`, matching `apply_cold_path_hints`; `-f
-//! no-branch-hinting` skips it (see `CodegenFlags::branch_hinting`).
-//!
-//! `select_br_ifs` collapses `if cond { br N }` with an empty else into a
-//! single `br_if N-1`, carrying any branch hint on the condition over to the
-//! `br_if`. It must run before `infer_branch_hints`, so the trap-tail rule
+//! `select_br_ifs` collapses an else-less `if cond { br N }` into `br_if N-1`,
+//! carrying the condition's hint over. It runs first, so the trap-tail rule
 //! sees the selected `br_if`s.
 
 use crate::wir::{WirInstr, WirPackage};

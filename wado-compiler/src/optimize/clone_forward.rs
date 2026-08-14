@@ -1,31 +1,8 @@
-//! Post-inline read-only clone forwarding.
-//!
-//! Inlining an accessor that copies a projection of its receiver
-//! (`build(&self) -> List { return *self }`, finalizing a `[1, 2, 3]` builder)
-//! leaves a residual `let t = array_clone(&place)` whose result is only ever
-//! read — most visibly `array_clone(&array_clone(&place))`, the redundant
-//! double-copy of a constant into a read-only binding that later feeds another
-//! copy. The fold-time value-copy elision cannot reach it: the copy is created
-//! by `inline` + `value_copy_demote`, after the pre-inline elider has run.
-//!
-//! This pass recovers it. When `t` is a read-only binding of `array_clone(&place)`
-//! (or its shallow twin) whose sole use is the referent of *another*
-//! `array_clone(&t)`, the inner clone is redundant: the outer clone already
-//! re-materializes a fresh copy, so `t` only needs to hold `place`'s value at that
-//! one point. The pass rewrites the outer clone to read `place` directly and drops
-//! the dead binding, turning `array_clone(&array_clone(&place))` into a single
-//! `array_clone(&place)`.
-//!
-//! Soundness rests on four gates, all conservative:
-//! - `t` is read exactly once and never mutated, reassigned, or `&mut`-borrowed;
-//! - that single read is the argument of an `array_clone` call — so the outer
-//!   clone makes a fresh, independent copy at the use and `t` is dead afterward.
-//!   This is the crux: a use that instead *stored* `t` into a longer-lived
-//!   aggregate (`*r = List { repr: t }`) would keep it aliased past the use, where
-//!   a later mutation of `place` could corrupt it, so such uses are not matched;
-//! - the use is in the *same block*, after the binding, a straight-line range;
-//! - no statement in that interval mutates `place`'s root local or writes *any*
-//!   global, so `place`'s value at the use equals its value at the binding.
+//! Post-inline read-only clone forwarding: `array_clone(&array_clone(&place))`
+//! becomes one `array_clone(&place)`, recovering what an inlined accessor left
+//! past the pre-inline elider's reach. Four conservative gates: the binding is
+//! read once and never mutated; that read is another `array_clone`'s argument;
+//! the use is a straight-line successor; and nothing in between writes `place`.
 
 use super::alias::{FirstParamTypes, first_param_types, method_mutates_receiver};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -297,16 +274,11 @@ fn collect_address_taken(body: &Body, out: &mut IndexSet<u32>) {
     }
 }
 
-/// The `Local { index }` node that sits as the referent of an
-/// `array_clone(&Local { index })` call in `stmt`'s subtree, if any.
-///
-/// Restricting the forwardable use to *another clone* is what keeps this sound:
-/// the outer clone re-materializes a fresh copy at the use site, so the binding's
-/// value only has to match `place` at that one point (the interval-stability
-/// check), and the binding is dead afterward. A use that instead *stored* the
-/// clone into a longer-lived aggregate (`*r = List { repr: t }`) would keep it
-/// aliased past the use, where a later mutation of `place` could corrupt it — so
-/// such uses are deliberately not matched.
+/// The `Local { index }` node sitting as the referent of an
+/// `array_clone(&Local { index })` call in `stmt`'s subtree, if any. Restricting
+/// the forwardable use to *another clone* is what keeps this sound: the outer
+/// clone re-materializes a fresh copy, so the binding need only match `place`
+/// there. A use that *stored* it would stay aliased past the use.
 fn find_clone_referent_use(
     body: &Body,
     stmt: StmtId,

@@ -1,17 +1,8 @@
-//! Which blocks are self-contained enough to run as a frame.
-//!
-//! A self-contained region builds a value in locals of its own, reads and
-//! writes only those locals, and yields the result as its value — as
-//! self-contained as a call body, except that the caller wrote it inline.
-//! Recognizing that shape is what lets a fully-constant string template fold
-//! to the literal the source could have written.
-//!
-//! Everything here is asked before the run, because the run copies the whole
-//! enclosing body while these only walk the block, and a codebase's blocks are
-//! overwhelmingly not regions. What is left the run decides for itself — a
-//! global it cannot read, a loop past the budget, an operation that would trap
-//! — by abandoning the evaluation, which forfeits the fold rather than
-//! dropping a write.
+//! Which blocks are self-contained enough to run as a frame: one that builds a
+//! value in locals of its own, touches only those, and yields the result — as
+//! self-contained as a call body written inline, which is what lets a constant
+//! string template fold to a literal. Asked before the run, since the run copies
+//! the whole enclosing body while this only walks the block.
 
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
@@ -86,28 +77,12 @@ pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&s
     }
 }
 
-/// The outer locals `block` only reads — the seeds a region frame needs —
-/// provided every call in it is one a frame could run and nothing writes a
-/// global. `None` disqualifies the region outright: an unrunnable call, a
-/// global write, an outer local in a write position — where folding the
-/// region would drop the write the program performs — or an outer local of
-/// reference type, since reading a `&mut T` value hands a callee the same
-/// write capability.
-///
-/// A write position is an `Assign` target, a `&mut` borrow, or an argument —
-/// receiver included — the callee's signature takes by `&mut`. The signature
-/// is the only reliable witness: `ArenaCallArg::is_mut` marks a by-value
-/// `mut` parameter, the callee's own copy, and boxing can erase the borrow
-/// node at the call site. A write whose place no local roots also
-/// disqualifies: the executor resolves stores through the same chains, so an
-/// unrooted one is a write this scan cannot account for, not a write that
-/// will not happen.
-///
-/// Only the reachable nodes are scanned, so a mention an earlier rewrite
-/// orphaned neither disqualifies the region nor keeps it from folding. What
-/// the scan cannot see is which reachable nodes actually execute: a free local
-/// read or an unrunnable call on a statically dead path costs the fold, which
-/// is the price of answering before the body is cloned rather than after.
+/// The outer locals `block` only reads — the seeds a region frame needs — or
+/// `None` for anything that disqualifies it: an unrunnable call, a global write,
+/// a reference-typed outer local, or a write whose place is an outer local or
+/// roots in no local at all (unaccountable, not absent). A write is an `Assign`
+/// target, a `&mut` borrow, or a `&mut` parameter per the callee's signature —
+/// the signature being the only reliable witness.
 pub(super) fn region_free_reads(
     body: &Body,
     block: BlockId,

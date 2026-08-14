@@ -28,7 +28,6 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
-- [ ] A lexer rule whose whole body is the same fixed text as a parser literal cannot be reached by name. `s : 'kw' | K 'x' ;` with `K : 'kw' ;` parses `kw x` as `(s kw)`, leaving `x` unconsumed, where the oracle gives `(s kw x)`. Only bites when both spellings of the same text appear in the parser, so no corpus grammar hits it. [#1752](https://github.com/wado-lang/wado/issues/1752); `tests/grammars/lexer_lit_dup_ref.g4` pins the token-identity half `#[TODO]`.
 - [ ] `\p{...}` reaches what the UCD names, not the ICU surface ANTLR4 adds on top of it. Rejected with "unsupported Unicode property": the POSIX aliases (`\p{Alnum}`, `\p{Digit}`, `\p{Blank}`, `\p{Graph}`, `\p{Print}`, `\p{XDigit}`), enumerated properties beyond `General_Category=` / `Script=` / `Block=` (`\p{Bidi_Class=L}`), the `LC` / `Cased_Letter` category group (the one group that is not a prefix of its members), and ANTLR4's own `\p{EmojiPresentation=EmojiDefault}`. No corpus grammar needs one — RustLexer's are in comments.
 
 ### Pipeline and tooling correctness
@@ -56,7 +55,7 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 Grammar-authoring DX follow-ups, from the review in [#1246](https://github.com/wado-lang/wado/issues/1246) (closed — these are what it left behind). Take them in this order; the first is a prerequisite for the second.
 
 - **Structured diagnostic-to-rule identity.** A diagnostic's owning rule is carried today as the free-form human label the warn was raised with, and tooling re-associates it by substring-matching the quoted rule name — so group-scoped warnings (no quoted rule name) never inline under their owning rule. Carry a structured owner (rule name / index), set it at the warn site, and compare by equality, keeping the label display-only. The same change lets the overlap-dispatch builder be told explicitly whether it is on the scan pass instead of recovering that from a label suffix.
-- **Optional-scan-guard-fallback warning.** Lowering warns on an overlap tournament today; the obvious next warning fires when an `e?` resolves to a scan-guarded optional (live case: a rule in `example/Wado.g4`). Deferred because it needs the enclosing rule name available at the warn site; add the diagnostic kind, the warn, and a fixture together.
+- **Optional-scan-guard-fallback warning.** Lowering warns on an overlap tournament today; the obvious next warning fires when an `e?` resolves to a scan-guarded optional (live case: a rule in `package-gale-highlight-wado/grammar/Wado.g4`). Deferred because it needs the enclosing rule name available at the warn site; add the diagnostic kind, the warn, and a fixture together.
 
 ## Stage C — action / predicate execution
 

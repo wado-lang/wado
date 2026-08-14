@@ -7,15 +7,15 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::MangledName;
 
+use crate::canonical::CanonicalIntrinsic;
 use crate::module_source::ModuleSource;
 use crate::name::StructName;
 use crate::nir::NirFunction;
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
 use crate::wir::{
-    CanonicalIntrinsic, WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction,
-    WirGlobal, WirImport, WirImportDesc, WirName, WirNames, WirPackage, WirType, WirTypeDef,
-    WirTypeId,
+    WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction, WirGlobal, WirImport,
+    WirImportDesc, WirName, WirNames, WirPackage, WirType, WirTypeDef, WirTypeId,
 };
 
 /// Base offset for defined function `WirFuncId` indices.
@@ -144,28 +144,17 @@ pub struct WirContext<'a> {
     pub closure_wrapper_funcs: IndexMap<(ModuleSource, u32), ClosureWrapperFuncs>,
     /// Counter for canonical closure type naming.
     pub canonical_closure_counter: u32,
-    /// Set of `(arity, return_type)` signatures whose
-    /// `Fn^Inspect` / `Fn^InspectAlt` dispatch stub survived DCE.
-    /// Computed once at WIR build start by scanning
-    /// `package.functions` for surviving
-    /// `FunctionKind::FnCanonicalDispatch` entries. Drives the per-
-    /// `(N, Ret)` gate that decides whether `CanonicalClosure_K`
-    /// carries `inspect` / `inspect_alt` vtable slots — closures
-    /// whose `(N, Ret)` is unreachable here keep the slim
-    /// `{ env, func }` shape so production builds that never inspect
-    /// closures pay nothing.
+    /// The `(arity, return_type)` signatures whose `Fn^Inspect` / `^InspectAlt`
+    /// dispatch stub survived DCE, scanned once at WIR build start. Gates whether
+    /// a `CanonicalClosure_K` carries the `inspect` / `inspect_alt` vtable slots:
+    /// a signature absent here keeps the slim `{ env, func }` shape, so a build
+    /// that never inspects closures pays nothing.
     pub inspectable_fn_dispatch: IndexSet<(usize, TypeId)>,
-    /// Shared inspectable supertype `$canonical_inspectable_base`
-    /// (`{ env, inspect, inspect_alt }`). Lazily created on the first
-    /// inspectable `CanonicalClosure_K` registration; the
-    /// `Fn<N, Ret>^Inspect` dispatch stub `ref.cast`s `self` to this
-    /// type so any inspectable closure value reaches the same `inspect`
-    /// / `inspect_alt` slot positions regardless of its parameter
-    /// types. Without this shared supertype the dispatch stub would
-    /// have to pick one specific `CanonicalClosure_K` per `(arity,
-    /// return_type)` pair and trap whenever a runtime value belongs to
-    /// a different per-signature canonical struct sharing the same
-    /// `(arity, return_type)`.
+    /// Shared inspectable supertype `$canonical_inspectable_base`, created lazily
+    /// at the first inspectable `CanonicalClosure_K` registration. The dispatch
+    /// stub `ref.cast`s `self` to it, so every inspectable closure reaches the
+    /// same slot positions whatever its parameter types — otherwise the stub
+    /// would trap on any value from a different per-signature struct.
     pub canonical_inspectable_base_type_id: Option<WirTypeId>,
 
     /// Available WASI function names (computed during component generation).
@@ -183,16 +172,11 @@ pub struct WirContext<'a> {
     /// Value: the `WirFuncId` for the registered import.
     pub needed_canonicals: IndexMap<CanonicalIntrinsic, WirFuncId>,
 
-    /// Map of `(function_name, module_source)` for functions whose TIR
-    /// `return_abi` is `MultiValue`. Names alone are not unique across
-    /// modules (e.g. two `make_pair` in different `.wado` files), so the
-    /// pair is what the call-site translator queries.
-    /// Value is the callee's per-result `(field_name, type_id)` in
-    /// declaration order — `("0", i32)` / `("1", i32)` for tuple returns,
-    /// `("x", i32)` / `("y", i32)` for user-struct returns. The
-    /// call-site translator uses this to build named split locals
-    /// without re-deriving the aggregate shape.
-    /// Computed from `package.functions` at WIR-build start.
+    /// Functions whose TIR `return_abi` is `MultiValue`, keyed by
+    /// `(function_name, module_source)` since a name alone is not unique across
+    /// modules. The value is the callee's per-result `(field_name, type_id)` in
+    /// declaration order, which the call-site translator uses to build named
+    /// split locals without re-deriving the aggregate shape.
     pub multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>>,
     /// Unresolved `Type^Trait::method` calls (unsatisfied trait bounds),
     /// collected rather than trapping; the driver reports them and bails.
@@ -209,16 +193,10 @@ pub struct PendingFunctionBody {
     pub type_table: Rc<RefCell<TypeTable>>,
 }
 
-/// Scan `package.functions` and return the set of `Fn<arity, ret>`
-/// signatures whose `Fn^Inspect::inspect` or `Fn^InspectAlt::inspect_alt`
-/// impl is reachable.
-///
-/// Auto-derived dispatch stubs for `Fn<arity, return_type>^Inspect`
-/// / `^InspectAlt` are produced per-module by `synthesize_traits`
-/// and tagged `FunctionKind::FnCanonicalDispatch`. After DCE prunes
-/// unreachable functions, the survivors here drive the per-
-/// `(N, Ret)` schema gate so canonical closures whose signature is
-/// never inspected stay slim.
+/// The `Fn<arity, ret>` signatures whose `^Inspect` / `^InspectAlt` impl is
+/// still reachable: `synthesize_traits` emits a dispatch stub per module tagged
+/// `FunctionKind::FnCanonicalDispatch`, and the ones DCE leaves behind drive the
+/// per-signature schema gate that keeps an uninspected canonical closure slim.
 fn compute_inspectable_fn_dispatch(package: &NirPackage) -> IndexSet<(usize, TypeId)> {
     let mut set: IndexSet<(usize, TypeId)> = IndexSet::default();
     for func_rc in &package.functions {
@@ -238,16 +216,11 @@ fn compute_inspectable_fn_dispatch(package: &NirPackage) -> IndexSet<(usize, Typ
     set
 }
 
-/// Per-functor wrapper functions stored in `CanonicalClosure_K` vtable
-/// slots. Populated by `register_closure_wrappers` and consumed by
-/// `translate_closure_to_canonical` to initialise the canonical
-/// closure struct.
-///
-/// `inspect` and `inspect_alt` are `None` when the per-`(N, Ret)`
-/// gate (`WirContext::inspectable_fn_dispatch`) reports the
-/// signature as unreachable — in that case `CanonicalClosure_K` uses
-/// the slim `{ env, func }` schema and `translate_closure_to_canonical`
-/// only emits two `struct.new` operands.
+/// Per-functor wrapper functions for the `CanonicalClosure_K` vtable slots,
+/// populated by `register_closure_wrappers` and read by
+/// `translate_closure_to_canonical`. `inspect` / `inspect_alt` are `None` where
+/// [`WirContext::inspectable_fn_dispatch`] calls the signature unreachable, and
+/// the struct then takes the slim `{ env, func }` schema.
 #[derive(Clone, Debug)]
 pub struct ClosureWrapperFuncs {
     /// `__closure_wrapper_N(env, args...) -> ret` — refcasts env to
@@ -472,45 +445,11 @@ impl<'a> WirContext<'a> {
         )
     }
 
-    /// Get or create a canonical closure type pair (func type + closure struct) for a
-    /// function signature. Returns `(fn_type_id, closure_struct_type_id)`.
-    ///
-    /// The struct schema is the vtable shape required by trait dispatch on
-    /// `Fn<N, Ret>` values held behind function parameters, struct fields,
-    /// or globals (the indirect-call case). Per WEP: Inspect (Debug
-    /// Output) > Closure Inspect via Runtime Dispatch, the inspectable
-    /// layout puts `env` + the two callback slots first so they form the
-    /// Wasm GC subtype prefix shared with `$canonical_inspectable_base`,
-    /// and the per-signature `func` slot comes last:
-    ///
-    /// ```text
-    /// CanonicalClosure_K {
-    ///     env:         (ref null struct),
-    ///     inspect:     (ref $canonical_callback_fn),
-    ///     inspect_alt: (ref $canonical_callback_fn),
-    ///     func:        (ref $canonical_fn_K),
-    /// }
-    /// ```
-    ///
-    /// `$canonical_callback_fn = (env, formatter) -> ()` is shared across
-    /// all signatures: the `env`/`formatter` slots use abstract `(ref null
-    /// struct)` so a single function type covers every closure literal.
-    /// Each per-literal wrapper refcasts both args back to its concrete
-    /// `&__Closure_N` and `&Formatter` before forwarding.
-    ///
-    /// Inspectable canonical structs share the supertype
-    /// `$canonical_inspectable_base` (built lazily via
-    /// [`Self::get_or_create_canonical_inspectable_base`]); per-signature
-    /// canonical structs add a typed `func` field at the end. The
-    /// `Fn<N, Ret>^Inspect` dispatch stub casts to that base, so any
-    /// inspectable closure value reaches the shared `inspect` /
-    /// `inspect_alt` slots regardless of its parameter types — the only
-    /// requirement is that the field layout `{ env, inspect, inspect_alt,
-    /// func }` is identical across subtypes (Wasm GC `sub` constraint).
-    ///
-    /// Non-inspectable signatures keep the slim `{ env, func }` layout
-    /// without any supertype: the dispatch stub is never synthesised for
-    /// them, so the base type is irrelevant.
+    /// Get or create the `(fn_type_id, closure_struct_type_id)` pair for a
+    /// signature — the vtable shape trait dispatch needs on an `Fn<N, Ret>` held
+    /// behind a parameter, field or global. An inspectable struct is laid out
+    /// `{ env, inspect, inspect_alt, func }`, the first three being the GC subtype
+    /// prefix shared with `$canonical_inspectable_base`; others keep `{ env, func }`.
     pub fn get_or_create_canonical_closure_type(
         &mut self,
         param_wirs: Vec<WirType>,

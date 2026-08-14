@@ -60,16 +60,11 @@ fn apply_instantiation(
 }
 
 impl Monomorphizer {
-    /// Try to find a queued instantiation, allowing `key.module_source` to be
-    /// an approximate hint. Mirrors `lookup_template_with_trait_fallback` in
-    /// `func_inst.rs`: when the literal `(module_source, name, ...)` key
-    /// misses, consult `TraitEnv::impl_module_for` over the listed struct
-    /// candidates to find the impl block's home, then retry the lookup with
-    /// that module. For inherent (non-trait) methods, also try the
-    /// `type_module_hint` directly — inherent impls live with their type.
-    /// Returns `(matched_key, mangled_name)` so the caller can rewrite the
-    /// call site to point at the same module the queued instantiation
-    /// landed in.
+    /// Find a queued instantiation, treating `key.module_source` as a hint.
+    /// Mirrors `lookup_template_with_trait_fallback`: on a literal-key miss,
+    /// consult `TraitEnv::impl_module_for` for the impl block's home and retry,
+    /// trying `type_module_hint` too for an inherent method. Returns
+    /// `(matched_key, mangled_name)`, so the caller rewrites to the same module.
     fn lookup_instantiation_with_trait_fallback(
         &self,
         mut key: InstantiationKey,
@@ -550,19 +545,11 @@ impl Monomorphizer {
                 }
             }
         }
-        // Also handle case where type_args is empty but receiver is a GenericInstance
-        // e.g., nums.index_value(0) where nums: Triple<i32>
-        //
-        // Skip this branch when the call carries a blanket-impl
-        // `monomorph_info` (synthesized refs like `self.data.inspect(f)` for
-        // `data: &List<i32>`). The impl_type_args derived from the
-        // receiver's GenericInstance (`[i32]`) are NOT what the blanket
-        // instantiation was queued with (`[List<i32>]`), so any match here
-        // would route the call to the inner-type's impl
-        // (`List<i32>^Inspect`) and drop the leading `&` produced by the
-        // ref blanket body. Let the dedicated blanket-fallback branch below
-        // handle these — it uses `mono.impl_type_args` which carries the
-        // full ref-inner type.
+        // Empty `type_args` over a `GenericInstance` receiver —
+        // `nums.index_value(0)` on a `Triple<i32>`. Skipped for a blanket-impl
+        // `monomorph_info`: the args derived from the receiver (`[i32]`) are not
+        // what the blanket was queued with (`[List<i32>]`), so a match here would
+        // route to the inner type's impl. The blanket branch below handles it.
         else if let Some((base_struct, impl_type_args)) =
             self.get_struct_info_from_type(receiver.type_id, type_table)
             && !impl_type_args.is_empty()

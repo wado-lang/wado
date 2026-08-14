@@ -107,16 +107,11 @@ fn dedup_invocations(invocations: Vec<Invocation>) -> Result<Vec<Invocation>, Pl
         .collect())
 }
 
-/// Kahn-style topological sort.
-///
-/// Edge `A -> B` exists iff any of A's declared input paths (primary, inputs,
-/// or prior-reads — passed separately) lies lexically inside B's output
-/// directory. Here we consider only `primary` + `inputs`; prior-reads are
-/// threaded in by the pipeline driver when composing the full graph.
-///
-/// The queue is FIFO (`VecDeque::pop_front`) so that, among invocations whose
-/// relative order is not pinned by edges, the declaration order is preserved.
-/// Downstream consumers (the lockfile writer) rely on this stability.
+/// Kahn-style topological sort. Edge `A -> B` exists iff one of A's declared
+/// input paths lies lexically inside B's output directory — here `primary` and
+/// `inputs` only, the driver threading prior-reads in when it composes the full
+/// graph. The FIFO queue preserves declaration order among invocations no edge
+/// pins, which the lockfile writer relies on.
 fn topo_sort(invocations: Vec<Invocation>) -> Result<Plan, PlanError> {
     use std::collections::VecDeque;
 

@@ -52,7 +52,7 @@ pub struct WorldExportPlan {
     /// Raw Wado parameter types `(name, type)` for `--lib` exports; empty for
     /// the WASI worlds (which use [`Self::cm_params`]). The lib export path
     /// defines its own CM value types top-level from these, so it never goes
-    /// through the WASI-only [`resolve_cm_export_type`].
+    /// through the WASI-only `resolve_cm_export_type`.
     pub param_types: Vec<(String, Type)>,
     /// Raw Wado return type for `--lib` exports; `None` for the WASI worlds.
     pub result_type: Option<Type>,
@@ -118,18 +118,11 @@ pub enum CmExportType {
         /// not by probing the type registry.
         is_resource: bool,
     },
-    /// `result<own<resp>, error>` synthesized for the world's handler return.
-    ///
-    /// Produced when the export's return type is `Result<X, Y>` with at least
-    /// one non-unit component. Codegen resolves this variant through the
-    /// structural type interner, keyed on the `ok`/`err` arm types, so it
-    /// shares the type the import/world-type helpers interned.
-    ///
-    /// The resolved `ok`/`err` boundary types are carried so codegen can
-    /// enumerate the named CM types to re-export in an interface-instance
-    /// export (e.g. `response`, `error-code`) without re-deriving them from
-    /// hardcoded type names. Either arm may be [`Self::Unit`] (e.g.
-    /// `Result<(), Error>`); such arms contribute no re-exported type.
+    /// `result<own<resp>, error>` synthesized for the world's handler return,
+    /// produced when the export returns a `Result` with a non-unit arm. Codegen
+    /// resolves it through the structural interner keyed on the arm types, so it
+    /// shares what the world-type helpers interned. The resolved arms are carried
+    /// so codegen can enumerate the named CM types to re-export.
     HandlerResult {
         ok: Box<CmExportType>,
         err: Box<CmExportType>,
@@ -328,27 +321,17 @@ fn build_world_export_plans(
         .collect()
 }
 
-/// Resolve a Wado [`Type`] reachable from a world export signature into the
-/// CM-level boundary representation.
-///
-/// Recognised shapes:
-///
-/// - `()` / unit / `Result<(), ()>` → [`CmExportType::Unit`]
-/// - `Result<X, Y>` with at least one non-unit component →
-///   [`CmExportType::HandlerResult`]
-/// - Any other named type whose source interface and CM kebab-name are known
-///   to the registry → [`CmExportType::Named`]
-///
-/// Panics on shapes the registry cannot resolve. World export signatures
-/// originate in stdlib `lib/wasi/**/worlds.wado` and
-/// `lib/core/kiln/worlds.wado`, so any unresolved name indicates a bug in the
-/// stdlib bootstrap rather than user input.
 /// Whether `name` is a Wado primitive that maps directly to a Component Model
 /// primitive value type at the export boundary.
 fn is_cm_primitive_name(name: &str) -> bool {
     crate::component_model::wado_primitive_name_to_cm(name).is_some()
 }
 
+/// Resolve a Wado [`Type`] reachable from a world export signature into its
+/// CM-level boundary representation: unit shapes to [`CmExportType::Unit`], a
+/// `Result` with a non-unit arm to [`CmExportType::HandlerResult`], any other
+/// registry-known named type to [`CmExportType::Named`]. Panics otherwise —
+/// world signatures come from the stdlib, so an unresolved name is a bug there.
 fn resolve_cm_export_type(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,

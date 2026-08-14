@@ -138,7 +138,7 @@ fn "opt_copy_prop_unmutated_value.wado/run"() with Stdout {
         global:opt_copy_prop_unmutated_value.wado::__modules_initialized = 1;
     };
     a = struct.new "opt_copy_prop_unmutated_value.wado//Point" { x: 1, y: 2 };
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_12((("opt_copy_prop_unmutated_value.wado/total"(a) + "opt_copy_prop_unmutated_value.wado/total"(a)) + 1) + 2), __local_5); __local_4);
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_12((("opt_copy_prop_unmutated_value.wado/total"(a) + "opt_copy_prop_unmutated_value.wado/total"(a)) + a.x) + 2), __local_5); __local_4);
     c = struct.new "opt_copy_prop_unmutated_value.wado//Point" { x: 10, y: 20 };
     d = struct.new "opt_copy_prop_unmutated_value.wado//Point" { x: 10, y: 20 };
     d.x = 99;
@@ -421,6 +421,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -430,10 +431,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);

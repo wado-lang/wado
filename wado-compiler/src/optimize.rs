@@ -1,15 +1,8 @@
-//! Optimization passes for Wado NIR.
-//!
-//! The optimizer rewrites the [`NirPackage`] in place. Each pass lives in its
-//! own module under `optimize/` and documents itself there; the sequence of
-//! [`run_pass`] calls below is the only statement of what runs and in what
-//! order, with the rationale for each position in the comment beside it.
-//!
-//! [`docs/optimizer.md`](../../../docs/optimizer.md) is the reader-facing
-//! inventory, and
-//! [`docs/wep-2026-06-05-nir-optimizer-architecture.md`](../../../docs/wep-2026-06-05-nir-optimizer-architecture.md)
-//! describes the two-tier NIR, the rewrite engine, and the gate the passes run
-//! on.
+//! Optimization passes for Wado NIR, rewriting the [`NirPackage`] in place. Each
+//! pass documents itself in its own module under `optimize/`; the sequence of
+//! `run_pass` calls below is the only statement of what runs in what order.
+//! `docs/optimizer.md` is the reader-facing inventory, and WEP 2026-06-05 covers
+//! the two-tier NIR, the rewrite engine, and the gate.
 
 mod alias;
 mod arena_query;
@@ -75,6 +68,8 @@ use store_load_forward::forward_stores_to_loads_all;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
 
+use extract::FreezePhase;
+
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
 
@@ -86,29 +81,11 @@ struct OptConfig {
     inline_threshold: usize,
 }
 
-/// Optimization level for the compiler.
-///
-/// All levels run DCE (Dead Code Elimination) to remove unreachable code.
-/// The levels differ in what optimization passes are run:
-/// - O0: DCE only - no optimization passes
-/// - O1: Development - fast compilation with basic optimization passes
-/// - O2: Production - full optimization passes (default)
-/// - O3: Production - aggressive optimization passes
-/// - Os: Frontend - O2 + name section stripping for smaller binaries
-///
-/// Configuration for each level:
-/// | Level | DCE | Iterations | Inline Threshold |
-/// |-------|-----|------------|------------------|
-/// | O0    | Yes | 0          | N/A              |
-/// | O1    | Yes | 2          | 4                |
-/// | O2    | Yes | 10         | 13               |
-/// | O3    | Yes | 30         | 32               |
-/// | Os    | Yes | 10         | 13               |
-///
-/// "Iterations" / "Inline Threshold" describe the fixed-point
-/// optimization loop. The post-loop rewrites the Wasm backend depends on
-/// always run, including at `O0`; only the fixed-point loop itself is
-/// skipped there.
+/// Optimization level. Every level runs DCE and the post-loop rewrites the Wasm
+/// backend depends on; what varies is the fixed-point loop, whose iteration
+/// count and inline threshold go `O0` (skipped entirely), `O1` (2 / 4),
+/// `O2` (10 / 13, the default), `O3` (30 / 32). `Os` is `O2` plus name-section
+/// stripping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
     /// No optimization loop. DCE plus the always-on post-optimization
@@ -129,43 +106,11 @@ pub enum OptLevel {
     Os,
 }
 
-/// Optimize a Package by analyzing and populating its usage fields.
-///
-/// This is the main entry point for the optimizer. Based on the optimization
-/// level, it applies different optimization strategies:
-///
-/// - O0: DCE only (no optimization passes)
-/// - O1: Basic optimization passes + DCE
-/// - O2: Full optimization passes + DCE (default)
-/// - O3: Aggressive optimization passes + DCE
-/// - Os: Same as O2 plus name section stripping
-///
-/// All levels run DCE to remove unreachable functions and types, which
-/// significantly reduces codegen work.
-///
-/// For O1+, DCE runs twice: once before the optimization loop to reduce
-/// the working set (eliminating stdlib functions/types the program doesn't
-/// use), and once after to clean up code made dead by optimizations
-/// (e.g., functions inlined away).
-///
-/// The `inline_threshold` and `opt_iterations` parameters override the
-/// defaults for the given `opt_level` when provided.
-/// Maximum UTF-8 byte length for a string literal to be materialized with a
-/// constant `array.new_fixed<u8>` repr instead of a passive `array.new_data`
-/// data segment. Below it, a constant string global promotes to an eager Wasm
-/// constant; above it the compact data-segment repr is kept (and the global
-/// stays lazy). `-O3` trades a little code size for more eager string globals;
-/// the other levels (and `-Os`, which targets size) stay conservative.
-///
-/// This threshold applies to every *ordinary* string literal, including one
-/// with nothing to do with `const_object_globalization` (e.g. an `assert`
-/// diagnostic template, which `codegen_flags` tests require stay byte-scannable
-/// below this threshold). A global `const_object_globalization` hoists from an
-/// `InlineRef` candidate gets a separate, size-bounded override — see
-/// [`crate::nir::NirGlobal::prefer_fixed_string_repr`] — since such a hoist
-/// rewrites the literal's construction in place rather than moving it to
-/// `__initialize_module`, so only an eager repr lets the redundant re-assignment
-/// be recognized and dropped.
+/// Longest string literal materialized as a constant `array.new_fixed<u8>`
+/// rather than a passive data segment; above it the compact repr is kept and the
+/// global stays lazy. `-O3` trades code size for more eager string globals,
+/// while `-Os` and the rest stay conservative. A global hoisted by
+/// `const_object_globalization` overrides it via `prefer_fixed_string_repr`.
 fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
     match opt_level {
         OptLevel::O3 => 8,
@@ -173,6 +118,11 @@ fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
     }
 }
 
+/// The optimizer's entry point. Every level runs DCE, which cuts codegen work
+/// sharply; `O1` and above run it twice, before the fixed-point loop to shrink
+/// the working set and after it to sweep what the loop made dead. What runs in
+/// between is the pass sequence below, scaled by [`OptLevel`]. `inline_threshold`
+/// and `opt_iterations` override that level's defaults.
 pub fn optimize(
     mut project: NirPackage,
     opt_level: OptLevel,
@@ -234,19 +184,11 @@ pub fn optimize(
             }
         }
         OptLevel::O3 => {
-            // The iteration cap is purely defensive. Since
-            // `field_forward` was merged into `const_fold` (issue
-            // #1009), straight-line constant chains produced by
-            // inlined `List::push` and similar patterns fold in a
-            // single iteration rather than one statement per round,
-            // so even Gale parsers reach a true fixed point in well
-            // under 10 iterations. 30 leaves comfortable headroom for
-            // whatever gradient new fixtures expose.
-            //
-            // Threshold 32 sits just under a discrete size cliff at
-            // 33 on syntax-highlight (859KB -> 1049KB, crossing 1MB)
-            // where additional Gale action functions become inline
-            // candidates with no measurable speed payoff.
+            // The iteration cap is defensive: since `field_forward` merged into
+            // `const_fold`, a straight-line constant chain folds in one iteration
+            // rather than one statement per round, so even Gale parsers converge
+            // well under 10. Threshold 32 sits just under a size cliff at 33 on
+            // syntax-highlight (859KB → 1049KB), for no speed gain.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(30),
                 inline_threshold: inline_threshold.unwrap_or(32),
@@ -266,7 +208,7 @@ pub fn optimize(
     // const-local propagation keep it default-safe.
     if opt_level != OptLevel::O0 {
         run_pass("nir/promote_fields", &mut project, profiler, |p| {
-            extract::freeze_pure_arith(p, /* include_fields */ true, /* early */ false)
+            extract::freeze_pure_arith(p, /* include_fields */ true, FreezePhase::Terminal)
         });
         // Re-run the structural BCE matcher now that `promote_fields` froze
         // invariant bounds (`arr.used`) into constant operands the in-loop
@@ -293,17 +235,11 @@ pub fn optimize(
         select_lowering::select_lowering(p)
     });
 
-    // Multi-value return ABI classification: marks tuple- or
-    // user-struct-returning functions whose every return site is a fresh
-    // `TupleLiteral` / `StructLiteral` and whose every call site
-    // destructures via `FieldAccess` on the bound temp. WIR build
-    // (`wir_build::translate::try_emit_multi_value_let`) reads the marker
-    // to emit the multi-value Wasm signature on the function definition
-    // and to rewrite call-site `let __tmp = Call(f)` into
-    // `MultiValueLocalBind [__tmp_0, …] = Call(f)` with subsequent
-    // `FieldAccess` reads going to the split locals directly. Runs after
-    // every other transformation so the analysis sees the final NIR
-    // shape.
+    // Multi-value return ABI classification: marks an aggregate-returning
+    // function whose every return builds a fresh literal and whose every call
+    // site destructures the bound temp, which WIR build reads to emit the
+    // multi-value signature and split the call-site binding. Runs after every
+    // other transformation, so the analysis sees the final NIR shape.
     run_pass("nir/multi_value_return", &mut project, profiler, |p| {
         multi_value_return::classify_multi_value_returns(p)
     });
@@ -315,7 +251,7 @@ pub fn optimize(
     // root and are simply not emitted. (Early arith promotion already ran before
     // the loop; `FieldAccess` promotion ran above, after SROA.)
     run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ false)
+        extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::Terminal)
     });
 
     // The born-resolved invariant is now enforced by the type system: a call
@@ -550,7 +486,7 @@ fn run_optimization_passes(
     // the SROA passes), since SROA scalarizes the structs a promoted `FieldAccess`
     // would reference. See the late call in `optimize`.
     run_pass("nir/promote_pure_values_early", project, profiler, |p| {
-        extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ true)
+        extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::Early)
     });
     for i in 0..config.iterations {
         profiler.span_start(&format!("nir/iteration {}", i + 1));
@@ -577,36 +513,17 @@ fn run_optimization_passes(
                 run_pass($name, project, profiler, |p| $pass(p, &mut gate));
             }};
         }
-        // Dense-int / dense-enum `Match` → `Switch` is a codegen-friendly late
-        // lowering (see WEP 2026-05-11). It runs as `MatchToSwitchRule` inside
-        // the unified peephole session below: the pre-inline `peephole` run
-        // converts every function's `Match` to `Switch` before `inline`, so
-        // inline still sees `Switch`-shaped bodies, and the worklist reconverges
-        // on any `Match` a later rewrite plants. `container_sroa` /
-        // `value_copy_*` run before that first `peephole` and so see `Match`,
-        // which is fine — neither keys on the `Switch` shape.
-        // Container SROA must run *before* inline in each iteration: inline
-        // expands trait methods like `IndexValue::index_value` into raw
-        // `builtin::array_get` + field-access pairs, after which the
-        // method-call shape container SROA relies on is gone. Running early
-        // also means we see the `SequenceLiteralBuilder` desugaring for `[]`
-        // while its inner `Constructor` call is still a plain `Call` node,
-        // which `recognize_init` can match structurally.
+        // Container SROA must run before inline in each iteration: inline
+        // expands `IndexValue::index_value` and friends into raw
+        // `builtin::array_get` + field-access pairs, after which the method-call
+        // shape this pass keys on is gone. Running early also catches the `[]`
+        // desugaring while its inner `Constructor` is still a plain `Call`.
         gated!("nir/container_sroa", scalarize_containers);
-        // Unified peephole engine pass, pre-inline run. Folds short
-        // `push_str` literals, elides write-only locals, and (post-inline only)
-        // materializes array literals — all three rules over one shared
-        // worklist; see `optimize/peephole.rs`. Runs *before* inline so
-        // `string_push` still sees the `buf.push_str("0.")` call shape:
-        // once the inliner expands `String::push_str`'s body that node is gone
-        // and the literal-recognising rewrite can no longer match, leaving
-        // short-string formatting paths (e.g. `fpfmt.wado`) paying full
-        // per-call allocation cost. This run also hosts `const_branch_prune`
-        // (trivial-block / dead-statement cleanup); it keys only on block
-        // structure, so `copy_prop` — not pass ordering — is what folds the
-        // inliner's parameter copies. This pre-inline run also hosts
-        // `MatchToSwitchRule` (`include_match = true`), lowering every `Match` to
-        // `Switch` before `inline`.
+        // Peephole engine, pre-inline run — several rules over one worklist; see
+        // `optimize/peephole.rs`. Before inline so `string_push` still sees the
+        // `buf.push_str("0.")` shape, which the inliner's expansion would erase.
+        // Hosts `MatchToSwitchRule` (`include_match = true`), so `inline` copies
+        // `Switch`-shaped bodies, and `const_branch_prune`.
         gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, true));
         // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
         // copies when the binding's elements are provably never mutated through
@@ -642,17 +559,11 @@ fn run_optimization_passes(
                 }
             }
         }
-        // Unified peephole engine pass, post-inline run. Now `array_literal`
-        // fires: it materializes `ArrayLiteral` from the `List<T> {
-        // array_new(N) } + N × List::push` builder window, which inline must
-        // expose first — the `SequenceLiteralBuilder` methods (and, for wrapper
-        // builders such as `SeqVec { items: List<T> }`, the `push_literal →
-        // self.field.push` delegation) are inlined into the raw `array_new +
-        // push` window, direct or field-rooted. Hash-consing and the later
-        // `const_fold` in this same loop then see the normalized literal. `elide_local` runs
-        // again here over inline's freshly dead bindings. No `MatchToSwitchRule`
-        // here (`include_match = false`): the pre-inline run already lowered
-        // every reachable `Match`, and `inline` copies `Switch`-shaped bodies.
+        // Peephole engine, post-inline run. `array_literal` fires only here: it
+        // needs inline to have expanded the builder methods into the raw
+        // `array_new(N) + N × push` window it matches. `elide_local` runs again
+        // over inline's freshly dead bindings. No `MatchToSwitchRule` — the
+        // pre-inline run lowered every reachable `Match` already.
         gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, false));
         // `labeled_block_fusion` moved into the post-inline `nir/peephole`
         // session as `LabeledBlockFusionRule`; see `optimize/peephole.rs`.
@@ -670,26 +581,11 @@ fn run_optimization_passes(
         // elimination moved into the unified `nir/peephole` pass above.)
         gated!("nir/dae", eliminate_dead_arguments);
         gated!("nir/drve", eliminate_dead_return_values);
-        // Pure-value CSE is subsumed by hash-consing (identical values already
-        // share a ValueId), and store-load forwarding by FieldAccess promoting at
-        // its heap version, so no separate `cse` pass runs.
-        // The flow-sensitive half of constant folding; the env-free half
-        // (literal arithmetic + pure CTFE) runs in the `nir/peephole` passes.
-        // This walker handles the folds that need per-function dataflow state —
-        // env-bound locals, forwarded struct fields, immutable-global reads, and
-        // constant-branch collapse.
-        //
-        // `field_forward`'s rewrite responsibilities are absorbed by
-        // `const_fold` (see `optimize::const_folding::ConstFoldVisitor`).
-        // Both passes used to alternate one statement at a time on
-        // chained-`List::push` patterns produced by Gale-generated
-        // parsers, leaving the optimizer non-convergent at `-O3`
-        // (issue #1009). The merged const-fold walk feeds the
-        // interpreter's `field_env` from `Let` / `Assign` /
-        // `$value_copy$T(arg)` shapes and forks per branch, so a
-        // chain of pushes folds in a single iteration. The alias and
-        // value-copy-helper analyses migrated to
-        // `optimize::alias`.
+        // The flow-sensitive half of constant folding — env-bound locals,
+        // forwarded struct fields, immutable-global reads, constant-branch
+        // collapse — where the env-free half runs in `nir/peephole`. It absorbs
+        // `field_forward`, which used to alternate one statement per round and
+        // left `-O3` non-convergent. No `cse` pass: hash-consing already shares.
         {
             let c = run_pass("nir/const_fold", project, profiler, |p| {
                 fold_constants(p, &mut gate, &mut const_fold_cache)

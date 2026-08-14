@@ -1,33 +1,8 @@
-//! Reference elimination optimization for Wado NIR.
-//!
-//! Eliminates unnecessary reference bindings introduced during function inlining.
-//! After inlining, we often have patterns like:
-//!
-//! ```text
-//! let self: &List<T> = &arr;
-//! ... self.repr ...
-//! ```
-//!
-//! This can be optimized to:
-//!
-//! ```text
-//! ... arr.repr ...
-//! ```
-//!
-//! The pass also handles bindings whose source is a field-access chain
-//! (`let r: &T = &v.f1.f2`), substituting the chain at each `r.field` use.
-//!
-//! Runs as `RefElimRule` inside the unified post-inline peephole session
-//! (see `docs/wep-2026-06-05-nir-optimizer-architecture.md`).
-//! `build_ref_elim` collects all `let r = &v` bindings and classifies every use
-//! of each `r` (field-access-only or not), plus the disjoint deref-only set, in
-//! one pristine-body analysis per function. The rule then drops eliminable
-//! bindings and substitutes uses through the engine edit API. The referent is
-//! stored as the *unresolved* source expression id and resolved during the
-//! transform — the refs map is complete, so a transitive `let r2 = &r1.field`
-//! resolves through `r1` even though `r1`'s `let` is dropped. A deref-only
-//! source is single-use, so it is moved into its one `*r` site rather than
-//! cloned.
+//! Reference elimination: drop the `let self = &arr` bindings inlining leaves
+//! behind, folding each `self.repr` back to `arr.repr`, field-access chains
+//! included. `build_ref_elim` classifies every use in one pristine-body
+//! analysis; the referent is then stored unresolved and resolved during the
+//! transform, so a transitive `let r2 = &r1.field` survives `r1`'s removal.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::NirUnaryOp;
@@ -422,17 +397,11 @@ fn extended_live_end(binding: usize, last_use: usize, loops: &[(usize, usize)]) 
     end
 }
 
-/// Whether replacement `r` invalidates ref `local`'s capture (making the
-/// `r.field → re-read referent` fold unsound). An unused ref has no live region
-/// and cannot be invalidated; a missing binding position is treated
-/// conservatively as bound at the body entry.
-///
-/// - A direct `Assign` write invalidates only when it falls strictly after the
-///   binding and within the (loop-extended) live region: `binding < pos <= end`.
-/// - A `&mut` alias (`via_borrow`) invalidates whenever it is created at or
-///   before the end of the live region (`pos <= end`), regardless of the
-///   binding: the alias stays live past its creation and can write through the
-///   referent at any later point, including one the creation position predates.
+/// Whether replacement `r` invalidates ref `local`'s capture, making the
+/// `r.field` → re-read fold unsound. An unused ref has no live region; a missing
+/// binding position is read as body entry. A direct `Assign` invalidates only
+/// within `binding < pos <= end`, while a `&mut` alias does so from anywhere
+/// `pos <= end`, staying live past its creation to write at any later point.
 fn invalidates_capture(r: &Replacement, local: u32, facts: &CaptureFacts) -> bool {
     let Some(&last_use) = facts.last_use.get(&local) else {
         return false;

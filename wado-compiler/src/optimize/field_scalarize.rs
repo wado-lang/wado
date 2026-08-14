@@ -1,110 +1,12 @@
-//! Hot Field Scalarization for Wado NIR
+//! Hot Field Scalarization: promotes a hot struct field `obj.field` accessed in
+//! a loop to a mutable local `__hfs_<field>_<idx>` hoisted out of the loop. A
+//! dataflow walker tracks which side is canonical (`Both` / `ScalarOnly` /
+//! `FieldOnly`) and emits write-back / re-read sync only at transitions: calls
+//! reaching the field, branch joins, escape paths, and loop back-edges.
 //!
-//! Promotes a hot struct field `obj.field` (read+written inside a loop)
-//! to a mutable local `__hfs_field_N`, hoisted out of the loop. Reads
-//! and writes inside the loop become `local.get`/`local.set`; sync with
-//! the underlying GC field happens only when control leaves the
-//! scalar's domain (calls, escape paths, loop back-edges).
-//!
-//! For a field `obj.field` accessed at least `MIN_ACCESS_COUNT` times:
-//! 1. Allocate a mutable local `__hfs_field_N`.
-//! 2. Pre-load `let __hfs_field_N = obj.field;` before the loop.
-//! 3. Rewrite every `obj.field` read in the body to `__hfs_field_N`.
-//! 4. Rewrite every `obj.field = v` write in the body to
-//!    `__hfs_field_N = v`.
-//! 5. Walk the body with a dataflow lattice that tracks which side
-//!    holds the truth and emits sync only at transitions (see below).
-//!
-//! ## Sync placement (dataflow-driven)
-//!
-//! For each scalarized candidate `(L, F)` the walker tracks one of:
-//!
-//! - `Both`        — `__hfs_F == L.F` (no sync needed for either side).
-//! - `ScalarOnly`  — `__hfs_F` holds the latest value; `L.F` is stale.
-//! - `FieldOnly`   — `L.F` holds the latest value; `__hfs_F` is stale.
-//!
-//! Transitions:
-//!
-//! - Scalar write `__hfs_F = v`     → state becomes `ScalarOnly`.
-//! - `&mut T` call touching `L.F`   → pre-call: `write_back` if not
-//!   field-canonical; post-call: state becomes `FieldOnly`.
-//! - `&T` call touching `L.F`       → pre-call: `write_back` if not
-//!   field-canonical; state unchanged otherwise.
-//! - Field read `obj.field`         → re-read if not scalar-canonical;
-//!   state becomes `Both`.
-//!
-//! Sync is emitted only at canonical-side transitions:
-//! `ScalarOnly → Both/FieldOnly` writes back, `FieldOnly → Both/ScalarOnly`
-//! re-reads, `Both → *` is a relabel with no sync. Consecutive `&mut`
-//! calls therefore emit zero inter-call sync — once `FieldOnly`, every
-//! subsequent `&mut` call's pre-state is already satisfied.
-//!
-//! Sync placement is position-exact: a sync stmt may be hoisted to the
-//! enclosing statement's slot only while nothing earlier in that
-//! statement's evaluation touched any candidate's scalar or field
-//! (`WalkCtx::interior_effects`). Once something has, the sync is
-//! wrapped in place — a re-read becomes `{ __hfs_F = L.F; __hfs_F }`
-//! at the read, and a pre-call write-back wraps the call (hoisting the
-//! already-walked call inputs into temps when the args themselves
-//! transitioned state), so `let x = self.advance() + self.pos;` reads
-//! `pos` after `advance()` ran, not before the whole statement.
-//!
-//! Branch joins (`If`/`Switch`/`Match`) walk each arm with a cloned
-//! entry state and pick a per-candidate join target; convergence sync
-//! is inserted at each arm's exit. A call in one match arm cannot
-//! trigger sync that clobbers a sibling scalar-update arm (issue #1008).
-//! Joins whose paths cannot all host sync are constrained: a labeled
-//! block converges its fall-through *and every recorded `break` site*
-//! to the join target; an `&&`/`||` RHS and a match guard converge to a
-//! target reachable sync-free from the path that has no sync slot (the
-//! short-circuit / pattern-mismatch path).
-//!
-//! Loop boundaries:
-//! - The body-end of the HFS loop appends sync to drive every
-//!   candidate back to its loop-entry state, restoring the loop
-//!   back-edge invariant.
-//! - `return` / `break` to a non-enclosing target emit commit sync
-//!   inline before the control-flow stmt; `continue` converges to the
-//!   innermost loop's entry states (so a deferred candidate stays
-//!   `ScalarOnly` across a `continue` back-edge, same as fall-through).
-//! - Nested loops commit any `ScalarOnly` candidate before recursing
-//!   so inner reads see an up-to-date field, then set the outer state
-//!   to `JOIN(entry_state, body_exit_state)` per candidate.
-//!
-//! ## Field-selective sync
-//!
-//! For each call site, the walker queries a pre-computed
-//! `FieldUsageCache` to determine which scalarized fields the callee
-//! actually touches. An immutable-ref parameter elides the post-call
-//! `re_read` since the callee cannot mutate through it. Unresolved
-//! callees fall back to "all fields" conservatively.
-//!
-//! A `&`/`&mut local.field` of a scalarized field rewrites to the scalar
-//! (`&mut __hfs_F`). For a GC-typed field this is transparent: the
-//! reference is the object handle the scalar shares (the field-read
-//! rewrite re-reads first when the scalar is stale), and `*v = x`
-//! mutates the object in place — a place rebinding through a reference
-//! is inexpressible. A non-GC field ref cannot reach NIR today (the
-//! front end lowers it to a snapshot `Box` literal or rejects it), but
-//! is still handled defensively: as a call arg it makes the scalar the
-//! post-call canonical side (`SyncFields::scalar_write`); outside a
-//! call arg it disqualifies the candidate (`FnAliases::fields`).
-//!
-//! TODO(optimizer): the "unresolved callee → all fields" fallback (used
-//! by indirect / cm-raw / closure-functor invocations and by callees
-//! outside the local function set) writes back every scalarized field
-//! on every such call. Propagating an "opaque-callee transparent on
-//! fields this function never writes" summary up the call graph would
-//! eliminate the sync cliff for thin wrapper functions that only forward
-//! the receiver.
-//!
-//! ## Generated locals
-//!
-//! - `__hfs_<field>_<idx>` — the scalar holding `obj.field`.
-//! - `__hfs_call_<idx>`    — pooled per-type temps used to capture the
-//!   trailing value of a non-unit `Match` arm body / `If`/`Switch`
-//!   block when convergence sync must run after the value-producing
-//!   expression.
+//! TODO(optimizer): the "unresolved callee → all fields" fallback writes back
+//! every field on every opaque call; a "writes no field" summary propagated up
+//! the call graph would remove that cliff for thin forwarding wrappers.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirFunction, NirLocal, NirUnaryOp};
@@ -241,16 +143,11 @@ struct ParamUsageCtx<'a> {
     type_table: &'a TypeTable,
 }
 
-/// Record which fields of each struct parameter the function accesses. Only a
-/// few node shapes carry signal (`local.field` access, a whole-`param` assign
-/// or pass-to-callee); the rest descend via `for_each_child`. Patterns are not
-/// entered — a `param.field` cannot appear there.
+/// Record which fields of each struct parameter the function accesses.
 ///
-/// Every shape that reads a tracked param whole must resolve to *conservative*
-/// (all fields): a bare `Local` in value position is a ref share (`let r =
-/// param;` / `return param;` / a literal capture), through which the callee
-/// can touch any field invisibly. The precise shapes (`param.field` receivers)
-/// return before the `Local` arm can see the param.
+/// Any shape that reads a tracked param *whole* — a bare `Local` in value
+/// position — resolves to conservative "all fields": the callee can reach every
+/// field through the shared reference. Precise `param.field` shapes return first.
 fn collect_param_field_usage_node(body: &Body, node: NodeRef, cx: &mut ParamUsageCtx) {
     if let NodeRef::Expr(e) = node {
         match &body.exprs[e].kind {
@@ -664,16 +561,8 @@ fn scalarize_loop(
         pre_stmts.push(load_stmt);
     }
 
-    // Step 4: Walk the loop body with the dataflow-driven sync-placement
-    // pass. The walker tracks per-candidate canonical-side state
-    // (Scalar/Field/Both) and inserts write-back / re-read stmts only at
-    // state transitions. At escape paths (return / non-enclosing break) it
-    // commits the scalar to the field if `ScalarOnly`. At body end it
-    // forces all candidates back to `Both` to satisfy the loop's
-    // back-edge invariant (entry == exit). With this discipline the
-    // post-loop write-back is always redundant — the body and escape
-    // paths leave every candidate's field canonical — so no `post_stmts`
-    // are generated.
+    // Step 4: dataflow-driven sync placement. The body end and every escape
+    // path leave each candidate's field canonical, so no `post_stmts` arise.
     process_loop_body(
         body,
         loop_body,
@@ -819,32 +708,11 @@ struct FnAliases {
     fields: IndexSet<(u32, u32)>,
 }
 
-/// Walk the function body once and collect every GC-heap-typed local that
-/// becomes aliased anywhere in the function, so it cannot be HFS-scalarized
-/// at any loop level. Two shapes alias a local:
-///
-/// - Its address (`&local` / `&mut local`) is taken outside a direct
-///   call-argument position. Writes through the captured alias bypass the
-///   scalar.
-/// - Its whole value is bound/assigned to another local (`let other = gc;`
-///   or `other = gc;`). A GC struct is a reference, so the copy shares the
-///   heap object; a mutation through `other` (e.g. `other.push(c)`) bypasses
-///   `gc`'s scalar. The per-loop scan marks this too, but only when the
-///   alias-creating statement is walked *after* the field-access entries
-///   exist; doing it here makes the disqualification order-independent (the
-///   real-world trigger is a LICM-hoisted buffer `let _licm_buf_b = _licm_buf_a`
-///   whose copy precedes the loop's first `_licm_buf_a.field` access).
-///
-/// Also collects `&`/`&mut local.field` taken outside a call argument for a
-/// *non-GC* field (`FnAliases::fields`): such a reference would bypass the
-/// scalar entirely. A GC field's reference is the object handle the scalar
-/// shares (mutation through it is in-place, never a place rebinding), so it
-/// stays eligible; non-GC field refs are unreachable today — the front end
-/// lowers them to snapshot `Box` literals — making this purely defensive.
-///
-/// Direct call arguments are excluded from the address-taken set because the
-/// call's write-back/re-read mechanism synchronises HFS scalars around the
-/// call, bounding the alias's lifetime to that single call.
+/// Collect the locals and fields that alias, disqualifying them from HFS at any
+/// loop level: a local whose address is taken outside a call argument or whose
+/// whole value is copied into another local (a GC copy shares the heap object),
+/// and a `&`/`&mut local.field` of a non-GC field. Direct call arguments are
+/// excluded — the call's write-back/re-read bounds the alias to that call.
 fn collect_function_aliases(body: &Body, type_table: &TypeTable) -> FnAliases {
     let mut out = FnAliases {
         locals: IndexSet::default(),
@@ -1258,45 +1126,10 @@ fn mark_local_aliased(local_idx: u32, counts: &mut IndexMap<(u32, u32), FieldAcc
 // ─────────────────────────────────────────────────────────────────────────────
 // Replacement pass — dataflow-driven sync placement
 //
-// For each scalarized field `(L, F)` (with associated scalar local
-// `__hfs_F`), the walker tracks one of three canonical-side states at
-// each program point:
-//
-//   - `Both`        : `__hfs_F == L.F` (both sides agree).
-//   - `ScalarOnly`  : `__hfs_F` is the truth, `L.F` is stale.
-//   - `FieldOnly`   : `L.F` is the truth, `__hfs_F` is stale.
-//
-// Each operation has a state requirement and a state effect:
-//
-// | operation              | requires (state ∈)         | post state           |
-// | scalar read            | {Both, ScalarOnly}         | unchanged            |
-// | scalar write           | (any)                      | ScalarOnly           |
-// | call w/ `&T` arg       | {Both, FieldOnly}          | unchanged            |
-// | call w/ `&mut T` arg   | {Both, FieldOnly}          | FieldOnly            |
-//
-// When the requirement is not met, the walker inserts the cheapest sync
-// to transition the state — `re_read` (FieldOnly→Both) for scalar reads
-// and `write_back` (ScalarOnly→Both) for calls. After the operation the
-// new state is recorded.
-//
-// At branch joins (Match/If/Switch arms), each arm is walked with a
-// fresh copy of the entry state. The walker then picks a target state
-// for the join and inserts at-end-of-arm convergence sync where exit ≠
-// target.
-//
-// At escape paths (return / non-enclosing break), every `ScalarOnly`
-// candidate gets a write-back — outside the loop only the field is
-// observable.
-//
-// At loop body end, every candidate is forced back to `Both` (entry
-// state), maintaining the back-edge invariant. This makes the
-// post-loop write-back redundant in every case, so `scalarize_loop`
-// returns no `post_stmts`.
-//
-// The temp call locals introduced by non-unit call wrappers are pooled
-// per `TypeId` and reused across separate wrappers. Since each temp's
-// def and use are confined to its containing wrapper Block, reuse is
-// always sound.
+// A scalar read requires `{Both, ScalarOnly}` and a call reaching the field
+// requires `{Both, FieldOnly}`; an unmet requirement inserts the cheapest sync
+// (`re_read` / `write_back`). Temps for non-unit call wrappers are pooled per
+// `TypeId` — each temp's def and use stay inside its own wrapper block.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Per-candidate canonical-side state.
@@ -1324,17 +1157,10 @@ type ScalarStates = Vec<CanonState>;
 
 /// The per-candidate loop-entry / back-edge state.
 ///
-/// A candidate whose field the loop body never accesses through the GC
-/// reference — no call takes the local by `&`/`&mut`, and the field is never
-/// `&`/`&mut`-referenced directly — is *call-clean*: its only field
-/// interaction is the scalar write-back. For such a candidate
-/// the field can stay `ScalarOnly` across the back-edge — the per-iteration
-/// write-back the back-edge invariant would otherwise force is pure waste.
-/// Its write-back is deferred to the loop's escape points (`return`,
-/// `break`), which `commit_scalar_for_escape` already covers, so the field
-/// is canonical for any reader after the loop. Candidates that *are* read
-/// through the reference inside the loop keep the `Both` entry / body-end
-/// force so the read observes an up-to-date field.
+/// A *call-clean* candidate — one whose field the loop body never reaches
+/// through the GC reference — stays `ScalarOnly` across the back-edge, deferring
+/// its write-back to the loop's escape points instead of paying it per
+/// iteration. Every other candidate keeps the `Both` entry / body-end force.
 fn entry_states_for(candidates: &[ScalarizeCandidate], deferrable: &[bool]) -> ScalarStates {
     candidates
         .iter()
@@ -1442,18 +1268,10 @@ struct WalkCtx<'a> {
     /// constructed. Each temp's def/use are confined to one Block, so
     /// reuse across separate Blocks is sound.
     temp_pool: IndexMap<TypeId, Vec<u32>>,
-    /// Per-active-label break-site observations. `walk_labeled_block`
-    /// pushes an empty entry on enter and pops it on exit; every
-    /// `walk_stmt` `Break { label: Some(l), .. }` arm appends a
-    /// [`BreakRecord`] to the entry for `l`. The labeled-block exit
-    /// JOINs the fall-through state with every observed break-state to
-    /// derive the post-block walker state — over-approximating by entry
-    /// alone (the prior fix) wrongly dropped `FieldOnly` walker states
-    /// when entry was `ScalarOnly`, causing missed re-reads in
-    /// post-block code (#1190 regression) — and inserts per-site
-    /// convergence sync before each break whose state diverges from the
-    /// join (a sync-free `{ScalarOnly, FieldOnly}` join would leave one
-    /// runtime path's canonical side stale).
+    /// Per-active-label break-site observations, pushed and popped by
+    /// `walk_labeled_block`. The block exit JOINs the fall-through state with
+    /// every observed break-state and inserts convergence sync before each
+    /// break site that diverges from the join.
     label_breaks: IndexMap<String, Vec<BreakRecord>>,
     /// Entry states of each enclosing loop, innermost last. `continue`
     /// converges to the top entry — the state the walker assumed at the
@@ -1506,16 +1324,10 @@ impl WalkCtx<'_> {
     }
 }
 
-/// Top-level entry: walk the loop body with each candidate's state
-/// initialized to its loop-entry state, then converge body-exit back to that
-/// same entry state so the loop's back-edge invariant holds.
-///
-/// Call-clean candidates (`deferrable`) enter as `ScalarOnly` and stay
-/// `ScalarOnly` across the back-edge, so the body-end converge is a no-op
-/// for them — the per-iteration write-back is eliminated and the field is
-/// instead committed at the loop's escape points (`return` / `break`, via
-/// `commit_scalar_for_escape`). All other candidates keep the classic
-/// `Both` entry / body-end force-`Both` discipline.
+/// Walk the loop body from each candidate's loop-entry state, then converge
+/// body-exit back to it so the back-edge invariant holds. Call-clean
+/// (`deferrable`) candidates enter and stay `ScalarOnly`, making the converge a
+/// no-op; their write-back happens at the loop's escape points instead.
 #[allow(clippy::too_many_arguments)]
 fn process_loop_body(
     body: &mut Body,
@@ -1702,21 +1514,10 @@ fn insert_convergence_at_block_end(
 }
 
 /// Bind `value` so a sync sequence can run after it and still yield the same
-/// value: returns the bindings to emit before the sync, and the operand to
-/// place after it.
-///
-/// An aggregate literal binds its *operands* rather than itself. The literal is
-/// a pure construction over them, so rebuilding it after the sync evaluates
-/// exactly the same effects in exactly the same order — and it leaves no
-/// aggregate local behind. That matters downstream:
-/// [`super::multi_value_return`] flattens a return only when the return builds
-/// a fresh aggregate, so capturing the whole aggregate here costs the
-/// allocation the multi-value ABI exists to avoid.
-///
-/// Two things are re-emitted after the sync without a binding: a literal
-/// constant, and a local `assigned` says the sync leaves alone. A promoted heap
-/// read (`ValueKind::FieldAccess`) is neither — it is re-emitted at its use, and
-/// the sync may have written the field it reads.
+/// value: returns the bindings to emit before the sync and the operand to place
+/// after it. An aggregate literal binds its *operands* instead of itself, leaving
+/// no aggregate local to block [`super::multi_value_return`]. Constants and
+/// locals the sync leaves alone are re-emitted without a binding.
 fn capture_for_sync(
     body: &mut Body,
     ctx: &mut WalkCtx,
@@ -2000,20 +1801,10 @@ fn walk_stmt(
             if let Some(v) = value {
                 walk_operand(body, v, states, true, out, ctx);
             }
-            // Escape: commit every ScalarOnly candidate to the field
-            // before the return. After commit, only the field is
-            // observable outside the loop.
-            //
-            // If the return expression itself transitioned a candidate to
-            // `ScalarOnly` (e.g. an inlined `self.pos = self.pos + 1`
-            // nested under `__inline_advance: { ... break tok; }` inside
-            // the return value), a writeback emitted before the Return
-            // stmt would run with the **pre-expression** scalar value at
-            // runtime — the expression mutates `__hfs_pos` after the
-            // writeback has already syncd the old value, and the post-
-            // mutation value is then discarded by the return. Hoist the
-            // value into a temp local so the writeback can run between
-            // the expression's evaluation and the return jump.
+            // Escape: commit every ScalarOnly candidate before the return. If
+            // the return expression itself transitioned a candidate, hoist its
+            // value into a temp so the write-back runs after the expression
+            // instead of syncing the pre-expression scalar.
             if let Some(return_value) = value.filter(|_| states.contains(&CanonState::ScalarOnly)) {
                 // Build the sync first so what it assigns is read off the
                 // statements themselves, as at the other two capture sites,
@@ -2043,19 +1834,11 @@ fn walk_stmt(
             if let Some(v) = value {
                 walk_operand(body, v, states, true, out, ctx);
             }
-            // Unlabeled `break` exits the innermost loop; at the HFS-loop
-            // top level (the common case) this leaves the HFS scope, so
-            // any `ScalarOnly` candidate must be committed inline before
-            // the break — the body-end force-Both is not reached.
-            //
-            // Labeled `break <name>` exits a labeled block. Emitting an
-            // unconditional commit here ("commit-on-every-labeled-break")
-            // proved a runtime-perf disaster on gale's hot loops. Record
-            // the walker's current state and site instead so
-            // `walk_labeled_block` can JOIN every per-path exit into its
-            // post-block walker state and insert per-site convergence
-            // only where the join diverges — the precise alternative to
-            // over-syncing.
+            // Unlabeled `break` leaves the HFS scope, so `ScalarOnly`
+            // candidates must be committed inline. A labeled break is only
+            // recorded — committing on every one over-syncs gale's hot loops —
+            // so `walk_labeled_block` JOINs the sites and syncs only the ones
+            // that diverge.
             let registered_label = label
                 .as_ref()
                 .filter(|l| ctx.label_breaks.contains_key(*l))
@@ -2072,16 +1855,10 @@ fn walk_stmt(
                     .push(record);
                 out.push(sid);
             } else {
-                // An unlabeled break, or a labeled break to a label not
-                // registered during this loop-body walk (a block *enclosing*
-                // the loop): both escape the HFS scope just like a `return`.
-                // Commit `ScalarOnly` candidates so the field is canonical
-                // for readers after the loop — this is what keeps deferring
-                // the per-iteration back-edge write-back sound for breaks
-                // that exit the loop. The commit runs before the break stmt,
-                // i.e. before the break value; if that value's walk
-                // transitioned a candidate to `ScalarOnly`, hoist it into a
-                // temp (same hazard as `Return`).
+                // An unlabeled break, or one to a label enclosing the loop:
+                // both escape the HFS scope like `return`. Commit `ScalarOnly`
+                // candidates, hoisting the break value into a temp when its own
+                // walk transitioned one (same hazard as `Return`).
                 if let Some(break_value) =
                     value.filter(|_| states.contains(&CanonState::ScalarOnly))
                 {
@@ -2253,30 +2030,11 @@ fn walk_if_branches(
     *states = target;
 }
 
-/// Walk a nested loop's body and update the outer state for the
-/// post-loop point.
-///
-/// Two things must hold for the single-walk analysis to match runtime:
-///
-/// 1. **Back-edge invariant.** Iter 2+ at runtime starts with whatever
-///    state the previous iteration's body left. The walker analyzed
-///    iter 2+ assuming `entry_states`. Bridge that gap by appending
-///    sync stmts at body-end that drive `body_exit_states` back to
-///    `entry_states`. Same shape as `process_loop_body`'s body-end
-///    force-Both, but targets `entry_states`. Without this, a
-///    `read → &mut call` pattern miscompiles: walker emits no
-///    re-read at the read (state=Both), but iter 2's runtime state
-///    after iter 1's call is `FieldOnly` — scalar is stale.
-///
-/// 2. **Post-loop conservatism.** The NIR `Loop` only exits via
-///    `break`/`return`, so the post-loop state at runtime is the
-///    state at the break-point. The walker doesn't track break-paths
-///    precisely; the OLD `pick_join_target_for_candidate(entry,
-///    body_exit_pre_sync)` is a reasonable over-approximation since
-///    `body_exit_pre_sync` captures the linear-walk's belief about
-///    the body's running state, which in typical shapes coincides
-///    with break-state. Use `body_exit_pre_sync` here, NOT the
-///    post-back-edge-sync state, so the JOIN keeps that information.
+/// Walk a nested loop's body and update the outer state for the post-loop point.
+/// Body-end sync drives `body_exit_states` back to `entry_states` so iteration
+/// 2+ matches what the single walk assumed. The post-loop state JOINs
+/// `entry_states` with `body_exit_pre_sync`, whose linear-walk belief
+/// approximates the break-point state the walker does not track precisely.
 fn walk_nested_loop(
     body: &mut Body,
     block: BlockId,
@@ -2315,25 +2073,10 @@ fn walk_nested_loop(
             body.blocks[block].stmts.push(stmt);
         }
     }
-    // Post-loop state: JOIN(entry_states, body_exit_pre_sync). The
-    // outer scope sees the conservative over-approximation; subsequent
-    // scalar reads emit re-reads when break could leave `FieldOnly`.
-    //
-    // A nested loop's post-state can never soundly be `ScalarOnly`: the
-    // zero-iteration path exits at `entry_states`, which the pre-recurse
-    // commit above forced to `{Both, FieldOnly}` (field canonical, never
-    // scalar-only). Every other exit also leaves the field canonical —
-    // the body-end back-edge sync drives `body_exit` back to `entry`, and
-    // `commit_scalar_for_escape` writes the scalar back before any
-    // `break`/`return`. So if the linear `body_exit_pre_sync` pushes the
-    // JOIN to `ScalarOnly` (the `{ScalarOnly, FieldOnly}` branch-join
-    // heuristic, sound only when each arm gets convergence sync — which
-    // the un-syncable zero-iteration path does not), the scalar may in
-    // fact be stale at runtime. Demote to `FieldOnly` so the next scalar
-    // read re-reads from the canonical field instead of trusting a stale
-    // `__hfs`. (Regression: a `&mut self` push run followed by an empty
-    // inner loop, e.g. `gale dump`'s `render_follow_variants`, otherwise
-    // wrote the stale length back and dropped the pushed bytes.)
+    // Post-loop state: JOIN(entry_states, body_exit_pre_sync), demoting
+    // `ScalarOnly` to `FieldOnly`. Every exit leaves the field canonical —
+    // including the zero-iteration path, which has no slot for convergence
+    // sync — so a `ScalarOnly` join would let a later read trust a stale scalar.
     for i in 0..states.len() {
         let joined = pick_join_target_for_candidate(&[entry_states[i], body_exit_pre_sync[i]]);
         states[i] = match joined {
@@ -2904,24 +2647,11 @@ fn walk_inline_block(
     walk_block(body, block, states, ctx);
 }
 
-/// Walk a labeled block (stmt- or expr-position), accounting for
-/// labeled-break early-exits that bypass any sync the walker emits
-/// inside the block.
-///
-/// `walk_stmt`'s `Break { label: Some(l), .. }` arm does not commit
-/// unconditionally (an experiment with "commit-on-every-labeled-break"
-/// caused unacceptable over-syncing in gale's hot loops). It records a
-/// [`BreakRecord`] instead. Here we JOIN the fall-through state with
-/// every observed break-state to derive the post-block walker state,
-/// then insert convergence sync on each path — appended at the block's
-/// end for the fall-through, and spliced before each recorded break —
-/// exactly where a path's exit state diverges from the join. Without
-/// the per-path sync, a `{ScalarOnly, FieldOnly}` join resolved to
-/// `ScalarOnly` would let post-block code trust a scalar that is stale
-/// on the `FieldOnly` runtime path. Issue #1187 (the early-return +
-/// nested-loop bug) and the #1190 regression (`FieldOnly` walker exit
-/// silently weakened to `ScalarOnly` by a JOIN with `ScalarOnly`
-/// entry) both fall out of this precise per-path join.
+/// Walk a labeled block, accounting for labeled breaks that bypass the sync
+/// emitted inside it. `walk_stmt` only records each break site (committing on
+/// every one over-syncs); here the fall-through and break states are joined and
+/// convergence sync spliced into each path whose exit diverges, so post-block
+/// code never trusts a side that is stale on some runtime path.
 fn walk_labeled_block(
     body: &mut Body,
     label: &str,
@@ -3025,28 +2755,11 @@ fn walk_expr_branches_switch(
     *states = target;
 }
 
-/// Walk a Match expression: each `arm.body` is an expression id, not a block.
-/// The guard (if any) and the body each get their own per-expression
-/// sync wrapper so that pre-stmts emitted while walking the guard run
-/// BEFORE the guard's evaluation (not after — which would let the
-/// guard's mutations be observed before the wrap committed scalar
-/// values), and pre-stmts emitted while walking the body run BEFORE
-/// the body's value-producing expression.
-///
-/// Cross-arm guard side effects: at runtime, arm K's guard runs only
-/// after arms 1..K-1's patterns matched-and-their-guards-failed. A
-/// `&mut` call inside arm 1's guard mutates the field state before
-/// arm 2's pattern is even tested. The walker reflects this by
-/// carrying an `accumulated_pre`: the join over {entry, `arm_i_after_guard`}
-/// for each prior side-effecting guard. arm K's guard and body are
-/// then walked starting from `accumulated_pre`, matching the runtime
-/// state at the dispatch point.
-///
-/// The pattern-mismatch path (the guard never ran) has no slot for
-/// convergence sync, so the post-guard join must be reachable sync-free
-/// from the prior `accumulated_pre`; the guard-ran side converges by
-/// sync appended at the guard's end — which runs whether the guard
-/// passed or failed, so the arm body also starts from the joined state.
+/// Walk a Match expression. The guard and the body each get their own sync
+/// wrapper so pre-stmts run before the expression they belong to. Arm K's guard
+/// runs only after the earlier guards failed, so it starts from
+/// `accumulated_pre` — the join over prior side-effecting guards. The
+/// pattern-mismatch path has no sync slot, so that join must be sync-free.
 fn walk_expr_branches_match(
     body: &mut Body,
     arms: &[ArmData],

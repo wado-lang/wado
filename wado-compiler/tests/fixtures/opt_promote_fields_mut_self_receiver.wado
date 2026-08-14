@@ -1,0 +1,46 @@
+// A `&mut self` receiver is the ordinary method shape and most of what
+// `promote_fields` can share, so being `&mut` is not itself a reason to refuse.
+// `sum_twice` shares one load across two reads; `around_call` reads either side
+// of a mutating call and must not.
+
+struct Acc {
+    total: i32,
+    step: i32,
+}
+
+impl Acc {
+    #[inline(never)]
+    fn add(&mut self) {
+        self.total = self.total + self.step;
+    }
+
+    #[inline(never)]
+    fn sum_twice(&mut self) -> i32 {
+        return self.step + self.step;
+    }
+
+    #[inline(never)]
+    fn around_call(&mut self) -> i32 {
+        let before = self.total;
+        self.add();
+        let after = self.total;
+        return before * 100 + after;
+    }
+}
+
+#[inline(never)]
+fn seed(n: i32) -> i32 {
+    return n;
+}
+
+export fn run() {
+    let mut a = Acc { total: seed(20), step: seed(5) };
+    assert a.sum_twice() == 10;
+    assert a.around_call() == 2025;
+    assert a.total == 25;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

@@ -810,21 +810,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         );
     }
 
-    /// Require that the impl's target and trait reference between them name
-    /// every type parameter it declares.
-    ///
-    /// A use site determines them from the receiver and the trait arguments
-    /// and from nothing else, so one the two do not mention has no value to be
-    /// given. Rust rejects the same shape (E0207).
-    ///
-    /// A *predicate* determines one too: `impl<S: ReflectStruct<FieldTypes =
-    /// [..F]>, ..F> Inspect for S` fixes `F` once `S` is known, so the
-    /// arguments a bound writes count as mentions. Its subject does not — `A`
-    /// in `A: Eq` is what the bound constrains, not what constrains `A`.
-    ///
-    /// A parameter whose name is really a concrete type (`impl<i32, T>`) is not
-    /// one, and an effect parameter is bound by the handler rather than the
-    /// target.
+    /// Require the impl's target and trait reference to name, between them, every
+    /// type parameter it declares — a use site determines them from the receiver
+    /// and trait arguments alone, so one they never mention has no value to be
+    /// given (Rust's E0207). A bound's arguments count as mentions, its subject
+    /// does not; an effect parameter is bound by the handler.
     fn check_impl_params_constrained(&mut self, impl_block: &ast::ImplBlock) {
         let mut named: Vec<String> = Vec::new();
         impl_block.ty.mentioned_names(&mut named);
@@ -863,6 +853,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         }
     }
 
+<<<<<<< HEAD
     /// Require that the name an `impl` implements is declared.
     ///
     /// `impl X for T` names a trait, an effect or a resource — the latter two
@@ -876,6 +867,26 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// named `Deserialize` — and the header would then carry no identity, so
     /// dispatch would be left comparing spellings two modules can share.
     /// Naming the trait is what a module does to implement it.
+||||||| bad542cd7
+    /// Require that the name an `impl` implements is declared.
+    ///
+    /// `impl X for T` names a trait, an effect or a resource — the latter two
+    /// install handlers through the same syntax — so all three declaration
+    /// kinds satisfy it. Nothing else resolves this name: every index downstream
+    /// keys off the written string, so an `impl` of a name nothing declares
+    /// registers happily, matches no query, and reaches the back end unmentioned.
+    ///
+    /// The head resolves through the same chain the block's own facts use, so
+    /// the check and the facts cannot disagree about which declaration it
+    /// names. A head with a reference site answers from the site; a synthesized
+    /// one, which has none, falls back to the name-only chain.
+=======
+    /// Require that the name an `impl` implements is declared — as a trait, an
+    /// effect, or a resource, the latter two installing handlers through the same
+    /// syntax. Nothing else resolves it: every downstream index keys off the
+    /// written string, so an `impl` of an undeclared name registers happily,
+    /// matches no query, and reaches the back end unmentioned.
+>>>>>>> origin/main
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
         let implementable = crate::resolve::head_site(trait_type)
             .and_then(|site| self.tysys.resolutions.declared(site))
@@ -1362,24 +1373,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve the `methods` list of an effect or resource declaration into
-    /// TIR operations. Generic type parameters declared on the enclosing
-    /// resource (e.g. `resource Stream<T>`) are brought into scope before
-    /// resolving each method's params and return type so that `T` maps to a
-    /// proper `TypeParam` rather than `UNKNOWN`.
-    /// Lower a resource / effect declaration's method list to
-    /// [`TirEffectOp`]s. Type-param scope is set up once at the start
-    /// (so operation signatures can mention `T` for generic resources)
-    /// and then each method's params + return are resolved.
-    ///
-    /// `resource_self`, when `Some((name, module))`, signals that this
-    /// is a resource decl rather than an effect decl: methods declared
-    /// with `&self`/`&mut self` shorthand get the receiver synthesised
-    /// as a real `TirEffectOp` parameter at index 0 (with type
-    /// `&Self`/`&mut Self`) so dispatch wrapper signatures match the
-    /// post-cm-binding call shape `__cm_binding__<R>_<op>(self, args)`.
-    /// For effects (where `resource_self == None`) any `self_kind` is
-    /// silently dropped — effect declarations don't take receivers.
     /// Operation signatures the decl pass recorded for `decl_id`.
     fn declared_effect_ops(&self, decl_id: ast::AstId) -> Vec<TirEffectOp> {
         self.sem
@@ -1531,6 +1524,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(trait_decl.id, super::sig::TraitSig { module, methods });
     }
 
+    /// Lower an effect or resource declaration's method list to [`TirEffectOp`]s,
+    /// with the enclosing type-param scope set up first so a generic resource's
+    /// signatures can mention `T`. `resource_self` marks a resource decl, whose
+    /// `&self` shorthand becomes a real parameter at index 0 to match
+    /// `__cm_binding__<R>_<op>(self, args)`; an effect decl takes no receiver.
     pub(super) fn resolve_effect_ops(
         &mut self,
         type_params: &[ast::GenericParam],
@@ -1866,16 +1864,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Populate the generic-function inference caches (type params,
-    /// resolved param types, resolved return type) for `func` without
-    /// resolving its body. Used as a pre-pass before body resolution so
-    /// that same-module forward references to other generic functions
-    /// (e.g. `outer<T>` defined before `inner<T>` in the same file) can
-    /// run argument-derived type inference at the call site.
-    ///
-    /// Idempotent: may be called multiple times. Uses fresh `TypeId`s
-    /// each time; subsequent overwrites inside `resolve_function` keep
-    /// the cache consistent with the body's own `TypeId`s.
+    /// Populate `func`'s generic-inference caches without resolving its body, so
+    /// a same-module forward reference — `outer<T>` written before `inner<T>` —
+    /// can still run argument-derived inference at the call site. Idempotent, and
+    /// mints fresh `TypeId`s each time; `resolve_function`'s later overwrite is
+    /// what keeps the cache consistent with the body's own ids.
     pub(super) fn precompute_generic_function_cache(&mut self, func: &Function) {
         // Mirrors `resolve_function`'s guard: fn-bound params are realised
         // eagerly, so a function whose only non-effect params are fn-bound
@@ -2014,16 +2007,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         scope.register_generic_params(&func.type_params, 0);
 
-        // Populate the generic-function inference caches
-        // (`generic_function_params`, `generic_function_resolved_param_types`,
-        // `generic_function_resolved_return_types`). Populated before the
-        // `function_return_types` update below because that map is shared
-        // with non-generic callers and may be overwritten by external
-        // registrations (trait methods, etc.) over time. The declared return
-        // type is also used for `task_return_type` in async fns.
-        // `<F: fn(...)>` bounds are eagerly realised to the bound's function
-        // type and do not consume a `TypeParam` slot — they're not generic
-        // parameters that need monomorphisation.
+        // Populate the generic-inference caches before the `function_return_types`
+        // update below, which shares its map with non-generic callers and can be
+        // overwritten by an external registration. A `<F: fn(…)>` bound is
+        // eagerly realised to its function type and consumes no `TypeParam` slot,
+        // being nothing monomorphisation needs to substitute.
         let has_real_type_params = func
             .type_params
             .iter()
@@ -2058,19 +2046,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ctx.task_return_type = Some(declared_return_type);
         }
 
-        // Resolve parameters. Each default expression is resolved in the
-        // callee's lexical scope, with only the earlier parameters in scope
-        // (a default cannot reference its own parameter or any later one).
-        // This gives defaults access to the definition module's private items
-        // and earlier parameters without needing call-site substitution.
-        //
-        // `export fn` is rejected: the Component Model ABI requires every
-        // parameter at the boundary, so defaults cannot divergently exist
-        // only on the Wado side.
-        // A function crosses the Component Model boundary when it is either
-        // exported (`export fn ...`) or imported (declaration with no body
-        // carrying `#[canonical(...)]` or `#[cm(...)]`). Closures may not
-        // appear in either side's signature.
+        // Resolve parameters. A default expression resolves in the callee's
+        // lexical scope with only the earlier parameters visible, so it reaches
+        // the definition module's private items. An `export fn` takes no
+        // parameter default, and nothing crossing the Component Model boundary
+        // takes a closure: the ABI represents neither.
         let is_cm_import =
             func.body.is_none() && func.attrs.iter().any(|a| a.cm_boundary.is_some());
         let crosses_cm_boundary = func.is_export || is_cm_import;
@@ -2285,17 +2265,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `impl_block` is a concrete generic instantiation (`impl List<u8>`,
-    /// `impl Tag for List<u8>`, `impl Tag for [i32, i32]`): its self type is a
-    /// generic type — tuples included, since a tuple is a generic instance of
-    /// the tuple family — all of whose arguments are concrete (no free type
-    /// params, accounting for any impl-declared parameters). Methods on such an
-    /// impl are per-instantiation concrete functions, named `List<u8>::method`
-    /// and called directly.
-    ///
-    /// The tuple arm carries coherence Rule 1 (WEP 2026-03-14 §5):
-    /// `impl Tag for [i32, i32]` names its method `[i32,i32]^Tag::tag`, the
-    /// name a `[i32, i32]` receiver looks up, so the variadic template is never
-    /// instantiated for that arity.
+    /// `impl Tag for [i32, i32]`) — a generic self type, tuples included, whose
+    /// every argument is concrete. Its methods are per-instantiation functions
+    /// named `List<u8>::method` and called directly. The tuple arm carries
+    /// coherence Rule 1: the variadic template is skipped for that arity.
     pub(super) fn impl_is_concrete_instantiation(
         &self,
         impl_ty: &ast::Type,
@@ -2317,18 +2290,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .all(|a| self.is_concrete_type_arg(a, impl_type_params, impl_module))
     }
 
-    /// Resolve a method (function with &self parameter).
-    ///
-    /// `impl_is_concrete` is `true` when the surrounding impl is a fully
-    /// concrete generic instantiation (`impl List<u8>`, all args concrete).
-    /// Such impls define per-instantiation *concrete* methods. Unlike a
-    /// partially-generic impl (`impl TreeMap<String, V>`, where `String` must
-    /// keep its positional slot so `V`'s index stays aligned for
-    /// monomorphization), a fully-concrete impl has no free param to align, so
-    /// its args are NOT registered as impl type params: the method's `self` /
-    /// param / return types resolve to the concrete instantiation (`&List<u8>`,
-    /// not `&List<TypeParam>`), and reify emits a standalone concrete function
-    /// named `List<u8>::method`.
+    /// Resolve a method. Under `impl_is_concrete` the surrounding impl is a fully
+    /// concrete instantiation, so its arguments are *not* registered as impl type
+    /// params — there is no free parameter to keep aligned, unlike
+    /// `impl TreeMap<String, V>`. The signature then resolves to `&List<u8>` and
+    /// reify emits a standalone `List<u8>::method`.
     pub(super) fn resolve_method(
         &mut self,
         func: &Function,

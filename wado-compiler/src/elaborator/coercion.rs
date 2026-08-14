@@ -262,16 +262,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Re-coerce numeric literal arguments to inferred parameter types.
-    ///
-    /// When a generic call has its type arguments inferred (e.g. `two<T>(1 as u8, 2)`),
-    /// numeric literal arguments resolved before inference may have picked up the
-    /// default `i32`/`f64` type because the expected type was an unsubstituted
-    /// `TypeParam`. After inference, we know the concrete `T`, so any literal arg
-    /// whose corresponding parameter is now a numeric type should be re-coerced.
-    ///
-    /// `expected_param_types` should be the parameter types after substituting the
-    /// inferred type arguments.
+    /// Re-coerce numeric literal arguments to inferred parameter types: a literal
+    /// resolved before inference took the default `i32` / `f64`, its expected
+    /// type still being an unsubstituted `TypeParam`, so once `T` is concrete
+    /// every literal at a now-numeric parameter is coerced again.
+    /// `expected_param_types` must already carry the inferred type arguments.
     pub(super) fn recoerce_literal_args(
         &mut self,
         raw_args: &[Expr],
@@ -309,22 +304,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Try to coerce an expression to match the expected type.
-    /// Handles numeric literals, null, string newtypes, and tuple-to-array coercion.
-    /// Returns `None` if no coercion applies.
-    ///
-    /// WEP 2026-05-26: each successful branch records the
-    /// chosen [`super::sem::types::CoercionKind`] in
-    /// [`super::sem::types::TypeAnnotations::coercions`] keyed by
-    /// `expr.id()`. The variants that fan out into shared
-    /// `try_coerce_*` sub-helpers (numeric / tuple-to-sequence /
-    /// struct-to-map) record from inside those helpers so direct callers
-    /// (`resolve_cast`, struct-field deferred-coercion, `resolve_let`,
-    /// `recoerce_literal_args`) record uniformly. The variants
-    /// implemented inline in this function (null / string-newtype /
-    /// closure-fn-newtype) record here at the decision point. The future
-    /// `reify` pass replays the same adaptation without re-checking
-    /// expected-type compatibility.
+    /// Try to coerce an expression to the expected type — numeric literals,
+    /// null, string newtypes, tuple-to-array — or `None` when none applies. Each
+    /// success records its [`super::sem::types::CoercionKind`] keyed by
+    /// `expr.id()`, from inside the shared `try_coerce_*` helpers where one
+    /// exists, so reify can replay the adaptation without re-checking.
     pub(super) fn try_coerce(
         &mut self,
         expr: &Expr,
@@ -684,19 +668,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(placeholder(target_type, span))
     }
 
-    /// Try to coerce a tuple/sequence literal `[e0, e1, ...]` to a user-defined type
-    /// implementing `SequenceLiteralBuilder`.
-    ///
-    /// Coerce a tuple/sequence literal `[e0, e1, ...]` to a type implementing
-    /// `SequenceLiteralBuilder` (including built-in `List<T>` and user types).
-    ///
-    /// `&mut <tuple-literal>` / `&<tuple-literal>` are looked through: the cast
-    /// `&mut [...] as List<T>` parses as `(&mut [...]) as List<T>` (`&mut`
-    /// binds tighter than `as`), but the user-facing semantics is to construct
-    /// an `List<T>` and let the call site auto-borrow it. Without this
-    /// passthrough the inner `[...]` would lower as a `tuple<>` `struct.new`
-    /// and the call site's Wasm validation would fail because the tuple
-    /// struct type is unrelated to the expected `List` struct type.
+    /// Coerce a tuple/sequence literal `[e0, e1, …]` to a type implementing
+    /// `SequenceLiteralBuilder`, built-in `List<T>` included. A leading `&` /
+    /// `&mut` is looked through: `&mut [...] as List<T>` parses as
+    /// `(&mut [...]) as List<T>`, but means a `List<T>` the call site
+    /// auto-borrows — lowering the inner literal as a tuple fails validation.
     pub(super) fn try_coerce_tuple_to_sequence(
         &mut self,
         expr: &Expr,

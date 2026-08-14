@@ -30,7 +30,7 @@ pub const GENERATOR_HOST_INTERFACE: &str = "KilnHost";
 /// World exports take two AST shapes (`export Foo;` interface form and
 /// `export fn name(...);` function form). Both are normalized into this
 /// flat struct: an `export Foo;` is expanded by the registry into one
-/// `WorldExportInfo` per interface method, with [`from_interface_fq`]
+/// `WorldExportInfo` per interface method, with `from_interface_fq`
 /// populated. Bare function exports leave `from_interface_fq` as `None`.
 #[derive(Debug, Clone)]
 pub struct WorldExportInfo {
@@ -160,16 +160,11 @@ impl WorldInfo {
         })
     }
 
-    /// The CM package segment of this world's fully-qualified name.
-    ///
-    /// `wasi:http/service` → `"http"`, `core:kiln/generator` → `"kiln"`.
-    /// Returns an empty slice when `fq_name` has no scheme/package
-    /// structure (e.g. the built-in synthetic `test` world).
-    ///
-    /// This is a computed accessor, not a stored field — `fq_name` is the
-    /// single source of truth. Use [`Self::namespace_prefix`] when the
-    /// caller needs a `starts_with`-friendly form that also pins the
-    /// scheme.
+    /// The CM package segment of this world's fully-qualified name:
+    /// `wasi:http/service` → `"http"`. Empty when `fq_name` has no
+    /// scheme/package structure, as the synthetic `test` world does not. For a
+    /// `starts_with`-friendly form that pins the scheme, use
+    /// [`Self::namespace_prefix`].
     pub fn package(&self) -> &str {
         fq_name_package(&self.fq_name)
     }
@@ -262,26 +257,11 @@ impl WorldRegistry {
         Self::default()
     }
 
-    /// Register a world from a parsed world declaration.
-    ///
-    /// The world is keyed by its fully-qualified name from the `#[cm("...")]` attribute.
-    /// If no attribute is present, the `PascalCase` name is used as fallback.
-    ///
-    /// `lookup_interface_export` resolves an `export Foo;` interface reference
-    /// to the interface's CM FQ and methods. Interface exports for which the
-    /// callback returns `None` are silently skipped (the world will be
-    /// registered without that export); this happens when the referenced
-    /// interface declaration is not yet known.
-    ///
-    /// `lookup_interface_import` is the analogous elaborator for `import Foo;`
-    /// and only needs to surface the CM FQ (the methods are tree-shaken from
-    /// usage). Returning `None` leaves `cm_interface_fq` unfilled.
-    ///
-    /// If another world is already registered under the same `fq_name`, the
-    /// first registrant is kept and this registration is skipped (with a
-    /// warning logged to stderr). Two distinct worlds sharing a fully-qualified
-    /// name is a bug in the stdlib or user input — silently overwriting would
-    /// make the earlier world invisible to the code generator.
+    /// Register a world from a parsed declaration, keyed by the `#[cm("…")]`
+    /// fully-qualified name or, failing that, the `PascalCase` name. The
+    /// `lookup_interface_*` callbacks resolve an `export Foo;` / `import Foo;`
+    /// to its CM FQ; `None` skips the entry. A duplicate `fq_name` keeps the
+    /// first registrant and warns — overwriting would hide it from codegen.
     pub fn register(
         &mut self,
         world: &WorldDecl,

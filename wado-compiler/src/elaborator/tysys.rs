@@ -1,23 +1,8 @@
-//! [`TypeSystem`] — pipeline-wide type knowledge.
-//!
-//! # Ownership
-//!
-//! Every field is `'static`, [`Arc`]-wrapped, or [`Rc`]-wrapped, so
-//! `TypeSystem` is `Clone` (a shallow copy) and is handed out cheaply to
-//! per-module phases: the driver builds one during
-//! [`super::orchestration::Elaborator::annotate_modules`], and each
-//! per-module [`super::Elaborator`] holds a clone.
-//!
-//! # Membership rule
-//!
-//! A field belongs here only when the answer to "would this fit the type
-//! system itself?" is yes. Per-call mutable state does not qualify even
-//! when it looks cache-shaped: sharing e.g. the `type_implements_trait`
-//! recursion stack across module walks would leak frames between them
-//! (it lives on [`super::scope::Scope`] instead), and the removed
-//! `method_info_cache` / `indexing_trait_cache` were both stale-prone
-//! covers over scans that the prebuilt `TraitEnv` indices already
-//! memoise.
+//! [`TypeSystem`] — pipeline-wide type knowledge. Every field is `'static`,
+//! [`Arc`]- or [`Rc`]-wrapped, so a `Clone` is a shallow copy each per-module
+//! [`super::Elaborator`] holds. A field belongs here only if it fits the type
+//! system itself: per-call mutable state does not, even when cache-shaped, since
+//! sharing a recursion stack across module walks would leak frames between them.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -167,19 +152,11 @@ impl TypeSystem {
             .any(|t| self.carries_resource_rec(t, visited))
     }
 
-    /// Whether `name` resolves to a declared type *from the perspective of
-    /// `module`* — i.e. a type that module can actually see (its own
-    /// declarations, the auto-imported prelude, a primitive, or a type it
-    /// explicitly imports). Unlike [`Self::is_known_type_name`], which is a
-    /// global union, this is immune to pollution by unrelated modules: a
-    /// user module declaring a type named `E` does not make `E` "known" in
-    /// `core:prelude/types`, so the prelude's `impl Result<T, E>` keeps
-    /// treating `E` as a free type parameter rather than a concrete
-    /// instantiation argument.
-    ///
-    /// Falls back to the global cache when `module` is unknown (e.g. a
-    /// synthetic source not present in the per-module map), which preserves
-    /// the prior behaviour for those edge cases.
+    /// Whether `name` resolves to a declared type *from `module`'s perspective*
+    /// — its own declarations, the prelude, a primitive, or an explicit import.
+    /// Unlike the global union [`Self::is_known_type_name`], no unrelated module
+    /// can pollute it: a user type named `E` does not stop the prelude's
+    /// `impl Result<T, E>` treating `E` as free. Unknown modules use the union.
     pub(crate) fn is_known_type_name_in(&self, module: &ModuleSource, name: &str) -> bool {
         match self.module_visible_types.get(module) {
             Some(visible) => visible.contains(name),
@@ -200,12 +177,6 @@ impl TypeSystem {
         declared.iter().any(|p| p.name == name) || !self.is_known_type_name_in(module, name)
     }
 
-    /// Check if an expression is a numeric literal (possibly negated).
-    ///
-    /// The non-numeric arms are enumerated explicitly rather than a
-    /// catch-all `_` so that adding a new [`Expr`] variant produces a
-    /// compile error here, forcing a deliberate decision about whether
-    /// the new shape should participate in numeric-literal coercion.
     /// Whether `expr` is the bare `null` literal. A bare `null` initially
     /// resolves to `Option<UNKNOWN>` and only acquires its inner type from an
     /// expected-type context, so callers that can supply one (e.g. binary
@@ -214,6 +185,9 @@ impl TypeSystem {
         matches!(expr, Expr::Literal(lit) if matches!(lit.value, Literal::Null))
     }
 
+    /// Whether `expr` is a numeric literal, possibly negated. The non-numeric
+    /// arms are enumerated rather than caught by `_`, so a new [`Expr`] variant
+    /// forces a decision about numeric-literal coercion here.
     pub(crate) fn is_numeric_literal(&self, expr: &Expr) -> bool {
         match expr {
             Expr::Literal(lit) => matches!(lit.value, Literal::Number(_)),
@@ -251,20 +225,11 @@ impl TypeSystem {
         }
     }
 
-    /// Map a binary operator to its `(trait_name, method_name)` pair, or
-    /// `None` for short-circuit operators that don't dispatch through a
-    /// trait.
-    ///
-    /// For operators that dispatch through a [`CompilerItem`] trait
-    /// (`Eq` for `==` / `!=`), the trait name is resolved through the
-    /// compiler-item registry so a rename on the stdlib side stays
-    /// transparent. For traits that don't yet have a `CompilerItem`
-    /// anchor (`Add`, `Sub`, …, `Ord`), the canonical stdlib name is
-    /// returned as a literal.
-    ///
-    /// The non-trait arms (`And` / `Or`) are explicit rather than a
-    /// catch-all `_` so that adding a new [`BinaryOp`] variant produces
-    /// a compile error here instead of silently returning `None`.
+    /// Map a binary operator to its `(trait_name, method_name)` pair, or `None`
+    /// for the short-circuit operators, which dispatch through no trait. A trait
+    /// with a [`CompilerItem`] anchor (`Eq`) resolves through the registry, so a
+    /// stdlib rename stays transparent; the rest are literals. `And` / `Or` are
+    /// explicit arms, so a new [`BinaryOp`] variant fails the build here.
     pub(crate) fn operator_trait_method(&self, op: &BinaryOp) -> Option<(String, &'static str)> {
         match op {
             BinaryOp::Add => Some(("Add".to_string(), "add")),

@@ -436,6 +436,47 @@ impl SymbolTable {
             .and_then(|key| self.symbols.get(key))
     }
 
+<<<<<<< HEAD
+||||||| bad542cd7
+    /// Look up a name as it resolves when referenced from `module`: the
+    /// module's own explicit imports first, then the implicit prelude.
+    ///
+    /// The prelude (`core:prelude`) is in scope in every module without an
+    /// explicit `use`, so its public exports are consulted as a fallback. This
+    /// keeps `List`, `Option`, … resolvable everywhere while confining all
+    /// other imports to the module that declared them — a name imported by one
+    /// module never leaks into another (issue #1298). The prelude
+    /// implementation files (`core:prelude*`) resolve only their own imports;
+    /// they would otherwise recurse into themselves through this fallback.
+    pub fn lookup(&self, module: &ModuleSource, name: &str) -> Option<&Symbol> {
+        if let Some(symbol) = self.imported(module, name) {
+            return Some(symbol);
+        }
+        let prelude = ModuleSource::prelude();
+        if module != &prelude {
+            return self.lookup_in_module(&prelude, name);
+        }
+        None
+    }
+
+=======
+    /// Look up a name as it resolves when referenced from `module`: the module's
+    /// own explicit imports first, then the implicit prelude. That fallback
+    /// keeps `List`, `Option`, … resolvable everywhere while confining every
+    /// other import to the module that declared it (#1298). The prelude's own
+    /// implementation files skip it, or they would recurse into themselves.
+    pub fn lookup(&self, module: &ModuleSource, name: &str) -> Option<&Symbol> {
+        if let Some(symbol) = self.imported(module, name) {
+            return Some(symbol);
+        }
+        let prelude = ModuleSource::prelude();
+        if module != &prelude {
+            return self.lookup_in_module(&prelude, name);
+        }
+        None
+    }
+
+>>>>>>> origin/main
     /// Look up a symbol in a specific module
     ///
     /// This resolves re-exports transparently, following re-export chains

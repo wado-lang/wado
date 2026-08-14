@@ -19,17 +19,10 @@ use crate::tir::{
 
 use crate::synthesis::common::{binary, builtin_call, cast, i32_const, i64_const, synth_span};
 
-/// Snapshot of the stdlib type / variant names the CM binding code
-/// matches against — `String`, `List`, `Option`, `Result` — resolved
-/// once through the `CompilerItem` registry so a stdlib rename of any
-/// of these flows through every CM lift / lower / adapter site
-/// without hard-coded literals scattered across `synthesis::cm_binding`.
-///
-/// `result` is kept for downstream callers that match against the
-/// `Result` variant name even when the current consumer set does not
-/// need it; populating it costs one registry hit + clone and keeps
-/// the snapshot's shape complete for the next CM-binding site that
-/// wants to read it.
+/// Snapshot of the stdlib type / variant names CM binding matches against,
+/// resolved once through the `CompilerItem` registry so a stdlib rename flows
+/// through every lift / lower / adapter site rather than through literals
+/// scattered across `synthesis::cm_binding`.
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub struct CmStdlibNames {
@@ -122,16 +115,11 @@ pub struct LiftContext<'a> {
     /// `wasi:http/ErrorCode` — or, across schemes,
     /// `wasi:http/types::Response` vs. `core:kiln/types::Response`.
     pub cm_package: &'a str,
-    /// `ModuleSource` interner shared with the package; used by
-    /// `module_source_for_cm_interface` to canonicalise the module
-    /// identity of synthesised types (e.g. `wasi:http/types`,
-    /// `core:kiln/types.wado`) so they match the elaborator's registered
-    /// `StructName`s ptr-eq.
-    ///
-    /// Re-entrancy: the lift call chain may `borrow_mut()` this cell;
-    /// callers must not hold a `RefMut` to the same cell across calls
-    /// into `synthesize_lift` or its helpers. The lift path itself only
-    /// borrows transiently inside `module_source_for_cm_interface`.
+    /// `ModuleSource` interner shared with the package, used to canonicalise a
+    /// synthesised type's module identity so it matches the elaborator's
+    /// registered `StructName`s pointer-equal. The lift chain may `borrow_mut`
+    /// it, so no caller may hold a `RefMut` across a call into `synthesize_lift`;
+    /// the lift path itself borrows only transiently.
     pub interner: &'a RefCell<ModuleSourceInterner>,
 }
 
@@ -152,16 +140,11 @@ impl LiftContext<'_> {
         module_source_for_cm_interface(&mut self.interner.borrow_mut(), source)
     }
 
-    /// Resolve a CM `Type` to its elaborator-registered `TypeId`, lib-aware.
-    ///
-    /// Unlike [`cm_type_to_type_id`], a *lib-local* named struct/variant is
-    /// resolved through its recorded entry `ModuleSource`, so it yields the
-    /// concrete GC `TypeId` the rest of the pipeline expects rather than falling
-    /// back to `i32`. WASI/core named types keep going through
-    /// `cm_type_to_type_id` (which resolves them by package). Lib-local
-    /// provenance is detected via the registry, not an FQ prefix check. Container
-    /// types (tuple/list/option/result) recurse so nested lib-local elements
-    /// resolve too.
+    /// Resolve a CM `Type` to its elaborator-registered `TypeId`, lib-aware:
+    /// unlike [`cm_type_to_type_id`], a lib-local named type resolves through its
+    /// recorded entry `ModuleSource` and yields the concrete GC id rather than
+    /// falling back to `i32`. Provenance comes from the registry, not an FQ
+    /// prefix check, and containers recurse. WASI and core types go by package.
     pub(super) fn cm_type_id(&self, ty: &Type, tt: &mut TypeTable) -> TypeId {
         match ty {
             Type::Named(n) => {
@@ -256,20 +239,11 @@ pub struct LowerContext<'a> {
     pub names: CmStdlibNames,
 }
 
-/// Convert a WASI AST `Type` to a `TypeId` in the type table.
-///
-/// Every WASI binding is emitted inside a known package (e.g. `"http"`), so
-/// both the registry and the owning package are required — there is no
-/// unscoped variant. Named types are resolved by `(name, wasi_package)`; if
-/// the primary scope misses we consult the registry for the canonical owner
-/// of the bare name (e.g. `ErrorCode` is declared in `filesystem/types.wado`
-/// but referenced from `http` bindings). Same-named types from distinct
-/// interfaces are always distinct `TypeId`s.
-///
-/// This is needed for synthesized binding code that calls generic methods
-/// (e.g., `List::<String>::with_capacity()`). The monomorphizer requires
-/// concrete `TypeId`s in `MonomorphInfo::type_args` to instantiate generic
-/// methods.
+/// Convert a WASI AST `Type` to a `TypeId`. Every WASI binding is emitted inside
+/// a known package, so both the registry and the owner are required. A named
+/// type resolves by `(name, wasi_package)`, falling back to the registry's
+/// canonical owner of the bare name, since `http` bindings may reference an
+/// `ErrorCode` declared in `filesystem`.
 pub fn cm_type_to_type_id(
     ty: &Type,
     type_table: &mut TypeTable,
@@ -553,20 +527,11 @@ pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
     )
 }
 
-/// Validate that `type_id` has a Component Model value representation, returning
-/// `Err(reason)` for a type that has *none in any world* — an empty record (the
-/// CM binary format forbids zero-field records) or a 128-bit/`v128` scalar (no
-/// CM scalar type). The driver surfaces this as a proper compile error instead
-/// of emitting an invalid component or panicking in codegen.
-///
-/// The check is world-independent: it does not branch on `--lib` vs WASI. Handle
-/// and async types (`resource`, `own`/`borrow`, `stream`/`future`) *are*
-/// representable — they lower to `i32` handles identically in every world — so
-/// they pass. Recurses through containers and named aggregates to catch a
-/// non-representable type nested inside one; `visited` is the recursion path,
-/// and a type that revisits itself is rejected — WIT has no recursive types,
-/// and the lift/lower synthesizers would otherwise recurse forever generating
-/// inline code for one.
+/// Validate that `type_id` has a Component Model value representation, erroring
+/// for one that has none in any world — an empty record, which the CM binary
+/// format forbids, or a 128-bit / `v128` scalar — rather than emitting an
+/// invalid component. Recurses through containers, and rejects a type revisiting
+/// itself: WIT has no recursive types, and synthesis would inline one forever.
 pub(super) fn check_cm_boundary_representable(
     type_id: TypeId,
     type_table: &TypeTable,
@@ -634,13 +599,29 @@ fn check_cm_boundary_representable_inner(
             R::Primitive(_) | R::Unit | R::Enum { .. } | R::Flags { .. } | R::Resource { .. } => {
                 Ok(())
             }
-            // Stream/Future handles are themselves i32, but their payload is
-            // lifted/lowered by value on read/write, so it must be
-            // representable (and non-recursive) too.
-            R::GenericResource { type_args, .. } => {
+            // The handle is an i32, but its payload is lifted and lowered by
+            // value, so it must be classifiable too — `()` is representable
+            // yet has no payload type.
+            R::GenericResource {
+                name, type_args, ..
+            } => {
+                let name = name.clone();
                 let args = type_args.clone();
-                for a in args {
+                for &a in &args {
                     recurse(a, visited)?;
+                }
+                if let Some(&payload) = args.first()
+                    && let Some(reason) = match name.as_str() {
+                        "Future" | "FutureWritable" => {
+                            crate::component_model::future_payload_rejection(type_table, payload)
+                        }
+                        "Stream" | "StreamWritable" => {
+                            crate::component_model::stream_payload_rejection(type_table, payload)
+                        }
+                        _ => None,
+                    }
+                {
+                    return Err(reason);
                 }
                 Ok(())
             }
@@ -1338,22 +1319,11 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
     }
 }
 
-/// Reconstruct a minimal AST `Type` surface from a TIR `TypeId`.
-///
-/// Used by callers that need to re-enter AST-shaped `Type` match arms
-/// (struct/generic field recursion in
-/// `synthesize_lift_from_flat_params`, element lowering in the
-/// `List<T>` arm of `lower_to_flat_inner`). The returned value only
-/// needs the top-level `name` and (for `GenericInstance`) immediate
-/// type args; deeper structural data is already reachable through
-/// `tir_modules` + `type_table` and is looked up lazily.
-///
-/// Named types receive their `source_interface` populated via
-/// [`CmInterfaceRegistry::resolve_cm_source_for`] when the registry knows the
-/// type (`wasi:*` records or `core:kiln/*` records). Without this,
-/// downstream lower / lift helpers can't find the record's field
-/// layout because they key the registry lookup by
-/// `(source_interface, name)`.
+/// Reconstruct a minimal AST `Type` from a TIR `TypeId`, for callers that need
+/// to re-enter the AST-shaped match arms. Only the top-level name and immediate
+/// type args are filled in; deeper structure is looked up lazily. A named type
+/// gets its `source_interface` where the registry knows it, since the lift /
+/// lower helpers key by `(source_interface, name)`.
 pub(super) fn type_id_to_ast_type(
     type_id: TypeId,
     type_table: &TypeTable,
@@ -1395,6 +1365,7 @@ pub(super) fn type_id_to_ast_type(
     match resolved {
         ResolvedType::Primitive(p) => named_no_source(p.as_str()),
         ResolvedType::Unit => Type::Tuple(Vec::new()),
+<<<<<<< HEAD
         ResolvedType::Struct { .. } | ResolvedType::Variant { .. } | ResolvedType::Enum { .. } => {
             let (name, module_source) = type_table
                 .nominal_head(type_id)
@@ -1404,6 +1375,50 @@ pub(super) fn type_id_to_ast_type(
         ResolvedType::Resource { def } => named_no_source(type_table.def_name(*def)),
         ResolvedType::GenericInstance { def, type_args } => {
             let name = &type_table.def_name(*def).to_string();
+||||||| bad542cd7
+        ResolvedType::Struct {
+            decl_name: name,
+            module_source,
+            ..
+        } => cm_named(name, module_source),
+        ResolvedType::Variant {
+            name,
+            module_source,
+            ..
+        } => cm_named(name, module_source),
+        ResolvedType::Enum {
+            name,
+            module_source,
+        } => cm_named(name, module_source),
+        ResolvedType::Resource { name, .. } => named_no_source(name),
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } => {
+=======
+        ResolvedType::Struct {
+            decl_name: name,
+            module_source,
+            ..
+        } => cm_named(name, module_source),
+        ResolvedType::Variant {
+            name,
+            module_source,
+            ..
+        } => cm_named(name, module_source),
+        ResolvedType::Enum {
+            name,
+            module_source,
+        } => cm_named(name, module_source),
+        // Its own CM type, 1 byte at ≤8 labels, not a four-byte `i32`.
+        ResolvedType::Flags {
+            name,
+            module_source,
+        } => cm_named(name, module_source),
+        ResolvedType::Resource { name, .. } => named_no_source(name),
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } => {
+>>>>>>> origin/main
             let args: Vec<Type> = type_args
                 .iter()
                 .map(|&tid| type_id_to_ast_type(tid, type_table, cm_interface_registry))
@@ -1451,7 +1466,18 @@ pub(super) fn type_id_to_ast_type(
             type_table,
             cm_interface_registry,
         ))),
-        _ => named_no_source("i32"),
+        ResolvedType::Never
+        | ResolvedType::Function { .. }
+        | ResolvedType::Reactive(_)
+        | ResolvedType::BuiltinArray(_)
+        | ResolvedType::TypeParam { .. }
+        | ResolvedType::InferVar(_)
+        | ResolvedType::TypePack { .. }
+        | ResolvedType::AssocTypeProjection { .. }
+        | ResolvedType::Unknown
+        | ResolvedType::Error => {
+            panic!("type has no Component Model surface: {resolved:?}")
+        }
     }
 }
 
@@ -1467,20 +1493,11 @@ pub(super) fn compute_export_flat_param_types(
     out
 }
 
-/// Does a user function parameter whose TIR `TypeId` is `type_id` need CM
-/// flat-ABI lifting at the export boundary?
-///
-/// A parameter "needs lifting" when its canonical CM flat representation
-/// is not a single-slot passthrough of the same Wasm value type.
-/// Primitives (`i32`, `f64`, `bool`, `char`, ...) and handle-shaped
-/// types (resources, enums, flags) all travel as a single i32 / i64 /
-/// f32 / f64 both at the Wasm layer and at the CM layer, so no lifting
-/// step is required. Everything else — `String`, `List<T>`,
-/// `Option<T>`, `Result<T, E>`, tuples, user structs, variants — expands
-/// to either a different value type or multiple values under the flat
-/// ABI, and therefore must be reconstructed into a Wado-side value.
-///
-/// Consults [`TypeTable`] directly; no `tir_modules` or AST traversal.
+/// Whether a parameter needs CM flat-ABI lifting at the export boundary — that
+/// is, whether its flat representation is anything but a single-slot passthrough
+/// of the same Wasm value type. Handle-shaped types (resource, enum, flags) and
+/// every primitive but `bool` travel as one scalar at both layers and need none;
+/// `bool`, `Unit`, and everything else must be reconstructed Wado-side.
 pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
     match tt.get(type_id) {
         ResolvedType::Primitive(prim) => matches!(prim, PrimitiveType::Bool),

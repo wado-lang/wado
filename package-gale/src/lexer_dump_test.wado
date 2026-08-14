@@ -9,6 +9,7 @@ use {
     merge_grammars,
     synthesize_implicit_tokens,
     normalize_caches,
+    alias_parser_literals,
     canonicalize_empty_alt_groups,
     unwrap_labeled_transparent_groups,
 } from "./ir.wado";
@@ -19,6 +20,7 @@ use { parse } from "./g4/parser.wado";
 fn lexer_dump(input: &String) -> String {
     let mut merged = merge_grammars([parse(*input).unwrap()]);
     synthesize_implicit_tokens(&mut merged);
+    alias_parser_literals(&mut merged);
     canonicalize_empty_alt_groups(&mut merged);
     unwrap_labeled_transparent_groups(&mut merged);
     normalize_caches(&mut merged);
@@ -203,12 +205,21 @@ ID : [a-z]+ ;");
 }
 
 test "lexer dump reports a rule the shared literal matcher covers" {
-    // `X : 'x'` has the same fixed text as the parser's `'x'` literal.
+    // A concatenated body is deduped, not aliased, so the literal covers it.
+    let report = lexer_dump(&"grammar T;
+r : 'xy' X ;
+X : 'x' 'y' ;");
+
+    assert str_contains(&report, &"shared literal matcher (TK_LIT_XY)"), report;
+}
+
+test "lexer dump reports a rule the parser also writes inline keeping its matcher" {
     let report = lexer_dump(&"grammar T;
 r : 'x' X ;
 X : 'x' ;");
 
-    assert str_contains(&report, &"shared literal matcher (TK_LIT_X)"), report;
+    assert str_contains(&report, &"rule X"), report;
+    assert !str_contains(&report, &"shared literal matcher"), report;
 }
 
 test "lexer dump separates inlined from recursive fragments" {

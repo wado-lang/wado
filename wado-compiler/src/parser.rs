@@ -215,16 +215,11 @@ impl Parser {
         }
     }
 
-    /// Allocate a fresh [`AstId`] for an AST node currently being constructed.
-    /// Id locals are dense in `0..next_ast_id` and assigned in parse order,
-    /// all within this parser's `ast_id_space`.
-    ///
-    /// Side effect: every comment in `self.comments` whose `span.start`
-    /// precedes the next-to-consume token's start and has not already been
-    /// attached is attached to the returned id as leading trivia. The
-    /// outermost AST node being constructed at a given source position
-    /// allocates first (DFS parse order), so the comment naturally lands
-    /// on the AST node it semantically belongs to.
+    /// Allocate a fresh [`AstId`], dense in `0..next_ast_id` and assigned in
+    /// parse order within this parser's `ast_id_space`. Also attaches every
+    /// not-yet-attached comment preceding the next token as leading trivia on
+    /// the returned id: DFS parse order means the outermost node at a source
+    /// position allocates first, so the comment lands where it belongs.
     fn alloc_ast_id(&mut self) -> crate::ast::AstId {
         let id = crate::ast::AstId::new(self.ast_id_space, self.next_ast_id);
         self.next_ast_id += 1;
@@ -265,16 +260,11 @@ impl Parser {
         trivia
     }
 
-    /// Snapshot enough parser state to roll back a speculative parse
-    /// without losing comments. `alloc_ast_id` advances `comment_cursor`
-    /// and writes leading trivia keyed by the freshly allocated id, so a
-    /// raw `self.pos = saved` style of backtrack would silently drop
-    /// every comment consumed during the discarded branch (the cursor
-    /// stays past them, the id they were attached to is never visited
-    /// by the unparser). [`Parser::restore`] also rolls back
-    /// `comment_cursor` and `next_ast_id`, and prunes any trivia entries
-    /// allocated in the discarded range, so the re-parse sees the
-    /// comment stream exactly as it was at the checkpoint.
+    /// Snapshot enough parser state to roll back a speculative parse without
+    /// losing comments. A bare `self.pos = saved` would drop every comment the
+    /// discarded branch consumed, attached to an id the unparser never visits.
+    /// [`Parser::restore`] rewinds `comment_cursor` and `next_ast_id` and prunes
+    /// the trivia allocated in between.
     fn checkpoint(&self) -> ParserCheckpoint {
         ParserCheckpoint {
             pos: self.pos,
@@ -357,8 +347,8 @@ impl Parser {
     /// Parse the token stream into a [`Module`]. Always succeeds: syntax
     /// errors are recovered and collected into `self.errors`, drained by
     /// [`Parser::take_errors`]. An unparsable item becomes an [`Item::Error`]
-    /// node (see [`Parser::recover_item`]); a broken statement inside a block
-    /// becomes a [`Stmt::Error`] placeholder (see [`Parser::error_stmt`]).
+    /// node (see `Parser::recover_item`); a broken statement inside a block
+    /// becomes a [`Stmt::Error`] placeholder (see `Parser::error_stmt`).
     pub fn parse(&mut self) -> Module {
         // `parse_inner_attributes` records each attribute as it parses, so a
         // malformed one only loses itself; the rest stay in the module.
@@ -420,19 +410,11 @@ impl Parser {
         )
     }
 
-    /// True when the current token starts a type/impl declaration valid
-    /// *inside* a function body (a local `struct`/`enum`/`variant`/`flags`/
-    /// `type`/`impl`/`trait`; see `Stmt::Item`). Excludes `use`/`fn`/
-    /// `interface`/`resource`/`world`/`global` — never locally valid — and
-    /// any visibility prefix (`pub`/`internal`/`export`) — a local item is
-    /// always private, so a prefixed form is left to fall through to the
-    /// pre-existing "probably a missing `}`" recovery, same as today.
-    ///
-    /// `struct`/`enum`/`variant`/`impl`/`trait` are hard keywords, safe to
-    /// treat unconditionally. `flags`/`type` are contextual (valid as plain
-    /// identifiers, e.g. `flags = flags | 1;`), so they need one token of
-    /// lookahead: only `flags <IDENT>`/`type <IDENT>` — the declaration
-    /// name position — counts as starting a declaration.
+    /// True when the current token starts a declaration valid *inside* a
+    /// function body (`Stmt::Item`). Excludes the never-local keywords and any
+    /// visibility prefix — a local item is always private, so a prefixed form
+    /// falls through to the "probably a missing `}`" recovery. `flags` and `type`
+    /// are contextual, so only `flags <IDENT>` / `type <IDENT>` count.
     fn at_local_item_start(&self) -> bool {
         match self.peek_kind() {
             T::Struct | T::Enum | T::Variant | T::Impl | T::Trait => true,
@@ -722,17 +704,11 @@ impl Parser {
         start.merge(&self.tokens[self.pos - 1].span)
     }
 
-    /// Parse an expression at statement granularity, recovering on failure: the
-    /// error is reported, tokens are skipped to the next statement boundary
-    /// (see [`Parser::sync_expr_boundary`]), and an [`Expr::Error`] placeholder
-    /// spanning the skipped run is returned. This keeps the enclosing statement
-    /// (its `let` binding, `return`, expression-statement node) intact instead
-    /// of discarding it, so e.g. `let x = a + ;` still binds `x`.
-    ///
-    /// Call only from statement positions. It sets [`Parser::recovering`], which
-    /// turns on operand recovery in the binary / assignment parsers (see that
-    /// field); the `checkpoint`/`restore` speculative paths never reach those,
-    /// so a backtracking caller's error is never masked.
+    /// Parse an expression at statement granularity, recovering on failure by
+    /// reporting, skipping to the next statement boundary, and returning an
+    /// [`Expr::Error`] over the skipped run — so the enclosing statement survives
+    /// and `let x = a + ;` still binds `x`. Call only from statement positions:
+    /// it sets [`Parser::recovering`], which a backtracking caller must not.
     fn parse_expr_recovering(&mut self) -> Expr {
         let before = self.pos;
         // Enable operand-position recovery inside the binary / assignment
@@ -797,18 +773,11 @@ impl Parser {
         self.skipped_span(before)
     }
 
-    /// Parse a comma-separated list of types within angle brackets (`<T1, T2>`).
-    /// Assumes the opening `<` has already been consumed.
-    /// Handles `>>` splitting for nested generics via `pending_gt`.
-    ///
-    /// Element-locally error-recovering: a malformed argument is reported and
-    /// skipped to the next `,` or the closing `>` and replaced with a
-    /// [`Type::Error`] placeholder, so the surrounding arguments (and the
-    /// generic itself) survive. The closing `>` is still required — a list that
-    /// runs off into `)` / `]` / `;` rather than closing returns an error so the
-    /// enclosing construct recovers at its own boundary. The speculative
-    /// turbofish path (`parse_generic_static_method_call_or_backtrack`) parses
-    /// its types directly, not through here, so its backtracking is unaffected.
+    /// Parse a comma-separated type list inside angle brackets, the opening `<`
+    /// already consumed, splitting `>>` for nested generics via `pending_gt`.
+    /// Recovery is element-local: a malformed argument is reported, skipped to
+    /// the next `,` or `>`, and replaced with a [`Type::Error`]. The closing `>`
+    /// is still required, so the enclosing construct recovers at its own boundary.
     fn parse_type_args(&mut self) -> ParseResult<Vec<Type>> {
         let mut args = Vec::new();
         loop {
@@ -2054,23 +2023,11 @@ impl Parser {
 
         let mut stmts = Vec::new();
 
-        // Stop at a hard item keyword too, so a missing `}` closes the block
-        // instead of swallowing the next item. Must be `at_hard_item_keyword`,
-        // not `at_item_start`: see its doc for why `#`/`test`/`flags`/`type` are
-        // excluded. Trade-off: a brace-less block right before a `#[attr]` item
-        // still over-reads `#` as a compile-time literal, blurring that one
-        // diagnostic — the following item still recovers.
-        //
-        // `at_local_item_start` is checked first and, when true, wins over
-        // `at_hard_item_keyword`: `struct`/`enum`/`variant`/`impl`/`trait`
-        // are members of both sets, but inside a block they are a valid
-        // local declaration (`Stmt::Item`), not a "missing `}`" signal.
-        // `at_visibility_prefixed_local_item_start` also wins, for the same
-        // reason `pub`/`internal`/`export` (also hard item keywords) are in
-        // that set: `pub struct` inside a block should reach
-        // `parse_stmt_in_block`'s dedicated "cannot be `pub`" error, not the
-        // generic "missing `}`" this loop would otherwise report by
-        // stopping here.
+        // Stop at a hard item keyword so a missing `}` closes the block instead
+        // of swallowing the next item. The local-item checks win: `struct` and
+        // friends are a valid `Stmt::Item` inside a block, and a `pub struct`
+        // should reach `parse_stmt_in_block`'s "cannot be `pub`" error rather
+        // than the generic "missing `}`" this loop would report.
         while !self.check(&TokenKind::RBrace)
             && !self.is_at_end()
             && (self.at_local_item_start()
@@ -4256,16 +4213,11 @@ impl Parser {
         })))
     }
 
-    /// Parse an effect handler installation expression:
-    /// `with E1 => h1, E2 => h2 do { body }` or `with &mut h do { body }` (bundled).
-    ///
-    /// Each binding is one of:
-    /// - `EffectName => expr` — install `expr` as the handler for `EffectName`.
-    ///   The `=>` reads as "case E is dispatched to expr", mirroring match arms;
-    ///   this is not an assignment.
-    /// - `expr` (no `=>`) — bundled handler, used for every effect `expr` implements.
-    ///
-    /// See `docs/wep-2026-04-11-effect-handler.md`.
+    /// Parse an effect handler installation:
+    /// `with E1 => h1, E2 => h2 do { body }`, or `with &mut h do { body }` for a
+    /// bundled handler used for every effect it implements. The `=>` reads as
+    /// "case E is dispatched to expr", mirroring a match arm — it is not an
+    /// assignment. See WEP 2026-04-11.
     fn parse_with_handler_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::With)?;
@@ -5771,16 +5723,8 @@ impl Parser {
         }))
     }
 
-    /// Parse a trait declaration
-    /// ```wado
-    /// trait Display {
-    ///     fn display(&self) -> String;
-    /// }
-    ///
-    /// trait Ord: Eq {
-    ///     fn cmp(&self, other: &Self) -> Ordering;
-    /// }
-    /// ```
+    /// Parse a trait declaration, with or without a supertrait list
+    /// (`trait Ord: Eq { … }`).
     fn parse_trait_decl(
         &mut self,
         visibility: Visibility,
@@ -6275,17 +6219,11 @@ fn rebase_span(span: Span, origin: crate::token::Position) -> Span {
     )
 }
 
-/// Populate `Attribute::cm_boundary` based on the attribute name.
-///
-/// - `#[canonical("namespace", "name")]` becomes `CmBoundary::Canonical`.
-/// - `#[cm("ns:pkg/iface[@v][#fn]")]` becomes `CmBoundary::Import`.
-/// - `#[cm("simple-name")]` (anything that doesn't parse as a full CM path)
-///   becomes `CmBoundary::Name`.
-/// - Any other attribute returns `Ok(None)`.
-///
-/// Both `#[canonical(...)]` and `#[cm(...)]` are validated strictly: argument
-/// count and types must match the canonical form. Malformed shapes return
-/// `Err` so the caller can surface a parse-time diagnostic.
+/// Populate `Attribute::cm_boundary` from the attribute name:
+/// `#[canonical("namespace", "name")]` gives `Canonical`,
+/// `#[cm("ns:pkg/iface[@v][#fn]")]` gives `Import`, and a `#[cm(…)]` that does
+/// not parse as a full CM path gives `Name`. Anything else is `Ok(None)`; a
+/// malformed argument count or type returns `Err` for the caller to report.
 fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>, String> {
     if name == "canonical" {
         let [namespace, function] = args else {

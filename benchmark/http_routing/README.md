@@ -56,6 +56,18 @@ The four servers span four runtimes:
   fastest-JS reference point.
 - **Axum** — native Rust on Tokio; the native-compiled reference point.
 
+### Why HTTP/1.1 only
+
+Every server is driven over HTTP/1.1. h2c looks like the fairer choice —
+a reverse proxy speaks it to its upstream by default — but `oha` opens
+one stream per connection, which hands HTTP/2 all of its per-request
+framing and flow-control cost and none of its multiplexing benefit. The
+resulting spread (measured: `wado serve` -2 to -9%, Axum -30 to -37%,
+Hono on Node -57 to -64%) ranks each runtime's HTTP/2 stack under a load
+shape nobody deploys, in a benchmark whose job is to isolate routing.
+Restoring the h2c rows needs a load generator driving many streams per
+connection first; until then the numbers would invite a wrong reading.
+
 ## Files
 
 - `app.wado` — Wado `wasi:http/service` world server.

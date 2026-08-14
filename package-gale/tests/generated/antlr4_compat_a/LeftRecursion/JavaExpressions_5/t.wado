@@ -900,12 +900,7 @@ pub struct ParseResult {
 
 impl ParseResult {
     pub fn has_errors(&self) -> bool {
-        for let d of &self.diagnostics {
-            if d.is_error() {
-                return true;
-            }
-        }
-        return false;
+        return self.diagnostics.iter().any(|d| d.is_error());
     }
 
     /// True when the parse produced no error-severity diagnostics.
@@ -1537,7 +1532,6 @@ pub global ATN_TR_PRECEDENCE: i32 = 5;
 
 /// Sentinel "state": a config that has returned past the real stack bottom
 /// and is viable only if the next token is EOF (the start rule's follow).
-#[allow(dead_code)]
 global ATN_ACCEPT_EOF: i32 = -2;
 
 /// Safety caps for the merged closure. With graph-merged contexts the work is
@@ -1545,9 +1539,7 @@ global ATN_ACCEPT_EOF: i32 = -2;
 /// epsilon-cycle grammars; on overflow the predictor bails to the lowest
 /// viable alt (the same conservative answer as a true conflict). Generous so
 /// realistic deep recursion never approximates.
-#[allow(dead_code)]
 global ATN_CLOSURE_GUARD: i32 = 2000000;
-#[allow(dead_code)]
 global ATN_ARENA_CAP: i32 = 400000;
 
 /// Stride for `CtxArena::merge`'s pair-key packing (`lo * stride + hi`).
@@ -1603,12 +1595,10 @@ pub struct AtnSim {
 /// during-prediction stack is empty, so a rule-stop reaching it falls back to
 /// the caller stack (`rs` / `rule_stack`). Distinct from real ATN state ids
 /// (>= 0) and from the -1 start-frame / -2 EOF markers used on `rule_stack`.
-#[allow(dead_code)]
 global CTX_BOUNDARY: i32 = -3;
 
 /// The empty during-prediction context (no frames entered yet). A config with
 /// `pctx == CTX_EMPTY` pops straight to the caller stack.
-#[allow(dead_code)]
 global CTX_EMPTY: i32 = 0;
 
 /// Graph-structured during-prediction stack ("PredictionContext" DAG). Each
@@ -1758,7 +1748,6 @@ impl CtxArena {
 
 /// Sort an edge list by (return_state, restore_pr, parent) so interning keys
 /// are canonical regardless of insertion order.
-#[allow(dead_code)]
 fn sort_ctx_edges(edges: &mut List<[i32, i32, i32]>) {
     let n = edges.len();
     for let mut i = 1; i < n; i += 1 {
@@ -1772,7 +1761,6 @@ fn sort_ctx_edges(edges: &mut List<[i32, i32, i32]>) {
     }
 }
 
-#[allow(dead_code)]
 fn ctx_edge_gt(a: &[i32, i32, i32], b: &[i32, i32, i32]) -> bool {
     if a.0 != b.0 {
         return a.0 > b.0;
@@ -1785,7 +1773,6 @@ fn ctx_edge_gt(a: &[i32, i32, i32], b: &[i32, i32, i32]) -> bool {
 
 /// Structural equality of two (sorted) edge lists, for interning-collision
 /// disambiguation.
-#[allow(dead_code)]
 fn edge_lists_eq(a: &List<[i32, i32, i32]>, b: &List<[i32, i32, i32]>) -> bool {
     if a.len() != b.len() {
         return false;
@@ -1803,13 +1790,11 @@ fn edge_lists_eq(a: &List<[i32, i32, i32]>, b: &List<[i32, i32, i32]>) -> bool {
 /// bounds-checked `[]` for `get_byte_unchecked` — the underlying Wasm GC
 /// array still traps on a genuine out-of-bounds read, so a malformed blob
 /// still fails loudly.
-#[allow(dead_code)]
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
     return bytes.get_byte_unchecked(pos) as i32;
 }
 
 /// Little-endian 2-byte value at `pos` (0..=65535).
-#[allow(dead_code)]
 fn atn_read_u16(bytes: &ByteList, pos: i32) -> i32 {
     let b0 = bytes.get_byte_unchecked(pos) as i32;
     let b1 = bytes.get_byte_unchecked(pos + 1) as i32;
@@ -1821,7 +1806,6 @@ fn atn_read_u16(bytes: &ByteList, pos: i32) -> i32 {
 /// fields for a Unicode scalar range (up to `CHAR_MAX` = `0x10FFFF`), wider
 /// than the *parser* ATN's small token-kind index, so the shared decoder
 /// must fit the wider case.
-#[allow(dead_code)]
 fn atn_read_u24(bytes: &ByteList, pos: i32) -> i32 {
     let b0 = bytes.get_byte_unchecked(pos) as i32;
     let b1 = bytes.get_byte_unchecked(pos + 1) as i32;
@@ -1838,7 +1822,6 @@ fn atn_read_u24(bytes: &ByteList, pos: i32) -> i32 {
 /// running prefix sum) falls out while reading that column. Each column is
 /// read directly off the packed bytes into a `with_capacity`-presized
 /// `List`: one pass, no intermediate word array, nothing grows by doubling.
-#[allow(dead_code)]
 pub fn atn_decode(bytes: &ByteList, lr_tables: bool = true) -> AtnSim {
     let mut p = 0;
     let nrules = atn_read_u16(bytes, p);
@@ -1954,7 +1937,6 @@ pub fn atn_decode(bytes: &ByteList, lr_tables: bool = true) -> AtnSim {
 /// Cache `state_cont_*` after the rule fixpoint converges (it reads
 /// `rule_first` / `rule_nullable`). Per-state analogue of
 /// `atn_compute_first_nullable`.
-#[allow(dead_code)]
 fn atn_compute_state_cont(sim: &mut AtnSim) {
     let nstates = sim.state_kind.len();
     for let mut st = 0; st < nstates; st += 1 {
@@ -1985,7 +1967,6 @@ fn atn_compute_state_cont(sim: &mut AtnSim) {
 /// grows. Runs once at decode, and only when the ATN has precedence edges
 /// (see `atn_decode`); the grammar (ATN) is constant so this is O(1) w.r.t.
 /// input.
-#[allow(dead_code)]
 fn atn_compute_first_nullable(sim: &mut AtnSim) {
     let nrules = sim.rule_start.len();
     let mut changed = true;
@@ -2024,7 +2005,6 @@ fn atn_compute_first_nullable(sim: &mut AtnSim) {
 /// empty (derive no token). Uses `sim.rule_nullable` for rule-ref edges;
 /// `visited` breaks within-rule cycles (a re-entered state adds no new
 /// nullability).
-#[allow(dead_code)]
 fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool {
     if visited.contains(&state) {
         return false;
@@ -2065,7 +2045,6 @@ fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool 
 /// so those operator tokens belong in the rule's FIRST. (For the common
 /// non-nullable atom the walk stops at the atom before ever reaching the loop
 /// entry, so no operator enters FIRST.)
-#[allow(dead_code)]
 fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut List<i32>, neg: &mut List<i32>) -> bool {
     if visited.contains(&state) {
         return false;
@@ -2118,7 +2097,6 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
     return open;
 }
 
-#[allow(dead_code)]
 fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
     if sim.state_cont_first_open[state] && t != eof {
         return true;
@@ -2145,7 +2123,6 @@ fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
 /// True when `state`'s outgoing edges consume a token (atom / wildcard /
 /// not-atom). Such a state is a resting point: closure stops there and
 /// `atn_move` reads the edge. Epsilon / rule states are expanded instead.
-#[allow(dead_code)]
 fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
     let cnt = sim.state_tr_count[state];
     if cnt == 0 {
@@ -2243,7 +2220,6 @@ impl CfgSet {
 /// — an LR operand is only reached after consuming its operator token — so
 /// the context depth is bounded by the input, no cyclic-context handling is
 /// needed; the guards below are a safety net for pathological epsilon cycles).
-#[allow(dead_code)]
 fn atn_closure(sim: &AtnSim, arena: &mut CtxArena, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<AtnConfig> {
     let mut cset = CfgSet::new();
     let mut expanded: List<i32> = [];
@@ -2273,7 +2249,6 @@ fn atn_closure(sim: &AtnSim, arena: &mut CtxArena, seeds: &List<AtnConfig>, rstk
 
 /// Expand one (merged) config: rest it (consuming / at-end / EOF) or push its
 /// epsilon / precedence / rule-ref successors onto `work`.
-#[allow(dead_code)]
 fn atn_expand(
     sim: &AtnSim,
     arena: &mut CtxArena,
@@ -2321,7 +2296,6 @@ fn atn_expand(
 /// Pop a rule-stop: follow each graph-context edge back to its caller frame;
 /// a boundary edge (or an empty context) falls through to the pre-existing
 /// caller stack `rstk` via `atn_rs_pop`.
-#[allow(dead_code)]
 fn atn_pop(
     sim: &AtnSim,
     arena: &mut CtxArena,
@@ -2348,7 +2322,6 @@ fn atn_pop(
 /// context is exhausted. Mirrors the exact-return-state semantics: continue
 /// at `rstk[rs]`; the bottom start frame's follow is EOF; an unstamped /
 /// SLL frame matches any follow (the rule-stop stays "at-end").
-#[allow(dead_code)]
 fn atn_rs_pop(
     arena: &mut CtxArena,
     stop_state: i32,
@@ -2378,7 +2351,6 @@ fn atn_rs_pop(
 /// Advance a resting config set by one input token. At-end and accept-EOF
 /// configs carry only when still viable; consuming configs follow whichever
 /// edge matches `token`.
-#[allow(dead_code)]
 fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> List<AtnConfig> {
     let mut out: List<AtnConfig> = [];
     for let c of configs {
@@ -2414,7 +2386,6 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
     return out;
 }
 
-#[allow(dead_code)]
 fn atn_unique_alts(configs: &List<AtnConfig>) -> List<i32> {
     let mut alts: List<i32> = [];
     for let c of configs {
@@ -2426,7 +2397,6 @@ fn atn_unique_alts(configs: &List<AtnConfig>) -> List<i32> {
     return alts;
 }
 
-#[allow(dead_code)]
 fn atn_min_alt(alts: &List<i32>) -> i32 {
     if alts.is_empty() {
         return -1;
@@ -2440,7 +2410,6 @@ fn atn_min_alt(alts: &List<i32>) -> i32 {
     return m;
 }
 
-#[allow(dead_code)]
 fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
     if configs.is_empty() {
         return false;
@@ -2455,7 +2424,6 @@ fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
 
 /// The empty disabled-alternative set — the default when a decision has no
 /// semantic-predicate exclusions (every current generated call site).
-#[allow(dead_code)]
 pub global ATN_NO_DISABLED: List<i32> = [];
 
 /// Predict the winning alternative at `decision` against `tokens` from
@@ -2551,7 +2519,6 @@ pub fn atn_predict_with_stack(
 ///    whose suffix can start with the token wins (greedy; left-associativity
 ///    falls out of the precedence prune).
 /// 3. Else EXIT.
-#[allow(dead_code)]
 pub fn atn_lr_loop_decision(
     sim: &AtnSim,
     rule_stack: &List<i32>,
@@ -2587,7 +2554,6 @@ pub fn atn_lr_loop_decision(
 /// return-state stack from the top, pop nullable continuations (optional
 /// loops / nullable tails), and at the first non-nullable level test whether
 /// its FIRST admits `t`. The start frame (-1 at index 0) mandates EOF.
-#[allow(dead_code)]
 fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -> bool {
     let mut i = rule_stack.len() - 1;
     while i >= 0 {
@@ -2607,7 +2573,6 @@ fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -
 /// SLL convenience wrapper: predict with an empty rule stack. Correct for
 /// top-level decisions; deeper decisions whose disambiguation depends on the
 /// caller's follow need `atn_predict_with_stack` with the real rule stack.
-#[allow(dead_code)]
 pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &Array<i32>, start_pos: i32, eof: i32) -> i32 {
     let empty: List<i32> = [];
     return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);

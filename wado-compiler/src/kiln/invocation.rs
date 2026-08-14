@@ -13,16 +13,10 @@ use std::fmt;
 pub struct InvocationPath(pub String);
 
 impl InvocationPath {
-    /// Normalize a raw manifest / source path into the canonical form.
-    ///
-    /// - Backslashes are turned into forward slashes (Windows inputs).
-    /// - `./` prefix is stripped.
-    /// - Trailing slashes are trimmed.
-    /// - Empty segments between separators collapse.
-    ///
-    /// Full NFC normalization of the string contents is done by
-    /// [`crate::kiln::cache`] when the path is written into a cache key; here
-    /// we only handle the structural cases that actually change identity.
+    /// Normalize a raw manifest / source path: backslashes become forward
+    /// slashes, a `./` prefix and trailing slashes go, and empty segments
+    /// collapse. Only the structural cases that change identity — full NFC
+    /// normalization happens in [`crate::kiln::cache`] at cache-key time.
     #[must_use]
     pub fn normalize(raw: &str) -> Self {
         let mut s = raw.replace('\\', "/");

@@ -1,14 +1,8 @@
-//! Effect, stores, and default-purity checking for Wado (Design B).
-//!
-//! These checks validate, respectively, that every call holds the effects its
-//! callee requires, that a reference parameter that escapes declares
-//! `stores[param]`, and that parameter / field defaults are pure.
-//!
-//! All three operate on [`Semantics`] (the AST plus the facts recorded during
-//! `annotate`), not on the emitted TIR. They therefore see every source
-//! function regardless of what reify emits — immune to dead-code gating — and
-//! run on the LSP path, which builds no TIR. Each returns its violations so the
-//! caller can route them (LSP diagnostics or the batch logger).
+//! Effect, stores, and default-purity checking for Wado (Design B): that every
+//! call holds the effects its callee requires, that an escaping reference
+//! parameter declares `stores[param]`, and that defaults are pure. All three
+//! read [`Semantics`] rather than the emitted TIR, so they see every source
+//! function and run on the LSP path. Violations are returned, not emitted.
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -252,16 +246,11 @@ fn collect_resource_refs(
 // Semantics-based effect checking (Design B, Phase 1b)
 // ---------------------------------------------------------------------------
 
-/// Effect checking over [`Semantics`] (AST + recorded facts) — the Design B
-/// effect checker. It runs after `annotate_bodies`, so it sees every function,
-/// dead or live, and is independent of what reify emits. It also works on the
-/// LSP path, which builds no TIR. Violations are returned rather than emitted
-/// so the caller routes them (LSP diagnostics or the batch logger).
-///
-/// Covers free-function, method, and static dispatch with resource injection,
-/// the effect / resource propagation closure, signature-resource inference,
-/// effect-parameter resolution, `#[benign]`, handler-scope grants, and
-/// indirect (closure) calls, over user-authored modules.
+/// Effect checking over [`Semantics`], run after `annotate_bodies` so it sees
+/// every function, dead or live. Covers free-function, method, and static
+/// dispatch with resource injection, the effect / resource propagation closure,
+/// signature-resource inference, effect-parameter resolution, `#[benign]`,
+/// handler-scope grants, and closure calls, over user-authored modules.
 #[must_use]
 pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
     let mut out = Vec::new();
@@ -274,7 +263,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
 }
 
 /// All three Design-B semantic diagnostics, computed in one pass that builds the
-/// shared [`OwnedEffectData`] once. Used by the batch driver and the LSP so
+/// shared `OwnedEffectData` once. Used by the batch driver and the LSP so
 /// effect / stores / purity stay in lockstep across both.
 #[must_use]
 pub fn check_semantics(
@@ -1250,28 +1239,10 @@ impl SemEffectWalker<'_> {
 // ---------------------------------------------------------------------------
 
 /// Stores checking over [`Semantics`] — the Design B reference-escape checker.
-///
-/// Two soundness obligations, both enforced before lowering so the functor
-/// optimization can trust a functor slot's declared `stores`:
-///
-/// 1. **Named-function / method honesty.** Every function whose reference
-///    parameter *escapes* (is returned, placed in an aggregate / global, stored
-///    through a reference, or forwarded to a callee that stores that position)
-///    must declare `stores[param]`.
-/// 2. **Closure coercion.** A closure type is always `stores=[]` (never
-///    inferred) and functor coercion ignores `stores`, so a closure that stores
-///    one of its own reference parameters would slip through type-checking. Each
-///    closure body is analysed with allowance `[]` — no closure parameter may
-///    escape.
-///
-/// The escape analysis mirrors `lower/plan/value_copy/stores.rs` but stays
-/// *precise* rather than the optimizer's conservative over-approximation: a
-/// value only carries a parameter reference when reference-flow reaches it, and
-/// a storing call *folds* its stored argument into the call result (gated by
-/// whether the result type can hold a reference) rather than being an
-/// unconditional escape — so a locally-consumed borrow (`self.as_bytes()` fed
-/// to a loop) is not flagged, while a genuine persistence (`return g(p)`,
-/// `GLOBAL = p`, `Wrapper { r: p }`) is.
+/// Two obligations, both enforced before lowering so the functor optimization
+/// can trust a slot's declared `stores`: a function whose reference parameter
+/// escapes must declare `stores[param]`, and every closure body is analysed with
+/// allowance `[]`, closure types being `stores=[]` and coercion ignoring it.
 #[must_use]
 pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
     let mut out = Vec::new();
@@ -1396,21 +1367,10 @@ fn functions_of(item: &Item) -> Vec<&Function> {
 }
 
 /// Least-fixpoint return provenance: for every function / constructor, the
-/// parameter positions its return value may borrow. The value-copy optimizer
-/// trusts a functor slot's `stores`, and the escape walk folds a call's
-/// arguments at these positions to decide what the result carries, so this must
-/// be a sound upper bound.
-///
-/// Seeds:
-/// - Variant / enum constructors wrap their single payload argument into the
-///   result, so a payload-bearing case borrows position 0.
-/// - A bodyless callee (intrinsic such as `array_get_ref`) is unanalyzable;
-///   conservatively its result may borrow any reference-holding argument.
-///
-/// Bodied functions start at ∅ and grow: each round re-derives a function's
-/// return provenance from its `return` / `task return` values (with `let` and
-/// whole-local-assign carry propagation), folding nested calls at the callees'
-/// current provenance, until no set changes.
+/// parameter positions its return value may borrow — a sound upper bound, since
+/// the escape walk folds a call's arguments at these positions. Seeded from
+/// constructors (position 0) and bodyless callees (any reference argument);
+/// bodied functions start at ∅ and grow until no set changes.
 fn build_returns(
     sem: &Semantics,
     state: &crate::elaborator::orchestration::AnnotateState,
@@ -1978,14 +1938,8 @@ fn ident_returns(
 /// The parameter positions a call's *result* provably borrows, and the call's
 /// arguments in callee-position order. Mirrors `call_stored_args` but reads the
 /// per-function return provenance (`fn_returns` / `mangled_returns`) instead of
-/// declared `stores`: a result borrows an argument only at the positions the
-/// callee's return value borrows. A variant / enum constructor call resolves to
-/// its case decl id. An unresolvable direct callee borrows nothing. A functor
-/// callee is bounded by its slot's declared `stores`: obligation #2 and functor
-/// coercion already reject any function / closure that returns a borrow of a
-/// reference argument the slot does not store, so those positions soundly bound
-/// what the result can borrow (a functor slot with no `stores` on that ref
-/// parameter cannot leak it into the result).
+/// declared `stores`. An unresolvable direct callee borrows nothing; a functor
+/// callee is bounded by its slot's `stores`, which the closure obligation pins.
 fn resolve_returned_args<'e>(
     expr: &'e Expr,
     sem: &Semantics,

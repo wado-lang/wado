@@ -551,6 +551,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -560,10 +561,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
@@ -621,16 +623,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self, index) {
+    let _av_2: i32;
+    _av_2 = self.start;
     if @unlikely((if index < 0 -> i32 {
         1;
     } else {
-        index >= (self.end - self.start);
+        index >= (self.end - _av_2);
     })) {
         cold_path;
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
-    return builtin::array_get<u8>(self.repr, self.start + index);
+    return builtin::array_get<u8>(self.repr, _av_2 + index);
 }
 
 fn "core:prelude/array.wado/Array<u8>::slice"(self, start, end) {

@@ -9,16 +9,10 @@ use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 
 /// Whether `type_id` transitively owns an affine resource, making a binding of
-/// that type move-only: a bare resource (`Resource` / `GenericResource`), or a
-/// struct / tuple / `Result` that carries one. A reference stops the walk — a
-/// borrowed place owns nothing. `visited` guards against recursive types.
-///
-/// The aggregate set is kept in step with `resource_cleanup::carries_resource`
-/// (which synthesizes the compositional destructor): a type is treated as
-/// move-only here only if the cleanup pass can also drop it, so the move check
-/// never enforces move-only on an aggregate the runtime would then leak. User
-/// `variant`s and generic containers (`Option` / `List` / …) are out of both
-/// until their destructors land.
+/// that type move-only: a bare resource, or a struct / tuple / `Result` carrying
+/// one. A reference stops the walk, a borrowed place owning nothing. The
+/// aggregate set stays in step with `resource_cleanup::carries_resource`, so
+/// nothing is move-only that the cleanup pass would then leak.
 fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
     let base = sem.types.get_ultimate_base_type(type_id);
     if visited.contains(&base) {

@@ -1,17 +1,12 @@
-//! Typed Intermediate Representation (TIR) for Wado
-//!
-//! TIR is the post-type-resolution representation used for lowering,
-//! optimization, and code generation. Every expression has a resolved type.
-//!
-//! Key properties:
-//! - All types resolved to `TypeId` (no string-based type names)
-//! - All variable references resolved (local index known)
-//! - All function calls resolved
-//! - No syntactic sugar (desugared before TIR)
+//! Typed Intermediate Representation — the post-type-resolution form used for
+//! lowering, optimization, and codegen. Every type is a `TypeId`, every variable
+//! reference a local index, every call a resolved target, and all syntactic
+//! sugar is already desugared.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::canonical::CmCallTarget;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -29,17 +24,10 @@ pub enum TypeParamScope {
     Function,
 }
 
-/// A resolved effect reference.
-///
-/// In AST, effects are bare strings. In TIR, they are resolved to include
-/// the module source where the effect is defined, enabling cross-module
-/// effect identity.
-///
-/// Identity is `(module_source, name)` for `Concrete` and `name` alone for
-/// `Param` — same as every other resolved symbol in the compiler. The
-/// elaborator canonicalises the module source, so `with Stdout` imported from
-/// `wasi:cli` and `core:cli` both end up with `module_source = wasi:cli`
-/// (the defining module) and compare equal.
+/// A resolved effect reference — a bare string in the AST, carrying its defining
+/// module here. Identity is `(module_source, name)` for `Concrete` and `name`
+/// alone for `Param`. The elaborator canonicalises the module, so `with Stdout`
+/// imported from `wasi:cli` and from `core:cli` compare equal.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EffectRef {
     /// A concrete effect resolved to a module source (e.g., `Stdout` from `wasi:cli`)
@@ -101,7 +89,7 @@ impl TypeParamId {
 /// and a partially concrete target leaves gaps no positional list can express.
 /// Keying by position asks the caller to reconstruct that, which it cannot;
 /// `impl<T, ..F> Emit for T` is enough to break the reconstruction.
-/// [`MethodSig::instantiate_call`] takes the same view.
+/// `instantiate_call` takes the same view.
 #[derive(Debug, Clone, Default)]
 pub struct SubstitutionContext {
     substitutions: IndexMap<TypeId, TypeId>,
@@ -413,10 +401,21 @@ pub enum ResolvedType {
     Variant {
         def: crate::defs::DefId,
     },
+<<<<<<< HEAD
     // NOTE: Option<T> is no longer a dedicated type variant.
     // It is represented as GenericInstance { def: <the `Option` declaration>, type_args: [T] }.
     // Use TypeTable::as_option() to check if a type is Option<T>.
+||||||| bad542cd7
+    // NOTE: Option<T> is no longer a dedicated type variant.
+    // It is represented as GenericInstance { name: "Option", module_source: types(), type_args: [T] }.
+    // Use TypeTable::as_option() to check if a type is Option<T>.
+=======
+    // `Option<T>` is a `GenericInstance`, not a variant here — see
+    // `TypeTable::as_option`. `Future<T>` / `Stream<T>` and their writable twins
+    // are `GenericResource`, built by `make_future` / `make_future_writable`.
+>>>>>>> origin/main
     //
+<<<<<<< HEAD
     // TODO: Re-add NullableRef optimization for Option<T> where T is non-nullable.
     // When T is a reference type (struct, array, string, etc.), Option<T> can be
     // represented as (ref null T) — null means None, non-null means Some(T).
@@ -427,6 +426,22 @@ pub enum ResolvedType {
     // NOTE: Future<T>, Stream<T>, FutureWritable<T>, StreamWritable<T> are no longer dedicated
     // type variants. They are represented as GenericResource { def: <the declaration>, .. }.
     // Use TypeTable::make_future() / as_future() etc. to create and inspect them.
+||||||| bad542cd7
+    // TODO: Re-add NullableRef optimization for Option<T> where T is non-nullable.
+    // When T is a reference type (struct, array, string, etc.), Option<T> can be
+    // represented as (ref null T) — null means None, non-null means Some(T).
+    // This avoids the SubtypeHierarchy overhead (discriminant struct + case subtypes).
+    // Key requirement: Option<Option<T>> MUST NOT use NullableRef (ambiguous null).
+    // See wep-2026-02-09-variant-independent-types.md for the general optimization strategy.
+    //
+    // NOTE: Future<T>, Stream<T>, FutureWritable<T>, StreamWritable<T> are no longer dedicated
+    // type variants. They are represented as GenericResource { name: "Future", ... }.
+    // Use TypeTable::make_future() / as_future() etc. to create and inspect them.
+=======
+    // TODO: represent `Option<T>` as `ref null T` when `T` is a non-nullable
+    // reference, dropping the discriminant struct. `Option<Option<T>>` must not
+    // take that route — its null would be ambiguous.
+>>>>>>> origin/main
     /// Generic resource instantiation (e.g., `Future<i32>`, `Stream<String>`).
     /// Represents opaque i32 handles to Component Model resources with type parameters.
     GenericResource {
@@ -467,16 +482,11 @@ pub enum ResolvedType {
     /// type ever considered does, so a pass enumerating
     /// [`TypeTable::all_types`] must select with [`TypeTable::is_concrete`].
     InferVar(InferVarId),
-    /// Type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
-    /// Used inside tuples before monomorphization; expanded to concrete types during substitution.
-    ///
-    /// `mapped_elem` distinguishes an identity pack from a pack-map:
-    /// - `None` — `..F`: each element is the pack's own element `F_i`.
-    /// - `Some(R)` — a mapped pack: element `i` is `R[F := F_i]`. The pack
-    ///   param may recur inside `R` as a scalar `TypeParam` placeholder
-    ///   (constructor map, e.g. `[..Case<T, P>]` for `cases()`); a
-    ///   pack-independent `R` (`..F::method()`) degenerates to `R` repeated
-    ///   `|F|` times.
+    /// Type pack parameter (`..T` in `fn foo<..T>(x: [..T])`), living inside
+    /// tuples until substitution expands it. `mapped_elem` separates an identity
+    /// pack (`None` — element `i` is `F_i`) from a mapped one (`Some(R)` —
+    /// element `i` is `R[F := F_i]`, degenerating to `|F|` copies of `R` when
+    /// `R` does not mention the pack).
     TypePack {
         name: String,
         index: u32,
@@ -512,7 +522,7 @@ pub enum ResolvedType {
         assoc_type_bindings: Vec<(String, TypeId)>,
     },
     /// Raw GC array intrinsic (`Array<T>`)
-    /// This is the underlying storage type for String and List<T> structs
+    /// This is the underlying storage type for `String` and `List<T>` structs
     BuiltinArray(TypeId),
     /// Newtype: a distinct type wrapping a base type with the same representation.
     /// Created by `type T = U;` declarations.
@@ -537,6 +547,7 @@ pub enum ResolvedType {
     Error,
 }
 
+<<<<<<< HEAD
 /// A dense map from [`TypeId`] to `V`, backed by a `Vec` indexed by
 /// `TypeId.0`.
 ///
@@ -552,6 +563,65 @@ pub enum ResolvedType {
 /// lives here. Absent / erased entries are `None`; [`TypeMap::retain`]
 /// punches holes rather than renumbering, so surviving `TypeId`s keep
 /// their indices.
+||||||| bad542cd7
+impl ResolvedType {
+    /// Get the module path as a Vec<String> for backwards compatibility.
+    /// This is a transitional helper during the migration to `ModuleSource`.
+    #[must_use]
+    pub fn module_path(&self) -> Vec<String> {
+        match self {
+            Self::Struct { module_source, .. }
+            | Self::Enum { module_source, .. }
+            | Self::Variant { module_source, .. }
+            | Self::GenericInstance { module_source, .. }
+            | Self::GenericResource { module_source, .. }
+            | Self::Newtype { module_source, .. }
+            | Self::Flags { module_source, .. } => module_source.to_path(),
+            _ => vec![],
+        }
+    }
+}
+
+/// A dense map from [`TypeId`] to `V`, backed by a `Vec` indexed by
+/// `TypeId.0`.
+///
+/// `TypeId`s are dense and sequential — [`TypeTable::intern`] only ever
+/// hands out [`TypeMap::next_id`] — so a `Vec` replaces what would
+/// otherwise be a `TypeId`-keyed hash map and every access becomes a
+/// hash-free array index. This matters because [`TypeTable::get`] is the
+/// single hottest accessor in the compiler.
+///
+/// The newtype keeps the storage **type-safe**: callers index by `TypeId`
+/// (never a bare `usize`), so an unrelated integer or the wrong table
+/// cannot be passed by mistake, and the lone `TypeId`→`usize` conversion
+/// lives here. Absent / erased entries are `None`; [`TypeMap::retain`]
+/// punches holes rather than renumbering, so surviving `TypeId`s keep
+/// their indices.
+=======
+impl ResolvedType {
+    /// Get the module path as a `Vec<String>` for backwards compatibility.
+    /// This is a transitional helper during the migration to `ModuleSource`.
+    #[must_use]
+    pub fn module_path(&self) -> Vec<String> {
+        match self {
+            Self::Struct { module_source, .. }
+            | Self::Enum { module_source, .. }
+            | Self::Variant { module_source, .. }
+            | Self::GenericInstance { module_source, .. }
+            | Self::GenericResource { module_source, .. }
+            | Self::Newtype { module_source, .. }
+            | Self::Flags { module_source, .. } => module_source.to_path(),
+            _ => vec![],
+        }
+    }
+}
+
+/// A dense map from [`TypeId`] to `V`, backed by a `Vec` indexed by `TypeId.0`.
+/// `TypeId`s are dense and sequential, so every access is a hash-free array
+/// index — [`TypeTable::get`] is the compiler's hottest accessor. The newtype
+/// keeps the lone `TypeId`→`usize` conversion in one place. Erased entries are
+/// `None`: [`TypeMap::retain`] punches holes rather than renumbering.
+>>>>>>> origin/main
 #[derive(Debug, Clone)]
 pub(crate) struct TypeMap<V> {
     slots: Vec<Option<V>>,
@@ -622,16 +692,10 @@ impl<V> TypeMap<V> {
     }
 }
 
-/// A dense set of [`TypeId`], backed by a bitset indexed by `TypeId.0`.
-///
-/// Membership and insertion are O(1) and hash-free — one bit per type, so
-/// even a transient "visited" set over the type graph costs a single small
-/// `Vec<u64>` instead of a hashed [`IndexSet`] that allocates and rehashes
-/// as it grows. This is the set-shaped companion to [`TypeMap`]; reach for
-/// it wherever a `IndexSet<TypeId>` is used purely for membership.
-///
-/// Iteration yields ascending `TypeId` order, **not** insertion order, so
-/// callers that depend on insertion order must keep an ordered set.
+/// A dense set of [`TypeId`], backed by a bitset — the set-shaped companion to
+/// [`TypeMap`]. One bit per type, so a transient "visited" set over the type
+/// graph costs a small `Vec<u64>` instead of a hash set that reallocates as it
+/// grows. Iteration yields ascending `TypeId` order, *not* insertion order.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct TypeSet {
     words: Vec<u64>,
@@ -723,6 +787,7 @@ pub struct TypeTable {
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
+<<<<<<< HEAD
     /// `(name, module) -> TypeId` for the nominal declarations that are not
     /// structs. `find_decl_type_by_name` scanned every interned type for these,
     /// which an instantiation now pays on the way in — see
@@ -741,6 +806,27 @@ pub struct TypeTable {
     /// still resolves to the base `TypeId`. Use `symbol_of_type` to walk from
     /// any decl-backed `TypeId` (including monomorphizations) back to the
     /// declaring symbol.
+||||||| bad542cd7
+    /// Canonical map: declared-type symbol → `TypeId`.
+    ///
+    /// Populated by the elaborator whenever it creates a decl-backed type
+    /// (`make_struct`, `make_enum`, `make_variant`, `make_flags`,
+    /// `make_newtype`, `make_resource`) via [`TypeTable::register_decl_type`].
+    /// Lets LSP-style queries translate a [`AstId`](crate::ast::AstId) — the canonical
+    /// identity of a declaration — to the `TypeId` it represents without
+    /// searching by name.
+    ///
+    /// Monomorphized instances are NOT entered here; the base generic's key
+    /// still resolves to the base `TypeId`. Use `symbol_of_type` to walk from
+    /// any decl-backed `TypeId` (including monomorphizations) back to the
+    /// declaring symbol.
+=======
+    /// Canonical map: declared-type symbol → `TypeId`, populated whenever the
+    /// elaborator mints a decl-backed type, so an LSP-style query can go from an
+    /// [`AstId`](crate::ast::AstId) to its type without searching by name.
+    /// Monomorphized instances are not entered — the base generic's key still
+    /// resolves to the base id; `symbol_of_type` walks the other way.
+>>>>>>> origin/main
     type_by_symbol: IndexMap<crate::ast::AstId, TypeId>,
     /// Inverse of `type_by_symbol` plus monomorphization tracking: every
     /// decl-backed `TypeId` — including monomorphized instances —
@@ -748,18 +834,11 @@ pub struct TypeTable {
     ///
     /// A sparse [`TypeMap`] keyed by the decl-backed `TypeId`.
     symbol_by_type: TypeMap<crate::ast::AstId>,
-    /// `(type_name, module, trait_name)` triples that satisfied a `T:
-    /// Serialize` / `T: Deserialize` / `T: Eq` / `T: Ord` bound structurally
-    /// during elaboration (bound-driven synthesis, see
-    /// `docs/wep-2026-06-25-trait-derivation.md`). Keyed nominally, not by
-    /// `TypeId`, so a generic struct/variant records once against its own
-    /// declaration regardless of instantiation count.
-    ///
-    /// Lives on the one `TypeTable` every module's `Rc<RefCell<…>>` handle
-    /// shares, since elaboration runs one fresh `Elaborator` per module.
-    /// Read by both `synthesis::serde_synth::synthesize_serde` and
-    /// `synthesis::traits::synthesize_traits`, each filtering for the trait
-    /// names it owns.
+    /// `(type_name, module, trait_name)` triples that satisfied a `Serialize` /
+    /// `Deserialize` / `Eq` / `Ord` bound structurally during elaboration
+    /// (bound-driven synthesis, WEP 2026-06-25). Keyed nominally rather than by
+    /// `TypeId`, so a generic records once against its declaration. Lives on the
+    /// shared `TypeTable` because elaboration runs one `Elaborator` per module.
     bound_driven_synth_requests: IndexSet<(String, ModuleSource, TraitKey)>,
     /// Variant case templates: `(variant name, module)` → `(case name, case
     /// index, payload TypeId)`. Payload ids are in the declaring template's
@@ -953,17 +1032,11 @@ impl TypeTable {
         id
     }
 
-    /// Mint a brand-new `TypeId` for `ty`, bypassing `intern`'s structural
-    /// dedup: even a `ResolvedType` identical to an already-interned one
-    /// gets its own fresh id.
-    ///
-    /// `intern_map`/`struct_name_index` are deliberately NOT updated: they
-    /// are keyed by `(name, module_source)` alone, so inserting a second,
-    /// same-named entry would silently overwrite the first one's mapping.
-    /// This is the primitive a function-scoped local type declaration mints
-    /// through — identity comes from the caller's own `AstId` (via
-    /// `register_decl_type`), not from this type's name, so two local
-    /// declarations that happen to share a name never alias.
+    /// Mint a brand-new `TypeId` for `ty`, bypassing `intern`'s structural dedup.
+    /// `intern_map` / `struct_name_index` are deliberately not updated — keyed by
+    /// `(name, module_source)`, a second same-named entry would overwrite the
+    /// first. This is what a function-scoped local type declaration mints
+    /// through: its identity is the caller's `AstId`, not this type's name.
     pub fn push_fresh(&mut self, ty: ResolvedType) -> TypeId {
         let id = self.types.next_id();
         self.types.push(ty);
@@ -1394,23 +1467,13 @@ impl TypeTable {
         self.type_by_symbol.get(key).copied()
     }
 
-    /// Canonical `TypeId` for a declared-type [`AstId`](crate::ast::AstId),
-    /// for callers that already hold one (e.g. `StructFieldInfo::defined_at`)
-    /// and know the declaration was interned during `collect_types`.
+    /// Canonical `TypeId` for a declared-type [`AstId`](crate::ast::AstId).
+    /// Prefer this over re-deriving one from `(name, module_source)`: the
+    /// `AstId` is a cheap `Copy` key, and it stays unique even where name+module
+    /// does not — a function-scoped local type can share another's name.
     ///
-    /// Prefer this over re-deriving a `TypeId` from `(name, module_source)`
-    /// via `make_struct`/`make_enum`/`make_variant`/`make_resource`: the
-    /// `AstId` is a cheap `Copy` key with no string clone or re-hash, and —
-    /// unlike name+module — it stays unique even for declarations that do
-    /// not have a unique `(name, module_source)` (a function-scoped local
-    /// type declared under the same name as another).
-    ///
-    /// # Panics
-    /// If `collect_types` has not yet run for this declaration. Every
-    /// decl-backed `TypeId` is registered by `register_decl_type` at the
-    /// point it is minted, so a miss here means the caller queried before
-    /// collection completed, or the `AstId` does not name a decl-backed type
-    /// — both are compiler bugs, not recoverable conditions.
+    /// Panics if `collect_types` has not run for this declaration; both that and
+    /// a non-decl-backed `AstId` are compiler bugs, not recoverable conditions.
     pub fn type_id_of_decl(&self, key: crate::ast::AstId) -> TypeId {
         self.type_of_symbol(&key).unwrap_or_else(|| {
             panic!(
@@ -1536,22 +1599,11 @@ impl TypeTable {
         None
     }
 
-    /// Remove all type entries whose `TypeId` is not in `keep`.
-    ///
-    /// Erased entries become empty (`None`) holes in the backing [`TypeMap`]s
-    /// rather than being physically removed — `TypeId`s are never renumbered,
-    /// so surviving ids keep their indices — and `all_types` / `iter_type_ids`
-    /// skip the holes, so subsequent iterations (e.g. WIR type registration)
-    /// no longer see them. The intern map and secondary indices are rebuilt to
-    /// stay consistent.
-    ///
-    /// `retain` preserves the invariant that `self.get(id)` does not panic
-    /// for any surviving `id`. After `erase_newtypes_and_flags`, `get(id)`
-    /// follows `self.redirects` to a canonical `TypeId`; if the redirect's
-    /// target were removed, `get(id)` would panic on a surviving id.
-    /// To keep the invariant, the kept set is implicitly extended with
-    /// the redirect targets of every kept id, and stale redirect entries
-    /// (whose source or target did not survive) are dropped.
+    /// Remove all type entries whose `TypeId` is not in `keep`. Erased entries
+    /// become `None` holes rather than being renumbered away, so surviving ids
+    /// keep their indices, and the intern map and secondary indices are rebuilt.
+    /// `get(id)` must not panic for a surviving id, so `keep` is implicitly
+    /// closed under `redirects` and stale redirect entries are dropped.
     pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
         // Implicit closure under `redirects`: every kept id whose `get`
         // result lives at a different id must keep that target alive too.
@@ -1700,9 +1752,9 @@ impl TypeTable {
     }
 
     /// Canonical name of a registered struct / trait / variant / enum
-    /// [`CompilerItem`], forwarded from the registry so call sites read
-    /// `tt.compiler_struct_name(item)` instead of chaining through
-    /// `compiler_items()`.
+    /// [`CompilerItem`](crate::compiler_item::CompilerItem), forwarded from the
+    /// registry so call sites read `tt.compiler_struct_name(item)` instead of
+    /// chaining through `compiler_items()`.
     pub fn compiler_struct_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
         self.compiler_items.struct_name(item)
     }
@@ -1779,7 +1831,7 @@ impl TypeTable {
     }
 
     /// Owned `(module, name)` for a registered struct / enum item — forwards
-    /// the registry's [`CompilerItems::struct_owned`] so single-expression
+    /// the registry's `CompilerItems::struct_owned` so single-expression
     /// callers query the table directly instead of through `compiler_items()`.
     pub fn compiler_struct_owned(
         &self,
@@ -1827,14 +1879,14 @@ impl TypeTable {
 
     /// Get the module source where the `Default` trait is defined, if
     /// the stdlib has registered it. Thin wrapper around
-    /// [`CompilerItems::trait_module`].
+    /// `CompilerItems::trait_module`.
     pub fn default_trait_module_source(&self) -> Option<&ModuleSource> {
         self.compiler_items
             .trait_module(crate::compiler_item::CompilerItem::Default)
     }
 
-    /// Make the struct type for a registered [`CompilerItem`] variant
-    /// of kind [`CompilerItemKind::Struct`]. Reads both the module
+    /// Make the struct type for a registered `CompilerItem` variant
+    /// of kind `CompilerItemKind::Struct`. Reads both the module
     /// source and the struct name from the registry so the call site
     /// does not hard-code either. Panics with a clear ICE message when
     /// the item is not registered or has the wrong kind.
@@ -1847,8 +1899,8 @@ impl TypeTable {
         self.make_struct(StructDef::Decl(decl))
     }
 
-    /// Make the enum type for a registered [`CompilerItem`] variant
-    /// of kind [`CompilerItemKind::Enum`] (currently `Ordering`).
+    /// Make the enum type for a registered `CompilerItem` variant
+    /// of kind `CompilerItemKind::Enum` (currently `Ordering`).
     /// Same shape as [`Self::make_compiler_struct`]: routes both name
     /// and module through the registry.
     pub fn make_compiler_enum(&mut self, item: crate::compiler_item::CompilerItem) -> TypeId {
@@ -2082,9 +2134,73 @@ impl TypeTable {
         crate::name::mangle_generic_name(&decl_name, &args)
     }
 
+<<<<<<< HEAD
     /// Intern the instantiation of `def` with `type_args`, deriving its
     /// rendered spelling rather than taking one from the caller. An empty
     /// `type_args` interns the *declaration* — a different type.
+||||||| bad542cd7
+    /// Create a monomorphized struct type (e.g., "Box<i32>")
+    ///
+    /// - `name`: The fully mangled name (e.g., "`TreeMap`<String,i32>")
+    /// - `base_name`: The original generic struct name (e.g., "`TreeMap`")
+    /// - `type_args`: what it was instantiated with. Must be the arguments
+    ///   `name` renders from — passing an empty list for an instantiated type
+    ///   interns the *declaration* instead, a different type that spells itself
+    ///   the same way. The `debug_assert` below is that contract.
+    pub fn make_monomorphized_struct(
+        &mut self,
+        name: String,
+        module_source: ModuleSource,
+        base_name: String,
+        type_args: Vec<TypeId>,
+    ) -> TypeId {
+        debug_assert_eq!(
+            name,
+            self.struct_rendered_name(&base_name, &type_args),
+            "the caller's rendering must be what `struct_rendered_name` derives"
+        );
+        let _ = name;
+        self.intern(ResolvedType::Struct {
+            decl_name: base_name,
+            module_source,
+            type_args,
+        })
+    }
+
+    /// Intern the instantiation of `base_name` with `type_args`, deriving its
+    /// rendered spelling rather than taking one from the caller.
+=======
+    /// Create a monomorphized struct type (e.g., `"Box<i32>"`)
+    ///
+    /// - `name`: The fully mangled name (e.g., "`TreeMap`<String,i32>")
+    /// - `base_name`: The original generic struct name (e.g., "`TreeMap`")
+    /// - `type_args`: what it was instantiated with. Must be the arguments
+    ///   `name` renders from — passing an empty list for an instantiated type
+    ///   interns the *declaration* instead, a different type that spells itself
+    ///   the same way. The `debug_assert` below is that contract.
+    pub fn make_monomorphized_struct(
+        &mut self,
+        name: String,
+        module_source: ModuleSource,
+        base_name: String,
+        type_args: Vec<TypeId>,
+    ) -> TypeId {
+        debug_assert_eq!(
+            name,
+            self.struct_rendered_name(&base_name, &type_args),
+            "the caller's rendering must be what `struct_rendered_name` derives"
+        );
+        let _ = name;
+        self.intern(ResolvedType::Struct {
+            decl_name: base_name,
+            module_source,
+            type_args,
+        })
+    }
+
+    /// Intern the instantiation of `base_name` with `type_args`, deriving its
+    /// rendered spelling rather than taking one from the caller.
+>>>>>>> origin/main
     pub fn make_monomorphized_struct_from_args(
         &mut self,
         def: StructDef,
@@ -2193,23 +2309,11 @@ impl TypeTable {
         None
     }
 
-    /// Find any decl-backed named type (resource, enum, variant, struct,
-    /// flags, or newtype) scoped to a CM package.
-    ///
-    /// Matches types whose `module_source` prefix resolves to
-    /// `{cm_package}/` — both `Wasi { interface: "{pkg}/…" }` (e.g.
-    /// `wasi:http/types.wado`) and `Core { name: "{pkg}/…" }` (e.g.
-    /// `core:kiln/types.wado`) are considered. The key invariant: two
-    /// CM interfaces in distinct packages that happen to share a type
-    /// name (`wasi:cli/ErrorCode` vs `wasi:http/ErrorCode`, or
-    /// `wasi:http/types::Response` vs `core:kiln/types::Response`)
-    /// resolve to distinct `TypeId`s because `module_source` is part of
-    /// the intern key.
-    ///
-    /// `cm_package` is the bare package segment — `"http"`, `"kiln"`,
-    /// `"cli"`, etc. — not a fully-qualified source string. Callers
-    /// synthesizing CM bindings normally retrieve it from
-    /// [`crate::world_registry::WorldInfo::package`].
+    /// Find a decl-backed named type scoped to a CM package, matching any
+    /// `module_source` under the `{cm_package}/` prefix — `Wasi` and `Core`
+    /// alike. `cm_package` is the bare segment (`"http"`, `"kiln"`), not a
+    /// fully-qualified source. Same-named types in distinct packages stay
+    /// distinct because `module_source` is part of the intern key.
     pub fn find_named_type_by_cm_package(&self, name: &str, cm_package: &str) -> Option<TypeId> {
         let prefix = format!("{cm_package}/");
         for (type_id, _) in self.all_types() {
@@ -2294,16 +2398,10 @@ impl TypeTable {
         }
     }
 
-    /// Peel reference layers AND any `Box<T>` wrapper introduced by the
-    /// boxing pass, returning the underlying value type.
-    ///
-    /// The boxing pass rewrites `&T` / `&mut T` into `Box<T>` wrapper
-    /// structs for primitives, variants and function types. Sites that
-    /// inspect receiver / argument types in post-boxing IR — DCE inspect
-    /// scanning, dispatch synthesis, etc. — should reach for this
-    /// helper instead of [`Self::peel_refs`] so a `&fn(...)` parameter
-    /// (now `Box<fn(...)>`) and an unwrapped `fn(...)` value look the
-    /// same. For non-boxed types the result matches `peel_refs`.
+    /// Peel reference layers and any `Box<T>` the boxing pass introduced,
+    /// returning the underlying value type. Post-boxing IR should use this over
+    /// [`Self::peel_refs`] so a `&fn(…)` parameter — by then `Box<fn(…)>` — and
+    /// an unwrapped `fn(…)` look the same. Matches `peel_refs` when unboxed.
     pub fn peel_refs_and_box(&self, type_id: TypeId) -> TypeId {
         let peeled = self.peel_refs(type_id);
         self.box_payload_types
@@ -2608,16 +2706,10 @@ impl TypeTable {
     }
 
     /// Register associated-type resolutions for a freshly monomorphized struct.
-    ///
-    /// When a generic struct `Foo<T>` that implements a trait with `type Item = …`
-    /// is instantiated as the monomorphized struct `concrete_id` (a
-    /// [`ResolvedType::Struct`], which carries no type args), the projection
-    /// `Foo<…>::Item` can no longer be resolved through
-    /// [`Self::resolve_generic_assoc_type`] (that path only handles
-    /// `GenericInstance`). We therefore eagerly resolve each associated-type
-    /// definition registered for `base_decl` against the instantiation
-    /// `substitution` and record the result keyed by `concrete_id`, so later
-    /// [`Self::resolve_assoc_type`] lookups succeed.
+    /// A [`ResolvedType::Struct`] carries no type args, so `Foo<…>::Item` can no
+    /// longer go through [`Self::resolve_generic_assoc_type`]; each definition on
+    /// `base_decl` is instead resolved eagerly against `substitution` and
+    /// recorded under `concrete_id` for later [`Self::resolve_assoc_type`] hits.
     pub fn register_monomorphized_assoc_types(
         &mut self,
         concrete_id: TypeId,
@@ -2693,15 +2785,10 @@ impl TypeTable {
     }
 
     /// Monomorphization-time associated-type resolution for a `GenericInstance`.
-    ///
-    /// Unlike [`Self::resolve_generic_assoc_type`] (a `&self` fast path that only
-    /// substitutes a bare-`TypeParam` def and cannot intern a substituted
-    /// composite def), this substitutes the instance's type args into the def
-    /// positionally (param index `i` -> `type_args[i]`) via
-    /// [`Self::substitute_type_params`], so a reference / composite / nested
-    /// associated type (`&T`, `I::Item`) becomes fully concrete. The mutual
-    /// recursion through `substitute_type_params` resolves nested projections
-    /// one level at a time, each with its own instance's args.
+    /// Where [`Self::resolve_generic_assoc_type`] is a `&self` fast path limited
+    /// to a bare-`TypeParam` def, this substitutes positionally through
+    /// [`Self::substitute_type_params`], so a composite or nested definition
+    /// (`&T`, `I::Item`) becomes fully concrete one level per recursion.
     pub fn resolve_generic_assoc_type_mono(
         &mut self,
         concrete_id: TypeId,
@@ -2817,19 +2904,11 @@ impl TypeTable {
         Some(self.substitute_type_params(def_type_id, &subst))
     }
 
-    /// Substitute `TypeParam` and `TypePack` indices in `type_id` using `substitution`,
-    /// leaving the projections rooted at those slots abstract.
-    ///
-    /// Returns a new `TypeId` with the substitutions applied. Missing indices
-    /// are permissive: unmatched `TypeParam`s remain in place so callers can
-    /// perform partial substitution during type inference, or let downstream
-    /// code report errors.
-    ///
-    /// Handles all container forms (`Ref`, `MutRef`, `BuiltinArray`,
-    /// `Function`, `GenericInstance`, `GenericResource`) including `TypePack`
-    /// expansion inside tuple `GenericInstance`s, and `AssocTypeProjection`
-    /// resolution whenever the underlying parameter becomes fully concrete
-    /// after substitution.
+    /// Substitute `TypeParam` and `TypePack` indices in `type_id`, descending
+    /// through every container form, expanding a `TypePack` inside a tuple, and
+    /// resolving an `AssocTypeProjection` once its parameter turns concrete.
+    /// Missing indices are permissive — an unmatched `TypeParam` stays put, so
+    /// callers can substitute partially during inference.
     pub fn substitute_type_params(
         &mut self,
         type_id: TypeId,
@@ -3115,7 +3194,7 @@ impl TypeTable {
         self.intern(ResolvedType::GenericInstance { def, type_args })
     }
 
-    /// Create an List<T> type (`GenericInstance` { name: "List", ... })
+    /// Create a `List<T>` type (`GenericInstance` { name: "List", ... })
     pub fn make_list(&mut self, element: TypeId) -> TypeId {
         let def = self
             .compiler_item_def(crate::compiler_item::CompilerItem::List)
@@ -3227,7 +3306,7 @@ impl TypeTable {
         self.get_ultimate_base_type(a) == self.get_ultimate_base_type(b)
     }
 
-    /// Check if a type is List<T> and return the element type if so.
+    /// Check if a type is `List<T>` and return the element type if so.
     /// Also unwraps Ref/MutRef types to check the inner type.
     pub fn as_list(&self, id: TypeId) -> Option<TypeId> {
         match self.get(id) {
@@ -3697,78 +3776,21 @@ impl TypeTable {
         }
     }
 
-    /// Get a mangled name for a type suitable for use in struct/function names.
-    ///
-    /// Unlike `type_name` which returns human-readable names (e.g., `[i32, String]`),
-    /// this returns mangled names suitable for monomorphization (e.g., `Tuple<i32,String>`).
-    ///
-    /// The format is:
-    /// - Primitives: `i32`, `f64`, `bool`, etc.
-    /// - Unit: `unit`
-    /// - Struct: struct name
-    /// - Tuple: `Tuple<T1,T2,...>`
-    /// - Option: `Option<T>`
-    /// - Result: `Result<T,E>`
-    /// - List: `List<T>`
-    /// - Function: `Fn<paramCount,returnType>`
-    /// - `GenericInstance`: `Name<T1,T2,...>`
-    /// - Ref/MutRef: inner type (references are stripped for mangling)
-    ///
+    /// Mangle a type for use inside struct / function names — `Tuple<i32,String>`
+    /// where [`Self::type_name`] would give the human-readable `[i32, String]`.
+    /// A generic renders as `Name<T1,T2,…>`, a function as
+    /// `Fn<paramCount,returnType>`, and references are stripped.
     #[must_use]
     pub fn mangle_type_name(&self, id: TypeId) -> String {
         let info = self.get_type_name_info(id);
         format_type_name(info)
     }
 
-    /// Mangle `id` for use as a type argument inside a generic instance's
-    /// or monomorphized entity's identity name (e.g. as the `T` in
-    /// `Result<unit, T>` or `Box<T>`).
-    ///
-    /// Unlike [`Self::mangle_type_name`], this *always* qualifies named
-    /// user-defined types whose simple name alone is not unique across
-    /// the type table — `Variant`, `Enum`, `Resource`, `Newtype`, and
-    /// `Flags` — by prefixing their declaring `ModuleSource`. Without
-    /// this, two distinct types from different modules sharing a simple
-    /// name (e.g. `wasi:filesystem`'s `pub variant ErrorCode` and
-    /// `wasi:cli`'s `pub enum ErrorCode`) collapse onto the same generic-
-    /// instance / monomorph identity at the WIR layer, causing
-    /// `register_mono_variants` to register only the first instantiation
-    /// it encounters and the later one's case-struct payload to silently
-    /// inherit the wrong representation.
-    ///
-    /// `Struct` and `GenericInstance` are qualified here too, so that
-    /// the mangled name a type takes inside a generic-instance identity
-    /// is stable regardless of where the type was defined.
-    ///
-    /// Without `Struct` qualification, two same-named structs from
-    /// distinct modules collapsed to the same `List<S>` mangled fq
-    /// at the WIR layer, leaving `List<S>` registered with one
-    /// module's element struct and code constructing the other module's
-    /// struct stored into that array — a Wasm GC validation failure
-    /// (regression `cross_module_same_name_struct_iter.wado`).
-    ///
-    /// Without `GenericInstance` qualification the mangled name flips
-    /// at the substitution boundary `GenericInstance → Struct`
-    /// (`IterFilter<ListIter<i32>>` while still `GenericInstance` vs
-    /// `IterFilter<core:prelude/list.wado/ListIter<i32>>` once the
-    /// inner is monomorphized to `Struct`), producing duplicate WIR
-    /// registrations of the same logical struct.
-    ///
-    /// All sites that build a generic-instance identity, register a
-    /// struct, or look one up by name must agree on this qualified
-    /// form. `wir_build::context::type_id_to_wir_type`'s `List<T>`
-    /// lookup, `wir_build::types::register_struct`'s fq construction,
-    /// and the `synthesis::cm_binding` / `synthesis::serde_synth`
-    /// name builders all flow through this function or through
-    /// `mangle_type_name` (which delegates here for type args).
-    ///
-    /// Standalone uses (e.g. `mangle_type_name(ErrorCode)` outside a
-    /// generic instance, or method-dispatch `base_struct_name`) keep the
-    /// short name so that `cm_interface_registry`, `LocalMethodName`, and
-    /// `ModuleSource::interface_name` keys remain unchanged.
-    ///
-    /// User-facing display (`TypeTable::type_name`) is independent and
-    /// is unaffected by this function.
+    /// Mangle `id` as a type argument inside a generic instance's or monomorph's
+    /// identity name — the `T` in `Result<unit, T>`. Unlike
+    /// [`Self::mangle_type_name`], every named user-defined head is qualified by
+    /// its declaring `ModuleSource`, or two same-named types collapse onto one
+    /// WIR identity and the second inherits the first's representation.
     pub fn mangle_type_arg_for_generic(&self, id: TypeId) -> String {
         match self.get(id) {
             ResolvedType::Variant { def }
@@ -3898,6 +3920,7 @@ impl TypeTable {
         }
     }
 
+<<<<<<< HEAD
     /// The name a struct is *stored* under in the package's struct list and
     /// named by in a `StructLiteral`: the declaration or instantiation name
     /// with the head left bare, module disambiguation carried alongside as a
@@ -3908,6 +3931,24 @@ impl TypeTable {
     /// one entry per instantiation, so an instantiation is spelled with its
     /// arguments — the declaration alone names a template nothing stores.
     /// `None` for a type that is not struct-shaped.
+||||||| bad542cd7
+    /// The name a struct is *stored* under in the package's struct list and
+    /// named by in a `StructLiteral`: the declaration or instantiation name
+    /// with the head left bare, module disambiguation carried alongside as a
+    /// `ModuleSource` rather than folded into the string.
+    ///
+    /// Every mangler qualifies a declared head by its module; this namespace
+    /// must not, because that is how the struct list is keyed. The list holds
+    /// one entry per instantiation, so an instantiation is spelled with its
+    /// arguments — `decl_name` alone names a template nothing stores. `None`
+    /// for a type that is not struct-shaped.
+=======
+    /// The name a struct is *stored* under in the package's struct list: the
+    /// head left bare, with module disambiguation carried alongside as a
+    /// `ModuleSource` rather than folded in — unlike every mangler, because that
+    /// is how the list is keyed. It holds one entry per instantiation, so an
+    /// instantiation is spelled with its arguments. `None` if not struct-shaped.
+>>>>>>> origin/main
     #[must_use]
     pub fn struct_list_name(&self, id: TypeId) -> Option<String> {
         match self.get(id) {
@@ -4032,17 +4073,10 @@ impl TypeTable {
         }
     }
 
-    /// Convert a resolved type to its name info for formatting.
-    ///
-    /// This separates type resolution (here in tir.rs) from name formatting
-    /// (in name.rs), following the principle that name format details belong
-    /// in name.rs.
-    /// The structured fq name of `id`.
-    ///
-    /// The type table is the only thing that knows a declaration's module, so
-    /// it hands back structure and lets the caller render or inspect. Rendering
-    /// here and re-deriving the module from the string later is not possible —
-    /// a `ModuleSource` cannot be rebuilt without the interner — which is why
+    /// The structured fq name of `id`. The type table is the only thing that
+    /// knows a declaration's module, so it hands back structure and lets the
+    /// caller render or inspect. Rendering here would be one-way — a
+    /// `ModuleSource` cannot be rebuilt from a string without the interner — so
     /// the name stays structured all the way to its consumers.
     #[must_use]
     pub fn fq_type_name(&self, id: TypeId) -> crate::name::FqTypeName {
@@ -4428,7 +4462,7 @@ pub enum TirExprKind {
         /// `args[0]`, so `args[i]` maps to `params[i]` for every call shape.
         args: Vec<CallArg>,
         /// Whether `args[0]` is the receiver of an instance method, set by
-        /// [`TirExprKind::method_call`] alone — so it marks dot syntax. A
+        /// `TirExprKind::method_call` alone — so it marks dot syntax. A
         /// trait-qualified (UFCS) call carries its receiver in `args[0]` too but
         /// leaves this `false`: it spells the receiver's mode itself
         /// (`Trait::m(&mut x, …)`), so the receiver is already reference-typed
@@ -4436,14 +4470,14 @@ pub enum TirExprKind {
         /// never-value-copy-a-receiver rule.
         has_receiver: bool,
     },
-    /// Raw Component Model call to a lowered WASI import.
+    /// Raw Component Model call to a lowered WASI import or a canonical built-in.
     ///
-    /// Used inside synthesized CM binding functions to call the flat-ABI WASI function
+    /// Used inside synthesized CM binding functions to call the flat-ABI function
     /// directly, bypassing the normal effect call mechanism. Args are already lowered
     /// to flat CM types (i32, i64, f32, f64).
     CmRawCall {
-        /// Full WASI local alias name (e.g., "wasi:cli/stdout@0.3.0/write-via-stream")
-        local_name: String,
+        /// Which function this calls, by identity rather than by rendered name.
+        target: CmCallTarget,
         /// Flat ABI arguments (already lowered to core Wasm types)
         args: Vec<TirExpr>,
     },
@@ -4561,16 +4595,11 @@ pub enum TirExprKind {
         /// for synthesised closures (e.g. effect-handler dispatch),
         /// which never take addresses.
         address_taken_locals: crate::hashmap::IndexSet<u32>,
-        /// Body-level let-bindings inside the closure, in declaration
-        /// order. Indices `0..params.len()` belong to the closure's
-        /// parameters (whose info lives in `params`); these body locals
-        /// occupy `params.len()..params.len()+body_locals.len()` in the
-        /// closure's local-index namespace.
-        ///
-        /// Captured at resolve time from the closure's `FunctionContext`
-        /// so pattern lowering can seed a closure-scoped allocator
-        /// without re-walking the body. Synthetic closures created by
-        /// `synthesis/` have an empty `body_locals`.
+        /// Body-level let-bindings inside the closure, in declaration order,
+        /// occupying `params.len()..` in its local-index namespace (the params
+        /// themselves live in `params`). Captured at resolve time so pattern
+        /// lowering can seed a closure-scoped allocator without re-walking the
+        /// body. Empty for the synthetic closures `synthesis/` creates.
         body_locals: Vec<TirLocal>,
         /// Effects the closure type was annotated with at the use site (let
         /// annotation, function-typed parameter, etc.). `Some` only when the
@@ -4708,17 +4737,11 @@ pub struct TirHandlerBinding {
     /// Used by codegen to pick the correct `impl E for T` methods.
     pub handler_type: TypeId,
     pub span: Span,
-    /// If `Some(id)`, this binding came from a bundled `with &mut h do`
-    /// expansion. All bindings produced from one bundled clause share the
-    /// same `id`. The dispatch synthesis uses this to allocate a single
-    /// `__h_<bundle>` local that every per-effect closure captures, so the
-    /// handler value is evaluated once and mutations from any installed
-    /// effect are observed by the rest. `None` for explicit
-    /// `Effect => handler` bindings (each gets its own `__h_<E>` local).
-    ///
-    /// IDs are unique within a single `WithHandler` expression but are not
-    /// reused across separate `with` blocks; the synthesis pass starts
-    /// fresh for each `WithHandler` it visits.
+    /// `Some(id)` marks a binding from a bundled `with &mut h do` expansion; all
+    /// bindings from one clause share the id, so dispatch synthesis can allocate
+    /// a single `__h_<bundle>` local that every per-effect closure captures —
+    /// the handler is evaluated once and one effect's mutations are seen by the
+    /// rest. `None` for an explicit `Effect => handler`. Unique per `WithHandler`.
     pub bundle_group: Option<u32>,
 }
 
@@ -4890,22 +4913,11 @@ impl TirBlock {
     }
 }
 
-/// Value-yielding type of a block, mirroring how `let x = { ... }`
-/// resolves: the last statement determines the type, with two
-/// special cases:
-///
-/// - `If` / `IfLet` with both branches: both branches must agree
-///   (or one must be `Never`); otherwise the block has no
-///   meaningful value and is `Unit`. The elaborator enforces the
-///   "both agree" rule when typing the surrounding expression, so
-///   the `None` fallback at a stale mismatch is benign — the
-///   surrounding diagnostic already reports the error.
-/// - `Return` / `Break` / `Continue`: diverging statements yield
-///   `Never`.
-///
-/// Used by the elaborator, to type `let x = { /* block */ }` (the call
-/// lives on `Elaborator` for historical reasons but delegates here) and
-/// to type the `if let` → `Let` + `Match` lowering's arms.
+/// Value-yielding type of a block: the last statement decides, except that a
+/// two-branch `If` needs its branches to agree (or one to be `Never`)
+/// and falls back to `Unit`, and a diverging `Return` / `Break` / `Continue`
+/// yields `Never`. The elaborator enforces the agreement rule while typing the
+/// surrounding expression, so a mismatch here is already reported.
 pub fn block_result_type(block: &TirBlock) -> TypeId {
     block
         .stmts
@@ -5082,7 +5094,8 @@ pub fn method_param_offset(impl_type_params: &[TirTypeParam]) -> u32 {
 /// Information about monomorphization origin for instantiated items
 #[derive(Debug, Clone)]
 pub struct MonomorphInfo {
-    /// Original generic name (e.g., "Box" for "Box<i32>", or "`BTreeNode`<`K,V>::insert`" for methods)
+    /// Original generic name: `"Box"` for `"Box<i32>"`, or
+    /// `"BTreeNode<K,V>::insert"` for methods.
     pub generic_name: String,
     /// Impl-level type arguments (from the struct/type, e.g. `[i32]` for `List<i32>`)
     pub impl_type_args: Vec<TypeId>,
@@ -5342,20 +5355,11 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
-    /// Auto-derived `Fn<arity, return_type>^Inspect::inspect` (or
-    /// `^InspectAlt::inspect_alt`) dispatch stub.
-    ///
-    /// The TIR body is `unreachable()` — a placeholder that exists
-    /// only so the function is registered and the call is resolvable
-    /// from templates and from user code. WIR build recognises this
-    /// kind and supplies the real body: a `call_ref` through the
-    /// matching `CanonicalClosure_K`'s `inspect` / `inspect_alt`
-    /// vtable slot. Carries `(arity, return_type)` as structured
-    /// fields so neither WIR build nor DCE has to recover them by
-    /// parsing the mangled function name.
-    ///
-    /// See WEP: Inspect (Debug Output) > Closure Inspect via Runtime
-    /// Dispatch.
+    /// Auto-derived `Fn<arity, return_type>^Inspect::inspect` dispatch stub (or
+    /// its `^InspectAlt` twin). The TIR body is `unreachable()` — enough for the
+    /// function to be registered and the call resolvable — and WIR build
+    /// supplies the real one, a `call_ref` through `CanonicalClosure_K`'s vtable
+    /// slot. `(arity, return_type)` are structured so nobody parses the mangle.
     FnCanonicalDispatch {
         trait_kind: FnDispatchTrait,
         arity: usize,
@@ -5441,22 +5445,11 @@ impl TirFunction {
     }
 }
 
-/// A resolved local-slot entry in a function, global initializer, or
-/// closure scope, identified by its declaration / order in the surrounding
-/// local environment.
-///
-/// `FunctionContext::add_local` records every local — source-level
-/// parameters, `let` bindings, destructure bindings, and elaborator-generated
-/// temporaries — as a `TirLocal`. The single source of truth for the local
-/// namespace is `FunctionContext::locals: Vec<TirLocal>`; from there it is
-/// projected onto:
-///
-/// * `TirFunction::locals` and `TirGlobal::locals` — the function/global's
-///   absolute local table, keyed by Wasm local index.
-/// * `TirExprKind::Closure { body_locals, .. }` — the closure's
-///   body-level let-bindings (params live in `params` so they aren't
-///   duplicated). Pattern lowering reconstructs the closure-scope local
-///   table from `params + body_locals` while descending in.
+/// A resolved local slot in a function, global initializer, or closure scope.
+/// `FunctionContext::locals` is the single source of truth — every parameter,
+/// `let`, destructure binding and elaborator temporary — and is projected onto
+/// `TirFunction::locals` / `TirGlobal::locals` (keyed by Wasm local index) and
+/// onto `Closure { body_locals }`, whose params stay in `params` instead.
 #[derive(Debug, Clone)]
 pub struct TirLocal {
     /// Source-level name of the binding (or a synthesised `__name` for
@@ -5792,16 +5785,11 @@ pub struct ClosureFunctor {
     pub call_method: Rc<RefCell<TirFunction>>,
     /// Captures from the original closure
     pub captures: Vec<TirCapture>,
-    /// Canonical user-declared (name, type) pairs of the closure literal —
-    /// `[]` for `|| ...`, `[("x", i32)]` for `|x: i32| ...`. Captured at
-    /// functor creation and never mutated. `wir_build`'s
-    /// `register_closure_wrappers` uses this list to choose the wrapper's
-    /// external signature: the function-table type the closure was coerced
-    /// to is `fn(env, canonical_user_params...) -> canonical_return`,
-    /// independent of any DAE shrinkage that happens later on
-    /// `call_method.params`. Without this snapshot, dropping a "dead" param
-    /// from `__call` would also shrink the wrapper signature and
-    /// desynchronise it from the typed-fn callers.
+    /// Canonical user-declared `(name, type)` pairs of the closure literal,
+    /// captured at functor creation and never mutated. `register_closure_wrappers`
+    /// derives the wrapper's external signature
+    /// (`fn(env, ..canonical_user_params) -> canonical_return`) from this
+    /// snapshot, so a later DAE shrink of `__call` cannot desynchronise it.
     pub canonical_user_params: Vec<(String, TypeId)>,
     /// Canonical return type of the closure literal. Same role as
     /// `canonical_user_params` — drives the wrapper external signature.

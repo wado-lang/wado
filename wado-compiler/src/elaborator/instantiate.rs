@@ -1,14 +1,8 @@
-//! Instantiating a polymorphic signature at a use site.
-//!
-//! A declaration is written in its own frame: `fn id<T>(x: T) -> T` names slot
-//! 0 as a rigid `T`. A use of it does not mention `T` — it stands for whatever
-//! this call needs. Instantiation says so: each slot gets a fresh
-//! [`ResolvedType::InferVar`], and the signature is rewritten into those
-//! variables before anything is checked against it.
-//!
-//! The variables join the lifecycle [`super::infer_hole`] owns: solved ones
-//! are substituted away, unsolved ones raise "cannot infer" and are pinned to
-//! `error`, and neither reaches a recorded fact.
+//! Instantiating a polymorphic signature at a use site. A declaration is written
+//! in its own frame — `fn id<T>(x: T) -> T` names slot 0 a rigid `T` — but a use
+//! of it stands for whatever this call needs, so each slot gets a fresh
+//! [`ResolvedType::InferVar`] and the signature is rewritten into those before
+//! anything is checked. They then join the lifecycle [`super::infer_hole`] owns.
 
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;

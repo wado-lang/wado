@@ -585,16 +585,11 @@ impl FunctionTranslator<'_, '_> {
                 ),
             ) => Self::truncate_to_sub_i32(inner_instr, to_prim),
             _ => {
-                // Other casts (newtype reinterprets, SIMD `v128` lane-type
-                // reinterprets, enum→i32, struct→struct) are no-ops at the
-                // Wasm level and pass through. But a pass-through only
-                // produces valid Wasm when both sides share a representation
-                // kind. A reference↔scalar cast reaching here means an
-                // earlier phase failed to lower it — e.g. the struct-source
-                // `i128/u128 as f64` of issue #1328, which used to silently
-                // feed a boxed `(ref $type)` into an `f64` slot and only
-                // tripped the validator deep in codegen. Fail loudly here,
-                // at the layer that owns the lowering, instead.
+                // Other casts — newtype and SIMD reinterprets, enum→i32,
+                // struct→struct — are Wasm-level no-ops and pass through, which
+                // is valid only when both sides share a representation kind. A
+                // reference↔scalar cast here means an earlier phase failed to
+                // lower it, so fail loudly at the layer that owns the lowering.
                 let from_wir = self.ctx.type_id_to_wir_type(self.type_table, from_type);
                 let to_wir = self.ctx.type_id_to_wir_type(self.type_table, to_type);
                 assert_eq!(

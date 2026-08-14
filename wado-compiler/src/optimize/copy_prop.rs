@@ -1,16 +1,8 @@
-//! Copy propagation optimization for Wado NIR.
-//!
-//! Eliminates trivial copy bindings like `let x = y`, `let x = &y`,
-//! `let x = &mut y`, or a copy of a promoted operand by propagating the source
-//! to all uses of the target. See `can_propagate_copy` for the safety gates.
-//!
-//! Runs on the worklist rewrite engine (see
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) as a [`Rule`]: a
-//! per-function standalone engine session whose `apply_block` fires once at
-//! the body root and runs the analyse/substitute fixpoint to convergence in
-//! one shot. The substitute-and-remove rewrites route through
-//! `engine.replace_expr_kind`, `engine.alloc_expr`, and
-//! `engine.set_block_stmts` so the parent map and use index stay coherent.
+//! Copy propagation for Wado NIR: eliminates a trivial `let x = y`,
+//! `let x = &y`, `let x = &mut y`, or a copy of a promoted operand by
+//! propagating the source to every use of the target. `can_propagate_copy` holds
+//! the safety gates. Runs as a [`Rule`] whose `apply_block` fires at the body
+//! root and drives the analyse/substitute fixpoint to convergence in one shot.
 
 use std::cell::Cell;
 
@@ -34,16 +26,11 @@ struct CopyBinding {
     target_local: u32,
     source: CopySource,
     type_id: TypeId,
-    /// Whether the source value is stable across the target's scope: the source
-    /// local is never *mutated* (re-assigned, field-mutated, `&mut`-borrowed,
-    /// passed as a mutable argument, or written through a `&mut` alias — see
-    /// [`MutRefAliases`]) anywhere in the binding block's statements after the
-    /// binding, and every read of the target sits after the binding (a
-    /// backward read would cross a loop iteration the interval cannot reason
-    /// about). The target's uses are confined to that scope, so a stable
-    /// source can be propagated even when the source is reassigned elsewhere
-    /// in the function (e.g. a loop counter copied inside the loop body).
-    /// Always `true` for a promoted-value source.
+    /// Whether the source value is stable across the target's scope: never
+    /// mutated — by assignment, `&mut`, or through a [`MutRefAliases`] alias —
+    /// after the binding in its block, with every read of the target after it, a
+    /// backward read crossing a loop iteration. So a source reassigned elsewhere
+    /// in the function still propagates. Always `true` for a promoted value.
     source_scope_stable: bool,
     /// Whether [`substitute_promoted_reads`] can rewrite every promoted read of
     /// the target: each fills its slot whole (`Opaque(Local target)`), and the
@@ -235,36 +222,21 @@ struct AnalysisCtx<'a> {
 }
 
 /// Per-block mutation / read positions, keyed by the block's own statement
-/// indices.
-///
-/// `mut_indices`: per-local sorted statement indices whose subtree mutates it.
-/// `.last()` is the last mutation — a binding at `k` is source-scope-stable
-/// iff its source has none after `k`. The full list additionally lets the
-/// projection-source check ask whether any mutation falls in the open
-/// interval `(binding, use]`.
-///
-/// `first_read`: per-local earliest statement index whose subtree reads it,
-/// counting the reads a promoted operand carries in the value pool.
-/// For a single-use projection temp this is its unique use, bounding the
-/// interval the projection stability check scans for root mutations; for
-/// every source kind it guards against backward (cross-iteration) reads.
+/// indices. `mut_indices` holds each local's sorted mutating statements: a
+/// binding at `k` is source-scope-stable iff its source has none after `k`, and
+/// the full list answers the projection check's open-interval question.
+/// `first_read` is the earliest read, which guards against backward reads.
 #[derive(Default)]
 struct BlockScan {
     mut_indices: IndexMap<u32, Vec<usize>>,
     first_read: IndexMap<u32, usize>,
 }
 
-/// Build every block's [`BlockScan`] in ONE top-down walk: each read /
-/// mutation event is recorded into all enclosing blocks at their current
-/// statement index, instead of re-walking full subtrees at every nesting
-/// level (O(N²) on deep bodies — #1472 follow-up).
-///
-/// A method receiver is a mutation only when the callee actually writes
-/// through it, and a write through a `&mut` alias is attributed to the
-/// aliased root too — both via [`for_each_mutated_root`], the same dispatch
-/// `analyze_expr`'s usage marking uses — so a read-only receiver (`x.len()`)
-/// does not end the scope-stability interval of `x`-sourced bindings, while
-/// `let r = &mut y; …; r.f = v` does.
+/// Build every block's [`BlockScan`] in ONE top-down walk, recording each read /
+/// mutation into all enclosing blocks at their current statement index rather
+/// than re-walking subtrees per nesting level (O(N²) on deep bodies).
+/// [`for_each_mutated_root`] decides what counts, so a read-only `x.len()`
+/// does not end `x`'s interval while `r.f = v` through a `&mut` alias does.
 fn scan_blocks(
     body: &Body,
     type_table: &TypeTable,

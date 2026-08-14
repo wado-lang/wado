@@ -1,30 +1,8 @@
-//! Compiler-recognized stdlib items (the Wado compiler's analogue of
-//! rustc's lang items).
-//!
-//! A `CompilerItem` identifies a specific stdlib symbol that the Wado
-//! compiler — Rust-side — needs to reference directly: types it
-//! instantiates (`Option<T>`, `Box<T>`), traits whose impls it
-//! synthesises (`Default`, `From`, `Serialize`), or methods it lowers
-//! into calls (`String::push_str`, `List::push`). Each item is bound
-//! to its resolution by a `#[compiler_item("...")]` attribute on the
-//! Wado-side declaration; the elaborator populates the
-//! [`CompilerItems`] registry during the annotate phase and downstream
-//! passes look symbols up through the registry instead of by string
-//! name.
-//!
-//! Why this exists: pre-`CompilerItem`, the compiler hard-coded paths
-//! and names (`LocalMethodName::new("String", None, "push_str")`,
-//! `name == "Option"`) at every site. Renaming a stdlib item would
-//! silently break those sites — failures showed up only at runtime as
-//! "unresolved call" errors. With the registry, renames on the
-//! Wado side are invisible to the Rust side as long as the
-//! `#[compiler_item("...")]` value stays put; renaming the
-//! `compiler_item` value, in turn, fails the compiler's own build by
-//! breaking the enum variant ↔ string mapping in
-//! [`CompilerItem::from_attr_name`].
-//!
-//! Scope: `#[compiler_item("...")]` is only meaningful inside
-//! `core::*` modules. The elaborator rejects the attribute on user code.
+//! Compiler-recognized stdlib items — Wado's analogue of rustc's lang items.
+//! Each names a stdlib symbol the Rust side references directly, bound by a
+//! `#[compiler_item("…")]` attribute on the Wado declaration and looked up
+//! through the [`CompilerItems`] registry, so a stdlib rename is invisible here.
+//! The attribute is meaningful only inside `core::*`.
 
 use std::fmt;
 
@@ -67,18 +45,11 @@ impl SeqField {
     }
 }
 
-/// Every compiler-recognized stdlib item.
-///
-/// Each variant has a canonical `snake_case` name (see
-/// [`CompilerItem::attr_name`]) that must match the argument of the
-/// `#[compiler_item("...")]` attribute on the Wado-side declaration.
-///
-/// Naming convention: flat `snake_case`. Methods use
-/// `<type>_<method>` (e.g. [`Self::StringPushStr`]); types and traits
-/// use the lowercase type/trait name; variant cases use
-/// `<variant>_<case>`. The convention is enforced socially, not by
-/// the parser — the parser only checks that the argument names a
-/// known [`CompilerItem`] variant.
+/// Every compiler-recognized stdlib item. Each variant's canonical
+/// [`CompilerItem::attr_name`] must match the `#[compiler_item("…")]` argument
+/// on the Wado declaration. Names are flat `snake_case`: `<type>_<method>` for a
+/// method, the lowercase name for a type or trait, `<variant>_<case>` for a
+/// case.
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum CompilerItem {
     // ── Types (structs / generic structs) ────────────────────────────
@@ -790,24 +761,11 @@ impl CompilerItem {
         Self::ALL.iter().copied().find(|i| i.attr_name() == name)
     }
 
-    /// Whether the registry must contain this item by the end of
-    /// resolution for compilation of `world` to succeed.
-    ///
-    /// Items declared in `core::prelude::*` are always required — they
-    /// underpin the core type system and the prelude is auto-loaded
-    /// regardless of target world. Items declared in worlds the user
-    /// did not opt into (e.g. `core:kiln/generator` for
-    /// [`Self::KilnRequest`], `core:serde` for [`Self::Serialize`] /
-    /// [`Self::Deserialize`]) are only required when the matching
-    /// world / module is actually loaded; tracking that here keeps the
-    /// validator from spuriously failing in CLI / HTTP builds that
-    /// don't pull in kiln or serde.
-    ///
-    /// The validator scans this method for every [`Self::ALL`]
-    /// variant after `annotate_modules` runs; a `true` return on an
-    /// unregistered item is a hard error at compile time, surfacing
-    /// the missing stdlib annotation immediately rather than at the
-    /// first synthesis call that reaches for it.
+    /// Whether the registry must hold this item for `world` to compile. A
+    /// `core::prelude` item always is; one from a world the user did not opt
+    /// into is required only once that module is loaded, which keeps the
+    /// validator from failing a CLI build that pulls in neither kiln nor serde.
+    /// The scan runs after `annotate_modules`, ahead of any synthesis call.
     pub fn is_required(self, world: &str) -> bool {
         match self {
             // Always loaded — `core:prelude` is auto-imported.
@@ -1161,18 +1119,11 @@ impl fmt::Display for CompilerItemKind {
     }
 }
 
-/// The resolved data for a registered [`CompilerItem`].
-/// One associated type declaration captured from a trait registered
-/// via `#[compiler_item("...")]`. Carries the source-side name plus
-/// the source-side names of all trait bounds (e.g.
-/// `type SeqSerializer: SerializeSeq;` →
-/// `{ name: "SeqSerializer", bound_names: ["SerializeSeq"] }`).
-///
-/// The bound list is what makes
-/// [`CompilerItems::trait_assoc_type_by_bound`] stable across stdlib
-/// renames: the synthesiser asks "which assoc type is bound by
-/// `SerializeSeq`?" instead of "is there an assoc type named
-/// `SeqSerializer`?".
+/// One associated type declared on a registered trait, carrying its source-side
+/// name and those of its bounds — `type SeqSerializer: SerializeSeq;` becomes
+/// `{ name: "SeqSerializer", bound_names: ["SerializeSeq"] }`. The bound list is
+/// what makes [`CompilerItems::trait_assoc_type_by_bound`] rename-stable: it
+/// asks which assoc type `SerializeSeq` bounds, not for one named by spelling.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TraitAssocType {
     pub name: String,
@@ -1187,7 +1138,7 @@ pub struct TraitAssocType {
 ///
 /// Consumers should generally not match on `Resolved` directly; use
 /// the kind-checked accessors on [`CompilerItems`]
-/// (e.g. [`CompilerItems::require_trait_module`]) instead.
+/// (e.g. `CompilerItems::require_trait_module`) instead.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Resolved {
     Struct {
@@ -1216,40 +1167,17 @@ pub enum Resolved {
         /// that trait?" compares this rather than the spelling
         /// (WEP 2026-08-12).
         decl: crate::ast::AstId,
-        /// Primary method name for **single-method** traits, captured
-        /// automatically by the elaborator when registering the trait's
-        /// `#[compiler_item("...")]` annotation. `None` for
-        /// multi-method traits (`Serializer`, `Deserializer`, …).
-        ///
-        /// The format-family traits (`Display` / `DisplayAlt` /
-        /// `Inspect` / `InspectAlt` / `Binary` / `BinaryAlt` / `Octal`
-        /// / `OctalAlt` / `LowerHex` / `LowerHexAlt` / `UpperHex` /
-        /// `UpperHexAlt` / `LowerExp` / `UpperExp`) all have exactly
-        /// one method by design, so the synthesiser can look up the
-        /// method name from the trait registration alone instead of
-        /// hard-coding `"fmt"` / `"inspect"` at every call site.
-        ///
-        /// Reading: [`CompilerItems::trait_method_name`].
+        /// Primary method name of a **single-method** trait, captured when the
+        /// elaborator registers its annotation; `None` for a multi-method trait
+        /// such as `Serializer`. Lets the synthesiser read the name of a format
+        /// trait's one method rather than hard-coding `"fmt"`. Read via
+        /// [`CompilerItems::trait_method_name`].
         method_name: Option<String>,
-        /// Associated types declared on the trait, in source order.
-        /// Each entry pairs the assoc type's source-side name with the
-        /// source-side names of its trait bounds (e.g. for
-        /// `type SeqSerializer: SerializeSeq;` the entry is
-        /// `TraitAssocType { name: "SeqSerializer", bound_names: ["SerializeSeq"] }`).
-        /// Auto-captured by the elaborator when registering the trait's
-        /// `#[compiler_item("...")]` annotation; empty for traits
-        /// without associated types.
-        ///
-        /// The serde synthesiser identifies each assoc type by its
-        /// **bound trait** (itself a `#[compiler_item("...")]`-
-        /// registered trait whose current spelling comes from the
-        /// registry), not by its source-side spelling. That makes both
-        /// ends rename-stable: renaming `SeqSerializer` to `SeqWriter`
-        /// or renaming the bound `SerializeSeq` to `SeqWriterTrait`
-        /// both keep flowing through the registry instead of panicking
-        /// on a missing source-side name.
-        ///
-        /// Reading: [`CompilerItems::trait_assoc_type_by_bound`].
+        /// The trait's associated types in source order, each a
+        /// [`TraitAssocType`], captured when the elaborator registers the
+        /// annotation. The serde synthesiser identifies one by its *bound* trait
+        /// rather than its spelling, so renaming either end keeps resolving. Read
+        /// via [`CompilerItems::trait_assoc_type_by_bound`].
         assoc_types: Vec<TraitAssocType>,
     },
     Method {
@@ -1592,15 +1520,11 @@ impl CompilerItems {
     }
 
     /// Resolved method name of a **single-method** trait — `"fmt"` for
-    /// `Display`, `"inspect"` for `Inspect`, and so on across the
-    /// format-family traits. Panics for multi-method traits where
-    /// `method_name` was not captured during registration; callers
-    /// that need such method names must reach for a dedicated method
-    /// `CompilerItem` instead.
-    ///
-    /// Routing the synthesiser's `Display::fmt` / `Inspect::inspect`
-    /// call construction through this method removes the last hard
-    /// dependency on the conventional source-side method spelling.
+    /// `Display`, `"inspect"` for `Inspect`. Routing the synthesiser's call
+    /// construction through here is what removes its last dependency on the
+    /// source-side spelling. Panics for a multi-method trait, whose
+    /// `method_name` was never captured; those need a dedicated method
+    /// [`CompilerItem`].
     pub fn trait_method_name(&self, item: CompilerItem) -> &str {
         match self.require(item) {
             Resolved::Trait {
@@ -1626,16 +1550,11 @@ impl CompilerItems {
         }
     }
 
-    /// Single associated type name on a trait, identified by the
-    /// source-side name of its trait bound. Both the bound trait's
-    /// spelling (passed in by the caller) and the associated type's
-    /// spelling (returned) come from the registry, so renaming either
-    /// end in the stdlib flows through without hand-edits.
-    ///
-    /// Panics if no associated type with the given bound is found —
-    /// the only legitimate way to hit that is to break the structural
-    /// shape of the trait, which the synthesiser does not silently
-    /// handle anywhere else either.
+    /// The associated type a given trait bound identifies. Both the bound's
+    /// spelling and the returned name come from the registry, so a stdlib rename
+    /// at either end flows through without hand-edits. Panics when no assoc type
+    /// carries that bound: the only way to reach it is to break the trait's
+    /// structural shape, which the synthesiser handles silently nowhere else.
     pub fn trait_assoc_type_by_bound(&self, item: CompilerItem, bound_trait_name: &str) -> &str {
         let assoc = self
             .trait_assoc_types(item)
@@ -1839,17 +1758,11 @@ impl fmt::Display for RegisterError {
     }
 }
 
-/// Parse all `#[compiler_item("...")]` arguments from a declaration's
-/// attribute list.
-///
-/// Returns the matched [`CompilerItem`] values in encounter order,
-/// plus a [`Vec`] of *unrecognised* argument strings so the elaborator
-/// can emit a diagnostic without losing the original spelling.
-///
-/// In valid stdlib code, a single declaration carries at most one
-/// `#[compiler_item("...")]` attribute. Multiple matches are not
-/// rejected here; the elaborator decides whether to fold the bits
-/// (legacy behaviour from the original `comp_feature` mechanism) or flag duplicates.
+/// Parse a declaration's `#[compiler_item("…")]` arguments, returning the
+/// matched [`CompilerItem`]s in encounter order plus the unrecognised argument
+/// strings, so the elaborator can report one without losing its spelling. Valid
+/// stdlib code carries at most one such attribute per declaration, but multiple
+/// matches are not rejected here — the elaborator decides.
 pub fn parse_compiler_item_attrs(
     attrs: &[crate::ast::Attribute],
 ) -> (Vec<CompilerItem>, Vec<String>) {

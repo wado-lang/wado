@@ -1,0 +1,44 @@
+// `promote_fields` pins a shared field load before the statement holding the
+// earliest use. The two `c.n` reads agree with each other — one `heap_ver` —
+// but not with that boundary: `bump(c)` runs earlier in the same statement.
+//
+// The receiver is a `&mut` parameter on purpose: the receiver gate treats a
+// parameter more leniently than the identical shape on a local.
+
+struct Counter {
+    n: i32,
+}
+
+#[inline(never)]
+fn bump(c: &mut Counter) -> i32 {
+    c.n = c.n + 10;
+    return 1;
+}
+
+#[inline(never)]
+fn total(a: i32, b: i32, c: i32) -> i32 {
+    return a + b + c;
+}
+
+// Keeps the field out of reach of constant forwarding.
+
+#[inline(never)]
+fn seed() -> i32 {
+    return 8;
+}
+
+#[inline(never)]
+fn work(c: &mut Counter) -> i32 {
+    return total(bump(c), c.n, c.n);
+}
+
+export fn run() {
+    let mut c = Counter { n: seed() };
+    assert work(&mut c) == 37;
+    assert c.n == 18;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

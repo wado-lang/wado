@@ -1,14 +1,8 @@
-//! Template string expansion synthesis phase.
-//!
-//! Expands `TirExprKind::TemplateString` nodes into concrete formatting code:
-//! a `__tmpl` labeled block containing `String::with_capacity`, `push_str` calls,
-//! `Formatter` construction, and `Display`/`Inspect` trait dispatch.
-//!
-//! Pipeline position: pre-monomorphize synthesis phase.
-//! Template expansion emits trait method calls (`Display::fmt`, `Inspect::inspect`)
-//! that the monomorphizer resolves to concrete implementations. This approach
-//! eliminates the need for post-mono `has_trait_impl` checks and standalone inspect
-//! functions.
+//! Template string expansion: `TirExprKind::TemplateString` becomes a `__tmpl`
+//! labeled block of `String::with_capacity`, `push_str` calls, `Formatter`
+//! construction, and `Display` / `Inspect` dispatch. Runs pre-monomorphize, so
+//! the emitted trait calls resolve there — no post-mono `has_trait_impl` check
+//! or standalone inspect function is needed.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -26,17 +20,10 @@ use crate::tir::{
 use crate::token::Span;
 
 /// Snapshot of every `core:prelude/format` symbol name + case index the
-/// template-expansion synthesiser needs. Resolved once through the
-/// [`CompilerItem`] registry per template-string expansion, then threaded
-/// through the helpers so stdlib renames flow without touching synthesis
-/// sites — same shape as
-/// [`super::cm_binding::types::CmStdlibNames`].
-///
-/// Every format-family trait is single-method, so each `<trait>` field
-/// is paired with a `<trait>_method` field carrying the trait's
-/// resolved method name (e.g. `"fmt"` for `Display`, `"inspect"` for
-/// `Inspect`). Both values come from
-/// [`CompilerItems::trait_method_name`].
+/// template-expansion synthesiser needs, resolved once through the
+/// [`CompilerItem`] registry so stdlib renames flow without touching synthesis
+/// sites. Every format-family trait is single-method, so each `<trait>` field is
+/// paired with a `<trait>_method` from [`CompilerItems::trait_method_name`].
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub(super) struct FormatStdlibNames {
@@ -326,16 +313,11 @@ fn expand_expr(expr: &mut TirExpr, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx
             body_locals,
             ..
         } => {
-            // Closure bodies own an independent local-index namespace
-            // (see `TirExprKind::Closure::body_locals` / `address_taken_locals`).
-            // Template synth locals (`__r`, `__f`, …) must be allocated in
-            // that namespace; otherwise their indices collide with closure
-            // params or body lets and `LocalCollector` in closure planning
-            // merges incompatibly-typed locals into the same Wasm slot,
-            // producing a module that fails core-Wasm validation.
-            //
-            // Mirrors the same closure-scope switch in
-            // `lower::translate::pattern::lower_expr`'s `Closure` arm.
+            // Closure bodies own an independent local-index namespace, so the
+            // template synth locals (`__r`, `__f`, …) must be allocated there;
+            // otherwise they collide with closure params or body lets and
+            // `LocalCollector` merges incompatibly-typed locals into one Wasm
+            // slot. Mirrors the closure-scope switch in pattern lowering.
             let mut closure_alloc = FuncLocalAlloc {
                 next_index: (params.len() + body_locals.len()) as u32,
                 new_locals: Vec::new(),
@@ -1429,19 +1411,11 @@ fn trait_impl_module(
     {
         return loc.clone();
     }
-    // Fallbacks for impls `TraitEnv` cannot index:
-    //
-    // - Auto-derived/synthesized impls (Inspect / Display fallbacks for
-    //   structs, enums, variants, newtypes, flags). `synthesize_traits`
-    //   places these in the same module as the receiver type, so the
-    //   type's `module_source` is correct.
-    // - Function types are anonymous and have no defining module, so
-    //   their `Fn<N, Ret>^Inspect` / `^InspectAlt` impls are auto-derived
-    //   per-module (no cross-module dedup, since
-    //   `collect_existing_trait_methods` is per-module). After `link()`
-    //   every function's `module_source` is rewritten to its hosting
-    //   module, so the impl callable from this template lives under the
-    //   current module's namespace.
+    // Fallbacks for impls `TraitEnv` cannot index. An auto-derived impl lands in
+    // the receiver type's module, so the type's `module_source` is right. A
+    // function type is anonymous and has no defining module, so its
+    // `Fn<N, Ret>^Inspect` impl is auto-derived per-module and, after `link()`,
+    // lives under the current module's namespace.
     if let Some(m) = type_module {
         return m;
     }

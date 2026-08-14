@@ -1,19 +1,8 @@
-//! Typed extraction of a Kiln generator's `Options` struct.
-//!
-//! The driver calls [`extract_options_descriptor`] once per generator
-//! component, after that component's package has been type-resolved. The
-//! returned [`OptionsDescriptor`] drives both [`crate::kiln::options_check`]
-//! (typed validation of a user-supplied options table) and
-//! [`crate::kiln::cache::encode_options_canonical`] (the cache-key byte
-//! layout).
-//!
-//! See WEP 2026-04-12 §"Authoring a generator" for the full design.
-//!
-//! The extractor is deliberately strict: only shapes that round-trip cleanly
-//! through the Component-Model canonical encoder are allowed. A generator
-//! that wants to accept richer configuration should split that configuration
-//! out into auxiliary structs that are themselves made of the primitives
-//! listed here.
+//! Typed extraction of a Kiln generator's `Options` struct. The driver calls
+//! [`extract_options_descriptor`] once per generator component, once its package
+//! is type-resolved; the result drives both options validation and the cache-key
+//! byte layout. Deliberately strict — only shapes that round-trip through the
+//! Component-Model canonical encoder. See WEP 2026-04-12.
 
 use serde::{Deserialize, Serialize};
 
@@ -125,17 +114,13 @@ pub enum CanonicalValue {
     List(Vec<CanonicalValue>),
 }
 
-/// Locate `pub struct Options` in the generator's entry module and describe
-/// it as an [`OptionsDescriptor`].
-///
-/// `Options` is optional: a generator with no configuration omits it and gets
-/// an empty descriptor. `generate` is always required.
+/// Locate `pub struct Options` in the generator's entry module and describe it
+/// as an [`OptionsDescriptor`]. `Options` is optional — a generator with no
+/// configuration gets an empty descriptor — while `generate` is required.
 ///
 /// # Errors
-/// Returns `Err` when the module has no TIR or does not export `generate`.
-/// Shape-level failures inside a present `Options` come back as batched
-/// [`Code::GeneratorOptionsUnsupported`] diagnostics (a single bad field does
-/// not hide the rest).
+/// When the module has no TIR or does not export `generate`. A shape failure
+/// inside `Options` comes back batched, so one bad field hides no others.
 pub fn extract_options_descriptor(
     sem: &Semantics,
     module: &ModuleSource,

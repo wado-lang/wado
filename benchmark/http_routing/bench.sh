@@ -106,6 +106,7 @@ echo "=== Installing Hono dependencies ==="
 npm install --prefix . --silent --no-audit --no-fund
 
 # Server roster, populated in start order. Hono on Bun is optional.
+# Every server is driven over HTTP/1.1; README.md says why.
 SERVER_NAMES=()
 SERVER_URLS=()
 register() {

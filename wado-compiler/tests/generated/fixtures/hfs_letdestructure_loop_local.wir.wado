@@ -368,12 +368,14 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[hfs_letdestructur
     let item: ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";
     let v_2: ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";
     let v_3: ref "hfs_letdestructure_loop_local.wado//Acc";
-    if self.index >= self.end {
+    let _av_4: i32;
+    _av_4 = self.index;
+    if _av_4 >= self.end {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]">(self.repr, self.index);
+    v_2 = builtin::array_get<ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]">(self.repr, _av_4);
     item = struct.new "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]" { 0: ref.as_non_null(v_3 = v_2.0; struct.new "hfs_letdestructure_loop_local.wado//Acc" { sum: v_3.sum }), 1: v_2.1 };
-    self.index = self.index + 1;
+    self.index = _av_4 + 1;
     return item;
 }
 

@@ -1,0 +1,20 @@
+// `future<result<_, own<error>>>` from `Connector::send`. A unit Ok arm is also
+// the WASI transmission shape, so only the Err arm tells the two apart. The
+// payload is classified only once the future is operated on, hence the drop.
+use { println, Stdout } from "core:cli";
+use { Connector, Error } from "wasi:tls";
+
+export fn run() with Stdout, Connector, Error {
+    let conn = Connector::new();
+
+    let [data_rx, data_tx] = Stream::<u8>::new();
+    let [tls_rx, send_done] = conn.send(data_rx);
+    data_tx.drop();
+    tls_rx.drop();
+    send_done.drop();
+
+    println("send future dropped");
+}
+
+__DATA__
+{"stdout": "send future dropped\n"}

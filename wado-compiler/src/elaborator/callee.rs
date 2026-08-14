@@ -1,19 +1,8 @@
-//! Resolved call-target identities.
-//!
-//! `CalleeRef` and `StaticMethodRef` bundle the `(module, name)` pairs that
-//! identify a free function or a static method. Historically these were
-//! threaded through the elaborator as separate `&ModuleSource` + `&str`
-//! parameters, which allowed the defining-module name and the caller-visible
-//! alias to drift apart (see the bug where cross-module aliased generic calls
-//! without turbofish failed: `lookup_generic_func_for_inference` re-looked up
-//! a symbol by the defining-module name even though the symbol table is keyed
-//! by the local alias).
-//!
-//! By forcing every downstream consumer to take `&CalleeRef` / `&StaticMethodRef`,
-//! there is no way to accidentally split the pair, and the alias→defining-name
-//! translation lives in exactly one place: the factory methods below. The
-//! `name` fields are always the name *as defined in `module`*, never a local
-//! alias.
+//! Resolved call-target identities: `CalleeRef` and `StaticMethodRef` bundle the
+//! `(module, name)` pair naming a free function or static method. Threaded
+//! separately, the defining-module name and the caller-visible alias could drift
+//! apart; the bundle leaves no way to split them and confines the
+//! alias→defining-name translation to the factory methods below.
 
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::Symbol;

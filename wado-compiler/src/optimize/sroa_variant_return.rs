@@ -1,96 +1,8 @@
-//! Variant return scalarization for Wado NIR — the return-position dual of
-//! [`super::sroa_param`].
-//!
-//! A function returning a `variant` is rewritten to return a tuple of
-//! `[tag, payload slots…]`, so nothing downstream sees a variant in the return
-//! position:
-//!
-//! ```text
-//! fn parse(s: String) -> Result<i32, String>
-//!   ⇒ fn parse(s: String) -> [i32, i32, Option<String>]
-//!
-//! return Ok(v)                     ⇒  return [0, v, None]
-//! match parse(s) { Ok(v) => A, … }  ⇒  let t = parse(s);
-//!                                      match t.0 { 0 => { let v = t.1; A } … }
-//! ```
-//!
-//! The Wasm-level ABI needs no new machinery: [`super::multi_value_return`]
-//! already flattens a tuple return whose call sites destructure, so the variant
-//! stops being a special case. Running in the optimization loop before
-//! `nir/inline` is the point — every later pass then reasons about an integer
-//! tag and plain locals instead of one opaque boxed value.
-//!
-//! ## The slot typing rule
-//!
-//! Padding is the only part NIR cannot express directly: an unused slot needs a
-//! value of the slot's type, and NIR types carry no nullability. The rule keys
-//! on the payload's *Wasm* representation, which is what decides whether a
-//! wrapper costs anything:
-//!
-//! | payload `T`                                   | slot        | live      | pad     |
-//! | --------------------------------------------- | ----------- | --------- | ------- |
-//! | scalar (primitive / enum / flags / resource)  | `T`         | `v`       | `0`     |
-//! | already nullable (`Option<X>`, `X` a GC ref)  | `T`         | `v`       | `None`  |
-//! | any other GC ref                              | `Option<T>` | `Some(v)` | `None`  |
-//! | `Unit`                                        | (no slot)   | —         | —       |
-//!
-//! `wir_optimize::nullable_ref` lowers `Option<T>` for a non-nullable ref `T`
-//! to a bare `ref null T`, so row 3's wrapper is free. Row 2 is what stops the
-//! wrapper from ever costing a box: `Option<Option<String>>` holds a *nullable*
-//! ref, which that lowering refuses to erase.
-//!
-//! A pad is never read — every reader tests the tag first.
-//!
-//! ## Soundness does not rest on validation
-//!
-//! Validation is a snapshot of the call sites that exist when it runs, and
-//! `nir/inline` keeps planting new ones afterwards — so a callee rewritten in
-//! one iteration can acquire an unvalidated call site in the next, by which
-//! point its signature is committed. Two things close that:
-//!
-//! - The call-site rewrite runs over *everything scalarized so far*, not just
-//!   this round's candidates, so a site inlining just planted still gets the
-//!   fast path. It declines per temp ([`temp_uses_rewritable`]) rather than
-//!   assuming validation vouched for the shape.
-//! - [`rebox_stragglers`] takes what is left: any call the fast path did not
-//!   bind is wrapped back into the variant it used to return. Validation is a
-//!   profitability filter, not a correctness precondition.
-//!
-//! A rebox is sound but reinstates the allocation the pass exists to remove, so
-//! one firing in steady state means the candidate should not have been taken —
-//! it is a bug in the candidate set, not a cost to absorb. The tail-call rule
-//! in [`check_uses`] is what keeps the count at zero: a `return g(x)` is only a
-//! reason to keep `g` when the caller has a tuple to pass it through.
-//!
-//! ## Where a call's result is read
-//!
-//! [`call_sites`] is the only answer. Validation, the call-site rewrite, the
-//! repair and the invariant check all read it, so they differ in what they do
-//! with a site and never in which sites exist. Add a consumer by reading it,
-//! never by writing a fifth traversal.
-//!
-//! Each of the four used to decide for itself, and every gap between them was a
-//! defect: a binding the rewrite bound and validation refused, a call the
-//! rewrite retyped and the repair wrapped back into a variant, a `let` the
-//! assertion never looked at.
-//!
-//! ## Not yet handled
-//!
-//! The WIR widening pass this replaced is gone; only its `flatten_variant_slots`
-//! half remains, splitting a nested result slot after lowering. What this pass
-//! still declines:
-//!
-//! - A `LabeledBlock` in return-value position whose value also arrives via
-//!   `break L: v`. Those exits are rejected outright
-//!   ([`return_value_scalarizable`]) rather than half-handled.
-//! - A `v128`, `i128` or `u128` payload ([`slot_shape`]). The pad decides it:
-//!   every slot needs a zero this pass can mint as a promoted value, and
-//!   `ValueKind` has no `v128` literal, while the 128-bit types occupy two Wasm
-//!   results the slot count does not model.
-//!
-//! A case payload that is itself a variant is *not* declined — it takes a
-//! [`SlotShape::Wrapped`] slot, and `flatten_variant_slots` splits that slot
-//! further if the WIR shapes allow.
+//! Variant return scalarization — the return-position dual of
+//! [`super::sroa_param`]. A `variant` return becomes `[tag, payload slots…]`,
+//! which [`super::multi_value_return`] already flattens; slot types key on the
+//! payload's Wasm representation ([`slot_shape`]) and pads are never read.
+//! Whatever the rewrite misses, [`rebox_stragglers`] wraps back into a variant.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
@@ -249,27 +161,11 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
 // Repair: reboxing a call site the scalarized form never reached
 // -----------------------------------------------------------------------
 
-/// What makes the rewrite unconditionally sound.
-///
-/// Validation is a snapshot: it sees the call sites that exist when it runs.
-/// `nir/inline` runs later in the same iteration and keeps running in later
-/// ones, and it copies bodies wholesale — so a callee rewritten in iteration N
-/// can acquire a brand-new call site in iteration N+1 that nothing validated.
-/// The signature is already committed by then, so leaving that site alone is
-/// invalid Wasm, not a missed optimization.
-///
-/// Rather than try to forbid such sites, any call this pass's fast path did not
-/// bind is wrapped back into the variant it used to return:
-///
-/// ```text
-/// f(x)  ⇒  { let __t = f(x); match __t.0 { 0 => Ok(__t.1!), _ => Err(__t.2!) } }
-/// ```
-///
-/// The surrounding context then sees the variant-typed expression it was
-/// written against and needs no analysis at all. The rebox costs the allocation
-/// the scalarization was meant to avoid, so it is a correctness backstop, not a
-/// target — `const_fold` and `sroa` collapse most of them once the tag is
-/// known. Validation is left as what it now is: a profitability filter.
+/// Wrap every call the fast path did not bind back into the variant it used to
+/// return, so the surrounding context sees the type it was written against:
+/// `f(x)` ⇒ `{ let __t = f(x); match __t.0 { 0 => Ok(__t.1!), _ => Err(__t.2!) } }`.
+/// This is what makes the rewrite sound without validation — `nir/inline` keeps
+/// planting call sites after a callee's signature is already committed.
 fn rebox_stragglers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let scalarized = scalarized_returns(project);
     if scalarized.is_empty() {
@@ -2132,17 +2028,11 @@ fn rewrite_call_sites(
         let rebind = Rebind::new(&func, &project.type_table.borrow());
         changed |= hoist_call_scrutinees(&mut body, &mut func, candidates, &rebind, span);
         let mut bound = bound_temps(&body, candidates, func.return_type);
-        // A site validated this round is known handleable; one inherited from an
-        // earlier round is not, so each temp is re-checked. A temp that fails is
-        // dropped here and reboxed instead of half-rewritten.
-        //
-        // The aliasing refusal has to be repeated here, not left to validation:
-        // this runs over everything scalarized so far, and an inline-planted
-        // site on an earlier round's callee never passed validation at all. A
-        // temp whose address is taken, or which a `stores` parameter aliases, is
-        // not a pure destructure target — retyping it to the tuple would hand a
-        // tuple to a reference cell the rebox can no longer repair, because
-        // `handled_call_sites` then reads the binding as already handled.
+        // Re-check every temp: a site inherited from an earlier round never
+        // passed validation, so the aliasing refusal is repeated here rather
+        // than left to it. An aliased temp is not a pure destructure target, and
+        // retyping it would hand a tuple to a reference cell the rebox can no
+        // longer repair. A temp that fails is dropped and reboxed instead.
         let aliased = |local: &u32| {
             func.address_taken_locals.contains(local) || func.stores_aliased_locals.contains(local)
         };

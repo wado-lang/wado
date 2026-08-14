@@ -1,27 +1,8 @@
 //! Argument type synthesis — what a call site knows about an argument's type
-//! before any candidate signature exists.
-//!
-//! Overload selection (WEP 2026-07-31) needs argument types before it can pick
-//! among one trait's argument lists, and arguments are elaborated *after* the
-//! winner is known. This module answers the question in between: it classifies
-//! an argument expression into an [`ArgClass`], the set of types the argument
-//! could elaborate to.
-//!
-//! # Soundness
-//!
-//! The denoted set must *contain* the type the argument really elaborates to.
-//! Over-approximating costs a resolution; under-approximating selects the wrong
-//! impl, which is a compiler bug. A premise that is not exactly known widens to
-//! [`ArgClass::Head`] or [`ArgClass::Opaque`], never to a guess.
-//!
-//! # Side-effect discipline
-//!
-//! Synthesis runs during lookup, before anything is committed, so it must leave
-//! no trace but interning: no `resolve_expr`, no `&mut FunctionContext`, no
-//! TIR, no recorded fact. The lookup queries it does call report and record on
-//! their own, so [`Elaborator::synthesize_arg_class`] runs them under the
-//! logger's quiet scope and the use→def suppression, and asserts in debug
-//! builds that the module's fact count is unchanged.
+//! before any candidate signature exists, which overload selection (WEP
+//! 2026-07-31) needs and elaboration cannot yet give. The resulting
+//! [`ArgClass`] must *contain* the real type, so an inexact premise widens
+//! rather than guessing, and synthesis leaves no trace but interning.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;

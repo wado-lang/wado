@@ -1,19 +1,8 @@
-//! Flatten block-tailed `let` bindings — the value-block normal form.
-//!
-//! An inlined helper that computes intermediates before its result leaves the
-//! binding wrapped in a block, which `sroa` and other matchers — keyed on a
-//! direct `let x = <value>` — then miss:
-//!
-//! ```text
-//! let x = { let end = v.used; ArraySlice { repr: &v.repr, start: 0, end } }
-//! ⇒ let end = v.used; let x = ArraySlice { repr: &v.repr, start: 0, end }
-//! ```
-//!
-//! Only straight-line leading statements (`Let` / `Expr` / `LetDestructure`)
-//! are hoisted, so no control flow crosses the binding and the tail — already
-//! last — keeps its execution order. With the fixed-point loop this converges
-//! to the normal form: after the post-inline peephole, no `let` binds a
-//! straight-line value-position `Block`.
+//! Flatten block-tailed `let` bindings — the value-block normal form. An inlined
+//! helper computing intermediates leaves its binding wrapped in a block, which
+//! `sroa` and every other matcher keyed on a direct `let x = <value>` then miss;
+//! hoisting the leading straight-line statements out restores the shape. Only
+//! `Let` / `Expr` / `LetDestructure` move, so execution order is unchanged.
 
 use cranelift_entity::EntityRef;
 

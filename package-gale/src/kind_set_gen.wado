@@ -1,0 +1,199 @@
+//! Token-set tables — `_kind_set_<id>` helpers, `FOLLOW_MASK_<id>` and
+//! `SYNC_<id>` globals — and the lookahead conditions that read them.
+//! Module-level emit: `codegen` writes the tables once, rule bodies only
+//! intern sets and build conditions.
+
+use { LoweredGrammar } from "./gir.wado";
+use { GenContext, sets_overlap } from "./gen_context.wado";
+use { join_kinds } from "./gen_util.wado";
+use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
+use { CodeWriter, FnSpec } from "./wadopoet.wado";
+
+/// Scan-side twin of `gen_lookahead_condition`. Uses
+/// `tokens[pos + d]` (guarded by `pos + d < tokens.len()`) instead
+/// of `p.peek_at(d)`. Multi-token sets route through
+/// `ctx.kind_check_str` so they collapse to a `_kind_set_<id>(...)`
+/// helper call; otherwise a 120-keyword set inlined at every dispatch
+/// site bloats the generated wasm by hundreds of KB.
+pub fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -> String {
+    return join_lookahead_condition(ctx, sig, sig.len(), LookaheadAccess::Scan);
+}
+
+pub global EMPTY_SYNC: List<String> = [];
+
+/// Resolve a leaf's FIRST-of-rest to the by-reference `expect` sync argument:
+/// `&SYNC_<id>` for a distinct non-empty set (interned into a `global` once,
+/// never rebuilt per call), or `&EMPTY_SYNC` for the empty set. Mirrors the
+/// `FOLLOW_MASK_<id>` interning so the hot path copies nothing.
+pub fn sync_set_ref(ctx: &mut GenContext, sync: &List<String>) -> String {
+    if let Some(id) = ctx.intern_sync_set(sync) {
+        return `&SYNC_${id}`;
+    }
+    return String::from("&EMPTY_SYNC");
+}
+
+enum LookaheadAccess {
+    Scan,
+    Parse,
+    ParseKind,
+}
+
+fn join_lookahead_condition(
+    ctx: &mut GenContext,
+    sig: &List<List<String>>,
+    depth: i32,
+    access: LookaheadAccess,
+) -> String {
+    let mut result = String::with_capacity(128);
+    for let mut d = 0; d < depth; d += 1 {
+        if d > 0 {
+            result.push_str(&" && ");
+        }
+        let part = match access {
+            Scan => {
+                let idx_expr = if d == 0 { `pos` } else { `pos + ${d}` };
+                let check = ctx.kind_check_str(&sig[d], &`tokens[${idx_expr}]`);
+                `${idx_expr} < tokens.len() && ${check}`;
+            },
+            Parse => {
+                let check_expr = if d == 0 { `p.peek_kind()` } else { `p.peek_at(${d})` };
+                ctx.kind_check_str(&sig[d], &check_expr);
+            },
+            ParseKind => {
+                let check_expr = if d == 0 { `kind` } else { `p.peek_at(${d})` };
+                ctx.kind_check_str(&sig[d], &check_expr);
+            },
+        };
+        result.push_str(&part);
+    }
+    return result;
+}
+
+pub fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -> String {
+    return join_lookahead_condition(ctx, sig, sig.len(), LookaheadAccess::Parse);
+}
+
+/// Emit a `_kind_set_<id>(k: i32) -> bool` function for every
+/// multi-element token-kind set interned during parser codegen. The
+/// `ctx.kind_check_str` and `ctx.kind_negate_check_str` methods rewrite
+/// every multi-element `matches { ... }` check into a call into one of
+/// these helpers, so duplicate sets share a single function body in
+/// the generated wasm.
+/// Emit `_kind_set_<id>(k) -> bool` helpers. The id range
+/// `0..lowered.kind_sets.len()` reads tokens directly from
+/// `lowered.kind_sets` — that's lower's Phase 2.7 pre-interning
+/// surfacing as actual generated code. Higher ids (sets emit-time
+/// `kind_check_str` interned during walk) read from
+/// `ctx.kind_sets()` as a salvage tail, same pattern as the
+/// variant-emission split.
+///
+/// For the lower-registered prefix, the generated helper body is
+/// the canonical proof that `lowered.kind_sets[i].tokens` matches
+/// what emit subsequently calls — a mismatch would compile but
+/// parse wrong (the helper body would not include the token emit
+/// queries). Today the two registries converge by construction
+/// because both intern through the same `ctx.intern_kind_set`
+/// keyed by canonical token order.
+pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
+    let entries = ctx.kind_sets();
+    for let mut idx = 0; idx < entries.len(); idx += 1 {
+        if idx < lowered.kind_sets.len() {
+            let ks = &lowered.kind_sets[idx];
+            gen_kind_set_helper_raw(w, ks.id, &ctx.token_names_of(&ks.tokens));
+        } else {
+            let entry = &entries[idx];
+            gen_kind_set_helper_raw(w, entry.id, &ctx.token_names_of(&entry.tokens));
+        }
+    }
+}
+
+/// Emit `global FOLLOW_MASK_<id>: List<List<i32>> = [[TK_X], …]` for
+/// every interned runtime FOLLOW mask, in `FollowMaskEntry` id order.
+/// Repair call sites pass `&FOLLOW_MASK_<id>` to `follow_yields`. Emits
+/// nothing while the registry is empty (the common case until the
+/// runtime-follow conversion wires call sites).
+pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
+    // No caller-FOLLOW gate anywhere ⇒ no call site references a mask,
+    // so emitting the globals would leave them unused. Skip entirely.
+    if !ctx.emit_follow() {
+        return;
+    }
+    let entries = ctx.follow_masks();
+    for let entry of &entries {
+        let mut depths: List<String> = [];
+        for let depth_set of &entry.mask {
+            depths.push(`[${join_kinds(&ctx.token_names_of(depth_set))}]`);
+        }
+        w.line(&`global FOLLOW_MASK_${entry.id}: List<List<i32>> = [${join_kinds(&depths)}];`);
+    }
+    if !entries.is_empty() {
+        w.blank();
+    }
+}
+
+/// Emit the recovery sync-set globals: `EMPTY_SYNC` (the empty default) plus
+/// one `SYNC_<id>: List<i32>` per interned non-empty set. `expect` takes its
+/// `sync` by reference to one of these, so a terminal on the valid hot path
+/// neither rebuilds nor copies the set.
+pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &GenContext) {
+    if ctx.parser_rules.is_empty() {
+        return;
+    }
+    w.line(&"global EMPTY_SYNC: List<i32> = [];");
+    for let entry of &ctx.sync_sets() {
+        w.line(&`global SYNC_${entry.id}: List<i32> = [${join_kinds(&ctx.token_names_of(&entry.tokens))}];`);
+    }
+    w.blank();
+}
+
+fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
+    let mut f = FnSpec::new(&`_kind_set_${id}`);
+    f.add_param(&"k", &"i32");
+    f.set_return_type(&"bool");
+    f.emit_begin(w);
+    let mut body = String::with_capacity(64);
+    body.push_str(&"return k matches { ");
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if i > 0 {
+            body.push_str(&" | ");
+        }
+        body.push_str(&tokens[i]);
+    }
+    body.push_str(&" };");
+    w.line(&body);
+    w.end();
+    w.blank();
+}
+
+pub fn build_lookahead_condition(ctx: &mut GenContext, pos_sets: &List<List<String>>, depth: i32) -> String {
+    return join_lookahead_condition(ctx, pos_sets, depth, LookaheadAccess::ParseKind);
+}
+
+pub fn find_needed_depth(all_position_sets: &List<List<List<String>>>) -> i32 {
+    let max_k = MAX_LOOKAHEAD_DEPTH;
+    for let mut depth = 1; depth <= max_k; depth += 1 {
+        let mut all_ok = true;
+        for let mut i = 0; i < all_position_sets.len(); i += 1 {
+            for let mut j = i + 1; j < all_position_sets.len(); j += 1 {
+                let mut still_ambiguous = true;
+                for let mut d = 0; d < depth; d += 1 {
+                    if d >= all_position_sets[i].len() || d >= all_position_sets[j].len() {
+                        still_ambiguous = false;
+                        break;
+                    }
+                    if !sets_overlap(&all_position_sets[i][d], &all_position_sets[j][d]) {
+                        still_ambiguous = false;
+                        break;
+                    }
+                }
+                if still_ambiguous {
+                    all_ok = false;
+                }
+            }
+        }
+        if all_ok {
+            return depth;
+        }
+    }
+    return max_k;
+}

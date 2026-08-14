@@ -1,20 +1,12 @@
-//! NIR skeleton arena (Layer 1).
-//!
-//! A per-function arena representation of a NIR body: every node lives in a
-//! `PrimaryMap` keyed by a typed id (`ExprId` / `StmtId` / `BlockId` / `PatId`)
-//! and references its children by id. This is the substrate the worklist
-//! rewrite engine needs: stable handles that survive in-place edits.
-//!
-//! This module owns the representation, structural traversal
-//! (`for_each_child`), and structural cloning (`clone_expr` / `clone_block`).
-//! The parent map, the local use index, and the mutating edit API live on the
-//! rewrite [`crate::nir_engine::Engine`] that consumes this arena, not on
-//! `Body` itself (so they don't burden every body). `lower::translate` builds
-//! the arena directly — there is no tree representation to convert from. See
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`.
+//! NIR skeleton arena (Layer 1): a per-function body whose nodes live in
+//! `PrimaryMap`s keyed by typed ids and reference their children by id, giving
+//! the rewrite engine handles that survive in-place edits. This module owns the
+//! representation, traversal, and cloning; the parent map, use index and edit
+//! API sit on [`crate::nir_engine::Engine`]. See WEP 2026-06-05.
 
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
+use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBinaryOp, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
@@ -217,7 +209,7 @@ pub enum ExprKind {
         has_receiver: bool,
     },
     CmRawCall {
-        local_name: String,
+        target: CmCallTarget,
         args: Vec<Operand>,
     },
     FieldAccess {
@@ -635,17 +627,10 @@ impl Body {
 }
 
 /// A NIR expression stored as an arena [`Body`] whose root block holds exactly
-/// one `Expr` statement. This is how single-expression NIR positions (global
-/// initializers) are represented so the optimizer engine and the arena passes
-/// can operate on them uniformly, while the wrapped expression stays directly
-/// reachable via [`ExprBody::expr`].
-///
-/// The newtype localizes the "root block = one `Expr` statement" invariant:
-/// it is established at construction (`from_body` / `wrapping`) and read
-/// through `expr()`, instead of every consumer rediscovering it via a bare
-/// `Body::sole_expr` on a plain `Body`. Passes that need to run the rewrite
-/// engine or mutate the body in place go through `body_mut()`, which keeps the
-/// single-`Expr`-statement shape (engine rules at a global are expr-local).
+/// one `Expr` statement — how a single-expression position such as a global
+/// initializer is represented, so the engine and arena passes handle it like any
+/// body. The newtype localizes that invariant: established at construction, read
+/// through `expr()`, and preserved by `body_mut()`.
 #[derive(Debug, Clone)]
 pub struct ExprBody {
     body: Body,
@@ -816,8 +801,8 @@ impl Body {
                     .collect(),
                 has_receiver,
             },
-            ExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
-                local_name,
+            ExprKind::CmRawCall { target, args } => ExprKind::CmRawCall {
+                target,
                 args: args.into_iter().map(|a| self.clone_operand(a)).collect(),
             },
             ExprKind::FieldAccess {
@@ -1160,6 +1145,60 @@ impl Body {
         }
     }
 
+    /// Every local index that is *read* — every `Local` mention except the
+    /// bare-`Local` target of an `Assign` (a write). `&local` / `&mut local`,
+    /// `local.field = …`, and every value-position `Local` count as reads.
+    pub fn collect_local_reads(&self, out: &mut IndexSet<u32>) {
+        self.collect_local_reads_node(NodeRef::Block(self.root), out);
+    }
+
+    fn collect_local_reads_node(&self, node: NodeRef, out: &mut IndexSet<u32>) {
+        if let NodeRef::Expr(id) = node {
+            match &self.exprs[id].kind {
+                ExprKind::Local { index, .. } => {
+                    out.insert(*index);
+                    return;
+                }
+                ExprKind::Assign { target, value } => {
+                    let (target, value) = (*target, *value);
+                    // The bare-`Local` target is a write, not a read; nested
+                    // write places (`a.field`, `a[i]`) and the assigned value
+                    // are reads.
+                    if !matches!(&self.exprs[target].kind, ExprKind::Local { .. }) {
+                        self.collect_local_reads_node(NodeRef::Expr(target), out);
+                    }
+                    if let Some(ve) = value.as_expr() {
+                        self.collect_local_reads_node(NodeRef::Expr(ve), out);
+                    }
+                    return;
+                }
+                _ => {}
+            }
+        }
+        let mut kids = Vec::new();
+        self.for_each_child(node, |c| kids.push(c));
+        for c in kids {
+            self.collect_local_reads_node(c, out);
+        }
+    }
+
+    /// The first of `locals` that still has a reachable read, in the skeleton or
+    /// the value pool — the check a rewrite that deletes a binding runs against
+    /// itself.
+    ///
+    /// One census for the whole batch, since each half costs a body walk. Read
+    /// off the arena, not the engine's use index and memo, which are what the
+    /// rewrite decided on — so this can still catch them drifting.
+    pub fn surviving_read(&self, locals: &[u32]) -> Option<u32> {
+        if locals.is_empty() {
+            return None;
+        }
+        let mut reads = IndexSet::default();
+        self.collect_local_reads(&mut reads);
+        self.promoted_local_reads(&mut reads);
+        locals.iter().copied().find(|l| reads.contains(l))
+    }
+
     /// [`Body::promoted_local_reads`] as a per-local tally, for a gate comparing
     /// a whole-body count against a scoped one. Attribution is per value, so
     /// unlike the union above a shared subtree is walked once per value that
@@ -1177,16 +1216,11 @@ impl Body {
         counts
     }
 
-    /// Invoke `f` on every operand slot of `node`, in source order — the
-    /// mutable twin of [`Body::for_each_operand`]. Non-operand `ExprId` slots
-    /// (`Assign::target`) and structural children (blocks, patterns) are not
-    /// operands and are not visited.
-    ///
-    /// A `&mut` walk cannot be a filter over the shared [`Slot`] one, so this
-    /// match restates the operand positions. A debug assertion compares its
-    /// slot count against [`Body::for_each_operand`] on every call, so a variant
-    /// taught to one and not the other fails the first test that reaches that
-    /// node kind.
+    /// Invoke `f` on every operand slot of `node`, in source order — the mutable
+    /// twin of [`Body::for_each_operand`]. Non-operand `ExprId` slots and
+    /// structural children are skipped. A `&mut` walk cannot filter the shared
+    /// `Slot` one, so the match is restated here; a debug assertion compares
+    /// the two slot counts on every call.
     pub fn for_each_operand_mut(&mut self, node: NodeRef, mut f: impl FnMut(&mut Operand)) {
         #[cfg(debug_assertions)]
         let expected = {
@@ -1369,7 +1403,7 @@ impl Body {
     /// structural children (blocks, patterns) are not operands and are skipped.
     ///
     /// This and [`Body::for_each_child`] filter one description of the node
-    /// structure ([`Slot`]), so a variant added to the arena cannot be seen by
+    /// structure (`Slot`), so a variant added to the arena cannot be seen by
     /// one and missed by the other.
     pub fn for_each_operand(&self, node: NodeRef, mut f: impl FnMut(Operand)) {
         self.for_each_slot(node, &mut |slot| {

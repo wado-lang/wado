@@ -1,27 +1,8 @@
-//! Logger module for structured compiler diagnostics
-//!
-//! Provides a `Logger` wrapper around `CompilerHost` that serves as the single
-//! error reporting channel for the compilation pipeline. All compilation errors
-//! are emitted immediately to the `CompilerHost` via the logger, enabling:
-//!
-//! - Real-time error reporting (for IDE/LSP)
-//! - Phase timing via host-side timestamps (compiler stays syscall-free)
-//! - Unified error counting with automatic bail at `MAX_ERRORS`
-//!
-//! # Architecture
-//!
-//! ```text
-//! Phase (Analyzer, Elaborator, ...) → Logger → CompilerHost → CLI/IDE/LSP
-//!                                     ↑
-//!                              error counting + bail
-//! ```
-//!
-//! Each phase calls `logger.error_in(module, typed_error)?` which:
-//! 1. Converts the typed error to a `Diagnostic` via `Into<Diagnostic>`
-//! 2. Stamps the module's file onto the span when it carries none
-//! 3. Emits the diagnostic to `CompilerHost::emit_diagnostic()`
-//! 4. Increments the error count
-//! 5. Returns `Err(Bail)` if the error limit is reached
+//! A `Logger` wrapping `CompilerHost` as the pipeline's single error-reporting
+//! channel: every phase's `logger.error_in(module, typed_error)?` converts the
+//! typed error to a `Diagnostic`, stamps the module's file onto a span carrying
+//! none, emits it, and bails once the count reaches `MAX_ERRORS`. Emitting
+//! immediately gives IDEs real-time errors and keeps the compiler syscall-free.
 
 use std::cell::Cell;
 
@@ -51,44 +32,11 @@ impl std::fmt::Display for Bail {
 
 impl std::error::Error for Bail {}
 
-/// Logger for the compilation pipeline
-///
-/// Wraps a `CompilerHost` and provides the unified error reporting channel.
-/// All compilation errors and informational messages go through this logger.
-///
-/// # Error Counting
-///
-/// The logger tracks how many errors have been emitted. When the count reaches
-/// `MAX_ERRORS`, `error()` returns `Err(Bail)` to stop compilation.
-///
-/// # File Attribution
-///
-/// A diagnostic's file is stamped from the module the caller holds
-/// (`error_in` / `error_at`), never from ambient logger state — so no phase
-/// can forget to set it. `error(err)` is for diagnostics that already carry
-/// their own location.
-///
-/// # Example
-///
-/// ```ignore
-/// let logger = Logger::new(&host, LogLevel::Debug);
-///
-/// // Report compilation errors attributed to a module (counted, may bail)
-/// logger.error_in(&module_source, TypeError::TypeMismatch { expected, found, span })?;
-///
-/// // Fatal errors always bail
-/// logger.fatal(TypeError::TypeMismatch { ... })?; // always Err(Bail)
-///
-/// // Informational logging (fire-and-forget, filtered by level)
-/// logger.debug("entering function");
-/// logger.info("processing 10 items");
-///
-/// // Track phase timing with RAII guard
-/// {
-///     let _span = logger.span("parse");
-///     // ... parsing happens here ...
-/// } // SpanEnd is emitted when _span is dropped
-/// ```
+/// Logger for the compilation pipeline: the unified channel every error and
+/// informational message goes through, bailing at `MAX_ERRORS`. A diagnostic's
+/// file is stamped from the module the caller holds (`error_in` / `error_at`),
+/// never from ambient state, so no phase can forget it; `error(err)` is for one
+/// that already carries its own location.
 pub struct Logger<'a, H: CompilerHost> {
     host: &'a H,
     level: LogLevel,

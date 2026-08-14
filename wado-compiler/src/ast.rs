@@ -3,18 +3,11 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
 
-/// Identity of one `AstId` allocation space — one per parse.
-///
-/// Every top-level [`crate::parser::Parser`] draws a fresh space from a
-/// process-global counter and stamps it into each id it allocates, so a full
-/// [`AstId`] is globally unique while [`AstId::local`] stays dense per module.
-/// Template-interpolation sub-parsers and [`Module::alloc_ast_id`] continue an
-/// existing space (one module tree = one space).
-///
-/// A space identifies a *parse*, not a `ModuleSource`: re-parsing mints a new
-/// one. Nothing relies on ids being stable across parses — stdlib ASTs are
-/// parsed once per process and shared (`loader::cached_stdlib_module`), and
-/// user-module facts never outlive their parse.
+/// Identity of one `AstId` allocation space — one per parse. Each top-level
+/// [`crate::parser::Parser`] draws a fresh one from a process-global counter and
+/// stamps it into every id, so a full [`AstId`] is globally unique while
+/// [`AstId::local`] stays dense per module; sub-parsers continue an existing
+/// space. Ids identify a *parse* and never survive a re-parse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AstIdSpace(u32);
 
@@ -34,19 +27,11 @@ impl AstIdSpace {
     }
 }
 
-/// Globally-unique identifier for a semantically-significant AST node (items,
-/// named members, parameters).
-///
-/// An `AstId` is an [`AstIdSpace`] (which parse made it) plus a module-local
-/// dense index assigned in DFS order (`0..Module::ast_id_count()`). Every node
-/// has a real id; there is no sentinel. Builtins are parsed like any module.
-///
-/// Because the space differs per module, nodes from different modules can
-/// never share an `AstId` — so per-node fact maps key by bare `AstId` without
-/// cross-module collisions even under a wrong keying perspective (issue
-/// #1342). Ordering is `(space, local)`, so within one module ids order by
-/// allocation — what parser checkpoint rollback and
-/// [`crate::comment::TriviaMap`] rely on.
+/// Globally-unique identifier for a semantically-significant AST node: an
+/// [`AstIdSpace`] plus a module-local dense index assigned in DFS order. Spaces
+/// differ per module, so a per-node fact map keys by bare `AstId` without
+/// collision. Ordering is `(space, local)` — ids within a module order by
+/// allocation, which parser rollback and [`crate::comment::TriviaMap`] rely on.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AstId {
     space: AstIdSpace,
@@ -93,7 +78,7 @@ impl AstId {
     /// A globally-unique `AstId` for a transient node never owned by a
     /// [`Module`] — synthesized `Type::Named` / `Type::Generic` operands for
     /// type-query functions, and test fixtures. It lives in the reserved
-    /// [`AstIdSpace::FRESH`] space, so it never collides with a
+    /// `AstIdSpace::FRESH` space, so it never collides with a
     /// parser-allocated id (and must never become a fact / symbol key).
     #[must_use]
     pub fn fresh() -> Self {
@@ -272,17 +257,11 @@ impl Module {
         self.ast_id_count
     }
 
-    /// Allocate a fresh dense [`AstId`] at the end of this module's
-    /// per-module range.  Use this when post-parse synthesis injects a
-    /// new AST node into [`Self::items`] and the node needs a
-    /// the symbol coordinate-compatible id (for
-    /// example an `Item::Impl` that the elaborator walks).  The returned
-    /// id is guaranteed not to collide with any parser-allocated id.
-    ///
-    /// Prefer this over [`AstId::fresh`] for nodes that enter a module
-    /// tree — `AstId::fresh` is globally unique but lives in the reserved
-    /// transient space, outside this module's dense local range, so
-    /// machinery keyed on that range cannot find them.
+    /// Allocate a fresh dense [`AstId`] at the end of this module's range, for
+    /// post-parse synthesis injecting a node into [`Self::items`]. Prefer it
+    /// over [`AstId::fresh`] for anything entering a module tree: that mints
+    /// into the reserved transient space, outside this dense range, where
+    /// machinery keyed on the range cannot find it.
     #[must_use]
     pub fn alloc_ast_id(&mut self) -> AstId {
         let id = AstId::new(self.ast_id_space, self.ast_id_count);
@@ -382,18 +361,11 @@ fn span_byte_len(span: Span) -> usize {
     span.end.saturating_sub(span.start)
 }
 
-/// Structural AST visitor used for id-based queries (LSP position lookup,
-/// density checks) and scope-aware analyses (reference collection).
-///
-/// Every `visit_*` method defaults to its corresponding free `walk_*`
-/// function, which recurses into children through the visitor's own
-/// methods. Implementers override only the nodes where their behavior
-/// differs from plain structural traversal.
-///
-/// `visit_id` receives every [`AstId`] / [`Span`] pair encountered during a
-/// walk — including container ids (items, statements, expressions, blocks)
-/// and leaf id-bearing nodes that have no dedicated `visit_*` method (struct
-/// fields, enum cases, generic/closure parameters, etc.).
+/// Structural AST visitor, for id-based queries (LSP position lookup, density
+/// checks) and scope-aware analyses. Every `visit_*` defaults to its free
+/// `walk_*`, which recurses through the visitor's own methods, so an implementer
+/// overrides only where its behaviour differs from plain traversal. `visit_id`
+/// sees every [`AstId`] / [`Span`] pair, containers and leaves alike.
 pub trait AstVisitor: Sized {
     /// Invoked for every [`AstId`] emitted during traversal.
     ///
@@ -1198,18 +1170,10 @@ pub struct GlobalDecl {
     pub span: Span,
 }
 
-/// A single argument in an attribute.
-///
-/// Distinguishes between string literals, bare identifiers, and key=value pairs so that
-/// `unparse` can reconstruct the original syntax faithfully.
-///
-/// Examples:
-/// - `#[cm("wasi:cli/stdout")]`          → `[Str("wasi:cli/stdout")]`
-/// - `#[inline(always)]`                           → `[Ident("always")]`
-/// - `#[wire(name = "type")]`                   → `[KeyValue("name", "type")]`
-/// - `#[canonical("wasi", "stream-new")]`          → `[Str("wasi"), Str("stream-new")]`
-/// - `#[timeout_ms(120000)]`                       → `[Number("120000")]`
-/// - `#![generated(sources = ["a.wit", "b.wit"])]` → `[KeyArray("sources", ["a.wit", "b.wit"])]`
+/// A single argument in an attribute, keeping string literals, bare identifiers,
+/// numbers, `key = value` pairs and `key = [array]` distinct so `unparse` can
+/// reconstruct the original syntax — `#[inline(always)]` is `[Ident("always")]`
+/// where `#[cm("wasi:cli/stdout")]` is `[Str(…)]`.
 #[derive(Debug, Clone)]
 pub enum AttrArg {
     /// A quoted string literal, e.g. `"value"`.
@@ -1297,20 +1261,11 @@ impl Attribute {
     }
 }
 
-/// Component Model boundary metadata extracted from `#[cm(...)]` or
-/// `#[canonical(...)]`.
-///
-/// Functions, methods, effects, resources, variant cases, and worlds tagged
-/// with one of these attributes cross the Component Model boundary, but the
-/// kind of boundary differs:
-///
-/// - `Canonical` — `#[canonical("namespace", "name")]` lowers to a CM
-///   canonical built-in (e.g. `canon.task.return`, `canon.stream.new`), not
-///   to an interface import.
-/// - `Import` — `#[cm("namespace:package/interface[@version][#function]")]`
-///   resolves to a real import from a CM interface.
-/// - `Name` — `#[cm("simple-name")]` is a single CM-side identifier used
-///   for naming a field, variant case, or method (no interface attached).
+/// Which Component Model boundary a `#[cm(…)]` / `#[canonical(…)]` declaration
+/// crosses: `Canonical` lowers to a CM canonical built-in such as
+/// `canon.task.return`, `Import` resolves to a real import from
+/// `namespace:package/interface[@version][#function]`, and `Name` is a bare
+/// CM-side identifier naming a field, case or method.
 #[derive(Debug, Clone)]
 pub enum CmBoundary {
     Canonical {
@@ -1477,17 +1432,10 @@ pub struct WorldDecl {
     pub span: Span,
 }
 
-/// A world import declaration (bare interface reference, WIT-faithful).
-///
-/// ```wado
-/// import Stdout;
-/// ```
-///
-/// Wado does not support `from "<package>"` or `as` qualifications: every
-/// importable interface is a `pub interface Foo` declaration whose
-/// `#[cm("...")]` attribute is the source of truth for its CM FQ name.
-/// Resource methods and types reach call sites through ordinary `use`
-/// statements.
+/// A world import declaration — a bare `import Stdout;`, WIT-faithful. Wado has
+/// no `from "<package>"` or `as` qualification: every importable interface is a
+/// `pub interface Foo` whose `#[cm("…")]` is the source of truth for its CM FQ
+/// name, and resource methods and types reach call sites through ordinary `use`.
 #[derive(Debug, Clone)]
 pub struct WorldImport {
     pub interface_name: String,
@@ -2006,7 +1954,7 @@ pub struct ForStmt {
 }
 
 /// For-of loop: `for let item of array { body }`
-/// Iterates over elements of an List<T>
+/// Iterates over elements of a `List<T>`
 #[derive(Debug, Clone)]
 pub struct ForOfStmt {
     pub id: AstId,
@@ -2416,17 +2364,11 @@ impl Expr {
         }
     }
 
-    /// Substitute free occurrences of identifiers inside this expression.
-    ///
-    /// Walks the expression tree and replaces each [`Expr::Ident`] whose name
-    /// appears as a key in `subs` with a clone of the mapped expression.
-    /// Used by default-argument expansion to rewrite references to earlier
-    /// parameters (e.g. `fn make_rect(w, h = w)`) into the caller's values.
-    ///
-    /// Only traverses expression forms that can appear inside the simple,
-    /// pure defaults permitted by the language; blocks, closures, and
-    /// match/if forms are left untouched because they cannot appear in a
-    /// pure default.
+    /// Replace each [`Expr::Ident`] whose name is a key in `subs` with a clone of
+    /// the mapped expression — how default-argument expansion rewrites a
+    /// reference to an earlier parameter (`fn make_rect(w, h = w)`) into the
+    /// caller's value. Traverses only the forms a simple, pure default may
+    /// contain; blocks, closures and match/if cannot appear in one.
     pub fn substitute_idents(&mut self, subs: &crate::hashmap::IndexMap<String, Expr>) {
         match self {
             Expr::Ident(ident) => {
@@ -2607,7 +2549,7 @@ pub struct StructLiteralField {
 
 /// Tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`
 /// This uses bracket syntax following TypeScript conventions.
-/// Can be coerced to List<T> when all elements have the same type.
+/// Can be coerced to `List<T>` when all elements have the same type.
 #[derive(Debug, Clone)]
 pub struct TupleLiteralExpr {
     pub id: AstId,

@@ -1,15 +1,8 @@
-//! What an expression denotes.
-//!
-//! A projection reads: it answers what value an expression stands for, given
-//! what is known about its inputs, and changes nothing. Every method here takes
-//! `&self`, and that is load-bearing rather than incidental — the engine walks
-//! the same node any number of times, so anything performed here would be
-//! performed again. What has to happen once belongs to the frame.
-//!
-//! A reference denotes its referent's value: the engine has no reference
-//! values, so borrowing and dereferencing change nothing about what is denoted.
-//! Where a frame gave a local a place of its own, that holds only for reads
-//! made *through* it — see [`Interpreter::projected_lattice`].
+//! What an expression denotes. A projection only reads, and every method taking
+//! `&self` is load-bearing: the engine walks the same node any number of times,
+//! so anything performed here would be performed again — what must happen once
+//! belongs to the frame. A reference denotes its referent's value, the engine
+//! having no reference values of its own.
 
 use std::rc::Rc;
 

@@ -1,16 +1,8 @@
-//! Nested result-slot flattening for variant returns.
-//!
-//! Widening a variant return into `[i32 disc, payload…]` happens at NIR
-//! (`optimize::sroa_variant_return`, feeding `optimize::multi_value_return`).
-//! What stays here is the one step that needs WIR shapes: splitting a `ref W`
-//! *result slot* whose `W` is itself a small variant — the `Ok(ref Option<T>)`
-//! a widening leaves boxed.
-//!
-//! The split is decidable only after lowering. Its gates read how each call
-//! site consumes the slot and whether every return decomposes, neither of which
-//! NIR can see; a NIR analogue was measured and cost more than it recovered
-//! (`docs/wep-2026-08-03-variant-return-abi.md`). So the NIR pass declines the
-//! shape and this reaches it instead.
+//! Nested result-slot flattening for variant returns. Widening one into
+//! `[i32 disc, payload…]` happens at NIR; what stays here is the step needing
+//! WIR shapes — splitting a `ref W` *result slot* whose `W` is itself a small
+//! variant, the `Ok(ref Option<T>)` a widening leaves boxed. Its gates read
+//! shapes NIR cannot see (WEP 2026-08-03).
 
 use crate::compiler_trace;
 use crate::wir::WirPackage;

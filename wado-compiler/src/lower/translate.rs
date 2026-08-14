@@ -830,17 +830,10 @@ impl FunctionTranslator<'_, '_> {
         };
 
         // The referent must be an in-place aggregate, so `*ref = v` writes each
-        // field of the shared handle. Replace-on-assign referents (variant /
-        // enum / fn) are boxed and were filtered by the `box_type_ids` check
-        // above. Three in-place shapes reach here:
-        //   - a plain `struct` (`String`, monomorphized generics): fields from
-        //     `struct_fields_map`.
-        //   - `List<T>`: an in-place `GenericInstance` never monomorphized into
-        //     its own struct, so its canonical `{repr, used}` layout comes from
-        //     `SeqField` with the concrete element type.
-        //   - a tuple (`[A, B, …]`): also an in-place `GenericInstance`, with
-        //     positional fields `0..n` typed by the tuple's element types.
-        // Any other type falls through to the default single-statement lowering.
+        // field of the shared handle; replace-on-assign referents are boxed and
+        // already filtered above. Three shapes reach here: a plain struct, whose
+        // fields come from `struct_fields_map`; a `List<T>`, whose `{repr, used}`
+        // layout comes from `SeqField`; and a tuple, with positional fields.
         let inner_resolved = self.base.type_table.borrow().get(inner_type_id).clone();
         let fields: Vec<(String, u32, tir::TypeId)> =
             if let crate::tir::ResolvedType::Struct { def, type_args } = inner_resolved {
@@ -1183,7 +1176,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::CharLiteral(c) => Some(ValueKind::Char(*c)),
             // Pure constants whose WIR depends only on type/bytes (read back
             // from the pool by the extractor): `Null` → `None`/`ref.null`,
-            // string → `translate_string_literal`, unit → no runtime value.
+            // string → `seq_literal`, unit → no runtime value.
             TirExprKind::Null => Some(ValueKind::Null),
             // String / bytes literals are no longer atomic pool values; they
             // lower to a `StructLiteral` over a packed `Array<u8>` repr in
@@ -1517,8 +1510,8 @@ impl FunctionTranslator<'_, '_> {
                 args,
                 has_receiver,
             } => self.convert_call(func, type_args, args, *has_receiver),
-            TirExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
-                local_name: local_name.clone(),
+            TirExprKind::CmRawCall { target, args } => ExprKind::CmRawCall {
+                target: target.clone(),
                 args: args.iter().map(|a| self.convert_operand(a)).collect(),
             },
             TirExprKind::FieldAccess {
@@ -2064,18 +2057,11 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Build a `String` / `List<u8>` literal as a `StructLiteral { repr:
-    /// PackedArray(bytes), used: <len> }` over a raw packed `Array<u8>`, so the
-    /// literal flows through the generic aggregate machinery (field-projection
-    /// of `.used`, body globalization) instead of being an opaque value. The
-    /// `repr` field's raw-array type and the field indices come from the
-    /// sequence struct's definition.
-    /// The single `Array<u8>` type that every `String` / `List<u8>` literal uses
-    /// for its `repr` field. `String` and `List<u8>` share one canonical backing
-    /// type, so it is read off the always-loaded `String` struct, keyed by the
-    /// compiler-item registry's canonical name/module rather than a `"String"`
-    /// magic literal — a bytes-only program may never monomorphize `List<u8>`
-    /// into `struct_fields_map`, but `String` is guaranteed present.
+    /// The single `Array<u8>` type every `String` / `List<u8>` literal uses for
+    /// its `repr` field. The two share one canonical backing type, read off the
+    /// always-loaded `String` struct through the compiler-item registry rather
+    /// than a `"String"` literal: a bytes-only program may never monomorphize
+    /// `List<u8>` into `struct_fields_map`, but `String` is always present.
     fn seq_u8_repr_type(&self) -> tir::TypeId {
         use crate::compiler_item::{CompilerItem, SeqField};
         let string_head = crate::tir::StructDef::Decl(

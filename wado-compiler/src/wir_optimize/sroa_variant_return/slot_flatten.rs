@@ -1,26 +1,8 @@
-//! Nested variant-slot flattening.
-//!
-//! Single-level SROA turns `next_element<i64>` into a function returning the
-//! multi-value vector `[outer_disc, ref Option<i64>, ref Err]`. A `ref W` result
-//! slot whose `W` is itself a small variant is still heap-boxed at every return
-//! (`struct.new W::Case`) and immediately matched at every call site. This phase
-//! splits such a slot into `W`'s own multi-value layout `[inner_disc,
-//! payloads...]` (via [`compute_variant_layout`], the same layout engine
-//! single-level SROA uses), removing the per-element inner allocation — the
-//! dominant cost when deserializing arrays of scalars.
-//!
-//! This generalizes the layout analysis recursively: the inner `W` may be any
-//! eligible `SubtypeHierarchy` variant (`Result`, a multi-case variant, an
-//! `Option<(scalar, scalar)>`), not just `Option<scalar>`. Only `Option<&T>`
-//! null-niche variants (already unboxed, no discriminant field) are out of
-//! scope.
-//!
-//! Bail-everywhere: a slot is expanded only when every return of the function
-//! decomposes structurally and every call site's slot local is consumed solely
-//! via variant access — either directly, or through the lowered `?`-unwrap
-//! `local = if Ok { payload } else { return Err }` (whose then-arm copies the
-//! slot out and whose else-arm diverges). Any other shape leaves the slot at its
-//! single-level (boxed) form, which is already correct.
+//! Nested variant-slot flattening. Single-level SROA leaves a `ref W` result
+//! slot heap-boxed at every return when `W` is itself a small variant; this
+//! phase splits it into `W`'s own `[inner_disc, payloads...]` layout via
+//! [`compute_variant_layout`]. Bail-everywhere: expanded only when every return
+//! decomposes and every slot local is consumed solely via variant access.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{
@@ -70,18 +52,10 @@ fn slot_variant_layout(module: &WirPackage, slot_ty: &WirType) -> Option<(u32, V
 }
 
 /// Build the all-default result vector for `cand`'s inner variant — used when a
-/// return leaves the slot unused (a null ref, e.g. an `Err` return).
-///
-/// These locals are dead on this path: a read of the inner slot is dominated by
-/// the outer discriminant check that selects this case (the inner match is
-/// lowered inside the outer `Ok` arm), so the outer case not being taken means
-/// the inner match is never reached. To avoid relying on that invariant for
-/// soundness, the discriminant is chosen to match *no* payload-bearing case —
-/// the unit case's value when one exists, else an out-of-range sentinel (the
-/// case count). The only slot reads `classify_slot_consumer` admits lower to
-/// `inner_disc == case_disc`, so were one to execute against this default it
-/// would correctly miss every case (as `ref.test` on the old boxed null did)
-/// rather than spuriously match case 0.
+/// return leaves the slot unused (a null ref, e.g. an `Err` return). Rather than
+/// rely on those locals being dead, the discriminant is chosen to match *no*
+/// payload-bearing case: the unit case's value if one exists, else the case
+/// count. An admitted read then misses every case, as `ref.test` on null did.
 fn default_variant_vector(cand: &SlotFlattenCand) -> Vec<WirInstr> {
     let vi = &cand.layout.variant_info;
     let disc = vi
@@ -227,14 +201,9 @@ enum SlotConsumer {
 
 /// True when a `?`-unwrap then-arm is *exactly* the slot copied out — either
 /// `[<slot extraction>]` or `[LocalSet(t, <slot extraction>), LocalGet(t)]`,
-/// where `<slot extraction>` is `LocalGet(slot)` under zero or more
-/// `RefAsNonNull` wrappers. `rewrite_unwrap_to_guard` discards the whole
-/// then-arm, so anything richer (a side-effecting prefix statement, a branch, a
-/// second definition of the temp) must be rejected or a needed statement would
-/// be silently dropped. For the two-statement form the copy temp `t` must
-/// have no reads outside the discarded pair (`def_use.get_count(t) == 1` —
-/// the pair's own `LocalGet`): a read elsewhere would observe a local whose
-/// only definition was dropped.
+/// where `<slot extraction>` is `LocalGet(slot)` under `RefAsNonNull` wrappers.
+/// `rewrite_unwrap_to_guard` discards the whole then-arm, so anything richer is
+/// rejected, and `t` must have no reads outside the discarded pair.
 fn then_is_pure_slot_copy(then_body: &[WirInstr], slot_local: &str, def_use: &LocalDefUse) -> bool {
     fn is_slot_extraction(e: &WirInstr, slot: &str) -> bool {
         match e {
@@ -305,18 +274,10 @@ fn find_unwrap_alias(body: &[WirInstr], slot_local: &str, def_use: &LocalDefUse)
 }
 
 /// Classify the consumer of `slot_local` in `body`, or `None` if not cleanly
-/// rewritable. `case_types` is the inner variant's payload-bearing case set
-/// (the only type the nested rewrite's `VariantReplacement` maps carry).
-///
-/// This is a *structural* consumer check: it verifies every use of the slot is a
-/// payload-case `ref.test` / `ref.cast` (directly or through the `?`-unwrap
-/// alias), not that those reads are dominated by the outer discriminant guard
-/// that guarantees the slot was materialized. Correctness does not hinge on that
-/// dominance: on a path where the slot is absent it decodes via
-/// [`default_variant_vector`] to a discriminant matching no payload case, so an
-/// accepted read misses every case exactly as `ref.test` on the old boxed null
-/// did. A use naming a *unit* case is rejected here (its struct type is not in
-/// `case_types`), so the flattened form only ever answers payload-case tests.
+/// rewritable. A *structural* check: every use must be a payload-case
+/// `ref.test` / `ref.cast`, directly or through the `?`-unwrap alias. Dominance
+/// is not required — an absent slot decodes via [`default_variant_vector`] to a
+/// discriminant matching no payload case. `case_types` excludes unit cases.
 fn classify_slot_consumer(
     body: &[WirInstr],
     slot_local: &str,

@@ -1,14 +1,8 @@
-//! CM resource method rewriting and stream-read binding synthesis.
-//!
-//! Two passes that run before adapter synthesis:
-//!
-//! - [`synthesize_record_stream_reads`] generates a binding function
-//!   `__cm_stream_read_<T>` for every distinct WASI record `T` referenced
-//!   by `Stream<T>::read()`, so the rewriter has a callable target.
-//! - [`rewrite_cm_resource_methods`] walks every TIR function body and
-//!   rewrites `#[cm("...")]` resource method calls into the appropriate
-//!   raw / internal / entry-module call, before downstream phases see a
-//!   `cm_name`-tagged call they don't know how to translate.
+//! Two passes ahead of adapter synthesis: [`synthesize_record_stream_reads`]
+//! generates a `__cm_stream_read_<T>` binding per WASI record
+//! `Stream<T>::read()` mentions, and [`rewrite_cm_resource_methods`] then turns
+//! every `#[cm("…")]` resource method call into its raw / internal /
+//! entry-module form, before a downstream phase meets a `cm_name`-tagged call.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -26,12 +20,12 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
+use crate::canonical::{CanonicalIntrinsic, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
-    alloc_named_local, assign, binary, break_stmt, builtin_call, cast, cm_raw_call, entry_call,
-    expr_stmt, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt,
-    option_none, option_some, return_stmt, synth_span,
+    alloc_named_local, assign, binary, break_stmt, builtin_call, cast, cm_canonical_call,
+    entry_call, expr_stmt, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref,
+    loop_stmt, option_none, option_some, return_stmt, synth_span,
 };
-use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmStreamPayload};
 
 use super::synthesize_lift;
 use super::types::{CmStdlibNames, LiftContext, LowerContext, binary_add, type_id_to_ast_type};
@@ -221,7 +215,7 @@ fn synthesize_record_stream_read_func(
         .to_string();
     synthesize_stream_read_func(
         record_stream_read_func_name(&elem_name),
-        format!("stream-read:{cm_record_name}"),
+        CanonicalIntrinsic::StreamRead(CmStreamPayload::Record(cm_record_name)),
         elem_type_id,
         array_type_id,
         elem_size,
@@ -313,6 +307,47 @@ pub(super) fn synthesize_stream_writes(project: &mut Package) {
     );
 }
 
+/// The AST type a payload lays out as: a newtype has no representation of its
+/// own, so its base's, at every level.
+fn payload_ast_type(
+    payload: TypeId,
+    tt: &TypeTable,
+    registry: &CmInterfaceRegistry,
+) -> crate::ast::Type {
+    let id = crate::component_model::peel_newtypes(tt, payload);
+    // Peeled off the TypeId, not the produced AST: a lib-local alias's
+    // synthesized `NamedType` carries no source interface to look it up by.
+    if let ResolvedType::GenericInstance {
+        name, type_args, ..
+    } = tt.get(id)
+    {
+        let args: Vec<crate::ast::Type> = type_args
+            .iter()
+            .map(|&a| payload_ast_type(a, tt, registry))
+            .collect();
+        return if TypeTable::is_tuple_type(name) {
+            crate::ast::Type::Tuple(args)
+        } else {
+            crate::ast::Type::Generic(crate::ast::GenericType {
+                id: crate::ast::AstId::fresh(),
+                name: name.clone(),
+                args,
+                span: synth_span(),
+            })
+        };
+    }
+    type_id_to_ast_type(id, tt, registry)
+}
+
+/// Asked directly rather than through `classify_stream_payload`, which panics
+/// instead of answering `false`.
+fn has_value_payload(tt: &TypeTable, elem: TypeId) -> bool {
+    !matches!(
+        tt.get(elem),
+        ResolvedType::Primitive(crate::tir::PrimitiveType::U8)
+    ) && crate::component_model::cm_payload_type_from_type_id(tt, elem).is_some()
+}
+
 /// The stream-write element type for a scalar / structural `stream-write`, or
 /// `None` for `u8` and record streams (handled elsewhere).
 fn stream_write_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
@@ -325,11 +360,7 @@ fn stream_write_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> 
         recv = *inner;
     }
     let elem = *tt.generic_type_args(recv)?.first()?;
-    matches!(
-        crate::component_model::classify_stream_payload(tt, elem),
-        CmStreamPayload::Value(_)
-    )
-    .then_some(elem)
+    has_value_payload(tt, elem).then_some(elem)
 }
 
 fn stream_write_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
@@ -369,11 +400,7 @@ fn stream_read_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
         return None;
     }
     let elem = *tt.generic_type_args(expr.type_id)?.first()?;
-    matches!(
-        crate::component_model::classify_stream_payload(tt, elem),
-        CmStreamPayload::Value(_)
-    )
-    .then_some(elem)
+    has_value_payload(tt, elem).then_some(elem)
 }
 
 /// The `__cm_stream_read_val_*` helper name for an element type.
@@ -392,8 +419,8 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         let tt = type_table.borrow();
         let func_name = stream_write_func_name(&tt, elem_type_id);
         let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
-        let write_name = CanonicalIntrinsic::StreamWrite(payload).import_name();
-        let elem_ast = type_id_to_ast_type(elem_type_id, &tt, cm_interface_registry);
+        let write_name = CanonicalIntrinsic::StreamWrite(payload);
+        let elem_ast = payload_ast_type(elem_type_id, &tt, cm_interface_registry);
         // Match the package the element buffer is packed with below
         // (`synthesize_lower_list_to_buffer`, wasi_package "cli"), so the retry
         // pointer stride can't disagree with the buffer's element size.
@@ -514,8 +541,8 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
             // result = stream-write:<elem>(handle, cur_ptr, remaining)
             expr_stmt(assign(
                 result_ref(),
-                cm_raw_call(
-                    &write_name,
+                cm_canonical_call(
+                    write_name,
                     vec![
                         local_ref(handle_idx, "handle", TypeTable::I32),
                         cur_ptr,
@@ -708,9 +735,9 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         let tt = type_table.borrow();
         let func_name = future_write_func_name(&tt, payload_type_id);
         let payload = crate::component_model::classify_future_payload(&tt, payload_type_id);
-        let write_name = CanonicalIntrinsic::FutureWrite(payload.clone()).import_name();
+        let write_name = CanonicalIntrinsic::FutureWrite(payload.clone());
         let cm_package = future_payload_package(&payload);
-        let payload_ast = type_id_to_ast_type(payload_type_id, &tt, cm_interface_registry);
+        let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
         let size = crate::component_model::cm_size_with_registry_scoped(
             &payload_ast,
             cm_interface_registry,
@@ -812,8 +839,8 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         "__written",
         written_idx,
         TypeTable::I32,
-        cm_raw_call(
-            &write_name,
+        cm_canonical_call(
+            write_name,
             vec![
                 local_ref(handle_idx, "handle", TypeTable::I32),
                 local_ref(ptr_idx, "ptr", TypeTable::I32),
@@ -933,9 +960,9 @@ fn synthesize_future_read_func(
         let tt = type_table.borrow();
         let func_name = future_read_func_name(&tt, payload_type_id);
         let payload = crate::component_model::classify_future_payload(&tt, payload_type_id);
-        let read_name = CanonicalIntrinsic::FutureRead(payload.clone()).import_name();
+        let read_name = CanonicalIntrinsic::FutureRead(payload.clone());
         let cm_package = future_payload_package(&payload);
-        let payload_ast = type_id_to_ast_type(payload_type_id, &tt, cm_interface_registry);
+        let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
         let size = crate::component_model::cm_size_with_registry_scoped(
             &payload_ast,
             cm_interface_registry,
@@ -998,8 +1025,8 @@ fn synthesize_future_read_func(
         "status",
         status_idx,
         TypeTable::I32,
-        cm_raw_call(
-            &read_name,
+        cm_canonical_call(
+            read_name,
             vec![
                 local_ref(handle_idx, "handle", TypeTable::I32),
                 local_ref(ptr_idx, "ptr", TypeTable::I32),
@@ -1130,10 +1157,7 @@ fn record_stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId,
         return None;
     }
     let elem_type_id = *tt.generic_type_args(expr.type_id)?.first()?;
-    if matches!(
-        crate::component_model::classify_stream_payload(tt, elem_type_id),
-        CmStreamPayload::Value(_)
-    ) {
+    if has_value_payload(tt, elem_type_id) {
         return None;
     }
     Some((elem_type_id, expr.type_id))
@@ -1151,7 +1175,7 @@ fn record_stream_read_func_name(elem_name: &str) -> String {
 #[allow(clippy::too_many_arguments)]
 fn synthesize_stream_read_func(
     func_name: String,
-    stream_read_name: String,
+    stream_read_name: CanonicalIntrinsic,
     elem_type_id: TypeId,
     array_type_id: TypeId,
     elem_size: i32,
@@ -1244,8 +1268,8 @@ fn synthesize_stream_read_func(
         TypeTable::I32,
         false,
     );
-    let stream_read_call = cm_raw_call(
-        &stream_read_name,
+    let stream_read_call = cm_canonical_call(
+        stream_read_name,
         vec![
             local_ref(handle_idx, "handle", TypeTable::I32),
             local_ref(ptr_idx, "ptr", TypeTable::I32),
@@ -1511,8 +1535,8 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ti
         let tt = type_table.borrow();
         let func_name = stream_read_value_func_name(&tt, elem_type_id);
         let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
-        let read_name = CanonicalIntrinsic::StreamRead(payload).import_name();
-        let payload_ast = type_id_to_ast_type(elem_type_id, &tt, cm_interface_registry);
+        let read_name = CanonicalIntrinsic::StreamRead(payload);
+        let payload_ast = payload_ast_type(elem_type_id, &tt, cm_interface_registry);
         let size = crate::component_model::cm_size_with_registry_scoped(
             &payload_ast,
             cm_interface_registry,
@@ -1542,52 +1566,54 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ti
 }
 
 /// Dispatch target for a rewritten CM resource method call.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum BindingTarget {
     /// Direct `CmRawCall` to the canonical Wasm import (simple operations).
-    Raw,
+    Canonical(CanonicalIntrinsic),
     /// Call to an `internal.wado` binding function (complex operations).
-    Internal,
+    Internal(&'static str),
     /// Call to a synthesized binding function in the entry module.
-    Entry,
+    Entry(String),
 }
 
-/// Determine the binding target and function name for a CM resource method,
-/// or `None` if not handled here (falls through to WIR translate).
-fn cm_binding_function(cm_name: &str) -> Option<(BindingTarget, &'static str)> {
-    use BindingTarget::{Internal, Raw};
-    match cm_name {
+/// `None` for a method not handled here — it falls through to WIR translate.
+fn cm_binding_function(cm_name: &str) -> Option<BindingTarget> {
+    use BindingTarget::{Canonical, Internal};
+    use CanonicalIntrinsic as C;
+    // A non-u8 element is parameterized before it reaches here.
+    let u8_stream = CmStreamPayload::U8;
+    Some(match cm_name {
         // Simple drops → direct CmRawCall (non-parameterized)
-        "stream-drop-readable" => Some((Raw, "stream-drop-readable")),
-        "stream-drop-writable" => Some((Raw, "stream-drop-writable")),
-        "waitable-set-drop" => Some((Raw, "waitable-set-drop")),
-        "subtask-drop" => Some((Raw, "subtask-drop")),
-        "error-context-drop" => Some((Raw, "error-context-drop")),
+        "stream-drop-readable" => Canonical(C::StreamDropReadable(u8_stream)),
+        "stream-drop-writable" => Canonical(C::StreamDropWritable(u8_stream)),
+        "waitable-set-drop" => Canonical(C::WaitableSetDrop),
+        "subtask-drop" => Canonical(C::SubtaskDrop),
+        "error-context-drop" => Canonical(C::ErrorContextDrop),
 
         // Simple cancel → direct CmRawCall (non-parameterized)
-        "stream-cancel-read" => Some((Raw, "stream-cancel-read")),
-        "stream-cancel-write" => Some((Raw, "stream-cancel-write")),
-        "subtask-cancel" => Some((Raw, "subtask-cancel")),
+        "stream-cancel-read" => Canonical(C::StreamCancelRead(u8_stream)),
+        "stream-cancel-write" => Canonical(C::StreamCancelWrite(u8_stream)),
+        "subtask-cancel" => Canonical(C::SubtaskCancel),
 
         // Future drops/cancels are parameterized by payload type — leave for WIR translate
 
         // waitable-join: void canonical, returns the handle as Waitable
-        "waitable-join" => Some((Internal, "cm_waitable_join")),
+        "waitable-join" => Internal("cm_waitable_join"),
 
         // Simple constructors → direct CmRawCall (returns i32 handle)
-        "waitable-set-new" => Some((Raw, "waitable-set-new")),
+        "waitable-set-new" => Canonical(C::WaitableSetNew),
 
         // Complex operations → internal binding functions
-        "stream-read" => Some((Internal, "cm_stream_read_u8")),
-        "stream-write" => Some((Internal, "cm_stream_write_u8")),
-        "stream-write-raw" => Some((Internal, "cm_stream_write_raw_u8")),
-        "error-context-new" => Some((Internal, "cm_error_context_new")),
-        "error-context-debug-message" => Some((Internal, "cm_error_context_debug_message")),
-        "waitable-set-wait" => Some((Internal, "cm_waitable_set_wait")),
-        "waitable-set-poll" => Some((Internal, "cm_waitable_set_poll")),
+        "stream-read" => Internal("cm_stream_read_u8"),
+        "stream-write" => Internal("cm_stream_write_u8"),
+        "stream-write-raw" => Internal("cm_stream_write_raw_u8"),
+        "error-context-new" => Internal("cm_error_context_new"),
+        "error-context-debug-message" => Internal("cm_error_context_debug_message"),
+        "waitable-set-wait" => Internal("cm_waitable_set_wait"),
+        "waitable-set-poll" => Internal("cm_waitable_set_poll"),
 
-        _ => None,
-    }
+        _ => return None,
+    })
 }
 
 /// Rewrite all #[cm("...")] resource method calls in the project.
@@ -1678,7 +1704,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             && let Some(payload_type_id) = future_write_payload(self.tt, expr)
         {
             let func_name = future_write_func_name(self.tt, payload_type_id);
-            rewrite_cm_call(expr, BindingTarget::Entry, &func_name, self.entry_source);
+            rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
             return;
         }
         // Scalar / structural stream writes call a generated per-element binding;
@@ -1687,14 +1713,14 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             && let Some(elem_type_id) = stream_write_value_element(self.tt, expr)
         {
             let func_name = stream_write_func_name(self.tt, elem_type_id);
-            rewrite_cm_call(expr, BindingTarget::Entry, &func_name, self.entry_source);
+            rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
             return;
         }
         // Future reads call a generated per-payload binding function.
         if cm_name == "future-read" {
             if let Some((payload_type_id, _)) = future_read_payload(self.tt, expr) {
                 let func_name = future_read_func_name(self.tt, payload_type_id);
-                rewrite_cm_call(expr, BindingTarget::Entry, &func_name, self.entry_source);
+                rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
             }
             return;
         }
@@ -1702,7 +1728,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         // WASI-record reads fall through to the `__cm_stream_read_<record>` path.
         if let Some(elem_type_id) = stream_read_value_element(self.tt, expr) {
             let func_name = stream_read_value_func_name(self.tt, elem_type_id);
-            rewrite_cm_call(expr, BindingTarget::Entry, &func_name, self.entry_source);
+            rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
             return;
         }
         // WASI-record stream reads call a generated binding function.
@@ -1710,47 +1736,35 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             if let Some((elem_type_id, _)) = record_stream_read_element(self.tt, expr) {
                 let elem_name = self.tt.base_type_name(elem_type_id);
                 let func_name = record_stream_read_func_name(&elem_name);
-                rewrite_cm_call(expr, BindingTarget::Entry, &func_name, self.entry_source);
+                rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
                 return;
             }
             if !is_u8_array_type(expr.type_id, self.tt) {
                 return;
             }
         }
-        // Stream ops on non-u8 types: parameterize the canonical name and
-        // rewrite as a CmRawCall directly (the name is dynamic).
-        if is_stream_cm_method(&cm_name) {
-            let parameterized =
-                parameterize_stream_cm_name(&cm_name, expr, self.tt, self.cm_interface_registry);
-            if parameterized != cm_name {
-                rewrite_cm_call(expr, BindingTarget::Raw, &parameterized, self.entry_source);
-                return;
-            }
-        }
-        // Future drop / cancel: parameterize the canonical name by the future's
-        // payload and rewrite as a raw CmRawCall (mirrors the stream path above).
-        if let Some(parameterized) = parameterize_future_cm_name(&cm_name, expr, self.tt) {
-            rewrite_cm_call(expr, BindingTarget::Raw, &parameterized, self.entry_source);
+        // Stream ops on a non-u8 element, and future drop / cancel: parameterized
+        // by the receiver's payload, so they go straight to a canonical call.
+        let parameterized =
+            parameterize_stream_cm_name(&cm_name, expr, self.tt, self.cm_interface_registry)
+                .or_else(|| parameterize_future_cm_name(&cm_name, expr, self.tt));
+        if let Some(intrinsic) = parameterized {
+            rewrite_cm_call(expr, BindingTarget::Canonical(intrinsic), self.entry_source);
             return;
         }
         // Look up the binding function for everything else.
-        let Some((target, func_name)) = cm_binding_function(&cm_name) else {
+        let Some(target) = cm_binding_function(&cm_name) else {
             // Not handled by synthesis yet — falls through to WIR translate.
             return;
         };
-        rewrite_cm_call(expr, target, func_name, self.entry_source);
+        rewrite_cm_call(expr, target, self.entry_source);
     }
 }
 
 /// Rewrite a CM call — `recv.method(args)` or `Type::method(args)` — to a
 /// builtin/internal call. An instance method's receiver is `args[0]`, cast to
 /// i32: the resource handle the canonical import takes.
-fn rewrite_cm_call(
-    expr: &mut TirExpr,
-    target: BindingTarget,
-    func_name: &str,
-    entry_source: &ModuleSource,
-) {
+fn rewrite_cm_call(expr: &mut TirExpr, target: BindingTarget, entry_source: &ModuleSource) {
     let TirExprKind::Call {
         args, has_receiver, ..
     } = &mut expr.kind
@@ -1768,25 +1782,16 @@ fn rewrite_cm_call(
     }
 
     let new_expr = match target {
-        BindingTarget::Raw => cm_raw_call(func_name, taken_args, expr.type_id),
-        BindingTarget::Internal => internal_call(func_name, taken_args, expr.type_id),
-        BindingTarget::Entry => {
-            entry_call(func_name, taken_args, expr.type_id, entry_source.clone())
+        BindingTarget::Canonical(intrinsic) => {
+            cm_canonical_call(intrinsic, taken_args, expr.type_id)
+        }
+        BindingTarget::Internal(name) => internal_call(name, taken_args, expr.type_id),
+        BindingTarget::Entry(name) => {
+            entry_call(&name, taken_args, expr.type_id, entry_source.clone())
         }
     };
 
     *expr = new_expr;
-}
-
-/// Check if a CM method name is a stream operation.
-fn is_stream_cm_method(cm_name: &str) -> bool {
-    matches!(
-        cm_name,
-        "stream-drop-readable"
-            | "stream-drop-writable"
-            | "stream-cancel-read"
-            | "stream-cancel-write"
-    )
 }
 
 /// Rewrite a `Future::<T>::new()` / `Stream::<T>::new()` static call into
@@ -1804,21 +1809,15 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
     else {
         return;
     };
-    let (canonical_name, helper) = if is_future {
+    let (canonical, helper) = if is_future {
         let payload = crate::component_model::classify_future_payload(tt, payload_tid);
-        (
-            CanonicalIntrinsic::FutureNew(payload).import_name(),
-            "cm_future_pair",
-        )
+        (CanonicalIntrinsic::FutureNew(payload), "cm_future_pair")
     } else {
         let payload = crate::component_model::classify_stream_payload(tt, payload_tid);
-        (
-            CanonicalIntrinsic::StreamNew(payload).import_name(),
-            "cm_stream_pair",
-        )
+        (CanonicalIntrinsic::StreamNew(payload), "cm_stream_pair")
     };
     let result_type = expr.type_id;
-    let packed = cm_raw_call(&canonical_name, vec![], TypeTable::I64);
+    let packed = cm_canonical_call(canonical, vec![], TypeTable::I64);
     *expr = TirExpr::new(
         TirExprKind::Call {
             func: Box::new(FunctionRef {
@@ -1841,14 +1840,13 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
     );
 }
 
-/// Parameterize a future drop / cancel canonical name by the receiver's payload
-/// (`future-drop-readable` → `future-drop-readable:val-point`, …), matching the
-/// `import_name` codegen builds. Returns `None` if `cm_name` is not a future
-/// drop/cancel op or the receiver is not a `Future<T>` / `FutureWritable<T>`
-/// method call.
-fn parameterize_future_cm_name(cm_name: &str, expr: &TirExpr, tt: &TypeTable) -> Option<String> {
-    // Match the op first so the canonical-name list lives in exactly one place
-    // and non-future-handle methods skip the receiver classification below.
+/// The future drop / cancel intrinsic for `cm_name`, parameterized by the
+/// receiver's payload.
+fn parameterize_future_cm_name(
+    cm_name: &str,
+    expr: &TirExpr,
+    tt: &TypeTable,
+) -> Option<CanonicalIntrinsic> {
     let make = match cm_name {
         "future-drop-readable" => CanonicalIntrinsic::FutureDropReadable,
         "future-drop-writable" => CanonicalIntrinsic::FutureDropWritable,
@@ -1863,44 +1861,39 @@ fn parameterize_future_cm_name(cm_name: &str, expr: &TirExpr, tt: &TypeTable) ->
     }
     let payload_tid = *tt.generic_type_args(type_id)?.first()?;
     let payload = crate::component_model::classify_future_payload(tt, payload_tid);
-    Some(make(payload).import_name())
+    Some(make(payload))
 }
 
-/// Parameterize a stream CM name based on the receiver type.
-/// For non-u8 streams (e.g., `Stream<DirectoryEntry>`), appends the CM record name
-/// (e.g., "stream-drop-readable:directory-entry").
-///
-/// Prefers the canonical CM name registered via `#[cm("…")]` so that
-/// non-mechanical mappings (e.g., `DNSRecord` → `dns-record`) and
-/// preserved acronyms aren't mangled. Falls back to a `PascalCase` →
-/// kebab-case conversion only for receiver element types not in the
-/// registry (user-authored streams).
+/// The stream drop / cancel intrinsic for `cm_name`, parameterized by the
+/// receiver's element. A record element takes its `#[cm("…")]` name, so a
+/// non-mechanical mapping (`DNSRecord` → `dns-record`) is not mangled; only a
+/// user-authored element outside the registry falls back to `PascalCase` →
+/// kebab-case.
 fn parameterize_stream_cm_name(
     cm_name: &str,
     expr: &TirExpr,
     tt: &TypeTable,
     cm_interface_registry: &CmInterfaceRegistry,
-) -> String {
-    // Get the receiver's type from the method call
-    let Some((receiver, _, _)) = expr.kind.as_method_call() else {
-        return cm_name.to_string();
+) -> Option<CanonicalIntrinsic> {
+    let make = match cm_name {
+        "stream-drop-readable" => CanonicalIntrinsic::StreamDropReadable,
+        "stream-drop-writable" => CanonicalIntrinsic::StreamDropWritable,
+        "stream-cancel-read" => CanonicalIntrinsic::StreamCancelRead,
+        "stream-cancel-write" => CanonicalIntrinsic::StreamCancelWrite,
+        _ => return None,
     };
-    let receiver_type_id = receiver.type_id;
-    // Resolve through references: &Stream<T> → Stream<T>
-    let mut type_id = receiver_type_id;
+    let (receiver, _, _) = expr.kind.as_method_call()?;
+    let mut type_id = receiver.type_id;
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
         type_id = *inner;
     }
-    // Extract element type from Stream<T>
     if let Some(type_args) = tt.generic_type_args(type_id)
         && let Some(&elem) = type_args.first()
     {
         let elem_name = tt.base_type_name(elem);
         if elem_name != "u8" {
-            // Scalar / structural elements use the general `val-` payload name,
-            // matching `CmStreamPayload::Value`; named records keep their CM name.
             if let Some(payload) = crate::component_model::cm_payload_type_from_type_id(tt, elem) {
-                return format!("{cm_name}:val-{}", payload.name_suffix());
+                return Some(make(CmStreamPayload::Value(payload)));
             }
             // The element's declaring interface keys the CM-name lookup. Its
             // `module_source` is the loader identity (a `.wado` path); the
@@ -1912,10 +1905,10 @@ fn parameterize_stream_cm_name(
                 .as_deref()
                 .and_then(|source| registered_cm_name(&elem_name, source, cm_interface_registry))
                 .unwrap_or_else(|| pascal_to_kebab(&elem_name));
-            return format!("{cm_name}:{cm_elem}");
+            return Some(make(CmStreamPayload::Record(cm_elem)));
         }
     }
-    cm_name.to_string()
+    None
 }
 
 /// Look up the canonical `#[cm("…")]` CM name for a Wado type declared in the

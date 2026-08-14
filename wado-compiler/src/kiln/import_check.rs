@@ -1,21 +1,8 @@
-//! Kiln generator import-refusal check.
-//!
-//! When the target world is `core:kiln/generator`, the generator package
-//! must not transitively import any WASI interface at the Wado source
-//! level. The sandbox guarantee (WEP 2026-04-12, "Design principles" #1)
-//! depends on the generator being deterministic: no clocks, randomness,
-//! network, filesystem, or environment. This pass catches the obvious
-//! case where a generator writes
-//! `use { now } from "wasi:clocks"` directly. The `CompilerHost`'s
-//! `run_generator` runtime link refuses any `wasi:*` CM import as defense
-//! in depth for the transitive case (a stdlib helper pulling in a WASI
-//! interface).
-//!
-//! Runs after Phase 1 (module loading) and before analysis so the
-//! diagnostic points at the user's `use` statement with the same span
-//! machinery as any other import error.
-//!
-//! See WEP 2026-04-12 §"Authoring a generator".
+//! Kiln generator import-refusal check: under `core:kiln/generator` the package
+//! must import no WASI interface, the sandbox guarantee (WEP 2026-04-12) resting
+//! on the generator being deterministic. `run_generator`'s runtime link refuses
+//! any `wasi:*` CM import as depth. Runs after loading and before analysis, so
+//! the diagnostic points at the user's `use` like any other import error.
 use crate::ast::{
     AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern,
     SelfKind, Stmt, StructLiteralExpr, StructLiteralField, Type, UseDecl, UseItem,
@@ -60,25 +47,11 @@ pub fn check_loaded<H: CompilerHost>(
     count
 }
 
-/// Rewrite a kiln generator's `fn generate(req: Request<T>) -> Result<...>`
-/// into the typed-options wire shape (Kiln WEP §"Options are a typed argument
-/// in each generator's own world"):
-/// the single `req` parameter is replaced by `primary: InputFile`, `inputs:
-/// List<InputFile>`, and `options: T`, and the body starts with `let req =
-/// Request { primary, inputs, options };`. The user's subsequent body keeps
-/// seeing `req` as `Request<T>` via same-scope shadowing (WEP 2026-03-25),
-/// so the UX is "author writes `fn generate(req: Request<Options>)`".
-///
-/// Options cross the boundary as a typed WIT value — not a CBOR blob — so
-/// there is no `bind_request` / `RawRequest`. A no-`Options` generator
-/// (`T = NoOptions`) omits the `options` parameter entirely (an empty record
-/// has no Component Model representation) and its `Request` is built with a
-/// literal `NoOptions {}`.
-///
-/// Gated on `target_world == core:kiln/generator`. Fires when the first
-/// param's type is syntactically `Request<T>` (one type argument) or the
-/// bare `Request` (a no-options generator), in which case `T` is the
-/// default `NoOptions`.
+/// Rewrite a kiln generator's `fn generate(req: Request<T>)` into the
+/// typed-options wire shape: `req` becomes `primary`, `inputs` and `options`,
+/// and the body opens with `let req = Request { primary, inputs, options };`,
+/// which same-scope shadowing keeps looking like the author's `req`. A
+/// `NoOptions` generator omits `options`, an empty record having no CM form.
 pub fn inject_kiln_request_adapter(
     target_world: Option<&str>,
     entry_module: &ModuleSource,

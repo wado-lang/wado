@@ -1,34 +1,12 @@
-//! Dead Return Value Elimination for Wado NIR.
+//! Dead Return Value Elimination: a function whose return value is dropped at
+//! every call site turns void, each `Return`'s verified-pure value going away
+//! while the call sites stay structurally identical. Running at NIR exposes the
+//! freshly dead expressions to the rest of the loop — after `inline` collapses a
+//! `Result<(), Error>` helper nobody reads, DCE takes its `Ok(())` too.
 //!
-//! Converts non-void functions whose return value is always immediately
-//! dropped at every call site into void-returning functions. Every
-//! `Return { value: Some(expr) }` becomes `Return { value: None }` once
-//! `expr` is verified pure, and call sites stay structurally identical
-//! (the call expression now produces `Unit`).
-//!
-//! NIR analog of `wir_optimize/drve.rs`. Running at NIR exposes the freshly
-//! dead expressions to the rest of the fixed-point loop. Especially useful
-//! after `inline` collapses a `Result<(), Error>`-returning helper whose
-//! callers all `_ = helper(args);`-style discard the result — DCE can then
-//! remove the (now unreferenced) `Ok(())` constructor wholesale.
-//!
-//! Conservative scope:
-//!
-//! - Skips the same pinned set as DAE.
-//! - Requires the body to end with an explicit `Return { value: Some(_) }`
-//!   so we never have to reason about an implicit trailing-value return.
-//! - Requires every other `Return` in the body to also carry a pure value.
-//! - Requires every call site to appear as a top-level statement
-//!   (`StmtKind::Expr(Call(f, ...))`); any nested or `Let`-bound use
-//!   disqualifies the candidate.
-//! - Requires at least one observed call site (otherwise DCE will delete
-//!   the function anyway and there is nothing to optimise).
-//!
-//! Runs over the arena `Body` (see `docs/wep-2026-06-05-nir-optimizer-architecture.md`):
-//! the function-body walks (purity check, call-site validation, void rewrite,
-//! call retype) read and mutate it directly. Global initializers are arena
-//! bodies too, so their use-scan (`scan_node`) and retype (`retype_calls`)
-//! reuse the same routines.
+//! Conservative: it skips DAE's pinned set, needs the body to end in an explicit
+//! `Return` with every other `Return` carrying a pure value, and needs at least
+//! one call site, each a top-level statement.
 
 use crate::hashmap::IndexSet;
 use crate::nir::{FunctionKind, NirFunction};

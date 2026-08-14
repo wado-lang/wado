@@ -1,24 +1,8 @@
-//! Forward-substitute a single-use pure scalar `let` into its adjacent use.
-//!
-//! Inlining a value parameter binds it as `let p = <arg>` at the callee-block
-//! head; when the arg is a field read or a cast (`let index = self.used; let
-//! value = code as u8; array_set(&mut self.repr, index, value)`) it matches no
-//! `copy_prop` copy source and survives as a dead-weight local. This rule folds
-//! such a binding back into its one use, so the backend emits the operand
-//! directly instead of a `local.set` / `local.get` round-trip.
-//!
-//! Only a *replacement-free* fold is taken: the binding's value must be pure and
-//! scalar (a scalar copy has no aliasing or value-copy timing to preserve) and
-//! free of the reorder hazards the before-use check cannot cover — `Index` (OOB),
-//! a global read (writers invisible to the summary), and integer `/` `%` unless
-//! the divisor is a provably-safe constant. Its single use must sit in the
-//! immediately following statement, and every effect evaluated before the use's
-//! slot there must clear a `ModRef` clobber check against the value's reads — a
-//! call through a ref-typed local or a write through a captured alias has no
-//! syntactic `Assign` / `MutRef` node, so the summary, not a place scan, is the
-//! sound test. A trap-free value may also sink into a sub-block of that statement
-//! (`let t = a + b; if c { use(t) }`). Non-adjacent chains resolve through the
-//! engine fixpoint: forwarding the nearer binding makes the next one adjacent.
+//! Forward-substitute a single-use pure scalar `let` into its adjacent use, so
+//! the backend emits the operand rather than a `local.set` / `local.get` pair.
+//! The value must be pure, scalar, and free of the hazards the before-use check
+//! cannot cover — `Index`, a global read, unsafe integer `/` `%`. Its one use
+//! must be in the next statement, whose earlier effects clear a `ModRef` check.
 
 use cranelift_entity::EntityRef;
 
@@ -125,16 +109,11 @@ impl ScalarForwardRule<'_> {
         if nested && value_mr.may_trap {
             return false;
         }
-        // Reorder hazard: the value moves from `def_stmt` to `use_id`'s slot inside
-        // `use_stmt`, so it must clear every effect evaluated *before* `use_id`
-        // there. A syntactic place-overlap check is not enough — a call through a
-        // ref-typed local (`sink(advance(r), i)`) or a write through a captured
-        // alias mutates the value's reads with no `Assign` / `MutRef` node the
-        // place check sees. Summarise the strictly-earlier effects with `ModRef`
-        // and reject if any may clobber the value's reads. The outermost op's own
-        // effect (e.g. an `array_set` argument the value feeds) is sequenced after
-        // `use_id`, so it never rejects its own argument — keeping the sound scalar
-        // forwarding firing.
+        // Reorder hazard: the value moves into `use_id`'s slot, so it must clear
+        // every effect evaluated before it there. A syntactic place check is not
+        // enough — a call through a ref-typed local or a write through a captured
+        // alias has no `Assign` / `MutRef` node — so summarise with `ModRef`. The
+        // outermost op's own effect is sequenced after `use_id`.
         if clobbered_before_use(engine, &value_mr, use_id, use_stmt) {
             return false;
         }
@@ -146,17 +125,11 @@ impl ScalarForwardRule<'_> {
     }
 }
 
-/// Whether any effect evaluated strictly before `use_id` — within the top-level
-/// statement `use_stmt` — may clobber the reads summarised by `value_mr`, the
-/// pure value about to be forwarded into `use_id`'s slot. Walks up the path from
-/// `use_id` to `use_stmt`; at each parent it summarises the siblings sequenced
-/// before the path child (evaluation order, per `for_each_child`) and tests
-/// `ModRef::may_clobber`. Statements outside `use_stmt` are not visited — they
-/// run before the binding, so they are already reflected in the value. An
-/// ancestor operation's own effect is sequenced after `use_id` (its operand), so
-/// it never rejects its own argument. A `Loop` on the path is rejected: its
-/// back-edge could clobber the value between iterations, unseen by this forward
-/// walk.
+/// Whether any effect evaluated strictly before `use_id`, within the statement
+/// `use_stmt`, may clobber the reads `value_mr` summarises. Walks the path up
+/// from `use_id`, testing `ModRef::may_clobber` against each parent's earlier
+/// siblings; anything outside `use_stmt` already ran before the binding. A
+/// `Loop` on the path is rejected — its back-edge is unseen by a forward walk.
 fn clobbered_before_use(
     engine: &Engine,
     value_mr: &ModRef,

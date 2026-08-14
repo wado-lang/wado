@@ -1,30 +1,8 @@
-//! Centralized type compatibility checking.
-//!
-//! This module is the single source of truth for "can type A be used where
-//! type B is expected?". All type mismatch checks route through here.
-//!
-//! # Layering
-//!
-//! The check is split across three layers, each more host-aware than the
-//! last:
-//!
-//! 1. [`check_assignable`] — pure function over the type table. Returns
-//!    [`TypeCheckResult`] (`Compatible` / `Deferred` / `Incompatible`).
-//!    No diagnostics, no host.
-//! 2. [`TypeSystem::typecheck`] and friends — type-system operations that
-//!    build a [`TypeMismatchPayload`] (the pretty-printed `expected` /
-//!    `found` names) on rejection. Still host-agnostic — `TypeSystem` does
-//!    not carry `<H: CompilerHost>`.
-//! 3. [`Elaborator::typecheck`] and friends — thin wrappers that call (2)
-//!    and emit a [`TypeError::TypeMismatch`] diagnostic via `self.logger`
-//!    on rejection. This is the layer callers in the body walk use.
-//!
-//! Layers 2 and 3 each come in two flavours: the plain check and the
-//! `_return` one (`UNIT` expected always passes).
-//!
-//! Keeping the `<H>` plumbing confined to layer 3 means future
-//! `TypeSystem` operations that report errors can mirror this split
-//! without bleeding the host trait into the type-system API.
+//! The single source of truth for "can type A be used where type B is
+//! expected?", in three layers of increasing host-awareness: the pure
+//! [`check_assignable`], then [`TypeSystem::typecheck`] adding a
+//! [`TypeMismatchPayload`], then [`Elaborator::typecheck`] emitting the
+//! diagnostic. The last two each have a `_return` flavour where `UNIT` passes.
 
 use crate::compiler_host::CompilerHost;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -46,18 +24,11 @@ pub(super) enum TypeCheckResult {
     Incompatible,
 }
 
-/// Pure type compatibility check. Does NOT emit errors.
-///
-/// Rules (in order):
-/// 1. Identity: same `TypeId` -> Compatible
-/// 2. Bottom/Top/Error: UNKNOWN, ERROR -> Deferred; NEVER -> Compatible
-/// 3. Undecided: inference variables, packs, projections, unknown -> Deferred
-/// 4. References: &T->non-ref, &T->&mut T -> Incompatible; &mut T->&T -> Compatible
-/// 5. Newtype/flags: distinct from base type and each other
-/// 6. Option: T vs Option<T>, Option<X> vs Option<Y>
-/// 7. Function types: structural comparison of params + return type
-/// 8. Generic instances: compare name + type args recursively
-/// 9. Catch-all: different concrete types -> Incompatible
+/// Pure type compatibility check, emitting no errors. Rules apply in order:
+/// identity; `NEVER` compatible and `UNKNOWN` / `ERROR` deferred; anything
+/// genuinely undecided deferred; reference variance (`&mut T` → `&T` only);
+/// newtypes and flags distinct from their base; `Option`; structural comparison
+/// for function types and generic instances; anything else incompatible.
 pub(super) fn check_assignable(
     actual: TypeId,
     expected: TypeId,
@@ -80,18 +51,11 @@ pub(super) fn check_assignable(
         return TypeCheckResult::Compatible;
     }
 
-    // Rule 3: defer only what is genuinely undecided.
-    //
-    // A rigid `TypeParam` is not undecided: it is opaque, standing for whatever
-    // a caller instantiates the binding item with, so nothing but itself is
-    // assignable to it in either direction. It reaches a check only inside the
-    // item that binds it — a *use* of a polymorphic signature instantiates its
-    // slots into `InferVar`s first (`super::instantiate`) — so there is no
-    // "maybe this gets substituted later" case left to defer.
-    //
-    // What is still undecided: an inference variable awaiting its solver, a
-    // type pack awaiting expansion (packs are not instantiated yet), an
-    // associated-type projection awaiting its impl, and `unknown` / `error`.
+    // Defer only what is genuinely undecided: an inference variable awaiting its
+    // solver, a pack awaiting expansion, a projection awaiting its impl, and
+    // `unknown` / `error`. A rigid `TypeParam` is opaque, not undecided — a use
+    // of a polymorphic signature instantiates its slots into `InferVar`s first,
+    // so nothing but itself is ever assignable to it.
     if type_table.contains_undecided(actual) || type_table.contains_undecided(expected) {
         return TypeCheckResult::Deferred;
     }

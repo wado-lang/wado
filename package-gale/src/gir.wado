@@ -215,13 +215,8 @@ pub struct MultiAltRule {
     /// Scan-side counterpart of `alts`, again indexed by original
     /// alt index.
     pub scan_alts: List<ScanBody>,
-    /// Parse-side dispatch shape between the alternatives.
+    /// Dispatch shape between the alternatives. Parse and scan share it.
     pub dispatch: MultiAltDispatch,
-    /// Scan-side dispatch shape. Today this is always a byte-identical
-    /// copy of `dispatch` (lower builds one dispatch and assigns it to
-    /// both fields); kept as a separate field so the two sides can
-    /// diverge later without a structural change.
-    pub scan_dispatch: MultiAltDispatch,
 }
 
 /// Direct left-recursive rule. The atom holds the non-LR alternatives
@@ -743,11 +738,10 @@ pub struct GroupOp {
     pub alts: List<AltBody>,
     /// Scan-side mirror.
     pub scan_alts: List<ScanBody>,
-    /// Parse-time dispatch when the group has multiple alts. For
-    /// single-alt groups this is `MultiAltDispatch::Direct` with one
-    /// branch.
+    /// Dispatch when the group has multiple alts; parse and scan share
+    /// it. For single-alt groups this is `MultiAltDispatch::Direct` with
+    /// one branch.
     pub dispatch: MultiAltDispatch,
-    pub scan_dispatch: MultiAltDispatch,
 }
 
 /// Lower-side classification of a Repeat's body op shape. Drives
@@ -1093,31 +1087,17 @@ pub fn rule_header(rule: &Rule) -> &RuleHeader with stores[rule] {
 pub fn rule_alt_body(rule: &Rule, alt_index: i32) -> Option<&AltBody> with stores[rule] {
     return match rule {
         Simple(s) => if alt_index == 0 { Option::<&AltBody>::Some(&s.body) } else { null },
-        MultiAlt(m) => find_alt_body_in_array(&m.alts, alt_index),
+        MultiAlt(m) => m.alts.iter().find(|a| a.alt_index == alt_index),
         LeftRecursive(l) => {
-            if let Some(b) = find_alt_body_in_array(&l.atom.alts, alt_index) {
+            if let Some(b) = l.atom.alts.iter().find(|a| a.alt_index == alt_index) {
                 Option::<&AltBody>::Some(b);
+            } else if let Some(lr) = l.lr_alts.iter().find(|lr| lr.alt_index == alt_index) {
+                Option::<&AltBody>::Some(&lr.suffix);
             } else {
-                let mut found: Option<&AltBody> = null;
-                for let lr of &l.lr_alts {
-                    if lr.alt_index == alt_index {
-                        found = Option::<&AltBody>::Some(&lr.suffix);
-                        break;
-                    }
-                }
-                found;
+                null;
             }
         },
     };
-}
-
-fn find_alt_body_in_array(alts: &List<AltBody>, alt_index: i32) -> Option<&AltBody> with stores[alts] {
-    for let a of alts {
-        if a.alt_index == alt_index {
-            return Option::<&AltBody>::Some(a);
-        }
-    }
-    return null;
 }
 
 /// Scan-side counterpart of `rule_alt_body`. Returns the
@@ -1131,15 +1111,10 @@ pub fn rule_alt_scan_body(rule: &Rule, alt_index: i32) -> Option<&ScanBody> with
         LeftRecursive(l) => {
             if let Some(b) = find_scan_body_in_array(&l.atom.alts, &l.atom.scan_alts, alt_index) {
                 Option::<&ScanBody>::Some(b);
+            } else if let Some(lr) = l.lr_alts.iter().find(|lr| lr.alt_index == alt_index) {
+                Option::<&ScanBody>::Some(&lr.scan_suffix);
             } else {
-                let mut found: Option<&ScanBody> = null;
-                for let lr of &l.lr_alts {
-                    if lr.alt_index == alt_index {
-                        found = Option::<&ScanBody>::Some(&lr.scan_suffix);
-                        break;
-                    }
-                }
-                found;
+                null;
             }
         },
     };
@@ -1150,10 +1125,8 @@ fn find_scan_body_in_array(
     scan_alts: &List<ScanBody>,
     alt_index: i32,
 ) -> Option<&ScanBody> with stores[scan_alts] {
-    for let mut i = 0; i < alts.len(); i += 1 {
-        if alts[i].alt_index == alt_index {
-            return Option::<&ScanBody>::Some(&scan_alts[i]);
-        }
-    }
-    return null;
+    return match alts.iter().position(|a| a.alt_index == alt_index) {
+        Some(i) => Option::Some(&scan_alts[i]),
+        None => null,
+    };
 }

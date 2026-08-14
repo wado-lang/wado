@@ -1,21 +1,15 @@
 //! The complete set of CM interfaces the component imports, resolved as
-//! structured data at the WIR layer.
-//!
-//! This is where the import decision lives. Codegen (`generate_cm_imports` + the
-//! resource and HTTP phases), the WIT producer (`wit_emit`), and the CM embedding
-//! all read this one plan rather than each re-deriving membership from the
-//! registry / `used_wasi_functions` — upholding the `codegen.rs` principle
-//! ("emit `Package` as is, without knowledge of earlier phases"). See WEP
-//! `wep-2026-05-02-wit-interoperability.md` §"Faithful imports".
-//!
-//! `tests/wit_import_plan.rs` asserts the plan equals the compiled component's
-//! actual CM imports, so the two cannot drift.
+//! structured data at the WIR layer — the one place the import decision lives.
+//! Codegen, the WIT producer, and the CM embedding all read this plan rather
+//! than re-deriving membership, upholding `codegen.rs`'s "emit `Package` as is".
+//! `tests/wit_import_plan.rs` asserts the plan matches the compiled component.
 
 use crate::ast::Type;
+use crate::canonical::{CanonicalIntrinsic, CmFuturePayload};
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexSet;
 use crate::nir_package::NirPackage;
-use crate::wir::{CanonicalIntrinsic, CmFuturePayload, ImportEntry, ImportKind};
+use crate::wir::{ImportEntry, ImportKind};
 
 /// Resolve the categorized import plan for `project` from `used_wasi_functions`,
 /// the registry, and the WIR-level canonical intrinsics. This is the decision
@@ -180,16 +174,11 @@ pub fn resolve_import_plan(
         worklist.extend(more);
     }
 
-    // Phase 3: resource-getter interfaces (returning `option<resource>`) whose
-    // accessor is used. The gate is `NirPackage::has_interface` — whether a
-    // `{interface}::` function appears in `used_wasi_functions` — which is the
-    // gate codegen applies inline, NOT the registry's same-named `with`-set
-    // predicate; the two are distinct. For each used getter the plan carries two
-    // imports: the getter interface itself (`ResourceGetter`; codegen's getter
-    // phase — http getters go through the HTTP phase instead, so they are
-    // excluded here) and, when the returned resource is *defined elsewhere*, that
-    // defining interface (`ResourceSource`, so the resource type is in scope
-    // before the getter is encoded).
+    // Phase 3: resource-getter interfaces whose accessor is used, gated on
+    // `NirPackage::has_interface` — the gate codegen applies inline, not the
+    // registry's same-named `with`-set predicate. Each used getter contributes
+    // the getter interface itself (http ones going through the HTTP phase) and,
+    // for a resource defined elsewhere, its defining interface.
     for interface_info in registry.interfaces() {
         let Some((resource_wado_name, _)) = &interface_info.resource_type else {
             continue;

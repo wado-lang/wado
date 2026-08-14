@@ -19,6 +19,7 @@ use {
     merge_grammars,
     synthesize_implicit_tokens,
     normalize_caches,
+    alias_parser_literals,
 } from "./ir.wado";
 use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
@@ -32,6 +33,7 @@ use { parse } from "./g4/parser.wado";
 fn dump_source(input: &String) -> String {
     let mut merged = merge_grammars([parse(*input).unwrap()]);
     synthesize_implicit_tokens(&mut merged);
+    alias_parser_literals(&mut merged);
     normalize_caches(&mut merged);
     let lit = collect_literal_tokens(&merged.parser_rules);
     let mut ctx = GenContext::new(&merged.parser_rules, &lit);

@@ -1,0 +1,18 @@
+// An unlowerable future payload is reported, not panicked on, from a function
+// the world does not export: synthesis classifies every `future` / `stream`
+// method call in every function.
+use { println, Stdout } from "core:cli";
+
+export fn helper(v: Future<()>) -> i32 {
+    v.drop();
+    return 1;
+}
+
+export fn run() with Stdout {
+    println("unreachable");
+}
+
+__DATA__
+{
+    "compile_error": "`()` has no Component Model representation as a `future` payload"
+}

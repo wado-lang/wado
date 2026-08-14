@@ -11,8 +11,9 @@
 //! that exact handle — `cm_catalog.rs` round-trips it functionally rather than
 //! by handle equality, since the handle is single-use.
 //!
-//! Still TODO in this catalog: handles (`own`/`borrow` of resources), whose
-//! non-duplicable boundary semantics differ from the value types above.
+//! Still TODO: an `own`/`borrow` resource identity export, whose non-duplicable
+//! boundary semantics differ from the value types above. The catalog declares
+//! no resource of its own to write one against.
 //!
 //! This file is the published package source, reused verbatim as a compiler
 //! test fixture (`wado-compiler/tests/fixtures/cm_catalog.wado` must stay
@@ -227,6 +228,19 @@ export fn id_list_tuple_record(v: List<[Point, u32]>) -> List<[Point, u32]> {
     return v;
 }
 
+// --- Flags nested in aggregates ---
+// Three labels lower to one CM byte, not the u32 the guest holds, and only a
+// composite reads a stride or an offset.
+export fn id_option_flags(v: Option<Perms>) -> Option<Perms> {
+    return v;
+}
+export fn id_list_flags(v: List<Perms>) -> List<Perms> {
+    return v;
+}
+export fn id_tuple_flags(v: [Perms, u32]) -> [Perms, u32] {
+    return v;
+}
+
 // --- Async handle types (CM `future` / `stream`) ---
 export fn id_future_bool(v: Future<bool>) -> Future<bool> {
     let value = v.read();
@@ -369,6 +383,17 @@ export async fn id_future_result(v: Future<Result<u32, String>>) -> Future<Resul
         tx.write(x);
     }
 }
+// A unit Ok arm is also the WASI transmission shape; only a WASI error-code
+// on the Err side makes it one.
+export async fn id_future_result_err(v: Future<Result<(), String>>) -> Future<Result<(), String>> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Result<(), String>>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
 export async fn id_future_list(v: Future<List<u32>>) -> Future<List<u32>> {
     let value = v.read();
     v.drop();
@@ -391,6 +416,43 @@ export async fn id_future_record(v: Future<Point>) -> Future<Point> {
     let value = v.read();
     v.drop();
     let [rx, tx] = Future::<Point>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+// A newtype is a WIT type alias, so the payload is its base's (`f64`).
+export fn id_future_newtype(v: Future<Meters>) -> Future<Meters> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Meters>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+export async fn id_future_enum(v: Future<Color>) -> Future<Color> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Color>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+export async fn id_future_variant(v: Future<Shape>) -> Future<Shape> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Shape>::new();
+    task return rx;
+    if let Some(x) = value {
+        tx.write(x);
+    }
+}
+export async fn id_future_flags(v: Future<Perms>) -> Future<Perms> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<Perms>::new();
     task return rx;
     if let Some(x) = value {
         tx.write(x);
@@ -436,6 +498,46 @@ export async fn id_stream_string(v: Stream<String>) -> Stream<String> {
 }
 export async fn id_stream_record(v: Stream<Point>) -> Stream<Point> {
     let [rx, tx] = Stream::<Point>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
+}
+export async fn id_stream_enum(v: Stream<Color>) -> Stream<Color> {
+    let [rx, tx] = Stream::<Color>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
+}
+export async fn id_stream_variant(v: Stream<Shape>) -> Stream<Shape> {
+    let [rx, tx] = Stream::<Shape>::new();
+    task return rx;
+    loop {
+        let chunk = v.read(16);
+        if chunk.len() == 0 {
+            break;
+        }
+        tx.write(chunk);
+    }
+    v.drop();
+    tx.drop();
+}
+// The element whose CM width differs from its Wado one: checks the stride.
+export async fn id_stream_flags(v: Stream<Perms>) -> Stream<Perms> {
+    let [rx, tx] = Stream::<Perms>::new();
     task return rx;
     loop {
         let chunk = v.read(16);

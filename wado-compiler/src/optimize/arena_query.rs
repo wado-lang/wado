@@ -1,25 +1,12 @@
-//! Arena-side structural queries shared by the rewrite-engine rules.
+//! Arena-side structural queries shared by the rewrite-engine rules, reading the
+//! [`Body`] directly so the ported passes need no `Body ↔ tree` bridge. A new
+//! see-through node kind must be taught to `storage_root` / `strip_refs` here
+//! *and* to `niri/place.rs`, which keeps its own transparent-wrapper set.
 //!
-//! `is_local`, `expr_mentions_local`, `stmt_mentions_local`, `is_pure_expr`,
-//! `collect_reads`, … read the [`Body`] arena directly, so the ported passes
-//! need no `Body ↔ tree` bridge.
-//!
-//! `niri/place.rs` keeps its own statement of the transparent-wrapper set
-//! (`wrapped_operand`), so a new see-through node kind must be taught there
-//! as well as to `storage_root` / `strip_refs` below.
-//!
-//! ## Promoted reads
-//!
-//! After operand promotion a pure read lives in the value pool as an
-//! `Operand::Value`, not in the skeleton, so a census that walks nodes alone —
-//! [`collect_reads`], the engine's use index — cannot see it. The
-//! `promoted_*` queries here supply exactly what that walk misses, and every
-//! one of them is scoped to the *reachable* operands: the pool is append-only,
-//! so it still holds the values of reads that folded away long ago, and seeding
-//! from it would keep their locals alive forever.
-//!
-//! The walk itself lives on `Body`, since [`crate::nir_engine::Engine`]
-//! memoizes it per session and cannot reach into `optimize`.
+//! After operand promotion a pure read lives in the value pool rather than the
+//! skeleton, where a node walk cannot see it; the `promoted_*` queries supply
+//! exactly that, scoped to the *reachable* operands — the pool is append-only, so
+//! seeding from it wholesale would keep long-folded locals alive forever.
 
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
@@ -51,22 +38,6 @@ pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
 /// memoizes it; this entry point is for the standalone passes.
 pub(super) fn promoted_local_reads(body: &Body, out: &mut IndexSet<u32>) {
     body.promoted_local_reads(out);
-}
-
-/// The first of `locals` that still has a reachable read, in the skeleton or the
-/// value pool — the check a rewrite that deletes a binding runs against itself.
-///
-/// One census for the whole batch, since each half costs a body walk. Read off
-/// the arena, not the engine's use index and memo, which are what the rewrite
-/// decided on — so this can still catch them drifting.
-pub(super) fn surviving_read(body: &Body, locals: &[u32]) -> Option<u32> {
-    if locals.is_empty() {
-        return None;
-    }
-    let mut reads = IndexSet::default();
-    collect_reads(body, &mut reads);
-    promoted_local_reads(body, &mut reads);
-    locals.iter().copied().find(|l| reads.contains(l))
 }
 
 /// How many of `node`'s operand slots read `idx` through a promoted value. A
@@ -214,17 +185,11 @@ pub(super) fn is_place_prefix(q: &Place, p: &Place) -> bool {
     q.0 == p.0 && q.1.len() <= p.1.len() && q.1 == p.1[..q.1.len()]
 }
 
-/// The local whose interior storage `expr` reaches, seeing through the
-/// projections that share it: field access, indexing, variant payload, a
-/// transparent cast, and `&`/`&mut`/`*`. Arithmetic unaries produce fresh
-/// scalars and do not descend. The root-only storage query for the escape /
-/// aliasing / mutation-witness analyses; distinct from [`place_root_local`]
-/// (narrower, paired with the caller's own wrapper dispatch) and the
-/// path-sensitive [`place_path`].
-///
-/// `None` does *not* mean "fresh": `container.index_value(i)` also returns
-/// `None` yet aliases the container, so callers pair this with a freshness
-/// gate (`EscapeMap::rvalue_is_fresh`) or treat `None` conservatively.
+/// The local whose interior storage `expr` reaches, seeing through the sharing
+/// projections — field access, indexing, variant payload, a transparent cast,
+/// and `&`/`&mut`/`*` — but not an arithmetic unary. The root-only query for the
+/// escape / aliasing / mutation analyses. `None` does not mean fresh:
+/// `container.index_value(i)` still aliases, so pair it with a freshness gate.
 pub(super) fn storage_root(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
@@ -290,42 +255,9 @@ pub(super) fn strip_one_value_copy(
     }
 }
 
-/// Collect every local index that is *read* — every `Local` mention except the
-/// bare-`Local` target of an `Assign` (a write). `&local` / `&mut local`,
-/// `local.field = …`, and every value-position `Local` count as reads. The
-/// arena counterpart of `elide_local`'s tree `ReadCollector` /
-/// `collect_reads_in_block`.
+/// See [`Body::collect_local_reads`].
 pub(super) fn collect_reads(body: &Body, out: &mut IndexSet<u32>) {
-    collect_reads_node(body, NodeRef::Block(body.root), out);
-}
-
-fn collect_reads_node(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
-    if let NodeRef::Expr(id) = node {
-        match &body.exprs[id].kind {
-            ExprKind::Local { index, .. } => {
-                out.insert(*index);
-                return;
-            }
-            ExprKind::Assign { target, value } => {
-                let (target, value) = (*target, *value);
-                // The bare-`Local` target is a write, not a read; nested write
-                // places (`a.field`, `a[i]`) and the assigned value are reads.
-                if !matches!(&body.exprs[target].kind, ExprKind::Local { .. }) {
-                    collect_reads_node(body, NodeRef::Expr(target), out);
-                }
-                if let Some(ve) = value.as_expr() {
-                    collect_reads_node(body, NodeRef::Expr(ve), out);
-                }
-                return;
-            }
-            _ => {}
-        }
-    }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_reads_node(body, c, out);
-    }
+    body.collect_local_reads(out);
 }
 
 /// Whether `id` is a bare `Local(idx)` reference.
@@ -424,18 +356,11 @@ pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
     op.as_expr().is_none_or(|e| is_pure_expr(body, e))
 }
 
-/// True when the expression has no observable effect *and cannot trap*. A trap
-/// is an observable effect that must survive, so this — not [`is_pure_expr`] —
-/// is the predicate for passes that *delete* an expression (dead-argument
-/// elimination, dead-return-value elimination, write-only-local elision):
-/// dropping a `100 / x` or `arr[i]` erases a runtime trap the program is
-/// entitled to. `is_pure_expr` stays trap-agnostic for reordering/CSE, which
-/// keep the expression (its trap still fires). The trap dimension comes from the
-/// shared [`ModRef`] oracle so the taxonomy lives in one place.
-///
-/// With a type table, a `FieldAccess` on a non-null struct/ref receiver is
-/// recognised as non-trapping (dropping the dead residue of an inlined unused
-/// `&self` receiver, say); pass `None` to stay conservative.
+/// True when the expression has no observable effect *and cannot trap* — the
+/// predicate for a pass that *deletes* an expression, where dropping a `100 / x`
+/// would erase a trap the program is entitled to. [`is_pure_expr`] stays
+/// trap-agnostic for reordering and CSE. With a type table a `FieldAccess` on a
+/// non-null receiver is non-trapping; pass `None` to stay conservative.
 pub(super) fn is_pure_nontrapping_expr_typed(
     body: &Body,
     id: ExprId,
@@ -518,15 +443,10 @@ fn is_pure_block(body: &Body, block: BlockId) -> bool {
 // Per-node trap taxonomy
 // ---------------------------------------------------------------------------
 //
-// The single listing of *which operation traps*, shared by every pass that
-// reasons about trap preservation so they cannot drift apart (an earlier
-// trap-deletion P0 was exactly such a drift). It mirrors, at per-node
-// granularity, the trap dimension `mod_ref::ModRef::may_trap` accumulates
-// recursively — `mod_ref` stays the recursive trap authority (its inline
-// `Div | Mod` / `Deref` / `Cast` / heap-projection classification is the
-// reference these helpers reproduce). Consumers: `elide_box_local`'s
-// leftmost-side-effect walk (`expr_node_may_trap`) and `select_lowering`'s
-// arm-eligibility gate (`binary_op_may_trap`).
+// The single listing of which operation traps, shared so no two passes reasoning
+// about trap preservation can drift apart — an earlier trap-deletion P0 was
+// exactly that. Mirrors per node what `mod_ref::ModRef::may_trap` accumulates
+// recursively; `mod_ref` remains the recursive authority these reproduce.
 
 /// Whether a [`NirBinaryOp`] may trap at runtime, independent of its operands.
 /// Integer `Div` / `Mod` trap on a zero divisor (and `INT_MIN / -1`); every
@@ -591,41 +511,16 @@ pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Mutated-root queries
+// Mutated-root queries — the canonical "which locals may a subtree mutate"
+// facility. Consolidation target for the hand-rolled variants in
+// `const_folding` and `condition_implication`.
 // ---------------------------------------------------------------------------
-//
-// The canonical "which locals may a subtree mutate" facility, shared so every
-// consumer applies one witness taxonomy, one bodyless-callee fallback, and one
-// `&mut`-alias resolution. Direct consumers today: `copy_prop` (scope-stability
-// scan and usage marking). Consolidation target for the hand-rolled variants in
-// `const_folding::record_loop_write` and `condition_implication::node_modifies`.
-//
-// Receiver-wrapper caveat: at reification a `&mut self` receiver is
-// `&mut`-typed or an explicit `Unary(MutRef)` (`elaborator/method_lookup.rs`,
-// `adjust_receiver_for_self_kind_static`), but the boxing rewrite erases the
-// `&mut`/`&` wrapper distinction for boxed-scalar receivers, so at NIR a
-// mutating receiver can arrive as a bare shared `&` borrow. Mutation is
-// therefore recognized by the callee's *declared* pre-boxing bit (the oracle
-// verdict / the call site's `is_mut` bit), never by the wrapper shape alone;
-// with a mutating verdict the attribution sees through either wrapper to the
-// storage root. This is also why the bodyless fallback trusts `is_mut` rather
-// than the — boxing-erased — `&mut` type.
 
-/// Flow-insensitive `&mut`-alias map: for every `&mut`-typed local, the set of
-/// function locals its stored reference may point into.
-///
-/// Built in one walk + a fixpoint over ref-to-ref copies:
-///
-/// - `let r = &mut place` / `r = &mut place` contributes the place's root
-///   (or, when the place derefs another ref local, that local's own roots).
-/// - `let r2 = r` between ref locals copies `r`'s roots.
-/// - Every other definition shape (a call returning `&mut`, a ref read back
-///   out of an aggregate, a pattern binding, an `if` producing a ref) makes
-///   the local's provenance *unknown*: a write through it may hit any local
-///   whose `&mut` was ever taken (`borrowed`).
-///
-/// Parameters are external: a caller cannot hold a `&mut` into this frame's
-/// fresh locals, so a mut-ref parameter aliases no function local.
+/// Flow-insensitive `&mut`-alias map: per `&mut`-typed local, the function locals
+/// its reference may point into. Built in one walk plus a fixpoint over
+/// ref-to-ref copies; every other shape leaves the provenance unknown, so a write
+/// may hit any `borrowed` local. A mut-ref parameter aliases nothing — a caller
+/// cannot hold a reference into this frame's fresh locals.
 #[derive(Debug, Default)]
 pub(super) struct MutRefAliases {
     entries: crate::hashmap::IndexMap<u32, AliasEntry>,
@@ -883,18 +778,11 @@ fn is_mut_ref_typed(body: &Body, e: ExprId, type_table: &crate::tir::TypeTable) 
     )
 }
 
-/// Report every local root the expression node `id` itself may mutate (the
-/// caller's walk drives traversal into children). The single shared
-/// witness→root dispatch: one root resolution (a storage chain, expanded
-/// through [`MutRefAliases`]) and one bodyless-callee fallback.
-///
-/// Bodyless-callee fallback (`verdict: None`): trust the call site's declared
-/// `mut` bit for arguments. The `&mut`-type test used for receivers /
-/// indirect arguments has false negatives for arguments the lowering boxed
-/// (`&mut scalar` arrives `Box`-typed with `is_mut` still set, and the box
-/// cell IS the caller-visible storage), so where the declared bit exists it
-/// is the more faithful signal; where it does not (receivers, indirect call
-/// operands), the `&mut` type is all there is.
+/// Report every local root the node `id` itself may mutate, the caller's walk
+/// driving traversal into children. The one shared witness→root dispatch, with a
+/// single bodyless-callee fallback. That fallback trusts the call site's declared
+/// `mut` bit, since the `&mut`-type test misses a boxed argument: `&mut scalar`
+/// arrives `Box`-typed with `is_mut` still set.
 pub(super) fn for_each_mutated_root(
     body: &Body,
     id: ExprId,

@@ -132,8 +132,8 @@ small grammar). Expect the biggest effect on TS/Rust (keyword-dense, GC-bound).
   `name→id` `TreeMap` from `collect_literal_tokens` + `token_slot_order`. Promote
   it (plus an `id→name` `List`) into the shared `TokenKinds` table; the ATN
   builder then consumes the same table instead of rebuilding it.
-- **`single_token_first` / `element_token_const`** (gen_util.wado:471-477)
-  already centralise `TokenRef→"TK_name"` / `Literal→const_name`; the `kind_id`
+- **`single_token_first`** (`gen_util.wado`)
+  already centralises `TokenRef→"TK_name"` / `Literal→const_name`; the `kind_id`
   resolution pass routes through them, and open-coded `` `TK_{t.name}` `` sites
   (enumerated: lower, parser_gen, prediction, gen_context, atn, dump) migrate to
   reading `elem.kind_id`.

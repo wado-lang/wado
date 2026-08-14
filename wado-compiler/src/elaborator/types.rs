@@ -784,13 +784,6 @@ pub enum TypeError {
     },
 }
 
-/// Render the human-readable body of an [`TypeError::OperatorNotApplicable`].
-///
-/// Shared by the `Display` impl and the `From<TypeError> for Diagnostic`
-/// conversion so both surfaces phrase operator errors identically. The
-/// message names one operand type when `operands` has a single entry and
-/// both when it has two, keeping the wording symmetric regardless of which
-/// operand triggered the error.
 /// Append a trait-bound reason chain as indented `note:` lines beneath a
 /// headline message. Shared by the `Display` impl and the `Diagnostic`
 /// conversion so the chain renders identically on every surface.
@@ -2094,18 +2087,11 @@ pub(super) struct TraitMethodMatch {
     pub(super) is_variadic_impl: bool,
 }
 
-/// Read-only view that resolves a type name from a given module's perspective
-/// without cloning per-module flat maps.
-///
-/// Three-layer precedence (highest first):
-///   1. Local additions discovered during resolution (anonymous structs, in-progress
-///      newtypes/enums declared in the current module's body).
-///   2. The current module's own definitions.
-///   3. Imports of the current module (with `use { Foo as Bar }` aliasing).
-///   4. Any module that defines the name (legacy fallback for prelude-style visibility).
-///
-/// Constructed cheaply at each call site from the `Elaborator`'s context. All
-/// fields are borrowed; no heap allocation.
+/// Read-only view resolving a type name from a module's perspective without
+/// cloning per-module maps. Precedence, highest first: local additions found
+/// during resolution, the current module's own definitions, then its imports
+/// (with `use { Foo as Bar }` aliasing) — no global scan beyond that (#1416).
+/// All fields are borrowed, so a call site constructs one without allocating.
 pub(crate) struct TypeLookup<'a> {
     pub(crate) current_module_source: &'a ModuleSource,
     /// What every name in the program resolves to, answered once by the resolve
@@ -2142,6 +2128,217 @@ pub(crate) struct TypeLookup<'a> {
 }
 
 impl<'a> TypeLookup<'a> {
+<<<<<<< HEAD
+||||||| bad542cd7
+    /// Resolve `name` against `all_per_module` using the (local → current →
+    /// imports → any) precedence. Borrows have lifetime `'a`, so the caller
+    /// can keep the returned reference alive across `&self` re-borrows.
+    fn lookup_ref<V>(
+        &self,
+        name: &str,
+        local: Option<&'a IndexMap<String, V>>,
+        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
+    ) -> Option<&'a V> {
+        // Canonicalize a `ns::Type` reference to its `ns$Type` alias — the
+        // single chokepoint for every type-name lookup. The alias resolves
+        // through the `imported_type_sources` branch below to the namespace's
+        // own module.
+        let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
+        let name = canon.as_deref().unwrap_or(name);
+        if let Some(local) = local
+            && let Some(v) = local.get(name)
+        {
+            return Some(v);
+        }
+        if let Some(v) = all_per_module
+            .get(self.current_module_source)
+            .and_then(|m| m.get(name))
+        {
+            return Some(v);
+        }
+        if let Some(src) = self.imported_type_sources.get(name) {
+            let canonical = self
+                .import_original_names
+                .get(name)
+                .map(String::as_str)
+                .unwrap_or(name);
+            if let Some(v) = all_per_module.get(src).and_then(|m| m.get(canonical)) {
+                return Some(v);
+            }
+            if let ModuleSource::Wasi { interface } = src {
+                let prefix = format!("{interface}/");
+                for (s, m) in all_per_module {
+                    if let ModuleSource::Wasi { interface: sub } = s
+                        && sub.starts_with(&prefix)
+                        && let Some(v) = m.get(canonical)
+                    {
+                        return Some(v);
+                    }
+                }
+            }
+            // Imported but absent from this registry: the name is simply of
+            // another kind (e.g. an imported `enum` queried against the variant
+            // registry). `src` is the true definer — `module_import_scope`
+            // resolves `pub use` chains — so there is nowhere else to look.
+        }
+        // No global-scan fallback. A bare name resolves only through locals, the
+        // current module, or imports (the prelude is injected into every
+        // module's import scope, so its types resolve through the import branch
+        // above). Returning the first same-named match from any module is what
+        // let a type bind to an unrelated module's same-named type (issue #1416).
+        None
+    }
+
+    /// Resolve `name` keyed strictly by `module_source`: the local override
+    /// matches only when its own module agrees, then the per-module table is
+    /// indexed directly. Unlike [`Self::lookup_ref`] it applies no import
+    /// precedence, so a resolved `ResolvedType` (which carries its
+    /// `module_source`) can never resolve to a same-named type from another
+    /// module (issue #1416). The bare-name lookups are for names written in
+    /// source, where import precedence is the right policy.
+    fn lookup_ref_in<V>(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+        local: &'a IndexMap<String, V>,
+        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
+        module_of: impl Fn(&V) -> &ModuleSource,
+    ) -> Option<&'a V> {
+        local
+            .get(name)
+            .filter(|v| *module_of(v) == *module_source)
+            .or_else(|| all_per_module.get(module_source).and_then(|m| m.get(name)))
+    }
+
+    /// Resolve a *source-written* bare `name` with function-local
+    /// precedence: the current function's own local items (`fn_local`, see
+    /// `ModuleDecls::fn_local_struct_fields`) shadow everything else, ahead
+    /// of `lookup_ref`'s (local → current module → imports → any) chain.
+    /// Consolidates the identical wrapper every bare-name accessor below
+    /// used to duplicate by hand.
+    ///
+    /// Only for resolving a name as *written in source* — an already-known
+    /// `(name, module_source)` identity recovered from a resolved `TypeId`
+    /// (e.g. reify's `recorded_type`) must use [`Self::lookup_ref_in`]
+    /// directly (via the `_in` accessors below) and *not* this tier: the
+    /// function-local table is a flat, unordered map mutated in place as
+    /// annotate walks the function sequentially, so by the time a later,
+    /// independent pass (reify) looks up a name, it reflects the *end* of
+    /// that function's local declarations, not the position-appropriate
+    /// state — consulting it for an already-resolved identity risks
+    /// resolving to an unrelated later-declared local item that happens to
+    /// share the same bare name as an outer, non-local type.
+    fn fn_local_first<V>(
+        &self,
+        name: &str,
+        fn_local: &'a IndexMap<String, V>,
+        local: Option<&'a IndexMap<String, V>>,
+        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
+    ) -> Option<&'a V> {
+        fn_local
+            .get(name)
+            .or_else(|| self.lookup_ref(name, local, all_per_module))
+    }
+
+=======
+    /// Resolve `name` against `all_per_module` using the (local → current →
+    /// imports → any) precedence. Borrows have lifetime `'a`, so the caller
+    /// can keep the returned reference alive across `&self` re-borrows.
+    fn lookup_ref<V>(
+        &self,
+        name: &str,
+        local: Option<&'a IndexMap<String, V>>,
+        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
+    ) -> Option<&'a V> {
+        // Canonicalize a `ns::Type` reference to its `ns$Type` alias — the
+        // single chokepoint for every type-name lookup. The alias resolves
+        // through the `imported_type_sources` branch below to the namespace's
+        // own module.
+        let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
+        let name = canon.as_deref().unwrap_or(name);
+        if let Some(local) = local
+            && let Some(v) = local.get(name)
+        {
+            return Some(v);
+        }
+        if let Some(v) = all_per_module
+            .get(self.current_module_source)
+            .and_then(|m| m.get(name))
+        {
+            return Some(v);
+        }
+        if let Some(src) = self.imported_type_sources.get(name) {
+            let canonical = self
+                .import_original_names
+                .get(name)
+                .map(String::as_str)
+                .unwrap_or(name);
+            if let Some(v) = all_per_module.get(src).and_then(|m| m.get(canonical)) {
+                return Some(v);
+            }
+            if let ModuleSource::Wasi { interface } = src {
+                let prefix = format!("{interface}/");
+                for (s, m) in all_per_module {
+                    if let ModuleSource::Wasi { interface: sub } = s
+                        && sub.starts_with(&prefix)
+                        && let Some(v) = m.get(canonical)
+                    {
+                        return Some(v);
+                    }
+                }
+            }
+            // Imported but absent from this registry: the name is simply of
+            // another kind (e.g. an imported `enum` queried against the variant
+            // registry). `src` is the true definer — `module_import_scope`
+            // resolves `pub use` chains — so there is nowhere else to look.
+        }
+        // No global-scan fallback. A bare name resolves only through locals, the
+        // current module, or imports (the prelude is injected into every
+        // module's import scope, so its types resolve through the import branch
+        // above). Returning the first same-named match from any module is what
+        // let a type bind to an unrelated module's same-named type (issue #1416).
+        None
+    }
+
+    /// Resolve `name` keyed strictly by `module_source`: the local override
+    /// matches only when its own module agrees, then the per-module table is
+    /// indexed directly. Unlike [`Self::lookup_ref`] it applies no import
+    /// precedence, so a resolved `ResolvedType` (which carries its
+    /// `module_source`) can never resolve to a same-named type from another
+    /// module (issue #1416). The bare-name lookups are for names written in
+    /// source, where import precedence is the right policy.
+    fn lookup_ref_in<V>(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+        local: &'a IndexMap<String, V>,
+        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
+        module_of: impl Fn(&V) -> &ModuleSource,
+    ) -> Option<&'a V> {
+        local
+            .get(name)
+            .filter(|v| *module_of(v) == *module_source)
+            .or_else(|| all_per_module.get(module_source).and_then(|m| m.get(name)))
+    }
+
+    /// Resolve a *source-written* bare `name` with function-local precedence:
+    /// the current function's own local items shadow everything, ahead of
+    /// `lookup_ref`'s chain. An already-resolved `(name, module_source)` identity
+    /// must use [`Self::lookup_ref_in`] instead — the flat fn-local table
+    /// reflects the *end* of the function and could resolve to a later item.
+    fn fn_local_first<V>(
+        &self,
+        name: &str,
+        fn_local: &'a IndexMap<String, V>,
+        local: Option<&'a IndexMap<String, V>>,
+        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
+    ) -> Option<&'a V> {
+        fn_local
+            .get(name)
+            .or_else(|| self.lookup_ref(name, local, all_per_module))
+    }
+
+>>>>>>> origin/main
     pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
         let def = self.declaration(name).or_else(|| {
             self.local_item_renders
@@ -2424,14 +2621,10 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) rhs_type: Option<TypeId>,
 }
 
-/// Complete, Self-substituted description of a trait method lookup.
-///
-/// Produced by [`Elaborator::resolve_trait_method_for_op`][rtq] and consumed
-/// by [`Elaborator::build_trait_op_method_call_on_resolved`][bop]. Having a
-/// single, always-populated data type for trait-method dispatch eliminates
-/// the `param_types: vec![]` anti-pattern that previously caused codegen
-/// ICEs when operator dispatch built a method call without any
-/// argument-type check.
+/// Complete, Self-substituted description of a trait method lookup, produced by
+/// [`Elaborator::resolve_trait_method_for_op`][rtq] and consumed by
+/// [`Elaborator::build_trait_op_method_call_on_resolved`][bop]. Always populated,
+/// so operator dispatch cannot build a method call without argument types.
 ///
 /// [rtq]: crate::elaborator::Elaborator::resolve_trait_method_for_op
 /// [bop]: crate::elaborator::Elaborator::build_trait_op_method_call_on_resolved

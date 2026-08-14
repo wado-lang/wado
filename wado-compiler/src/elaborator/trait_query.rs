@@ -660,15 +660,10 @@ impl TypeSystem {
     }
 
     /// Whether a reflection written at `scope`'s module can enumerate `info`'s
-    /// fields (WEP 2026-06-13, Visibility).
-    ///
-    /// Every field must be reachable, not merely one: a declaration carries a
-    /// single synthesized impl whose `members()` is fixed, so admitting the
-    /// struct on one public field would enumerate its private ones alongside
-    /// it.
-    ///
-    /// Visibility decides only this. Eligibility is a property of the
-    /// declaration, so [`Self::is_reflect_eligible`] always sees every field.
+    /// fields (WEP 2026-06-13, Visibility). *Every* field must be reachable: a
+    /// declaration carries one synthesized impl with a fixed `members()`, so
+    /// admitting the struct on one public field would expose its private ones.
+    /// Eligibility is separate — [`Self::is_reflect_eligible`] sees every field.
     fn has_visible_fields(&self, scope: &TypeLookup, info: &super::types::StructFieldInfo) -> bool {
         if info.fields.is_empty() || &info.module_source == scope.current_module_source {
             return true;
@@ -2319,24 +2314,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Build a mapping from type parameter names to concrete type IDs.
-    /// For `impl Trait for Container<T>` with concrete type `Container<i32>`,
-    /// returns `{"T" -> i32's TypeId}`.
-    ///
-    /// When `declared_type_params` is non-empty, only names in that set are
-    /// treated as type parameters. This prevents concrete types (e.g., `String` in
-    /// `impl Trait for Map<String, V>`) from being incorrectly mapped.
-    /// When empty, all `Named` types are assumed to be type parameters (legacy behavior).
-    /// Single entry point for resolving a trait method that a binary operator
-    /// dispatches to (Eq / Ord / Add / Sub / Mul / Div / Rem / `BitAnd` / `BitOr` /
-    /// `BitXor` / Shl / Shr). Produces a fully-populated
-    /// [`ResolvedTraitMethod`] with the rhs type already substituted, so
-    /// callers need not reach into the underlying `find_*_trait_impl`
-    /// family and cannot forget to wire `rhs_type` through the typecheck.
-    ///
-    /// `struct_name` / `lookup_type_id` are the name-and-id used for impl
-    /// lookup (for newtypes this may be the ultimate base). `is_type_param`
-    /// is true for `T: Trait` type-param receivers.
+    /// Single entry point for resolving a trait method a binary operator
+    /// dispatches to (Eq / Ord / Add / … / Shr), returning a fully-populated
+    /// [`ResolvedTraitMethod`] with `rhs_type` already substituted so no caller
+    /// can forget to wire it through. `struct_name` / `lookup_type_id` are the
+    /// impl-lookup key — for a newtype, possibly the ultimate base.
     pub(super) fn resolve_trait_method_for_op(
         &mut self,
         struct_name: &str,
@@ -2345,16 +2327,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         is_type_param: bool,
     ) -> Option<ResolvedTraitMethod> {
-        // 1. User-written impl via the shared arithmetic-trait lookup.
-        // 2. Auto-derive fallback (Eq / Ord only; other operator traits
-        //    have no auto-derive rules).
-        //
-        // Eq / Ord trait decls fix their return types (`bool` and `Ordering`
-        // respectively) regardless of what a user impl writes, so normalize
-        // those here. `find_arithmetic_trait_impl` would otherwise default
-        // `output_type` to the receiver type when no `type Output` is
-        // declared. The auto-derive set and the fixed return types come from
-        // `TypeSystem::auto_derive_by_trait` (the single source).
+        // A user-written impl first, then the Eq / Ord auto-derive fallback.
+        // Both fix their return types (`bool`, `Ordering`) whatever a user impl
+        // writes, so normalize here: `find_arithmetic_trait_impl` would default
+        // `output_type` to the receiver type absent a `type Output`. The set and
+        // the types come from `TypeSystem::auto_derive_by_trait`.
         let auto_derive = self.tysys.auto_derive_by_trait(trait_name);
         let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) = self
             .find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_name, method_name, None)
@@ -2397,31 +2374,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Fallback for [`Self::find_trait_method_for_type`]: when no user-written
-    /// impl of `trait_name::method_name` exists for a type that is still
-    /// auto-derive-eligible (per [`Self::type_implements_trait`]), synthesize
-    /// a [`TraitMethodMatch`] whose [`MethodInfo`] has the receiver type
-    /// fully substituted into `Self` positions. This is the single pathway
-    /// that makes auto-derived methods discoverable via method-call
-    /// resolution, mirroring what operator dispatch already got from the
-    /// arithmetic-trait lookup's own auto-derive branch.
-    ///
-    /// Only method bodies actually produced by the trait-synthesis phase
-    /// (`synthesis::traits`) are returned here; primitives are excluded
-    /// because their equality/comparison lowers to Wasm instructions, not
-    /// to a method body.
-    ///
-    /// The method ↔ trait mapping and the fixed return type come from
-    /// [`TypeSystem::auto_derive_by_method`] — the single source for which
-    /// traits the compiler auto-derives — so adding a new auto-derived trait
-    /// touches that table, not this arm.
-    ///
-    /// The synthesized [`MethodInfo`] is still built with the fixed shape the
-    /// auto-derived `Eq` / `Ord` declarations have (`self_kind: Ref`, a single
-    /// `&Self` parameter named `"other"`, no defaults, no method type params).
-    /// Should a future auto-derived trait need a different shape, read it from
-    /// the trait's `ast::Function` (via `find_trait_decl_methods`) instead of
-    /// this literal; the current two traits share this shape exactly.
+    /// Fallback for [`Self::find_trait_method_for_type`]: with no user-written
+    /// impl of `trait_name::method_name` on an auto-derive-eligible type,
+    /// synthesize a [`TraitMethodMatch`] with the receiver substituted into
+    /// `Self`. Primitives are excluded, comparing via Wasm instructions. The
+    /// method ↔ trait table is [`TypeSystem::auto_derive_by_method`].
     pub(super) fn try_auto_derived_method_match(
         &mut self,
         struct_name: &str,
@@ -2487,3 +2444,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 }
+<<<<<<< HEAD
+||||||| bad542cd7
+
+impl TypeSystem {
+    /// Whether an `impl` block implements the trait a query is asking about.
+    ///
+    /// Identity when both sides have one: the query's comes from the reference
+    /// site that asked (a bound, a `T::method()` prefix), the impl's from the
+    /// site its header writes, and both were resolved by the module that wrote
+    /// them. Comparing the spellings instead is what made an aliased bound
+    /// unsatisfiable and a same-named foreign trait satisfied (#1785).
+    ///
+    /// `trait_ref: None` is a caller not yet carrying an identity. Those fall
+    /// back to the spelling, which two modules can share.
+    fn same_trait(
+        &self,
+        trait_name: &str,
+        trait_ref: Option<DeclRef>,
+        header: &super::trait_env::ImplHeader,
+        impl_trait_name: &str,
+    ) -> bool {
+        // The header already carries the table's answer for the site it wrote,
+        // computed from this very expression at build time. Re-deriving it here
+        // is the second derivation this design exists to remove.
+        match (trait_ref, header.trait_ref) {
+            (Some(DeclRef::Decl(query)), Some(DeclRef::Decl(decl))) => query == decl,
+            _ => impl_trait_name == trait_name,
+        }
+    }
+}
+=======
+
+impl TypeSystem {
+    /// Whether an `impl` block implements the trait a query is asking about, by
+    /// identity when both sides have one — each resolved by the module that wrote
+    /// its own reference site. Comparing spellings instead made an aliased bound
+    /// unsatisfiable and a same-named foreign trait satisfied (#1785).
+    /// `trait_ref: None` falls back to the spelling, which two modules can share.
+    fn same_trait(
+        &self,
+        trait_name: &str,
+        trait_ref: Option<DeclRef>,
+        header: &super::trait_env::ImplHeader,
+        impl_trait_name: &str,
+    ) -> bool {
+        // The header already carries the table's answer for the site it wrote,
+        // computed from this very expression at build time. Re-deriving it here
+        // is the second derivation this design exists to remove.
+        match (trait_ref, header.trait_ref) {
+            (Some(DeclRef::Decl(query)), Some(DeclRef::Decl(decl))) => query == decl,
+            _ => impl_trait_name == trait_name,
+        }
+    }
+}
+>>>>>>> origin/main

@@ -1,57 +1,8 @@
-//! Dead Argument Elimination for Wado NIR.
-//!
-//! Removes parameters that the callee body never reads, together with the
-//! corresponding argument expressions at every call site. The dropped
-//! arguments must be pure so removal cannot change observable behaviour.
-//!
-//! NIR analog of `wir_optimize/dae.rs`. Running at NIR exposes the freshly
-//! dead expressions to the rest of the fixed-point loop (`copy_prop` /
-//! `const_fold` / `dce`), and it shrinks signatures *before* `inline` so the
-//! inliner is not deterred by parameters that would never be read in the
-//! inlined body anyway.
-//!
-//! Pinning rules — the pass conservatively skips:
-//!
-//! - Functions without a body (imports / extern declarations).
-//! - Synthesised CM bridges (`is_cm_export`, `is_cm_binding`,
-//!   `is_dispatch_wrapper`). These sit on the world boundary; their
-//!   signatures are observed by the host runtime, not just by the
-//!   in-project call graph.
-//! - `is_ambient` functions (special call shapes — effect-handler
-//!   dispatch carries an implicit handler param the call sites assume).
-//! - Non-`Regular` `FunctionKind` entries (specialised stubs).
-//! - Builtin / wasm-asset modules (their signatures are part of the ABI).
-//! - Allocator entry points (`allocator_tag.is_some()`) — wired raw into
-//!   the canonical ABI as `realloc`, with no `is_cm_export` wrapper to
-//!   absorb a shrunken signature.
-//! - Closure `__call` functors (`is_closure_call`) — their function-table
-//!   wrapper snapshots the signature. Concrete trait-impl methods are NOT
-//!   pinned: after monomorphization they are plain functions whose call sites
-//!   all carry a resolved `func_id` (matching `sroa_param`'s relaxation), so a
-//!   dead parameter is dropped soundly. The closure-functor `^Inspect` /
-//!   `^InspectAlt` impls are the relaxed exception even among `__call`s.
-//! - Functions whose pointer is taken via `FuncRef` anywhere in the project.
-//!
-//! `is_export` is NOT a pin: every user `export fn` reaches the world
-//! boundary through a synthesised CM wrapper (`__cm_export__<name>`,
-//! `is_cm_export = true`). The wrapper is the boundary; the user
-//! function is internal — only the wrapper calls it — and the validator
-//! sees the call site, so DAE shrinks the user function safely. The
-//! wrapper's signature is held fixed by the `is_cm_export` pin above.
-//!
-//! Methods receive no special pin either. A method whose `self` is dead
-//! has the receiver dropped from `args` by `apply_dae` at every call
-//! site, leaving a free call of the same callee — mirroring what was
-//! previously implemented for closure-functor `__call` only. The
-//! `closure_call_keys` set still exists for one purpose: to lift the
-//! `trait_name` pin on the closure-functor's `^Inspect` /
-//! `^InspectAlt` impls, where the matching wrapper adapts to the
-//! shrunken signature. Everything else flows through the general path.
-//!
-//! Runs over the arena `Body` (see `docs/wep-2026-06-05-nir-optimizer-architecture.md`):
-//! the function-body work (dead-param detection, call-site validation, local
-//! renumbering, call-site rewriting) reads and mutates it directly. Global
-//! initializers are arena bodies too, so the same routines run on them.
+//! Dead Argument Elimination — drops parameters the callee never reads, along
+//! with the (pure) argument expressions at every call site. Running at NIR
+//! rather than WIR feeds the freshly dead expressions back into the fixed-point
+//! loop and shrinks signatures before `inline` sees them. [`is_dae_sroa_eligible`]
+//! holds the pinning rules; neither `is_export` nor a method receiver is pinned.
 
 use cranelift_entity::EntityRef;
 
@@ -108,27 +59,11 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
     true
 }
 
-/// Functions whose `dead[0]` (receiver-position deadness) is honoured rather
-/// than forced to `false`, AND whose trait-method pin is lifted. These are
-/// the closure-functor methods that have a controlled dispatch path:
-///
-/// - `__Closure_N::__call` (the closure body). Reached via the
-///   synthesised `__closure_wrapper_*` (function-table dispatch) and via
-///   `lower::plan::closure`'s fn-param-specialisation `g.__call(args)`.
-///   `wir_build::register_closure_wrappers` adapts the wrapper
-///   body to the surviving `call_method.params`.
-///
-/// - `__Closure_N^Inspect::inspect` and `^InspectAlt::inspect_alt`. The
-///   only callers are the corresponding `__closure_inspect_wrapper_*` /
-///   `__closure_inspect_alt_wrapper_*` (function-table dispatch, looked
-///   up off `CanonicalClosure_K`'s `inspect` / `inspect_alt` slot). User
-///   code reaches these via `Fn<N,Ret>^Inspect::inspect(closure_ref,
-///   formatter)` / its alt twin, both of which dispatch through the
-///   canonical struct rather than the per-functor impl directly.
-///   `register_inspect_wrapper` adapts the wrapper body the same way the
-///   call wrapper does, so DAE can safely drop the `self` (env) param
-///   from the inspect impl when its synthesised body
-///   (`f.write_str("...")`) doesn't read it.
+/// Closure-functor methods whose `is_closure_call` pin is lifted:
+/// `__Closure_N::__call` and the
+/// `^Inspect` / `^InspectAlt` impls. Each is reached only through a synthesised
+/// function-table wrapper, and `register_closure_wrappers` /
+/// `register_inspect_wrapper` adapt that wrapper to the shrunken signature.
 fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
     let mut keys: IndexSet<FnKey> = IndexSet::default();
     let functor_struct_names: IndexSet<(ModuleSource, String)> = project
@@ -142,17 +77,11 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
             keys.insert(id);
         }
     }
-    // Sweep the function list for synthesised
-    // `__Closure_N^{Inspect,InspectAlt}::{inspect,inspect_alt}` impls.
-    // These don't have a direct field on `ClosureFunctor`, so we
-    // discriminate by `(struct_name == __Closure_N, trait is Inspect /
-    // InspectAlt)`. The trait is matched against the canonical names in
-    // the compiler-item registry — the same source
-    // `generate_functor_format_methods` stamps into these impls'
-    // `trait_name` — so a stdlib rename of either trait flows through
-    // instead of a bare-literal `"Inspect"` match a user trait could
-    // shadow. (`base_trait_module` is left `None` on these synthesis-
-    // derived impls, so the registry name is the exact-identity anchor.)
+    // Sweep for synthesised `__Closure_N^{Inspect,InspectAlt}` impls, which have
+    // no field on `ClosureFunctor` to key off. The trait is matched against the
+    // compiler-item registry — the same source `generate_functor_format_methods`
+    // stamps into `trait_name` — so a stdlib rename flows through and no user
+    // trait named `Inspect` can shadow it.
     let type_table = project.type_table.borrow();
     let items = type_table.compiler_items();
     let inspect_name = items.trait_name(CompilerItem::Inspect);
@@ -178,26 +107,11 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
     keys
 }
 
-/// Shared pinning predicate for the two interprocedural signature-rewriting
-/// passes, `dae` and `sroa_param` (which calls this via `super::dae`). Both
-/// refuse the same world-boundary and ABI-fixed shapes — bodyless imports, CM
-/// bridges, non-`Regular` kinds, builtin / wasm-asset modules, and allocator
-/// entry points wired raw into the canonical ABI — and both treat a concrete
-/// trait-impl method as eligible (after monomorphization it is a plain function
-/// whose every call site carries a resolved `func_id`, so the rewrite reaches
-/// them all). They diverge only on the closure `__call` functor policy, carried
-/// by `relax_closure_call`:
-///
-/// - `false` (`sroa_param`, and `dae` for any `__call` not covered by its
-///   relaxation): a closure `__call` stays pinned — its function-table wrapper
-///   snapshots the signature.
-/// - `true` (`dae`, for the closure-functor `^Inspect` / `^InspectAlt` /
-///   `__call` impls whose wrapper adapts to the shrunken signature): the closure
-///   pin is lifted.
-///
-/// `is_export` / `is_async` are intentionally *not* pins — both describe
-/// user source-level intent, not a real call-shape constraint (see the module
-/// doc). `sroa_param` layers its one extra pin (`is_value_copy`) on top of this.
+/// Shared pinning predicate for `dae` and `sroa_param`: both refuse the same
+/// world-boundary and ABI-fixed shapes, and both accept a concrete trait-impl
+/// method (post-monomorphization every call site carries a resolved `func_id`).
+/// They diverge only on `relax_closure_call` — a closure `__call` stays pinned
+/// unless its function-table wrapper adapts to the shrunken signature.
 pub(super) fn is_dae_sroa_eligible(func: &NirFunction, relax_closure_call: bool) -> bool {
     if func.body.is_none() {
         return false;

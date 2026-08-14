@@ -176,7 +176,7 @@ YY"), used: 12 });
     let data_mv_start: i32;
     let data_mv_end: i32;
     multivalue_bind [data_mv_repr, data_mv_start, data_mv_end] = "core:prelude/array.wado/Array<u8>::slice"(global:stream_write_raw_offset.wado::__const_obj_6, 2, 10);
-    ptr = builtin::i32_wrap_i64(local.tee packed_39("core:rt/cm_lower_list_u8"(data_mv_repr, 2, 8)));
+    ptr = builtin::i32_wrap_i64(local.tee packed_39("core:rt/cm_lower_list_u8"(data_mv_repr, data_mv_start, data_mv_end - data_mv_start)));
     raw_len = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     "core:rt/cm_stream_write_drain"(tx_9, ptr, raw_len, 1);
     drop("mem/realloc"(ptr, raw_len, 1, 0));
@@ -524,6 +524,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -533,10 +534,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);

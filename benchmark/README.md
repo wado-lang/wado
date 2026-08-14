@@ -231,19 +231,20 @@ Node.js and Bun, vs native-Rust [Axum](https://github.com/tokio-rs/axum), over
 Hono's official router benchmark route set driven with `oha`. See
 `http_routing/README.md` for the full route set and methodology.
 
-Throughput (requests/sec, higher is better):
+Throughput (requests/sec, higher is better), all over HTTP/1.1:
 
-| Request                         | `wado serve` | Hono (Node) | Hono (Bun) | Axum (native) |
-| ------------------------------- | -----------: | ----------: | ---------: | ------------: |
-| `GET /user`                     |       30,835 |      18,660 |     31,979 |        73,465 |
-| `GET /user/lookup/username/hey` |       26,835 |      15,513 |     31,223 |        75,372 |
-| `GET /event/abcd1234/comments`  |       24,982 |      15,931 |     27,405 |        72,029 |
-| `POST /event/abcd1234/comment`  |       26,181 |      13,138 |     31,410 |        72,488 |
-| `GET /static/index.html`        |       26,019 |      15,048 |     31,427 |        70,690 |
+| Request                                     | `wado serve` | Hono (Node) | Hono (Bun) | Axum (native) |
+| ------------------------------------------- | -----------: | ----------: | ---------: | ------------: |
+| `GET /user`                                 |       30,469 |      21,020 |     39,182 |        78,411 |
+| `GET /user/comments`                        |       31,621 |      24,775 |     39,716 |        78,583 |
+| `GET /user/lookup/username/hey`             |       25,355 |      20,549 |     32,394 |        77,892 |
+| `GET /event/abcd1234/comments`              |       27,718 |      19,253 |     34,315 |        75,316 |
+| `POST /event/abcd1234/comment`              |       28,149 |      16,035 |     35,570 |        76,412 |
+| `GET /very/deeply/nested/route/hello/there` |       30,180 |      20,185 |     36,856 |        76,774 |
+| `GET /static/index.html`                    |       27,535 |      18,990 |     34,108 |        77,874 |
 
 HTTP routing needs `oha` and Bun, and is measured separately
-(`SLICE=4 ROUNDS=5 CONNECTIONS=50 mise run benchmark-http-routing`). The table
-above carries over from the previous run: this one had no `oha`.
+(`SLICE=4 ROUNDS=5 CONNECTIONS=50 mise run benchmark-http-routing`).
 
 ## Running
 

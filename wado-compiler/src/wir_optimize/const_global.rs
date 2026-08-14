@@ -1,35 +1,8 @@
-//! Constant global-initializer promotion for WIR.
-//!
-//! A user-immutable global (`global X = …`, not `global mut`) whose
-//! initializer is not a syntactic Wasm constant is extracted by
-//! `lower::plan::globals::extract` into an `__initialize_module` runtime
-//! assignment, leaving the Wasm global mutable with a `null`/zero
-//! placeholder. After NIR optimization (`array_literal`, `string_push`,
-//! `const_folding`, …) collapses builder sequences, that runtime
-//! assignment frequently reduces to a constant `struct.new` /
-//! `array.new_fixed` / scalar.
-//!
-//! This pass is the single eager/lazy classifier, realizing the "lazy iff
-//! optimize could not simplify it" rule at the point where the value is
-//! already correctly lowered to WIR (variant representation, non-null field
-//! wrapping all baked in). For each such global it moves the constant value
-//! into the global's eager `init`, marks the global immutable, and drops the
-//! now-redundant `GlobalSet`(s). The dead init temps, emptied
-//! `__initialize_module` body, and `__modules_initialized` guard are
-//! reclaimed by `dce` / `cleanup` in the same phase.
-//!
-//! The init assignment is reached wherever it ends up: a standalone
-//! `__initialize_module` body, or — when that module-init is inlined into
-//! the entry points — nested inside an `__inline___initialize_modules`
-//! guard block and *duplicated* once per entry export. The scan therefore
-//! recurses into nested instructions and treats a global as promotable when
-//! every assignment to it is constant (they are identical copies of one
-//! init, since a user-immutable global is assigned exactly once in source).
-//!
-//! It subsumes the former NIR `const_global_promotion` (scalar-only):
-//! const-ness is decided once here, via [`WirInstr::is_const_expressible`].
-//! Strings stay lazy — a `String`'s `array.new_data<u8>` repr is not a valid
-//! Wasm constant instruction, so it is excluded by that predicate.
+//! Constant global-initializer promotion: a user-immutable global whose
+//! initializer is no syntactic Wasm constant becomes an `__initialize_module`
+//! runtime assignment, which NIR optimization often reduces back to a constant.
+//! This is the single eager/lazy classifier, promoting when *every* assignment
+//! is [`WirInstr::is_const_expressible`] — leaving a string lazy.
 
 use super::dedupe_const_globals::const_key;
 use crate::hashmap::{IndexMap, IndexSet};

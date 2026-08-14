@@ -650,13 +650,15 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(s
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(self) {
-    if self.byte_index >= self.used {
+    let _av_5: i32;
+    _av_5 = self.byte_index;
+    if _av_5 >= self.used {
         return 1, 0;
     }
     let __pattern_temp_0_mv_0: u32;
     let __pattern_temp_0_mv_1: i32;
-    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:prelude/string.wado/decode_char_at"(self.repr, self.byte_index);
-    self.byte_index = self.byte_index + __pattern_temp_0_mv_1;
+    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:prelude/string.wado/decode_char_at"(self.repr, _av_5);
+    self.byte_index = _av_5 + __pattern_temp_0_mv_1;
     return 0, __pattern_temp_0_mv_0;
 }
 
@@ -780,11 +782,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
     let align: "core:prelude/format.wado//enum:Alignment";
     let left_pad: i32;
     let right_pad: i32;
+    let _av_8: i32;
     content_len = content.used;
-    if (if self.width <= 0 -> i32 {
+    _av_8 = self.width;
+    if (if _av_8 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_8;
     }) {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, content);
         return;
@@ -817,6 +821,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
+    let _av_16: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
@@ -826,10 +831,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if (if self.width <= 0 -> i32 {
+    _av_16 = self.width;
+    if (if _av_16 <= 0 -> i32 {
         1;
     } else {
-        content_len >= self.width;
+        content_len >= _av_16;
     }) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
@@ -913,11 +919,13 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
     let start_156: i32;
     let self_163: ref "core:prelude/string.wado//String";
     let start_165: i32;
+    let _av_172: i32;
     limit = __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: block -> i32 {
-        if f.precision == -2 {
+        _av_172 = f.precision;
+        if _av_172 == -2 {
             break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: 256;
         }
-        break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: f.precision;
+        break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: _av_172;
     };
     self_55 = f.buf;
     start_57 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self_55, 1);
@@ -1110,12 +1118,14 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<variadic_nested_un
     let item: ref "variadic_nested_unroll_pack_element.wado//Mixed";
     let v_2: ref "variadic_nested_unroll_pack_element.wado//Mixed";
     let v_3: ref "core:prelude/string.wado//String";
-    if self.index >= self.end {
+    let _av_4: i32;
+    _av_4 = self.index;
+    if _av_4 >= self.end {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "variadic_nested_unroll_pack_element.wado//Mixed">(self.repr, self.index);
+    v_2 = builtin::array_get<ref "variadic_nested_unroll_pack_element.wado//Mixed">(self.repr, _av_4);
     item = struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: v_2.count, label: ref.as_non_null(v_3 = v_2.label; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<u8>; __array_clone_src_6 = v_3.repr; let __array_clone_len_6: i32; __array_clone_len_6 = v_3.used; let __array_clone_dst_6: ref Array<u8>; __array_clone_dst_6 = builtin::array_new<u8>(__array_clone_len_6); builtin::array_copy<u8>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v_3.used }), on: v_2.on };
-    self.index = self.index + 1;
+    self.index = _av_4 + 1;
     return item;
 }
 
@@ -1127,16 +1137,18 @@ fn "variadic_nested_unroll_pack_element.wado/variadic_nested_unroll_pack_element
     let __sroa_fields_1_74: ref "core:prelude/string.wado//String";
     let __sroa_fields_0_76: i32;
     let __sroa_fields_1_77: ref "core:prelude/string.wado//String";
+    let _av_79: bool;
     out = struct.new "core:prelude//List<variadic_nested_unroll_pack_element.wado/Mixed>" { repr: builtin::array_new<ref "variadic_nested_unroll_pack_element.wado//Mixed">(4), used: 0 };
     __sroa_fields_0_76 = self.count;
     __sroa_fields_1_77 = self.label;
-    "core:prelude/list.wado/core:prelude/list.wado/List<variadic_nested_unroll_pack_element.wado/Mixed>::push"(out, struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: __sroa_fields_0_76, label: __sroa_fields_1_77, on: self.on });
+    _av_79 = self.on;
+    "core:prelude/list.wado/core:prelude/list.wado/List<variadic_nested_unroll_pack_element.wado/Mixed>::push"(out, struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: __sroa_fields_0_76, label: __sroa_fields_1_77, on: _av_79 });
     __sroa_fields_0_73 = self.count;
     __sroa_fields_1_74 = self.label;
-    "core:prelude/list.wado/core:prelude/list.wado/List<variadic_nested_unroll_pack_element.wado/Mixed>::push"(out, struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: __sroa_fields_0_73, label: __sroa_fields_1_74, on: self.on });
+    "core:prelude/list.wado/core:prelude/list.wado/List<variadic_nested_unroll_pack_element.wado/Mixed>::push"(out, struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: __sroa_fields_0_73, label: __sroa_fields_1_74, on: _av_79 });
     __sroa_fields_0_70 = self.count;
     __sroa_fields_1_71 = self.label;
-    "core:prelude/list.wado/core:prelude/list.wado/List<variadic_nested_unroll_pack_element.wado/Mixed>::push"(out, struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: __sroa_fields_0_70, label: __sroa_fields_1_71, on: self.on });
+    "core:prelude/list.wado/core:prelude/list.wado/List<variadic_nested_unroll_pack_element.wado/Mixed>::push"(out, struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: __sroa_fields_0_70, label: __sroa_fields_1_71, on: _av_79 });
     return out;
 }
 

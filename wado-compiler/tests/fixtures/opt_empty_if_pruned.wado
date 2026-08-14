@@ -1,0 +1,20 @@
+// An `if` whose body dies leaves empty branches over a condition that observes
+// nothing, and holds the reads in that condition alive with it.
+//
+// `black_box` keeps the condition out of reach of constant folding, which would
+// otherwise remove the `if` for its own reasons and stop this testing anything.
+
+export fn run() {
+    let n = builtin::black_box(7);
+    let mut count = 0;
+    if n & 1024 != 0 {
+        count = 1;
+    }
+    assert n == 7;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["& 1024"]
+}

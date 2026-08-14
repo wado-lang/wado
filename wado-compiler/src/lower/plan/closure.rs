@@ -47,18 +47,11 @@ const CLOSURE_FORMAT_TRAITS: [(CompilerItem, FunctorFmtBody); 4] = [
     ),
 ];
 
-/// Per-local entry recording that a function parameter has been
-/// specialized to a functor type. Populated for synthesized
-/// fn-param-specialized callees. The translator uses these entries to:
-///
-/// - Retag `Local` reads of the param to the functor `&__Closure_N`
-///   type instead of the original `fn(...)` declared type.
-/// - Rewrite `IndirectCall { callee: Local(param), .. }` into
-///   a call to the functor's `__call` method.
-/// - Wrap `Local(param)` args to call slots that
-///   still expect `fn(...)` in `ExprKind::ClosureToCanonical`,
-///   converting the specialized value back to its canonical
-///   function-shaped view.
+/// Records that a parameter of a synthesized fn-param-specialized callee has
+/// been specialized to a functor type. The translator retags the param's `Local`
+/// reads to `&__Closure_N`, rewrites its `IndirectCall`s into `__call` method
+/// calls, and wraps it in `ClosureToCanonical` wherever it feeds a slot still
+/// expecting the canonical `fn(…)` shape.
 pub struct SpecializedLocal {
     pub local_index: u32,
     pub functor_id: u32,
@@ -66,16 +59,11 @@ pub struct SpecializedLocal {
     pub original_fn_type: tir::TypeId,
 }
 
-/// Result of closure planning.
-///
-/// `functor_infos` is consumed by the TIR → NIR translator to populate
-/// `NirPackage::closure_functors`. It carries per-functor metadata
-/// (struct name, `__call` method body, captures, canonical signature)
-/// that the optimizer uses for closure inlining.
-///
-/// `specialized_locals` lists, for each synthesized specialized
-/// callee, the params that were re-bound to functor types. See
-/// [`SpecializedLocal`].
+/// Result of closure planning. `functor_infos` populates
+/// `NirPackage::closure_functors` — the per-functor metadata (struct name,
+/// `__call` body, captures, canonical signature) the optimizer inlines against —
+/// and `specialized_locals` lists each synthesized callee's params re-bound to
+/// functor types. See [`SpecializedLocal`].
 pub struct ClosurePlan {
     pub functor_infos: Vec<ClosureFunctor>,
     pub specialized_locals: IndexMap<(ModuleSource, String), Vec<SpecializedLocal>>,
@@ -230,20 +218,11 @@ struct FnParamSpecKey {
     functor_types: Vec<(u32, TypeId)>,
 }
 
-/// Lowers closures to functor structs with `__call` methods.
-///
-/// For each closure, this generates:
-/// 1. A synthetic struct `__Closure_N` with fields for captured variables
-/// 2. A `__call` method containing the transformed closure body
-///
-/// Transformations (selective - only for closures stored in locals and called directly):
-/// - `Closure { params, body, captures }` → `StructLiteral { __Closure_N, capture_values }`
-/// - `Capture { index }` (in body) → `FieldAccess { self, __capture_{index} }`
-/// - `IndirectCall { callee, args }` (known closure) → `callee.__call(args)`
-///
-/// Closures passed as function arguments are transformed via fn-param specialization:
-/// - A specialized version of the callee is generated with functor struct params
-/// - The call is updated to use the specialized function with `StructLiteral` args
+/// Lowers each closure to a `__Closure_N` struct of its captures plus a `__call`
+/// method holding the transformed body, so the literal becomes a `StructLiteral`,
+/// a `Capture` becomes a field access on `self`, and a known `IndirectCall`
+/// becomes `callee.__call(args)`. Applied only to closures bound to a local and
+/// called directly; one passed as an argument goes through fn-param spec.
 struct ClosureLowerer {
     /// Counter for the Phase 1 walk. Each visited `Closure` has its
     /// `functor_id` populated from this — that ID is the stable index
@@ -453,16 +432,11 @@ impl ClosureLowerer {
         }
     }
 
-    /// Update `locals` in a function after closure transformation
-    /// Seed `local_to_closure` for any function parameter whose declared
-    /// type is `&__Closure_N` (the result of fn-param specialisation in
-    /// `generate_fn_param_specializations`). Without this, the
-    /// inspect-redirect in `try_redirect_inspect_to_functor` would miss
-    /// specialised parameters — they aren't `let`-bound, so the safety
-    /// analyser doesn't put them in the map — and `f.Fn^Inspect::inspect`
-    /// inside a specialised function body would fall through to the
-    /// canonical-vtable dispatch on a `&__Closure_N` value, where the
-    /// `ref.cast` to `$canonical_inspectable_base` traps.
+    /// Seed `local_to_closure` for every parameter declared `&__Closure_N` by
+    /// fn-param specialisation. These are not `let`-bound, so the safety
+    /// analyser never adds them, and without this the inspect-redirect misses
+    /// them: `f.Fn^Inspect::inspect` would reach the canonical-vtable dispatch,
+    /// where `ref.cast` to `$canonical_inspectable_base` traps on a functor.
     fn seed_local_to_closure_from_params(
         &mut self,
         param_locals: &[(u32, TypeId)],
@@ -595,17 +569,11 @@ impl ClosureLowerer {
             }
             .visit_expr(&mut transformed_body);
 
-            // Block bodies: keep the inner statements as-is so that any
-            // Return inside survives. The inliner's `remap_stmt_with_label`
-            // turns Return into Break only at the statement level, so a
-            // Return wrapped inside a Block expression would be missed.
-            //
-            // A single-expression body that reified into a Block (e.g. a
-            // spread struct literal `S { ..*s, .. }`, hoisted to
-            // `{ let __base = ..; S { .. } }`) leaves the produced value in
-            // the block's trailing `Expr` statement. For a value-returning
-            // closure that tail is the return value, so promote it to a
-            // `Return`; otherwise wir_build drops it as a bare statement.
+            // Keep a block body's statements as-is so a `Return` inside survives
+            // — the inliner rewrites `Return` into `Break` only at statement
+            // level. A single-expression body that reified into a Block leaves
+            // its value in the trailing `Expr` statement; promote it to a
+            // `Return` or wir_build drops it as a bare statement.
             let body_stmts = match &transformed_body.kind {
                 TirExprKind::Block(block) => {
                     let mut stmts = block.stmts.clone();
@@ -741,16 +709,11 @@ impl ClosureLowerer {
                 canonical_return: return_type,
             });
 
-            // Synthesize per-functor Inspect / InspectAlt / Display /
-            // DisplayAlt impls so trait dispatch on the specialised
-            // `&__Closure_N` value writes the per-literal signature /
-            // TIR-unparsed source. Template expansion routes `{f}` / `{f:?}`
-            // / `{f:#}` / `{f:#?}` for fn-typed receivers through the
-            // `Fn<N, Ret>^<Trait>::<method>` call shape; `ClosureCallSiteLowerer`
-            // retargets each to the matching impl here. These are reachable
-            // through three routes: explicit user calls, the redirect
-            // (specialised path), and the canonical-vtable inspect slots
-            // (indirect path). Standard DCE removes them when none reach.
+            // Synthesize per-functor Inspect / InspectAlt / Display / DisplayAlt
+            // impls, so trait dispatch on a specialised `&__Closure_N` writes
+            // the per-literal signature and unparsed source. Template expansion
+            // routes fn-typed receivers through `Fn<N, Ret>^<Trait>::<method>`,
+            // which `ClosureCallSiteLowerer` retargets here.
             let signature = format_closure_signature(&collected.params, return_type, type_table);
             // Recover the per-literal source body (`|x: i32| x + 1`)
             // by unparsing the captured TIR closure form. The TIR is
@@ -1438,20 +1401,11 @@ impl TirRefVisitor for LocalCollector<'_> {
         self.walk_stmt(stmt);
     }
 
-    /// Pattern bindings (in `Match` arms, `IfLet`, and `LetDestructure`)
-    /// introduce locals exactly like `Let` does — the binding's
-    /// `local_index` is the slot the variant payload / destructured
-    /// field is written into. Before WEP 2026-05-11 Phase 10, pattern
-    /// lowering ran as a separate pre-pass that rewrote every such
-    /// binding into a `Let { ..., value: VariantPayload(..) }`, so
-    /// the `Let` arm above caught every body-introduced local. With
-    /// pattern lowering now folded into the TIR → NIR translator the
-    /// pre-pass is gone, and the pattern binding is the canonical
-    /// declaration site. Record it here so the closure planner's
-    /// locals vector reserves the correct type for that slot — without
-    /// this, `wir_build` falls back to the placeholder UNKNOWN /
-    /// `i32` slot and downstream code emits ref→i32 type-mismatch
-    /// Wasm.
+    /// A pattern binding introduces a local exactly as `Let` does, and since
+    /// pattern lowering moved into the TIR → NIR translator it is the canonical
+    /// declaration site. Record it so the planner's locals vector reserves the
+    /// right type for the slot; otherwise `wir_build` falls back to a
+    /// placeholder and downstream code emits ref→i32 type-mismatch Wasm.
     fn visit_pattern(&mut self, pattern: &TirPattern) {
         if let TirPattern::Binding {
             local_index,
@@ -1465,27 +1419,11 @@ impl TirRefVisitor for LocalCollector<'_> {
     }
 }
 
-/// Phase 2 visitor: decide which closures are safe to specialise.
-///
-/// A closure is **safe to specialise** when its value never escapes its
-/// declaring local: every use is either a direct call (`local(args)` /
-/// `local.method(args)`) or a redirect-eligible trait dispatch on it.
-/// Otherwise the value must travel as a `CanonicalClosure_K` so it can be
-/// stored in struct fields, passed as a function argument, returned, or
-/// assigned to globals — all positions where a specialised
-/// `__Closure_N` would be incompatible with the receiver's canonical fn
-/// type.
-///
-/// The escape decision is made by tracking `in_callee_position`: only the
-/// callee of `IndirectCall` / receiver or func of `Call` is
-/// a non-escape position. Every other slot (struct literal field, return
-/// value, global assignment, let-rebinding, …) is an escape, and finding a
-/// closure-bearing `Local` or a `Closure` literal there marks it
-/// non-specialisable.
-///
-/// `Let { value: Closure }` is special-cased: the literal is what binds
-/// the local, not an escape. Its body is walked under a fresh
-/// `local_to_closure` (closure bodies have their own local-index namespace).
+/// Phase 2 visitor deciding which closures are safe to specialise: those whose
+/// value never escapes its declaring local, every use being a direct call or a
+/// redirect-eligible trait dispatch. Anything else must travel as a
+/// `CanonicalClosure_K`. Only a call's callee, receiver or func is a non-escape
+/// position; `Let { value: Closure }` is special-cased, the literal binding it.
 struct ClosureSafetyAnalyzer<'a> {
     local_to_closure: &'a mut IndexMap<u32, u32>,
     specializable: &'a mut IndexSet<u32>,
@@ -1702,35 +1640,11 @@ impl ClosureCallSiteLowerer<'_> {
         };
     }
 
-    /// When a method call resolves to `Fn<N, Ret>^Inspect`,
-    /// `^InspectAlt`, `^Display`, or `^DisplayAlt` with a receiver that
-    /// is a specialised closure local — either let-bound by the closure
-    /// safety analyser, or a fn-param specialised parameter
-    /// (`generate_fn_param_specializations` rewrites the param type to
-    /// `&__Closure_N`) — redirect the call to the per-functor
-    /// `__Closure_N^Inspect / InspectAlt` impl. `Display` / `DisplayAlt`
-    /// auto-derived fallbacks delegate to `Inspect` / `InspectAlt`
-    /// respectively, so all four trait-method shapes terminate at the
-    /// per-functor impl on the specialised path. Skipping the redirect
-    /// for `Display`/`DisplayAlt` would let the value reach the
-    /// canonical-vtable dispatch stub through the fallback's
-    /// `self.Inspect::inspect(f)` body, where `ref.cast self to
-    /// $canonical_inspectable_base` traps because the receiver is a
-    /// specialised `&__Closure_N`, not a canonical struct.
-    ///
-    /// Cross-module note: when the closure was defined in module A and
-    /// the redirect fires inside a body that was inlined / specialised
-    /// into module B, the per-functor impl still lives in module A
-    /// (where the closure literal was lowered). The rewritten
-    /// `FunctionRef` uses the functor's `module_source`, not the
-    /// surrounding body's module.
-    ///
-    /// Detection: `local_to_closure` is seeded by the safety analyser
-    /// for let-bound closures and by `seed_local_to_closure_from_params`
-    /// at body-walk start for fn-param specialised parameters. A
-    /// receiver that doesn't peel down to a local (or peels to one not
-    /// in the map, i.e. a canonicalised value) falls through to the
-    /// generic dispatch stub.
+    /// Redirect a `Fn<N, Ret>^{Inspect,InspectAlt,Display,DisplayAlt}` call on a
+    /// specialised closure local to the per-functor impl. All four shapes must be
+    /// redirected: the `Display` fallbacks delegate through `Inspect::inspect`,
+    /// which would trap the canonical stub's `ref.cast`. The rewritten
+    /// `FunctionRef` takes the *functor's* module, where the impl was lowered.
     fn try_redirect_inspect_to_functor(&self, receiver: &mut TirExpr, func: &mut FunctionRef) {
         let info = match &func.method_info {
             Some(info) => info,
@@ -1942,19 +1856,11 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
     }
 }
 
-/// Phase 1.5 in-place body transformer for the synthesised `__call` method.
-///
-/// Operates on a clone of the original closure body and rewrites:
-/// - `Capture { index }` → `FieldAccess { self.__capture_<index> }`
-/// - `Local { index }` → `Local { index + 1 }` (shift past the synthetic `self`)
-/// - `Let { local_index }` → `Let { local_index + 1 }`
-/// - `Binding { local_index }` (in patterns) → shifted by +1
-///
-/// A nested `Closure` node's body is NOT recursed into: it lives in a
-/// separate local-index namespace and gets its own `__call` method generated
-/// at the same level. Its `captures[*].outer_index` does name locals in *this*
-/// scope, though — the enclosing closure's — so those shift by +1 with
-/// everything else, or the nested functor reads the local one slot too early.
+/// In-place body transformer for the synthesised `__call` method: rewrites each
+/// `Capture` into a `self.__capture_<index>` field access and shifts every local
+/// index — reads, `Let`s, and pattern bindings alike — past the synthetic `self`.
+/// A nested `Closure` body has its own index namespace and is not recursed into,
+/// but its `captures[*].outer_index` names locals here, so those shift too.
 struct ClosureBodyTransformer<'a> {
     captures: &'a [TirCapture],
     self_ref_type: TypeId,

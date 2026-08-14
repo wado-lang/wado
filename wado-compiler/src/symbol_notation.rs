@@ -1,22 +1,8 @@
-//! Parser for Wado **symbol notation** — the official textual name for
-//! "this symbol in this module" used by docs and `wado query`.
-//!
-//! Grammar (see `docs/wep-2026-06-14-symbol-notation.md`):
-//!
-//! ```text
-//! NOTATION := MODULE '#' SYMBOL
-//! MODULE   := '"' <import specifier> '"' | <import specifier without '#'>
-//! SYMBOL   := <member>                       // free symbol
-//!           | RECEIVER '::' <member>          // static-scoped (assoc const/fn, …)
-//!           | RECEIVER '.'  <member>          // instance method
-//! RECEIVER := <type> | <type> '^' <trait>    // trait impl disambiguation
-//! ```
-//!
-//! `MODULE` is the import specifier verbatim (`core:json`, `./utils.wado`,
-//! `https://x/lib.wado`). Quotes are required only when the specifier itself
-//! contains `#`; otherwise they may be omitted. `<type>` may carry generics
-//! (`List<String>`); `::` / `.` / `^` inside `<…>` are part of the type and
-//! never act as separators.
+//! Parser for Wado **symbol notation**, `MODULE '#' SYMBOL` — the textual name
+//! for "this symbol in this module" that docs and `wado query` use (WEP
+//! 2026-06-14). `MODULE` is the import specifier verbatim, quoted only when it
+//! contains `#`; `SYMBOL` is a bare member or a receiver joined by `::` or `.`,
+//! the receiver optionally `^`-qualified. A separator inside `<…>` is not one.
 
 use std::fmt;
 

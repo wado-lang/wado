@@ -1,57 +1,19 @@
-//! Source-level liveness / dead-code analysis.
-//!
-//! Implements the `liveness` pass described in
-//! [`wep-2026-05-16-unused-diagnostics.md`] (policy) and
-//! [`wep-2026-05-26-elaborator-rearchitecture.md`] (mechanism). The pass
-//! runs after `annotate_bodies` and before `reify`, computing source-level
-//! reachability from the package-external boundary (`pub` and `export`
-//! items) over the call graph the elaborator recorded in `references`.
-//!
-//! # Current scope
-//!
-//! The pass classifies **free functions and globals** as live / test-only /
-//! dead (see [`Liveness`]) and reports `DeadFunction` / `DeadGlobal` /
-//! `TestOnlyFunction` / `TestOnlyGlobal` accordingly. Reify gates emission of
-//! those two item kinds on `live_items` (`E ∪ T`). Every impl/trait method is
-//! seeded as a production root, so it serves as a live intermediary in the call
-//! graph without itself being a report or gating candidate. This keeps the
-//! analysis sound against false positives (the failure the WEP optimises
-//! against) while deferring method-level dead detection — which needs the
-//! operator / `?` / for-of dispatch edges that leave no `references` entry — to
-//! a follow-up slice.
-//!
-//! The graph traces every site where reify can emit a call: function and
-//! method bodies, global initializers, parameter defaults, and struct field
-//! defaults. A callee reachable only through one of those still stays live.
-//!
-//! # Suppression
-//!
-//! `#[allow(dead_code)]` on a function or global (or `#![allow(dead_code)]` at
-//! the module level, covering every item in the file) drops the item from the
-//! lint's report candidates while leaving its call-graph edges intact, so a
-//! callee it reaches still stays live. The attribute name matches rustc's
-//! `dead_code` lint.
+//! Source-level liveness / dead-code analysis (WEP 2026-05-16, 2026-05-26):
+//! between `annotate_bodies` and `reify`, reachability from the
+//! package-external boundary over the call graph `references` recorded, tracing
+//! every site reify can emit a call from. Only free functions and globals are
+//! classified; every method is seeded as a production root.
 
 use crate::ast::{self, AstId, AstVisitor, Block, Expr, Function, Item, Module};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::token::Span;
 
-/// Result of the source-level liveness analysis.
-///
-/// Reachability is computed from two independent root sets over the same
-/// call graph: `E` = reachable from production roots (world exports, `pub`
-/// / `export` items, `#[export]`, methods, struct-field defaults), `T` =
-/// reachable from `test` blocks. Each user-authored free function / global
-/// is then classified:
-///
-/// - **live** (`∈ E`): used by production. Not reported.
-/// - **test-only** (`∈ T \ E`): used by tests but not production → `test_only_items`.
-/// - **dead** (`∉ E ∧ ∉ T`): used by neither → `dead_items`.
-///
-/// `live_items = E ∪ T` is the set reify gates emission on (a test-reachable
-/// item is still kept so test code compiles); the split only affects which
-/// diagnostic the emitter raises.
+/// Result of the source-level liveness analysis. Two root sets run over one call
+/// graph: `E` reachable from production roots, `T` from `test` blocks. A
+/// user-authored free function or global is live in `E`, test-only in `T \ E`,
+/// dead in neither. Reify gates emission on `live_items = E ∪ T`, so test code
+/// still compiles; the split only picks which diagnostic is raised.
 #[derive(Default, Clone)]
 pub(crate) struct Liveness {
     /// Reachable from production roots ∪ tests (`E ∪ T`). Reify gates
@@ -966,16 +928,11 @@ impl AstVisitor for IdCollector {
     }
 }
 
-/// User-authored modules are the entry point and the files / URLs it
-/// transitively imports. Stdlib is never reported — and never reify-gated:
-/// stdlib functions reached only through compiler synthesis (CM bindings,
-/// effect dispatch) have no source-level caller, so the optimize-time DCE
-/// removes their dead ones.
-///
-/// Stdlib lives in the `Core` / `Wasi` / `Wasm` variants *and* in bundled
-/// `.wado` files that the loader registers as `Local` with a scheme-prefixed
-/// path (`wasi:cli/terminal_stdout.wado`, `core:…`). Those must be excluded
-/// too; a user's `Local` import is a relative path with no such scheme.
+/// User-authored modules are the entry point and what it transitively imports.
+/// Stdlib is never reported nor reify-gated — a function reached only through
+/// compiler synthesis has no source-level caller, and optimize-time DCE handles
+/// it. Stdlib is the `Core` / `Wasi` / `Wasm` variants plus the bundled `.wado`
+/// files the loader registers as `Local` with a scheme-prefixed path.
 pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
     match source {
         ModuleSource::EntryPoint { .. }

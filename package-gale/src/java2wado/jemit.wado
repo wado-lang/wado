@@ -466,12 +466,7 @@ fn lexer_name_expr(env: &JEnv, name: &String) -> Result<String, String> {
 /// snake_cased, matching the call-site rewrite and the method definition).
 fn method_declared(env: &JEnv, name: &String) -> bool {
     let snake = to_snake_case(name);
-    for let m of &env.methods {
-        if *m == snake {
-            return true;
-        }
-    }
-    return false;
+    return env.methods.iter().any(|m| *m == snake);
 }
 
 fn unknown_method_err(name: &String) -> String {

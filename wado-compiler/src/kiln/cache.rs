@@ -1,21 +1,8 @@
-//! Cache-key composition for Kiln generator invocations.
-//!
-//! The cache key is a SHA-256 over a canonical byte string described in
-//! WEP 2026-04-12 §"Caching". This module is the single
-//! authority for that layout: callers (the pipeline driver, the lockfile
-//! writer) go through [`compose_cache_key`] so a cache hit is bit-identical
-//! regardless of who computed it.
-//!
-//! The options encoding is intentionally opaque here (`&[u8]`). The caller
-//! supplies already-canonical bytes produced by [`encode_options_canonical`]:
-//! a deterministic, injective serialization of the validated options tree used
-//! solely as a hash input. In protocol revision 3 the options cross the generator
-//! boundary as a typed WIT argument, not a serialized blob, so nothing ever
-//! decodes these bytes — the encoding only has to be canonical, not an
-//! interchange format.
-//!
-//! Swapping the encoder in one place keeps cache keys stable unless the
-//! user-facing options actually change.
+//! Cache-key composition for Kiln generator invocations: a SHA-256 over the
+//! canonical byte string of WEP 2026-04-12, with [`compose_cache_key`] the sole
+//! authority for that layout so a hit is bit-identical whoever computed it. The
+//! options arrive as already-canonical bytes from [`encode_options_canonical`]
+//! and are pure hash input — nothing ever decodes them.
 
 use sha2::{Digest, Sha256};
 
@@ -99,16 +86,10 @@ pub fn hex_digest(digest: &[u8; 32]) -> String {
 }
 
 /// Encode a [`CanonicalOptions`] to a deterministic byte string for the
-/// invocation cache key. This is purely a hash input — nothing ever decodes
-/// it (options now cross the generator boundary as a typed WIT argument, not a
-/// serialized blob) — so the format only has to be canonical and injective,
-/// not an interchange format.
-///
-/// A table drops `None` options, sorts the rest by field name, and writes a
-/// length-prefixed entry list; each value is a one-byte type tag followed by
-/// its little-endian / length-prefixed bytes (`Some(x)` is transparent). `F64`
-/// canonicalizes `-0.0` to `0.0` and rejects non-finite values so equal option
-/// sets share a cache key.
+/// invocation cache key — pure hash input, so it need only be canonical and
+/// injective. A table drops `None`s, sorts by field name, and writes a
+/// length-prefixed entry list, each value a type tag plus its bytes. `F64`
+/// canonicalizes `-0.0` and rejects non-finites, so equal sets share a key.
 #[must_use]
 pub fn encode_options_canonical(options: &CanonicalOptions) -> Vec<u8> {
     let mut out = Vec::new();

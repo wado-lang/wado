@@ -1,14 +1,8 @@
-//! Writing a value back into the IR.
-//!
-//! The projection answers what an expression denotes; this is what becomes of
-//! the expression once it does. Every edit goes through an [`EditSink`], so the
-//! same rewrites serve two backends: the throwaway body a compile-time frame
-//! runs on, and the real one, whose maps an engine keeps coherent.
-//!
-//! Not every value has a form to be written as. A scalar promotes to a pure
-//! operand; a byte-sequence container becomes the literal the lower phase emits
-//! for a source string; every other aggregate stays inside the engine, and what
-//! reaches the IR is the scalars projected out of it.
+//! Writing a value back into the IR: what becomes of an expression once the
+//! projection says what it denotes. Every edit goes through an [`EditSink`], so
+//! the same rewrites serve the throwaway frame body and the real one. A scalar
+//! promotes to a pure operand and a byte-sequence container to the lower phase's
+//! string literal; every other aggregate reaches the IR only via its scalars.
 
 use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
@@ -71,7 +65,7 @@ impl Interpreter<'_> {
     /// Reduce `e` to its flow-sensitive constant value or collapse a constant
     /// branch, committing every edit through `sink`. Both value sources — the
     /// flow-sensitive candidate and a self-contained region run — land through
-    /// [`Self::commit_fold`], so what is promoted, materialized, memoized, and
+    /// `Self::commit_fold`, so what is promoted, materialized, memoized, and
     /// refused is decided in one place.
     pub fn reduce_local<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
         if let Some(value) = self.flow_fold_candidate(sink.body(), e)
@@ -94,22 +88,10 @@ impl Interpreter<'_> {
     }
 
     /// Take `value` over `e`: promote a scalar, materialize a byte-sequence
-    /// container, and memoize what the sink did not take, reporting whether
-    /// the node was rewritten.
-    ///
-    /// A reference-typed node is refused whole: its value would stand as a
-    /// fresh literal where the program yields an alias, and `ref.eq` can tell
-    /// the two apart.
-    ///
-    /// A declined scalar is always memoized — the scratch backend promotes
-    /// nothing, so the memo is where its folds live.
-    ///
-    /// An aggregate is written back wherever the write buys something
-    /// ([`Self::is_worth_materializing`]), and over a shape that consumed its
-    /// source ([`consumes_its_source`]) regardless. Only the latter is
-    /// memoized: a revisit would re-run a body to recompute it, while every
-    /// other shape still derives its own value from the literal left in its
-    /// place.
+    /// container, memoize what the sink declined, and report whether the node was
+    /// rewritten. A reference-typed node is refused whole — a fresh literal where
+    /// the program yields an alias, which `ref.eq` can tell apart. An aggregate
+    /// is written where [`Self::is_worth_materializing`] agrees.
     fn commit_fold<S: EditSink>(&mut self, sink: &mut S, e: ExprId, value: Value) -> bool {
         let node_type = sink.body().exprs[e].type_id;
         if self.type_table.is_reference_shaped(node_type) {
@@ -133,17 +115,11 @@ impl Interpreter<'_> {
         committed
     }
 
-    /// Whether writing the value over `e` buys anything.
-    ///
-    /// It does everywhere but two shapes that already hold the answer. One is
-    /// the literal [`Self::materialize_seq_via`] writes — refusing it is what
-    /// makes the rewrite happen once, which the [`consumes_its_source`] shapes
-    /// get from their kinds for free.
-    ///
-    /// The other is a read of a global. Const-object globalization put the
-    /// value there so it is built once and shared; a literal in its place is
-    /// that constant copied back to every site, and the store left behind
-    /// outlives the slot the reachability census then drops.
+    /// Whether writing the value over `e` buys anything. It does everywhere but
+    /// two shapes already holding the answer: the literal
+    /// [`Self::materialize_seq_via`] writes, refusing which is what makes the
+    /// rewrite happen once, and a global read, whose value globalization put
+    /// there precisely to build once and share.
     fn is_worth_materializing(&self, body: &Body, e: ExprId) -> bool {
         !matches!(body.exprs[e].kind, ExprKind::GlobalVarGet { .. })
             && !self.is_materialized_seq_literal(body, e)
@@ -187,16 +163,9 @@ impl Interpreter<'_> {
 
     /// Write `value` back over `e` as the container literal the lower phase
     /// emits for a source string: a struct over a packed byte array and its
-    /// length.
-    ///
-    /// Only the container's first `used` bytes: capacity outruns what it holds
-    /// and is not observable. An empty one is left alone, being a reservation
-    /// rather than a result.
-    ///
-    /// The container is identified by type, never recognised by shape — any
-    /// struct over an array and an `i32` has that shape, and over
-    /// `Chunk { data, tag }` the literal would read the second field as a
-    /// length.
+    /// length. Only the first `used` bytes — capacity is not observable — and an
+    /// empty container is left alone. Identified by type, never by shape: over a
+    /// `Chunk { data, tag }` the literal would read `tag` as a length.
     fn materialize_seq_via<S: EditSink>(&self, sink: &mut S, e: ExprId, value: &Value) -> bool {
         let Value::Aggregate { type_id, .. } = value else {
             return false;

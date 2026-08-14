@@ -42,19 +42,11 @@ impl Monomorphizer {
         }
     }
 
-    /// Rewrite all `GenericInstance` `type_ids` in a single `TirFunction` —
-    /// the per-function dual of [`Self::rewrite_types_in_module`].
-    ///
-    /// Phase 9's inner loop calls this on every newly-instantiated function
-    /// (after struct monomorphisation has run to fixpoint over the types
-    /// reachable from its body) so that, by the time
-    /// `collect_function_instantiation_sites` walks the body, every
-    /// `TypeId` it consumes — including a call's `type_args` —
-    /// is in canonical `Struct` form. Without this, function-call queues
-    /// produced by Phase 9 carry pre-monomorphisation `GenericInstance`
-    /// `TypeId`s that mangle identically to their post-monomorphisation
-    /// `Struct` counterparts, violating `function_id_for` injectivity
-    /// over `project.functions`.
+    /// Rewrite all `GenericInstance` `type_ids` in a single `TirFunction` — the
+    /// per-function dual of [`Self::rewrite_types_in_module`]. Called on each
+    /// newly-instantiated function after struct monomorphisation reaches
+    /// fixpoint, so `collect_function_instantiation_sites` sees only canonical
+    /// `Struct` form and `function_id_for` stays injective.
     pub fn rewrite_types_in_function(
         &self,
         func: &mut crate::tir::TirFunction,
@@ -214,26 +206,11 @@ impl Monomorphizer {
         }
     }
 
-    /// Substitute type parameters in a type with concrete types.
-    ///
-    /// Walks `type_id` recursively, delegating the leaf cases (`TypeParam`,
-    /// `TypePack`, `AssocTypeProjection`, `GenericResource`) to
-    /// [`TypeTable::substitute_type_params`] and handling container /
-    /// `GenericInstance` cases inline so that a monomorphize-specific
-    /// struct-rewrite happens at every level: after recursively
-    /// substituting a `GenericInstance`'s type arguments, if an
-    /// already-monomorphized struct with the resulting mangled name exists
-    /// in the type table, the type is rewritten to that struct directly.
-    /// This keeps later phases (WIR build, variant-case registration)
-    /// looking up the same mangled name as was registered at
-    /// struct-instantiation time, including for nested references such as
-    /// `Option<&mut TreeMapNode<K>>`.
-    ///
-    /// A `GenericInstance` whose `type_args` are empty — which can occur
-    /// when e.g. `Container { .. }` inside `Container<T>::new()` is typed
-    /// as `GenericInstance` without spelling out its type arguments — is
-    /// resolved to an existing monomorphized struct using the substitution
-    /// map itself.
+    /// Substitute type parameters in a type with concrete types, delegating the
+    /// leaf cases to [`TypeTable::substitute_type_params`] and handling
+    /// containers inline so a `GenericInstance` collapses onto an
+    /// already-monomorphized struct of the same mangled name at every level.
+    /// Empty `type_args` resolve through the substitution map itself.
     pub fn substitute_type(
         &self,
         type_id: TypeId,
@@ -522,21 +499,10 @@ impl TirMutVisitor for TypeRewriter<'_> {
         expr.type_id = self.rewrite_type_id(expr.type_id);
 
         // Rewrite explicit `type_args` on a call so post-monomorphisation
-        // `InstantiationKey`s built from them use the canonical (substituted)
-        // `Struct` form rather than the elaborator-assigned `GenericInstance`
-        // form. Without this, two queue paths for the same logical
-        // instantiation — one driven by call-site `type_args` (left as
-        // `GenericInstance` by the elaborator) and another driven by
-        // receiver/struct_key paths (already rewritten to `Struct`) —
-        // would hash distinct yet mangle identically, producing two
-        // `TirFunction`s sharing one `function_id_for`.
-        //
-        // The default `walk_expr` does not descend into `type_args` (see
-        // `tir_visitor.rs`'s `Call` pattern, which only binds `args`),
-        // so rewrite them explicitly here. `Call`'s own
-        // body rewrites (param substitution, etc.) happen via
-        // `substitute_types_in_expr` at `instantiate_function` time and
-        // are independent of this whole-module rewrite.
+        // `InstantiationKey`s use canonical `Struct` form: otherwise the
+        // call-site and receiver queue paths for one instantiation hash
+        // distinctly yet mangle identically, giving two `TirFunction`s one
+        // `function_id_for`. `walk_expr` does not descend into `type_args`.
         if let TirExprKind::Call { type_args, .. } = &mut expr.kind {
             for type_arg in type_args.iter_mut() {
                 *type_arg = self.rewrite_type_id(*type_arg);

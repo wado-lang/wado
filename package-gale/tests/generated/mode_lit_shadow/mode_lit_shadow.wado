@@ -900,12 +900,7 @@ pub struct ParseResult {
 
 impl ParseResult {
     pub fn has_errors(&self) -> bool {
-        for let d of &self.diagnostics {
-            if d.is_error() {
-                return true;
-            }
-        }
-        return false;
+        return self.diagnostics.iter().any(|d| d.is_error());
     }
 
     /// True when the parse produced no error-severity diagnostics.
@@ -1420,8 +1415,6 @@ pub global TK_INTERP_OPEN: i32 = 5;
 pub global TK_STR_END: i32 = 6;
 pub global TK_EOF: i32 = 7;
 pub global TK_ERROR: i32 = 8;
-pub global TK_LIT_LBRACE: i32 = 9;
-pub global TK_LIT_RBRACE: i32 = 10;
 
 struct Lexer {
     chars: List<char>,
@@ -1468,6 +1461,20 @@ fn try_WORD(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn try_LBRACE(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '{' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_RBRACE(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '}' { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
@@ -1501,18 +1508,6 @@ fn try_STR_END(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_lbrace(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '{' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_rbrace(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '}' { return -1; }
-    return pos + 1;
-}
-
 pub fn tokenize(input: &String) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -1528,14 +1523,14 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_push_mode: i32 = -1;
         let mut best_pop_mode = false;
         if current_mode == 0 {
-            end = try_lit_lbrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; best_push_mode = 0; best_pop_mode = false; }
-            end = try_lit_rbrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; best_push_mode = -1; best_pop_mode = true; }
             end = try_BACKTICK(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BACKTICK; best_push_mode = 1; best_pop_mode = false; }
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; best_push_mode = -1; best_pop_mode = false; }
+            end = try_LBRACE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LBRACE; best_push_mode = 0; best_pop_mode = false; }
+            end = try_RBRACE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_RBRACE; best_push_mode = -1; best_pop_mode = true; }
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; }
         } else if current_mode == 1 {
@@ -1589,8 +1584,6 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_STR_END => "STR_END",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_LBRACE => "TK_LIT_LBRACE",
-        TK_LIT_RBRACE => "TK_LIT_RBRACE",
         _ => "Unknown",
     };
 }
@@ -1871,9 +1864,9 @@ fn scan_prog(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn scan_block(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LBRACE { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RBRACE { return -1; }
     pos += 1;
     return pos;
 }
@@ -1895,7 +1888,7 @@ fn scan_interp(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_WORD { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RBRACE { return -1; }
     pos += 1;
     return pos;
 }
@@ -1921,8 +1914,8 @@ fn _parse_prog(p: &mut Parser) -> () {
 
 fn _parse_block__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
-    let rbrace = p.expect(TK_LIT_RBRACE, &EMPTY_SYNC);
+    let lbrace = p.expect(TK_LBRACE, &SYNC_0);
+    let rbrace = p.expect(TK_RBRACE, &EMPTY_SYNC);
     return;
 }
 
@@ -1960,7 +1953,7 @@ fn _parse_interp__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let interp_open = p.expect(TK_INTERP_OPEN, &SYNC_2);
     let word = p.expect(TK_WORD, &SYNC_0);
-    let rbrace = p.expect(TK_LIT_RBRACE, &EMPTY_SYNC);
+    let rbrace = p.expect(TK_RBRACE, &EMPTY_SYNC);
     return;
 }
 
@@ -2013,16 +2006,16 @@ pub fn parse_interp(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(11);
-    for let mut k = 0; k < 11; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(9);
+    for let mut k = 0; k < 9; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(11);
-    for let mut k = 0; k < 11; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(9);
+    for let mut k = 0; k < 9; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
@@ -2040,7 +2033,7 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_RBRACE];
+global SYNC_0: List<i32> = [TK_RBRACE];
 global SYNC_1: List<i32> = [TK_INTERP_OPEN];
 global SYNC_2: List<i32> = [TK_WORD];
 

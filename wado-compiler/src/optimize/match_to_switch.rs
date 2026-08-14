@@ -1,25 +1,8 @@
-//! Match → Switch optimization.
-//!
-//! Rewrites dense-int / dense-enum `Match` expressions into `Switch`, which
-//! lowers to a Wasm `br_table`. Faster than the generic match if-chain when
-//! the value space is dense and the match has no guards.
-//!
-//! Before WEP 2026-05-11's "Match canonical" direction, this rewrite ran
-//! during TIR → NIR lowering (`lower::translate::switch`). Moving it into
-//! the optimizer keeps `lower::translate` emitting a single canonical
-//! `Match` shape and treats `Switch` as a codegen-friendly optimised form
-//! the optimizer materialises.
-//!
-//! Runs as a [`Rule`] on the worklist rewrite engine (see
-//! `docs/wep-2026-06-05-nir-optimizer-architecture.md`) over each function's
-//! arena `Body`. The arm bodies are
-//! deep-cloned via the engine's edit API because the same arm can appear at
-//! multiple `br_table` offsets, and the arena is a tree (one parent per node).
-//! Global initializers are arena `ExprBody`s, so the same rule runs on each
-//! global's body directly. The rule is confluent under the worklist's
-//! bottom-up order: nested `Match`es in arm bodies are converted before the
-//! outer one, so the cloned bodies hold `Switch`es and re-processing them is a
-//! no-op.
+//! Match → Switch: a dense-int or dense-enum guardless `Match` becomes a
+//! `Switch`, lowering to a Wasm `br_table` rather than the generic if-chain.
+//! Kept in the optimizer rather than lowering (WEP 2026-05-11), so
+//! `lower::translate` emits one canonical `Match` shape. Arm bodies are
+//! deep-cloned, one arm being reachable at several `br_table` offsets.
 
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirLiteralPattern};

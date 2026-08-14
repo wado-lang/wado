@@ -8228,3 +8228,265 @@ fn a_ref_returning_callee_does_not_fold_through_the_lost_alias() {
          folded through the alias",
     );
 }
+
+#[test]
+fn a_stored_reference_parameter_does_not_fold_into_a_snapshot() {
+    // fn keep(p: &Inner) -> Holder with stores[p] { return Holder { inner: p }; }
+    // fn scenario() -> i32 {
+    //     let mut p = Inner { x: 7 };
+    //     let h = keep(&p);
+    //     p.x = 9;
+    //     return h.inner.x;
+    // }
+    // `h.inner` aliases `p`, so scenario() == 9. The alias escapes inside an
+    // aggregate rather than as the return type, which the sibling test covers.
+    let mut table = TypeTable::new();
+    let inner_ty = table.make_struct("Inner".to_string(), ModuleSource::default());
+    let holder_ty = table.make_struct("Holder".to_string(), ModuleSource::default());
+    let ref_inner = table.make_ref(inner_ty);
+
+    let mut keep = make_pure_fn(
+        "keep",
+        vec![("p", ref_inner)],
+        holder_ty,
+        return_stmt(struct_lit(
+            holder_ty,
+            vec![(0, "inner", local_expr(0, ref_inner))],
+        )),
+    );
+    keep.stores.push("p".to_string());
+
+    let scenario = make_pure_fn_stmts(
+        "scenario",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_mut_stmt_b(
+                "p",
+                0,
+                inner_ty,
+                struct_lit(inner_ty, vec![(0, "x", int_lit(7, TypeTable::I32, "7"))]),
+            ),
+            let_stmt_b(
+                "h",
+                1,
+                holder_ty,
+                call_expr(
+                    &keep,
+                    vec![unary(NirUnaryOp::Ref, local_expr(0, inner_ty), ref_inner)],
+                ),
+            ),
+            assign_stmt_b(
+                field_access(local_expr(0, inner_ty), 0, "x", TypeTable::I32),
+                int_lit(9, TypeTable::I32, "9"),
+            ),
+            return_stmt(field_access(
+                field_access(local_expr(1, holder_ty), 0, "inner", ref_inner),
+                0,
+                "x",
+                TypeTable::I32,
+            )),
+        ],
+    );
+
+    let funcs = [keep, scenario];
+    let callees = build_callee_map_test(&funcs);
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.enter_function();
+    let call = call_expr(&funcs[1], vec![]);
+    assert_ne!(
+        reduce_lat(&mut interp, &call),
+        Lattice::Const(int(7)),
+        "the frame bound the stored reference as a value snapshot and folded \
+         through the alias",
+    );
+}
+
+#[test]
+fn a_ref_global_alias_rebound_by_a_later_let_does_not_vouch_for_it() {
+    // One index, two bindings: the flow-insensitive scan cannot say which one
+    // governs the read.
+    let mut table = TypeTable::new();
+    let cfg_ty = table.make_struct("Cfg".to_string(), ModuleSource::default());
+    let module = ModuleSource::default();
+    let mut fields = GlobalFieldEnv::default();
+    fields.insert(
+        (module.clone(), "CONFIG".to_string()),
+        [("width".to_string(), int(7))].into_iter().collect(),
+    );
+
+    let mut body = Body::empty();
+    let stmts = [
+        let_stmt_b(
+            "cfg",
+            0,
+            cfg_ty,
+            unary(
+                NirUnaryOp::Ref,
+                global_get(module, "CONFIG", cfg_ty),
+                cfg_ty,
+            ),
+        ),
+        let_stmt_b(
+            "cfg",
+            0,
+            cfg_ty,
+            struct_lit(cfg_ty, vec![(0, "width", int_lit(1, TypeTable::I32, "1"))]),
+        ),
+    ];
+    body.root = block_of(&mut body, &stmts);
+    let read = field_access(local_expr(0, cfg_ty), 0, "width", TypeTable::I32)(&mut body)
+        .as_expr()
+        .expect("a field access is a composite expression");
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_global_fields(&fields);
+    interp.record_ref_global_aliases(&body);
+
+    assert_ne!(
+        interp.reduce_to_lattice(&body, read),
+        Lattice::Const(int(7)),
+        "a rebound index must keep no alias to the global it once borrowed",
+    );
+}
+
+#[test]
+fn an_orphaned_ref_global_binding_does_not_vouch_for_a_live_local() {
+    // A displaced `let cfg = &CONFIG` stays in the arena and cannot run, so it
+    // must not speak for the binding that replaced it.
+    let mut table = TypeTable::new();
+    let cfg_ty = table.make_struct("Cfg".to_string(), ModuleSource::default());
+    let module = ModuleSource::default();
+    let mut fields = GlobalFieldEnv::default();
+    fields.insert(
+        (module.clone(), "CONFIG".to_string()),
+        [("width".to_string(), int(7))].into_iter().collect(),
+    );
+
+    let mut body = Body::empty();
+    // Interned but parented to no block: what an in-place rewrite leaves.
+    let _orphan = let_stmt_b(
+        "cfg",
+        0,
+        cfg_ty,
+        unary(
+            NirUnaryOp::Ref,
+            global_get(module, "CONFIG", cfg_ty),
+            cfg_ty,
+        ),
+    )(&mut body);
+    let stmts = [let_stmt_b(
+        "cfg",
+        0,
+        cfg_ty,
+        struct_lit(cfg_ty, vec![(0, "width", int_lit(1, TypeTable::I32, "1"))]),
+    )];
+    body.root = block_of(&mut body, &stmts);
+    let read = field_access(local_expr(0, cfg_ty), 0, "width", TypeTable::I32)(&mut body)
+        .as_expr()
+        .expect("a field access is a composite expression");
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_global_fields(&fields);
+    interp.record_ref_global_aliases(&body);
+
+    assert_ne!(
+        interp.reduce_to_lattice(&body, read),
+        Lattice::Const(int(7)),
+        "an orphaned binding must not vouch for the live one that replaced it",
+    );
+}
+
+#[test]
+fn a_run_the_engine_abandoned_is_not_paid_for_twice() {
+    // Running a call copies the whole callee body before anything can refuse
+    // it, and a call is visited more than once per pass. Both visits answer
+    // `Unevaluated`, so the budget is what shows the second was free.
+    let table = TypeTable::new();
+    // Local 9 is bound nowhere, so the run is abandoned after the statements
+    // before it were charged for.
+    let waster = make_pure_fn_stmts(
+        "waster",
+        vec![],
+        TypeTable::I32,
+        vec![
+            let_stmt_b("a", 0, TypeTable::I32, int_lit(1, TypeTable::I32, "1")),
+            let_stmt_b("b", 1, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
+            let_stmt_b("c", 2, TypeTable::I32, int_lit(3, TypeTable::I32, "3")),
+            return_stmt(local_expr(9, TypeTable::I32)),
+        ],
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&waster));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.enter_function();
+    let (mut body, e) = into_body_expr(&call_expr(&waster, vec![]));
+
+    let before = interp.step_budget();
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut body, e),
+        Lattice::Unevaluated
+    );
+    let after_first = interp.step_budget();
+    assert!(
+        after_first < before,
+        "the first run must have been charged, or this proves nothing",
+    );
+
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut body, e),
+        Lattice::Unevaluated
+    );
+    assert_eq!(
+        interp.step_budget(),
+        after_first,
+        "an abandoned run must not be re-paid at the next visit",
+    );
+}
+
+#[test]
+fn an_abandoned_run_is_remembered_per_argument_list() {
+    // The memo keys on the arguments too, or a callee that folds for one
+    // argument and not another would be refused for both.
+    let table = TypeTable::new();
+    // `fn only_zero(x) { return 6 / x; }` — at x = 0 the division would trap,
+    // so the run is abandoned; at x = 3 it folds to 2.
+    let only_zero = make_pure_fn(
+        "only_zero",
+        vec![("x", TypeTable::I32)],
+        TypeTable::I32,
+        return_stmt(binary(
+            NirBinaryOp::Div,
+            int_lit(6, TypeTable::I32, "6"),
+            local_expr(0, TypeTable::I32),
+            TypeTable::I32,
+        )),
+    );
+    let callees = build_callee_map_test(std::slice::from_ref(&only_zero));
+
+    let mut interp = Interpreter::new(&table);
+    interp.with_callees(&callees);
+    interp.enter_function();
+
+    let (mut trapping, t) = into_body_expr(&call_expr(
+        &only_zero,
+        vec![int_lit(0, TypeTable::I32, "0")],
+    ));
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut trapping, t),
+        Lattice::Unevaluated,
+        "dividing by zero traps at run time, so the call stays",
+    );
+
+    let (mut folding, f) = into_body_expr(&call_expr(
+        &only_zero,
+        vec![int_lit(3, TypeTable::I32, "3")],
+    ));
+    assert_eq!(
+        interp.reduce_to_lattice_full(&mut folding, f),
+        Lattice::Const(int(2)),
+        "a different argument list is a different run",
+    );
+}

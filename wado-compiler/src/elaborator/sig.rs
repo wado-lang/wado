@@ -10,24 +10,11 @@ use crate::tir::{TypeId, TypeTable};
 
 use super::sem::decls::FunctionSig;
 
-/// Program-wide declaration facts, resolved once by the decl pass and
-/// read-only afterwards (WEP 2026-05-26).
-///
-/// # Membership rule
-///
-/// One entry per source declaration, holding what that declaration *says* —
-/// its signature, or the declaration-level datum it is. Nothing computed
-/// from a use site, and nothing a later phase recomputes: after
-/// `annotate_decls` no phase re-resolves a declaration signature from AST.
-///
-/// AST survives inside an entry only where the value is irreducibly AST and
-/// the consumer is the walker or reify, never a query: parameter defaults
-/// (re-resolved per call site under the callee's scope, WEP 2026-04-11),
-/// associated-const value expressions, `__DATA__` contents.
-///
-/// Assembled from the per-module [`super::sem::decls::ModuleDecls`] digests
-/// once every module's decl pass has run, so a body walk reads any module's
-/// declarations without reaching for an AST.
+/// Program-wide declaration facts, resolved once by the decl pass and read-only
+/// afterwards (WEP 2026-05-26). One entry per source declaration, holding what
+/// it *says*, never anything computed from a use site. AST survives inside an
+/// entry only where the value is irreducibly AST — parameter defaults,
+/// associated-const values, `__DATA__`. Assembled from `ModuleDecls` digests.
 #[derive(Default)]
 pub(crate) struct Signatures {
     /// Canonical free-function signatures, declaring module → name.
@@ -117,18 +104,11 @@ impl Signatures {
     }
 }
 
-/// A declaration's parameter and return types, resolved once in its
-/// declaring frame and abstract over the positional slots in
-/// [`Self::type_params`] (WEP 2026-05-26).
-///
-/// Slot `i` is a `ResolvedType::TypeParam` (or `TypePack`) whose index is
-/// `i`, so a use site's type arguments fill the slots positionally.
-/// Effect parameters and `<F: fn(…)>` bounds consume no slot — they are
-/// scope entries, not substitution targets — so this list is dense.
-///
-/// A use site that knows its type arguments reads the signature through
-/// [`Self::instantiate`]. Inference, which solves *for* those arguments,
-/// is the one consumer that reads the canonical types directly.
+/// A declaration's parameter and return types, resolved once in its declaring
+/// frame and abstract over the positional slots in [`Self::type_params`]. Slot
+/// `i` is a `TypeParam` of index `i`, filled positionally; effect parameters and
+/// `<F: fn(…)>` bounds are scope entries, not substitution targets, so the list
+/// stays dense. Read through [`Self::instantiate`] — except by inference.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct DeclSig {
     pub(crate) type_params: Vec<(String, TypeId)>,

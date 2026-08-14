@@ -1,18 +1,8 @@
-// Comment handling for Wado formatter and `wado doc`.
-//
-// `TriviaMap` is the single AstId-keyed store for comments:
-//   * `leading_of(id)` — comments that precede the node, populated by
-//     the parser on each `alloc_ast_id` call.
-//   * `trailing_of(id)` — same-line tail comments, populated by
-//     [`populate_trailing`] after parsing completes.
-//   * `inner_tail_of(block_id)` — comments between a block's last
-//     statement and its closing `}`, populated by
-//     [`populate_inner_tail`].
-//   * `dangling()` — file-tail comments past the last AST node.
-//
-// `populate_trailing` and `populate_inner_tail` walk the parsed AST and
-// repatriate comments out of their parser-assigned slots; the unparser
-// then reads `TriviaMap` exclusively, with no positional reconstruction.
+// Comment handling for the Wado formatter and `wado doc`. `TriviaMap` is the
+// single AstId-keyed store: `leading_of` (populated by the parser at each
+// `alloc_ast_id`), `trailing_of`, `inner_tail_of`, and `dangling`. The last
+// three are repatriated out of their parser-assigned slots post-parse, so the
+// unparser reads `TriviaMap` alone with no positional reconstruction.
 
 use crate::ast::{AstId, AstVisitor, Block, Module, walk_block};
 use crate::token::Span;
@@ -42,34 +32,11 @@ pub enum CommentKind {
     ModuleDoc,
 }
 
-/// Trivia (currently: comments) attached to AST nodes by [`AstId`].
-///
-/// The parser populates this as it allocates ids: at each `alloc_ast_id`
-/// call, every still-unattached comment whose `span.start` precedes the
-/// next-to-consume token's start is attached to the new id as leading
-/// trivia. Because `alloc_ast_id` is called in DFS parse order — the
-/// outermost node being constructed at a given source position allocates
-/// first — leading comments naturally land on the outermost AST node that
-/// "starts" at that position, which matches the semantic ownership users
-/// expect (`/*flag=*/true` belongs to the literal `true`, not to the
-/// surrounding call).
-///
-/// `trailing` is populated by [`populate_trailing`] in a post-parse pass:
-/// any comment that sits on the same source line as a node's end position
-/// and starts at or after that position is repatriated from its
-/// parser-assigned `leading`/`dangling` slot to `trailing[node]`. The
-/// unparser reads `trailing_of(id)` to emit "tail" comments inline with
-/// the closing token of the node they belong to.
-///
-/// `inner_tail` is populated by [`populate_inner_tail`]: comments that
-/// fall *between the end of a block's last statement and its closing
-/// brace* are attributed to the innermost containing block's id. The
-/// unparser flushes them just before emitting the `}` of that block.
-///
-/// `dangling` collects comments that fall after the last token of the
-/// last allocated AST node — typically a comment on a trailing line of
-/// the file. Those are emitted by the unparser at a fixed sink (the end
-/// of the module) without an AST anchor.
+/// Trivia (currently: comments) attached to AST nodes by [`AstId`]. `leading` is
+/// filled by the parser in DFS order, so a comment lands on the outermost node
+/// starting at its position — `/*flag=*/true` belongs to the literal, not the
+/// call. [`populate_trailing`] and [`populate_inner_tail`] then move what they
+/// own; the rest, past the last node, stays `dangling`.
 #[derive(Debug, Clone, Default)]
 pub struct TriviaMap {
     leading: BTreeMap<AstId, Vec<Comment>>,
@@ -192,20 +159,11 @@ impl NodeLookup {
         }
     }
 
-    /// Identify the AST node that owns `c` as a trailing comment.
-    ///
-    /// A node is a candidate when its span ends at or before
-    /// `c.span.start` on the same source line as `c`. Among
-    /// candidates we pick the one with the largest `span.end` (the
-    /// one whose closing token is closest to the comment) and, on
-    /// ties, the smallest `span.start` (the outermost of perfectly
-    /// nested nodes). Returns `None` if no node fits.
-    ///
-    /// Comments that are followed by another AST node on the same
-    /// line — e.g. `foo(1, /*flag=*/true)` — are *interior* trivia
-    /// of the surrounding construct and remain leading of the next
-    /// node; they are never reclassified as trailing of the previous
-    /// one.
+    /// The AST node owning `c` as a trailing comment: among the nodes ending at
+    /// or before `c.span.start` on its line, the largest `span.end` wins, ties
+    /// going to the smallest `span.start`. `None` if none fits, including when
+    /// another node follows on the same line — `foo(1, /*flag=*/true)` is
+    /// interior trivia and stays leading of the next node.
     fn trailing_owner(&self, c: &Comment) -> Option<AstId> {
         if let Some(starts) = self.starts_by_line.get(&c.span.end_line()) {
             // Sorted ascending; if any value is >= c.span.end, the
@@ -251,7 +209,7 @@ fn collect_node_spans(module: &Module) -> Vec<(AstId, Span)> {
 
 /// Repatriate same-line trailing comments out of `leading[*]` and
 /// `dangling` into `trailing[owner]`, using the
-/// [`NodeLookup::trailing_owner`] rule. Idempotent: a second call is
+/// `NodeLookup::trailing_owner` rule. Idempotent: a second call is
 /// a no-op because the surviving `leading`/`dangling` entries by
 /// definition have no trailing owner.
 pub fn populate_trailing(trivia: &mut TriviaMap, module: &Module) {
@@ -293,16 +251,11 @@ fn collect_block_ranges(module: &Module) -> Vec<(AstId, usize, usize)> {
     c.0
 }
 
-/// Repatriate comments that sit between a block's last statement and
-/// its closing `}` into `inner_tail[block.id]`. Innermost block wins
-/// for nested cases. Idempotent: the surviving `leading`/`dangling`
-/// entries by definition contain no comments inside any block's
-/// inner-tail range.
-///
-/// Run *after* [`populate_trailing`] — comments already moved to a
-/// trailing slot are no longer in `leading`/`dangling` and are
-/// therefore left alone, preserving their stronger same-line tail
-/// attribution.
+/// Repatriate comments between a block's last statement and its closing `}`
+/// into `inner_tail[block.id]`, innermost block winning. Idempotent, the
+/// survivors being outside every inner-tail range by definition. Run *after*
+/// [`populate_trailing`], so a comment already moved to a trailing slot keeps
+/// its stronger same-line attribution.
 pub fn populate_inner_tail(trivia: &mut TriviaMap, module: &Module) {
     let blocks = collect_block_ranges(module);
     populate_inner_tail_from_blocks(trivia, &blocks);

@@ -1,21 +1,8 @@
-//! Lowering pass for Wado TIR
-//!
-//! The lower phase is a `FlatPackage` (TIR-shaped) → `NirPackage`
-//! translation, structured as planner + translator:
-//!
-//! ```text
-//! FlatPackage → lower::plan::plan(&mut flat) → lower::translate::translate(flat, plan)
-//! ```
-//!
-//! The planner ([`plan::plan`]) runs the TIR-mutating sub-passes
-//! (pattern lowering, global-initializer extraction, boxing, closure
-//! lowering, value-copy materialization, string-literal collection) and
-//! produces a [`plan::LowerPlan`] of facts the translator consumes. The
-//! translator ([`translate::translate`]) is a single fold from TIR to
-//! NIR; arms that rewrite markers (`builtin::copy_value::<T>` → helper
-//! call, `i128`/`u128` match → if-else chain) live there.
-//!
-//! See `docs/wep-2026-05-11-nir.md`.
+//! Lowering `FlatPackage` → `NirPackage` (WEP 2026-05-11), as planner then
+//! translator. [`plan::plan`] runs the TIR-mutating sub-passes — pattern
+//! lowering, global-initializer extraction, boxing, closure lowering, value-copy
+//! materialization, string-literal collection — and hands the translator a
+//! [`plan::LowerPlan`]. [`translate::translate`] is then a single fold.
 
 pub mod bare_asserts;
 pub mod plan;
