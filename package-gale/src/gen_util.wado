@@ -1,5 +1,6 @@
 use { Alternative, Element, RepeatKind, Visibility } from "./ir.wado";
 use { CodeWriter } from "./wadopoet.wado";
+use { unwrap_label } from "./lr_util.wado";
 use { TreeSet } from "core:collections";
 pub use { escape_ident, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 
@@ -628,5 +629,40 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
         Repeat(_) => panic(
             "element_field_info: Repeat has no storable field shape — caller routed a non-storable element into the field-info helper",
         ),
+    };
+}
+
+/// `", follow"` when the grammar emits FOLLOW machinery, else `""`.
+/// Appended after a call's fixed arguments so the forwarded `follow`
+/// is passed only when the callee actually declares the parameter
+/// (`ctx.emit_follow()`). See `GenContext::emit_follow`.
+pub fn follow_sep(emit_follow: bool) -> String {
+    if emit_follow {
+        return ", follow";
+    }
+    return "";
+}
+
+pub fn join_kinds(kinds: &List<String>) -> String {
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < kinds.len(); i += 1 {
+        if i > 0 {
+            result.push_str(&", ");
+        }
+        result.push_str(&kinds[i]);
+    }
+    return result;
+}
+
+
+/// Check if a consumed element matches the expected element at a given skip position.
+/// Returns true only for exact terminal matches (TokenRef or Literal).
+/// Unwraps Labels to compare inner elements.
+pub fn elements_match(consumed: &Element, expected: &Element) -> bool {
+    let exp = unwrap_label(expected);
+    return match consumed {
+        TokenRef(a) => *exp matches { TokenRef(b) && b.name == a.name },
+        Literal(a) => *exp matches { Literal(b) && b.text == a.text },
+        RuleRef(_) | Group(_) | Repeat(_) | Label(_) | Wildcard(_) | Not(_) => false,
     };
 }
