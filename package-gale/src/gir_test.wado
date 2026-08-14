@@ -20,6 +20,10 @@ use {
     TournamentDispatch,
     Diagnostic,
     DiagnosticKind,
+    build_diagnostics,
+    surfaces_on_build,
+    DiagnosticOwner,
+    DiagnosticSite,
     AltBody,
     Op,
     TokenOp,
@@ -109,16 +113,40 @@ test "LoweredGrammar empty construction" {
 
 test "Diagnostic round-trips through its kind" {
     let d = Diagnostic {
-        rule: "expr",
+        owner: DiagnosticOwner::rule_dispatch(&"expr"),
         kind: DiagnosticKind::OverlapTournament,
         message: "alts 0, 1 share first {IDENT}",
     };
-    assert d.rule == "expr";
+    assert d.owner.rule == "expr";
     assert d.message == "alts 0, 1 share first {IDENT}";
     if let OverlapTournament = &d.kind {
     } else {
         panic("expected OverlapTournament");
     }
+}
+
+test "DiagnosticOwner compares by identity, not by label" {
+    let rule_site = DiagnosticOwner::rule_dispatch(&"expr");
+    let lr_site = DiagnosticOwner { rule: "expr", site: DiagnosticSite::LrAtomDispatch };
+    // Same rule, different decision points inside it.
+    assert rule_site.rule == lr_site.rule;
+    assert rule_site != lr_site;
+    assert rule_site == DiagnosticOwner::rule_dispatch(&"expr");
+    assert rule_site != DiagnosticOwner::rule_dispatch(&"stmt");
+}
+
+test "DiagnosticOwner labels every site" {
+    assert DiagnosticOwner::rule_dispatch(&"expr").label() == "rule 'expr'";
+    assert DiagnosticOwner { rule: "expr", site: DiagnosticSite::LrAtomDispatch }.label() == "LR rule 'expr' atom";
+    assert DiagnosticOwner { rule: "r", site: DiagnosticSite::GeneralGroup(0) }.label() == "General group rGroup0";
+    // The scan pass lowers a group with no index in scope; it never warns, so
+    // the label only has to name the rule.
+    assert DiagnosticOwner { rule: "r", site: DiagnosticSite::GeneralGroup(-1) }.label() == "General group in rule 'r'";
+    assert DiagnosticOwner { rule: "r", site: DiagnosticSite::SimpleCstGroup }.label() == "SimpleCst group in rule 'r'";
+    assert DiagnosticOwner { rule: "r", site: DiagnosticSite::Optional("tail") }.label() == "optional 'tail' in rule 'r'";
+    assert DiagnosticOwner { rule: "r", site: DiagnosticSite::Action(7) }.label() == "action 7";
+    assert DiagnosticOwner { site: DiagnosticSite::LexerAction(7) }.label() == "lexer action 7";
+    assert DiagnosticOwner::host(&"@members").label() == "@members";
 }
 
 test "Rule::Simple round-trip" {
@@ -475,4 +503,29 @@ test "rule_header reaches every Rule variant" {
     assert rule_header(&s).name == "a";
     assert rule_header(&m).name == "b";
     assert rule_header(&lr).name == "c";
+}
+
+test "build_diagnostics keeps what a grammar author can act on" {
+    // The scan-guard fallback fires on any `e?` whose body leads with a rule
+    // reference — five times as often as the kinds that name something to fix
+    // on a real grammar, which is enough to bury them. It stays in the dump
+    // report and off a build's stderr.
+    let overlap = Diagnostic {
+        owner: DiagnosticOwner::rule_dispatch(&"r"),
+        kind: DiagnosticKind::OverlapTournament,
+        message: "alts 0, 1 share lookahead {TK_ID}",
+    };
+    let fallback = Diagnostic {
+        owner: DiagnosticOwner { rule: "r", site: DiagnosticSite::Optional("tail") },
+        kind: DiagnosticKind::OptionalScanGuardFallback,
+        message: "no fixed-token lookahead decides this optional",
+    };
+    let built = build_diagnostics(&[fallback, overlap, fallback]);
+    assert built.len() == 1, `expected only the overlap warning, got ${built.len()}`;
+    assert built[0].kind matches { OverlapTournament };
+    // `gale dump` still sees every one of them.
+    assert !surfaces_on_build(&DiagnosticKind::OptionalScanGuardFallback);
+    assert surfaces_on_build(&DiagnosticKind::UnsupportedAction);
+    assert surfaces_on_build(&DiagnosticKind::HighlightQuery);
+    assert surfaces_on_build(&DiagnosticKind::FragmentEntry);
 }

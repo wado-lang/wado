@@ -66,6 +66,24 @@ only ever dropped in tail position (followed by closing parens /
 whitespace), so an `<EOF>` that is genuine token _text_ mid-tree is left
 untouched.
 
+### Deleted terminals in parse trees
+
+A token deleted by single-token recovery prints as a bare child in ANTLR4 and
+as `<skip x>` in Gale. Like `<EOF>` this is a **rendering** difference over an
+identical tree, and both report the deletion outside the tree (ANTLR4 on the
+error stream, Gale as an `ExtraToken` diagnostic at the same position). Unlike
+`<EOF>` the divergence is Gale saying _more_, which is the point of the marker:
+it tells a recovered parse from a clean one at a glance.
+
+So the normalisation runs the other way — the compare strips the wrapper from
+**Gale's** output, and only for descriptors whose own `[errors]` report an
+`extraneous input`. That gate is what keeps it honest: a deletion Gale invents
+has no counterpart in the expected tree, and deleting a _different_ token
+leaves different text behind. The compare asks exactly "did Gale delete what
+ANTLR4 deleted, in the same place".
+
+`<missing X>` needs no normalisation — Gale's rendering already matches.
+
 ## Stages of Compatibility
 
 The contract is verified at layered stages — A, B, C. Higher
@@ -198,7 +216,7 @@ to leave the grammar loadable, not be reproducible.
 
 Stage B and Stage B′ share the generated parser under
 `tests/generated/antlr4_compat_b/`, but not the comparator. Stage B
-compares through `normalize_tree`, which collapses whitespace runs so a
+compares through `normalize_tree` (`tests/support/tree_compare.wado`), which collapses whitespace runs so a
 hand-written expected tree can be indented. Stage B′ compares verbatim:
 the oracle's tree is already one line, so collapsing can only lose
 information — and it does whenever a token's own text carries

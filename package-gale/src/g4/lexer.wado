@@ -1,5 +1,5 @@
 use { Span, Token, LexerSlice } from "../runtime/lex.wado";
-use { G4Token, make_token } from "./token.wado";
+use { G4Token } from "./token.wado";
 use { scan_line_comment, scan_block_comment, scan_char_class } from "./scan.wado";
 
 pub struct G4Lexer {
@@ -14,11 +14,9 @@ impl G4Lexer {
 
     /// Mint a token whose text is a verbatim copy of the source span
     /// `[start, end)`. The owned char buffer is built in a single pass with
-    /// exact capacity, avoiding both the intermediate `String` and the
-    /// re-`collect` that `make_token`'s `String` -> `LexerSlice` round-trip
-    /// incurred per token. Used for every token whose text equals its raw
-    /// source span (char classes, operators, EOF); identifiers and ints
-    /// build their buffer inline while scanning.
+    /// exact capacity. Used for every token whose text equals its raw source
+    /// span (char classes, operators, EOF); identifiers and ints build their
+    /// buffer inline while scanning.
     fn owned_token(&self, kind: G4Token, start: i32, end: i32) -> Token {
         let mut buf: List<char> = List::with_capacity(end - start);
         for let mut i = start; i < end; i += 1 {
@@ -87,7 +85,7 @@ impl G4Lexer {
         let mut text: List<char> = [];
         loop {
             if self.at_end() {
-                return make_token(G4Token::Error, "unterminated string", start, self.pos);
+                return self.owned_token(G4Token::UnterminatedString, start, self.pos);
             }
             let c = self.chars[self.pos];
             self.pos += 1;
@@ -119,7 +117,7 @@ impl G4Lexer {
             },
             None => {
                 self.pos = self.chars.len();
-                return make_token(G4Token::Error, "unterminated char class", start, self.pos);
+                return self.owned_token(G4Token::UnterminatedCharClass, start, self.pos);
             },
         }
     }
@@ -221,7 +219,7 @@ impl G4Lexer {
                 return self.owned_token(G4Token::Arrow, start, self.pos);
             },
             _ => {
-                return make_token(G4Token::Error, `unexpected char: ${c}`, start, self.pos);
+                return self.owned_token(G4Token::UnexpectedChar, start, self.pos);
             },
         };
         return self.owned_token(kind, start, self.pos);

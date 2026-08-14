@@ -3,7 +3,7 @@
 //! capture. All inert when `emit_actions()` is off.
 
 use { ActionSource, AltAction, Alternative, AttrDecl, Element, Grammar, ParserRule } from "./ir.wado";
-use { DiagnosticKind, Op, Rule, RuleCallOp } from "./gir.wado";
+use { DiagnosticKind, DiagnosticOwner, DiagnosticSite, Op, Rule, RuleCallOp } from "./gir.wado";
 use { GenContext } from "./gen_context.wado";
 use { elements_match, follow_sep, to_snake_case } from "./gen_util.wado";
 use { CodeWriter, FnSpec, ImplSpec, ParamSpec, str_lit } from "./wadopoet.wado";
@@ -208,7 +208,7 @@ pub fn warn_unhandled_actions(grammar: &Grammar, ctx: &mut GenContext) {
         for let id of &ids {
             if !ctx.action_was_seen(*id) {
                 ctx.warn(
-                    &`action ${*id}`,
+                    &DiagnosticOwner { rule: rule.name, site: DiagnosticSite::Action(*id) },
                     DiagnosticKind::UnsupportedAction,
                     `action ${*id} in rule '${rule.name}' is on a code path that does not yet execute actions (nested group, LR suffix, single-token multi-alt, or multi-alt prequel)`,
                 );
@@ -325,7 +325,7 @@ pub fn collect_parser_members(grammar: &Grammar, ctx: &mut GenContext) -> Member
                 }
             },
             Err(msg) => {
-                ctx.warn(&"@members", DiagnosticKind::UnsupportedAction, msg);
+                ctx.warn(&DiagnosticOwner::host(&"@members"), DiagnosticKind::UnsupportedAction, msg);
             },
         }
     }
@@ -444,10 +444,20 @@ fn predicate_selects_alternative(before: i32, ctx: &GenContext) -> bool {
     return before == 0 && current_rule_is_multi_alt(ctx);
 }
 
+/// Owner for a diagnostic about action body `id`, attributed to the rule
+/// being emitted so `gale dump` inlines it there. Outside a rule context the
+/// rule stays empty and the diagnostic surfaces in the summary only.
+fn action_owner(id: i32, ctx: &GenContext) -> DiagnosticOwner {
+    return DiagnosticOwner {
+        rule: ctx.current_rule_name(),
+        site: DiagnosticSite::Action(id),
+    };
+}
+
 fn warn_unsupported_prediction_predicate(src: &ActionSource, ctx: &mut GenContext) {
     ctx.mark_action_seen(src.action_id);
     ctx.warn(
-        &`action ${src.action_id}`,
+        &action_owner(src.action_id, ctx),
         DiagnosticKind::UnsupportedAction,
         `predicate ${src.action_id}: alt-initial predicates in a multi-alt rule need prediction-time gating (not yet supported)`,
     );
@@ -830,7 +840,7 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Ge
     let ridx = ctx.current_rule_index();
     if ridx < 0 {
         ctx.warn(
-            &`action ${src.action_id}`,
+            &action_owner(src.action_id, ctx),
             DiagnosticKind::UnsupportedAction,
             `action ${src.action_id} references attributes outside a rule context`,
         );
@@ -864,7 +874,7 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Ge
     return match translated {
         Ok(code) => Option::Some(code),
         Err(msg) => {
-            ctx.warn(&`action ${src.action_id}`, DiagnosticKind::UnsupportedAction, msg);
+            ctx.warn(&action_owner(src.action_id, ctx), DiagnosticKind::UnsupportedAction, msg);
             null;
         },
     };

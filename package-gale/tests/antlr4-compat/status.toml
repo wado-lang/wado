@@ -71,13 +71,6 @@
 "ParseTrees/Sync" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (synchronisation set fallback). Gale stops at `(a x)` instead of consuming to the synchronisation point, so the trailing tokens never land under the node."
 
 [stage_b_skip]
-# Gale's recovery decision already matches ANTLR4 here (single-token
-# deletion of `z`, in the same position under `a`); the trees differ
-# only in how a deleted terminal renders — Gale keeps its `<skip z>`
-# marker (README, resilient-parser marker table) where ANTLR4 prints
-# the bare token. Nothing to fix without dropping a deliberate,
-# documented Gale extension; see TODO.md ("Deleted-terminal rendering").
-"ParseTrees/ExtraToken" = "recovery matches ANTLR4; only Gale's deliberate `<skip z>` marker differs from ANTLR4's bare token rendering"
 
 # Stage B′ — JVM-oracle-derived expected trees. Entries here are read
 # by `scripts/extract_antlr4_descriptors.wado` (manifest emission) and
@@ -120,7 +113,7 @@
 # These execute action bodies but do not yet match; each names the gap.
 [stage_c_todo]
 "FullContextParsing/AmbiguityNoLoop" = "the grammar is ambiguous and its `@init` asks for LL_EXACT_AMBIG_DETECTION; Gale commits to an alternative without reporting the ambiguity, so the action on the reported alt never runs."
-"ParseTrees/ExtraTokensAndAltLabels" = "error-recovery path prints differently from ANTLR; flips with error-recovery output alignment."
+"ParseTrees/ExtraTokensAndAltLabels" = "recovery diverges, not just rendering: ANTLR4 deletes both extraneous `?` and keeps `(v ? a)`, Gale abandons `v` and prints `(s ${ v)`. The `<skip>` marker is already normalised away here, so this is the recovery decision itself."
 "ParserErrors/LL1ErrorInfo" = "the `@init` prints `getExpectedTokens().toString(getVocabulary())`; neither the expected-token set nor the vocabulary is in the recognizer API java2wado maps, so the body is reported and dropped."
 "LeftRecursion/MultipleAlternativesWithCommonLabel_4" = "common alt label across LR alternatives with a return value the print reads; label-to-vals wiring incomplete for this shape."
 "ParseTrees/TokenAndRuleContextString" = "the action prints getRuleInvocationStack() ([a, s]); that recognizer accessor is not in the API java2wado maps, so the body is reported and dropped. Same family as the LL1ErrorInfo entry above."

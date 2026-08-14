@@ -41,6 +41,7 @@ use {
     FollowArg,
     Diagnostic,
     DiagnosticKind,
+    DiagnosticOwner,
 } from "./gir.wado";
 
 fn empty_grammar(name: &String) -> Grammar {
@@ -2512,9 +2513,8 @@ test "lower warns once when overlapping alts fall back to a tournament" {
     let lowered = lower(&g, &no_lit_tokens());
     assert lowered.diagnostics.len() == 1, `expected 1 diagnostic, got ${lowered.diagnostics.len()}`;
     let d = &lowered.diagnostics[0];
-    // `rule` carries the human-readable owner label lowering used at
-    // the decision site — for a top-level rule that is `rule '<name>'`.
-    assert str_contains(&d.rule, &"r"), `expected rule label to mention "r", got "${d.rule}"`;
+    // The owner names the rule structurally, so tooling matches by equality.
+    assert d.owner == DiagnosticOwner::rule_dispatch(&"r"), `unexpected owner: ${d.owner.label()}`;
     if let OverlapTournament = &d.kind {
     } else {
         panic("expected DiagnosticKind::OverlapTournament");
@@ -2542,6 +2542,39 @@ test "lower raises no diagnostics for disjoint alts" {
 
     let lowered = lower(&g, &no_lit_tokens());
     assert lowered.diagnostics.is_empty(), `expected no diagnostics, got ${lowered.diagnostics.len()}`;
+}
+
+test "lower warns when an optional falls back to a scan guard" {
+    // `r : (b c)? Z ;` — the optional's body leads with a rule reference, so
+    // neither the k-token nor the shape lookahead can decide entry. It is
+    // scannable, so lowering gates entry on speculatively scanning the body.
+    let mut g = parse("grammar S;\nr : (b c)? Z ;\nb : X ;\nc : Y ;\nX : 'x' ;\nY : 'y' ;\nZ : 'z' ;\n").unwrap();
+    assign_atn_call_sites(&mut g);
+    let lit = collect_literal_tokens(&g.parser_rules);
+    let lowered = lower(&g, &lit);
+
+    let mut found = 0;
+    for let d of &lowered.diagnostics {
+        if d.kind matches { OptionalScanGuardFallback } {
+            found += 1;
+            assert d.owner.rule == "r", `expected the warning to name rule 'r', got '${d.owner.rule}'`;
+            assert d.owner.site matches { Optional(_) }, `unexpected site: ${d.owner.label()}`;
+        }
+    }
+    assert found == 1, `expected 1 scan-guard warning, got ${found}`;
+}
+
+test "lower raises no scan-guard warning for a token-led optional" {
+    // `r : (X Y)? Z ;` — a fixed leading token decides entry, so the
+    // optional never reaches the scan guard.
+    let mut g = parse("grammar S;\nr : (X Y)? Z ;\nX : 'x' ;\nY : 'y' ;\nZ : 'z' ;\n").unwrap();
+    assign_atn_call_sites(&mut g);
+    let lit = collect_literal_tokens(&g.parser_rules);
+    let lowered = lower(&g, &lit);
+
+    for let d of &lowered.diagnostics {
+        assert !d.kind matches { OptionalScanGuardFallback }, `unexpected warning: ${d.message}`;
+    }
 }
 
 test "lower Tournament sorts longer alt first" {
@@ -2708,6 +2741,33 @@ test "lower Optional Repeat over multi-token Group uses OptionalLookahead strate
         }
     } else {
         panic("expected Rule::Simple");
+    }
+}
+
+test "lower drops the empty shape from a scan-side optional lookahead" {
+    // `r : (X? Y?)? Z ;` — every element of the optional's body is itself
+    // optional, so shape enumeration includes the all-off shape. That shape
+    // selects nothing: no lookahead to gate on, no body to scan. Both the
+    // parse and the scan lowering must drop it, so neither emitter has to
+    // decide what a signature-less shape means.
+    let mut g = parse("grammar S;\nr : (X? Y?)? Z ;\nX : 'x' ;\nY : 'y' ;\nZ : 'z' ;\n").unwrap();
+    assign_atn_call_sites(&mut g);
+    let lit = collect_literal_tokens(&g.parser_rules);
+    let lowered = lower(&g, &lit);
+
+    let scan_elem = if let Simple(s) = &lowered.parser_rules[0] {
+        &s.scan_body.elements[0];
+    } else {
+        panic("expected Rule::Simple for r");
+    };
+    if let OptionalLookahead(ole) = scan_elem {
+        assert !ole.sigs.is_empty(), "expected at least one shape to survive";
+        assert ole.sigs.len() == ole.bodies.len(), "sigs and bodies must stay parallel";
+        for let mut i = 0; i < ole.sigs.len(); i += 1 {
+            assert !ole.sigs[i].is_empty(), `shape ${i} kept an empty signature`;
+        }
+    } else {
+        panic("expected ScanElement::OptionalLookahead");
     }
 }
 

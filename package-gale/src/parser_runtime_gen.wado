@@ -5,7 +5,7 @@
 //! the switches select which fields and methods exist.
 
 use { Grammar } from "./ir.wado";
-use { DiagnosticKind, LoweredGrammar, Rule, rule_header } from "./gir.wado";
+use { DiagnosticKind, DiagnosticOwner, LoweredGrammar, Rule, rule_header } from "./gir.wado";
 use { GenContext } from "./gen_context.wado";
 use { join_kinds } from "./gen_util.wado";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec } from "./wadopoet.wado";
@@ -35,7 +35,7 @@ pub fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List
         }
         if found < 0 {
             ctx.warn(
-                &"fragment_entries",
+                &DiagnosticOwner::host(&"fragment_entries"),
                 DiagnosticKind::FragmentEntry,
                 `fragment_entries: unknown parser rule '${*name}'`,
             );
@@ -165,7 +165,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.begin(&"if let Some(e) = &p.pending");
     w.line(&"let lc = line_col(p.tokens.chars, e.span.start);");
     w.line(
-        &"let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);",
+        &"let mut d = Diagnostic::error(p.pending_code, e.full_message(), e.span, lc.0, lc.1);",
     );
     // Carry the active rule chain (innermost-first, as each rule wrapper pushed
     // it on the way up) so tooling can report the context that failed.
@@ -305,6 +305,20 @@ pub fn gen_parser_struct(
         s.add_field_default(&mf.name, &mf.ty, &mf.init);
     }
     s.emit(w);
+    w.blank();
+
+    // `expect_set`'s wanted set is a runtime kind list, so it resolves its
+    // names through the same `token_kind_name` every other failure path uses.
+    let mut kn = FnSpec::new("kind_names");
+    kn.add_param(&"kinds", &"&List<i32>");
+    kn.set_return_type(&"List<String>");
+    kn.emit_begin(w);
+    w.line(&"let mut out: List<String> = List::with_capacity(kinds.len());");
+    w.begin(&"for let k of kinds");
+    w.line(&"out.push(token_kind_name(*k));");
+    w.end();
+    w.line(&"return out;");
+    w.end();
     w.blank();
 
     ImplSpec::new("Parser").emit_begin(w);
@@ -579,7 +593,7 @@ pub fn gen_parser_struct(
     pm.set_receiver(&"&self");
     pm.set_return_type(&"String");
     pm.emit_begin(w);
-    w.line(&"if let Some(e) = &self.pending { return e.message; }");
+    w.line(&"if let Some(e) = &self.pending { return e.full_message(); }");
     w.line(&"return String::from(\"\");");
     w.end();
     w.blank();
@@ -717,9 +731,8 @@ pub fn gen_parser_struct(
     // backtracks (committing an edit here could steal tokens that belong to the
     // caller's continuation, which static scan cannot rule out).
     w.begin(&"if self.speculating");
-    w.line(&"let name = token_kind_name(kind);");
     w.line(
-        &"self.fail(`expected ${name}, got \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);",
+        &"self.fail(`got \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);",
     );
     w.line(&"return self.pos;");
     w.end();
@@ -779,12 +792,11 @@ pub fn gen_parser_struct(
     w.line(&"return _syn2;");
     w.end();
     // no sync info: record the deepest failure and unwind.
-    w.line(&"let name = token_kind_name(kind);");
     w.line(&"self.fail(");
     w.indent();
-    w.line(&"`expected ${name}, got \"${self.tokens.token_text(self.pos)}\"`,");
+    w.line(&"`got \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
-    w.line(&"[name],");
+    w.line(&"[token_kind_name(kind)],");
     w.line(&"DiagnosticCode::UnexpectedToken,");
     w.dedent();
     w.line(&");");
@@ -804,7 +816,7 @@ pub fn gen_parser_struct(
     w.end();
     w.line(&"self.fail(");
     w.indent();
-    w.line(&"`expected any token, got \"${self.tokens.token_text(self.pos)}\"`,");
+    w.line(&"`got \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[\"any token\"],");
     w.line(&"DiagnosticCode::UnexpectedToken,");
@@ -839,7 +851,7 @@ pub fn gen_parser_struct(
     w.indent();
     w.line(&"`unexpected token \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
-    w.line(&"[\"set complement\"],");
+    w.line(&"[] as List<String>,");
     w.line(&"DiagnosticCode::UnexpectedToken,");
     w.dedent();
     w.line(&");");
@@ -868,9 +880,9 @@ pub fn gen_parser_struct(
     w.end();
     w.line(&"self.fail(");
     w.indent();
-    w.line(&"`unexpected token \"${self.tokens.token_text(self.pos)}\"`,");
+    w.line(&"`got \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
-    w.line(&"[\"token set\"],");
+    w.line(&"kind_names(&included),");
     w.line(&"DiagnosticCode::UnexpectedToken,");
     w.dedent();
     w.line(&");");

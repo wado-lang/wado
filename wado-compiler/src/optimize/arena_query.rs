@@ -13,7 +13,7 @@ use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::nir_value_graph::{OpaqueSource, ValueKind};
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 
 /// Every block reachable from the body root, in DFS pop order (a block precedes
 /// the blocks nested under it). The NIR block graph is a tree, so no visited set
@@ -369,15 +369,18 @@ pub(super) fn is_pure_nontrapping_expr_typed(
     is_pure_expr(body, id) && !super::mod_ref::ModRef::of_expr_typed(body, id, types).may_trap
 }
 
-/// [`is_pure_nontrapping_expr_typed`] for an operand: a promoted constant is
-/// pure and cannot trap.
+/// [`is_pure_nontrapping_expr_typed`] for an operand. A promoted value is pure
+/// by construction but not necessarily total — `let _ = 1 / 0` freezes a
+/// trapping division into one — so its tree is walked in the pool.
 pub(super) fn is_pure_nontrapping_operand_typed(
     body: &Body,
     op: Operand,
     types: Option<&crate::tir::TypeTable>,
 ) -> bool {
-    op.as_expr()
-        .is_none_or(|e| is_pure_nontrapping_expr_typed(body, e, types))
+    match op {
+        Operand::Expr(e) => is_pure_nontrapping_expr_typed(body, e, types),
+        Operand::Value(v) => !value_may_trap(&body.values, v),
+    }
 }
 
 /// True when the expression at `id` and every sub-expression has no observable
@@ -460,6 +463,42 @@ pub(super) fn binary_op_may_trap(op: NirBinaryOp) -> bool {
 /// are total.
 pub(super) fn unary_op_may_trap(op: NirUnaryOp) -> bool {
     matches!(op, NirUnaryOp::Deref)
+}
+
+/// Whether running the value tree at `v` can trap. The [`ValuePool`] counterpart
+/// of [`expr_node_may_trap`], recursive because a value tree has no skeleton
+/// nodes for a walker to descend through.
+///
+/// Two callers, for the two ways a promoted value can lose a trap: extraction
+/// materialises it at a point that dominates the uses — above the guard each use
+/// sits behind — and the deletion predicates drop the statement holding it.
+///
+/// Conservative on `Cast`: classifying one needs the operand's source type, and
+/// nothing guarantees the type-erased tree recorded it.
+pub(super) fn value_may_trap(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool {
+    match pool.kind(v) {
+        ValueKind::Binary { op, lhs, rhs, .. } => {
+            binary_op_may_trap(*op) || value_may_trap(pool, *lhs) || value_may_trap(pool, *rhs)
+        }
+        ValueKind::Unary { op, operand, .. } => {
+            unary_op_may_trap(*op) || value_may_trap(pool, *operand)
+        }
+        ValueKind::Cast { .. } => true,
+        ValueKind::Select { cond, then, else_ } => {
+            value_may_trap(pool, *cond)
+                || value_may_trap(pool, *then)
+                || value_may_trap(pool, *else_)
+        }
+        ValueKind::FieldAccess { .. } | ValueKind::LoopPhi { .. } => true,
+        ValueKind::Int(..)
+        | ValueKind::Float(..)
+        | ValueKind::Bool(_)
+        | ValueKind::Char(_)
+        | ValueKind::Null
+        | ValueKind::Unit
+        | ValueKind::Const(..)
+        | ValueKind::Opaque(_) => false,
+    }
 }
 
 /// Whether the expression *node* at `id` — its own operation only, not its

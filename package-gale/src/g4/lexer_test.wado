@@ -198,3 +198,19 @@ test "char class with literal left bracket inside" {
     let tokens = tokenize("[*\\r\\n\\\\/[]");
     assert_token(&tokens[0], G4Token::CharClass, "[*\\r\\n\\\\/[]");
 }
+
+test "a token the lexer cannot form carries its source text, not a message" {
+    // The reason lives in the token's kind, so `unterminated string` is a
+    // name the diagnostic reads off `G4Token`, never text a caller would
+    // quote back as if the source said it.
+    let unterminated = tokenize("'abc");
+    assert_token(&unterminated[0], G4Token::UnterminatedString, "'abc");
+    assert G4Token::UnterminatedString.name() == "unterminated string";
+
+    let open_set = tokenize("[a-z");
+    assert_token(&open_set[0], G4Token::UnterminatedCharClass, "[a-z");
+    assert G4Token::UnterminatedCharClass.name() == "unterminated character set";
+
+    let stray = tokenize("%");
+    assert_token(&stray[0], G4Token::UnexpectedChar, "%");
+}

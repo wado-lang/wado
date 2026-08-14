@@ -1,10 +1,3 @@
-//! Core lexing vocabulary shared by every generated parser and by Gale's
-//! own front end: source spans, lazy token-text slices, tokens, and the
-//! parse-error type. Prelude-only and self-contained so it can be both
-//! imported as a module (by Gale's `token`/`lexer`/`parser`/`ir`) and
-//! `#include_str`'d verbatim into generated parsers.
-
-/// Span represents a byte range in source text.
 pub struct Span {
     pub start: i32,
     pub end: i32,
@@ -32,8 +25,6 @@ impl Eq for Span {
     }
 }
 
-/// LexerSlice is a lazy reference to a range of characters in the source input.
-/// It avoids allocating a String for every token during tokenization.
 pub struct LexerSlice {
     pub chars: &List<char>,
     pub start: i32,
@@ -118,11 +109,6 @@ impl Eq for LexerSlice {
     }
 }
 
-/// The 0-based column of char index `i`: the number of chars since the last
-/// newline. ANTLR4's `getCharPositionInLine()` (over the live match cursor) and
-/// `_tokenStartCharPositionInLine` (over the token's start) are both this.
-/// Scans back to the line start, so the cost is the column, not the offset —
-/// a lexer predicate may call it once per candidate rule per token.
 pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     let mut j = if i < chars.len() { i } else { chars.len() };
     let mut col = 0;
@@ -133,10 +119,6 @@ pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     return col;
 }
 
-/// Token represents a lexed token with its kind, text, and position.
-/// Leading trivia (whitespace, comments) is attached to each token.
-/// `channel` is the ANTLR4 channel id (0 = default, 1 = HIDDEN; named
-/// channels resolve to integer ids declared in the grammar).
 pub struct Token {
     pub kind: i32,
     pub text: LexerSlice,
@@ -159,45 +141,12 @@ impl Token {
     }
 }
 
-// Note: Token Eq is intentionally omitted. Auto-derived Eq on recursive structs
-// with reference-containing fields triggers a compiler bug
-// (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
-
-/// Per-token recovery flags (a bitset stored in `TokenStream.flags`). A normal
-/// lexed token has `none()`. The bits mark tokens the error-resilient parser
-/// created or set aside during recovery, so the tree builder and diagnostics can
-/// render them without a side table:
-///
-/// - `Synthetic` — a zero-width token the parser *inserted* to stand in for
-///   a required terminal that was absent (its `kinds[i]` is the expected kind).
-/// - `Skipped` — a real lexed token the parser *deleted* during recovery
-///   (it belongs to no rule; preserved for lossless round-trip).
-/// - `LexError` — a fast mirror of the `TK_ERROR` kind: a char run that
-///   matched no lexer rule.
 pub flags TokenFlags {
     Synthetic,
     Skipped,
     LexError,
 }
 
-/// TokenStream is the struct-of-arrays token storage for generated parsers.
-/// A "token" is an `i32` index into these parallel arrays; no per-token
-/// aggregate is ever allocated. The hot fields (`kinds` / `starts` / `ends`)
-/// are read on every scan/dispatch step as a single `array.get i32`; the
-/// trivia and source-char data are cold, materialised on demand only by the
-/// diagnostic / round-trip paths.
-///
-/// `Token` above stays the value-typed vocabulary for Gale's own `.g4` front
-/// end; the generated-parser runtime uses `TokenStream` instead.
-///
-/// Layout invariant: the per-token arrays (`kinds` / `starts` / `ends` /
-/// `triv_lo` / `triv_hi` / `flags`) always share a length and capacity:
-/// `push_token_flagged` is the only writer, advancing and growing them
-/// together behind one capacity check. The trivia columns (`triv_kinds` /
-/// `triv_starts` / `triv_ends` / `triv_chans`) form a second such lockstep
-/// group under `push_trivia`. Hidden / skip tokens ("trivia") live in the
-/// flat `triv_*` arrays in source order; each parser token owns the half-open
-/// range `[triv_lo[i], triv_hi[i])`.
 pub struct TokenStream {
     pub kinds: List<i32>,
     pub starts: List<i32>,
@@ -210,17 +159,10 @@ pub struct TokenStream {
     pub triv_ends: List<i32>,
     pub triv_chans: List<i32>,
     pub flags: List<TokenFlags>,
-    /// Text the lexer's executed actions printed, in tokenization order
-    /// (Stage C). Empty unless the lexer was generated with action execution
-    /// on. Defaulted so existing construction sites keep compiling.
     pub output: String = "",
 }
 
 impl TokenStream {
-    /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size every array — trivia included — to ~one token
-    /// per four chars; trivia tracks token count, so `[]` would re-grow from
-    /// zero every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -242,14 +184,10 @@ impl TokenStream {
         return self.kinds.len();
     }
 
-    /// The next trivia index — the lexer records this as a token's `triv_lo`
-    /// before accumulating that token's leading trivia, and again as `triv_hi`
-    /// after.
     pub fn trivia_mark(&self) -> i32 {
         return self.triv_kinds.len();
     }
 
-    /// Append one hidden / skip token to the flat trivia arrays.
     pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
         if self.triv_kinds.len() >= self.triv_kinds.capacity() {
             builtin::cold_path();
@@ -267,14 +205,10 @@ impl TokenStream {
         self.triv_chans.push_within_capacity(channel);
     }
 
-    /// Append one parser (default-channel) token. The sole writer of the
-    /// per-token arrays, so their lengths stay in lockstep by construction.
     pub fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
         self.push_token_flagged(kind, start, end, triv_lo, triv_hi, TokenFlags::none());
     }
 
-    /// Append a token carrying recovery `flags`, returning its index. The
-    /// real lockstep writer; `push_token` is the `flags = 0` common case.
     pub fn push_token_flagged(
         &mut self,
         kind: i32,
@@ -308,9 +242,6 @@ impl TokenStream {
         return idx;
     }
 
-    /// Append a zero-width synthetic token at byte offset `at`, standing in for
-    /// a required terminal of kind `expected_kind` that the parser inserted
-    /// during recovery. Returns the new token index. The token owns no trivia.
     pub fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
         let m = self.trivia_mark();
         return self.push_token_flagged(expected_kind, at, at, m, m, TokenFlags::Synthetic);
@@ -324,14 +255,10 @@ impl TokenStream {
         self.flags[i] = self.flags[i] | flag;
     }
 
-    /// Mark token `i` as deleted by recovery (preserved, but bound to no rule).
     pub fn mark_skipped(&mut self, i: i32) {
         self.set_flag(i, TokenFlags::Skipped);
     }
 
-    /// Mark token `i` as a lexer error (a char run that matched no rule). The
-    /// lexer sets this alongside the `TK_ERROR` kind so consumers can test the
-    /// flag without knowing the grammar's `TK_ERROR` id.
     pub fn mark_lex_error(&mut self, i: i32) {
         self.set_flag(i, TokenFlags::LexError);
     }
@@ -360,14 +287,12 @@ impl TokenStream {
         return self.starts[i] >= self.ends[i];
     }
 
-    /// Append `chars[start..end]` to `out` (no allocation).
     pub fn push_text(&self, out: &mut String, start: i32, end: i32) {
         for let mut j = start; j < end; j += 1 {
             out.push(self.chars[j]);
         }
     }
 
-    /// Materialise token `i`'s text as an owned `String` (cold path).
     pub fn token_text(&self, i: i32) -> String {
         let start = self.starts[i];
         let end = self.ends[i];
@@ -376,14 +301,10 @@ impl TokenStream {
         return s;
     }
 
-    /// Append token `i`'s text to `out` (no allocation).
     pub fn push_token_text(&self, out: &mut String, i: i32) {
         self.push_text(out, self.starts[i], self.ends[i]);
     }
 
-    /// Append token `i`'s text with whitespace rendered as escapes, matching
-    /// ANTLR4's `Trees.toStringTree` node text (spaces are left alone). Used by
-    /// tree rendering only; `$text` and friends keep the raw text.
     pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
         for let mut j = self.starts[i]; j < self.ends[i]; j += 1 {
             match self.chars[j] {
@@ -395,18 +316,12 @@ impl TokenStream {
         }
     }
 
-    /// Append the text of token `i`'s leading trivia, in source order.
     pub fn push_leading_trivia_text(&self, out: &mut String, i: i32) {
         for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
             self.push_text(out, self.triv_starts[j], self.triv_ends[j]);
         }
     }
 
-    /// `$text` for a rule spanning tokens `[start_tok, end_tok]`: the token
-    /// texts with each token's leading *hidden-channel* trivia interleaved
-    /// (`triv_chans != 0`), matching ANTLR's `TokenStream.getText(interval)`.
-    /// `skip` trivia (channel 0, removed from the stream) is excluded, and so is
-    /// the start token's own leading trivia (the interval begins at the token).
     pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
         let mut out = String::new();
         for let mut i = start_tok; i <= end_tok; i += 1 {
@@ -423,19 +338,6 @@ impl TokenStream {
     }
 }
 
-
-/// ParseError represents a parse failure with location and expected tokens.
-///
-/// `message` is the local "expected X, got Y" description, kept free of
-/// position and rule context so it stays composable. `line`/`col` are a
-/// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
-/// from `span.start` against the source at error-construction time;
-/// `Parser::error` fills them in. `rule_stack` records the chain of parser
-/// rules that were active when the error was raised, innermost first — each
-/// rule entry wrapper pushes its own name as the `Err` propagates outward,
-/// so the last element is the start rule and the first is the rule the
-/// failing token sat in. The `Display` impl renders all of this into a
-/// human-readable diagnostic.
 pub struct ParseError {
     pub message: String,
     pub span: Span,
@@ -450,17 +352,17 @@ impl ParseError {
         return ParseError { message, span, expected };
     }
 
-    /// Construct a ParseError whose position is already resolved. Used by
-    /// `Parser::error`, which has the source on hand to compute line/col.
     pub fn at(message: String, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
         return ParseError { message, span, expected, line, col, rule_stack: [] };
     }
 
-    /// Render the rule chain as `outer > ... > inner` (start rule first).
-    /// `rule_stack` is stored innermost-first, so iterate it in reverse.
-    /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
-    /// itself once per precedence level, which would otherwise print
-    /// `expr > expr > expr` for a deep expression.
+    pub fn full_message(&self) -> String {
+        if self.expected.is_empty() {
+            return self.message;
+        }
+        return `expected ${join_expected(&self.expected)}; ${self.message}`;
+    }
+
     pub fn rule_path(&self) -> String {
         let mut out = String::with_capacity(self.rule_stack.len() * 8);
         let n = self.rule_stack.len();
@@ -480,9 +382,21 @@ impl ParseError {
     }
 }
 
+fn join_expected(names: &List<String>) -> String {
+    let n = names.len();
+    let mut out = String::with_capacity(n * 8);
+    for let mut i = 0; i < n; i += 1 {
+        if i > 0 {
+            out.push_str(&if i == n - 1 { " or " } else { ", " });
+        }
+        out.push_str(&names[i]);
+    }
+    return out;
+}
+
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.message}`);
+        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.full_message()}`);
         if !self.rule_stack.is_empty() {
             f.write_str(&`\n  in rule: ${self.rule_path()}`);
         }

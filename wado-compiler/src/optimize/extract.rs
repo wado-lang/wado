@@ -8,6 +8,8 @@ use crate::nir_arena::{ExprId, ExprKind, NodeRef, StmtKind};
 use crate::nir_engine::Engine;
 use crate::nir_value_graph::{ValueId, ValueKind};
 
+use super::arena_query::value_may_trap;
+
 /// Rewrite a pure expression whose `ValueGraph` representative is a literal into
 /// that literal. Idempotent: an expression already holding the target literal
 /// is left untouched, so the worklist retry terminates.
@@ -602,36 +604,6 @@ fn apply_field_materialise(
         changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Expr(lread));
     }
     changed
-}
-
-/// Whether re-emitting the value tree at `v` can trap. A materialisation runs it
-/// once at a point that dominates the uses — which the uses' own guards do not
-/// reach — so a trapping value has to stay where the program put it.
-///
-/// Conservative on `Cast`: classifying one needs the operand's source type, and
-/// nothing guarantees the type-erased tree recorded it.
-fn value_may_trap(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool {
-    match pool.kind(v).clone() {
-        ValueKind::Binary { op, lhs, rhs, .. } => {
-            super::arena_query::binary_op_may_trap(op)
-                || value_may_trap(pool, lhs)
-                || value_may_trap(pool, rhs)
-        }
-        ValueKind::Unary { operand, .. } => value_may_trap(pool, operand),
-        ValueKind::Cast { .. } => true,
-        ValueKind::Select { cond, then, else_ } => {
-            value_may_trap(pool, cond) || value_may_trap(pool, then) || value_may_trap(pool, else_)
-        }
-        ValueKind::FieldAccess { .. } | ValueKind::LoopPhi { .. } => true,
-        ValueKind::Int(..)
-        | ValueKind::Float(..)
-        | ValueKind::Bool(_)
-        | ValueKind::Char(_)
-        | ValueKind::Null
-        | ValueKind::Unit
-        | ValueKind::Const(..)
-        | ValueKind::Opaque(_) => false,
-    }
 }
 
 /// Whether one shared local beats re-emitting `v` at each use. Re-emission pays

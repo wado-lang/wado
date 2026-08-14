@@ -57,6 +57,8 @@ use {
     LoweredGrammar,
     Diagnostic,
     DiagnosticKind,
+    DiagnosticOwner,
+    DiagnosticSite,
     Rule,
     SimpleRule,
     MultiAltRule,
@@ -171,7 +173,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             // Action ops need the (unbuilt) winner-replay path; leave the base
             // unwired and warn, rather than emit a half-wired interface.
             ctx.warn(
-                &"superClass",
+                &DiagnosticOwner::host(&"superClass"),
                 DiagnosticKind::UnsupportedAction,
                 `superClass '${sc}' has action operations ({this.m();}); superClass action ops are not yet executed, so the base is not wired`,
             );
@@ -182,7 +184,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         // resolves against them and a reference is reported.
         let none: List<String> = [];
         for let msg of &rewrite_lexer_java_bodies(grammar, &none, &none) {
-            ctx.warn(&"lexer action", DiagnosticKind::UnsupportedAction, *msg);
+            ctx.warn(&DiagnosticOwner::host(&"lexer action"), DiagnosticKind::UnsupportedAction, *msg);
         }
     }
     ctx.precompute_scannability();
@@ -273,7 +275,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     if let Some(query) = &options.highlight_query {
         if ctx.has_superclass() {
             ctx.warn(
-                &"highlight",
+                &DiagnosticOwner::host(&"highlight"),
                 DiagnosticKind::UnsupportedAction,
                 `a highlight query with superClass '${*ctx.superclass_name()}' is not supported (the highlighter entry cannot install the base handler); skipping the highlighter`,
             );
@@ -341,7 +343,7 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
                     continue;
                 }
                 ctx.warn(
-                    &`lexer action ${*id}`,
+                    &DiagnosticOwner { site: DiagnosticSite::LexerAction(*id) },
                     DiagnosticKind::UnsupportedAction,
                     `action ${*id} in lexer rule '${rule.name}' is not yet executed (nested inside an element; only top-level rule/alt actions and predicates run today)`,
                 );
@@ -383,7 +385,7 @@ fn collect_lexer_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls
                 }
             },
             Err(msg) => {
-                ctx.warn(&"@lexer::members", DiagnosticKind::UnsupportedAction, msg);
+                ctx.warn(&DiagnosticOwner::host(&"@lexer::members"), DiagnosticKind::UnsupportedAction, msg);
             },
         }
     }
@@ -527,8 +529,10 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
 ///
 /// - `lex` / `diag` / `tree` / `tools` are always emitted: the core lexing
 ///   vocabulary, the diagnostics types, the flat CST store + `TreeBuilder`,
-///   and the consumer-facing tree/token utilities (`normalize_tree`,
-///   `to_lexer_string`).
+///   and the ANTLR4-format token-stream dump (`to_lexer_string`), which
+///   takes the generated `TokenStream` and so cannot live outside the
+///   generated module. Comparison helpers that take only strings are not
+///   bundled — see `tests/support/tree_compare.wado`.
 /// - `follow` only when lowering built a caller-FOLLOW gate (`emit_follow`).
 /// - `highlight` (`highlight` + `highlight_walk`) only when the `highlight`
 ///   generator option is on.

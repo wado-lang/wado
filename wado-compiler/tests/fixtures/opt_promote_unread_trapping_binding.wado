@@ -1,0 +1,19 @@
+// The `let` twin of `opt_promote_discarded_trapping_value.wado`. An unread
+// binding whose value was promoted into the `ValuePool` has no `ExprId` to
+// demote to, so the elider must keep the binding — dropping it erases the trap.
+
+use { println, Stdout } from "core:cli";
+
+fn boom() -> i32 {
+    let unread = 1 / 0;
+    return 7;
+}
+
+export fn run() with Stdout {
+    println(`${boom()}`);
+}
+
+__DATA__
+{
+    "trapped": true
+}

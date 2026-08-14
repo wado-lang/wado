@@ -1,5 +1,3 @@
-use { Span, Token } from "../runtime/lex.wado";
-
 pub enum G4Token {
     Grammar,
     Fragment,
@@ -29,7 +27,11 @@ pub enum G4Token {
     Identifier,
     IntLit,
     Eof,
-    Error,
+    // Tokens the lexer could not form. Each names its own lexical problem, so
+    // the token's `text` stays the source slice it is for every other kind.
+    UnterminatedString,
+    UnterminatedCharClass,
+    UnexpectedChar,
 }
 
 impl G4Token {
@@ -63,11 +65,9 @@ impl G4Token {
             Identifier => "identifier",
             IntLit => "int",
             Eof => "EOF",
-            Error => "error",
+            UnterminatedString => "unterminated string",
+            UnterminatedCharClass => "unterminated character set",
+            UnexpectedChar => "unexpected character",
         };
     }
-}
-
-pub fn make_token(kind: G4Token, text: String, start: i32, end: i32) -> Token {
-    return Token::new(kind as i32, LexerSlice::from_string(text), Span::new(start, end));
 }

@@ -669,6 +669,8 @@ struct TestFileSpec {
     output_subdir: String,
     /// Runtime symbols imported from the grammar module; empty for none.
     import_names: List<String>,
+    /// Comparison helpers imported from `tests/support/tree_compare.wado`.
+    tree_helpers: List<String> = [],
     test_label: String,
     triage: Triage,
 }
@@ -690,8 +692,11 @@ fn emit_test_file(spec: &TestFileSpec, body: fn(&mut CodeWriter)) -> String {
     w.line(&`            output_dir: "../../../generated/${spec.output_subdir}/${spec.category}/${spec.name}",`);
     w.line(&"        },");
     w.line(&"    };");
-    for let sym of &spec.import_names {
-        w.line(&`use \{ ${*sym} \} from "../../grammars/${spec.category}/${spec.name}.g4";`);
+    if !spec.import_names.is_empty() {
+        w.line(&`use \{ ${join_names(&spec.import_names)} \} from "../../grammars/${spec.category}/${spec.name}.g4";`);
+    }
+    if !spec.tree_helpers.is_empty() {
+        w.line(&`use \{ ${join_names(&spec.tree_helpers)} \} from "../../../support/tree_compare.wado";`);
     }
     w.blank();
     if let Todo(reason) = &spec.triage {
@@ -702,6 +707,62 @@ fn emit_test_file(spec: &TestFileSpec, body: fn(&mut CodeWriter)) -> String {
     body(&mut w);
     w.end();
     return w.to_string();
+}
+
+/// True when the descriptor's own `[errors]` report a single-token deletion —
+/// the only case where the compare may normalise Gale's `<skip …>` marker
+/// away, so a deletion Gale invents on its own can never be normalised into a
+/// match. See "Deleted terminals in parse trees" in `antlr4-compatibility.md`.
+fn descriptor_deletes_tokens(parsed: &ParsedDescriptor) -> bool {
+    return parsed.errors.contains("extraneous input");
+}
+
+/// True when `[output]` is a printed parse tree — the only shape a `<skip …>`
+/// marker can appear in. Stage B compares one by construction, but Stage C
+/// compares whatever the grammar's actions printed, and a tree normaliser let
+/// loose on arbitrary action text is a category error: it would rewrite any
+/// ` <skip … >` the actions themselves emit.
+fn output_is_tree_print(output: &String) -> bool {
+    return output.trim().starts_with("(");
+}
+
+/// The expression a tree compare reads its actual value from, wrapped in the
+/// marker normaliser when the descriptor deletes a token.
+fn actual_expr(inner: &String, strip: bool) -> String {
+    if strip {
+        return `strip_skip_markers(&${*inner})`;
+    }
+    return *inner;
+}
+
+fn join_names(names: &List<String>) -> String {
+    let mut out = String::new();
+    for let mut i = 0; i < names.len(); i += 1 {
+        if i > 0 {
+            out.push_str(&", ");
+        }
+        out.push_str(&names[i]);
+    }
+    return out;
+}
+
+fn tree_import_names(strip: bool) -> List<String> {
+    if strip {
+        return ["normalize_tree", "strip_skip_markers"];
+    }
+    return ["normalize_tree"];
+}
+
+/// Doc lines explaining a normalised compare, empty when it is a plain one.
+fn strip_doc_lines(strip: bool) -> List<String> {
+    if strip {
+        return [
+            "//", "// The descriptor deletes a token, which ANTLR4 renders bare and Gale",
+            "// wraps in `<skip …>`. `strip_skip_markers` drops the wrapper (not the",
+            "// token) so the compare is over the recovery decision, not the marker.",
+        ];
+    }
+    return [];
 }
 
 /// Emit one Stage B driver test file for a single descriptor.
@@ -728,15 +789,21 @@ fn emit_stage_b_test_file(
     input: &String,
     start: &String,
     expected_tree: &String,
+    strip: bool,
     triage: &Triage,
 ) -> String {
+    let mut doc_lines: List<String> = [triage_doc_line(&"stage_b")];
+    for let line of &strip_doc_lines(strip) {
+        doc_lines.push(*line);
+    }
     let spec = TestFileSpec {
         category: *category,
         name: *name,
         attr: generator_attr(),
-        doc_lines: [triage_doc_line(&"stage_b")],
+        doc_lines: doc_lines,
         output_subdir: "antlr4_compat_b",
-        import_names: ["normalize_tree"],
+        import_names: [],
+        tree_helpers: tree_import_names(strip),
         test_label: "stage_b",
         triage: *triage,
     };
@@ -744,7 +811,7 @@ fn emit_stage_b_test_file(
         w.line(&`let input = "${escape_for_wado_str(input)}";`);
         w.line(&`let expected = "${escape_for_wado_str(expected_tree)}";`);
         w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
-        w.line(&"let actual = t::to_string_tree(&result);");
+        w.line(&`let actual = ${actual_expr(&"t::to_string_tree(&result)", strip)};`);
         w.line(&"let norm = normalize_tree(&expected);");
         // Backticks land in the generated source verbatim; the Wado compiler
         // there interprets them as a template string with `{actual}` etc.
@@ -769,19 +836,24 @@ fn emit_stage_sub_b_test_file(
     start: &String,
     expected_tree: &String,
     sub_rule: &String,
+    strip: bool,
     triage: &Triage,
 ) -> String {
+    let mut doc_lines: List<String> = [
+        triage_doc_line(&"stage_b"), "//", `// Stage B sub-tree: [output] is the labelled child '${*sub_rule}' subtree,`,
+        "// not the start rule's full tree. Navigate via find_first_child_node.",
+    ];
+    for let line of &strip_doc_lines(strip) {
+        doc_lines.push(*line);
+    }
     let spec = TestFileSpec {
         category: *category,
         name: *name,
         attr: generator_attr(),
-        doc_lines: [
-            triage_doc_line(&"stage_b"), "//",
-            `// Stage B sub-tree: [output] is the labelled child '${*sub_rule}' subtree,`,
-            "// not the start rule's full tree. Navigate via find_first_child_node.",
-        ],
+        doc_lines: doc_lines,
         output_subdir: "antlr4_compat_b",
-        import_names: ["normalize_tree"],
+        import_names: [],
+        tree_helpers: tree_import_names(strip),
         test_label: "stage_b_sub",
         triage: *triage,
     };
@@ -789,7 +861,7 @@ fn emit_stage_sub_b_test_file(
         w.line(&`let input = "${escape_for_wado_str(input)}";`);
         w.line(&`let expected = "${escape_for_wado_str(expected_tree)}";`);
         w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
-        w.line(&`let actual = t::to_string_subtree(&result, &"${*sub_rule}");`);
+        w.line(&`let actual = ${actual_expr(&`t::to_string_subtree(&result, &"${*sub_rule}")`, strip)};`);
         w.line(&"let norm = normalize_tree(&expected);");
         w.line(&"assert actual == norm, `actual:   ${actual}\\nexpected: ${norm}`;");
     });
@@ -870,18 +942,24 @@ fn emit_stage_c_output_test_file(
     input: &String,
     output: &String,
     start: &String,
+    strip: bool,
     triage: &Triage,
 ) -> String {
+    let mut doc_lines: List<String> = [
+        triage_doc_line(&"stage_c"), "//", "// Stage C claim: the generated parser's action-print output",
+        "// (result.output, the p.emit buffer) equals the descriptor's [output].",
+    ];
+    for let line of &strip_doc_lines(strip) {
+        doc_lines.push(*line);
+    }
     let spec = TestFileSpec {
         category: *category,
         name: *name,
         attr: generator_attr(),
-        doc_lines: [
-            triage_doc_line(&"stage_c"), "//", "// Stage C claim: the generated parser's action-print output",
-            "// (result.output, the p.emit buffer) equals the descriptor's [output].",
-        ],
+        doc_lines: doc_lines,
         output_subdir: "antlr4_compat_a",
         import_names: [],
+        tree_helpers: if strip { ["strip_skip_markers"] } else { [] as List<String> },
         test_label: "stage_c_output",
         triage: *triage,
     };
@@ -894,7 +972,8 @@ fn emit_stage_c_output_test_file(
         w.line(&`let input = "${escape_for_wado_str(input)}";`);
         w.line(&`let expected = "${escape_for_wado_str(&expected)}";`);
         w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
-        w.line(&"assert result.output == expected, `output:\\n${result.output}\\nexpected:\\n${expected}`;");
+        w.line(&`let actual = ${actual_expr(&"result.output", strip)};`);
+        w.line(&"assert actual == expected, `output:\\n${actual}\\nexpected:\\n${expected}`;");
     });
 }
 
@@ -1661,6 +1740,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                                 &parsed.input,
                                 &parsed.output,
                                 &parsed.start,
+                                descriptor_deletes_tokens(&parsed) && output_is_tree_print(&parsed.output),
                                 &stage_c_triage,
                             );
                             if let Err(_) = write_file_string(&stage_c_cat_dir, &stage_c_filename, &src) {
@@ -1743,6 +1823,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                     &parsed.start,
                     &normalised,
                     &sub_rule,
+                    descriptor_deletes_tokens(&parsed),
                     &stage_b_triage,
                 );
                 if let Err(_) = write_file_string(&stage_b_cat_dir, &stage_b_filename, &stage_b_src) {
@@ -1756,6 +1837,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                     &parsed.input,
                     &parsed.start,
                     &normalised,
+                    descriptor_deletes_tokens(&parsed),
                     &stage_b_triage,
                 );
                 if let Err(_) = write_file_string(&stage_b_cat_dir, &stage_b_filename, &stage_b_src) {
@@ -2703,7 +2785,7 @@ test "emit_test_file: Todo triage decorates the test and wires Stage A paths" {
 }
 
 test "emit_test_file: per-claim imports and output dirs differ" {
-    let b = emit_stage_b_test_file(&"C", &"N", &"i", &"", &"(t)", &Triage::Pass);
+    let b = emit_stage_b_test_file(&"C", &"N", &"i", &"", &"(t)", false, &Triage::Pass);
     assert b.contains("use { normalize_tree }"), b;
     assert b.contains("output_dir: \"../../../generated/antlr4_compat_b/C/N\""), b;
     assert b.contains("t::parse(&input)"), b;

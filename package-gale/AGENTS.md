@@ -80,7 +80,7 @@ wado test package-gale/src/codegen_test.wado   # one file
 Test layers, all driven by `.g4` in `tests/grammars/` plus the descriptor corpus:
 
 1. g4 parse tests (`src/g4/integration_test.wado`) — real `.g4` files parse into `Grammar` IR.
-2. Driver tests (`tests/driver_*_test.wado`) — invoke the generator at compile time via `use ... with { generator: ... }`, parse input, and assert `to_string_tree()` output (EOF omitted; `normalize_tree()` lets you write indented expected trees).
+2. Driver tests (`tests/driver_*_test.wado`) — invoke the generator at compile time via `use ... with { generator: ... }`, parse input, and assert `to_string_tree()` output (EOF omitted; `normalize_tree()` from `tests/support/tree_compare.wado` lets you write indented expected trees).
 3. ANTLR4 descriptor compatibility (`tests/antlr4-compat/`) — the extracted corpus as a long-lived regression suite; see [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 
 Real-world grammars can also be oracle-pinned (Stage B′ over the published jar, not hand-written trees): `scripts/regen-oracle.sh <key>` regenerates `tests/driver_cst_<key>_oracle_test.wado` from `tests/oracle/<key>/cases.*`, marking cases Gale currently parses differently `#[TODO]`. Java runs only at regen time; the committed trees keep CI Java-free. `sqlite` and `json` are pinned this way. Adding a grammar is config + cases, but only for a clean single combined `WS -> skip` grammar — split and whitespace-token grammars (Rust, TypeScript, css3) are out of scope; see "Stage B′ for real-world grammars" in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
@@ -92,6 +92,13 @@ To add an e2e grammar: drop the `.g4` in `tests/grammars/` (with `// Source:` / 
 ## Inlined runtime
 
 The generated parser inlines the runtime fragments in `src/runtime/*.wado` (`lex`, `diag`, `tree`, `tools` always; `follow` / `highlight` / `atn` / `latn` gated per-feature). Each fragment is also a real module for dev / test.
+
+Two rules follow from every byte of these files landing in every generated parser:
+
+- **No comments.** They would be copied into hundreds of generated files, and the Kiln cache key is comment-blind (`is_wado_source` in `wado-cli/src/kiln_provider.rs` routes `.wado` through the canonical token stream), so editing one silently desynchronises the committed corpus from its generator. State intent through names, decomposition, and asserts.
+- **Nothing test-only.** String-level comparison helpers live in `tests/support/tree_compare.wado`; only a helper taking a generated type (`to_lexer_string`, over the generated `TokenStream`) has to stay.
+
+To force regeneration after editing a fragment, delete the invocation cache (`find tests/generated -name '*.kiln.json' -delete`) or pass `wado test --no-cache`. A plain `mise run test-wado` does not notice a comment-only edit.
 
 ## Failed approaches (do not repeat)
 

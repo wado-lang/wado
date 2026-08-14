@@ -3,7 +3,7 @@ use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
 use { CodeWriter, FnSpec, Vis, str_lit } from "./wadopoet.wado";
 use { HighlightRule, TokenSelector } from "./highlight_query.wado";
 use { GenContext } from "./gen_context.wado";
-use { DiagnosticKind } from "./gir.wado";
+use { DiagnosticKind, DiagnosticOwner } from "./gir.wado";
 use { TreeMap } from "core:collections";
 
 /// `highlight`: build the token/rule mapping from the parsed highlight query,
@@ -166,7 +166,7 @@ fn gen_highlight_mapping(
             Some(k) => k,
             None => {
                 ctx.warn(
-                    &"highlight",
+                    &DiagnosticOwner::host(&"highlight"),
                     DiagnosticKind::HighlightQuery,
                     `highlight query: unknown token ${selector_desc(&rule.selector)}`,
                 );
@@ -180,7 +180,7 @@ fn gen_highlight_mapping(
             Some(rctx) => {
                 if !parser_rule_exists(parser_rules, rctx) {
                     ctx.warn(
-                        &"highlight",
+                        &DiagnosticOwner::host(&"highlight"),
                         DiagnosticKind::HighlightQuery,
                         `highlight query: unknown parser rule '${*rctx}'`,
                     );
