@@ -128,7 +128,11 @@ async function fetchObject(token: string, object: string, timeout: number): Prom
 // would double the peak draw on the session's fixed disk allowance, which is
 // the resource under pressure here.
 async function untar(body: ReadableStream<Uint8Array>, destDir: string): Promise<void> {
-  const tar = spawn("tar", ["-xzf", "-", "-C", destDir], { stdio: ["pipe", "ignore", "inherit"] });
+  // `--no-same-owner`: tar restores the archive's uid/gid when it runs as root,
+  // which would leave a tree cargo writes into owned by the CI runner's uid.
+  const tar = spawn("tar", ["-xzf", "-", "--no-same-owner", "-C", destDir], {
+    stdio: ["pipe", "ignore", "inherit"],
+  });
   const exited = new Promise<void>((resolve, reject) => {
     tar.on("error", reject);
     tar.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`tar exited with code ${code}`))));
