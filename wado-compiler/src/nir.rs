@@ -639,6 +639,10 @@ pub struct NirParam {
 
 #[derive(Debug, Clone)]
 pub struct NirStruct {
+    /// The struct type this reifies — the declaration it was written from, or
+    /// the shape it was built from. Carried down from `TirStruct` so a pass
+    /// asking which struct this is does not have to find one by `name`.
+    pub def: crate::tir::StructDef,
     pub name: String,
     pub module_source: ModuleSource,
     pub visibility: ast::Visibility,

@@ -617,6 +617,7 @@ impl Translator<'_> {
     fn convert_struct(&self, s: &TirStruct) -> NirStruct {
         let fctx = FunctionTranslator::for_top_level(self);
         NirStruct {
+            def: s.def,
             name: s.name.clone(),
             module_source: s.module_source.clone(),
             visibility: s.visibility,

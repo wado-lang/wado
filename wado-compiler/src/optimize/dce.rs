@@ -118,11 +118,11 @@ impl DceAnalysis {
         if self.struct_monomorph_names.contains(s.name.as_str()) {
             return true;
         }
-        let Some(base) = type_table.decl_named_in(&mono.generic_name, &s.module_source) else {
-            return false;
-        };
-        let rendered = type_table
-            .struct_rendered_name(crate::tir::StructDef::Decl(base), &mono.impl_type_args);
+        // The struct's own head, not a declaration found by `generic_name`:
+        // that index answers with whichever declaration of a spelling came
+        // first, so two functions' `struct Box<T>` rendered one name and one
+        // of them was swept while its uses survived.
+        let rendered = type_table.struct_rendered_name(s.def, &mono.impl_type_args);
         self.struct_monomorph_names.contains(rendered.as_str())
             || type_table
                 .find_struct_by_name(&rendered, &s.module_source)
