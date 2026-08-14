@@ -6,6 +6,10 @@
 //
 // Stage C claim: the generated parser's action-print output
 // (result.output, the p.emit buffer) equals the descriptor's [output].
+//
+// The descriptor deletes a token, which ANTLR4 renders bare and Gale
+// wraps in `<skip …>`. `strip_skip_markers` drops the wrapper (not the
+// token) so the compare is over the recovery decision, not the marker.
 
 use t from "../../grammars/ParseTrees/ExtraTokensAndAltLabels.g4"
     with {
@@ -14,13 +18,15 @@ use t from "../../grammars/ParseTrees/ExtraTokensAndAltLabels.g4"
             output_dir: "../../../generated/antlr4_compat_a/ParseTrees/ExtraTokensAndAltLabels",
         },
     };
+use { strip_skip_markers } from "../../grammars/ParseTrees/ExtraTokensAndAltLabels.g4";
 
-// triage: error-recovery path prints differently from ANTLR; flips with error-recovery output alignment.
+// triage: recovery diverges, not just rendering: ANTLR4 deletes both extraneous `?` and keeps `(v ? a)`, Gale abandons `v` and prints `(s ${ v)`. The `<skip>` marker is already normalised away here, so this is the recovery decision itself.
 #[TODO]
 test "stage_c_output: ParseTrees/ExtraTokensAndAltLabels" {
     let input = "${ ? a ?}";
     let expected = "(s ${ (v ? a) ? })
 ";
     let result = t::parse_s(&input);
-    assert result.output == expected, `output:\n${result.output}\nexpected:\n${expected}`;
+    let actual = strip_skip_markers(&result.output);
+    assert actual == expected, `output:\n${actual}\nexpected:\n${expected}`;
 }
