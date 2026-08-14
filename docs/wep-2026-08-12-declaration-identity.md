@@ -807,18 +807,25 @@ compiles, passes the suite, and ends with a mechanical completion check.
       its type renders `UserId@AstId(N)`. Read the intern key, not the
       message.
 
-      Read directly, it says the newtype cluster is *not* a rendering
-      mismatch. Probing `synthesis/traits.rs`'s newtype loop for the failing
-      fixture prints
+      Read directly, it names the disagreement exactly. Two probes:
 
           PROBE nt.name="UserId@2" rendered=Some("UserId@2")
+          PROBE unresolved call_name=
+              "…/UserId^core:prelude/traits.wado/Inspect::inspect"
 
-      — the declared-side name and the type's rendering agree, for the local
-      newtype and for every stdlib one. So `function_local` reaches this path
-      correctly and both ends of the impl registration spell the same thing.
-      Whatever declines the `Inspect` bound declines it for another reason,
-      and the whole family of spelling explanations — the one that accounts
-      for every other failure in this migration — is ruled out here.
+      The synthesis side agrees with itself — the newtype's declared-side
+      name and its type's rendering are both `UserId@2`, so `function_local`
+      reaches that path. The *call* names the receiver `UserId`, plain. So it
+      is a spelling mismatch after all, on the call-minting side, and one end
+      of it is now known precisely.
+
+      What is not yet known is which producer mints that call. Routing
+      `TypeTable::fq_type_name`'s `Newtype` / `Enum` / `Variant` / `Flags` /
+      `GenericInstance` arms through `decl_render_name` — they read
+      `def_name` while the `Struct` arm reads `struct_head_name` — was the
+      obvious candidate and changed nothing, measured, so it was reverted
+      too. The call name is built somewhere else, and the two probes above
+      are the cheapest way back to it.
 
       Both attempts that changed nothing were reverted rather than kept on
       the argument that they were more correct in principle. That rule is
