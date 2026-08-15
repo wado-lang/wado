@@ -660,7 +660,7 @@ impl Engine {
             if span.is_some_and(|s| s.file != filename) {
                 return None;
             }
-            diagnostics::from_compiler_diagnostic(d, uri, lines.as_ref(), encoding)
+            diagnostics::from_compiler_diagnostic(d, lines.as_ref(), encoding)
         };
         let semantic = snapshot.semantic_diagnostics();
         let mut out: Vec<Diagnostic> = snapshot

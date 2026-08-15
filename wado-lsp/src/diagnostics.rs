@@ -121,7 +121,6 @@ fn span_to_range(
 /// batch and shared; see [`LineIndex`].
 pub(crate) fn from_compiler_diagnostic(
     diag: &CompilerDiagnostic,
-    _uri: &str,
     lines: Option<&LineIndex>,
     encoding: PositionEncoding,
 ) -> Option<Diagnostic> {
@@ -180,13 +179,7 @@ mod tests {
             }),
         };
 
-        let diag = from_compiler_diagnostic(
-            &compiler_diag,
-            "file:///test.wado",
-            None,
-            PositionEncoding::Utf16,
-        )
-        .unwrap();
+        let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();
         assert_eq!(diag.severity, Severity::Error);
         assert_eq!(diag.code, "TYPE_MISMATCH");
         assert_eq!(diag.message, "expected i32, found String");
@@ -208,13 +201,7 @@ mod tests {
                 end_column: Some(10),
             }),
         };
-        let diag = from_compiler_diagnostic(
-            &compiler_diag,
-            "file:///test.wado",
-            None,
-            PositionEncoding::Utf16,
-        )
-        .unwrap();
+        let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();
         assert_eq!(diag.tags, vec![DiagnosticTag::Unnecessary]);
         let json = serde_json::to_string(&diag).unwrap();
         assert!(json.contains("\"tags\":[1]"), "got {json}");
@@ -234,13 +221,7 @@ mod tests {
                 end_column: Some(2),
             }),
         };
-        let diag = from_compiler_diagnostic(
-            &compiler_diag,
-            "file:///test.wado",
-            None,
-            PositionEncoding::Utf16,
-        )
-        .unwrap();
+        let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();
         assert!(diag.tags.is_empty());
         let json = serde_json::to_string(&diag).unwrap();
         assert!(
@@ -257,15 +238,7 @@ mod tests {
             message: "parse".to_string(),
             span: None,
         };
-        assert!(
-            from_compiler_diagnostic(
-                &compiler_diag,
-                "file:///test.wado",
-                None,
-                PositionEncoding::Utf16
-            )
-            .is_none()
-        );
+        assert!(from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).is_none());
     }
 
     #[test]
@@ -278,13 +251,8 @@ mod tests {
             message: "module not found: ./missing.wado".to_string(),
             span: None,
         };
-        let diag = from_compiler_diagnostic(
-            &compiler_diag,
-            "file:///test.wado",
-            None,
-            PositionEncoding::Utf16,
-        )
-        .expect("a span-less error must still reach the editor");
+        let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16)
+            .expect("a span-less error must still reach the editor");
         assert_eq!(diag.range, DOCUMENT_START);
         assert_eq!(diag.severity, Severity::Error);
     }
@@ -303,13 +271,7 @@ mod tests {
                 end_column: None,
             }),
         };
-        let diag = from_compiler_diagnostic(
-            &compiler_diag,
-            "file:///test.wado",
-            None,
-            PositionEncoding::Utf16,
-        )
-        .unwrap();
+        let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();
         assert_eq!(diag.severity, Severity::Warning);
     }
 
@@ -335,7 +297,6 @@ mod tests {
         };
         let diag = from_compiler_diagnostic(
             &compiler_diag,
-            "file:///entry.wado",
             None, // cross-file: no source on hand
             PositionEncoding::Utf16,
         )
@@ -367,7 +328,6 @@ mod tests {
         };
         let diag = from_compiler_diagnostic(
             &compiler_diag,
-            "file:///entry.wado",
             Some(&LineIndex::new(src)),
             PositionEncoding::Utf16,
         )
@@ -393,13 +353,7 @@ mod tests {
                 end_column: Some(15),
             }),
         };
-        let diag = from_compiler_diagnostic(
-            &compiler_diag,
-            "file:///test.wado",
-            None,
-            PositionEncoding::Utf16,
-        )
-        .unwrap();
+        let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();
         assert_eq!(
             diag.range,
             Range {

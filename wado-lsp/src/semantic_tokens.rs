@@ -996,14 +996,10 @@ mod tests {
 
     #[test]
     fn multi_line_tokens_are_skipped() {
-        // LSP semantic tokens MUST NOT span lines. Both lexer-emitted
-        // tokens (raw-newline string literals, doc/block comments) and
-        // the comment list path used to silently slip through and
-        // produce wrong-length entries that delta_encode then clipped
-        // to end-of-start-line. The fixture below uses a `/* */` block
-        // comment that crosses a newline; the parse-emitted single-
-        // line tokens around it (`fn`, `f`, etc.) must still appear,
-        // but no COMMENT token may be produced.
+        // LSP semantic tokens MUST NOT span lines — a partially encoded
+        // one renders worse than none. The fixture crosses a newline with a
+        // `/* */` block comment: no COMMENT token may be produced, and the
+        // single-line tokens around it must still appear.
         let src = "fn f() {\n    /* multi\n    line */\n    let _ = 1;\n}\n";
         let tokens = compute(src, None);
         // "Must not span lines", expressed against a start and a length.

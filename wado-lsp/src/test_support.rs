@@ -1,15 +1,12 @@
 //! Shared test fixtures for `wado-lsp`.
 //!
-//! Centralises the in-memory `CompilerHost` implementation that every test
-//! file used to redeclare. The module is publicly exposed but marked
-//! `#[doc(hidden)]` so it is reachable from both unit tests (inside
-//! `src/`) and integration tests (`tests/*.rs`) without inflating the
-//! crate's documented surface.
+//! The one in-memory `CompilerHost` for the crate's tests. `#[doc(hidden)]
+//! pub` so both unit tests (inside `src/`) and integration tests
+//! (`tests/*.rs`) reach it without inflating the documented surface.
 //!
-//! Adding a new shared helper here is preferable to growing yet another
-//! `TestHost` per file — the previous duplication drifted across files
-//! (different constructor names, different diagnostic-capture behaviour)
-//! and made it easy to accidentally test against a non-canonical host.
+//! Add shared helpers here rather than growing a per-file `TestHost`: a
+//! second host drifts in constructor names and diagnostic-capture behaviour,
+//! and then a test silently asserts against the non-canonical one.
 //!
 //! Typical usage in tests:
 //!

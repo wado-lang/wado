@@ -182,8 +182,7 @@ where
 ///
 /// Skips the body when `id` is `None` (notification-shaped envelope on
 /// a request method), and bails after sending an `InvalidParams` error
-/// when the params don't deserialize. This shell is what every
-/// query-style handler in `dispatch.rs` used to inline by hand.
+/// when the params don't deserialize.
 pub async fn typed_request<P, R, W, F, Fut>(
     writer: &mut W,
     id: Option<&Value>,

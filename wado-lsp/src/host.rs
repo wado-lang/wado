@@ -39,7 +39,7 @@ impl FilesystemCompilerHost {
         }
     }
 
-    pub fn base_path(&self) -> &PathBuf {
+    pub fn base_path(&self) -> &Path {
         &self.base_path
     }
 

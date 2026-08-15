@@ -8,19 +8,8 @@
 //! scalar value, not per byte and not per UTF-16 code unit). The
 //! conversion lives here so every LSP query reaches the same compiler
 //! `(line, col)` for a given cursor regardless of which code-unit space
-//! the client speaks.
-//!
-//! Previously each query did
-//!
-//! ```ignore
-//! let line = position.line as usize + 1;
-//! let col = position.character as usize + 1;
-//! ```
-//!
-//! which silently assumed both 1-based-ness and ASCII. Non-ASCII source
-//! (multi-byte characters, multi-code-unit grapheme clusters) drifted
-//! the column by an unbounded amount, breaking hover / definition /
-//! references at every cursor past an emoji or a CJK character.
+//! the client speaks. Treating the two spaces as interchangeable drifts the
+//! column by an unbounded amount past any non-ASCII character.
 //!
 //! See LSP 3.18 §general.positionEncodings.
 
@@ -304,11 +293,9 @@ mod tests {
 
     #[test]
     fn past_eof_returns_out_of_range_sentinel() {
-        // A stale cursor (line beyond source) used to fall back to
-        // (1, 1) — a valid in-range position that silently bound LSP
-        // queries to the first AST node. The sentinel must be a line
-        // no real `Span` can have, so the compiler's `ast_id_at`
-        // returns `None` and the LSP query bails cleanly.
+        // The sentinel must be a line no real `Span` can have, so
+        // `ast_id_at` returns `None` and the query bails. An in-range
+        // fallback like (1, 1) would bind the cursor to the first AST node.
         let src = "fn f() {}\nfn g() {}\n";
         let (line, col) = lsp_position_to_line_col(src, pos(99, 0), PositionEncoding::Utf16);
         assert_eq!(

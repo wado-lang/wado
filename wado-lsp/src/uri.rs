@@ -11,11 +11,7 @@
 //!
 //! Centralising this lets `Engine`, the dispatcher, and
 //! `workspace/textDocumentContent` agree on what counts as a URI scheme
-//! rather than re-parsing strings inline. Previously the codebase had
-//! two copies of `uri_to_filename` (in `lib.rs` and in `location.rs`)
-//! plus ad-hoc `strip_prefix("file://")` calls scattered across
-//! `host_for_uri`, `text_document_content`, and the LSP query
-//! plumbing.
+//! rather than each re-parsing strings inline.
 
 use std::path::{Path, PathBuf};
 
@@ -106,10 +102,9 @@ impl Uri {
 
     /// Path / opaque component after the scheme delimiter `:`.
     ///
-    /// Returns `None` when the URI has no `:` (i.e. [`Self::scheme`]
-    /// returns [`UriScheme::Other`]). Callers that have already
-    /// classified the scheme as one of the known kinds may safely
-    /// `.expect()` on the result.
+    /// `None` only when the URI has no `:` at all — an unrecognised scheme
+    /// still yields its remainder. Callers that have already classified the
+    /// scheme as one of the known kinds may safely `.expect()`.
     #[must_use]
     pub fn rest(&self) -> Option<&str> {
         self.0.split_once(':').map(|(_, r)| r)
@@ -287,21 +282,15 @@ mod tests {
 
     #[test]
     fn file_uri_at_root_has_root_workspace() {
-        // Pre-existing bug class: `host_for_uri` for `file:///foo.wado`
-        // used to yield `PathBuf::from(".")` because `Path::parent` of
-        // `/foo.wado` returns `Some("/")` but the prior implementation
-        // treated the empty string oddly. Verify the typed accessor.
+        // `Path::parent` of `/foo.wado` is `Some("/")`, not the empty path.
         let u = Uri::new("file:///foo.wado");
         assert_eq!(u.workspace_root(), Some(PathBuf::from("/")));
     }
 
     #[test]
     fn malformed_file_uri_without_path_has_no_workspace_root() {
-        // `file://` (no path component) used to silently CWD-root the
-        // FilesystemCompilerHost. That let a buggy client read
-        // arbitrary files under the LSP process's cwd via relative
-        // imports off the bad URI. The typed accessor refuses such
-        // URIs.
+        // CWD-rooting this would let a buggy client read arbitrary files
+        // under the LSP process's cwd via relative imports off the bad URI.
         assert_eq!(Uri::new("file://").workspace_root(), None);
     }
 

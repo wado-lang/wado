@@ -68,7 +68,7 @@ fn resolve_local_uri(module_path: &str, request_uri: &str) -> String {
     // path component (`core:cli`, `wasi:filesystem/types.wado` *with*
     // a path, `untitled:1`), `rsplit_once` either returns the right
     // thing or yields an empty `base_dir` and we fall back to the bare
-    // module path. Matches the pre-refactor string-based behaviour.
+    // module path.
     let request_path = Uri::new(request_uri).to_filename();
     let base_dir = request_path
         .rsplit_once('/')
@@ -153,13 +153,8 @@ mod tests {
 
     #[test]
     fn relative_import_off_kiln_uri_preserves_parent_directory() {
-        // Regression test for the Layer-2 refactor: the typed-Uri
-        // rewrite of `resolve_local_uri` short-circuited every
-        // non-`file:` scheme to `filename_to_uri(normalized)`,
-        // dropping the parent directory of kiln-redirected modules.
-        // For `kiln:/abs/path/foo.wado` importing `./sibling.wado` the
-        // result must remain `kiln:/abs/path/sibling.wado`, not the
-        // unanchored `sibling.wado`.
+        // A kiln-redirected module's siblings anchor under its directory,
+        // not at the scheme root.
         let resolved = resolve_local_uri("./sibling.wado", "kiln:/abs/path/foo.wado");
         assert_eq!(resolved, "kiln:/abs/path/sibling.wado");
     }
