@@ -197,26 +197,57 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
     }
 }
 
-thread_local! {
-    /// One runtime per test thread, leaked so callers keep the `&'static` they
-    /// had. Bounded by `--test-threads`.
-    ///
-    /// A single current-thread runtime shared across test threads serialises
-    /// them on its scheduler core, and the core owns the timer wheel: a thread
-    /// that does not hold it can still drive its own future but cannot advance
-    /// a timer. A guest awaiting a 1 ms sleep then waits on whichever fixture
-    /// holds the core, for as long as that fixture runs.
-    static TOKIO_RT: &'static tokio::runtime::Runtime = Box::leak(Box::new(
+/// Runtimes returned by [`runtime`], waiting to be handed out again.
+static RUNTIME_POOL: OnceLock<Mutex<Vec<tokio::runtime::Runtime>>> = OnceLock::new();
+
+/// A runtime lent to one caller, returned to the pool when dropped.
+pub struct PooledRuntime(Option<tokio::runtime::Runtime>);
+
+impl std::ops::Deref for PooledRuntime {
+    type Target = tokio::runtime::Runtime;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref().expect("runtime is taken only on drop")
+    }
+}
+
+impl Drop for PooledRuntime {
+    fn drop(&mut self) {
+        let rt = self.0.take().expect("runtime is taken only once");
+        RUNTIME_POOL
+            .get_or_init(Default::default)
+            .lock()
+            .expect("runtime pool is not poisoned")
+            .push(rt);
+    }
+}
+
+/// A runtime this caller has to itself for as long as it holds the handle.
+///
+/// One current-thread runtime shared across tests serialises them on its
+/// scheduler core, and the core owns the timer wheel: a caller that does not
+/// hold it can drive its own future but cannot advance a timer, so a guest
+/// awaiting a 1 ms sleep waits on whichever fixture holds the core for as long
+/// as that fixture runs. Exclusive use is the point; the pool only decides
+/// where the runtime comes from.
+///
+/// Pooled rather than built per call, because libtest gives each test its own
+/// thread: building one per test pays for a scheduler and its descriptors
+/// thousands of times, and caching one per thread never frees them. The pool
+/// settles at the runner's concurrency, and the lock is held only to hand a
+/// runtime over, never while one runs.
+pub fn runtime() -> PooledRuntime {
+    let pooled = RUNTIME_POOL
+        .get_or_init(Default::default)
+        .lock()
+        .expect("runtime pool is not poisoned")
+        .pop();
+    PooledRuntime(Some(pooled.unwrap_or_else(|| {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .expect("Failed to create tokio runtime"),
-    ));
-}
-
-/// This thread's tokio runtime.
-pub fn runtime() -> &'static tokio::runtime::Runtime {
-    TOKIO_RT.with(|rt| *rt)
+            .expect("Failed to create tokio runtime")
+    })))
 }
 
 /// Shared wasmtime Engine for all tests (initialized once)
@@ -242,11 +273,6 @@ pub fn epoch_deadline_ticks(timeout_ms: u64) -> u64 {
     (timeout_ms / EPOCH_INTERVAL_MS).max(1)
 }
 
-/// Wall-clock bound for a host call that never returns. Deliberately far above
-/// any test's real duration: fuel is what bounds a test's own work, and this
-/// only has to stop the suite hanging when a host future never resolves.
-pub const HOST_HANG_TIMEOUT_MS: u64 = 5_000;
-
 /// Guest instructions a test may execute before wasmtime traps it.
 ///
 /// Fuel bounds guest work, which is what a runaway test spends and what a test
@@ -254,10 +280,13 @@ pub const HOST_HANG_TIMEOUT_MS: u64 = 5_000;
 /// 1 ms timer holds the guest for 1 ms of guest work and seconds of wall time
 /// under load, so an epoch deadline fails such a test for the machine's load
 /// rather than for anything the test did.
-/// Measured with `WADO_TEST_FUEL_REPORT=1`: the suite's median test spends
-/// under 2k, p99 under 21k, and the heaviest (u128 formatting) 1.9M. A hundred
-/// times the observed ceiling leaves room for a test that legitimately grows
-/// while still catching a loop that never terminates.
+/// Measured with `WADO_TEST_FUEL_REPORT=1` across every execution path: a test
+/// world's median spends under 2k and its heaviest 1.9M, while a CLI world runs
+/// whole programs and reaches 15M. Thirteen times that ceiling leaves room for
+/// a test that legitimately grows while still catching a loop that never ends.
+///
+/// Paths that ask for a longer budget scale from here through
+/// [`fuel_for_timeout`]; the 30s interop tests peak at 38M of their 1.2G.
 pub const DEFAULT_FUEL: u64 = 200_000_000;
 
 /// Fuel budget for `timeout_ms` of the old wall-clock budget, for call sites
@@ -274,16 +303,27 @@ pub fn report_fuel(label: &str, consumed: u64) {
     }
 }
 
-/// Bound a store's execution: `fuel` for the guest's own work, the epoch for a
-/// host call that never returns and so spends no fuel.
+/// Bound a store by `timeout_ms`: fuel for the guest's own work, the epoch for
+/// a host call that never returns and so spends no fuel.
 ///
 /// The engine turns on both mechanisms, and each one traps a store that never
 /// sets its limit — fuel starts at zero, and an unset epoch deadline is already
 /// reached. Every store the suite creates goes through here so that neither can
-/// be half-configured at a call site.
-pub fn limit_store<T>(store: &mut Store<T>, fuel: u64) {
-    store.set_fuel(fuel).expect("fuel is enabled on the engine");
-    store.set_epoch_deadline(epoch_deadline_ticks(HOST_HANG_TIMEOUT_MS));
+/// be half-configured at a call site, and both scale with the one budget the
+/// site asked for.
+pub fn limit_store<T>(store: &mut Store<T>, timeout_ms: u64) {
+    store
+        .set_fuel(fuel_for_timeout(timeout_ms))
+        .expect("fuel is enabled on the engine");
+    store.set_epoch_deadline(epoch_deadline_ticks(timeout_ms));
+}
+
+/// Report what the guest spent of the budget `limit_store` gave it. Pass the
+/// same `timeout_ms`; every execution path reports, so `WADO_TEST_FUEL_REPORT`
+/// covers the budgets that were estimated rather than measured.
+pub fn report_fuel_used<T>(store: &mut Store<T>, label: &str, timeout_ms: u64) {
+    let budget = fuel_for_timeout(timeout_ms);
+    report_fuel(label, budget.saturating_sub(store.get_fuel().unwrap_or(0)));
 }
 
 /// Get or initialize the shared wasmtime Engine for all tests.
@@ -1043,7 +1083,7 @@ pub fn run_wasm_with_full_options(
             tls_ctx: build_tls_ctx(tls_mocks),
         };
         let mut store = Store::new(engine, state);
-        limit_store(&mut store, DEFAULT_FUEL);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
 
         // `run` is exported through the `wasi:cli/run` instance; bind via
         // `Command` and drive the async export with `run_concurrent`.
@@ -1058,6 +1098,7 @@ pub fn run_wasm_with_full_options(
             Ok(Ok(result)) => (result.is_err(), None, String::new()),
             Ok(Err(e)) | Err(e) => classify_run_error(e),
         };
+        report_fuel_used(&mut store, "cli-world", DEFAULT_TIMEOUT_MS);
 
         let stdout = String::from_utf8(stdout_clone.contents().to_vec())?;
         let mut stderr = String::from_utf8(stderr_clone.contents().to_vec())?;
@@ -1161,17 +1202,13 @@ pub fn run_test_world(
             // (e.g., "test-tm2000-0-slow") and meter the guest with it.
             let timeout_ms =
                 parse_test_timeout_ms(test_name).unwrap_or(DEFAULT_TIMEOUT_MS);
-            let fuel = fuel_for_timeout(timeout_ms);
-            limit_store(&mut store, fuel);
+            limit_store(&mut store, timeout_ms);
 
             let instance = linker.instantiate_async(&mut store, &component).await?;
             let func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, test_name)?;
 
             let call_result = func.call_async(&mut store, ()).await;
-            report_fuel(
-                test_name,
-                fuel.saturating_sub(store.get_fuel().unwrap_or(0)),
-            );
+            report_fuel_used(&mut store, test_name, timeout_ms);
             match call_result {
                 Ok((Ok(()),)) => {
                     if is_todo {

@@ -12,6 +12,10 @@ pub global PARSE_EXP_MAX: i32 = 350;
 
 pub global PARSE_EXP_MIN: i32 = -351;
 
+global CM_EVENT_SUBTASK: i32 = 1;
+
+global CM_SUBTASK_STARTED: u32 = 1;
+
 global mut __modules_initialized: bool = false;
 
 pub struct UnpackResult {
@@ -11735,6 +11739,38 @@ pub fn "Fn<2,core:prelude/string.wado/String>^core:prelude/traits.wado/InspectAl
 
 pub fn "Fn<1,char>^core:prelude/traits.wado/InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
+fn cm_subtask_settled(event: WaitEvent) -> bool {
+    __assert_0: {
+        let __v0: i32 = event.code;
+        let __v1: i32 = core::prelude/types.wado::CM_EVENT_SUBTASK;
+        let __cond: bool = (__v0 == __v1);
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(180);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"cm_subtask_settled", used: 18 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed" at ", used: 4 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/types.wado", used: 23 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                Box<i32> { value: 271 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: event.code == CM_EVENT_SUBTASK\n", used: 43 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"event.code: ", used: 12 });
+                __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                Box<i32> { value: __v0 }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"CM_EVENT_SUBTASK: ", used: 18 });
+                __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
+                Box<i32> { value: __v1 }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
+                __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
+        }
+    }
+    return (event.payload > core::prelude/types.wado::CM_SUBTASK_STARTED);
+}
+
 pub fn "core:prelude/types.wado/WaitEvent^core:prelude/traits.wado/ReflectStruct::type_name"() -> String {
     return String { repr: packed"WaitEvent", used: 9 };
 }
@@ -11918,7 +11954,7 @@ fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:rt", used: 7 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 57 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 58 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed": ", used: 2 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"i32_clamp: lo must be <= hi", used: 27 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: lo <= hi\n", used: 21 });
@@ -11991,7 +12027,7 @@ fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
         core::rt::cm_waitable_join(&subtask as i32, &ws);
         loop {
             let event: WaitEvent = core::rt::cm_waitable_set_wait(&ws as i32);
-            if (event.payload == 2) {
+            if "core::prelude/types.wado::cm_subtask_settled"(event) {
                 break;
             }
         }

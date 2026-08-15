@@ -424,7 +424,7 @@ async fn run_http_request_async(
     };
     let mut store = Store::new(engine, state);
     // Set epoch deadline for timeout enforcement (HTTP tests use 5s default)
-    common::limit_store(&mut store, common::DEFAULT_FUEL);
+    common::limit_store(&mut store, common::DEFAULT_TIMEOUT_MS);
 
     let service = Service::instantiate_async(&mut store, &component, &linker).await?;
 
@@ -491,6 +491,7 @@ async fn run_http_request_async(
     })
     .await
     .map_err(|_| anyhow::anyhow!("HTTP handler timed out after {timeout_duration:?}"))??;
+    common::report_fuel_used(&mut store, "http-world", common::DEFAULT_TIMEOUT_MS);
 
     // Resource-cleanup check: every per-request wasi-http resource handle
     // (the incoming `Request`, `Fields`, `Response`, stream/future ends) must

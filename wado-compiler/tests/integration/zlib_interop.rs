@@ -67,9 +67,8 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
         };
         let mut store = Store::new(engine, state);
         // Set epoch deadline for timeout enforcement.
-        // zlib tests push large buffers through the guest, so raise the fuel
-        // budget well above a normal test's.
-        crate::common::limit_store(&mut store, crate::common::DEFAULT_FUEL * 10);
+        // zlib tests push large buffers through the guest.
+        crate::common::limit_store(&mut store, 30_000);
 
         // `run` is exported through the `wasi:cli/run` instance; bind via
         // `Command` and drive the async export with `run_concurrent`.
@@ -77,10 +76,11 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
             wasmtime_wasi::p3::bindings::Command::instantiate_async(&mut store, component, &linker)
                 .await
                 .expect("failed to instantiate");
-        match store
+        let run_result = store
             .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
-            .await
-        {
+            .await;
+        crate::common::report_fuel_used(&mut store, "zlib-interop", 30_000);
+        match run_result {
             Ok(Ok(result)) => {
                 if result.is_err() {
                     let stderr =
