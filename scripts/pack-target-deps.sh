@@ -65,6 +65,9 @@ for profile, root in profile_dirs(target_dir):
     for entry in os.listdir(deps):
         if not owned_by_workspace(entry):
             out.append(f"{profile}/deps/{entry}")
+    # Artifacts before the fingerprints that vouch for them: the restore
+    # extracts in this order, so an interrupted one leaves units cargo
+    # rebuilds rather than units it wrongly believes are fresh.
     for sub in ("build", ".fingerprint"):
         base = os.path.join(root, sub)
         for dirpath, _, files in os.walk(base):
@@ -101,6 +104,8 @@ json.dump(
 )
 PY
 
+# Last entry in the archive on purpose: the restore hook reads its presence in
+# target/ as "an extraction finished here", and skips on that.
 cp "$MANIFEST_OUT" "$TARGET_DIR/wado-cache-manifest.json"
 echo "wado-cache-manifest.json" >> "${WORK}/files.list"
 
