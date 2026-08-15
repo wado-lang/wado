@@ -2,7 +2,7 @@
 //! [`wado_lsp::FilesystemCompilerHost`] with CLI decorations: phase-tracking
 //! timestamps, log-level filtering, and stderr printing.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
@@ -185,7 +185,7 @@ impl FilesystemCompilerHost {
         self.inner.has_errors()
     }
 
-    pub fn base_path(&self) -> &PathBuf {
+    pub fn base_path(&self) -> &Path {
         self.inner.base_path()
     }
 

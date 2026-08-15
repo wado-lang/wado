@@ -64,7 +64,7 @@ pub fn prepare_invocations<H: CompilerHost>(
     host: &H,
 ) -> InvocationIndex {
     let entry_path = Path::new(entry_filename);
-    let Some(manifest_root) = find_manifest_root(entry_path) else {
+    let Some(manifest_root) = crate::workspace::nearest_manifest_dir(entry_path) else {
         return InvocationIndex::new();
     };
 
@@ -246,27 +246,6 @@ fn safe_join(manifest_root: &Path, rel: &str) -> Option<PathBuf> {
         return None;
     }
     Some(joined)
-}
-
-/// Walk up from `entry_path`'s directory looking for the nearest
-/// `wado.toml`. Returns the directory that contains it — the kiln
-/// pipeline's `manifest_root`.
-fn find_manifest_root(entry_path: &Path) -> Option<PathBuf> {
-    let mut dir = entry_path
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
-    if dir.as_os_str().is_empty() {
-        dir = PathBuf::from(".");
-    }
-    loop {
-        if dir.join("wado.toml").is_file() {
-            return Some(dir);
-        }
-        if !dir.pop() {
-            return None;
-        }
-    }
 }
 
 /// Compose the `kiln:` redirect URI used by [`InvocationIndex`].

@@ -107,7 +107,41 @@ pub struct Engine {
 /// `hover`, …) rather than the raw bundle.
 pub(crate) struct Snapshot {
     pub(crate) sem: Semantics,
+    /// Lex, parse, load, and analysis errors the host emitted while the pass
+    /// ran — a side effect of building `sem`.
     pub(crate) diagnostics: Vec<CompilerDiagnostic>,
+    /// Design-B semantic diagnostics (effect / stores / default-purity /
+    /// resource moves), derived on first request and cached.
+    ///
+    /// Deriving them walks the whole module graph again, and only
+    /// `Engine::diagnostics` reads them.
+    semantic: RefCell<Option<Rc<Vec<CompilerDiagnostic>>>>,
+}
+
+impl Snapshot {
+    fn semantic_diagnostics(&self) -> Rc<Vec<CompilerDiagnostic>> {
+        // Drop the borrow before computing — see `Engine::snapshot`.
+        if let Some(cached) = self.semantic.borrow().clone() {
+            return cached;
+        }
+        let checked =
+            wado_compiler::check_semantics(&self.sem, wado_compiler::hashmap::IndexSet::default());
+        let mut out: Vec<CompilerDiagnostic> = checked
+            .effects
+            .into_iter()
+            .map(Into::into)
+            .chain(checked.stores.into_iter().map(Into::into))
+            .chain(checked.purity.into_iter().map(Into::into))
+            .collect();
+        out.extend(
+            wado_compiler::check_resource_moves_semantic(&self.sem)
+                .into_iter()
+                .map(Into::into),
+        );
+        let computed = Rc::new(out);
+        *self.semantic.borrow_mut() = Some(Rc::clone(&computed));
+        computed
+    }
 }
 
 struct Document {
@@ -277,26 +311,11 @@ impl Engine {
         // InvocationIndex through without the LSP having to know the
         // loader's source-based entry point.
         let sem = build_semantics(&doc.text, &filename, invocations, &collecting_host).await;
-        // The Design-B semantic diagnostics (effect / stores / default-purity)
-        // are produced from `Semantics`; the LSP builds no TIR, so this is the
-        // only place they surface in the editor. `check_semantics` builds the
-        // shared effect index once and runs all three.
-        let mut diagnostics = collecting_host.take_diagnostics();
-        let semantic =
-            wado_compiler::check_semantics(&sem, wado_compiler::hashmap::IndexSet::default());
-        for error in semantic.effects {
-            diagnostics.push(error.into());
-        }
-        for error in semantic.stores {
-            diagnostics.push(error.into());
-        }
-        for error in semantic.purity {
-            diagnostics.push(error.into());
-        }
-        for error in wado_compiler::check_resource_moves_semantic(&sem) {
-            diagnostics.push(error.into());
-        }
-        let snapshot = Rc::new(Snapshot { sem, diagnostics });
+        let snapshot = Rc::new(Snapshot {
+            sem,
+            diagnostics: collecting_host.take_diagnostics(),
+            semantic: RefCell::new(None),
+        });
         *doc.snapshot.borrow_mut() = Some(snapshot.clone());
         Some(snapshot)
     }
@@ -321,12 +340,7 @@ impl Engine {
         let Some(doc_text) = self.documents.get(uri).map(|d| d.text.as_str()) else {
             return default;
         };
-        let ctx = QueryContext {
-            sem: &snapshot.sem,
-            source: doc_text,
-            uri,
-            encoding: self.position_encoding,
-        };
+        let ctx = QueryContext::new(&snapshot.sem, doc_text, uri, self.position_encoding);
         f(&ctx)
     }
 
@@ -385,12 +399,12 @@ impl Engine {
     /// Build a [`QueryContext`] over `uri`'s cached snapshot. The caller owns
     /// the `Rc<Snapshot>` so the borrow outlives the context.
     fn query_ctx_over<'a>(&'a self, snapshot: &'a Snapshot, uri: &'a str) -> QueryContext<'a> {
-        QueryContext {
-            sem: &snapshot.sem,
-            source: self.documents.get(uri).map_or("", |d| d.text.as_str()),
+        QueryContext::new(
+            &snapshot.sem,
+            self.documents.get(uri).map_or("", |d| d.text.as_str()),
             uri,
-            encoding: self.position_encoding,
-        }
+            self.position_encoding,
+        )
     }
 
     /// Resolve a symbol notation to a definition location. `public_only` only
@@ -417,7 +431,7 @@ impl Engine {
         .ok_or(SymbolQueryError::NoLocation)?;
         Ok(DefinitionResult {
             uri: def_uri,
-            range: location::span_to_range(&span, None, self.position_encoding),
+            range: text::span_to_range(&span, None, self.position_encoding),
         })
     }
 
@@ -615,40 +629,47 @@ impl Engine {
     ///
     /// Reads from the snapshot cache populated by [`Engine::snapshot`].
     /// The semantics pipeline runs at most once per document version
-    /// regardless of which queries the client issued first. Each
-    /// diagnostic's column is re-encoded against the source whose file
-    /// matches its
-    /// `span.file` — cross-file diagnostics keep the compiler's codepoint
-    /// columns, the entry document is re-expressed in the negotiated
-    /// position encoding.
+    /// regardless of which queries the client issued first.
+    ///
+    /// Only diagnostics belonging to `uri` are returned. LSP publishes per
+    /// document, so one whose `span.file` names an imported module would draw
+    /// its squiggle at that file's line and column inside the open one; the
+    /// imported file reports its own errors when the client opens it. A
+    /// span-less diagnostic is about the request itself and is always kept.
+    ///
+    /// Kept columns are re-encoded in the negotiated position encoding.
     ///
     /// Unused / dead-code warnings are applied here (not baked into the
-    /// snapshot, so [`Engine::set_unused_diagnostics`] stays live) and are
-    /// kept only for the entry document.
+    /// snapshot, so [`Engine::set_unused_diagnostics`] stays live).
     pub async fn diagnostics<H: CompilerHost>(&self, uri: &str, host: &H) -> Vec<Diagnostic> {
         let Some(snapshot) = self.snapshot(uri, host).await else {
             return Vec::new();
         };
         let filename = Uri::new(uri).to_filename();
         let encoding = self.position_encoding;
-        let entry_text = self.documents.get(uri).map(|d| d.text.as_str());
-        let reencode = |d: &CompilerDiagnostic| {
-            // Re-encode against the entry text only when the diagnostic points
-            // at it; imported-module spans keep raw codepoint columns.
-            let source = d
-                .span
-                .as_ref()
-                .filter(|s| s.file == filename)
-                .and(entry_text);
-            diagnostics::from_compiler_diagnostic(d, uri, source, encoding)
+        let lines = self
+            .documents
+            .get(uri)
+            .map(|d| text::LineIndex::new(&d.text));
+        let convert = |d: &CompilerDiagnostic| {
+            let span = d.span.as_ref();
+            if span.is_some_and(|s| s.file != filename) {
+                return None;
+            }
+            diagnostics::from_compiler_diagnostic(d, lines.as_ref(), encoding)
         };
-        let mut out: Vec<Diagnostic> = snapshot.diagnostics.iter().filter_map(&reencode).collect();
+        let semantic = snapshot.semantic_diagnostics();
+        let mut out: Vec<Diagnostic> = snapshot
+            .diagnostics
+            .iter()
+            .chain(semantic.iter())
+            .filter_map(&convert)
+            .collect();
         if self.unused_diagnostics {
             out.extend(
                 wado_compiler::unused_diagnostics(&snapshot.sem, false)
                     .iter()
-                    .filter(|d| d.span.as_ref().is_some_and(|s| s.file == filename))
-                    .filter_map(&reencode),
+                    .filter_map(&convert),
             );
         }
         out

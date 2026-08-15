@@ -8,10 +8,7 @@
 
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::symbol::Symbol;
-use wado_compiler::token::Span;
 
-use crate::diagnostics::Range;
-use crate::text::PositionEncoding;
 use crate::uri::Uri;
 
 /// Resolve the URI of a module relative to the requesting document's URI.
@@ -46,11 +43,15 @@ pub(crate) fn module_uri(
     }
 }
 
+/// Wrap an absolute path as a `file:` URI, percent-encoding on the way out —
+/// the paths reaching here are decoded, from `Uri::to_filename` or from the
+/// compiler. A string that is already a URI is left alone, as is a relative
+/// path or a non-`file:` scheme.
 fn filename_to_uri(filename: &str) -> String {
     if filename.starts_with("file://") {
         filename.to_string()
     } else if filename.starts_with('/') {
-        format!("file://{filename}")
+        format!("file://{}", crate::uri::percent_encode_path(filename))
     } else {
         filename.to_string()
     }
@@ -58,9 +59,8 @@ fn filename_to_uri(filename: &str) -> String {
 
 fn resolve_local_uri(module_path: &str, request_uri: &str) -> String {
     if module_path.starts_with('/') || module_path.starts_with("file://") {
-        return filename_to_uri(module_path);
+        return filename_to_uri(&normalize_dot_segments(module_path));
     }
-    let normalized = module_path.strip_prefix("./").unwrap_or(module_path);
     // String-based parent extraction. `Uri::to_filename` is a passthrough
     // for non-`file:` schemes, so for `kiln:/abs/path/foo.wado` we get
     // `kiln:/abs/path/foo.wado` back and `rsplit_once('/')` yields the
@@ -68,7 +68,7 @@ fn resolve_local_uri(module_path: &str, request_uri: &str) -> String {
     // path component (`core:cli`, `wasi:filesystem/types.wado` *with*
     // a path, `untitled:1`), `rsplit_once` either returns the right
     // thing or yields an empty `base_dir` and we fall back to the bare
-    // normalized path. Matches the pre-refactor string-based behaviour.
+    // module path.
     let request_path = Uri::new(request_uri).to_filename();
     let base_dir = request_path
         .rsplit_once('/')
@@ -76,14 +76,65 @@ fn resolve_local_uri(module_path: &str, request_uri: &str) -> String {
         .unwrap_or("");
     // When the request path is rooted at "/" (e.g. "/test.wado"), rsplit_once
     // yields an empty base_dir, so preserve the leading slash explicitly.
-    if base_dir.is_empty() {
+    let joined = if base_dir.is_empty() {
         if request_path.starts_with('/') {
-            filename_to_uri(&format!("/{normalized}"))
+            format!("/{module_path}")
         } else {
-            filename_to_uri(normalized)
+            module_path.to_string()
         }
     } else {
-        filename_to_uri(&format!("{base_dir}/{normalized}"))
+        format!("{base_dir}/{module_path}")
+    };
+    filename_to_uri(&normalize_dot_segments(&joined))
+}
+
+/// Collapse `.` and `..` segments lexically.
+///
+/// Clients key open documents by URI string, so `file:///a/b/../lib/x.wado`
+/// names a different document than the canonical `file:///a/lib/x.wado` the
+/// same file gets when opened any other way.
+///
+/// Lexical only — symlinks are not resolved, the wasm target has no
+/// filesystem. A `..` that escapes its own root is kept rather than dropped,
+/// which would silently retarget the URI.
+fn normalize_dot_segments(path: &str) -> String {
+    if !path.contains("./") && !path.ends_with("/.") && !path.ends_with("/..") {
+        return path.to_string();
+    }
+    let (prefix, rest) = split_scheme(path);
+    let rooted = rest.starts_with('/');
+    let mut out: Vec<&str> = Vec::new();
+    for segment in rest.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." if matches!(out.last(), Some(&last) if last != "..") => {
+                out.pop();
+            }
+            // An unmatched `..` is only droppable when the path is rooted:
+            // `/..` is `/`, but `../x` names a real sibling directory.
+            ".." if rooted => {}
+            _ => out.push(segment),
+        }
+    }
+    let body = out.join("/");
+    if rooted {
+        format!("{prefix}/{body}")
+    } else {
+        format!("{prefix}{body}")
+    }
+}
+
+/// Split `path` into its scheme prefix and the body `..` may rewrite, so a
+/// `..` can never eat the scheme. A bare filesystem path has no prefix.
+fn split_scheme(path: &str) -> (&str, &str) {
+    if let Some(rest) = path.strip_prefix("file://") {
+        return ("file://", rest);
+    }
+    match path.find(':') {
+        // Only a real scheme, never a stray colon inside a filename: the
+        // schemes reaching here are the compiler's own.
+        Some(colon) if colon > 0 && !path[..colon].contains('/') => path.split_at(colon + 1),
+        _ => ("", path),
     }
 }
 
@@ -96,33 +147,14 @@ pub(crate) fn symbol_uri(
     module_uri(entry, symbol.module_source(), request_uri)
 }
 
-/// Convert a compiler `Span` (1-based byte column) to an LSP `Range` in
-/// the negotiated `encoding`. Pass `Some(source)` for spans inside the
-/// request document so non-ASCII columns survive the round-trip; pass
-/// `None` only when the source text is not available for the span's
-/// module (cross-file references), and accept the ASCII-only correctness
-/// implied by that.
-pub(crate) fn span_to_range(
-    span: &Span,
-    source: Option<&str>,
-    encoding: PositionEncoding,
-) -> Range {
-    crate::text::span_to_range(span, source, encoding)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn relative_import_off_kiln_uri_preserves_parent_directory() {
-        // Regression test for the Layer-2 refactor: the typed-Uri
-        // rewrite of `resolve_local_uri` short-circuited every
-        // non-`file:` scheme to `filename_to_uri(normalized)`,
-        // dropping the parent directory of kiln-redirected modules.
-        // For `kiln:/abs/path/foo.wado` importing `./sibling.wado` the
-        // result must remain `kiln:/abs/path/sibling.wado`, not the
-        // unanchored `sibling.wado`.
+        // A kiln-redirected module's siblings anchor under its directory,
+        // not at the scheme root.
         let resolved = resolve_local_uri("./sibling.wado", "kiln:/abs/path/foo.wado");
         assert_eq!(resolved, "kiln:/abs/path/sibling.wado");
     }
@@ -145,6 +177,87 @@ mod tests {
     #[test]
     fn absolute_module_path_is_passed_through() {
         let resolved = resolve_local_uri("/abs/x.wado", "file:///home/user/foo.wado");
+        assert_eq!(resolved, "file:///abs/x.wado");
+    }
+
+    #[test]
+    fn parent_relative_import_collapses_dot_dot() {
+        let resolved = resolve_local_uri("../lib/x.wado", "file:///home/user/foo.wado");
+        assert_eq!(resolved, "file:///home/lib/x.wado");
+    }
+
+    #[test]
+    fn repeated_parent_segments_collapse() {
+        let resolved = resolve_local_uri("../../lib/x.wado", "file:///a/b/c/foo.wado");
+        assert_eq!(resolved, "file:///a/lib/x.wado");
+    }
+
+    #[test]
+    fn interior_dot_segments_collapse() {
+        let resolved = resolve_local_uri("./sub/./x.wado", "file:///home/user/foo.wado");
+        assert_eq!(resolved, "file:///home/user/sub/x.wado");
+    }
+
+    #[test]
+    fn parent_escape_of_root_is_clamped() {
+        // `/..` is `/`.
+        let resolved = resolve_local_uri("../../../x.wado", "file:///a/foo.wado");
+        assert_eq!(resolved, "file:///x.wado");
+    }
+
+    #[test]
+    fn parent_relative_import_off_kiln_uri_collapses_too() {
+        let resolved = resolve_local_uri("../gen/x.wado", "kiln:/abs/path/foo.wado");
+        assert_eq!(resolved, "kiln:/abs/gen/x.wado");
+    }
+
+    #[test]
+    fn sibling_of_an_encoded_request_uri_stays_encoded() {
+        // The base directory we join against is decoded, so the join has to
+        // be re-encoded on the way back out.
+        let resolved = resolve_local_uri("./other.wado", "file:///home/user/my%20project/foo.wado");
+        assert_eq!(resolved, "file:///home/user/my%20project/other.wado");
+    }
+
+    #[test]
+    fn non_ascii_path_segments_are_re_encoded() {
+        let resolved = resolve_local_uri("./types.wado", "file:///home/%E3%81%82/foo.wado");
+        assert_eq!(resolved, "file:///home/%E3%81%82/types.wado");
+    }
+
+    #[test]
+    fn a_literal_percent_survives_the_round_trip() {
+        // A bare `%` would be decoded a second time by the client.
+        let resolved = resolve_local_uri("./x.wado", "file:///home/100%25/foo.wado");
+        assert_eq!(resolved, "file:///home/100%25/x.wado");
+        assert_eq!(
+            Uri::new(&resolved).to_filename(),
+            "/home/100%/x.wado",
+            "the emitted URI must decode back to the real path",
+        );
+    }
+
+    #[test]
+    fn path_separators_and_sub_delims_are_not_escaped() {
+        let resolved = resolve_local_uri("./a+b,c.wado", "file:///home/user/foo.wado");
+        assert_eq!(resolved, "file:///home/user/a+b,c.wado");
+    }
+
+    #[test]
+    fn parent_segments_never_consume_the_scheme() {
+        let resolved = resolve_local_uri("../../../x.wado", "kiln:/a/foo.wado");
+        assert_eq!(resolved, "kiln:/x.wado");
+    }
+
+    #[test]
+    fn colon_in_a_filename_is_not_mistaken_for_a_scheme() {
+        let resolved = resolve_local_uri("../x.wado", "file:///a/we:ird/foo.wado");
+        assert_eq!(resolved, "file:///a/x.wado");
+    }
+
+    #[test]
+    fn absolute_module_path_with_dot_dot_is_normalized() {
+        let resolved = resolve_local_uri("/abs/sub/../x.wado", "file:///home/user/foo.wado");
         assert_eq!(resolved, "file:///abs/x.wado");
     }
 }

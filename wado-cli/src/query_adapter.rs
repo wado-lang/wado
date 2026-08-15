@@ -44,7 +44,9 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
     )
     .await
     .map_err(CliExit::error)?;
-    let uri = format!("file://{}", canonical.display());
+    let uri = wado_lsp::Uri::from_file_path(&canonical)
+        .as_str()
+        .to_string();
 
     let mut engine = wado_lsp::Engine::new();
     match run_generators_for(&canonical, &host, manifest_pair).await {
@@ -217,7 +219,9 @@ async fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
     )
     .await
     .map_err(CliExit::error)?;
-    let uri = format!("file://{}", entry_path.display());
+    let uri = wado_lsp::Uri::from_file_path(&entry_path)
+        .as_str()
+        .to_string();
     Ok(SymbolEnv {
         parsed,
         host,
@@ -355,7 +359,9 @@ fn imports_with_target(target: &str, extra: &[String]) -> Vec<String> {
 
 /// Whether `spec` analyzes on its own (imported into a throwaway entry).
 async fn file_analyzes(base_dir: &Path, host: &FilesystemCompilerHost, spec: &str) -> bool {
-    let uri = format!("file://{}", base_dir.join("__wado_probe__.wado").display());
+    let uri = wado_lsp::Uri::from_file_path(&base_dir.join("__wado_probe__.wado"))
+        .as_str()
+        .to_string();
     let mut engine = wado_lsp::Engine::new();
     engine.open_document(&uri, format!("use __p from \"{spec}\";\n"));
     engine.analyzes(&uri, host).await
@@ -531,7 +537,7 @@ pub async fn run_document_highlight_by_symbol(
             if json_output {
                 print_highlights_json(&highlights);
             } else {
-                print_highlights_text(uri_to_display(&def_uri), &highlights);
+                print_highlights_text(&uri_to_display(&def_uri), &highlights);
             }
         },
         || {
@@ -698,8 +704,10 @@ fn print_diagnostics_text(filename: &str, diagnostics: &[wado_lsp::Diagnostic]) 
     }
 }
 
-fn uri_to_display(uri: &str) -> &str {
-    uri.strip_prefix("file://").unwrap_or(uri)
+/// The path a URI names, for human-readable output. Decodes percent-escapes
+/// so the printed path matches what the user would type, not the wire form.
+fn uri_to_display(uri: &str) -> String {
+    wado_lsp::Uri::new(uri).to_filename()
 }
 
 fn print_references_json(refs: &[ReferenceLocation]) {

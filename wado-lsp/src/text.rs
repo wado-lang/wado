@@ -8,19 +8,8 @@
 //! scalar value, not per byte and not per UTF-16 code unit). The
 //! conversion lives here so every LSP query reaches the same compiler
 //! `(line, col)` for a given cursor regardless of which code-unit space
-//! the client speaks.
-//!
-//! Previously each query did
-//!
-//! ```ignore
-//! let line = position.line as usize + 1;
-//! let col = position.character as usize + 1;
-//! ```
-//!
-//! which silently assumed both 1-based-ness and ASCII. Non-ASCII source
-//! (multi-byte characters, multi-code-unit grapheme clusters) drifted
-//! the column by an unbounded amount, breaking hover / definition /
-//! references at every cursor past an emoji or a CJK character.
+//! the client speaks. Treating the two spaces as interchangeable drifts the
+//! column by an unbounded amount past any non-ASCII character.
 //!
 //! See LSP 3.18 §general.positionEncodings.
 
@@ -143,22 +132,47 @@ pub fn span_to_range(span: &Span, source: Option<&str>, encoding: PositionEncodi
     let end_line = span.end_line.saturating_sub(1) as u32;
     let end_col_codepoints = span.end_column.saturating_sub(1) as u32;
 
-    let (start_char, end_char) = match source {
-        Some(src) => (
-            codepoint_offset_to_character(src, start_line, start_col_codepoints, encoding),
-            codepoint_offset_to_character(src, end_line, end_col_codepoints, encoding),
-        ),
-        None => (start_col_codepoints, end_col_codepoints),
-    };
+    match source {
+        Some(src) => span_to_range_indexed(span, &LineIndex::new(src), encoding),
+        None => Range {
+            start: Position {
+                line: start_line,
+                character: start_col_codepoints,
+            },
+            end: Position {
+                line: end_line,
+                character: end_col_codepoints,
+            },
+        },
+    }
+}
 
+/// [`span_to_range`] against an already-built line table, for callers
+/// converting more than one span per document.
+#[must_use]
+pub(crate) fn span_to_range_indexed(
+    span: &Span,
+    lines: &LineIndex<'_>,
+    encoding: PositionEncoding,
+) -> Range {
+    let start_line = span.line.saturating_sub(1) as u32;
+    let end_line = span.end_line.saturating_sub(1) as u32;
     Range {
         start: Position {
             line: start_line,
-            character: start_char,
+            character: lines.to_character(
+                start_line,
+                span.column.saturating_sub(1) as u32,
+                encoding,
+            ),
         },
         end: Position {
             line: end_line,
-            character: end_char,
+            character: lines.to_character(
+                end_line,
+                span.end_column.saturating_sub(1) as u32,
+                encoding,
+            ),
         },
     }
 }
@@ -197,24 +211,45 @@ fn character_to_codepoint_offset(line: &str, character: u32, encoding: PositionE
     }
 }
 
-/// Translate a 0-based codepoint offset at `line` (of `source`) into a
-/// 0-based `character` in `encoding` code units. Looks the line up in
-/// `source` on each call; callers that already have the line slice on
-/// hand (e.g. a delta-encoding loop) should use
-/// [`codepoints_to_code_units`] directly to skip the lookup.
-#[must_use]
-pub(crate) fn codepoint_offset_to_character(
-    source: &str,
-    line: u32,
-    codepoint_col: u32,
-    encoding: PositionEncoding,
-) -> u32 {
-    let Some(line_text) = source.split_inclusive('\n').nth(line as usize) else {
-        return codepoint_col;
-    };
-    let line_content = line_without_terminator(line_text);
-    let line_codepoints = line_content.chars().count() as u32;
-    codepoints_to_code_units(line_content, line_codepoints, codepoint_col, encoding)
+/// A document's lines, each paired with its codepoint count.
+///
+/// Every codepoint→code-unit conversion needs one line's text. Looking it up
+/// with `split_inclusive('\n').nth(line)` rescans from the top, so a caller
+/// converting once per diagnostic or hint pays `O(items × document length)`.
+/// Built once, each conversion is a slice index.
+pub(crate) struct LineIndex<'a> {
+    lines: Vec<(&'a str, u32)>,
+}
+
+impl<'a> LineIndex<'a> {
+    #[must_use]
+    pub(crate) fn new(source: &'a str) -> Self {
+        Self {
+            lines: source
+                .split_inclusive('\n')
+                .map(|line| {
+                    let text = line_without_terminator(line);
+                    (text, text.chars().count() as u32)
+                })
+                .collect(),
+        }
+    }
+
+    /// Translate a 0-based codepoint offset at `line` into a 0-based
+    /// `character` in `encoding` code units. A line past the end of the
+    /// document passes the codepoint offset through unchanged.
+    #[must_use]
+    pub(crate) fn to_character(
+        &self,
+        line: u32,
+        codepoint_col: u32,
+        encoding: PositionEncoding,
+    ) -> u32 {
+        let Some(&(text, codepoints)) = self.lines.get(line as usize) else {
+            return codepoint_col;
+        };
+        codepoints_to_code_units(text, codepoints, codepoint_col, encoding)
+    }
 }
 
 /// Codepoint offset → LSP `character` (code-unit count) inside a single
@@ -258,11 +293,9 @@ mod tests {
 
     #[test]
     fn past_eof_returns_out_of_range_sentinel() {
-        // A stale cursor (line beyond source) used to fall back to
-        // (1, 1) — a valid in-range position that silently bound LSP
-        // queries to the first AST node. The sentinel must be a line
-        // no real `Span` can have, so the compiler's `ast_id_at`
-        // returns `None` and the LSP query bails cleanly.
+        // The sentinel must be a line no real `Span` can have, so
+        // `ast_id_at` returns `None` and the query bails. An in-range
+        // fallback like (1, 1) would bind the cursor to the first AST node.
         let src = "fn f() {}\nfn g() {}\n";
         let (line, col) = lsp_position_to_line_col(src, pos(99, 0), PositionEncoding::Utf16);
         assert_eq!(
