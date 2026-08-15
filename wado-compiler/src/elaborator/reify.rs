@@ -1385,10 +1385,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // concrete functions. Recorded AST-side by the elaborator.
         let concrete_owner: Option<FqTypeName> = facts.concrete_owner.clone();
 
-        let trait_decl_name = super::trait_env::get_type_name_static(trait_ast);
-        let Some(trait_sig) = super::trait_query::trait_sig_by_name_with(
-            &trait_decl_name,
-            &self.current_module_source,
+        // The impl header names the trait at a site of its own, which the walk
+        // answered for in the module that wrote the header.
+        let Some(trait_decl) = crate::resolve::head_site(trait_ast)
+            .and_then(|site| self.tysys.resolutions.declared(site))
+        else {
+            return Vec::new();
+        };
+        let Some(trait_sig) = super::trait_query::trait_sig_of_with(
+            trait_decl,
             &self.tysys.resolutions,
             &self.tysys.trait_env,
             &self.tysys.signatures,

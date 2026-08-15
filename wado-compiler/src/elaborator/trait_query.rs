@@ -175,22 +175,20 @@ fn mentions_self(ty: &ast::Type) -> bool {
     }
 }
 
-/// The recorded declaration facts of the trait named `trait_name`, for a
-/// caller holding the inputs rather than an `Elaborator` — reify's
-/// default-method pass. Resolves the name through the declaration index and
-/// reads the digest, never the declaring module's AST.
-pub(crate) fn trait_sig_by_name_with<'a>(
-    trait_name: &str,
-    current_module_source: &ModuleSource,
+/// The recorded declaration facts of the trait `decl` declares, for a caller
+/// holding the inputs rather than an `Elaborator` — reify's default-method
+/// pass. Reads the digest the decl pass recorded, never the declaring module's
+/// AST, and answers `None` for a declaration that is no trait.
+pub(crate) fn trait_sig_of_with<'a>(
+    decl: crate::defs::DefId,
     resolutions: &crate::resolve::Resolutions,
     trait_env: &super::trait_env::TraitEnv,
     signatures: &'a super::sig::Signatures,
 ) -> Option<&'a super::sig::TraitSig> {
-    let canonical_key = resolutions.declaration_named(current_module_source, trait_name)?;
-    if !trait_env.decl_index.contains(&canonical_key) {
+    if !trait_env.decl_index.contains(&decl) {
         return None;
     }
-    signatures.trait_sig(resolutions.defs().ast_id(canonical_key))
+    signatures.trait_sig(resolutions.defs().ast_id(decl))
 }
 
 impl TypeSystem {
@@ -334,16 +332,11 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The recorded declaration facts of the trait named `trait_name`.
-    ///
-    /// Resolves the name the same way [`Self::find_trait_decl_methods`]
-    /// does — canonicalise, then consult the declaration index — but reaches
-    /// the digest the decl pass recorded rather than the declaring module's
-    /// AST.
+    /// [`Self::trait_sig_of`] for a caller still holding a trait's spelling.
     pub(super) fn trait_sig_by_name(&self, trait_name: &str) -> Option<&TraitSig> {
-        trait_sig_by_name_with(
-            trait_name,
-            &self.current_module_source,
+        let decl = self.canonical_decl_key(trait_name)?;
+        trait_sig_of_with(
+            decl,
             &self.tysys.resolutions,
             &self.tysys.trait_env,
             &self.tysys.signatures,
