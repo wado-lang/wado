@@ -239,7 +239,6 @@ mod tests {
 
     #[test]
     fn path_separators_and_sub_delims_are_not_escaped() {
-        // Over-encoding is as wrong as under-encoding.
         let resolved = resolve_local_uri("./a+b,c.wado", "file:///home/user/foo.wado");
         assert_eq!(resolved, "file:///home/user/a+b,c.wado");
     }

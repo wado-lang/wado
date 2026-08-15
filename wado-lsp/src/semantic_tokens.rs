@@ -167,7 +167,6 @@ pub fn delta_encode(
     source: &str,
     encoding: PositionEncoding,
 ) -> Vec<u32> {
-    // Two conversions per token, so the line table is built up front.
     let lines = LineIndex::new(source);
 
     let mut data = Vec::with_capacity(tokens.len() * 5);
@@ -996,10 +995,7 @@ mod tests {
 
     #[test]
     fn multi_line_tokens_are_skipped() {
-        // LSP semantic tokens MUST NOT span lines — a partially encoded
-        // one renders worse than none. The fixture crosses a newline with a
-        // `/* */` block comment: no COMMENT token may be produced, and the
-        // single-line tokens around it must still appear.
+        // A partially encoded token renders worse than none.
         let src = "fn f() {\n    /* multi\n    line */\n    let _ = 1;\n}\n";
         let tokens = compute(src, None);
         // "Must not span lines", expressed against a start and a length.

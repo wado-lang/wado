@@ -124,7 +124,6 @@ impl Snapshot {
         if let Some(cached) = self.semantic.borrow().clone() {
             return cached;
         }
-        // One shared effect index drives all three checks.
         let checked =
             wado_compiler::check_semantics(&self.sem, wado_compiler::hashmap::IndexSet::default());
         let mut out: Vec<CompilerDiagnostic> = checked
@@ -312,8 +311,6 @@ impl Engine {
         // InvocationIndex through without the LSP having to know the
         // loader's source-based entry point.
         let sem = build_semantics(&doc.text, &filename, invocations, &collecting_host).await;
-        // Semantic diagnostics are derived lazily; see
-        // `Snapshot::semantic_diagnostics`.
         let snapshot = Rc::new(Snapshot {
             sem,
             diagnostics: collecting_host.take_diagnostics(),
@@ -650,7 +647,6 @@ impl Engine {
         };
         let filename = Uri::new(uri).to_filename();
         let encoding = self.position_encoding;
-        // One line table for the batch.
         let lines = self
             .documents
             .get(uri)

@@ -34,9 +34,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<LspOptions, CliExit> {
 }
 
 pub async fn run(_opts: LspOptions) -> Result<(), CliExit> {
-    // The server owns the exit code (LSP 3.18 §exit: `exit` without a prior
-    // `shutdown` is an error). Route it through the CLI's exit path rather
-    // than terminating from inside the message loop.
     match wado_lsp::server::run_stdio().await {
         0 => Ok(()),
         code => Err(CliExit::silent_failure(code)),

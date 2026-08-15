@@ -205,7 +205,6 @@ pub fn dependency_index_from(
 ) -> DependencyIndex {
     let mut index = DependencyIndex::default();
     let base_abs = crate::workspace::absolutize(base);
-    // One parse of `wado.lock` for both dependency kinds that consult it.
     let lock = read_lock(manifest_dir);
     let git_pins = lock.clone().map(git_pins).unwrap_or_default();
     let registry_pins = lock.as_ref().map(registry_pins).unwrap_or_default();

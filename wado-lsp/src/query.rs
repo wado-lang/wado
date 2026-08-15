@@ -9,8 +9,7 @@
 //! - the document URI (for relative-import URI resolution),
 //! - the negotiated [`PositionEncoding`],
 //! - a way to land an LSP [`Position`] on a compiler [`Cursor`],
-//! - a [`LineIndex`] over the document, so the many spans one query
-//!   answers share a single scan.
+//! - a [`LineIndex`] shared by every span the query answers.
 //!
 //! [`QueryContext`] bundles them so feature functions take a single
 //! argument instead of threading the tuple by hand at every call site.
@@ -41,8 +40,7 @@ pub(crate) struct QueryContext<'a> {
     pub(crate) source: &'a str,
     pub(crate) uri: &'a str,
     pub(crate) encoding: PositionEncoding,
-    /// Line table over `source`, built once per query — a query answers many
-    /// spans and each converts two columns.
+    /// Line table over `source`, built once per query.
     lines: LineIndex<'a>,
 }
 
@@ -117,10 +115,8 @@ impl<'a> QueryContext<'a> {
         self.sem.cursor_at(self.entry(), line, col)
     }
 
-    /// Whether node `id` lives in the entry document, carrying its source
-    /// when so. `None` for spans in other modules: their text is not
-    /// available here, so [`Self::range_of`] emits the compiler's codepoint
-    /// columns verbatim (correct under UTF-32 / ASCII).
+    /// The entry document's source when node `id` lives in it, `None`
+    /// otherwise — no other module's text is available here.
     pub fn source_for_id(&self, id: AstId) -> Option<&'a str> {
         (self.sem.module_of_id(id) == Some(self.entry())).then_some(self.source)
     }

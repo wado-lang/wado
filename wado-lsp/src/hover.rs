@@ -168,9 +168,8 @@ fn render_local_binding(sem: &Semantics, def_id: AstId, name: &str) -> Option<St
 
 /// Locates the AST node that binds `target` and renders its declaration.
 ///
-/// Traversal is [`AstVisitor`]'s rather than hand-rolled, so every shape that
-/// can hold a binding is reached by construction — a `let` inside a closure
-/// passed as a call argument as readily as one at the top of a function body.
+/// Traversal is [`AstVisitor`]'s, so every shape that can hold a binding is
+/// reached by construction.
 ///
 /// Only the shapes carrying extra syntax are intercepted: `Stmt::Let` (for
 /// `mut` and the type annotation), function and closure parameters. Every
@@ -634,7 +633,6 @@ mod tests {
 
     #[test]
     fn hover_on_local_inside_a_closure_call_argument() {
-        // A binding reachable only through a call argument.
         futures::executor::block_on(async {
             let source = concat!(
                 "fn apply(f: fn(i32) -> i32) -> i32 { return f(1); }\n",
@@ -652,8 +650,6 @@ mod tests {
 
     #[test]
     fn hover_on_local_inside_a_nested_call_argument_block() {
-        // One shape further out: a labeled block in a binary operand in a
-        // call argument.
         futures::executor::block_on(async {
             let source = concat!(
                 "fn take(v: i32) -> i32 { return v; }\n",
@@ -670,7 +666,6 @@ mod tests {
 
     #[test]
     fn hover_on_local_inside_a_test_block_closure() {
-        // A `test` block body, through a closure.
         futures::executor::block_on(async {
             let source = concat!(
                 "fn apply(f: fn(i32) -> i32) -> i32 { return f(1); }\n",

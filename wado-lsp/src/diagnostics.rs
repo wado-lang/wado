@@ -73,7 +73,6 @@ fn span_to_range(
     lines: Option<&LineIndex>,
     encoding: PositionEncoding,
 ) -> Range {
-    // Compiler uses 1-based line/codepoint column; LSP uses 0-based.
     let start_line = span.line.saturating_sub(1) as u32;
     let end_line = span
         .end_line
