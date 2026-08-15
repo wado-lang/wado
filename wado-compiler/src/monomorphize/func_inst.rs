@@ -451,14 +451,12 @@ impl TirRefVisitor for LocalCollector {
     }
 }
 
-/// Every local index a `let` or pattern binding introduces inside `expr`.
 fn locals_defined_in_expr(expr: &TirExpr) -> Vec<u32> {
     let mut collector = LocalCollector { locals: Vec::new() };
     collector.visit_expr(expr);
     collector.locals
 }
 
-/// Every local index a `let` or pattern binding introduces inside `block`.
 fn locals_defined_in_block(block: &TirBlock) -> Vec<u32> {
     let mut collector = LocalCollector { locals: Vec::new() };
     collector.visit_block(block);
@@ -512,8 +510,6 @@ impl TirRefVisitor for LocalTypeFinder {
     }
 }
 
-/// The declared type of local `local_idx`, from the `let` or pattern binding
-/// that introduces it inside `expr`.
 fn local_type_in_expr(expr: &TirExpr, local_idx: u32) -> Option<TypeId> {
     let mut finder = LocalTypeFinder {
         target: local_idx,
@@ -523,8 +519,6 @@ fn local_type_in_expr(expr: &TirExpr, local_idx: u32) -> Option<TypeId> {
     finder.found
 }
 
-/// The declared type of local `local_idx`, from the `let` or pattern binding
-/// that introduces it inside `block`.
 fn local_type_in_block(block: &TirBlock, local_idx: u32) -> Option<TypeId> {
     let mut finder = LocalTypeFinder {
         target: local_idx,
@@ -534,13 +528,11 @@ fn local_type_in_block(block: &TirBlock, local_idx: u32) -> Option<TypeId> {
     finder.found
 }
 
-/// Whether `expr` denotes local `local_index` itself, or something projected
-/// out of it.
+/// Whether `expr` denotes local `local_index`, or a projection out of it.
 ///
-/// Deliberately narrower than [`expr_reads_local`]: only these shapes make
-/// `&expr` a reference *to the binding*, which is what lets a nested unroll
-/// pin its receiver type. An expression that merely reads the binding — a
-/// call argument, an operand of `+` — yields something else entirely.
+/// Narrower than [`expr_reads_local`] on purpose: only these shapes make
+/// `&expr` a reference *to the binding*, which is what pins a nested unroll's
+/// receiver type. Merely reading the binding yields something else.
 fn expr_projects_local(expr: &TirExpr, local_index: u32) -> bool {
     match &expr.kind {
         TirExprKind::Local { index, .. } => *index == local_index,
@@ -581,12 +573,11 @@ fn expr_reads_local(expr: &TirExpr, index: u32) -> bool {
 
 /// Give each element of an expanded `TypePackExpansion` its own locals.
 ///
-/// Expanding `[..T::method()?]` clones the call once per pack member, so every
-/// clone carries the same local indices (the `?` operator's `__qm_v` /
-/// `__qm_e`) under a different element type. The first element keeps the
-/// template's slots, retyped from its own bindings; later elements move to
-/// fresh ones. Closures allocate in their own index namespace, so their bodies
-/// are left alone.
+/// Expanding `[..T::method()?]` clones the call per pack member, so every clone
+/// carries the same local indices under a different element type. The first
+/// element keeps the template's slots, retyped from its own bindings; later
+/// elements move to fresh ones. Closures allocate in their own index namespace,
+/// so their bodies are left alone.
 struct PackExpansionLocalSplitter<'a> {
     local_count: &'a mut u32,
     locals: &'a mut Vec<TirLocal>,
@@ -596,15 +587,13 @@ impl PackExpansionLocalSplitter<'_> {
     fn split(&mut self, elements: &mut [TirExpr]) {
         let mut first_seen: IndexSet<u32> = IndexSet::default();
         for element in elements.iter_mut() {
-            // One element can define a slot more than once (an or-pattern binds
-            // the same slot in each alternative); that is not a collision
-            // between elements, so collapse it before the bookkeeping below.
+            // An or-pattern binds the same slot in each alternative; that repeat
+            // is not a collision between elements, so collapse it first.
             let defined: IndexSet<u32> = locals_defined_in_expr(element).into_iter().collect();
             for old_idx in defined {
                 if first_seen.insert(old_idx) {
-                    // First element to define this slot keeps it, but the
-                    // binding's own type wins: pack substitution left the
-                    // frame's entry with the template's generic type.
+                    // Keeps the slot, but takes the binding's own type: pack
+                    // substitution left the frame entry generic.
                     if let Some(concrete) = local_type_in_expr(element, old_idx)
                         && let Some(entry) = self.locals.get_mut(old_idx as usize)
                     {
@@ -644,17 +633,12 @@ impl TirMutVisitor for PackExpansionLocalSplitter<'_> {
 
 /// The type slots a `return` value carries in the current frame: the value's
 /// own `type_id`, and a `VariantConstruct`'s `variant_type` plus its payload
-/// chain. Closure bodies are their own frame, so a `return` inside one belongs
-/// to the closure.
+/// chain. Closure bodies are their own frame.
 ///
-/// These are exactly the slots that must name the *enclosing* function's
-/// return type. Inside one element of an expanded `[..T::method()?]` every
-/// other expression is per-element, a call argument included: `return
-/// Result::Err(From::from(__qm_e))` returns the full pack, but `__qm_e` is this
-/// element's error and has to keep the type its own local declares.
-///
-/// Expansion resolves these slots under the outer substitution *before* the
-/// per-element one runs, so they never take the element type to begin with.
+/// Exactly the slots that must name the *enclosing* function's return type.
+/// Everything else in an expanded `[..T::method()?]` element is per-element, a
+/// call argument included: `return Result::Err(From::from(e))` returns the full
+/// pack, but `e` is this element's error.
 struct ReturnTypeSlots<F> {
     on_slot: F,
 }
@@ -2535,14 +2519,17 @@ impl Monomorphizer {
                                 .unwrap_or_else(|| vec![concrete_pack]);
                             for &elem_type in &pack_elems {
                                 let mut elem_call = call_expr.as_ref().clone();
-                                // A `return` inside the element exits the
-                                // *enclosing* function, whose return type names
-                                // the whole pack — so resolve those slots under
-                                // the outer substitution first. They come out
-                                // concrete, which leaves the per-element pass
-                                // below nothing to rewrite on them.
+                                // A `return` here exits the *enclosing* function,
+                                // whose return type names the whole pack, so
+                                // resolve those slots under the outer
+                                // substitution — the per-element pass below then
+                                // has nothing left to rewrite on them.
                                 ReturnTypeSlots::new(|slot: &mut TypeId| {
                                     *slot = self.substitute_type(*slot, substitution, type_table);
+                                    assert!(
+                                        !type_table.contains_type_param_index(*slot, pack_index),
+                                        "return slot still names pack {pack_index}"
+                                    );
                                 })
                                 .visit_expr(&mut elem_call);
                                 // Per-element substitution: pack → single element type.
