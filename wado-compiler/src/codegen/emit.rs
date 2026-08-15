@@ -652,18 +652,26 @@ impl<'a> WirEmitter<'a> {
         memories
     }
 
+    /// The `WirFuncId` of the `i`-th defined function. The base is the
+    /// package's own — `DEFINED_FUNC_BASE` for the GC module, `0` for the
+    /// import-less memory module — not a hard-coded constant, so both kinds of
+    /// package resolve. `defined_func_base` must clear the imports for the two
+    /// id spaces to stay disjoint.
+    fn defined_func_id(&self, i: usize) -> u32 {
+        debug_assert!(self.wir.defined_func_base >= self.func_index_offset);
+        self.wir.defined_func_base + u32::try_from(i).unwrap()
+    }
+
     fn build_func_index_map(&mut self) {
-        use crate::wir_build::DEFINED_FUNC_BASE;
         // Import functions already have indices 0..import_func_count-1
         for i in 0..self.func_index_offset {
             self.func_index_map.insert(i, i);
         }
-        // Defined functions use DEFINED_FUNC_BASE + list_position as WirFuncId,
-        // mapped to actual Wasm indices starting after imports.
+        // Defined functions map onto Wasm indices starting after the imports.
         for (wasm_idx, (i, func)) in
             (self.func_index_offset..).zip(self.wir.functions.iter().enumerate())
         {
-            let wir_func_idx = DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
+            let wir_func_idx = self.defined_func_id(i);
             self.func_index_map.insert(wir_func_idx, wasm_idx);
             // First-wins mirrors the previous linear scan (which returned the
             // first matching helper); after synthesis dedup each mangle is
@@ -765,8 +773,7 @@ impl<'a> WirEmitter<'a> {
             let wasm_func = self.emit_function(func);
             code.function(&wasm_func);
             if !self.current_branch_hints.is_empty() {
-                let wir_func_idx = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
-                let func_idx = self.func_index_map[&wir_func_idx];
+                let func_idx = self.resolve_func_index(self.defined_func_id(i));
                 self.all_branch_hints
                     .push((func_idx, std::mem::take(&mut self.current_branch_hints)));
             }
@@ -2515,10 +2522,7 @@ impl<'a> WirEmitter<'a> {
             // Generate names from WIR functions using remapped Wasm indices
             let mut name_map = NameMap::new();
             for (i, func) in self.wir.functions.iter().enumerate() {
-                let wir_func_idx = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
-                if let Some(&wasm_idx) = self.func_index_map.get(&wir_func_idx) {
-                    name_map.append(wasm_idx, &func.name.fq);
-                }
+                name_map.append(self.resolve_func_index(self.defined_func_id(i)), &func.name.fq);
             }
             names.functions(&name_map);
         }
