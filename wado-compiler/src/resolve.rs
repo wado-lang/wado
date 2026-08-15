@@ -247,19 +247,6 @@ impl Resolutions {
         self.scopes.resolve_value(module, name)
     }
 
-    /// The `(module, name)` pair a declaration renders to.
-    ///
-    /// A rendering *out of* an identity, which is the only direction a name is
-    /// allowed to travel — but it exists for the consumers whose keys are still
-    /// spellings, and it goes when `DefId` does.
-    #[must_use]
-    pub fn decl_key(&self, def: DefId) -> (ModuleSource, String) {
-        (
-            self.defs.module(def).clone(),
-            self.defs.name(def).to_string(),
-        )
-    }
-
     /// The declaration `module` itself declares under `name`.
     ///
     /// Not a scope lookup: `module` is the *declaring* module, so this asks a

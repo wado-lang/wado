@@ -1295,6 +1295,31 @@ mod tests {
                 module_source: ModuleSource::prelude(),
             },
         );
+        // The list adapters call through `IndexValue`, and they name it by the
+        // declaration this records rather than by spelling it.
+        let index_value_decl = {
+            let def = tt.declare_for_test(
+                "IndexValue",
+                ModuleSource::traits(),
+                crate::defs::DefKind::Trait,
+            );
+            tt.defs().ast_id(def)
+        };
+        let index_value_fq = tt
+            .defs()
+            .of_ast_id(index_value_decl)
+            .map(|def| crate::name::FqTraitName::declared(tt.defs(), def));
+        let _ = tt.compiler_items_mut().register(
+            CompilerItem::IndexValue,
+            Resolved::Trait {
+                module_source: ModuleSource::traits(),
+                name: "IndexValue".to_string(),
+                decl: index_value_decl,
+                fq: index_value_fq,
+                method_name: Some("index_value".to_string()),
+                assoc_types: Vec::new(),
+            },
+        );
     }
 
     /// Test fixture: empty registry + fresh type table + empty interner.

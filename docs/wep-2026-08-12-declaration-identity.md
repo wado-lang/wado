@@ -74,6 +74,17 @@ The properties are in what is absent:
 `Resolutions::declared` hand back, and the head of `FqTypeName` / `FqTraitName`.
 Equality is index equality.
 
+A head that reaches no declaration is not given one: `ImplTargetKey` carries an
+`Undeclared` case for a written name that resolves to nothing and for the
+anonymous struct shapes no declaration names. It holds a spelling because there
+is no identity to hold, and no query can mistake it for one.
+
+A rendering may be *stored* beside an identity; it may never be read back into
+one. `FqTraitName`'s head is a `DeclaredHead` — the `DefId`, plus the declaring
+module and the declared name its one constructor reads off the table — so a
+mangle needs no table at hand, while equality and hashing compare the `DefId`
+alone.
+
 `AstId` is deliberately not reused as the identity, though the symbol table is
 already keyed by the declaring node's. Two reasons: `AstId` is the id type of
 _every_ node and `AstId::fresh()` is public, so a use-site id type-checks wherever
@@ -375,8 +386,8 @@ decides which declaration is meant.
 
 ## Enforcement
 
-Each mechanism states what it makes impossible, not what it discourages. Two of
-them are not in place yet — see Remaining work, which says which.
+Each mechanism states what it makes impossible, not what it discourages. One of
+them is a ratchet rather than an absolute, and says so.
 
 - `DefId`'s field and `DefTable::declare` are both private to `crate::defs`. A
   pass cannot mint an identity. Enforced by the module system.
@@ -389,9 +400,14 @@ them are not in place yet — see Remaining work, which says which.
   name comparison.
 - `every_reference_bearing_node_carries_an_ast_id` fails on a new name-bearing AST
   node without an id, so a new reference position cannot be added silently.
-- One test asserts `wado-compiler/src` contains no function taking a module and a
-  name and returning an identity. That is the shape of the chain this design
-  removes, and the one property the type system cannot state.
+- `no_reachable_function_turns_a_name_into_an_identity` scans `wado-compiler/src`
+  for a reachable function taking a module and a name and handing back a
+  declaration. That is the shape of the chain this design removes, and the one
+  property the type system cannot state. The ones that remain are listed in
+  `NAME_TO_IDENTITY` with the reason each survives, so the class cannot grow
+  while it is being emptied; the test fails on a new one, and equally on a
+  stale entry, so the list shrinks as the work lands. An empty list is the
+  absolute assertion, and it is what Remaining work is for.
 
 ## Remaining work
 
@@ -410,24 +426,31 @@ resolution, the struct literal, the WIR lookup key, template admission, template
 lookup, the registration name, and the instantiation scan. Each was a distinct
 caller of the same first-wins index. A removed mechanism takes one fix.
 
-- [ ] A nominal head carries a `DefId`, not a `(module, name)` pair.
-      `name::TypeHead::Declared` and `trait_env::DeclKey` are the two, and they
-      make `FqTypeName` equality name equality — which is what the trait impl
-      index is keyed on. This is the step; the rest of this list is what it
-      unblocks.
+- [ ] A *type* head carries a `DefId`, not a `(module, name)` pair.
+      `name::TypeHead::Declared` is the one left — the trait side is
+      `FqTraitName`'s `DeclaredHead`, whose equality reads the declaration and
+      whose only constructor takes one — and it is what makes `FqTypeName`
+      equality name equality. This is the step; the rest of this list is what
+      it unblocks.
 - [ ] `TypeTable::decl_named_in` deleted. It answers `(name, module)` with a
       declaration, `or_insert` so the first declared wins, so it structurally
-      cannot tell two same-named declarations in one module apart. 48 callers.
-      With it go the 22 `(String, ModuleSource)`-keyed maps, one of which is a
-      generic-struct template registry in `monomorphize` — the elaborator's
-      seven are already `DefId`-keyed, this one is not.
-- [ ] `Resolutions::declaration_named` / `declared_in` deleted, and the
-      Enforcement bullet they contradict becomes true: a pass holding only a
-      spelling cannot obtain an identity. `DefTable` itself already has no such
-      lookup; these two and `decl_named_in` are what remain.
-- [ ] The Enforcement test that asserts `wado-compiler/src` contains no function
-      taking a module and a name and returning an identity. Not written — it
-      would fail today on the three above, which is the point of writing it last.
+      cannot tell two same-named declarations in one module apart. 45 callers.
+      Roughly half name a stdlib type outright — `Future`, `Stream`,
+      `AsyncCall`, `ByteList` — and those go the way `IndexValue` already did:
+      into `compiler_item.rs`'s registry, which records the declaration so no
+      synthesis site spells the name. With the rest go the `(String,
+      ModuleSource)`-keyed maps, one of which is a generic-struct template
+      registry in `monomorphize`.
+- [ ] `Resolutions::declaration_named` / `declared_in` / `value_named` deleted,
+      and the Enforcement bullet they contradict becomes true: a pass holding
+      only a spelling cannot obtain an identity. `DefTable` itself already has
+      no such lookup; these three and `decl_named_in` are what remain.
+- [ ] `NAME_TO_IDENTITY` emptied. Its five remaining entries are the four
+      above plus `canonical_assoc_const_key`, which splits a use-site
+      `Type::CONST` spelling whose `Type` half has no reference site of its
+      own. When the list is empty the Enforcement bullet is absolute rather
+      than a ratchet, and the `#[cfg]`-gated test constructors are all that a
+      spelling can still reach.
 - [ ] `SymbolPath`. `LocalMethodName` and `FqTypeName` already serve as the
       structured identity a name renders from, and nothing parses a rendering
       back. What is left is that `FqTraitName::args` and

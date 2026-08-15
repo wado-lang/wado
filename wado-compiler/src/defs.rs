@@ -7,12 +7,14 @@
 //! [`DefTable::name`] renders one for a diagnostic or for a mangle.
 //!
 //! The goal is that a spelling cannot reach an identity at all, so two modules'
-//! same-named declarations cannot be confused for one. That is not yet true:
-//! [`crate::tir::TypeTable::decl_named_in`] still answers `(name, module)` with
-//! a declaration, first-declared-wins, and has callers left. Until its head
-//! carries a `DefId` rather than a `(module, name)` pair, what keeps two
-//! same-named declarations apart is that their rendered names differ — a
-//! convention each site maintains, not a property of the key.
+//! same-named declarations cannot be confused for one. Every declaration index
+//! is keyed by `DefId` and a trait head carries one, but the goal is not yet
+//! reached: [`crate::tir::TypeTable::decl_named_in`] still answers
+//! `(name, module)` with a declaration, first-declared-wins, and
+//! [`crate::name::TypeHead::Declared`] is still a pair. Until a *type* head
+//! carries a `DefId` too, what keeps two same-named type declarations apart is
+//! that their rendered names differ — a convention each site maintains, not a
+//! property of the key.
 //!
 //! See `docs/wep-2026-08-12-declaration-identity.md`.
 
@@ -740,5 +742,157 @@ mod tests {
         let symbols = analyzer.into_symbols();
         let defs = DefTable::build(&modules, &symbols);
         (defs, modules, symbols, module)
+    }
+}
+
+/// The reachable functions that still turn a name into a declaration, each with
+/// the reason it survives. Empty is the goal; see
+/// `docs/wep-2026-08-12-declaration-identity.md`'s Remaining work.
+///
+/// A name reaching an identity is the whole shape this design removes: it is
+/// what lets two same-named declarations answer for one another, and it is the
+/// one property the type system cannot state. The test below is what keeps the
+/// list from growing while it is being emptied.
+#[cfg(test)]
+const NAME_TO_IDENTITY: &[(&str, &str)] = &[
+    (
+        "declaration_named",
+        "crate::resolve's own scope lookup — the one place a name is allowed \
+         to become an identity. Its callers are what the WEP is emptying, not \
+         this.",
+    ),
+    (
+        "value_named",
+        "the same lookup one tier longer, for a name written in value or \
+         pattern position",
+    ),
+    (
+        "declared_in",
+        "asks a module about its own declarations rather than what a spelling \
+         means from a vantage; goes when its callers carry identities",
+    ),
+    (
+        "imported_as",
+        "answers the import tier alone, for a caller to whom the *aliasing* is \
+         the question — the one import fact that is not a scope lookup",
+    ),
+    (
+        "decl_named_in",
+        "TypeTable's first-declared-wins decl index; the largest remaining \
+         group of callers, half of which name a stdlib type the compiler-item \
+         registry should record instead",
+    ),
+    (
+        "declare_for_test",
+        "gated on `test` / the `test-util` feature, so production code has no \
+         such constructor",
+    ),
+    (
+        "canonical_assoc_const_key",
+        "splits a use-site `Type::CONST` spelling, whose `Type` half has no \
+         reference site of its own to ask; goes when the key does",
+    ),
+];
+
+#[cfg(test)]
+mod enforcement {
+    /// The signature starting at `start`, up to the `{` or `;` that ends it.
+    fn signature_at(source: &str, start: usize) -> Option<&str> {
+        let mut depth = 0i32;
+        for (i, byte) in source[start..].bytes().enumerate() {
+            match byte {
+                b'(' => depth += 1,
+                b')' => depth -= 1,
+                b'{' | b';' if depth == 0 => return Some(&source[start..start + i]),
+                _ => {}
+            }
+        }
+        None
+    }
+
+    /// Whether `signature` takes a module and a name and hands back a
+    /// declaration.
+    fn maps_a_name_to_an_identity(signature: &str) -> bool {
+        let Some((params, ret)) = signature.split_once("->") else {
+            return false;
+        };
+        let Some(params) = params.split_once('(').map(|(_, p)| p) else {
+            return false;
+        };
+        ret.contains("DefId")
+            && params.contains("ModuleSource")
+            && (params.contains("&str") || params.contains("String"))
+    }
+
+    fn rust_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).expect("wado-compiler/src is readable") {
+            let path = entry.expect("a readable directory entry").path();
+            if path.is_dir() {
+                rust_sources(&path, out);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
+    /// A consumer that can turn a spelling into a declaration can compare two
+    /// declarations by spelling, which is the whole class of bug this design
+    /// removes (WEP 2026-08-12). The type system cannot state the absence of
+    /// such a function, so this does.
+    #[test]
+    fn no_reachable_function_turns_a_name_into_an_identity() {
+        let mut files = Vec::new();
+        rust_sources(std::path::Path::new("src"), &mut files);
+        assert!(!files.is_empty(), "found no sources to scan");
+
+        let mut offenders: Vec<String> = Vec::new();
+        let mut seen: Vec<&str> = Vec::new();
+        for file in &files {
+            let source = std::fs::read_to_string(file).expect("a readable source file");
+            // A test module's helpers are not reachable API.
+            let source = source
+                .split_once("\n#[cfg(test)]\nmod tests {")
+                .map_or(source.as_str(), |(before, _)| before);
+            for (offset, _) in source.match_indices("fn ") {
+                let line_start = source[..offset].rfind('\n').map_or(0, |i| i + 1);
+                if !source[line_start..offset].trim_start().starts_with("pub") {
+                    continue;
+                }
+                let Some(signature) = signature_at(source, offset) else {
+                    continue;
+                };
+                if !maps_a_name_to_an_identity(signature) {
+                    continue;
+                }
+                let name = signature["fn ".len()..]
+                    .split(['(', '<'])
+                    .next()
+                    .unwrap_or_default()
+                    .trim();
+                match super::NAME_TO_IDENTITY.iter().find(|(n, _)| *n == name) {
+                    Some((allowed, _)) => seen.push(allowed),
+                    None => offenders.push(format!("{}::{name}", file.display())),
+                }
+            }
+        }
+
+        assert!(
+            offenders.is_empty(),
+            "these take a module and a name and hand back a declaration, so a \
+             consumer holding only a spelling can obtain an identity and \
+             compare it: {offenders:?}. Give the caller the reference site \
+             instead — or, if it truly cannot have one, register it in \
+             NAME_TO_IDENTITY with the reason."
+        );
+        let stale: Vec<&str> = super::NAME_TO_IDENTITY
+            .iter()
+            .map(|(n, _)| *n)
+            .filter(|n| !seen.contains(n))
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "NAME_TO_IDENTITY lists functions that no longer exist: {stale:?}. \
+             Delete the entries — the list is what is left to remove."
+        );
     }
 }
