@@ -288,9 +288,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the set of identifiers `resolve_call`'s qualified-call fallback may
     /// treat as a deferred effect operation (`Stdout::write()`, etc.).
     fn is_declared_effect_or_resource(&self, name: &str) -> bool {
-        let key = self.decl_key_or_local(name);
-        self.tysys.trait_env.effect_decl_index.contains_key(&key)
-            || self.tysys.trait_env.resource_decl_index.contains_key(&key)
+        self.decl_key_or_local(name).is_some_and(|key| {
+            self.tysys.trait_env.effect_decl_index.contains(&key)
+                || self.tysys.trait_env.resource_decl_index.contains(&key)
+        })
     }
 
     pub(super) fn resolve_call(
@@ -738,7 +739,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let is_reflexive = if arg_is_generic {
                         arg_type_name == prefix
                     } else if let Some(arg_key) = self.type_decl_key(arg_type) {
-                        arg_key == self.decl_key_or_local(prefix)
+                        Some(arg_key) == self.decl_key_or_local(prefix)
                     } else {
                         arg_type_name == prefix
                     };
@@ -1611,17 +1612,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         effect: &str,
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
-        let canonical_key = self.decl_key_or_local(effect);
-        let (_, decl_id) = self
-            .tysys
-            .trait_env
-            .effect_decl_index
-            .get(&canonical_key)
-            .or_else(|| self.tysys.trait_env.resource_decl_index.get(&canonical_key))?;
+        let canonical_key = self.decl_key_or_local(effect)?;
+        if !self.tysys.trait_env.effect_decl_index.contains(&canonical_key)
+            && !self
+                .tysys
+                .trait_env
+                .resource_decl_index
+                .contains(&canonical_key)
+        {
+            return None;
+        }
+        let decl_id = self.tysys.resolutions.defs().ast_id(canonical_key);
         let sig = self
             .tysys
             .signatures
-            .resource_method_sig(*decl_id, operation)?;
+            .resource_method_sig(decl_id, operation)?;
         Some((sig.decl.param_types.clone(), sig.decl.return_type))
     }
 
@@ -2565,7 +2570,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Option<MethodSig> {
-        let key = self.decl_key_or_local(struct_name);
+        let key = self.impl_target(struct_name);
         let trait_env = &self.tysys.trait_env;
         if let Some(entry) = trait_env
             .static_method_index

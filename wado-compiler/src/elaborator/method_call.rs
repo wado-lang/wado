@@ -437,9 +437,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 // The referent this bound was rebuilt from.
                                 // Recorded on the bound, so nothing has to
                                 // resolve `name` at an id the walk never saw.
-                                resolved: b
-                                    .canonical()
-                                    .and_then(|(m, n)| self.tysys.resolutions.declared_in(&m, &n)),
+                                resolved: b.canonical(),
                             }
                         })
                         .collect();
@@ -1131,12 +1129,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (WEP 2026-07-31). A trait's *static* method is not included: it has no
     /// receiver argument to bind `Self` from.
     pub(super) fn is_trait_instance_method(&self, trait_name: &str, method_name: &str) -> bool {
-        let key = self.decl_key_or_local(trait_name);
-        self.tysys.trait_env.declares_trait(&key)
-            && self
-                .trait_sig_of(&key)
-                .and_then(|sig| sig.method(method_name))
-                .is_some_and(|m| m.sig.self_kind != ast::SelfKind::None)
+        self.decl_key_or_local(trait_name).is_some_and(|key| {
+            self.tysys.trait_env.declares_trait(&key)
+                && self
+                    .trait_sig_of(&key)
+                    .and_then(|sig| sig.method(method_name))
+                    .is_some_and(|m| m.sig.self_kind != ast::SelfKind::None)
+        })
     }
 
     /// `Trait::method(recv, args…)` — the receiver is the first argument, so
@@ -1365,9 +1364,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if target_type_id == TypeTable::UNKNOWN
             && let ast::Type::Generic(g) = &static_call.target_type
             && self
-                .tysys
-                .trait_env
-                .declares_trait(&self.decl_key_or_local(&g.name))
+                .decl_key_or_local(&g.name)
+                .is_some_and(|key| self.tysys.trait_env.declares_trait(&key))
         {
             // `Take::<A>::take(recv, …)` — the trait-turbofish qualified call
             // (WEP 2026-07-31): the turbofish pins one argument list by the
@@ -1380,7 +1378,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // misuse), so that shape keeps its unknown-function error.
             if self.is_trait_instance_method(&g.name, &static_call.method)
                 && self
-                    .trait_decl_type_params_of(&self.decl_key_or_local(&g.name))
+                    .decl_key_or_local(&g.name)
+                    .and_then(|key| self.trait_decl_type_params_of(&key))
                     .is_some_and(|params| !params.is_empty() && params.len() == g.args.len())
             {
                 let declared_head = self.declared_trait_name(&g.name);
@@ -2313,7 +2312,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method: &str,
         receiver_type_id: TypeId,
     ) -> Vec<TypeId> {
-        let key: super::trait_env::DeclKey = (blanket_module.clone(), blanket_param.to_string());
+        let key = crate::elaborator::trait_env::ImplTargetKey::TypeParam(
+            blanket_module.clone(),
+            blanket_param.to_string(),
+        );
         let template =
             self.lookup_static_method_param_types_keyed(blanket_param, method, Some(&key));
         let blanket_slot = self.blanket_param_slot(blanket_param);
@@ -2329,7 +2331,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The blanket impl's own parameter. `impl<T> Trait for T` declares
-    /// exactly one, and the `DeclKey` this path is built on *is* its name, so
+    /// exactly one, and the `DefId` this path is built on *is* its name, so
     /// the binder is the declaration rather than a reconstruction of it.
     fn blanket_param_slot(&self, blanket_param: &str) -> TypeId {
         self.tysys
@@ -2421,7 +2423,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys
                     .trait_env
                     .static_method_index
-                    .get(&(b.module.clone(), b.param.clone()))
+                    .get(&crate::elaborator::trait_env::ImplTargetKey::TypeParam(
+                        b.module.clone(),
+                        b.param.clone(),
+                    ))
                     .is_some_and(|entries| {
                         entries.iter().any(|e| {
                             e.name == method_name
@@ -2438,7 +2443,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .impl_headers
                     .get(&(b.module.clone(), b.ast_id))?;
                 Some((
-                    header.fq_trait()?,
+                    header.fq_trait(self.tysys.resolutions.defs())?,
                     b.param.clone(),
                     b.module.clone(),
                     b.bounds.clone(),
@@ -2470,11 +2475,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_module: &ModuleSource,
         method_name: &str,
     ) -> Option<String> {
+        let key = crate::elaborator::trait_env::ImplTargetKey::of_decl(
+            self.tysys.resolutions.defs(),
+            self.tysys
+                .resolutions
+                .declared_in(struct_module, struct_name)?,
+        );
         let (_, _, decl_id, _) = self
             .tysys
             .trait_env
             .resource_static_method_index
-            .get(&(struct_module.clone(), struct_name.to_string()))?
+            .get(&key)?
             .iter()
             .find(|(name, ..)| name == method_name)?;
         self.tysys
@@ -2645,7 +2656,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
-        static_key_hint: Option<&crate::elaborator::trait_env::DeclKey>,
+        static_key_hint: Option<&crate::elaborator::trait_env::ImplTargetKey>,
     ) -> Vec<TypeId> {
         // O(1) lookup via pre-built static method index. The index is
         // keyed by the receiver's canonical decl key so two same-named
@@ -2656,7 +2667,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // though both alias the same bare name `"Counter"`).
         let static_key = static_key_hint
             .cloned()
-            .unwrap_or_else(|| self.decl_key_or_local(struct_name));
+            .unwrap_or_else(|| self.impl_target(struct_name));
         // Carry the impl's defining module out of the index alongside
         // the AST so the per-param elaborator can swap into its perspective —
         // a static method's signature references types the impl module
@@ -2686,9 +2697,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type_id: TypeId,
     ) -> (
         Option<String>,
-        Option<crate::elaborator::trait_env::DeclKey>,
+        Option<crate::elaborator::trait_env::ImplTargetKey>,
     ) {
-        let key: Option<crate::elaborator::trait_env::DeclKey> = {
+        use crate::elaborator::trait_env::ImplTargetKey;
+        let key: Option<ImplTargetKey> = {
             let mut current_type = target_type_id;
             loop {
                 match self.tysys.type_table.borrow().get(current_type).clone() {
@@ -2697,16 +2709,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .tysys
                             .type_table
                             .borrow()
-                            .nominal_head(current_type)
-                            .map(|(n, m)| (m, n));
+                            .nominal_def(current_type)
+                            .map(|def| {
+                                ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
+                            });
                     }
                     ResolvedType::Newtype { base_type, .. } => current_type = base_type,
                     ResolvedType::Flags { .. } => {
                         current_type = TypeTable::U32;
                     }
                     ResolvedType::BuiltinArray(_) => {
-                        break Some((
-                            ModuleSource::array(),
+                        break Some(ImplTargetKey::Builtin(
                             TypeTable::ARRAY_TYPE_NAME.to_string(),
                         ));
                     }
@@ -2714,7 +2727,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         };
-        let name = key.as_ref().map(|(_, n)| n.clone());
+        let defs = self.tysys.resolutions.defs();
+        let name = key
+            .as_ref()
+            .and_then(|key| key.type_name(defs))
+            .map(str::to_string);
         (name, key)
     }
 
@@ -2726,11 +2743,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
-        static_key_hint: Option<&crate::elaborator::trait_env::DeclKey>,
+        static_key_hint: Option<&crate::elaborator::trait_env::ImplTargetKey>,
     ) -> Vec<(String, Option<ast::Expr>)> {
         let static_key = static_key_hint
             .cloned()
-            .unwrap_or_else(|| self.decl_key_or_local(struct_name));
+            .unwrap_or_else(|| self.impl_target(struct_name));
         // Names and defaults come out of the same record, so their order
         // matches the parameter types by construction.
         let indexed = self
@@ -2756,7 +2773,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// outside it. Consumers re-check the impl's spelling.
     fn trait_impl_keys_current_first(&self, struct_name: &str) -> Vec<(ModuleSource, AstId)> {
         let env = &self.tysys.trait_env;
-        let declared = env.entries_by_receiver_vec(&self.impl_target(struct_name).receiver());
+        let declared = env.entries_by_receiver_vec(
+            &self
+                .impl_target(struct_name)
+                .receiver(self.tysys.resolutions.defs()),
+        );
         let binder = env.entries_by_receiver_vec(&Receiver::Type(FqTypeName::binder(struct_name)));
         let is_current =
             |(module, _): &&(ModuleSource, AstId)| *module == self.current_module_source;
@@ -3145,7 +3166,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // names the declaration alone.
         let resolve_trait_name =
             |header: &super::trait_env::ImplHeader| -> Option<crate::name::FqTraitName> {
-                let fq = header.fq_trait()?;
+                let fq = header.fq_trait(self.tysys.resolutions.defs())?;
                 Some(if is_from_or_try_from(fq.base_name()) {
                     fq
                 } else {
@@ -3320,7 +3341,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // O(1) lookup via pre-built static method index (impl blocks).
         // Canonicalise so a same-named struct in another module doesn't
         // accidentally claim this name.
-        let static_key = self.decl_key_or_local(struct_name);
+        let static_key = self.impl_target(struct_name);
         if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key)
             && methods.iter().any(|e| e.name == method_name)
         {

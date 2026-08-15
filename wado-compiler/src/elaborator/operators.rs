@@ -1747,7 +1747,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .impl_target_decl_key(receiver.type_id, &resolved.impl_name)
             .map_or_else(
                 || self.find_struct_module_source(&resolved.impl_name),
-                |(module, _)| module,
+                |def| self.tysys.resolutions.defs().module(def).clone(),
             );
         let function_ref = FunctionRef {
             module_source,

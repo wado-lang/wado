@@ -995,30 +995,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(primitive) = TypeTable::primitive_by_name(name) {
             return ArgClass::Exact(primitive);
         }
-        let (module, decl) = self.decl_key_or_local(name);
+        let Some(def) = self.decl_key_or_local(name) else {
+            return ArgClass::Opaque(OpaqueReason::Unresolved);
+        };
+        let defs = self.tysys.resolutions.defs().clone();
+        let (module, decl) = (defs.module(def).clone(), defs.name(def).to_string());
         let generic = self
             .lookup_struct_fields_in(&decl, &module)
             .is_some_and(|info| !info.type_param_type_ids.is_empty());
         if generic {
-            return ArgClass::Head(FqTypeName::of_head(&module, &decl));
+            return ArgClass::Head(FqTypeName::of_head(
+                &module,
+                &self.decl_render_name(def),
+            ));
         }
-        let found = {
-            let def = self
-                .tysys
-                .type_table
-                .borrow()
-                .decl_named_in(&decl, &module)
-                .expect("the declaration this type names exists");
-            self.tysys
-                .type_table
-                .borrow()
-                .find_struct_type(crate::tir::StructDef::Decl(def))
-        };
+        let found = self
+            .tysys
+            .type_table
+            .borrow()
+            .find_struct_type(crate::tir::StructDef::Decl(def));
         if let Some(type_id) = found {
             return self.class_of_type(type_id);
         }
         if self.tysys.is_known_type_name(&decl) {
-            return ArgClass::Head(FqTypeName::of_head(&module, &decl));
+            return ArgClass::Head(FqTypeName::of_head(
+                &module,
+                &self.decl_render_name(def),
+            ));
         }
         ArgClass::Opaque(OpaqueReason::Unresolved)
     }

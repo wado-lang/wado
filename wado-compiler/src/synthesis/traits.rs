@@ -333,7 +333,7 @@ pub fn synthesize_traits(project: Package) -> Package {
         )
     };
     // `Default` is drained later by `synthesize_defaults` (after `serde_synth`).
-    let requested: IndexSet<(String, ModuleSource, crate::tir::TraitKey)> = first_module
+    let requested: IndexSet<(String, ModuleSource, crate::defs::DefId)> = first_module
         .type_table
         .borrow()
         .bound_driven_synth_requests(|key| *key == eq_trait_key || *key == ord_trait_key)
@@ -349,7 +349,7 @@ pub fn synthesize_traits(project: Package) -> Package {
     // canonical project-wide synthesis layer is rebuilt afterwards by
     // `collect_synthesised_impls` (see `synthesis.rs`), which scans TIR
     // and captures concrete-ness from the synthesized function itself.
-    let mut pending: IndexSet<(String, ModuleSource, crate::tir::TraitKey)> = IndexSet::default();
+    let mut pending: IndexSet<(String, ModuleSource, crate::defs::DefId)> = IndexSet::default();
     for module in project.tir_modules.values_mut() {
         let module_source = module.module_source.clone();
         let names = {
@@ -395,14 +395,14 @@ pub fn synthesize_defaults(project: &mut Package) {
         .compiler_items()
         .trait_fq(CompilerItem::Default);
     let default_trait_key = default_trait_name.canonical();
-    let requested: IndexSet<(String, ModuleSource, crate::tir::TraitKey)> = first_module
+    let requested: IndexSet<(String, ModuleSource, crate::defs::DefId)> = first_module
         .type_table
         .borrow()
         .bound_driven_synth_requests(|key| Some(key) == default_trait_key.as_ref())
         .into_iter()
         .collect();
 
-    let mut pending: IndexSet<(String, ModuleSource, crate::tir::TraitKey)> = IndexSet::default();
+    let mut pending: IndexSet<(String, ModuleSource, crate::defs::DefId)> = IndexSet::default();
     for module in project.tir_modules.values_mut() {
         let module_source = module.module_source.clone();
         let names = {
@@ -436,9 +436,9 @@ pub fn synthesize_reflect(project: &mut Package) {
         .trait_fq(CompilerItem::ReflectStruct);
     // Not demand-driven: `TypeTable::is_reflect_eligible` decides coverage, and
     // the bound check reads the same predicate.
-    let requested: IndexSet<(String, ModuleSource, crate::tir::TraitKey)> = IndexSet::default();
+    let requested: IndexSet<(String, ModuleSource, crate::defs::DefId)> = IndexSet::default();
 
-    let mut pending: IndexSet<(String, ModuleSource, crate::tir::TraitKey)> = IndexSet::default();
+    let mut pending: IndexSet<(String, ModuleSource, crate::defs::DefId)> = IndexSet::default();
     for module in project.tir_modules.values_mut() {
         let module_source = module.module_source.clone();
         let names = {
@@ -830,14 +830,14 @@ fn synthesize_reflect_kind(
         .compiler_items()
         .trait_fq(trait_item);
     let trait_key = trait_name.canonical();
-    let requested: IndexSet<(String, ModuleSource, crate::tir::TraitKey)> = first_module
+    let requested: IndexSet<(String, ModuleSource, crate::defs::DefId)> = first_module
         .type_table
         .borrow()
         .bound_driven_synth_requests(|key| Some(key) == trait_key.as_ref())
         .into_iter()
         .collect();
 
-    let mut pending: IndexSet<(String, ModuleSource, crate::tir::TraitKey)> = IndexSet::default();
+    let mut pending: IndexSet<(String, ModuleSource, crate::defs::DefId)> = IndexSet::default();
     for module in project.tir_modules.values_mut() {
         let module_source = module.module_source.clone();
         let names = {
@@ -2271,8 +2271,11 @@ fn generate_enum_reflect_methods(
         let member_type = { tt.make_generic_instance(env.member_struct_def, vec![enum_type]) };
         let members_tuple_type =
             tt.make_tuple(std::iter::repeat_n(member_type, target.cases.len()).collect());
-        let reflect_enum = tt.compiler_items().require_trait(CompilerItem::ReflectEnum);
-        let reflect_enum = (reflect_enum.0.clone(), reflect_enum.1.to_string());
+        let reflect_enum = tt
+            .compiler_items()
+            .trait_fq(CompilerItem::ReflectEnum)
+            .canonical()
+            .expect(KEYED);
         tt.register_assoc_type_resolution(
             enum_type,
             reflect_enum,
@@ -2718,8 +2721,9 @@ fn generate_flags_reflect_methods(
             tt.make_tuple(std::iter::repeat_n(member_type, target.members.len()).collect());
         let reflect_flags = tt
             .compiler_items()
-            .require_trait(CompilerItem::ReflectFlags);
-        let reflect_flags = (reflect_flags.0.clone(), reflect_flags.1.to_string());
+            .trait_fq(CompilerItem::ReflectFlags)
+            .canonical()
+            .expect(KEYED);
         tt.register_assoc_type_resolution(
             target.flags_type,
             reflect_flags,
@@ -3001,7 +3005,7 @@ pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
     /// component, the second derivation would be silently skipped and the
     /// receiver type from the second module would dispatch to the first
     /// module's impl.
-    pub(crate) pending: &'pend mut IndexSet<(String, ModuleSource, crate::tir::TraitKey)>,
+    pub(crate) pending: &'pend mut IndexSet<(String, ModuleSource, crate::defs::DefId)>,
     /// `(type_name, module, trait_name)` triples that a real `T: Eq` /
     /// `T: Ord` bound or explicit marker actually demanded (WEP
     /// 2026-06-25-trait-derivation), snapshotted from
@@ -3010,7 +3014,7 @@ pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
     /// `generate_variant_eq_impls` — an impl is emitted only for a pair
     /// recorded here, not for every declared type. Default / Inspect /
     /// Display and their `Alt` siblings stay unconditional.
-    pub(crate) requested: &'req IndexSet<(String, ModuleSource, crate::tir::TraitKey)>,
+    pub(crate) requested: &'req IndexSet<(String, ModuleSource, crate::defs::DefId)>,
     /// Module currently being synthesised. Auto-derived impls live in this
     /// module by convention.
     pub(crate) module: ModuleSource,
@@ -3032,7 +3036,7 @@ impl SynthesisCtx<'_, '_, '_> {
     pub(crate) fn has_impl(
         &self,
         receiver: ImplReceiver<'_>,
-        trait_key: &crate::tir::TraitKey,
+        trait_key: &crate::defs::DefId,
     ) -> bool {
         // Module-agnostic AST-layer check: any user-written impl, anywhere
         // in the project, counts. During synthesis the synthesised layer of
@@ -3041,20 +3045,20 @@ impl SynthesisCtx<'_, '_, '_> {
         // the AST layer.
         if self
             .trait_env
-            .impl_module_for(receiver, &trait_key.1, None)
+            .impl_module_for(receiver, self.trait_env.defs.name(*trait_key), None)
             .is_some()
         {
             return true;
         }
         self.pending
-            .contains(&(receiver.spelling(), self.module.clone(), trait_key.clone()))
+            .contains(&(receiver.spelling(), self.module.clone(), *trait_key))
     }
 
     /// Note that this synthesis pass added `impl <trait_name> for <type_name>`
     /// in the current module. Used for in-pass dedup only; the canonical
     /// synthesis layer is rebuilt by `collect_synthesised_impls` after
     /// `synthesize_traits` returns.
-    pub(crate) fn record_impl(&mut self, type_name: &str, trait_key: &crate::tir::TraitKey) {
+    pub(crate) fn record_impl(&mut self, type_name: &str, trait_key: &crate::defs::DefId) {
         self.pending.insert((
             type_name.to_string(),
             self.module.clone(),
@@ -3066,7 +3070,7 @@ impl SynthesisCtx<'_, '_, '_> {
     /// the project actually demanded `impl <trait_name> for <type_name>` in
     /// the current module — see [`Self::requested`]. Only consulted for the
     /// `Eq` / `Ord` sub-passes; the other auto-derives stay unconditional.
-    pub(crate) fn is_requested(&self, type_name: &str, trait_key: &crate::tir::TraitKey) -> bool {
+    pub(crate) fn is_requested(&self, type_name: &str, trait_key: &crate::defs::DefId) -> bool {
         self.requested.contains(&(
             type_name.to_string(),
             self.module.clone(),
@@ -3084,7 +3088,7 @@ impl SynthesisCtx<'_, '_, '_> {
     }
 
     /// `true` when this pass already emitted `<trait_name> for <type_name>`.
-    fn pending_has(&self, type_name: &str, trait_key: &crate::tir::TraitKey) -> bool {
+    fn pending_has(&self, type_name: &str, trait_key: &crate::defs::DefId) -> bool {
         self.pending.contains(&(
             type_name.to_string(),
             self.module.clone(),
@@ -3099,7 +3103,7 @@ impl SynthesisCtx<'_, '_, '_> {
     fn has_methodful_impl(
         &self,
         type_name: &str,
-        trait_key: &crate::tir::TraitKey,
+        trait_key: &crate::defs::DefId,
         scope: ImplScope,
     ) -> bool {
         let type_key = self.receiver(type_name);
@@ -3120,14 +3124,14 @@ impl SynthesisCtx<'_, '_, '_> {
 
     /// Module-scoped methodful check, for the `Eq` / `Ord` / `Default`
     /// sub-passes.
-    pub(crate) fn has_real_impl(&self, type_name: &str, trait_key: &crate::tir::TraitKey) -> bool {
+    pub(crate) fn has_real_impl(&self, type_name: &str, trait_key: &crate::defs::DefId) -> bool {
         self.has_methodful_impl(type_name, trait_key, ImplScope::CurrentModule)
     }
 
     pub(crate) fn has_methodful_impl_anywhere(
         &self,
         type_name: &str,
-        trait_key: &crate::tir::TraitKey,
+        trait_key: &crate::defs::DefId,
     ) -> bool {
         self.has_methodful_impl(type_name, trait_key, ImplScope::AnyModule)
     }
@@ -3135,7 +3139,7 @@ impl SynthesisCtx<'_, '_, '_> {
     pub(crate) fn should_synthesize(
         &self,
         type_name: &str,
-        trait_key: &crate::tir::TraitKey,
+        trait_key: &crate::defs::DefId,
     ) -> bool {
         self.is_requested(type_name, trait_key) && !self.has_real_impl(type_name, trait_key)
     }

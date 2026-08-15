@@ -1934,7 +1934,7 @@ mod tests {
         let method = MethodName::new(
             module.clone(),
             FqTypeName::declared(&module, "Point"),
-            Some(FqTraitName::declared(&module, "Display")),
+            Some(FqTraitName::declared_for_test(&module, "Display")),
             "fmt".to_string(),
         );
         assert_eq!(
@@ -2248,7 +2248,7 @@ mod tests {
         for kind in [RefKind::Shared, RefKind::Mut] {
             let mut info = LocalMethodName::new_ref(
                 kind,
-                Some(FqTraitName::declared(
+                Some(FqTraitName::declared_for_test(
                     &ModuleSource::default(),
                     "IntoIterator",
                 )),
@@ -2282,7 +2282,7 @@ mod tests {
 
         let mut generic = LocalMethodName::new(
             FqTypeName::declared(&geom, "Box"),
-            Some(FqTraitName::declared(&types, "Ord")),
+            Some(FqTraitName::declared_for_test(&types, "Ord")),
             "cmp".to_string(),
         );
         generic.struct_type_args = vec![FqTypeName::declared(&types, "T")];
@@ -2637,28 +2637,105 @@ impl std::fmt::Display for FqTypeName {
     }
 }
 
+/// A declaration in a name's head position: the identity, and the spelling it
+/// renders to.
+///
+/// Equality and hashing read the [`crate::defs::DefId`] alone, so two
+/// same-named declarations can never compare equal however they are spelled.
+/// The strings beside it are a rendering *out of* that identity, produced once
+/// by [`Self::new`] — the only constructor — so nothing can pair a declaration
+/// with a name that is not its own, and there is no accessor that turns either
+/// string back into an identity.
+#[derive(Debug, Clone)]
+pub struct DeclaredHead {
+    def: crate::defs::DefId,
+    module: ModuleSource,
+    name: String,
+}
+
+impl PartialEq for DeclaredHead {
+    fn eq(&self, other: &Self) -> bool {
+        self.def == other.def
+    }
+}
+
+impl Eq for DeclaredHead {}
+
+impl std::hash::Hash for DeclaredHead {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.def.hash(state);
+    }
+}
+
+impl DeclaredHead {
+    /// Render `def`. The declaring module and the declared name come off the
+    /// table, never from a caller.
+    #[must_use]
+    pub fn new(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+        Self {
+            def,
+            module: defs.module(def).clone(),
+            name: defs.name(def).to_string(),
+        }
+    }
+
+    #[must_use]
+    pub fn def(&self) -> crate::defs::DefId {
+        self.def
+    }
+
+    #[must_use]
+    pub fn module(&self) -> &ModuleSource {
+        &self.module
+    }
+
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
 /// The trait half of a `Type^Trait::method` mangle. The head is the trait's
-/// *declaration*, with its declaring module — never the spelling a use site
-/// wrote, which an alias or another module's import can change — or two
-/// same-named traits implemented for one type would mangle alike and one impl
-/// would overwrite the other. Type arguments are carried already-mangled.
+/// *declaration* — an identity, never the spelling a use site wrote, which an
+/// alias or another module's import can change — or two same-named traits
+/// implemented for one type would mangle alike and one impl would overwrite
+/// the other. Type arguments are carried already-mangled.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FqTraitName {
-    head: TypeHead,
+    head: TraitHead,
     args: Vec<String>,
 }
 
+/// What an [`FqTraitName`]'s head names.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum TraitHead {
+    /// A trait declaration.
+    Declared(DeclaredHead),
+    /// A trait position filled by a template's own binder. Not a declaration,
+    /// so it has no module and no identity — only the spelling its template
+    /// scopes.
+    Binder(String),
+}
+
+impl TraitHead {
+    fn name(&self) -> &str {
+        match self {
+            Self::Declared(head) => head.name(),
+            Self::Binder(name) => name,
+        }
+    }
+}
+
 impl FqTraitName {
-    /// A trait named by the module that declares it. `module` must be the
-    /// *declaring* module — a reference site's own module answers a different
-    /// question.
+    /// The trait `def` declares.
+    ///
+    /// There is no constructor taking a name: a caller holding only a spelling
+    /// cannot build one, which is what keeps two same-named traits from
+    /// mangling alike.
     #[must_use]
-    pub fn declared(module: &ModuleSource, name: &str) -> Self {
+    pub fn declared(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
         Self {
-            head: TypeHead::Declared {
-                module: module.clone(),
-                name: name.to_string(),
-            },
+            head: TraitHead::Declared(DeclaredHead::new(defs, def)),
             args: Vec::new(),
         }
     }
@@ -2668,9 +2745,25 @@ impl FqTraitName {
     #[must_use]
     pub fn binder(name: &str) -> Self {
         Self {
-            head: TypeHead::Binder(name.to_string()),
+            head: TraitHead::Binder(name.to_string()),
             args: Vec::new(),
         }
+    }
+
+    /// A trait declared under `name` in `module`, for a unit test that needs
+    /// one without parsing a program.
+    ///
+    /// Gated on `test` / the `test-util` feature: production code still has no
+    /// path from a spelling to a trait identity, which is the property this
+    /// design rests on. Each call mints a *fresh* declaration, so two calls
+    /// with the same name are two traits — which is what a test wanting the
+    /// same trait twice must clone rather than re-spell.
+    #[cfg(any(test, feature = "test-util"))]
+    #[must_use]
+    pub fn declared_for_test(module: &ModuleSource, name: &str) -> Self {
+        let mut defs = crate::defs::DefTable::default();
+        let def = defs.declare_for_test(module, name, crate::defs::DefKind::Trait);
+        Self::declared(&defs, def)
     }
 
     /// The same trait with its type arguments, each already mangled.
@@ -2690,15 +2783,20 @@ impl FqTraitName {
     /// The declaring module, or `None` for a binder.
     #[must_use]
     pub fn module(&self) -> Option<&ModuleSource> {
-        self.head.module()
+        match &self.head {
+            TraitHead::Declared(head) => Some(head.module()),
+            TraitHead::Binder(_) => None,
+        }
     }
 
-    /// The canonical `(declaring module, declaration name)` key, or `None` for
-    /// a binder.
+    /// The trait this names, or `None` for a binder. This is the identity —
+    /// compare these, never [`Self::base_name`].
     #[must_use]
-    pub fn canonical(&self) -> Option<(ModuleSource, String)> {
-        self.module()
-            .map(|m| (m.clone(), self.base_name().to_string()))
+    pub fn canonical(&self) -> Option<crate::defs::DefId> {
+        match &self.head {
+            TraitHead::Declared(head) => Some(head.def()),
+            TraitHead::Binder(_) => None,
+        }
     }
 
     #[must_use]
@@ -2719,9 +2817,8 @@ impl FqTraitName {
     #[must_use]
     pub fn to_mangled(&self) -> String {
         let head = match &self.head {
-            TypeHead::Declared { module, name } => format!("{module}/{name}"),
-            TypeHead::Builtin(name) | TypeHead::Binder(name) => name.clone(),
-            TypeHead::Tuple => TUPLE_TYPE_NAME.to_string(),
+            TraitHead::Declared(head) => format!("{}/{}", head.module(), head.name()),
+            TraitHead::Binder(name) => name.clone(),
         };
         mangle_generic_name(&head, &self.args)
     }

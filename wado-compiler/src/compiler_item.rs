@@ -129,6 +129,10 @@ pub enum CompilerItem {
     /// minus the replace-on-assign ones: `variant` / `fn`); its `Output: RefMut`
     /// bound gates `IndexMutRef`.
     RefMut,
+    /// `IndexValue<I>` — the value-copy indexing trait the CM list adapters
+    /// call through. Registered so a synthesis site names the declaration
+    /// rather than spelling `IndexValue`, which a user trait may share.
+    IndexValue,
     /// `Eq` — anchor for synthesised `==` / `!=` lowering and the
     /// auto-derive checks that decide whether a compound type
     /// (struct, variant, generic instance) implements `Eq`.
@@ -480,6 +484,7 @@ impl CompilerItem {
         Self::Member,
         Self::Ref,
         Self::RefMut,
+        Self::IndexValue,
         Self::Eq,
         Self::Ord,
         Self::From,
@@ -634,6 +639,7 @@ impl CompilerItem {
             Self::Member => "member",
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
+            Self::IndexValue => "index_value",
             Self::Eq => "eq",
             Self::Ord => "ord",
             Self::From => "from",
@@ -792,6 +798,7 @@ impl CompilerItem {
             | Self::Member
             | Self::Ref
             | Self::RefMut
+            | Self::IndexValue
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -955,6 +962,7 @@ impl CompilerItem {
             | Self::Member
             | Self::Ref
             | Self::RefMut
+            | Self::IndexValue
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -1167,6 +1175,12 @@ pub enum Resolved {
         /// that trait?" compares this rather than the spelling
         /// (WEP 2026-08-12).
         decl: crate::ast::AstId,
+        /// The trait as a mangled name's trait segment names it, rendered once
+        /// at registration from the declaration itself. `None` only where the
+        /// declaration is not in the table — a registry entry minted by a test.
+        /// Every synthesis site reads this rather than spelling the trait, so
+        /// none of them can spell the wrong one.
+        fq: Option<crate::name::FqTraitName>,
         /// Primary method name of a **single-method** trait, captured when the
         /// elaborator registers its annotation; `None` for a multi-method trait
         /// such as `Serializer`. Lets the synthesiser read the name of a format
@@ -1462,8 +1476,8 @@ impl CompilerItems {
     /// the trait and none can spell the wrong one.
     #[must_use]
     pub fn trait_fq(&self, item: CompilerItem) -> crate::name::FqTraitName {
-        let (module, name) = self.require_trait(item);
-        crate::name::FqTraitName::declared(module, name)
+        self.trait_fq_opt(item)
+            .unwrap_or_else(|| panic!("compiler item `{item}` is not a registered trait"))
     }
 
     /// Non-panicking [`Self::trait_fq`]: `None` when the item is not
@@ -1471,11 +1485,7 @@ impl CompilerItems {
     #[must_use]
     pub fn trait_fq_opt(&self, item: CompilerItem) -> Option<crate::name::FqTraitName> {
         match self.get(item)? {
-            Resolved::Trait {
-                module_source,
-                name,
-                ..
-            } => Some(crate::name::FqTraitName::declared(module_source, name)),
+            Resolved::Trait { fq, .. } => fq.clone(),
             _ => None,
         }
     }
@@ -1820,6 +1830,7 @@ mod tests {
                 CompilerItem::Option,
                 Resolved::Trait {
                     decl: crate::ast::AstId::fresh(),
+                    fq: None,
                     module_source: ModuleSource::types(),
                     name: "Option".into(),
                     method_name: None,
@@ -1868,6 +1879,7 @@ mod tests {
             CompilerItem::Default,
             Resolved::Trait {
                 decl: crate::ast::AstId::fresh(),
+                fq: None,
                 module_source: ModuleSource::traits(),
                 name: "Default".into(),
                 method_name: Some("default".into()),
@@ -1932,6 +1944,7 @@ mod tests {
             CompilerItem::Serializer,
             Resolved::Trait {
                 decl: crate::ast::AstId::fresh(),
+                fq: None,
                 module_source: ModuleSource::serde(),
                 name: "Serializer".to_string(),
                 method_name: None,

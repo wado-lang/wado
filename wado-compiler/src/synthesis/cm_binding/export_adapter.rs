@@ -22,7 +22,7 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
-    expr_stmt, generic_method_call, i32_const, if_stmt, index_value_trait, internal_call,
+    expr_stmt, generic_method_call, i32_const, if_stmt, internal_call,
     let_mut_stmt, let_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, param_local,
     return_stmt, split_packed_ptr_len, synth_span,
 };
@@ -276,7 +276,7 @@ fn lower_to_flat_inner(
             let elem_local = alloc_local(next_local, locals, elem_type_id);
             let iv_info = LocalMethodName::new(
                 FqTypeName::declared(&ModuleSource::list(), &names.array),
-                Some(index_value_trait()),
+                Some(names.index_value.clone().with_args(vec!["i32".to_string()])),
                 "index_value".to_string(),
             );
             let iv_mangled = iv_info.to_mangled_name();

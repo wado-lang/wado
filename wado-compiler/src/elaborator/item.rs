@@ -289,10 +289,16 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
             bound_names: a.bounds.iter().map(|b| b.name.clone()).collect(),
         })
         .collect();
+    let fq = type_table
+        .borrow()
+        .defs()
+        .of_ast_id(decl)
+        .map(|def| crate::name::FqTraitName::declared(type_table.borrow().defs(), def));
     let resolved = Resolved::Trait {
         module_source: module_source.clone(),
         name: name.to_string(),
         decl,
+        fq,
         method_name,
         assoc_types,
     };
@@ -2368,18 +2374,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //
         if let Some(name) = base_trait_name.as_deref() {
             let canonical_key = scope.decl_key_or_local(name);
-            let effect_decl = scope
-                .tysys
-                .trait_env
-                .effect_decl_index
-                .get(&canonical_key)
-                .cloned();
-            let resource_decl = scope
-                .tysys
-                .trait_env
-                .resource_decl_index
-                .get(&canonical_key)
-                .cloned();
+            let declares = |index: &crate::hashmap::IndexSet<crate::defs::DefId>| {
+                canonical_key.filter(|key| index.contains(key))
+            };
+            let effect_decl = declares(&scope.tysys.trait_env.effect_decl_index);
+            let resource_decl = declares(&scope.tysys.trait_env.resource_decl_index);
             if effect_decl.is_some() || resource_decl.is_some() {
                 ctx.in_handler_method = true;
             }
@@ -2388,7 +2387,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (None, Some(d)) => (Some(d), true),
                 (None, None) => (None, false),
             };
-            let async_op = decl_ref.and_then(|(_, decl_id)| {
+            let async_op = decl_ref.map(|key| scope.tysys.resolutions.defs().ast_id(key)).and_then(|decl_id| {
                 scope
                     .tysys
                     .signatures

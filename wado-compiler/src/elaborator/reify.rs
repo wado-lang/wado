@@ -285,14 +285,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `Elaborator::lookup_associated_constant` so both walkers resolve a
     /// constant to the same identity.
     fn lookup_associated_constant(&self, key: &str) -> Option<(ModuleSource, TypeId, ast::Expr)> {
-        let (type_module, canon_key) = super::trait_query::canonical_assoc_const_key(
+        let (owner, name) = super::trait_query::canonical_assoc_const_key(
             key,
             &self.current_module_source,
             &self.tysys.resolutions,
         )?;
         self.tysys
             .signatures
-            .associated_constant(&type_module, canon_key)
+            .associated_constant(owner, &name)
             .cloned()
     }
 
@@ -1286,10 +1286,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         Some(crate::tir::TirImpl {
-            trait_canonical: facts
-                .trait_name
-                .as_ref()
-                .and_then(crate::name::FqTraitName::canonical),
+            trait_canonical: facts.trait_name.as_ref().and_then(|fq| {
+                Some((fq.module()?.clone(), fq.base_name().to_string()))
+            }),
             trait_type_args: facts.trait_type_args.clone(),
             struct_name: naming.struct_name(),
             rest: impl_block.rest,

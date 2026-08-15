@@ -200,7 +200,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> Vec<ast::TraitBound> {
         // Each entry carries the declaration it merged on, so a bound that has
         // none — a `fn(..)` bound — cannot shift the ones after it.
-        let mut out: Vec<(ast::TraitBound, Option<super::trait_env::DeclKey>)> =
+        let mut out: Vec<(ast::TraitBound, Option<crate::defs::DefId>)> =
             Vec::with_capacity(bounds.len());
         for bound in bounds {
             self.merge_bound(&mut out, bound, known);
@@ -223,7 +223,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// sites stay two bounds, and only a bound repeated at one site merges.
     fn merge_bound(
         &self,
-        out: &mut Vec<(ast::TraitBound, Option<super::trait_env::DeclKey>)>,
+        out: &mut Vec<(ast::TraitBound, Option<crate::defs::DefId>)>,
         bound: &ast::TraitBound,
         known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
     ) {
@@ -237,13 +237,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
         let decl = self.bound_decl(bound, known);
-        if let Some((existing, _)) = out.iter_mut().find(|(_, d)| d.as_ref() == Some(&decl)) {
-            if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
-                *existing = bound.clone();
+        if let Some(decl) = decl {
+            if let Some((existing, _)) = out.iter_mut().find(|(_, d)| *d == Some(decl)) {
+                if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
+                    *existing = bound.clone();
+                }
+                return;
             }
-            return;
         }
-        out.push((bound.clone(), Some(decl)));
+        out.push((bound.clone(), decl));
     }
 
     /// The declaration a bound names: `known` first, then the bound's own site.
@@ -251,11 +253,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         bound: &ast::TraitBound,
         known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
-    ) -> super::trait_env::DeclKey {
+    ) -> Option<crate::defs::DefId> {
         known
             .get(&bound.id)
             .and_then(crate::name::FqTraitName::canonical)
-            .unwrap_or_else(|| self.trait_decl_at(bound.id, &bound.name))
+            .or_else(|| self.trait_decl_at(bound.id, &bound.name))
     }
 
     /// The transitive supertraits of the trait `bound` names, as bounds.
@@ -269,10 +271,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         bound: &ast::TraitBound,
         known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
     ) -> Vec<InheritedBound> {
-        self.tysys
-            .trait_env
-            .supertrait_closure(&self.bound_decl(bound, known))
-            .to_vec()
+        self.bound_decl(bound, known)
+            .map(|decl| self.tysys.trait_env.supertrait_closure(&decl).to_vec())
+            .unwrap_or_default()
     }
 
     /// Register a list of generic parameters as `TypeParam` / `TypePack` ids

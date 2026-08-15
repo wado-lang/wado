@@ -251,7 +251,7 @@ impl Resolutions {
     ///
     /// A rendering *out of* an identity, which is the only direction a name is
     /// allowed to travel — but it exists for the consumers whose keys are still
-    /// spellings, and it goes when `DeclKey` does.
+    /// spellings, and it goes when `DefId` does.
     #[must_use]
     pub fn decl_key(&self, def: DefId) -> (ModuleSource, String) {
         (

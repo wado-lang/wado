@@ -42,6 +42,10 @@ pub struct CmStdlibNames {
     /// `Result::Err` case name + zero-based index.
     pub err_name: String,
     pub err_index: u32,
+    /// The `IndexValue` trait the list adapters call through, as the
+    /// declaration the registry records — never a spelling a user trait could
+    /// share.
+    pub index_value: crate::name::FqTraitName,
 }
 
 impl CmStdlibNames {
@@ -69,6 +73,7 @@ impl CmStdlibNames {
             ok_index,
             err_name: err_name.to_string(),
             err_index,
+            index_value: items.trait_fq(CompilerItem::IndexValue),
         }
     }
 
@@ -91,6 +96,15 @@ impl CmStdlibNames {
             ok_index: 0,
             err_name: "Err".to_string(),
             err_index: 1,
+            index_value: {
+                let mut defs = crate::defs::DefTable::default();
+                let def = defs.declare_for_test(
+                    &crate::module_source::ModuleSource::traits(),
+                    "IndexValue",
+                    crate::defs::DefKind::Trait,
+                );
+                crate::name::FqTraitName::declared(&defs, def)
+            },
         }
     }
 }

@@ -3423,7 +3423,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .as_ref()
                     .and_then(crate::resolve::head_site)
                     .and_then(|site| resolutions.declared(site))
-                    .map(|def| resolutions.decl_key(def))
                 else {
                     continue;
                 };
@@ -3484,7 +3483,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,
-                            trait_key.clone(),
+                            trait_key,
                             binding.name.clone(),
                             type_param_id,
                         );

@@ -205,11 +205,18 @@ impl TypeSystem {
                 return tt.mangle_type_name(id);
             }
         }
+        let defs = self.resolutions.defs();
         self.trait_env.find_struct_like_decl_key(name).map_or_else(
             || name.to_string(),
             // `of_head`, not `declared`: the index also carries builtin shapes,
             // which a mangler spells bare wherever they appear.
-            |(module, decl)| crate::name::FqTypeName::of_head(&module, &decl).into_string(),
+            |def| {
+                crate::name::FqTypeName::of_head(
+                    defs.module(def),
+                    &super::trait_env::render_decl_name(defs, def),
+                )
+                .into_string()
+            },
         )
     }
 }
@@ -483,33 +490,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // itself. Ask which declaration the name resolves to first, so an
         // alias answers with its target rather than with another module's
         // type that happens to be spelled the same.
-        let (canonical_module, canonical_name) = self.decl_key_or_local(struct_name);
-        if canonical_name != struct_name
+        let defs = self.tysys.resolutions.defs().clone();
+        if let Some(canonical) = self.decl_key_or_local(struct_name)
+            && defs.name(canonical) != struct_name
             && self
                 .tysys
                 .trait_env
                 .struct_like_decl_modules
-                .get(&canonical_name)
-                .is_some_and(|modules| modules.contains(&canonical_module))
+                .get(defs.name(canonical))
+                .is_some_and(|decls| decls.contains(&canonical))
         {
-            return canonical_module;
+            return defs.module(canonical).clone();
         }
 
         // Struct / resource / variant / enum / builtin declarations from the
         // digest (covers every loaded module, incl. the current one). The
         // current module wins when it declares the type; else the first
         // declaring module in build order.
-        if let Some(modules) = self
+        if let Some(decls) = self
             .tysys
             .trait_env
             .struct_like_decl_modules
             .get(struct_name)
         {
-            if modules.contains(&self.current_module_source) {
+            if decls
+                .iter()
+                .any(|def| *defs.module(*def) == self.current_module_source)
+            {
                 return self.current_module_source.clone();
             }
-            if let Some(first) = modules.first() {
-                return first.clone();
+            if let Some(first) = decls.first() {
+                return defs.module(*first).clone();
             }
         }
 
@@ -526,10 +537,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        if let Some(modules) = self.tysys.trait_env.newtype_decl_modules.get(struct_name)
-            && let Some(first) = modules.first()
+        if let Some(decls) = self.tysys.trait_env.newtype_decl_modules.get(struct_name)
+            && let Some(first) = decls.first()
         {
-            return first.clone();
+            return defs.module(*first).clone();
         }
 
         // Aliased imports (`use { Counter as CounterA }`) aren't declared as
@@ -1378,7 +1389,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::newtype_chain_names`]. Each base is re-canonicalised, since a
     /// newtype's base may be declared in another module.
     fn newtype_chain(&self, type_key: &ImplTargetKey) -> Vec<ImplTargetKey> {
-        let Some(name) = type_key.type_name() else {
+        let Some(name) = type_key.type_name(self.tysys.resolutions.defs()) else {
             return vec![type_key.clone()];
         };
         // The head keeps the caller's key; each base is keyed from the
@@ -1490,7 +1501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.tysys.find_trait_impl_for_type(
                         &self.annotate_ctx,
                         &type_lookup,
-                        &target.receiver(),
+                        &target.receiver(self.tysys.resolutions.defs()),
                         bound_def,
                     )
                 })
@@ -1521,7 +1532,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // comes straight off the impl's own AST.
         if !names_to_check
             .iter()
-            .any(|target| target.receiver().decl_key() == impl_key)
+            .any(|target| target.receiver(self.tysys.resolutions.defs()).decl_key() == impl_key)
             && !is_blanket_type_param
         {
             return None;
@@ -1787,7 +1798,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A template is registered under its mangled head, so the probe
             // is in that namespace, not the declaration one.
             return self.try_auto_derived_method_match(
-                type_key.receiver().head_key().as_mangled_str(),
+                type_key
+                    .receiver(self.tysys.resolutions.defs())
+                    .head_key()
+                    .as_mangled_str(),
                 method_name,
                 recv_id,
             );
@@ -2136,11 +2150,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             };
             found_traits.push(TraitMethodMatch {
-                trait_name: crate::name::FqTraitName::declared(
-                    defs.module(trait_decl),
-                    defs.name(trait_decl),
-                )
-                .with_args(super::trait_env::written_type_args(&trait_type_for_name)),
+                trait_name: crate::name::FqTraitName::declared(&defs, trait_decl)
+                    .with_args(super::trait_env::written_type_args(&trait_type_for_name)),
                 trait_decl,
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
@@ -2191,11 +2202,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = default_method.sig.self_kind;
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
-                    trait_name: crate::name::FqTraitName::declared(
-                        defs.module(trait_decl),
-                        defs.name(trait_decl),
-                    )
-                    .with_args(super::trait_env::written_type_args(&trait_type_for_name)),
+                    trait_name: crate::name::FqTraitName::declared(&defs, trait_decl)
+                        .with_args(super::trait_env::written_type_args(&trait_type_for_name)),
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
@@ -2940,7 +2948,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // base name: it is what the mangled method name
                     // discriminates instantiations on, exactly as the indexing
                     // path records `IndexValue<i32>`.
-                    trait_name: header.fq_trait()?,
+                    trait_name: header.fq_trait(s.tysys.resolutions.defs())?,
                     rhs_type,
                 })
             },
@@ -3055,7 +3063,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
 
-                let trait_name = header.fq_trait()?;
+                let trait_name = header.fq_trait(s.tysys.resolutions.defs())?;
                 // Find the method. Only its receiver shape is needed here —
                 // the indexing types come from the impl's associated-type
                 // bindings.

@@ -391,21 +391,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `impl Foo for T` block we're walking; the decl index is
             // keyed by `(decl_module, name)` and two modules can declare
             // a same-named effect / resource.
-            let canonical_key = self.decl_key_or_local(&base_trait_name);
-            let decl_module = self
-                .tysys
-                .trait_env
-                .effect_decl_index
-                .get(&canonical_key)
-                .map(|(m, _)| m.clone())
-                .or_else(|| {
-                    self.tysys
-                        .trait_env
-                        .resource_decl_index
-                        .get(&canonical_key)
-                        .map(|(m, _)| m.clone())
-                });
-            let Some(decl_module) = decl_module else {
+            let decl_module = self.decl_key_or_local(&base_trait_name).filter(|key| {
+                self.tysys.trait_env.effect_decl_index.contains(key)
+                    || self.tysys.trait_env.resource_decl_index.contains(key)
+            });
+            let Some(decl_module) = decl_module
+                .map(|key| self.tysys.resolutions.defs().module(key).clone())
+            else {
                 continue;
             };
             let type_args: Vec<TypeId> = match trait_type {

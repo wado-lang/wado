@@ -15,7 +15,7 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, expr_stmt,
-    generic_method_call, i32_const, i64_const, if_stmt, index_value_trait, internal_call,
+    generic_method_call, i32_const, i64_const, if_stmt, internal_call,
     let_mut_stmt, let_stmt, local_ref, loop_stmt, split_packed_ptr_len, synth_span,
 };
 
@@ -751,7 +751,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
     let elem_local = alloc_local(next_local, locals, elem_type_id);
     let iv_info = LocalMethodName::new(
         FqTypeName::declared(&ModuleSource::list(), &names.array),
-        Some(index_value_trait()),
+        Some(names.index_value.clone().with_args(vec!["i32".to_string()])),
         "index_value".to_string(),
     );
     let iv_mangled = iv_info.to_mangled_name();
