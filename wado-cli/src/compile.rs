@@ -12,10 +12,11 @@ use wado_compiler::Severity;
 use wado_compiler::wit_bundle;
 
 use crate::args::{self, CliExit};
-use crate::compiler_host::{FilesystemCompilerHost, KilnComponentCache};
+use crate::compiler_host::FilesystemCompilerHost;
 use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::kiln_provider::CliGeneratorProvider;
 use crate::manifest;
+use crate::run_cache::RunCache;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OptLevel {
@@ -534,20 +535,21 @@ pub async fn try_compile(
     filename: &str,
     flags: &CompileFlags,
 ) -> Result<wado_compiler::CompileResult, wado_compiler::CompileFailure> {
-    try_compile_with_kiln_cache(filename, flags, None)
+    try_compile_with_run_cache(filename, flags, None)
         .await
         .map_err(|e| wado_compiler::CompileFailure {
             is_todo_module: e.is_todo_module,
         })
 }
 
-/// `try_compile` with an optional [`KilnComponentCache`]. `wado test`
-/// passes one shared across every fixture so a generator is AOT-compiled
-/// once per run; `None` keeps the per-host cache for single-file builds.
-pub async fn try_compile_with_kiln_cache(
+/// `try_compile` with an optional [`RunCache`]. `wado test` passes one shared
+/// across every fixture, so a generator is resolved and AOT-compiled once per
+/// run and every fixture reads one view of the tree; `None` keeps the per-host
+/// cache for single-file builds.
+pub async fn try_compile_with_run_cache(
     filename: &str,
     flags: &CompileFlags,
-    kiln_cache: Option<Arc<KilnComponentCache>>,
+    run_cache: Option<Arc<RunCache>>,
 ) -> Result<wado_compiler::CompileResult, TryCompileError> {
     let path = Path::new(filename);
 
@@ -571,10 +573,16 @@ pub async fn try_compile_with_kiln_cache(
     // index and the Kiln pipeline's `[build-dependencies]` resolution.
     let manifest_pair = load_nearest_manifest(path);
     let base_host = FilesystemCompilerHost::with_log_level(base_path.clone(), flags.log_level);
-    let base_host = match kiln_cache {
-        Some(cache) => base_host.with_shared_kiln_cache(cache),
+    let base_host = match run_cache {
+        Some(cache) => base_host.with_shared_run_cache(cache),
         None => base_host,
     };
+    // The entry file never goes through `load_source`, so the watch would miss
+    // the one file the caller named.
+    base_host
+        .run_cache()
+        .inputs()
+        .observe(path, source.as_bytes());
     let host = match attach_manifest_and_component_deps(
         base_host,
         manifest_pair.as_ref(),
@@ -855,7 +863,17 @@ pub(crate) async fn maybe_run_pipeline(
     let mut inline = inline;
     rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
     rewrite_local_dir_modules(&mut inline, &manifest_root);
+    // Everything a generator writes is a product of this run, so the watch must
+    // not read a regenerated output as the tree moving under it. Declared
+    // before the pipeline runs, but applied when the watch is asked, so the
+    // order fixtures compile in does not matter.
+    for invocation in &inline {
+        host.run_cache()
+            .inputs()
+            .mark_generated_dir(manifest_root.join(invocation.output_dir.as_str()));
+    }
     let provider = CliGeneratorProvider::new(manifest_root.clone())
+        .with_run_cache(host.run_cache())
         .with_no_cache(no_cache)
         .with_registry_context(crate::kiln_provider::RegistryContext {
             build_dependencies: manifest.build_dependencies.clone(),
