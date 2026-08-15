@@ -1200,7 +1200,6 @@ impl<'a> DceWalker<'a> {
                 }
             }
             ResolvedType::Struct { def, .. } => {
-                let _name = self.type_table.struct_head_name(def);
                 let module_source = self.type_table.struct_head_module(def).clone();
                 // Non-monomorphized struct method.
                 let method_id = FunctionId::Method(MethodName::new(
@@ -1290,7 +1289,6 @@ impl<'a> DceWalker<'a> {
                 self.analysis.callees.insert(callee_id);
             }
             ResolvedType::Enum { def } => {
-                let _name = self.type_table.def_name(def).to_string();
                 let module_source = self.type_table.def_module(def).clone();
                 // Enum method (user-defined or auto-derived trait impl).
                 let method_id = FunctionId::Method(MethodName::new(
@@ -1309,7 +1307,6 @@ impl<'a> DceWalker<'a> {
                 self.analysis.effect_calls.insert((name, method_name));
             }
             ResolvedType::Variant { def } => {
-                let _name = self.type_table.def_name(def).to_string();
                 let module_source = self.type_table.def_module(def).clone();
                 // Variant method, e.g. `Shape^Inspect::inspect`.
                 let method_id = FunctionId::Method(MethodName::new(

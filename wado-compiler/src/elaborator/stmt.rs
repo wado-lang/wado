@@ -88,8 +88,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // A newtype's `TypeId` is its base type's, so it is resolved here
         // rather than declared. The structs above are already nameable; a base
-        // naming another local newtype takes one round per link of the chain,
-        // and a round that resolves nothing new has reached the fixpoint.
+        // naming another local newtype resolves one more link of the chain per
+        // round, and a round that resolves nothing new has reached the
+        // fixpoint. A newtype registers only once its base is known, so what
+        // it registers is never revisited.
         let mut pending: Vec<&ast::Newtype> = items
             .iter()
             .filter_map(|item| match item {
@@ -349,6 +351,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a local newtype, reporting whether its base type came out
     /// known. A base naming another local newtype needs that one resolved
     /// first, which is what the caller's fixpoint delivers.
+    ///
+    /// An unknown base registers nothing. Registering one against `UNKNOWN`
+    /// would hand the next round a placeholder indistinguishable from the real
+    /// thing, and the dependent that bound to it would keep it.
     fn resolve_local_newtype(&mut self, newtype_decl: &ast::Newtype) -> bool {
         if !newtype_decl.type_params.is_empty() {
             // Generic local newtypes (`type Wrapper<T> = List<T>;`) are a
@@ -362,6 +368,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
         let base_type_id = self.resolve_type(&newtype_decl.ty);
+        if base_type_id == crate::tir::TypeTable::UNKNOWN {
+            return false;
+        }
         let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
         // Same as the local struct: the head is this declaration's identity.
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
@@ -398,7 +407,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // handling (`reify_local_newtype`) discovers and builds this
         // declaration's `TirNewtype`, from the `local_newtypes` entry just
         // recorded above.
-        base_type_id != crate::tir::TypeTable::UNKNOWN
+        true
     }
 
     pub(super) fn resolve_labeled_block(

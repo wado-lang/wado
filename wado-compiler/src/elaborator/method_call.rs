@@ -1723,7 +1723,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         {
                             let inferred = self.tysys.infer_variant_type_args(
                                 &self.annotate_ctx,
-                                &name,
                                 &variant_info,
                                 &case_data,
                                 args.first(),

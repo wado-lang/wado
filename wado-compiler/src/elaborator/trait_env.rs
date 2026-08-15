@@ -1099,13 +1099,10 @@ impl TraitEnv {
                     // for a trait, so a module implementing its own `trait Sub`
                     // fell through to `core:prelude`'s arithmetic one.
                     trait_ref.map(ImplTargetKey::Decl).unwrap_or_else(|| {
-                        // A trait position whose site names no declaration
-                        // — a bodiless derive naming a stdlib trait the
-                        // module never `use`d. The declaration indexes are
-                        // the only thing that can answer, and they decline
-                        // when several modules declare the name. Same chain
-                        // as `Elaborator::decl_key_or_local`, so the header
-                        // and the elaborator key the trait identically.
+                        // A trait position whose site names no declaration.
+                        // The declaration indexes are the only thing that can
+                        // answer, and they decline when several modules
+                        // declare the name.
                         unique_declared_trait(
                             defs,
                             &get_type_name_static(trait_type),

@@ -786,7 +786,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .collect();
                         let inferred = self.tysys.infer_variant_type_args(
                             &self.annotate_ctx,
-                            prefix,
                             &variant_info,
                             &case_data,
                             None,
@@ -3171,9 +3170,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // typed by — it would settle on the default `i32` and then mismatch.
         let expected_args =
             expected_type.and_then(|ty| match self.tysys.type_table.borrow().get(ty) {
-                ResolvedType::GenericInstance { def, type_args }
-                    if self.tysys.type_table.borrow().def_name(*def) == struct_name =>
-                {
+                ResolvedType::GenericInstance { def, type_args } if Some(*def) == struct_decl => {
                     Some(type_args.clone())
                 }
                 _ => None,
@@ -4065,7 +4062,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 def,
                 type_args: expected_args,
             } = expected_resolved
-                && self.tysys.type_table.borrow().def_name(def) == struct_info.name
+                && Some(def) == struct_decl
                 && expected_args.len() == struct_info.type_param_type_ids.len()
             {
                 for (&var, &expected_arg) in inst.vars.iter().zip(expected_args.iter()) {

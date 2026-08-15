@@ -545,7 +545,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             def: expected_def,
                             type_args: expected_args,
                         } = expected_resolved
-                            && self.tysys.type_table.borrow().def_name(expected_def) == prefix
+                            && Some(expected_def)
+                                == self
+                                    .tysys
+                                    .resolutions
+                                    .defs()
+                                    .of_ast_id(variant_info.defined_at)
                             && expected_args.len() == variant_info.type_param_type_ids.len()
                         {
                             payload_type =
@@ -890,7 +895,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         {
                             let inferred = self.tysys.infer_variant_type_args(
                                 &self.annotate_ctx,
-                                &prefix_owned,
                                 &variant_info,
                                 &case_data,
                                 payload.as_deref(),
@@ -1057,7 +1061,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 {
                                     let inferred = self.tysys.infer_variant_type_args(
                                         &self.annotate_ctx,
-                                        type_name,
                                         &variant_info,
                                         &case_data,
                                         payload.as_deref(),
@@ -2690,7 +2693,6 @@ impl TypeSystem {
     pub(super) fn infer_variant_type_args(
         &mut self,
         ctx: &Scope,
-        variant_name: &str,
         variant_info: &super::types::VariantInfo,
         case_data: &super::types::VariantCaseData,
         payload: Option<&TirExpr>,
@@ -2703,6 +2705,11 @@ impl TypeSystem {
         // prelude are one declaration, and the annotation is the one the
         // caller's frame resolved.
         let mut canonical_def = None;
+        let variant_def = self
+            .type_table
+            .borrow()
+            .defs()
+            .of_ast_id(variant_info.defined_at);
 
         let mut infer = InferCtx::new(&self.type_table, variant_info.type_param_type_ids.clone());
 
@@ -2732,7 +2739,7 @@ impl TypeSystem {
                 def,
                 type_args: expected_args,
             } = expected_resolved
-                && self.type_table.borrow().def_name(def) == variant_name
+                && Some(def) == variant_def
                 && expected_args.len() == variant_info.type_param_type_ids.len()
             {
                 canonical_def = Some(def);
