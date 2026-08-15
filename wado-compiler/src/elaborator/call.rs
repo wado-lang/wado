@@ -1810,16 +1810,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Expr::Ident(ident) = callee else {
             return (Vec::new(), None);
         };
-        if ident.name.contains("::") {
-            return (Vec::new(), None);
-        }
         if let Some(defaults) = ctx.closure_defaults.get(&ident.name) {
             return (defaults.clone(), None);
         }
-        if let Some(sig) = self
-            .tysys
-            .signatures
-            .function_sig(&self.current_module_source, &ident.name)
+        // A qualified name is never a function of the writing module, so only
+        // the site below can answer for one — `ns::f` included.
+        if !ident.name.contains("::")
+            && let Some(sig) = self
+                .tysys
+                .signatures
+                .function_sig(&self.current_module_source, &ident.name)
         {
             return (
                 crate::elaborator::sig::Param::named_defaults(&sig.params),
