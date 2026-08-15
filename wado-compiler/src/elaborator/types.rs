@@ -2240,7 +2240,6 @@ impl<'a> TypeLookup<'a> {
         self.all_flags_cases.get(&def)
     }
 
-
     /// Which declaration `name` reaches from the module this view stands in.
     ///
     /// The one place a `TypeLookup` turns a spelling into an identity, and it

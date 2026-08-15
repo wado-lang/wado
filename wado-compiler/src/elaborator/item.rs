@@ -260,8 +260,13 @@ pub(super) fn register_resource_compiler_item<H: CompilerHost>(
     let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
         return;
     };
-    if !check_compiler_item_placement(item, CompilerItemKind::Resource, module_source, span, logger)
-    {
+    if !check_compiler_item_placement(
+        item,
+        CompilerItemKind::Resource,
+        module_source,
+        span,
+        logger,
+    ) {
         return;
     }
     let resolved = Resolved::Resource {
@@ -1599,14 +1604,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .expect("type param registered by register_generic_params")
                     })
                     .collect();
-                scope
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .intern(crate::tir::ResolvedType::GenericResource {
+                scope.tysys.type_table.borrow_mut().intern(
+                    crate::tir::ResolvedType::GenericResource {
                         def,
                         type_args: type_arg_ids,
-                    })
+                    },
+                )
             } else {
                 scope.tysys.type_table.borrow_mut().make_resource(def)
             }

@@ -80,46 +80,6 @@ impl CmStdlibNames {
             array_fq: type_table.compiler_struct_fq_name(CompilerItem::List),
         }
     }
-
-    /// Canonical-name snapshot for unit tests that do not bootstrap a
-    /// full `TypeTable` with the stdlib registered. The names are the
-    /// production stdlib defaults; tests that want to exercise rename
-    /// behaviour must construct a [`Self`] explicitly.
-    #[cfg(test)]
-    pub fn for_tests() -> Self {
-        Self {
-            string: "String".to_string(),
-            array: "List".to_string(),
-            option: "Option".to_string(),
-            result: "Result".to_string(),
-            some_name: "Some".to_string(),
-            some_index: 0,
-            none_name: "None".to_string(),
-            none_index: 1,
-            ok_name: "Ok".to_string(),
-            ok_index: 0,
-            err_name: "Err".to_string(),
-            err_index: 1,
-            index_value: {
-                let mut defs = crate::defs::DefTable::default();
-                let def = defs.declare_for_test(
-                    &crate::module_source::ModuleSource::traits(),
-                    "IndexValue",
-                    crate::defs::DefKind::Trait,
-                );
-                crate::name::FqTraitName::declared(&defs, def)
-            },
-            array_fq: {
-                let mut defs = crate::defs::DefTable::default();
-                let def = defs.declare_for_test(
-                    &crate::module_source::ModuleSource::list(),
-                    "List",
-                    crate::defs::DefKind::Struct,
-                );
-                crate::name::FqTypeName::declared(&defs, def)
-            },
-        }
-    }
 }
 
 /// Context for lifting CM values to GC types, providing access to
@@ -572,7 +532,7 @@ pub(super) fn check_cm_boundary_representable(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     visited: &mut Vec<TypeId>,
 ) -> Result<(), String> {
-    let names = CmStdlibNames::from_type_table(&type_table);
+    let names = CmStdlibNames::from_type_table(type_table);
     check_cm_boundary_representable_inner(type_id, type_table, tir_modules, &names, visited)
 }
 
@@ -979,7 +939,7 @@ pub(super) fn flatten_export_type(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
 ) {
-    let names = CmStdlibNames::from_type_table(&type_table);
+    let names = CmStdlibNames::from_type_table(type_table);
     flatten_export_type_inner(ty, out, tir_modules, type_table, &names);
 }
 
@@ -1111,7 +1071,7 @@ pub(super) fn flat_types_from_type_id_into(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
 ) {
-    let names = CmStdlibNames::from_type_table(&type_table);
+    let names = CmStdlibNames::from_type_table(type_table);
     flat_types_from_type_id_inner(type_id, out, tir_modules, type_table, &names);
 }
 

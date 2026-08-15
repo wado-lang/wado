@@ -485,16 +485,18 @@ caller of the same first-wins index. A removed mechanism takes one fix.
         The call site's path still names the receiver with its owner segment,
         which the walk answers for under `ns$Type` — the dispatch chain has to
         carry that site down to here for it to be read.
-- [ ] `NAME_TO_IDENTITY` reduced to what belongs there. What is left of its
-      original seven is the three above plus three that stay: `imported_as`,
-      which answers what a module imported under a local name rather than what
-      a spelling means; `declare_for_test`, which is `#[cfg]`-gated; and
-      `cm_decl_in`, the Component Model boundary. `decl_named_in` and
-      `canonical_assoc_const_key` are gone — the latter because a `Type::CONST`
-      use site now reads its owner off the qualifier's own reference site,
-      which `walk_pattern` reaches and the resolve walk answers for. When only
-      those three are left, the Enforcement bullet above is a statement about
-      production code rather than a ratchet over it.
+- [ ] `NAME_TO_IDENTITY` reduced to what belongs there. Four of the original
+      seven are left: `declaration_named` and `value_named` above, `imported_as`,
+      which answers what a module imported under a local name rather than what a
+      spelling means, and `cm_decl_in`, the Component Model boundary.
+      `decl_named_in`, `canonical_assoc_const_key` and `declare_for_test` are
+      gone. When only the last two are left, the Enforcement bullet above is a
+      statement about production code rather than a ratchet over it.
+
+      `declare_for_test` went with every `#[cfg(test)]` constructor that minted
+      a declaration outside the pass that declares, and with the unit tests
+      resting on them. A feature whose only unit test needs a hole cut in it is
+      covered by `tests/fixtures/` instead, which exercises the real path.
 - [ ] `SymbolPath`. `LocalMethodName` and `FqTypeName` already serve as the
       structured identity a name renders from, and nothing parses a rendering
       back. What is left is that `FqTraitName::args` and

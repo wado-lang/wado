@@ -773,11 +773,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::RangeKind::Exclusive => crate::compiler_item::CompilerItem::RangeExclusive,
             ast::RangeKind::Inclusive => crate::compiler_item::CompilerItem::RangeInclusive,
         };
-        let range_decl = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_item_def(item);
+        let range_decl = self.tysys.type_table.borrow().compiler_item_def(item);
         let start = self.synth(&range.start, scope);
         let element = start.meet(self.synth(&range.end, scope));
         let Some(def) = range_decl else {

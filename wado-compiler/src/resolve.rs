@@ -298,14 +298,8 @@ impl Resolutions {
         }
     }
 
-    /// The declaration a reference site names, or `None` when the site names
-    /// no declaration *or* was never walked.
-    ///
-    /// For a consumer that also walks AST the compiler synthesised — reify
-    /// reifies a foreign default's body and the bodies its own desugarings
-    /// mint — whose nodes carry ids no module ever wrote and so no walk
-    /// answered for. Everyone reading a site from source uses
-    /// [`Self::declared`], which goes through the total [`Self::get`].
+    /// [`Self::declared`] for a consumer that also walks synthesised AST, whose
+    /// nodes carry ids no module wrote and no walk answered for.
     #[must_use]
     pub fn declared_if_walked(&self, site: AstId) -> Option<DefId> {
         match self.refs.get(&site).copied()? {
@@ -379,8 +373,6 @@ impl Resolver<'_> {
     /// module's explicit imports keyed by local name, its own declarations, then
     /// the prelude and its implementation modules. Own declarations outranking
     /// the prelude is what makes a local `trait Left` mean itself (#1298).
-    /// [`Self::resolve_name`] for a name written in value position, where a
-    /// case is reachable and a type of the same name shadows it.
     fn resolve_value_name(&self, name: &str) -> Resolution {
         if let Some(id) = self.binder(name) {
             return Resolution::Binder(id);
@@ -483,13 +475,9 @@ impl AstVisitor for Resolver<'_> {
         self.in_scope(&func.type_params, None, |s| ast::walk_function(s, func));
     }
 
-    /// A block opens a scope for the items declared in it, and hands them to
-    /// the enclosing one when it closes.
-    ///
-    /// A local item outlives the block that declares it: `struct Point` written
-    /// in a match arm is nameable for the rest of the function, which is what
-    /// the elaborator's `fn_local_items` records. Discarding the scope at the
-    /// block's end made the walk answer `Unresolved` for every later mention.
+    /// A local item outlives the block that declares it — `struct Point` in a
+    /// match arm is nameable for the rest of the function — so a closing block
+    /// hands its scope to the enclosing one.
     fn visit_block(&mut self, block: &ast::Block) {
         self.locals.push(IndexMap::default());
         ast::walk_block(self, block);
@@ -540,41 +528,19 @@ impl AstVisitor for Resolver<'_> {
         }
     }
 
-    /// A qualified path in expression position (`Trait::method`,
-    /// `Type::CONST`, `ns::Type::CONST`) names declarations with the segments
-    /// before its last, and each carries its own site. Without this the only
-    /// trait reference a UFCS call has is a substring of the callee's name,
-    /// which no vantage owns.
-    ///
-    /// Two segments are recorded: the head, which is what a `Trait::method`
-    /// callee names, and the *owner* — the segment just before the final name,
-    /// which is what a `Type::CONST` qualifies its constant with. They are the
-    /// same segment for a two-segment path. A namespace-qualified owner
-    /// resolves under the `ns$Type` alias the namespace import registered,
-    /// which is the only spelling naming the declaration behind it.
+    /// A qualified path names declarations with the segments before its last:
+    /// the head, which `Trait::method` names, and the one just before the final
+    /// name, which `Type::CONST` qualifies its constant with. They coincide for
+    /// a two-segment path.
     fn visit_expr(&mut self, expr: &ast::Expr) {
-        // A named struct literal's type name is a reference site like any
-        // written type: `Point { … }` names a declaration, and the module that
-        // wrote it is the vantage that decides which. A `ns::Point` literal
-        // resolves under the `ns$Point` alias, the same spelling the namespace
-        // import registered.
         if let ast::Expr::StructLiteral(lit) = expr
             && let (Some(name), Some(name_id)) = (lit.name.as_deref(), lit.name_id)
         {
             let answer = self.resolve_name(&name.replace("::", "$"));
             self.record(name_id, answer);
         }
-        // The name an expression-position identifier writes, whole: the walk
-        // answers for it so a consumer reads what it means here rather than
-        // running the scope again. A local binding is not a declaration, so a
-        // bare name that is one answers `Unresolved` — the consumer checks its
-        // own locals first, as it must.
-        //
-        // A qualified path is asked under the `ns$member` spelling a namespace
-        // import registers, which is the only one naming what `ns::member`
-        // means. A path that is no such import — `Color::Red`, `Trait::method`
-        // — reaches nothing under it and answers `Unresolved`; those are named
-        // by their segments, recorded below.
+        // `ns::member` resolves under the `ns$member` alias; a path that is no
+        // such import answers `Unresolved` and its segments below name it.
         if let ast::Expr::Ident(ident) = expr {
             let written = ident.name.replace("::", "$");
             let answer = self.resolve_value_name(&written);

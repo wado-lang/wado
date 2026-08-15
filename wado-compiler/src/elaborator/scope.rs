@@ -237,13 +237,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
         let decl = self.bound_decl(bound, known);
-        if let Some(decl) = decl
-            && let Some((existing, _)) = out.iter_mut().find(|(_, d)| *d == Some(decl)) {
-                if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
-                    *existing = bound.clone();
-                }
-                return;
+        // A bound that names no declaration falls back to its spelling, so an
+        // erroring program still reports one bound rather than one per mention.
+        let duplicate = match decl {
+            Some(decl) => out.iter_mut().find(|(_, d)| *d == Some(decl)),
+            None => out
+                .iter_mut()
+                .find(|(b, d)| d.is_none() && b.name == bound.name),
+        };
+        if let Some((existing, _)) = duplicate {
+            if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
+                *existing = bound.clone();
             }
+            return;
+        }
         out.push((bound.clone(), decl));
     }
 

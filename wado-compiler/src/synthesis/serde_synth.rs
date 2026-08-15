@@ -268,8 +268,7 @@ fn generate_field_schema(
     // trait signature.
     let key_slice_type = {
         let base = {
-            let def =
-                tt.require_compiler_item_def(crate::compiler_item::CompilerItem::ArraySlice);
+            let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::ArraySlice);
             tt.make_generic_instance(def, vec![TypeTable::U8])
         };
         let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::ByteSlice);
@@ -411,7 +410,7 @@ fn byte_slice_method_call(
         TirExprKind::method_call(
             Box::new(receiver),
             FunctionRef {
-                module_source: module_source.clone(),
+                module_source,
                 name: method_info.to_mangled_name(),
                 monomorph_info: Some(monomorph_info),
                 method_info: Some(method_info),

@@ -817,7 +817,6 @@ pub struct CmInterfaceRegistry {
     /// like `HeadingInfo`. Keyed by name — unique within a library's API.
     lib_local_type_sources: IndexMap<String, ModuleSource>,
 
-
     /// FQs of interfaces imported from a CM component dependency. The plan
     /// classifies these as [`crate::wir::ImportKind::Component`] for composition.
     component_interfaces: IndexSet<String>,
@@ -2562,7 +2561,6 @@ impl CmInterfaceRegistry {
     pub fn lib_local_type_source(&self, name: &str) -> Option<&ModuleSource> {
         self.lib_local_type_sources.get(name)
     }
-
 
     /// Resolve a named type to its source interface across all CM namespaces
     /// (`wasi:*` and `core:kiln/*`). The Kiln-specific lookup is only

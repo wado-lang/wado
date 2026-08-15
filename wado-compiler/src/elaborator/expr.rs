@@ -94,10 +94,9 @@ pub(super) fn peel_to_struct(
         // answers for it — a `DefId` would drop the whole anon-composition
         // path on the floor.
         ResolvedType::Struct { def, .. } => Some((*def, Vec::new())),
-        ResolvedType::GenericInstance { def, type_args } => Some((
-            crate::tir::StructDef::Decl(*def),
-            type_args.clone(),
-        )),
+        ResolvedType::GenericInstance { def, type_args } => {
+            Some((crate::tir::StructDef::Decl(*def), type_args.clone()))
+        }
         _ => None,
     }
 }
@@ -572,8 +571,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cross-module collision, issue #1342). Reify produces the const's
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
-        if let Some((_const_module, type_id, const_expr)) =
-            self.associated_constant_of_path(ident)
+        if let Some((_const_module, type_id, const_expr)) = self.associated_constant_of_path(ident)
         {
             // Resolve the constant body for its fact-recording side effects;
             // reify re-reifies it (`reify_ident`). Not an l-value.
@@ -644,21 +642,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         }
 
-        // Fallback: when resolving a default expression, look up the
-        // identifier in the callee's lexical scope (see
-        // `default_scope_module`). This gives defaults access to the
-        // definition module's private globals and functions, and to
-        // qualified type paths (`Mode::Fast`) whose type the use site
-        // never imported (issue #1486).
+        // A default expression looks its identifier up in the callee's lexical
+        // scope, which is what gives it the definition module's private globals
+        // and functions (issue #1486).
         if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
+            && let Some(result) = self.resolve_ident_in_fallback_module(&ident.name, &fallback)
         {
-            if let Some(result) = self.resolve_ident_in_fallback_module(&ident.name, &fallback) {
-                return result;
-            }
-            // The qualified-case path above already resolved the prefix in
-            // the module that wrote it, so a foreign default needs no second
-            // attempt from the declaring module's vantage.
+            return result;
         }
 
         // Unknown variable - report error
@@ -1127,7 +1118,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
         let struct_head = match resolved {
             ResolvedType::Struct { def, .. } => Some(def),
-            ResolvedType::GenericInstance { .. } => None,
+            ResolvedType::GenericInstance { def, .. } => Some(crate::tir::StructDef::Decl(def)),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 return self.record_field_reference(inner, field_name, use_id);
             }
@@ -1313,7 +1304,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
                     let _ = self.emit(TypeError::PrivateFieldAccess {
-                        struct_name: struct_name.clone(),
+                        struct_name,
                         field_name: field_name.to_string(),
                         visibility: *vis,
                         span,
@@ -2909,8 +2900,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
             ResolvedType::Struct { .. } => {
                 let tt = self.tysys.type_table.borrow();
-                tt.nominal_def(target_type)
-                    .map(|def| (FqTypeName::declared(tt.defs(), def), tt.def_name(def).to_string()))
+                tt.nominal_def(target_type).map(|def| {
+                    (
+                        FqTypeName::declared(tt.defs(), def),
+                        tt.def_name(def).to_string(),
+                    )
+                })
             }
             _ => None,
         };
@@ -3183,9 +3178,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 _ => None,
             });
-        let resolved_struct_fields: Option<Vec<(String, TypeId)>> = self
-            .struct_fields_of_written_decl(struct_decl)
-            .map(|info| {
+        let resolved_struct_fields: Option<Vec<(String, TypeId)>> =
+            self.struct_fields_of_written_decl(struct_decl).map(|info| {
                 let params = info.type_param_type_ids.clone();
                 let fields: Vec<(String, TypeId)> = info
                     .fields
@@ -3431,8 +3425,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // preserved — so only flag fields the user explicitly provided, not the
         // defaults synthesized above.
         if struct_module_source != self.current_module_source
-            && let Some(struct_info) =
-                self.struct_fields_of_written_decl(struct_decl)
+            && let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl)
         {
             let same_package = struct_module_source.same_package(&self.current_module_source);
             for (fname, _, vis) in &struct_info.fields {
@@ -3548,10 +3541,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Check trait bounds on inferred type arguments
-            if let Some(struct_info) = self
-                .struct_fields_of_written_decl(struct_decl)
-                .cloned()
-            {
+            if let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl).cloned() {
                 for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
                     if let Some(&type_arg) = type_args.get(i) {
                         for bound in bounds {

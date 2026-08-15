@@ -1203,7 +1203,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let param_is_mut = self.reflect_scalar_param_is_mut(spec, &method);
         let receiver = self.tysys.type_table.borrow().fq_base_type_name(self_ty);
         let func_ref = FunctionRef {
-            module_source: module_source.clone(),
+            module_source,
             name: MethodName::format_local(&receiver, Some(&trait_name), &method),
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(

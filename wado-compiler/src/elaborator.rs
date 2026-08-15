@@ -816,7 +816,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// aliases, so this is the import tier answering the qualification the
     /// programmer wrote — the same answer the resolve walk gives `ns::Name` in
     /// type position, rather than a second lookup beside it.
-    pub(super) fn namespace_member(&self, namespace: &str, name: &str) -> Option<crate::defs::DefId> {
+    pub(super) fn namespace_member(
+        &self,
+        namespace: &str,
+        name: &str,
+    ) -> Option<crate::defs::DefId> {
         self.tysys.resolutions.imported_as(
             &self.current_module_source,
             &crate::name::namespace_member_alias(namespace, name),
@@ -1199,8 +1203,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         ident: &ast::IdentExpr,
     ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
-        let owner =
-            trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
+        let owner = trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
         let name = ident.segments.last()?;
         self.associated_constant_of(owner, &name.name)
     }

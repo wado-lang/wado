@@ -2685,8 +2685,7 @@ impl Monomorphizer {
                 {
                     // The bare variant already names its declaration, so the
                     // instance is interned against that one — `Option` included.
-                    let new_id =
-                        type_table.make_generic_instance(def, vec![payload_expr.type_id]);
+                    let new_id = type_table.make_generic_instance(def, vec![payload_expr.type_id]);
                     *variant_type = new_id;
                     expr.type_id = new_id;
                 }

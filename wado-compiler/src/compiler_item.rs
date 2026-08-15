@@ -1544,7 +1544,9 @@ impl CompilerItems {
     pub fn require_enum(&self, item: CompilerItem) -> (&ModuleSource, &str) {
         match self.require(item) {
             Resolved::Enum {
-                module_source, name, ..
+                module_source,
+                name,
+                ..
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Enum", other),
         }

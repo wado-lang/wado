@@ -89,8 +89,7 @@ fn lower_to_flat_inner(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     ctx: LiftContext<'_>,
 ) -> Vec<FlatLocal> {
-    let names =
-        super::types::CmStdlibNames::from_type_table(&ctx.type_table.borrow());
+    let names = super::types::CmStdlibNames::from_type_table(&ctx.type_table.borrow());
     match resolved {
         ResolvedType::Primitive(p) => {
             let (flat_type_id, cm_type) = match p {
@@ -276,7 +275,7 @@ fn lower_to_flat_inner(
             let elem_local = alloc_local(next_local, locals, elem_type_id);
             let iv_info = LocalMethodName::new(
                 names.array_fq.clone(),
-                Some(names.index_value.clone().with_args(vec!["i32".to_string()])),
+                Some(names.index_value.with_args(vec!["i32".to_string()])),
                 "index_value".to_string(),
             );
             let iv_mangled = iv_info.to_mangled_name();
@@ -727,8 +726,7 @@ pub(super) fn synthesize_lift_from_flat_params(
     lift_ctx: LiftContext<'_>,
 ) -> (TirExpr, usize) {
     let type_table_cell = lift_ctx.type_table;
-    let names =
-        super::types::CmStdlibNames::from_type_table(&type_table_cell.borrow());
+    let names = super::types::CmStdlibNames::from_type_table(&type_table_cell.borrow());
     match ty {
         Type::Named(named) if named.name == names.string => {
             // String flat ABI: (ptr: i32, len: i32) pointing to linear memory.
@@ -1769,8 +1767,7 @@ pub(super) fn synthesize_post_return(
         return None;
     }
 
-    let names =
-        super::types::CmStdlibNames::from_type_table(&env.type_table.borrow());
+    let names = super::types::CmStdlibNames::from_type_table(&env.type_table.borrow());
     let shape_ctx = env.shape_ctx(&names);
     let shape = cm_shape(ty, &shape_ctx);
 

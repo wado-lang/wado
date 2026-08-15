@@ -778,11 +778,11 @@ fn build_dispatch_wrapper_function(
             let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::String);
             tt.find_struct_type(crate::tir::StructDef::Decl(def))
                 .unwrap_or_else(|| {
-                panic!(
-                    "core:prelude/string.wado String type missing from \
+                    panic!(
+                        "core:prelude/string.wado String type missing from \
                          the package type table at effect-dispatch synthesis"
-                )
-            })
+                    )
+                })
         };
         let message = TirExpr::new(
             TirExprKind::StringLiteral(format!("no handler installed for `{label}::{op_name}`")),

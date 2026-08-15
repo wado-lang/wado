@@ -317,8 +317,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         ident: &ast::IdentExpr,
     ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
-        let owner =
-            super::trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
+        let owner = super::trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
         let name = ident.segments.last()?;
         self.associated_constant_of(owner, &name.name)
     }
@@ -8786,8 +8785,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    static expression in practice), so reify uses the
         //    surrounding `ctx` directly — matches the elaborator's
         //    `resolve_expr(&const_expr, ctx, …)`.
-        if let Some((const_module, type_id, const_expr)) = self.associated_constant_of_path(ident)
-        {
+        if let Some((const_module, type_id, const_expr)) = self.associated_constant_of_path(ident) {
             // The constant's body lives in its *defining* module (e.g.
             // `pub const MAX: i32 = 2147483647;` in primitive.wado). Its
             // `AstId`s index that module's `ModuleSemantics`, not the use
@@ -9288,8 +9286,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     method_name.to_string(),
                 )
             };
-            let method_info =
-                crate::name::LocalMethodName::new(owner_head, None, method_name);
+            let method_info = crate::name::LocalMethodName::new(owner_head, None, method_name);
             crate::tir::FunctionRef {
                 module_source: crate::module_source::ModuleSource::int128(),
                 name: method_info.to_mangled_name(),
@@ -9751,11 +9748,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ResolvedType::GenericInstance { type_args, .. } => type_args,
             _ => Vec::<TypeId>::new(),
         };
-        let payload_type = self.get_variant_case_payload_type(
-            self.tysys.type_def(peeled),
-            case_name,
-            &type_args,
-        );
+        let payload_type =
+            self.get_variant_case_payload_type(self.tysys.type_def(peeled), case_name, &type_args);
         TirPattern::Variant {
             enum_type: peeled,
             variant_name: case_name.to_string(),

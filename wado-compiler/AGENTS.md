@@ -9,8 +9,7 @@ optimizer has its own guide: [`docs/optimizer.md`](../docs/optimizer.md).
 - Name mangling and monomorphization go through `name.rs`. No other component knows a name format.
 - Walk IR through the visitor utilities, not by hand.
 - Escalate the test scope as the work matures: `cargo check` while iterating,
-  `mise run test` during development, `mise run test-wado` when wrapping up, and
-  the `on-task-done` skill only when finishing a task.
+  `mise run test` during development, `mise run test-wado` when wrapping up.
 - This crate must compile for `wasm32-unknown-unknown` (a CI build check). Keep
   OS-dependent `std` modules out of production code.
 

@@ -1183,16 +1183,14 @@ impl TypeSystem {
                 FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME),
                 Some(vec![*elem]),
             ),
-            ResolvedType::GenericInstance { type_args, .. } => {
-                (
-                    self.type_table.borrow().fq_base_type_name(type_id),
-                    if type_args.is_empty() {
-                        None
-                    } else {
-                        Some(type_args.clone())
-                    },
-                )
-            }
+            ResolvedType::GenericInstance { type_args, .. } => (
+                self.type_table.borrow().fq_base_type_name(type_id),
+                if type_args.is_empty() {
+                    None
+                } else {
+                    Some(type_args.clone())
+                },
+            ),
             ResolvedType::Ref(inner) => {
                 // References always implement Eq via ref.eq (identity comparison)
                 if is_eq {

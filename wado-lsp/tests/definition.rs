@@ -354,6 +354,20 @@ fn struct_field_access_definition() {
 }
 
 #[test]
+fn generic_struct_field_access_definition() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "struct Boxed<T> { value: T }\n",
+            "fn f(b: Boxed<i32>) -> i32 {\n",
+            "    return b.value;\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 15).await.expect("b.value field access");
+        assert_range(&result, 0, 18, 23);
+    });
+}
+
+#[test]
 fn struct_field_in_literal_definition() {
     futures::executor::block_on(async {
         let source = concat!(

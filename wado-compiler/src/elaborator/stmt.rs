@@ -1434,8 +1434,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Use the base type name (no generic args) to match how
                     // `associated_constants` keys are built via `get_type_name`.
                     // Resolve to literal patterns when possible for switch optimization.
-                    if let Some((_const_module, type_id, const_expr)) = self
-                        .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
+                    if let Some((_const_module, type_id, const_expr)) =
+                        self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
                     {
                         // Resolve the const body for its facts. An associated
                         // constant introduces no binding — it is either a literal
@@ -1555,17 +1555,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let scrutinee_decl = self.tysys.type_def(scrutinee_type);
                 let payload_type: TypeId = match &resolved_type {
                     // Non-generic variant
-                    ResolvedType::Variant { .. } => scrutinee_decl.map_or(
-                        TypeTable::UNKNOWN,
-                        |def| {
+                    ResolvedType::Variant { .. } => {
+                        scrutinee_decl.map_or(TypeTable::UNKNOWN, |def| {
                             self.get_variant_case_payload_type(
                                 def,
                                 normalized_variant_name,
                                 &[],
                                 *span,
                             )
-                        },
-                    ),
+                        })
+                    }
                     // Generic variant instantiation
                     ResolvedType::GenericInstance { type_args, .. } => {
                         // Check if this is a variant (not a struct)
@@ -1579,8 +1578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 *span,
                             )
                         } else {
-                            let found =
-                                self.tysys.type_table.borrow().type_name(scrutinee_type);
+                            let found = self.tysys.type_table.borrow().type_name(scrutinee_type);
                             let _ = self.emit(TypeError::PatternTypeMismatch {
                                 expected: "variant type".to_string(),
                                 found,
@@ -2488,12 +2486,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let is_variant =
                 decl.is_some_and(|def| self.type_lookup().variant_cases_of(def).is_some());
             match self.tysys.type_table.borrow().get(option_type).clone() {
-                ResolvedType::GenericInstance { type_args, .. } if is_variant => {
-                    Some((decl.expect("a variant answers with its declaration"), type_args))
-                }
-                ResolvedType::Variant { .. } if is_variant => {
-                    Some((decl.expect("a variant answers with its declaration"), vec![]))
-                }
+                ResolvedType::GenericInstance { type_args, .. } if is_variant => Some((
+                    decl.expect("a variant answers with its declaration"),
+                    type_args,
+                )),
+                ResolvedType::Variant { .. } if is_variant => Some((
+                    decl.expect("a variant answers with its declaration"),
+                    vec![],
+                )),
                 _ => None,
             }
         };

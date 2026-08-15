@@ -311,14 +311,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // method declarations against the trait as their owner type
                     // — the trait body is the only place a serde protocol
                     // method and its owning trait are both in scope.
-                    let owner_head = self
-                        .tysys
-                        .resolutions
-                        .defs()
-                        .of_ast_id(trait_decl.id)
-                        .map(|def| {
-                            crate::name::FqTypeName::declared(self.tysys.resolutions.defs(), def)
-                        });
+                    let owner_head =
+                        self.tysys
+                            .resolutions
+                            .defs()
+                            .of_ast_id(trait_decl.id)
+                            .map(|def| {
+                                crate::name::FqTypeName::declared(
+                                    self.tysys.resolutions.defs(),
+                                    def,
+                                )
+                            });
                     for method in &trait_decl.methods {
                         let Some(owner_head) = owner_head.as_ref() else {
                             continue;

@@ -6,14 +6,9 @@
 //! [`DefTable::declare`] is the only constructor. Names travel the other way:
 //! [`DefTable::name`] renders one for a diagnostic or for a mangle.
 //!
-//! The goal is that a spelling cannot reach an identity at all, so two modules'
-//! same-named declarations cannot be confused for one. Every declaration index
-//! is keyed by `DefId`, every nominal head carries one, and the compiler-item
-//! registry records the declaring node of each stdlib type the compiler knows
-//! by construction — so a synthesis site names a declaration rather than
-//! spelling one. What remains is listed in `NAME_TO_IDENTITY` below, and the
-//! `enforcement` test keeps that list from growing. One entry is permanent:
-//! the Component Model boundary has no Wado reference site to ask.
+//! A spelling cannot reach an identity, so two modules' same-named
+//! declarations cannot be confused for one. What is left of that is
+//! `NAME_TO_IDENTITY` below, which the `enforcement` test keeps from growing.
 //!
 //! See `docs/wep-2026-08-12-declaration-identity.md`.
 
@@ -484,28 +479,6 @@ impl DefTable {
         self.defs.is_empty()
     }
 
-    /// Mint a declaration for a unit test that needs one without parsing a
-    /// module.
-    ///
-    /// Gated on `test` / the `test-util` feature, so production code still has
-    /// no constructor — which is the property this design rests on. A test that
-    /// wants a *struct type* rather than a declaration should use an anonymous
-    /// shape instead.
-    #[cfg(any(test, feature = "test-util"))]
-    pub fn declare_for_test(&mut self, module: &ModuleSource, name: &str, kind: DefKind) -> DefId {
-        self.declare(Def {
-            ast_id: AstId::fresh(),
-            module: module.clone(),
-            name: name.to_string(),
-            kind,
-            visibility: Visibility::Public,
-            span: None,
-            parent: None,
-            function_local: false,
-            members: Vec::new(),
-        })
-    }
-
     /// Every declaration, in collect order.
     pub fn iter(&self) -> impl Iterator<Item = DefId> + '_ {
         (0..self.defs.len()).map(|i| DefId(i as u32))
@@ -745,13 +718,7 @@ mod tests {
 }
 
 /// The reachable functions that still turn a name into a declaration, each with
-/// the reason it survives. Empty is the goal; see
-/// `docs/wep-2026-08-12-declaration-identity.md`'s Remaining work.
-///
-/// A name reaching an identity is the whole shape this design removes: it is
-/// what lets two same-named declarations answer for one another, and it is the
-/// one property the type system cannot state. The test below is what keeps the
-/// list from growing while it is being emptied.
+/// the reason it survives. See `docs/wep-2026-08-12-declaration-identity.md`.
 #[cfg(test)]
 const NAME_TO_IDENTITY: &[(&str, &str)] = &[
     (
@@ -772,18 +739,11 @@ const NAME_TO_IDENTITY: &[(&str, &str)] = &[
     ),
     (
         "cm_decl_in",
-        "the Component Model boundary, and the one entry that is permanent. A \
-         WIT name is written in a namespace no Wado resolver walked, so there \
-         is no reference site to ask; and `CmInterfaceRegistry` parses its own \
-         copy of the WASI modules once per process, so the declaring node it \
-         could record is not one this program's `DefTable` saw. `wado-from-idl` \
-         generates one module per interface declaring each WIT name once, so \
-         the pair identifies a single declaration by construction.",
-    ),
-    (
-        "declare_for_test",
-        "gated on `test` / the `test-util` feature, so production code has no \
-         such constructor",
+        "permanent. A WIT name has no Wado reference site, and \
+         `CmInterfaceRegistry` parses its own copy of the WASI modules, so no \
+         declaring node it could record is in this program's `DefTable`. \
+         `wado-from-idl` declares each WIT name once per generated module, so \
+         the pair identifies one declaration by construction.",
     ),
 ];
 

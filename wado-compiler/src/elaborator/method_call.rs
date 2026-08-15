@@ -1816,231 +1816,228 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let (struct_name, struct_module, mangled_struct_name, struct_type_args) = match self
-            .tysys
-            .type_table
-            .borrow()
-            .get(target_type_id)
-        {
-            ResolvedType::Struct { .. } | ResolvedType::Resource { .. } => {
-                let (name, module_source) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(target_type_id)
-                    .expect("a nominal type names a declaration");
-                let fq = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(target_type_id);
-                (name, module_source, fq, vec![])
-            }
-            // Generic resource types (Future<T>, Stream<T>, etc.) - handle like generic structs
-            // for static method resolution: use the base name and type args for substitution.
-            ResolvedType::GenericResource { type_args, .. } => {
-                let (name, module_source) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(target_type_id)
-                    .expect("a generic resource names a declaration");
-                let type_arg_names: Vec<FqTypeName> = type_args
-                    .iter()
-                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
-                    .collect();
-                let mangled = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(target_type_id)
-                    .with_args(type_arg_names);
-                (name, module_source, mangled, type_args.clone())
-            }
-            ResolvedType::Primitive(prim) => (
-                prim.as_str().to_string(),
-                ModuleSource::primitive(),
-                FqTypeName::builtin(prim.as_str()),
-                vec![],
-            ),
-            ResolvedType::BuiltinArray(elem) => {
-                let elem = *elem;
-                let arg = self.tysys.type_table.borrow().fq_type_name(elem);
-                (
-                    TypeTable::ARRAY_TYPE_NAME.to_string(),
-                    ModuleSource::array(),
-                    FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME).with_args(vec![arg]),
-                    vec![elem],
-                )
-            }
-            ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => {
-                let (name, module_source) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(target_type_id)
-                    .expect("a nominal type names a declaration");
-                let fq = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(target_type_id);
-                (name, module_source, fq, vec![])
-            }
-            ResolvedType::GenericInstance { type_args, .. } => {
-                let (name, module_source) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(target_type_id)
-                    .expect("a generic instance names a declaration");
-                let args: Vec<FqTypeName> = type_args
-                    .iter()
-                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
-                    .collect();
-                let mangled = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(target_type_id)
-                    .with_args(args);
-                (name, module_source, mangled, type_args.clone())
-            }
-            ResolvedType::Newtype { base_type, .. } => {
-                // First try the newtype's own name (for methods defined via `impl NewtypeName`)
-                let (newtype_name, newtype_module) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(target_type_id)
-                    .expect("a newtype names a declaration");
-
-                // Check if the newtype itself has the static method
-                if self.has_static_method_direct(&newtype_name, &static_call.method) {
+        let (struct_name, struct_module, mangled_struct_name, struct_type_args) =
+            match self.tysys.type_table.borrow().get(target_type_id) {
+                ResolvedType::Struct { .. } | ResolvedType::Resource { .. } => {
+                    let (name, module_source) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(target_type_id)
+                        .expect("a nominal type names a declaration");
                     let fq = self
                         .tysys
                         .type_table
                         .borrow()
                         .fq_base_type_name(target_type_id);
-                    (newtype_name, newtype_module, fq, vec![])
-                } else {
-                    // Fall back to the base type for inherited methods
-                    match self.tysys.type_table.borrow().get(*base_type).clone() {
-                        ResolvedType::Struct { .. } => {
-                            let (name, module_source) = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .nominal_head(*base_type)
-                                .expect("a struct names a declaration");
-                            let fq = self.tysys.type_table.borrow().fq_base_type_name(*base_type);
-                            (name, module_source, fq, vec![])
-                        }
-                        ResolvedType::GenericInstance { type_args, .. } => {
-                            let (name, module_source) = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .nominal_head(*base_type)
-                                .expect("a generic instance names a declaration");
-                            let args: Vec<FqTypeName> = type_args
-                                .iter()
-                                .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
-                                .collect();
-                            let fq = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .fq_base_type_name(*base_type)
-                                .with_args(args);
-                            (name, module_source, fq, type_args)
-                        }
-                        ResolvedType::Newtype {
-                            base_type: inner_base,
-                            ..
-                        } => {
-                            let mut current = inner_base;
-                            loop {
-                                match self.tysys.type_table.borrow().get(current).clone() {
-                                    ResolvedType::Struct { .. } => {
-                                        let (name, module_source) = self
-                                            .tysys
-                                            .type_table
-                                            .borrow()
-                                            .nominal_head(current)
-                                            .expect("a struct names a declaration");
-                                        let fq = self
-                                            .tysys
-                                            .type_table
-                                            .borrow()
-                                            .fq_base_type_name(current);
-                                        break (name, module_source, fq, vec![]);
-                                    }
-                                    ResolvedType::Newtype {
-                                        base_type: next, ..
-                                    } => current = next,
-                                    _ => {
-                                        let fq = self
-                                            .tysys
-                                            .type_table
-                                            .borrow()
-                                            .fq_base_type_name(target_type_id);
-                                        break (newtype_name, newtype_module, fq, vec![]);
+                    (name, module_source, fq, vec![])
+                }
+                // Generic resource types (Future<T>, Stream<T>, etc.) - handle like generic structs
+                // for static method resolution: use the base name and type args for substitution.
+                ResolvedType::GenericResource { type_args, .. } => {
+                    let (name, module_source) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(target_type_id)
+                        .expect("a generic resource names a declaration");
+                    let type_arg_names: Vec<FqTypeName> = type_args
+                        .iter()
+                        .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
+                        .collect();
+                    let mangled = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .fq_base_type_name(target_type_id)
+                        .with_args(type_arg_names);
+                    (name, module_source, mangled, type_args.clone())
+                }
+                ResolvedType::Primitive(prim) => (
+                    prim.as_str().to_string(),
+                    ModuleSource::primitive(),
+                    FqTypeName::builtin(prim.as_str()),
+                    vec![],
+                ),
+                ResolvedType::BuiltinArray(elem) => {
+                    let elem = *elem;
+                    let arg = self.tysys.type_table.borrow().fq_type_name(elem);
+                    (
+                        TypeTable::ARRAY_TYPE_NAME.to_string(),
+                        ModuleSource::array(),
+                        FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME).with_args(vec![arg]),
+                        vec![elem],
+                    )
+                }
+                ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => {
+                    let (name, module_source) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(target_type_id)
+                        .expect("a nominal type names a declaration");
+                    let fq = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .fq_base_type_name(target_type_id);
+                    (name, module_source, fq, vec![])
+                }
+                ResolvedType::GenericInstance { type_args, .. } => {
+                    let (name, module_source) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(target_type_id)
+                        .expect("a generic instance names a declaration");
+                    let args: Vec<FqTypeName> = type_args
+                        .iter()
+                        .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
+                        .collect();
+                    let mangled = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .fq_base_type_name(target_type_id)
+                        .with_args(args);
+                    (name, module_source, mangled, type_args.clone())
+                }
+                ResolvedType::Newtype { base_type, .. } => {
+                    // First try the newtype's own name (for methods defined via `impl NewtypeName`)
+                    let (newtype_name, newtype_module) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_head(target_type_id)
+                        .expect("a newtype names a declaration");
+
+                    // Check if the newtype itself has the static method
+                    if self.has_static_method_direct(&newtype_name, &static_call.method) {
+                        let fq = self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .fq_base_type_name(target_type_id);
+                        (newtype_name, newtype_module, fq, vec![])
+                    } else {
+                        // Fall back to the base type for inherited methods
+                        match self.tysys.type_table.borrow().get(*base_type).clone() {
+                            ResolvedType::Struct { .. } => {
+                                let (name, module_source) = self
+                                    .tysys
+                                    .type_table
+                                    .borrow()
+                                    .nominal_head(*base_type)
+                                    .expect("a struct names a declaration");
+                                let fq =
+                                    self.tysys.type_table.borrow().fq_base_type_name(*base_type);
+                                (name, module_source, fq, vec![])
+                            }
+                            ResolvedType::GenericInstance { type_args, .. } => {
+                                let (name, module_source) = self
+                                    .tysys
+                                    .type_table
+                                    .borrow()
+                                    .nominal_head(*base_type)
+                                    .expect("a generic instance names a declaration");
+                                let args: Vec<FqTypeName> = type_args
+                                    .iter()
+                                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
+                                    .collect();
+                                let fq = self
+                                    .tysys
+                                    .type_table
+                                    .borrow()
+                                    .fq_base_type_name(*base_type)
+                                    .with_args(args);
+                                (name, module_source, fq, type_args)
+                            }
+                            ResolvedType::Newtype {
+                                base_type: inner_base,
+                                ..
+                            } => {
+                                let mut current = inner_base;
+                                loop {
+                                    match self.tysys.type_table.borrow().get(current).clone() {
+                                        ResolvedType::Struct { .. } => {
+                                            let (name, module_source) = self
+                                                .tysys
+                                                .type_table
+                                                .borrow()
+                                                .nominal_head(current)
+                                                .expect("a struct names a declaration");
+                                            let fq = self
+                                                .tysys
+                                                .type_table
+                                                .borrow()
+                                                .fq_base_type_name(current);
+                                            break (name, module_source, fq, vec![]);
+                                        }
+                                        ResolvedType::Newtype {
+                                            base_type: next, ..
+                                        } => current = next,
+                                        _ => {
+                                            let fq = self
+                                                .tysys
+                                                .type_table
+                                                .borrow()
+                                                .fq_base_type_name(target_type_id);
+                                            break (newtype_name, newtype_module, fq, vec![]);
+                                        }
                                     }
                                 }
                             }
-                        }
-                        ResolvedType::Primitive(prim) => (
-                            prim.as_str().to_string(),
-                            ModuleSource::primitive(),
-                            FqTypeName::builtin(prim.as_str()),
-                            vec![],
-                        ),
-                        _ => {
-                            let fq = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .fq_base_type_name(target_type_id);
-                            (newtype_name, newtype_module, fq, vec![])
+                            ResolvedType::Primitive(prim) => (
+                                prim.as_str().to_string(),
+                                ModuleSource::primitive(),
+                                FqTypeName::builtin(prim.as_str()),
+                                vec![],
+                            ),
+                            _ => {
+                                let fq = self
+                                    .tysys
+                                    .type_table
+                                    .borrow()
+                                    .fq_base_type_name(target_type_id);
+                                (newtype_name, newtype_module, fq, vec![])
+                            }
                         }
                     }
                 }
-            }
-            ResolvedType::Flags { .. } => {
-                // First try the flags' own name, then fall back to u32
-                let (flags_name, flags_module) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(target_type_id)
-                    .expect("a flags type names a declaration");
-                if self.has_static_method_direct(&flags_name, &static_call.method) {
-                    let fq = self
+                ResolvedType::Flags { .. } => {
+                    // First try the flags' own name, then fall back to u32
+                    let (flags_name, flags_module) = self
                         .tysys
                         .type_table
                         .borrow()
-                        .fq_base_type_name(target_type_id);
-                    (flags_name, flags_module, fq, vec![])
-                } else {
-                    (
-                        "u32".to_string(),
-                        ModuleSource::primitive(),
-                        FqTypeName::builtin("u32"),
-                        vec![],
-                    )
+                        .nominal_head(target_type_id)
+                        .expect("a flags type names a declaration");
+                    if self.has_static_method_direct(&flags_name, &static_call.method) {
+                        let fq = self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .fq_base_type_name(target_type_id);
+                        (flags_name, flags_module, fq, vec![])
+                    } else {
+                        (
+                            "u32".to_string(),
+                            ModuleSource::primitive(),
+                            FqTypeName::builtin("u32"),
+                            vec![],
+                        )
+                    }
                 }
-            }
-            // The target names no struct-like type: a trait, an undeclared
-            // name, a turbofish on a non-generic.
-            _ => {
-                let _ = self.emit(TypeError::UnknownFunction {
-                    name: static_call_symbol_name(static_call),
-                    span: static_call.span,
-                });
-                return TypeTable::ERROR;
-            }
-        };
+                // The target names no struct-like type: a trait, an undeclared
+                // name, a turbofish on a non-generic.
+                _ => {
+                    let _ = self.emit(TypeError::UnknownFunction {
+                        name: static_call_symbol_name(static_call),
+                        span: static_call.span,
+                    });
+                    return TypeTable::ERROR;
+                }
+            };
 
         // Find trait name: if the static method belongs to a trait impl, include the
         // trait name in the mangled function name so WIR can resolve it correctly.
@@ -2180,11 +2177,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         .with_type_args(&impl_only_type_arg_names, &method_type_arg_names);
 
         // Propagate #[cm("...")] from resource static methods for CM binding synthesis.
-        let cm_owner = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_def(target_type_id);
+        let cm_owner = self.tysys.type_table.borrow().nominal_def(target_type_id);
         method_info.cm_name = self.lookup_resource_static_cm(cm_owner, &static_call.method);
 
         // The selection covers trait impls only; an inherent static has none
