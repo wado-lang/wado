@@ -302,10 +302,21 @@ impl Resolutions {
     /// nodes carry ids no module wrote and no walk answered for.
     #[must_use]
     pub fn declared_if_walked(&self, site: AstId) -> Option<DefId> {
-        match self.refs.get(&site).copied()? {
+        match self.walked(site)? {
             Resolution::Def(def) => Some(def),
             Resolution::Binder(_) | Resolution::Unresolved => None,
         }
+    }
+
+    /// The whole answer for a site the walk reached, `None` for a node it
+    /// never saw.
+    ///
+    /// The three cases stay apart for a caller that must tell "this names a
+    /// binder" from "this names nothing" from "no walk saw this node" — the
+    /// last being the only one for which any other source of truth is honest.
+    #[must_use]
+    pub fn walked(&self, site: AstId) -> Option<Resolution> {
+        self.refs.get(&site).copied()
     }
 
     /// The answer for a reference site, or `None` when the site was never

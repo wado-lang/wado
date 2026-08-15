@@ -463,8 +463,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // recovered from `recorded_type` — see `reify_struct_literal`),
             // not through this per-function ephemeral tier, which annotate
             // clears between functions and reify never repopulates.
-            local_item_struct_fields: &self.sem.decls.local_item_struct_fields,
-            local_item_newtypes: &self.sem.decls.local_item_newtypes,
+            anon_struct_fields: &self.sem.decls.anon_struct_fields,
             local_item_renders: &self.sem.decls.local_item_renders,
             fn_local_items: &self.sem.decls.fn_local_items,
         }
@@ -920,7 +919,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Field types and type-param bounds come from
-    /// `sem.decls.local_item_struct_fields` — the durable fact
+    /// `sem.decls.local_struct_fields` — the durable fact
     /// `resolve_local_struct` recorded under this declaration's own identity.
     /// Field attributes (`#[wire(...)]`, `#[secret]`) and default-value
     /// expressions are read straight from the AST here, exactly matching
@@ -932,7 +931,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .resolutions
             .defs()
             .of_ast_id(struct_decl.id)
-            .and_then(|def| self.sem.decls.local_item_struct_fields.get(&def))
+            .and_then(|def| self.sem.decls.local_struct_fields.get(&def))
             .cloned()
         else {
             // `resolve_local_struct` inserts this unconditionally for every
@@ -1006,7 +1005,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         });
     }
 
-    /// The base type comes from `sem.decls.local_item_newtypes` — the durable
+    /// The base type comes from `sem.decls.local_newtypes` — the durable
     /// fact `resolve_local_newtype` recorded under this declaration's own
     /// identity.
     fn reify_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
@@ -1019,7 +1018,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .resolutions
             .defs()
             .of_ast_id(newtype_decl.id)
-            .and_then(|def| self.sem.decls.local_item_newtypes.get(&def))
+            .and_then(|def| self.sem.decls.local_newtypes.get(&def))
         else {
             return;
         };
@@ -4889,13 +4888,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         // Decl field shape: (name, index, raw_type, default_expr), cloned out
         // of the lookup so the borrow ends before reifying.
-        let anon_name = || {
-            struct_head.map_or_else(String::new, |head| {
-                self.tysys.type_table.borrow().struct_head_name(head)
-            })
-        };
         let lookup = self.type_lookup();
-        let info = struct_head.and_then(|head| lookup.struct_fields_of_head(head, anon_name));
+        let info = struct_head.and_then(|head| lookup.struct_fields_of_head(head));
         let decl_fields: Vec<(String, u32, TypeId, Option<ast::Expr>)> = {
             info.map(|info| {
                 info.fields
@@ -6982,10 +6976,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         else {
             return Vec::new();
         };
-        let anon_name = || self.tysys.type_table.borrow().struct_head_name(head);
         let raw: Vec<(String, TypeId, u32)> = {
             let lookup = self.type_lookup();
-            let Some(info) = lookup.struct_fields_of_head(head, anon_name) else {
+            let Some(info) = lookup.struct_fields_of_head(head) else {
                 return Vec::new();
             };
             info.fields

@@ -227,6 +227,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.logger.error_in(&self.current_module_source, err)
     }
 
+    /// The declaration an item node declares.
+    ///
+    /// Every item the collect pass walks was declared into the table, so a miss
+    /// is a hole in that pass rather than a name that reached nothing.
+    pub(super) fn def_of_item(&self, id: crate::ast::AstId) -> crate::defs::DefId {
+        self.tysys
+            .resolutions
+            .defs()
+            .of_ast_id(id)
+            .expect("an item declaration has an identity")
+    }
+
     /// The symbol `name` reaches from `module`.
     ///
     /// One scope answers, and it is the resolve pass's: the identity comes from
@@ -272,8 +284,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             local_flags_cases: &self.sem.decls.local_flags_cases,
             local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
             local_variant_cases: &self.sem.decls.local_variant_cases,
-            local_item_struct_fields: &self.sem.decls.local_item_struct_fields,
-            local_item_newtypes: &self.sem.decls.local_item_newtypes,
+            anon_struct_fields: &self.sem.decls.anon_struct_fields,
             local_item_renders: &self.sem.decls.local_item_renders,
             fn_local_items: &self.sem.decls.fn_local_items,
         }
@@ -304,27 +315,71 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().flags_case(name)
     }
 
-    pub(super) fn lookup_resource_type(&self, name: &str) -> Option<&ResourceInfo> {
-        self.type_lookup().resource_type(name)
-    }
-
-    pub(super) fn lookup_generic_newtype(&self, name: &str) -> Option<&GenericNewtypeInfo> {
-        self.type_lookup().generic_newtype(name)
-    }
-
     pub(super) fn lookup_newtype(&self, name: &str) -> Option<TypeId> {
         self.type_lookup().newtype(name)
+    }
+
+    pub(super) fn lookup_variant_case_of_decl(&self, def: crate::defs::DefId) -> Option<&VariantInfo> {
+        self.type_lookup().variant_cases_of(def)
+    }
+
+    pub(super) fn lookup_enum_case_of_decl(&self, def: crate::defs::DefId) -> Option<&EnumInfo> {
+        self.type_lookup().enum_cases_of(def)
+    }
+
+    pub(super) fn lookup_resource_type_of_decl(
+        &self,
+        def: crate::defs::DefId,
+    ) -> Option<&ResourceInfo> {
+        self.type_lookup().resource_type_of(def)
+    }
+
+    pub(super) fn lookup_generic_newtype_of_decl(
+        &self,
+        def: crate::defs::DefId,
+    ) -> Option<&GenericNewtypeInfo> {
+        self.type_lookup().generic_newtype_of(def)
+    }
+
+    pub(super) fn lookup_newtype_of_decl(&self, def: crate::defs::DefId) -> Option<TypeId> {
+        self.type_lookup().newtype_of(def)
+    }
+
+    /// The declaration a *type* reference names.
+    ///
+    /// The walk answered for every site a module wrote, from the module that
+    /// wrote it — which is how a default re-resolved at a caller and a
+    /// function-local `struct` both reach their own declaration without the
+    /// elaborator supplying a vantage. A binder is not a declaration and gets
+    /// none. `name` answers only where the walk left nothing: `None` for a
+    /// spelling the elaborator itself produced, and `Unresolved` for one the
+    /// walk could not place — where the module scope is the same scope, and so
+    /// the same answer.
+    pub(super) fn type_decl_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<crate::defs::DefId> {
+        match site.and_then(|site| self.tysys.resolutions.walked(site)) {
+            Some(crate::resolve::Resolution::Def(def)) => Some(def),
+            Some(crate::resolve::Resolution::Binder(_)) => None,
+            Some(crate::resolve::Resolution::Unresolved) | None => {
+                self.type_lookup().declaration(name)
+            }
+        }
     }
 
     pub(super) fn contains_variant(&self, name: &str) -> bool {
         self.lookup_variant_case(name).is_some()
     }
 
-    /// Run `body` in `module`'s perspective, swapping the current module and its
-    /// namespace imports and clearing locals, which describe in-progress
-    /// resolution rather than the target's definitions. For callee-scope work
-    /// only, such as a parameter default; already being there skips the swap,
-    /// keeping the locals in reach.
+    /// Run `body` in `module`'s perspective, swapping the current module and
+    /// its namespace imports. For callee-scope work only, such as a parameter
+    /// default; already being there skips the swap.
+    ///
+    /// The walk's own type tables are not swapped with it: they are keyed by
+    /// declaration, so an entry answers for the declaration that made it and
+    /// for nothing else, whichever module the walk is standing in.
     pub(super) fn with_module_perspective_for<R>(
         &mut self,
         module: &ModuleSource,
@@ -336,23 +391,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let namespaces = self.tysys.trait_env.namespace_imports(module);
         let saved_src = std::mem::replace(&mut self.current_module_source, module.clone());
         let saved_ns = std::mem::replace(&mut self.sem.imports.namespace_imports, namespaces);
-        let saved_local_struct = std::mem::take(&mut self.sem.decls.local_struct_fields);
-        let saved_local_newtypes = std::mem::take(&mut self.sem.decls.local_newtypes);
-        let saved_local_enum = std::mem::take(&mut self.sem.decls.local_enum_cases);
-        let saved_local_flags = std::mem::take(&mut self.sem.decls.local_flags_cases);
-        let saved_local_gnt = std::mem::take(&mut self.sem.decls.local_generic_newtypes);
-        let saved_local_variant = std::mem::take(&mut self.sem.decls.local_variant_cases);
 
         let result = body(self);
 
         self.current_module_source = saved_src;
         self.sem.imports.namespace_imports = saved_ns;
-        self.sem.decls.local_struct_fields = saved_local_struct;
-        self.sem.decls.local_newtypes = saved_local_newtypes;
-        self.sem.decls.local_enum_cases = saved_local_enum;
-        self.sem.decls.local_flags_cases = saved_local_flags;
-        self.sem.decls.local_generic_newtypes = saved_local_gnt;
-        self.sem.decls.local_variant_cases = saved_local_variant;
         result
     }
 
@@ -1255,9 +1298,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         head: crate::tir::StructDef,
     ) -> Option<&StructFieldInfo> {
-        self.type_lookup().struct_fields_of_head(head, || {
-            self.tysys.type_table.borrow().struct_head_name(head)
-        })
+        self.type_lookup().struct_fields_of_head(head)
     }
 
     /// The variant `type_id` is an instance of, or `None` when it is not one.

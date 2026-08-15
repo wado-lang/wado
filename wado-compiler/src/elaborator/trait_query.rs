@@ -869,9 +869,7 @@ impl TypeSystem {
                 // just has no declaration to reach them through. Asking the
                 // head answers for both, which is what lets a `{ ..ctx, x }`
                 // literal satisfy a structural bound at all.
-                let info = scope.struct_fields_of_head(*def, || {
-                    self.type_table.borrow().struct_head_name(*def)
-                })?;
+                let info = scope.struct_fields_of_head(*def)?;
                 Some(walk_struct(info, &[], visit))
             }
             ResolvedType::Variant { def } => {

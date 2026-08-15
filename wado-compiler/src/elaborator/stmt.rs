@@ -275,7 +275,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .make_type_param(p.name.clone(), i as u32)
             })
             .collect();
-        self.sem.decls.local_item_struct_fields.insert(
+        self.sem.decls.local_struct_fields.insert(
             def,
             super::types::StructFieldInfo {
                 name: mangled_name,
@@ -338,7 +338,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
             return;
         };
-        let Some(info) = self.sem.decls.local_item_struct_fields.get_mut(&def) else {
+        let Some(info) = self.sem.decls.local_struct_fields.get_mut(&def) else {
             return;
         };
         info.fields = fields;
@@ -399,7 +399,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decls
             .local_item_renders
             .insert((mangled_name, self.current_module_source.clone()), def);
-        self.sem.decls.local_item_newtypes.insert(def, type_id);
+        self.sem.decls.local_newtypes.insert(def, type_id);
         self.sem
             .decls
             .fn_local_items

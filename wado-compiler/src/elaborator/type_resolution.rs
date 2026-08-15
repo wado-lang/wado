@@ -1,6 +1,6 @@
 //! AST Type to `TypeId` resolution.
 
-use crate::ast::{GenericType, Type};
+use crate::ast::{AstId, GenericType, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -55,11 +55,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match ty {
             Type::Named(named) => {
                 self.record_type_name_reference(named.id, &named.name);
-                self.resolve_named_type(&named.name, named.span, true)
+                self.resolve_named_type(named.id, &named.name, named.span, true)
             }
             Type::Generic(generic) => {
                 self.record_type_name_reference(generic.id, &generic.name);
-                self.resolve_generic_type(&generic.name, &generic.args, generic.span)
+                self.resolve_generic_type(generic.id, &generic.name, &generic.args, generic.span)
             }
             Type::Function(func_ty) => {
                 let params: Vec<TypeId> = func_ty
@@ -318,9 +318,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let alias =
                 crate::name::namespace_member_alias(&namespaced.namespace, &namespaced.name);
             if namespaced.args.is_empty() {
-                self.resolve_named_type(&alias, namespaced.span, true)
+                self.resolve_named_type(namespaced.id, &alias, namespaced.span, true)
             } else {
-                self.resolve_generic_type(&alias, &namespaced.args, namespaced.span)
+                self.resolve_generic_type(namespaced.id, &alias, &namespaced.args, namespaced.span)
             }
         } else {
             let _ = self.emit(TypeError::UnknownType {
@@ -331,9 +331,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a named type
+    /// The type a named reference site resolves to.
+    ///
+    /// `site` is what decides which declaration is meant; `name` is carried
+    /// for the binder tiers the walk does not answer for — `Self` and the type
+    /// parameters in the frame — and for the diagnostic.
     pub(super) fn resolve_named_type(
         &mut self,
+        site: AstId,
+        name: &str,
+        span: Span,
+        enforce_arity: bool,
+    ) -> TypeId {
+        self.resolve_named_type_at(Some(site), name, span, enforce_arity)
+    }
+
+    /// [`Self::resolve_named_type`] for a receiver spelling the elaborator
+    /// itself produced, where no segment of the source names the type: a
+    /// `Self::` / `T::` prefix rewritten to a concrete name. The module scope
+    /// answers, since there is no site to ask.
+    pub(super) fn resolve_unsited_type_name(&mut self, name: &str, span: Span) -> TypeId {
+        self.resolve_named_type_at(None, name, span, false)
+    }
+
+    fn resolve_named_type_at(
+        &mut self,
+        site: Option<AstId>,
         name: &str,
         span: Span,
         enforce_arity: bool,
@@ -356,72 +379,66 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return primitive;
         }
 
-        if enforce_arity && let Some(expected) = self.bare_generic_type_arity(name) {
-            let _ = self.emit(TypeError::MissingTypeArguments {
-                name: name.to_string(),
-                expected,
-                span,
-            });
-            return TypeTable::ERROR;
+        if let Some(def) = self.type_decl_at(site, name) {
+            if enforce_arity && let Some(expected) = self.bare_generic_type_arity(def) {
+                let _ = self.emit(TypeError::MissingTypeArguments {
+                    name: name.to_string(),
+                    expected,
+                    span,
+                });
+                return TypeTable::ERROR;
+            }
+            if let Some(type_id) = self.lookup_newtype_of_decl(def) {
+                return type_id;
+            }
+            if let Some(defined_at) = self
+                .lookup_struct_fields_of_decl(def)
+                .map(|info| info.defined_at)
+                .or_else(|| {
+                    self.lookup_variant_case_of_decl(def)
+                        .map(|info| info.defined_at)
+                })
+                .or_else(|| {
+                    self.lookup_enum_case_of_decl(def)
+                        .map(|info| info.defined_at)
+                })
+                .or_else(|| {
+                    self.lookup_resource_type_of_decl(def)
+                        .map(|info| info.defined_at)
+                })
+            {
+                return self.tysys.type_table.borrow().type_id_of_decl(defined_at);
+            }
         }
-        if let Some(type_id) = self.lookup_newtype(name) {
-            type_id
-        } else if let Some(struct_info) = self.lookup_struct_fields(name) {
-            self.tysys
-                .type_table
-                .borrow()
-                .type_id_of_decl(struct_info.defined_at)
-        } else if let Some(variant_info) = self.lookup_variant_case(name) {
-            self.tysys
-                .type_table
-                .borrow()
-                .type_id_of_decl(variant_info.defined_at)
-        } else if let Some(enum_info) = self.lookup_enum_case(name) {
-            self.tysys
-                .type_table
-                .borrow()
-                .type_id_of_decl(enum_info.defined_at)
-        } else if let Some(resource_info) = self.lookup_resource_type(name) {
-            self.tysys
-                .type_table
-                .borrow()
-                .type_id_of_decl(resource_info.defined_at)
-        } else if let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone()
+        if let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone()
             && scope_mod != self.current_module_source
         {
             // A default re-resolved at the caller may name a type
             // private to the callee's module (`fn f<T = Priv>()` called
             // cross-module); the caller can't name it, so retry in the
             // callee's perspective. Mirrors the ident / call fallback.
-            self.with_module_perspective_for(&scope_mod, |s| {
-                s.resolve_named_type(name, span, enforce_arity)
-            })
-        } else {
-            TypeTable::UNKNOWN
+            return self.with_module_perspective_for(&scope_mod, |s| {
+                s.resolve_named_type_at(site, name, span, enforce_arity)
+            });
         }
+        TypeTable::UNKNOWN
     }
 
-    pub(super) fn bare_generic_type_arity(&self, name: &str) -> Option<usize> {
-        // `lookup_struct_fields` alone decides whether `name` is generic:
-        // it already applies the correct precedence (a local struct —
-        // `Stmt::Item`, see `resolve_local_struct` — shadows a same-named
-        // module-level one), so basing this on `info.type_param_bounds`
-        // directly keeps the "is this generic" question and "which struct's
-        // info is this" question about the *same* struct. A separate
-        // name-keyed gate lets the two disagree: dispatch enters on the
-        // module-level struct's registration while `lookup_struct_fields`
-        // returns a same-named local, non-generic shadow's info.
-        if let Some(info) = self.lookup_struct_fields(name)
+    /// How many type arguments the declaration `def` requires, when it requires
+    /// any. The three kinds are asked of one declaration, so "is this generic"
+    /// and "whose parameters are these" can never be about two of them.
+    pub(super) fn bare_generic_type_arity(&self, def: crate::defs::DefId) -> Option<usize> {
+        if let Some(info) = self.lookup_struct_fields_of_decl(def)
             && !info.type_param_bounds.is_empty()
         {
             return Some(info.type_param_bounds.len());
         }
-        if let Some(info) = self.lookup_variant_case(name)
+        if let Some(info) = self.lookup_variant_case_of_decl(def)
             && !info.type_params.is_empty()
         {
             return Some(info.type_params.len());
         }
-        if let Some(info) = self.lookup_generic_newtype(name)
+        if let Some(info) = self.lookup_generic_newtype_of_decl(def)
             && !info.type_params.is_empty()
         {
             return Some(info.type_params.len());
@@ -429,8 +446,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Resolve a generic type
-    pub(super) fn resolve_generic_type(&mut self, name: &str, args: &[Type], span: Span) -> TypeId {
+    /// The type a generic application resolves to. `site` names the head's
+    /// declaration; `name` is the compiler-item spelling and the diagnostic.
+    pub(super) fn resolve_generic_type(
+        &mut self,
+        site: AstId,
+        name: &str,
+        args: &[Type],
+        span: Span,
+    ) -> TypeId {
+        self.resolve_generic_type_at(Some(site), name, args, span)
+    }
+
+    fn resolve_generic_type_at(
+        &mut self,
+        site: Option<AstId>,
+        name: &str,
+        args: &[Type],
+        span: Span,
+    ) -> TypeId {
         // Prelude module path for looking up Option/Result
         let prelude_source = ModuleSource::prelude();
 
@@ -514,14 +548,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .make_builtin_array(element_type)
             }
             _ => {
-                // Check if it's a user-defined generic struct.
-                // `lookup_struct_fields` alone decides this (see
-                // `bare_generic_type_arity` for why a separate name-keyed
-                // gate is wrong: it can name a different struct than the one
-                // this lookup returns when a local struct — `Stmt::Item`, see
-                // `resolve_local_struct` — shadows a same-named
-                // module-level generic one).
-                let struct_info = self.lookup_struct_fields(name).cloned();
+                // Which declaration the head names is the site's answer; the
+                // kind it turns out to be decides which shape is built.
+                let Some(def) = self.type_decl_at(site, name) else {
+                    return self.resolve_generic_type_out_of_scope(site, name, args, span);
+                };
+                let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
                 if struct_info
                     .as_ref()
                     .is_some_and(|info| !info.type_param_bounds.is_empty())
@@ -565,76 +597,66 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
 
-                    // Create a GenericInstance type. The declaration is read
-                    // from the node that declares it, not from
-                    // `identity_name`: a function-local struct's storage name
-                    // is mangled, and no declaration is registered under that
-                    // spelling — asking by it could only ever miss.
-                    let def = struct_info
-                        .as_ref()
-                        .and_then(|info| self.tysys.resolutions.defs().of_ast_id(info.defined_at))
-                        .expect("the generic declaration being instantiated exists");
+                    // The instantiation is named by the declaration its head
+                    // resolved to, and keeps its arguments beside it rather
+                    // than fused into a rendered `Box<i32>` head no `impl`
+                    // header writes.
                     self.tysys
                         .type_table
                         .borrow_mut()
                         .make_generic_instance(def, type_args)
-                } else if let Some(variant_info) = self.lookup_variant_case(name).cloned() {
+                } else if let Some(variant_info) = self.lookup_variant_case_of_decl(def).cloned() {
                     // Check if it's a generic variant (like Result<T, E>)
                     if variant_info.type_params.is_empty() {
                         TypeTable::UNKNOWN
                     } else {
                         let type_args: Vec<TypeId> =
                             args.iter().map(|t| self.resolve_type(t)).collect();
-                        let def = self
-                            .tysys
-                            .resolutions
-                            .defs()
-                            .of_ast_id(variant_info.defined_at)
-                            .expect("the generic variant being instantiated exists");
                         self.tysys
                             .type_table
                             .borrow_mut()
                             .make_generic_instance(def, type_args)
                     }
-                } else if let Some(gn_info) = self.lookup_generic_newtype(name).cloned() {
+                } else if let Some(gn_info) = self.lookup_generic_newtype_of_decl(def).cloned() {
                     // Generic newtype instantiation: type MyArray<T> = List<T>
                     // Substitute type params in the base type AST, then resolve
                     let concrete_base_ast =
                         substitute_type_params(&gn_info.base_type_ast, &gn_info.type_params, args);
                     let base_type_id = self.resolve_type(&concrete_base_ast);
-                    // Build a display name like "MyArray<i32>"
                     let resolved_args: Vec<TypeId> =
                         args.iter().map(|t| self.resolve_type(t)).collect();
-                    // The instantiation is named by its declaration and keeps
-                    // its arguments beside it, not fused into a rendered
-                    // `MyArray<i32>` head no `impl` header writes.
-                    let def = self
-                        .tysys
-                        .resolutions
-                        .defs()
-                        .of_ast_id(gn_info.defined_at)
-                        .expect("the generic newtype being instantiated exists");
                     self.tysys.type_table.borrow_mut().make_newtype_instance(
                         def,
                         resolved_args,
                         base_type_id,
                     )
-                } else if let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone()
-                    && scope_mod != self.current_module_source
-                {
-                    // A foreign default re-resolved at the caller may name a
-                    // generic type the callee's module imports but the caller
-                    // does not (`entries: TreeMap<K, V> = TreeMap::new()`
-                    // omitted cross-module); retry in the callee's perspective.
-                    // Mirrors the `resolve_named_type` fallback for bare names.
-                    self.with_module_perspective_for(&scope_mod, |s| {
-                        s.resolve_generic_type(name, args, span)
-                    })
                 } else {
-                    TypeTable::UNKNOWN
+                    self.resolve_generic_type_out_of_scope(site, name, args, span)
                 }
             }
         }
+    }
+
+    /// The retry a generic application gets when its head names nothing here:
+    /// a default re-resolved at the caller may spell a type only the callee's
+    /// module imports (`entries: TreeMap<K, V> = TreeMap::new()` called
+    /// cross-module). Mirrors the [`Self::resolve_named_type`] fallback.
+    fn resolve_generic_type_out_of_scope(
+        &mut self,
+        site: Option<AstId>,
+        name: &str,
+        args: &[Type],
+        span: Span,
+    ) -> TypeId {
+        let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone() else {
+            return TypeTable::UNKNOWN;
+        };
+        if scope_mod == self.current_module_source {
+            return TypeTable::UNKNOWN;
+        }
+        self.with_module_perspective_for(&scope_mod, |s| {
+            s.resolve_generic_type_at(site, name, args, span)
+        })
     }
 
     /// Look up the trait bounds on an associated type declaration.

@@ -153,9 +153,6 @@ pub(crate) struct ResourceInfo {
 /// Generic newtype definition: `type Foo<T> = Bar<T>`
 #[derive(Clone)]
 pub(crate) struct GenericNewtypeInfo {
-    /// `AstId` of the `type X<T> = …;` declaration, so an instantiation is
-    /// interned against the declaration rather than looked up by spelling.
-    pub(super) defined_at: AstId,
     pub(super) type_params: Vec<String>,
     pub(super) base_type_ast: ast::Type,
 }
@@ -2113,16 +2110,16 @@ pub(crate) struct TypeLookup<'a> {
     pub(crate) all_flags_cases: &'a IndexMap<crate::defs::DefId, FlagsInfo>,
     pub(crate) all_resource_types: &'a IndexMap<crate::defs::DefId, ResourceInfo>,
     pub(crate) all_generic_newtypes: &'a IndexMap<crate::defs::DefId, GenericNewtypeInfo>,
-    pub(crate) local_struct_fields: &'a IndexMap<String, StructFieldInfo>,
-    pub(crate) local_newtypes: &'a IndexMap<String, TypeId>,
-    pub(crate) local_enum_cases: &'a IndexMap<String, EnumInfo>,
-    pub(crate) local_flags_cases: &'a IndexMap<String, FlagsInfo>,
-    pub(crate) local_generic_newtypes: &'a IndexMap<String, GenericNewtypeInfo>,
-    pub(crate) local_variant_cases: &'a IndexMap<String, VariantInfo>,
-    /// Function-local item declarations (`Stmt::Item`), by identity. See
-    /// `ModuleDecls::local_item_struct_fields` for the scoping rationale.
-    pub(crate) local_item_struct_fields: &'a IndexMap<crate::defs::DefId, StructFieldInfo>,
-    pub(crate) local_item_newtypes: &'a IndexMap<crate::defs::DefId, TypeId>,
+    /// This walk's own additions, keyed by declaration like the `all_*` tables
+    /// above. See `ModuleDecls::local_struct_fields`.
+    pub(crate) local_struct_fields: &'a IndexMap<crate::defs::DefId, StructFieldInfo>,
+    pub(crate) local_newtypes: &'a IndexMap<crate::defs::DefId, TypeId>,
+    pub(crate) local_enum_cases: &'a IndexMap<crate::defs::DefId, EnumInfo>,
+    pub(crate) local_flags_cases: &'a IndexMap<crate::defs::DefId, FlagsInfo>,
+    pub(crate) local_generic_newtypes: &'a IndexMap<crate::defs::DefId, GenericNewtypeInfo>,
+    pub(crate) local_variant_cases: &'a IndexMap<crate::defs::DefId, VariantInfo>,
+    /// Fields of the anonymous shapes this walk interned, by shape id.
+    pub(crate) anon_struct_fields: &'a IndexMap<crate::tir::AnonStructId, StructFieldInfo>,
     /// See `ModuleDecls::local_item_renders`.
     pub(crate) local_item_renders: &'a IndexMap<(String, ModuleSource), crate::defs::DefId>,
     /// The local items in scope at the walk's position, highest precedence.
@@ -2131,87 +2128,44 @@ pub(crate) struct TypeLookup<'a> {
 
 impl<'a> TypeLookup<'a> {
     pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
-        let def = self.declaration(name).or_else(|| {
-            self.local_item_renders
-                .get(&(name.to_string(), self.current_module_source.clone()))
-                .copied()
-        });
-        if let Some(info) = def.and_then(|d| self.local_item_struct_fields.get(&d)) {
-            return Some(info);
-        }
-        if let Some(info) = self.local_struct_fields.get(name) {
-            return Some(info);
-        }
-        self.all_struct_fields.get(&def?)
+        self.struct_fields_of(self.declaration_or_render(name)?)
     }
 
-    /// Field info for a struct type's own head.
-    ///
-    /// A declaration answers by its identity, which is the only way a
-    /// function-local `struct` can answer at all: its durable entry is keyed
-    /// by the declaration, and the spelling `nominal_head` renders is the
-    /// plain declared name, which names the enclosing module's struct of that
-    /// name — or nothing.
-    ///
-    /// An anonymous shape has no declaration; `anon_name` is what the literal
-    /// registered it under.
+    /// Field info for a struct type's own head — the form with nothing left to
+    /// resolve, since the head is already an identity or a shape.
     pub(super) fn struct_fields_of_head(
         &self,
         head: crate::tir::StructDef,
-        anon_name: impl FnOnce() -> String,
     ) -> Option<&'a StructFieldInfo> {
         match head {
             crate::tir::StructDef::Decl(def) => self.struct_fields_of(def),
-            crate::tir::StructDef::Anon(_) => self.local_struct_fields.get(&anon_name()),
+            crate::tir::StructDef::Anon(shape) => self.anon_struct_fields.get(&shape),
         }
     }
 
     pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
-        if let Some(info) = self.local_variant_cases.get(name) {
-            return Some(info);
-        }
-        self.all_variant_cases.get(&self.declaration(name)?)
+        self.variant_cases_of(self.declaration(name)?)
     }
 
     pub(super) fn enum_case(&self, name: &str) -> Option<&'a EnumInfo> {
-        if let Some(info) = self.local_enum_cases.get(name) {
-            return Some(info);
-        }
-        self.all_enum_cases.get(&self.declaration(name)?)
+        self.enum_cases_of(self.declaration(name)?)
     }
 
     pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {
-        if let Some(info) = self.local_flags_cases.get(name) {
-            return Some(info);
-        }
-        self.all_flags_cases.get(&self.declaration(name)?)
+        self.flags_members_of(self.declaration(name)?)
     }
 
     pub(super) fn resource_type(&self, name: &str) -> Option<&'a ResourceInfo> {
-        self.all_resource_types.get(&self.declaration(name)?)
+        self.resource_type_of(self.declaration(name)?)
     }
 
     pub(super) fn generic_newtype(&self, name: &str) -> Option<&'a GenericNewtypeInfo> {
-        if let Some(info) = self.local_generic_newtypes.get(name) {
-            return Some(info);
-        }
-        self.all_generic_newtypes.get(&self.declaration(name)?)
+        self.generic_newtype_of(self.declaration(name)?)
     }
 
     /// The newtype (or `flags` type) `name` names here.
     pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
-        let def = self.declaration(name).or_else(|| {
-            self.local_item_renders
-                .get(&(name.to_string(), self.current_module_source.clone()))
-                .copied()
-        });
-        if let Some(id) = def.and_then(|d| self.local_item_newtypes.get(&d)) {
-            return Some(*id);
-        }
-        if let Some(id) = self.local_newtypes.get(name) {
-            return Some(*id);
-        }
-        self.all_newtypes.get(&def?).copied()
+        self.newtype_of(self.declaration_or_render(name)?)
     }
 
     /// The fields of the struct `def` declares.
@@ -2220,24 +2174,53 @@ impl<'a> TypeLookup<'a> {
     /// caller that reached `def` off a type cannot land on another module's
     /// same-named struct.
     pub(super) fn struct_fields_of(&self, def: crate::defs::DefId) -> Option<&'a StructFieldInfo> {
-        self.local_item_struct_fields
+        self.local_struct_fields
             .get(&def)
             .or_else(|| self.all_struct_fields.get(&def))
     }
 
     /// The cases of the variant `def` declares.
     pub(super) fn variant_cases_of(&self, def: crate::defs::DefId) -> Option<&'a VariantInfo> {
-        self.all_variant_cases.get(&def)
+        self.local_variant_cases
+            .get(&def)
+            .or_else(|| self.all_variant_cases.get(&def))
     }
 
     /// The cases of the enum `def` declares.
     pub(super) fn enum_cases_of(&self, def: crate::defs::DefId) -> Option<&'a EnumInfo> {
-        self.all_enum_cases.get(&def)
+        self.local_enum_cases
+            .get(&def)
+            .or_else(|| self.all_enum_cases.get(&def))
     }
 
     /// The members of the flags type `def` declares.
     pub(super) fn flags_members_of(&self, def: crate::defs::DefId) -> Option<&'a FlagsInfo> {
-        self.all_flags_cases.get(&def)
+        self.local_flags_cases
+            .get(&def)
+            .or_else(|| self.all_flags_cases.get(&def))
+    }
+
+    /// The resource `def` declares.
+    pub(super) fn resource_type_of(&self, def: crate::defs::DefId) -> Option<&'a ResourceInfo> {
+        self.all_resource_types.get(&def)
+    }
+
+    /// The generic newtype `def` declares.
+    pub(super) fn generic_newtype_of(
+        &self,
+        def: crate::defs::DefId,
+    ) -> Option<&'a GenericNewtypeInfo> {
+        self.local_generic_newtypes
+            .get(&def)
+            .or_else(|| self.all_generic_newtypes.get(&def))
+    }
+
+    /// The type the newtype (or `flags` type) `def` declares.
+    pub(super) fn newtype_of(&self, def: crate::defs::DefId) -> Option<TypeId> {
+        self.local_newtypes
+            .get(&def)
+            .or_else(|| self.all_newtypes.get(&def))
+            .copied()
     }
 
     /// Which declaration `name` reaches from the module this view stands in.
@@ -2255,6 +2238,17 @@ impl<'a> TypeLookup<'a> {
         }
         self.resolutions
             .declaration_named(self.current_module_source, name)
+    }
+
+    /// [`Self::declaration`], falling back to the local-item rendering index
+    /// for a caller that arrived holding a `{name}@{AstId}` spelling rather
+    /// than the declaration it renders.
+    fn declaration_or_render(&self, name: &str) -> Option<crate::defs::DefId> {
+        self.declaration(name).or_else(|| {
+            self.local_item_renders
+                .get(&(name.to_string(), self.current_module_source.clone()))
+                .copied()
+        })
     }
 }
 

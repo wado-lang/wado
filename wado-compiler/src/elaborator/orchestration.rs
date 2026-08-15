@@ -368,15 +368,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Some(entry_module_source),
                     &invocations,
                 );
-                let empty_struct: IndexMap<String, StructFieldInfo> = IndexMap::default();
-                let empty_newtype: IndexMap<String, TypeId> = IndexMap::default();
-                let empty_enum: IndexMap<String, EnumInfo> = IndexMap::default();
-                let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
-                let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
-                let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
-                let empty_local_struct: IndexMap<crate::defs::DefId, StructFieldInfo> =
+                let empty_struct: IndexMap<crate::defs::DefId, StructFieldInfo> =
                     IndexMap::default();
-                let empty_local_newtype: IndexMap<crate::defs::DefId, TypeId> = IndexMap::default();
+                let empty_newtype: IndexMap<crate::defs::DefId, TypeId> = IndexMap::default();
+                let empty_enum: IndexMap<crate::defs::DefId, EnumInfo> = IndexMap::default();
+                let empty_flags: IndexMap<crate::defs::DefId, FlagsInfo> = IndexMap::default();
+                let empty_gnt: IndexMap<crate::defs::DefId, GenericNewtypeInfo> =
+                    IndexMap::default();
+                let empty_variant: IndexMap<crate::defs::DefId, VariantInfo> = IndexMap::default();
+                let empty_anon_struct: IndexMap<crate::tir::AnonStructId, StructFieldInfo> =
+                    IndexMap::default();
                 let empty_local_items: IndexMap<String, crate::defs::DefId> = IndexMap::default();
                 let empty_local_renders: IndexMap<(String, ModuleSource), crate::defs::DefId> =
                     IndexMap::default();
@@ -415,8 +416,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             local_flags_cases: &empty_flags,
                             local_generic_newtypes: &empty_gnt,
                             local_variant_cases: &empty_variant,
-                            local_item_struct_fields: &empty_local_struct,
-                            local_item_newtypes: &empty_local_newtype,
+                            anon_struct_fields: &empty_anon_struct,
                             local_item_renders: &empty_local_renders,
                             fn_local_items: &empty_local_items,
                         };
@@ -440,7 +440,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         all_generic_newtypes.insert(
                             def,
                             GenericNewtypeInfo {
-                                defined_at: newtype_decl.id,
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
                             },
@@ -474,15 +473,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // current state of the shared tables. Recreated per call site so
             // that the previous borrow is released before each `borrow_mut()`
             // on `type_table`.
-            let empty_struct: IndexMap<String, StructFieldInfo> = IndexMap::default();
-            let empty_newtype: IndexMap<String, TypeId> = IndexMap::default();
-            let empty_enum: IndexMap<String, EnumInfo> = IndexMap::default();
-            let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
-            let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
-            let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
-            let empty_local_struct: IndexMap<crate::defs::DefId, StructFieldInfo> =
+            let empty_struct: IndexMap<crate::defs::DefId, StructFieldInfo> = IndexMap::default();
+            let empty_newtype: IndexMap<crate::defs::DefId, TypeId> = IndexMap::default();
+            let empty_enum: IndexMap<crate::defs::DefId, EnumInfo> = IndexMap::default();
+            let empty_flags: IndexMap<crate::defs::DefId, FlagsInfo> = IndexMap::default();
+            let empty_gnt: IndexMap<crate::defs::DefId, GenericNewtypeInfo> = IndexMap::default();
+            let empty_variant: IndexMap<crate::defs::DefId, VariantInfo> = IndexMap::default();
+            let empty_anon_struct: IndexMap<crate::tir::AnonStructId, StructFieldInfo> =
                 IndexMap::default();
-            let empty_local_newtype: IndexMap<crate::defs::DefId, TypeId> = IndexMap::default();
             let empty_local_items: IndexMap<String, crate::defs::DefId> = IndexMap::default();
             let empty_local_renders: IndexMap<(String, ModuleSource), crate::defs::DefId> =
                 IndexMap::default();
@@ -505,8 +503,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     local_flags_cases: &empty_flags,
                     local_generic_newtypes: &empty_gnt,
                     local_variant_cases: &empty_variant,
-                    local_item_struct_fields: &empty_local_struct,
-                    local_item_newtypes: &empty_local_newtype,
+                    anon_struct_fields: &empty_anon_struct,
                     local_item_renders: &empty_local_renders,
                     fn_local_items: &empty_local_items,
                 };
@@ -620,7 +617,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .map(|p| p.name.clone())
                                 .collect();
                             let info = GenericNewtypeInfo {
-                                defined_at: newtype_decl.id,
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
                             };

@@ -3913,10 +3913,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
         };
-        self.sem
-            .decls
-            .local_struct_fields
-            .insert(anon_name.clone(), field_info);
+        self.sem.decls.anon_struct_fields.insert(shape, field_info);
 
         // Create TirStruct definition for codegen
         let tir_fields: Vec<TirField> = effective_fields

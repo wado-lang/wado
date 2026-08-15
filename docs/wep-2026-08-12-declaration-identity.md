@@ -245,9 +245,20 @@ The seven name-keyed registries collapse into `DefId`-indexed columns on
 span. `TypeLookup`'s four-tier scope walk disappears, because there is nothing
 left to walk — the caller arrives holding the `DefId` its site resolved to.
 
+The tables a walk builds as it goes are keyed the same way. `ModuleDecls`'
+`local_*` maps — the fields, cases, members and newtypes the module being
+elaborated has contributed so far — used to be keyed by spelling, so a
+module-level `struct Box` and a function-local one of that name were one entry
+that the later insert won. They are keyed by declaration, and the separate
+`local_item_*` maps that existed to keep local items out of that collision are
+gone with the collision.
+
 This is what removes the consumers' need for a vantage. A pass reading a struct's
 fields no longer needs to know which module it is standing in, so it can no longer
-stand in the wrong one.
+stand in the wrong one — and `with_module_perspective_for`, which used to hide
+the walk's own tables behind a `mem::take` before entering another module, no
+longer swaps them at all. A declaration-keyed entry answers for its declaration
+from anywhere.
 
 ### 6. Types carry `DefId`
 
@@ -305,7 +316,10 @@ enum StructDef {
 Every site that matches `Struct` keeps matching it; every site that reads the
 head has to say which case it means, and the compiler lists them. The
 synthesized `__anon_{…}` spelling goes: it exists only to key the interner, and
-the fields are the key.
+the fields are the key. A shape's fields are filed under its `AnonStructId`
+beside the declarations' under their `DefId`s, so nothing has to render a
+spelling to store them and nothing has to reproduce that spelling to read them
+back.
 
 Interning identity does not change. `TypeTable` keys an interned type by its
 rendered spelling, because holding argument `TypeId`s as identity would mint two

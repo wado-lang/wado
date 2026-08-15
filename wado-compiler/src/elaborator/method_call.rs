@@ -2634,7 +2634,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
         {
             let mut scope = self.enter_inherited_type_param_scope();
-            let self_type_id = scope.resolve_named_type(struct_name, Span::default(), false);
+            let self_type_id = scope.resolve_unsited_type_name(struct_name, Span::default());
             let result = default_method
                 .sig
                 .instantiate_call(&scope.tysys.type_table, &[self_type_id], &[])
