@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786791205222,
+  "lastUpdate": 1786809610464,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48281,6 +48281,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/82655730551dfafe764f8849288ab0dc9865525e"
         },
         "date": 1786791204577,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 5998,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9789cb43f015c7df3f8fee8e1cc4667c4d74ab2d",
+          "message": "Merge pull request #1820 from wado-lang/claude/declaration-identity-wep-tasks-3rsjlk\n\nrefactor(compiler): key declarations by DefId, not by name",
+          "timestamp": "2026-08-16T00:47:29+09:00",
+          "tree_id": "cdc68749a651b7f2fb018581cbd86861b22331db",
+          "url": "https://github.com/wado-lang/wado/commit/9789cb43f015c7df3f8fee8e1cc4667c4d74ab2d"
+        },
+        "date": 1786809609690,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
