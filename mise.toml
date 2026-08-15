@@ -54,6 +54,14 @@ cargo check -p wado-lsp --target wasm32-unknown-unknown
 cargo check -p wado-manifest --target wasm32-unknown-unknown
 """
 
+[tasks.check-grammar]
+description = "Fail if Wado.g4 and the compiler's parser disagree on the stdlib + fixture corpus"
+run = "scripts/check-grammar.sh"
+
+[tasks.update-grammar-divergences]
+description = "Rewrite the Wado.g4 divergence list from the current grammar"
+run = "scripts/check-grammar.sh --update"
+
 [tasks.check-deps]
 description = "Fail if wasm-tools crates drift off wasmtime's generation (duplicate 0.x trees)"
 run = """
