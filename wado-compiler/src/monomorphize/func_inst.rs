@@ -642,10 +642,16 @@ impl TirMutVisitor for PackExpansionLocalSplitter<'_> {
     }
 }
 
-/// Every type slot a `return` value carries, in the current frame: the value's
-/// own `type_id`, a `VariantConstruct`'s `variant_type`, and the same for a
-/// payload or a call argument. Closure bodies are their own frame, so a
-/// `return` inside one belongs to the closure.
+/// The type slots a `return` value carries in the current frame: the value's
+/// own `type_id`, and a `VariantConstruct`'s `variant_type` plus its payload
+/// chain. Closure bodies are their own frame, so a `return` inside one belongs
+/// to the closure.
+///
+/// These are exactly the slots that must name the *enclosing* function's
+/// return type. Inside one element of an expanded `[..T::method()?]` every
+/// other expression is per-element, a call argument included: `return
+/// Result::Err(From::from(__qm_e))` returns the full pack, but `__qm_e` is this
+/// element's error and has to keep the type its own local declares.
 ///
 /// One traversal, two uses — [`Monomorphizer::collect_return_value_types`]
 /// reads the slots to build the wrong/correct type pairs of a type-pack
@@ -663,23 +669,16 @@ impl<F: FnMut(&mut TypeId)> ReturnTypeSlots<F> {
 
     fn slots_of(&mut self, value: &mut TirExpr) {
         (self.on_slot)(&mut value.type_id);
-        match &mut value.kind {
-            TirExprKind::VariantConstruct {
-                variant_type,
-                payload,
-                ..
-            } => {
-                (self.on_slot)(variant_type);
-                if let Some(payload) = payload {
-                    self.slots_of(payload);
-                }
+        if let TirExprKind::VariantConstruct {
+            variant_type,
+            payload,
+            ..
+        } = &mut value.kind
+        {
+            (self.on_slot)(variant_type);
+            if let Some(payload) = payload {
+                self.slots_of(payload);
             }
-            TirExprKind::Call { args, .. } => {
-                for arg in args {
-                    self.slots_of(&mut arg.expr);
-                }
-            }
-            _ => {}
         }
     }
 }
@@ -4498,7 +4497,6 @@ impl Monomorphizer {
     fn rewrite_local_index_in_stmt(stmt: &mut TirStmt, old_idx: u32, new_idx: u32) {
         LocalIndexRewriter { old_idx, new_idx }.visit_stmt(stmt);
     }
-
 }
 
 /// Convert `==`/`!=`/`<`/`>`/`<=`/`>=` on Struct/Variant/GenericInstance types to
