@@ -532,8 +532,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             };
         let info = self
-            .type_lookup()
-            .struct_fields_in(&base_name, &module_source)?;
+            .tysys
+            .type_def(self_ty)
+            .and_then(|def| self.type_lookup().struct_fields_of(def))?;
         let declared: Vec<TypeId> = info.fields.iter().map(|(_, ty, _)| *ty).collect();
         let param_ids = info.type_param_type_ids.clone();
         Some(ReflectSubject {
@@ -569,8 +570,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => return None,
             };
         let info = self
-            .type_lookup()
-            .variant_case_in(&base_name, &module_source)?;
+            .tysys
+            .type_def(self_ty)
+            .and_then(|def| self.type_lookup().variant_cases_of(def))?;
         let declared: Vec<TypeId> = info.cases.iter().map(|c| c.payload).collect();
         let param_ids = info.type_param_type_ids.clone();
         Some(ReflectSubject {

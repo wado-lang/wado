@@ -450,10 +450,17 @@ caller of the same first-wins index. A removed mechanism takes one fix.
 - [ ] `Resolutions::declaration_named` / `declared_in` / `value_named` deleted,
       and the Enforcement bullet they contradict becomes true: a pass holding
       only a spelling cannot obtain an identity. `DefTable` itself already has
-      no such lookup; these three are what remain. `declared_in` is the largest
-      group: `TypeLookup`'s `*_in(name, module)` family and its 45 callers,
-      most of which already reach the same answer through the `DefId` their
-      `ResolvedType` carries and keep the name lookup only as an `or_else`.
+      no such lookup; these three are what remain.
+      - `declared_in` backs `TypeLookup`'s `*_in(name, module)` family. Of its
+        45 callers, 15 are left and all but one are `resolve_struct_literal`'s
+        — the one place still resolving a *written* type name, which the walk
+        should answer for through `StructLiteralExpr::name_id` the way it now
+        answers for a path's owner segment. The rest carried an identity
+        already and were rendering it into a pair to look the same identity
+        back up.
+      - `declaration_named` / `value_named` back `canonical_decl_key`,
+        `decl_key_or_local`, `symbol_named` and the method-lookup receiver
+        keys — 21 callers, each of which needs the site it lost.
 - [ ] `NAME_TO_IDENTITY` reduced to what belongs there. What is left of its
       original seven is the three above plus three that stay: `imported_as`,
       which answers what a module imported under a local name rather than what

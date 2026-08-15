@@ -984,10 +984,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(def) = self.decl_key_or_local(name) else {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         };
-        let defs = self.tysys.resolutions.defs().clone();
-        let (module, decl) = (defs.module(def).clone(), defs.name(def).to_string());
         let generic = self
-            .lookup_struct_fields_in(&decl, &module)
+            .lookup_struct_fields_of_decl(def)
             .is_some_and(|info| !info.type_param_type_ids.is_empty());
         if generic {
             return ArgClass::Head(FqTypeName::of_head(self.tysys.resolutions.defs(), def));
@@ -1000,7 +998,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(type_id) = found {
             return self.class_of_type(type_id);
         }
-        if self.tysys.is_known_type_name(&decl) {
+        if self
+            .tysys
+            .is_known_type_name(self.tysys.resolutions.defs().name(def))
+        {
             return ArgClass::Head(FqTypeName::of_head(self.tysys.resolutions.defs(), def));
         }
         ArgClass::Opaque(OpaqueReason::Unresolved)
