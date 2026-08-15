@@ -23,6 +23,7 @@ use super::arena_query::{
     block_contains_loop, has_break_to, is_local, is_local_operand, promoted_read_count_at,
     single_payload_binding,
 };
+use super::sroa_variant_return::{Pad, zero_pad};
 
 /// The slot `sroa_variant_return` reserves for the tag in every scalarized
 /// variant return.
@@ -2413,5 +2414,537 @@ fn emit_threaded_exit(
         }
         // A divergent arm already terminates; no fused break needed.
         None => {}
+    }
+}
+
+/// Tagged-tuple temp scalarization: the `let temp = L: { …; break L: [tag,
+/// slots…]; }` an inlined `sroa_variant_return` callee leaves behind, where
+/// every read of `temp` is a `temp.k` projection.
+///
+/// [`LabeledBlockFusionRule`] folds the shapes whose consumer it can relocate
+/// into the block. The one it cannot is the value-producing `let v = match
+/// temp.0 { … }` of an inlined `let x = f()?`, and there the result tuple is
+/// allocated on the heap once per call and read straight back — `json-canada`
+/// pays one per coordinate. Scalarizing the temp needs no consumer analysis at
+/// all: give each projected slot a local, fill them at every exit, and the
+/// tuple never exists.
+/// Build the rule for one function. Mirrors the sibling constructors; the rule
+/// keeps no per-function state beyond the type table it classifies slot types
+/// against.
+pub(super) fn build_slot_temp_sroa(type_table: &TypeTable) -> SlotTempSroaRuleWithTypes<'_> {
+    SlotTempSroaRuleWithTypes { type_table }
+}
+
+/// One scalarizable temp: its labeled block, and the slots the body projects.
+struct SlotTempSroa {
+    temp_local: u32,
+    label: String,
+    lb_block: BlockId,
+    /// Statements a `Block` wrapper ran before the labeled block, hoisted out.
+    lead: Vec<StmtId>,
+    /// Projected slots in field order, each with the local that replaces it.
+    slots: Vec<BoundSlot>,
+    /// The declaring `let mut slot = <zero>` each one needs ahead of the block.
+    zeros: Vec<(u32, TypeId, Operand)>,
+    span: Span,
+}
+
+impl SlotTempSroa {
+    /// The local standing in for `temp.field_index`, if that slot is read.
+    fn slot_of(&self, field_index: u32) -> Option<&BoundSlot> {
+        self.slots.iter().find(|s| s.field_index == field_index)
+    }
+}
+
+pub(super) struct SlotTempSroaRuleWithTypes<'t> {
+    type_table: &'t TypeTable,
+}
+
+impl Rule for SlotTempSroaRuleWithTypes<'_> {
+    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        let stmts = engine.body.blocks[block].stmts.clone();
+        for (i, &s) in stmts.iter().enumerate() {
+            let Some(plan) = plan_slot_temp_sroa(engine, s, self.type_table) else {
+                continue;
+            };
+            perform_slot_temp_sroa(engine, block, &stmts, i, plan);
+            return true;
+        }
+        false
+    }
+}
+
+fn plan_slot_temp_sroa(
+    engine: &mut Engine,
+    let_s: StmtId,
+    type_table: &TypeTable,
+) -> Option<SlotTempSroa> {
+    let mut zeros: Vec<(u32, TypeId, Operand)> = Vec::new();
+    let body = &*engine.body;
+    let StmtKind::Let {
+        local_index: temp_local,
+        value: let_value,
+        is_mut: false,
+        ..
+    } = &body.stmts[let_s].kind
+    else {
+        return None;
+    };
+    let temp_local = *temp_local;
+    // `let_block_flatten` normalises `let x = { stmts…; tail }`, but this tail
+    // is a labeled block rather than a plain value, so the wrapper can still be
+    // in place: look through it and carry its leading statements out ahead of
+    // the block.
+    let lv = let_value.as_expr()?;
+    let (lead, lb_expr) = match &body.exprs[lv].kind {
+        ExprKind::Block(b) => {
+            let (&last, lead) = body.blocks[*b].stmts.split_last()?;
+            let StmtKind::Expr(Operand::Expr(tail)) = &body.stmts[last].kind else {
+                return None;
+            };
+            (lead.to_vec(), *tail)
+        }
+        _ => (Vec::new(), lv),
+    };
+    let ExprKind::LabeledBlock {
+        label,
+        block: lb_block,
+        ..
+    } = &body.exprs[lb_expr].kind
+    else {
+        return None;
+    };
+    let (label, lb_block) = (label.clone(), *lb_block);
+
+    // One `let` for the temp, or the rewrite is unsound: `clone_block` (fusion's
+    // own duplication) copies `local_index` verbatim, and a second copy's
+    // `temp.k` reads would be rewritten to slot locals that only the first
+    // copy's exits declare and assign.
+    if declaration_count(body, temp_local) != 1 {
+        return None;
+    }
+
+    // The block's value must arrive through `break L:` exits the transform can
+    // reach, so the tail has to terminate rather than fall through with one.
+    // Checked before the read census below, which walks the whole body.
+    let last = body.blocks[lb_block].stmts.last()?;
+    if !matches!(
+        body.stmts[*last].kind,
+        StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue
+    ) {
+        return None;
+    }
+
+    // Every read of the temp, anywhere in the body, must be a `temp.k`
+    // projection: the block has no aggregate left to hand any other read.
+    let mut reads = SlotReadCollector {
+        local_idx: temp_local,
+        slots: IndexMap::default(),
+        direct_uses: 0,
+        slot_uses: 0,
+    };
+    reads.visit_node(body, NodeRef::Block(body.root));
+    if reads.slot_uses == 0 || reads.direct_uses != reads.slot_uses {
+        return None;
+    }
+    let mut fields: Vec<(u32, TypeId)> = reads.slots.into_iter().collect();
+    fields.sort_by_key(|(field_index, _)| *field_index);
+    let widest = fields
+        .last()
+        .map_or(0, |(field_index, _)| *field_index as usize);
+    let mut sink = SlotTupleChecker {
+        label: &label,
+        widest,
+    };
+    if !walk_exits(body, lb_block, &label, &mut sink) {
+        return None;
+    }
+
+    // Each slot local is declared once, before the block, so its definition
+    // dominates every projection the consumer left behind; the exits assign it.
+    // A type with no zero value to declare it with is refused here rather than
+    // producing a `let` per exit, which would leave reads no single definition
+    // dominates — and a later fold would pick one arbitrarily.
+    let span = body.stmts[let_s].span;
+    let pads: Vec<Pad> = fields
+        .iter()
+        .map(|(_, type_id)| zero_pad(*type_id, type_table))
+        .collect::<Option<_>>()?;
+    let mut slots = Vec::with_capacity(fields.len());
+    for ((field_index, type_id), pad) in fields.into_iter().zip(pads) {
+        let zero = materialize_pad(engine, pad, span);
+        let next = engine.locals().len() as u32;
+        let local_index = engine.alloc_local(
+            format!("__sroa_slot_{next}"),
+            type_id,
+            /* is_mut */ true,
+        );
+        slots.push(BoundSlot {
+            field_index,
+            local_index,
+            type_id,
+        });
+        zeros.push((local_index, type_id, zero));
+    }
+    Some(SlotTempSroa {
+        temp_local,
+        label,
+        lb_block,
+        lead,
+        slots,
+        zeros,
+        span,
+    })
+}
+
+/// [`ExitSink`] for the slot rule: every exit carries a tuple literal wide
+/// enough for the widest projection and hides no further exit inside it — one
+/// moving with a relocated element would leave the block it belongs to.
+struct SlotTupleChecker<'a> {
+    label: &'a str,
+    widest: usize,
+}
+
+impl ExitSink for SlotTupleChecker<'_> {
+    fn visit(&mut self, body: &Body, value: Option<Operand>) -> bool {
+        let Some(e) = value.and_then(Operand::as_expr) else {
+            return false;
+        };
+        let ExprKind::TupleLiteral { elements } = &body.exprs[e].kind else {
+            return false;
+        };
+        elements.len() > self.widest && !has_break_to(body, NodeRef::Expr(e), self.label)
+    }
+    fn descend_branches(&self) -> bool {
+        true
+    }
+    fn reject_hidden_break(&self) -> bool {
+        true
+    }
+}
+
+fn perform_slot_temp_sroa(
+    engine: &mut Engine,
+    outer_block: BlockId,
+    stmts: &[StmtId],
+    i: usize,
+    plan: SlotTempSroa,
+) {
+    let span = plan.span;
+    scalarize_exits(engine, plan.lb_block, &plan);
+
+    // Every `temp.k` now reads the slot local instead. Collect first: the
+    // rewrite only replaces expression kinds, so the ids stay valid.
+    let mut hits = SlotAccessCollector {
+        local_idx: plan.temp_local,
+        hits: Vec::new(),
+    };
+    hits.visit_node(engine.body, NodeRef::Block(engine.body.root));
+    for (e, field_index) in hits.hits {
+        let Some(slot) = plan.slot_of(field_index) else {
+            continue;
+        };
+        engine.replace_expr_kind(
+            e,
+            ExprKind::Local {
+                index: slot.local_index,
+                name: format!("__sroa_slot_{}", slot.local_index),
+            },
+        );
+    }
+
+    // The labeled block yields nothing now, so it becomes a statement and the
+    // temp's binding goes with it.
+    let lb_stmt = engine.alloc_stmt(
+        StmtKind::LabeledBlock {
+            label: plan.label,
+            block: plan.lb_block,
+        },
+        span,
+    );
+    let mut kept = Vec::with_capacity(stmts.len() + plan.zeros.len() + plan.lead.len());
+    kept.extend_from_slice(&stmts[..i]);
+    kept.extend_from_slice(&plan.lead);
+    for (local_index, type_id, zero) in plan.zeros {
+        let decl = engine.alloc_stmt(
+            StmtKind::Let {
+                name: format!("__sroa_slot_{local_index}"),
+                local_index,
+                is_mut: true,
+                is_reactive: false,
+                type_id,
+                value: zero,
+                skip_value_copy: false,
+            },
+            span,
+        );
+        kept.push(decl);
+    }
+    kept.push(lb_stmt);
+    kept.extend_from_slice(&stmts[i + 1..]);
+    engine.set_block_stmts(outer_block, kept);
+    engine.note_elided_local(plan.temp_local);
+}
+
+/// How many `let` statements declare `idx`, capped at two — the callers only
+/// need to tell "exactly one" from "more".
+fn declaration_count(body: &Body, idx: u32) -> usize {
+    let mut count = 0;
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+            && *local_index == idx
+        {
+            count += 1;
+            if count > 1 {
+                return count;
+            }
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    count
+}
+
+/// Replace each `break L: [e0, …]` with the slot assignments the projections
+/// read and a value-less `break L`. The walk mirrors [`walk_exits`], which is
+/// what the plan checked against: an exit it accepted but this missed would
+/// keep a value-carrying break in a block that no longer has a result type.
+fn scalarize_exits(engine: &mut Engine, block: BlockId, plan: &SlotTempSroa) {
+    let stmts = engine.body.blocks[block].stmts.clone();
+    let mut out = Vec::with_capacity(stmts.len());
+    for s in stmts {
+        scalarize_stmt(engine, s, plan, &mut out);
+    }
+    engine.set_block_stmts(block, out);
+}
+
+fn scalarize_stmt(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa, out: &mut Vec<StmtId>) {
+    let exit = match &engine.body.stmts[s].kind {
+        StmtKind::Break {
+            label: Some(l),
+            value: Some(v),
+        } if *l == plan.label => v.as_expr(),
+        StmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
+            scalarize_operand(engine, condition, plan);
+            scalarize_exits(engine, then_block, plan);
+            if let Some(eb) = else_block {
+                scalarize_exits(engine, eb, plan);
+            }
+            None
+        }
+        StmtKind::Loop { body } => {
+            let body = *body;
+            scalarize_exits(engine, body, plan);
+            None
+        }
+        // A block re-binding the label owns every `break` to it inside, so the
+        // planner's walk skips it without looking — `walk_exit_stmt` returns
+        // for the shadowing case rather than descending. Rewriting those breaks
+        // here would scalarize exits that are not ours, which is why
+        // `scalarize_expr` skips the same shape.
+        StmtKind::LabeledBlock { label, block } => {
+            if label != &plan.label {
+                let block = *block;
+                scalarize_exits(engine, block, plan);
+            }
+            None
+        }
+        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+            let value = *value;
+            scalarize_operand(engine, value, plan);
+            None
+        }
+        StmtKind::Expr(value) => {
+            let value = *value;
+            scalarize_operand(engine, value, plan);
+            None
+        }
+        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+            if let Some(v) = *value {
+                scalarize_operand(engine, v, plan);
+            }
+            None
+        }
+        StmtKind::Continue => None,
+    };
+    let Some(tuple) = exit else {
+        out.push(s);
+        return;
+    };
+    let ExprKind::TupleLiteral { elements } = &engine.body.exprs[tuple].kind else {
+        unreachable!("guarded by SlotTupleChecker")
+    };
+    let elements = elements.clone();
+    let span = engine.body.stmts[s].span;
+    for (index, element) in elements.into_iter().enumerate() {
+        let field_index = u32::try_from(index).expect("tuple arity");
+        let kind = match plan.slot_of(field_index) {
+            Some(slot) => {
+                let target = engine.alloc_expr(
+                    ExprKind::Local {
+                        index: slot.local_index,
+                        name: format!("__sroa_slot_{}", slot.local_index),
+                    },
+                    slot.type_id,
+                    span,
+                );
+                StmtKind::Expr(Operand::Expr(engine.alloc_expr(
+                    ExprKind::Assign {
+                        target,
+                        value: element,
+                    },
+                    TypeTable::UNIT,
+                    span,
+                )))
+            }
+            // Unread: a promoted element is pure and drops with the tuple, a
+            // skeleton one stays for its effects and its evaluation order.
+            None if element.as_expr().is_none() => continue,
+            None => StmtKind::Expr(element),
+        };
+        let stmt = engine.alloc_stmt(kind, span);
+        out.push(stmt);
+    }
+    let brk = engine.alloc_stmt(
+        StmtKind::Break {
+            label: Some(plan.label.clone()),
+            value: None,
+        },
+        span,
+    );
+    out.push(brk);
+}
+
+fn scalarize_operand(engine: &mut Engine, op: Operand, plan: &SlotTempSroa) {
+    if let Some(e) = op.as_expr() {
+        scalarize_expr(engine, e, plan);
+    }
+}
+
+/// The expression positions [`walk_exit_expr`] resolves. Every other kind is one
+/// it treats as opaque and the plan already refused an exit inside.
+fn scalarize_expr(engine: &mut Engine, e: ExprId, plan: &SlotTempSroa) {
+    match &engine.body.exprs[e].kind {
+        ExprKind::LabeledBlock { label, block, .. } => {
+            if label == &plan.label {
+                return;
+            }
+            let block = *block;
+            scalarize_exits(engine, block, plan);
+        }
+        ExprKind::Block(block) => {
+            let block = *block;
+            scalarize_exits(engine, block, plan);
+        }
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
+            scalarize_operand(engine, condition, plan);
+            scalarize_exits(engine, then_branch, plan);
+            if let Some(eb) = else_branch {
+                scalarize_exits(engine, eb, plan);
+            }
+        }
+        ExprKind::Match { expr, arms } => {
+            let (expr, arms) = (*expr, arms.clone());
+            scalarize_operand(engine, expr, plan);
+            for arm in &arms {
+                if let Some(g) = arm.guard {
+                    scalarize_operand(engine, g, plan);
+                }
+                scalarize_operand(engine, arm.body, plan);
+            }
+        }
+        ExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            let (scrutinee, arms, default) = (*scrutinee, arms.clone(), *default);
+            scalarize_operand(engine, scrutinee, plan);
+            for b in arms {
+                scalarize_exits(engine, b, plan);
+            }
+            scalarize_exits(engine, default, plan);
+        }
+        ExprKind::Binary { .. }
+        | ExprKind::Unary { .. }
+        | ExprKind::Call { .. }
+        | ExprKind::FieldAccess { .. }
+        | ExprKind::Index { .. }
+        | ExprKind::TupleLiteral { .. }
+        | ExprKind::ArrayLiteral { .. }
+        | ExprKind::StructLiteral { .. }
+        | ExprKind::VariantConstruct { .. }
+        | ExprKind::EnumConstruct { .. }
+        | ExprKind::Assign { .. }
+        | ExprKind::Cast { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::GlobalVarSet { .. }
+        | ExprKind::Local { .. }
+        | ExprKind::PackedArray(_)
+        | ExprKind::Dead
+        | ExprKind::CmRawCall { .. }
+        | ExprKind::IndirectCall { .. }
+        | ExprKind::ClosureToCanonical { .. }
+        | ExprKind::VariantTag { .. }
+        | ExprKind::VariantTest { .. }
+        | ExprKind::VariantPayload { .. } => {}
+    }
+}
+
+/// The zero operand for a slot's declaring `let`, built through the engine so
+/// its per-node buffers grow with the arena.
+fn materialize_pad(engine: &mut Engine, pad: Pad, span: Span) -> Operand {
+    match pad {
+        Pad::Int(ty) => engine.const_operand(ValueKind::Int(0, ty), ty),
+        Pad::Float(ty) => engine.const_operand(ValueKind::Float(0.0f64.to_bits(), ty), ty),
+        Pad::Bool => engine.const_operand(ValueKind::Bool(false), TypeTable::BOOL),
+        Pad::Char => engine.const_operand(ValueKind::Char('\0'), TypeTable::CHAR),
+        Pad::NoneOf(option_type) => Operand::Expr(engine.alloc_expr(
+            ExprKind::VariantConstruct {
+                variant_type: option_type,
+                case_index: OPTION_NONE_CASE,
+                case_name: "None".to_string(),
+                payload: None,
+            },
+            option_type,
+            span,
+        )),
+    }
+}
+
+/// `Option`'s `None` case index, as declared in `lib/core/prelude/types.wado`.
+const OPTION_NONE_CASE: u32 = 1;
+
+/// Collects every `Local(temp).k` projection as `(node, field_index)`.
+struct SlotAccessCollector {
+    local_idx: u32,
+    hits: Vec<(ExprId, u32)>,
+}
+
+impl NirRefVisitor for SlotAccessCollector {
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::FieldAccess {
+                expr: inner,
+                field_index,
+                ..
+            } = &body.exprs[e].kind
+            && is_local_operand(body, *inner, self.local_idx)
+        {
+            self.hits.push((e, *field_index));
+        }
+        self.walk_node(body, node);
     }
 }

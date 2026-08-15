@@ -53,25 +53,21 @@ type "functype//variant_eq_auto.wado/__cm_export__run" = fn();  // TypeId(16)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(18)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(18)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(19)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(20)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(20)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(21)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(21)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(22)
+type "functype//variant_eq_auto.wado/variant_eq_auto.wado/Shape^core:prelude/traits.wado/Eq::eq" = fn(ref "core:prelude/types.wado//Box<variant_eq_auto.wado/Shape>", ref "variant_eq_auto.wado//Shape") -> bool;  // TypeId(22)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(23)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
-type "functype//variant_eq_auto.wado/variant_eq_auto.wado/Shape^core:prelude/traits.wado/Eq::eq" = fn(ref "core:prelude/types.wado//Box<variant_eq_auto.wado/Shape>", ref "variant_eq_auto.wado//Shape") -> bool;  // TypeId(24)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(27)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -82,9 +78,9 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:variant_eq_auto.wado::__modules_initialized: bool = 0;
 
@@ -97,6 +93,38 @@ fn "variant_eq_auto.wado/run"() with Stdout {
     let s6: ref "variant_eq_auto.wado//Shape";
     let s7: ref "variant_eq_auto.wado//Shape";
     let s8: ref "variant_eq_auto.wado//Shape";
+    let handle_11: i32;
+    let packed_13: i64;
+    let rx_14: i32;
+    let tx_15: i32;
+    let handle_20: i32;
+    let packed_22: i64;
+    let rx_23: i32;
+    let tx_24: i32;
+    let handle_29: i32;
+    let packed_31: i64;
+    let rx_32: i32;
+    let tx_33: i32;
+    let handle_38: i32;
+    let packed_40: i64;
+    let rx_41: i32;
+    let tx_42: i32;
+    let handle_47: i32;
+    let packed_49: i64;
+    let rx_50: i32;
+    let tx_51: i32;
+    let handle_56: i32;
+    let packed_58: i64;
+    let rx_59: i32;
+    let tx_60: i32;
+    let handle_65: i32;
+    let packed_67: i64;
+    let rx_68: i32;
+    let tx_69: i32;
+    let handle_74: i32;
+    let packed_76: i64;
+    let rx_77: i32;
+    let tx_78: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:variant_eq_auto.wado::__modules_initialized);
         cold_path;
@@ -112,28 +140,60 @@ fn "variant_eq_auto.wado/run"() with Stdout {
     s7 = struct.new "variant_eq_auto.wado//Shape" { 2 };
     s8 = struct.new "variant_eq_auto.wado//Shape" { 2 };
     if "variant_eq_auto.wado/variant_eq_auto.wado/Shape^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<variant_eq_auto.wado/Shape>" { value: s1 }, s2) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("circle == circle"), used: 16 });
+        rx_14 = builtin::i32_wrap_i64(local.tee packed_13("wasi/stream-new"()));
+        tx_15 = builtin::i32_wrap_i64(packed_13 >> 32_i64);
+        handle_11 = "variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(rx_14);
+        "core:cli/write_to_stream"(tx_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("circle == circle"), used: 16 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_11);
     }
     if "variant_eq_auto.wado/variant_eq_auto.wado/Shape^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<variant_eq_auto.wado/Shape>" { value: s1 }, s3) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("circle(3.14) != circle(2.0)"), used: 27 });
+        rx_23 = builtin::i32_wrap_i64(local.tee packed_22("wasi/stream-new"()));
+        tx_24 = builtin::i32_wrap_i64(packed_22 >> 32_i64);
+        handle_20 = "variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
+        "core:cli/write_to_stream"(tx_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("circle(3.14) != circle(2.0)"), used: 27 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_20);
     }
     if "variant_eq_auto.wado/variant_eq_auto.wado/Shape^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<variant_eq_auto.wado/Shape>" { value: s1 }, s4) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("circle != rectangle"), used: 19 });
+        rx_32 = builtin::i32_wrap_i64(local.tee packed_31("wasi/stream-new"()));
+        tx_33 = builtin::i32_wrap_i64(packed_31 >> 32_i64);
+        handle_29 = "variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(rx_32);
+        "core:cli/write_to_stream"(tx_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("circle != rectangle"), used: 19 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_29);
     }
     if "variant_eq_auto.wado/variant_eq_auto.wado/Shape^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<variant_eq_auto.wado/Shape>" { value: s4 }, s5) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rect == rect"), used: 12 });
+        rx_41 = builtin::i32_wrap_i64(local.tee packed_40("wasi/stream-new"()));
+        tx_42 = builtin::i32_wrap_i64(packed_40 >> 32_i64);
+        handle_38 = "variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(rx_41);
+        "core:cli/write_to_stream"(tx_42, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rect == rect"), used: 12 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_38);
     }
     if "variant_eq_auto.wado/variant_eq_auto.wado/Shape^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<variant_eq_auto.wado/Shape>" { value: s4 }, s6) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rect(1) != rect(3)"), used: 18 });
+        rx_50 = builtin::i32_wrap_i64(local.tee packed_49("wasi/stream-new"()));
+        tx_51 = builtin::i32_wrap_i64(packed_49 >> 32_i64);
+        handle_47 = "variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(rx_50);
+        "core:cli/write_to_stream"(tx_51, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rect(1) != rect(3)"), used: 18 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_47);
     }
     if "variant_eq_auto.wado/variant_eq_auto.wado/Shape^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<variant_eq_auto.wado/Shape>" { value: s7 }, s8) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("point == point"), used: 14 });
+        rx_59 = builtin::i32_wrap_i64(local.tee packed_58("wasi/stream-new"()));
+        tx_60 = builtin::i32_wrap_i64(packed_58 >> 32_i64);
+        handle_56 = "variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(rx_59);
+        "core:cli/write_to_stream"(tx_60, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("point == point"), used: 14 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_56);
     }
     if "variant_eq_auto.wado/variant_eq_auto.wado/Shape^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<variant_eq_auto.wado/Shape>" { value: s7 }, s1) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("point != circle"), used: 15 });
+        rx_68 = builtin::i32_wrap_i64(local.tee packed_67("wasi/stream-new"()));
+        tx_69 = builtin::i32_wrap_i64(packed_67 >> 32_i64);
+        handle_65 = "variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(rx_68);
+        "core:cli/write_to_stream"(tx_69, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("point != circle"), used: 15 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_65);
     }
     if "variant_eq_auto.wado/variant_eq_auto.wado/Shape^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<variant_eq_auto.wado/Shape>" { value: s1 }, s3) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("!= works"), used: 8 });
+        rx_77 = builtin::i32_wrap_i64(local.tee packed_76("wasi/stream-new"()));
+        tx_78 = builtin::i32_wrap_i64(packed_76 >> 32_i64);
+        handle_74 = "variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(rx_77);
+        "core:cli/write_to_stream"(tx_78, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("!= works"), used: 8 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_74);
     }
 }
 
@@ -153,46 +213,43 @@ fn "variant_eq_auto.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let len: i32;
+    let len_3: i32;
     let new_repr: ref Array<u8>;
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
     let end_15: i32;
-    let packed_21: i64;
-    let ptr_22: i32;
-    let raw_len_23: i32;
-    let repr_25: ref Array<u8>;
-    len = message.used;
+    let len_18: i32;
+    let ptr_19: i32;
+    let packed_25: i64;
+    let ptr_26: i32;
+    let raw_len_27: i32;
+    let repr_29: ref Array<u8>;
+    let len_35: i32;
+    let ptr_36: i32;
+    len_3 = message.used;
     if add_newline {
-        new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
-        builtin::array_set_u8(new_repr, len, 10);
-        end_15 = len + 1;
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
+        new_repr = builtin::array_new<u8>(len_3 + 1);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len_3);
+        builtin::array_set_u8(new_repr, len_3, 10);
+        len_18 = local.tee end_15(len_3 + 1) - 0;
+        ptr_19 = "mem/realloc"(0, 0, 1, len_18);
+        "core:rt/gc_array_to_memory"(new_repr, 0, ptr_19, len_18);
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9(builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_18) << 32_i64)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
-        repr_25 = message.repr;
-        ptr_22 = builtin::i32_wrap_i64(local.tee packed_21("core:rt/cm_lower_list_u8"(repr_25, 0, len - 0)));
-        raw_len_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
-        "core:rt/cm_stream_write_drain"(tx, ptr_22, raw_len_23, 1);
-        drop("mem/realloc"(ptr_22, raw_len_23, 1, 0));
+        repr_29 = message.repr;
+        len_35 = len_3 - 0;
+        ptr_36 = "mem/realloc"(0, 0, 1, len_35);
+        "core:rt/gc_array_to_memory"(repr_29, 0, ptr_36, len_35);
+        ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));
+        raw_len_27 = builtin::i32_wrap_i64(packed_25 >> 32_i64);
+        "core:rt/cm_stream_write_drain"(tx, ptr_26, raw_len_27, 1);
+        drop("mem/realloc"(ptr_26, raw_len_27, 1, 0));
     }
     "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:cli/println"(message) with Stdout {
-    let handle: i32;
-    let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
-    "core:cli/write_to_stream"(tx_7, message, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
@@ -206,13 +263,6 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
             continue l10;
         };
     };
-}
-
-fn "core:rt/cm_lower_list_u8"(data, start, len) {
-    let ptr: i32;
-    ptr = "mem/realloc"(0, 0, 1, len);
-    "core:rt/gc_array_to_memory"(data, start, ptr, len);
-    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
 fn "core:rt/cm_await_blocked"(handle) {

@@ -1,0 +1,71 @@
+// A multi-value-ABI return whose value is a `match` over inlined helpers.
+//
+// `resolve` returns `Option<i32>` under the multi-value ABI, and each match arm
+// is an inlined `lookup` — a labeled block that `break`s its `Option` from two
+// places. Lowering rewrites every one of those exits into a multi-value
+// `return`, after which the block yields nothing and its result type must go.
+// `return_every_exit` reported "not all rewritten" for an exit it had just
+// rewritten inside an `if`, so the block kept its result type and pushed two
+// values the void `if` around it never consumed: "values remaining on stack at
+// end of block" at codegen. Reproduced at `-O3` before the inline cost model
+// brought the same shape within reach of `-O2`.
+use { println, Stdout } from "core:cli";
+
+variant Sel {
+    A(i32),
+    B(i32),
+}
+
+#[inline(never)]
+fn find(m: &List<i32>, k: i32) -> i32 {
+    for let mut i = 0; i < m.len(); i += 1 {
+        if m[i] == k {
+            return i;
+        }
+    }
+    return -1;
+}
+
+fn lookup(m: &List<i32>, k: i32) -> Option<i32> {
+    let i = find(m, k);
+    if i >= 0 {
+        return Option::Some(m[i]);
+    }
+    return Option::None;
+}
+
+#[inline(never)]
+fn resolve(a: &List<i32>, b: &List<i32>, sel: &Sel) -> Option<i32> {
+    return match sel {
+        A(n) => lookup(a, *n),
+        B(t) => lookup(b, *t),
+    };
+}
+
+// Every call site destructures the result, which is what puts `resolve` under
+// the multi-value return ABI.
+#[inline(never)]
+fn sum(a: &List<i32>, b: &List<i32>) -> i32 {
+    let mut s = 0;
+    if let Some(v) = resolve(a, b, &Sel::A(20)) {
+        s += v;
+    }
+    if let Some(v) = resolve(a, b, &Sel::B(30)) {
+        s += v;
+    }
+    if let Some(v) = resolve(a, b, &Sel::A(99)) {
+        s += v;
+    } else {
+        s += 7;
+    }
+    return s;
+}
+
+export fn run() with Stdout {
+    let a: List<i32> = [builtin::black_box(10), 20];
+    let b: List<i32> = [builtin::black_box(30), 40];
+    println(`${sum(&a, &b)}`);
+}
+
+__DATA__
+{ "stdout": "57\n" }

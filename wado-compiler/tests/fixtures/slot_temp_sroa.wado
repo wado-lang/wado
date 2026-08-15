@@ -1,0 +1,55 @@
+// An inlined `f()?` must not rebuild its scalarized return tuple on the heap.
+//
+// `sroa_variant_return` gives `inner` a `[tag, value, error]` result, which the
+// call ABI passes flat. Inlined, NIR has no flat form: each exit builds the
+// tuple and `let v = inner(…)?` reads it straight back — one allocation per
+// call, which `json-canada` paid per coordinate. Fusion cannot help here; it
+// relocates the consumer into the block, and this consumer produces a value.
+// `slot_temp_sroa` gives each projected slot a local instead.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn find(m: &List<i32>, k: i32) -> i32 {
+    for let mut i = 0; i < m.len(); i += 1 {
+        if m[i] == k {
+            return i;
+        }
+    }
+    return -1;
+}
+
+fn inner(m: &List<i32>, k: i32) -> Result<i32, String> {
+    let i = find(m, k);
+    if i < 0 {
+        return Result::Err("nope");
+    }
+    return Result::Ok(m[i]);
+}
+
+#[inline(never)]
+fn outer(m: &List<i32>, k: i32) -> Result<i32, String> {
+    let v = inner(m, k)?;
+    return Result::Ok(v * 2);
+}
+
+export fn run() with Stdout {
+    let m: List<i32> = [builtin::black_box(10), 20, 30];
+    let mut total = 0;
+    for let mut j = 0; j < 3; j += 1 {
+        if let Ok(v) = outer(&m, 10 * (j + 1)) {
+            total += v;
+        }
+    }
+    if let Err(e) = outer(&m, 99) {
+        total += e.len();
+    }
+    println(`${total}`);
+}
+
+__DATA__
+{
+    "stdout": "124\n",
+    "wir_not_expect:O2": [
+        "struct.new \"tuple//"
+    ]
+}

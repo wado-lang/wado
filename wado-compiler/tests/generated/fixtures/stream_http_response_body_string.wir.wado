@@ -277,39 +277,31 @@ type "functype//stream_http_response_body_string.wado/__cm_export__handle" = fn(
 
 type "functype//stream_http_response_body_string.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>" = fn(i32, ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>");  // TypeId(56)
 
-type "functype//core:prelude/string.wado/decode_char_at" = fn(ref Array<u8>, i32) -> [u32, i32];  // TypeId(57)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(57)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(58)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(58)
 
-type "functype//core:rt/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(59)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(59)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(60)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(60)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(61)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(61)
 
-type "functype//core:rt/cm_stream_write_u8" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(62)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(62)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(63)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(63)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(64)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(64)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(65)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(65)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(66)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(66)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(67)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(67)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(68)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(68)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(69)
-
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(70)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(71)
-
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(72)
-
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(73)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(69)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -494,6 +486,47 @@ fn "stream_http_response_body_string.wado/handle"(request) {
     let packed_184: i64;
     let rx_185: i32;
     let tx_186: i32;
+    let packed_189: i64;
+    let ptr_190: i32;
+    let len_191: i32;
+    let len_194: i32;
+    let ptr_200: i32;
+    let s_205: ref "core:prelude/string.wado//String";
+    let len_206: i32;
+    let bytes_207: ref Array<u8>;
+    let ptr_208: i32;
+    let s_211: ref "core:prelude/string.wado//String";
+    let len_212: i32;
+    let bytes_213: ref Array<u8>;
+    let ptr_214: i32;
+    let s_217: ref "core:prelude/string.wado//String";
+    let len_218: i32;
+    let bytes_219: ref Array<u8>;
+    let ptr_220: i32;
+    let s_223: ref "core:prelude/string.wado//String";
+    let len_224: i32;
+    let bytes_225: ref Array<u8>;
+    let ptr_226: i32;
+    let s_229: ref "core:prelude/string.wado//String";
+    let len_230: i32;
+    let bytes_231: ref Array<u8>;
+    let ptr_232: i32;
+    let s_235: ref "core:prelude/string.wado//String";
+    let len_236: i32;
+    let bytes_237: ref Array<u8>;
+    let ptr_238: i32;
+    let s_241: ref "core:prelude/string.wado//String";
+    let len_242: i32;
+    let bytes_243: ref Array<u8>;
+    let ptr_244: i32;
+    let s_247: ref "core:prelude/string.wado//String";
+    let len_248: i32;
+    let bytes_249: ref Array<u8>;
+    let ptr_250: i32;
+    let s_253: ref "core:prelude/string.wado//String";
+    let len_254: i32;
+    let bytes_255: ref Array<u8>;
+    let ptr_256: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stream_http_response_body_string.wado::__modules_initialized);
         cold_path;
@@ -532,7 +565,12 @@ fn "stream_http_response_body_string.wado/handle"(request) {
             __local_25 = 0;
             __local_26 = 0;
             if __local_24 != 0 {
-                __local_28 = builtin::i32_wrap_i64(local.tee __local_27("core:rt/cm_lower_string"(ref.as_non_null(__local_23))));
+                s_205 = ref.as_non_null(__local_23);
+                len_206 = s_205.used;
+                bytes_207 = s_205.repr;
+                ptr_208 = "mem/realloc"(0, 0, 1, len_206);
+                "core:rt/gc_array_to_memory"(bytes_207, 0, ptr_208, len_206);
+                __local_28 = builtin::i32_wrap_i64(local.tee __local_27(builtin::i64_extend_i32_s(ptr_208) | (builtin::i64_extend_i32_s(len_206) << 32_i64)));
                 __local_29 = builtin::i32_wrap_i64(__local_27 >> 32_i64);
                 __local_25 = __local_28;
                 __local_26 = __local_29;
@@ -573,7 +611,12 @@ fn "stream_http_response_body_string.wado/handle"(request) {
             __local_42 = 0;
             __local_43 = 0;
             if __local_41 != 0 {
-                __local_45 = builtin::i32_wrap_i64(local.tee __local_44("core:rt/cm_lower_string"(ref.as_non_null(__local_40))));
+                s_211 = ref.as_non_null(__local_40);
+                len_212 = s_211.used;
+                bytes_213 = s_211.repr;
+                ptr_214 = "mem/realloc"(0, 0, 1, len_212);
+                "core:rt/gc_array_to_memory"(bytes_213, 0, ptr_214, len_212);
+                __local_45 = builtin::i32_wrap_i64(local.tee __local_44(builtin::i64_extend_i32_s(ptr_214) | (builtin::i64_extend_i32_s(len_212) << 32_i64)));
                 __local_46 = builtin::i32_wrap_i64(__local_44 >> 32_i64);
                 __local_42 = __local_45;
                 __local_43 = __local_46;
@@ -621,7 +664,12 @@ fn "stream_http_response_body_string.wado/handle"(request) {
                 __local_68 = 0;
                 __local_69 = 0;
                 if __local_67 != 0 {
-                    __local_71 = builtin::i32_wrap_i64(local.tee __local_70("core:rt/cm_lower_string"(ref.as_non_null(__local_66))));
+                    s_217 = ref.as_non_null(__local_66);
+                    len_218 = s_217.used;
+                    bytes_219 = s_217.repr;
+                    ptr_220 = "mem/realloc"(0, 0, 1, len_218);
+                    "core:rt/gc_array_to_memory"(bytes_219, 0, ptr_220, len_218);
+                    __local_71 = builtin::i32_wrap_i64(local.tee __local_70(builtin::i64_extend_i32_s(ptr_220) | (builtin::i64_extend_i32_s(len_218) << 32_i64)));
                     __local_72 = builtin::i32_wrap_i64(__local_70 >> 32_i64);
                     __local_68 = __local_71;
                     __local_69 = __local_72;
@@ -660,7 +708,12 @@ fn "stream_http_response_body_string.wado/handle"(request) {
             __local_86 = 0;
             __local_87 = 0;
             if __local_85 != 0 {
-                __local_89 = builtin::i32_wrap_i64(local.tee __local_88("core:rt/cm_lower_string"(ref.as_non_null(__local_84))));
+                s_223 = ref.as_non_null(__local_84);
+                len_224 = s_223.used;
+                bytes_225 = s_223.repr;
+                ptr_226 = "mem/realloc"(0, 0, 1, len_224);
+                "core:rt/gc_array_to_memory"(bytes_225, 0, ptr_226, len_224);
+                __local_89 = builtin::i32_wrap_i64(local.tee __local_88(builtin::i64_extend_i32_s(ptr_226) | (builtin::i64_extend_i32_s(len_224) << 32_i64)));
                 __local_90 = builtin::i32_wrap_i64(__local_88 >> 32_i64);
                 __local_86 = __local_89;
                 __local_87 = __local_90;
@@ -693,7 +746,12 @@ fn "stream_http_response_body_string.wado/handle"(request) {
             __local_104 = 0;
             __local_105 = 0;
             if __local_103 != 0 {
-                __local_107 = builtin::i32_wrap_i64(local.tee __local_106("core:rt/cm_lower_string"(ref.as_non_null(__local_102))));
+                s_229 = ref.as_non_null(__local_102);
+                len_230 = s_229.used;
+                bytes_231 = s_229.repr;
+                ptr_232 = "mem/realloc"(0, 0, 1, len_230);
+                "core:rt/gc_array_to_memory"(bytes_231, 0, ptr_232, len_230);
+                __local_107 = builtin::i32_wrap_i64(local.tee __local_106(builtin::i64_extend_i32_s(ptr_232) | (builtin::i64_extend_i32_s(len_230) << 32_i64)));
                 __local_108 = builtin::i32_wrap_i64(__local_106 >> 32_i64);
                 __local_104 = __local_107;
                 __local_105 = __local_108;
@@ -734,7 +792,12 @@ fn "stream_http_response_body_string.wado/handle"(request) {
             __local_127 = 0;
             __local_128 = 0;
             if __local_126 != 0 {
-                __local_130 = builtin::i32_wrap_i64(local.tee __local_129("core:rt/cm_lower_string"(ref.as_non_null(__local_125))));
+                s_235 = ref.as_non_null(__local_125);
+                len_236 = s_235.used;
+                bytes_237 = s_235.repr;
+                ptr_238 = "mem/realloc"(0, 0, 1, len_236);
+                "core:rt/gc_array_to_memory"(bytes_237, 0, ptr_238, len_236);
+                __local_130 = builtin::i32_wrap_i64(local.tee __local_129(builtin::i64_extend_i32_s(ptr_238) | (builtin::i64_extend_i32_s(len_236) << 32_i64)));
                 __local_131 = builtin::i32_wrap_i64(__local_129 >> 32_i64);
                 __local_127 = __local_130;
                 __local_128 = __local_131;
@@ -756,7 +819,12 @@ fn "stream_http_response_body_string.wado/handle"(request) {
             __local_139 = 0;
             __local_140 = 0;
             if __local_138 != 0 {
-                __local_142 = builtin::i32_wrap_i64(local.tee __local_141("core:rt/cm_lower_string"(ref.as_non_null(__local_136))));
+                s_241 = ref.as_non_null(__local_136);
+                len_242 = s_241.used;
+                bytes_243 = s_241.repr;
+                ptr_244 = "mem/realloc"(0, 0, 1, len_242);
+                "core:rt/gc_array_to_memory"(bytes_243, 0, ptr_244, len_242);
+                __local_142 = builtin::i32_wrap_i64(local.tee __local_141(builtin::i64_extend_i32_s(ptr_244) | (builtin::i64_extend_i32_s(len_242) << 32_i64)));
                 __local_143 = builtin::i32_wrap_i64(__local_141 >> 32_i64);
                 __local_139 = __local_142;
                 __local_140 = __local_143;
@@ -770,7 +838,12 @@ fn "stream_http_response_body_string.wado/handle"(request) {
             __local_147 = 0;
             __local_148 = 0;
             if __local_146 != 0 {
-                __local_150 = builtin::i32_wrap_i64(local.tee __local_149("core:rt/cm_lower_string"(ref.as_non_null(__local_144))));
+                s_247 = ref.as_non_null(__local_144);
+                len_248 = s_247.used;
+                bytes_249 = s_247.repr;
+                ptr_250 = "mem/realloc"(0, 0, 1, len_248);
+                "core:rt/gc_array_to_memory"(bytes_249, 0, ptr_250, len_248);
+                __local_150 = builtin::i32_wrap_i64(local.tee __local_149(builtin::i64_extend_i32_s(ptr_250) | (builtin::i64_extend_i32_s(len_248) << 32_i64)));
                 __local_151 = builtin::i32_wrap_i64(__local_149 >> 32_i64);
                 __local_147 = __local_150;
                 __local_148 = __local_151;
@@ -789,7 +862,12 @@ fn "stream_http_response_body_string.wado/handle"(request) {
             __local_155 = 0;
             __local_156 = 0;
             if __local_154 != 0 {
-                __local_158 = builtin::i32_wrap_i64(local.tee __local_157("core:rt/cm_lower_string"(ref.as_non_null(__local_152))));
+                s_253 = ref.as_non_null(__local_152);
+                len_254 = s_253.used;
+                bytes_255 = s_253.repr;
+                ptr_256 = "mem/realloc"(0, 0, 1, len_254);
+                "core:rt/gc_array_to_memory"(bytes_255, 0, ptr_256, len_254);
+                __local_158 = builtin::i32_wrap_i64(local.tee __local_157(builtin::i64_extend_i32_s(ptr_256) | (builtin::i64_extend_i32_s(len_254) << 32_i64)));
                 __local_159 = builtin::i32_wrap_i64(__local_157 >> 32_i64);
                 __local_155 = __local_158;
                 __local_156 = __local_159;
@@ -875,7 +953,13 @@ fn "stream_http_response_body_string.wado/handle"(request) {
         }
     }
     body = "stream_http_response_body_string.wado/string_to_bytes"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 75), used: 2 });
-    "core:rt/cm_stream_write_u8"(tx_186, body);
+    len_194 = body.used;
+    ptr_200 = "mem/realloc"(0, 0, 1, len_194);
+    "core:rt/gc_array_to_memory"(body.repr, 0, ptr_200, len_194);
+    ptr_190 = builtin::i32_wrap_i64(local.tee packed_189(builtin::i64_extend_i32_s(ptr_200) | (builtin::i64_extend_i32_s(len_194) << 32_i64)));
+    len_191 = builtin::i32_wrap_i64(packed_189 >> 32_i64);
+    "core:rt/cm_stream_write_drain"(tx_186, ptr_190, len_191, 1);
+    drop("mem/realloc"(ptr_190, len_191, 1, 0));
     "wasi/stream-drop-writable"(tx_186);
     "stream_http_response_body_string.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_183, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
     "wasi/resource-drop:request"(request);
@@ -917,7 +1001,7 @@ fn "stream_http_response_body_string.wado/__cm_export__handle"(request) {
 }
 
 fn "stream_http_response_body_string.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(handle, value) {
-    let ptr: i32;
+    let ptr_2: i32;
     let __local_4: ref "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>";
     let __local_6: i32;
     let __local_7: ref "wasi:http/types.wado//ErrorCode";
@@ -980,35 +1064,66 @@ fn "stream_http_response_body_string.wado/__cm_future_write_core:prelude/types.w
     let __local_81: ref "core:prelude/string.wado//String";
     let __local_82: i64;
     let __written: i32;
-    builtin::store_u8(local.tee ptr("mem/realloc"(0, 0, 8, 40)), ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Err"(value));
+    let len_86: i32;
+    let bytes_87: ref Array<u8>;
+    let ptr_88: i32;
+    let len_92: i32;
+    let bytes_93: ref Array<u8>;
+    let ptr_94: i32;
+    let len_98: i32;
+    let bytes_99: ref Array<u8>;
+    let ptr_100: i32;
+    let len_104: i32;
+    let bytes_105: ref Array<u8>;
+    let ptr_106: i32;
+    let len_110: i32;
+    let bytes_111: ref Array<u8>;
+    let ptr_112: i32;
+    let len_116: i32;
+    let bytes_117: ref Array<u8>;
+    let ptr_118: i32;
+    let len_122: i32;
+    let bytes_123: ref Array<u8>;
+    let ptr_124: i32;
+    let len_128: i32;
+    let bytes_129: ref Array<u8>;
+    let ptr_130: i32;
+    let len_134: i32;
+    let bytes_135: ref Array<u8>;
+    let ptr_136: i32;
+    builtin::store_u8(local.tee ptr_2("mem/realloc"(0, 0, 8, 40)), ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Err"(value));
     if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok"(value) {
         __local_4 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok"(value).payload_0;
-        builtin::store_u8(ptr + 8, ref.test "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"(__local_4));
+        builtin::store_u8(ptr_2 + 8, ref.test "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"(__local_4));
         if ref.test "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"(__local_4) {
             __local_6 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"(__local_4).payload_0;
-            builtin::store_i32((ptr + 8) + 4, __local_6);
+            builtin::store_i32((ptr_2 + 8) + 4, __local_6);
         } else {
         }
     } else {
         __local_7 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Err"(value).payload_0;
-        builtin::store_u8(ptr + 8, __local_7.discriminant);
+        builtin::store_u8(ptr_2 + 8, __local_7.discriminant);
         if __local_7.discriminant == 0 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::DnsError"(__local_7) {
             __local_9 = ref.cast "wasi:http/types.wado//ErrorCode::DnsError"(__local_7).payload_0;
             __local_11 = __local_9.rcode;
-            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_11) == 0);
+            builtin::store_u8((ptr_2 + 8) + 8, ref.is_null(__local_11) == 0);
             if ref.is_null(__local_11) == 0 {
                 __local_12 = ref.as_non_null(__local_11);
-                __local_13 = "core:rt/cm_lower_string"(__local_12);
-                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_13));
-                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_13 >> 32_i64));
+                len_86 = __local_12.used;
+                bytes_87 = __local_12.repr;
+                ptr_88 = "mem/realloc"(0, 0, 1, len_86);
+                "core:rt/gc_array_to_memory"(bytes_87, 0, ptr_88, len_86);
+                __local_13 = builtin::i64_extend_i32_s(ptr_88) | (builtin::i64_extend_i32_s(len_86) << 32_i64);
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64(__local_13));
+                builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_13 >> 32_i64));
             } else {
             }
             __local_14 = __local_9.info_code;
-            builtin::store_u8(((ptr + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u16>::Some"(__local_14));
+            builtin::store_u8(((ptr_2 + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u16>::Some"(__local_14));
             if ref.test "core:prelude/types.wado//Option<u16>::Some"(__local_14) {
                 __local_15 = ref.cast "core:prelude/types.wado//Option<u16>::Some"(__local_14).payload_0;
-                builtin::store_u16((((ptr + 8) + 8) + 12) + 2, __local_15);
+                builtin::store_u16((((ptr_2 + 8) + 8) + 12) + 2, __local_15);
             } else {
             }
         } else if __local_7.discriminant == 2 {
@@ -1026,29 +1141,33 @@ fn "stream_http_response_body_string.wado/__cm_future_write_core:prelude/types.w
         } else if ref.test "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__local_7) {
             __local_16 = ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__local_7).payload_0;
             __local_18 = __local_16.alert_id;
-            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u8>::Some"(__local_18));
+            builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u8>::Some"(__local_18));
             if ref.test "core:prelude/types.wado//Option<u8>::Some"(__local_18) {
                 __local_19 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__local_18).payload_0;
-                builtin::store_u8(((ptr + 8) + 8) + 1, __local_19);
+                builtin::store_u8(((ptr_2 + 8) + 8) + 1, __local_19);
             } else {
             }
             __local_20 = __local_16.alert_message;
-            builtin::store_u8(((ptr + 8) + 8) + 4, ref.is_null(__local_20) == 0);
+            builtin::store_u8(((ptr_2 + 8) + 8) + 4, ref.is_null(__local_20) == 0);
             if ref.is_null(__local_20) == 0 {
                 __local_21 = ref.as_non_null(__local_20);
-                __local_22 = "core:rt/cm_lower_string"(__local_21);
-                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_22));
-                builtin::store_i32(((((ptr + 8) + 8) + 4) + 4) + 4, builtin::i32_wrap_i64(__local_22 >> 32_i64));
+                len_92 = __local_21.used;
+                bytes_93 = __local_21.repr;
+                ptr_94 = "mem/realloc"(0, 0, 1, len_92);
+                "core:rt/gc_array_to_memory"(bytes_93, 0, ptr_94, len_92);
+                __local_22 = builtin::i64_extend_i32_s(ptr_94) | (builtin::i64_extend_i32_s(len_92) << 32_i64);
+                builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_22));
+                builtin::store_i32(((((ptr_2 + 8) + 8) + 4) + 4) + 4, builtin::i32_wrap_i64(__local_22 >> 32_i64));
             } else {
             }
         } else if __local_7.discriminant == 15 {
         } else if __local_7.discriminant == 16 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"(__local_7) {
             __local_23 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"(__local_7).payload_0;
-            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_23));
+            builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_23));
             if ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_23) {
                 __local_25 = ref.cast "core:prelude/types.wado//Option<u64>::Some"(__local_23).payload_0;
-                builtin::store_i64(((ptr + 8) + 8) + 8, __local_25);
+                builtin::store_i64(((ptr_2 + 8) + 8) + 8, __local_25);
             } else {
             }
         } else if __local_7.discriminant == 18 {
@@ -1056,140 +1175,164 @@ fn "stream_http_response_body_string.wado/__cm_future_write_core:prelude/types.w
         } else if __local_7.discriminant == 20 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"(__local_7) {
             __local_26 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"(__local_7).payload_0;
-            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_26));
+            builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_26));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_26) {
                 __local_28 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_26).payload_0;
-                builtin::store_i32(((ptr + 8) + 8) + 4, __local_28);
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, __local_28);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize"(__local_7) {
             __local_29 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize"(__local_7).payload_0;
-            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_29) == 0);
+            builtin::store_u8((ptr_2 + 8) + 8, ref.is_null(__local_29) == 0);
             if ref.is_null(__local_29) == 0 {
                 __local_31 = ref.as_non_null(__local_29);
                 __local_33 = __local_31.field_name;
-                builtin::store_u8(((ptr + 8) + 8) + 4, ref.is_null(__local_33) == 0);
+                builtin::store_u8(((ptr_2 + 8) + 8) + 4, ref.is_null(__local_33) == 0);
                 if ref.is_null(__local_33) == 0 {
                     __local_34 = ref.as_non_null(__local_33);
-                    __local_35 = "core:rt/cm_lower_string"(__local_34);
-                    builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_35));
-                    builtin::store_i32(((((ptr + 8) + 8) + 4) + 4) + 4, builtin::i32_wrap_i64(__local_35 >> 32_i64));
+                    len_98 = __local_34.used;
+                    bytes_99 = __local_34.repr;
+                    ptr_100 = "mem/realloc"(0, 0, 1, len_98);
+                    "core:rt/gc_array_to_memory"(bytes_99, 0, ptr_100, len_98);
+                    __local_35 = builtin::i64_extend_i32_s(ptr_100) | (builtin::i64_extend_i32_s(len_98) << 32_i64);
+                    builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_35));
+                    builtin::store_i32(((((ptr_2 + 8) + 8) + 4) + 4) + 4, builtin::i32_wrap_i64(__local_35 >> 32_i64));
                 } else {
                 }
                 __local_36 = __local_31.field_size;
-                builtin::store_u8((((ptr + 8) + 8) + 4) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_36));
+                builtin::store_u8((((ptr_2 + 8) + 8) + 4) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_36));
                 if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_36) {
                     __local_37 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_36).payload_0;
-                    builtin::store_i32(((((ptr + 8) + 8) + 4) + 12) + 4, __local_37);
+                    builtin::store_i32(((((ptr_2 + 8) + 8) + 4) + 12) + 4, __local_37);
                 } else {
                 }
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSectionSize"(__local_7) {
             __local_38 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSectionSize"(__local_7).payload_0;
-            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_38));
+            builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_38));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_38) {
                 __local_40 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_38).payload_0;
-                builtin::store_i32(((ptr + 8) + 8) + 4, __local_40);
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, __local_40);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize"(__local_7) {
             __local_41 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize"(__local_7).payload_0;
             __local_43 = __local_41.field_name;
-            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_43) == 0);
+            builtin::store_u8((ptr_2 + 8) + 8, ref.is_null(__local_43) == 0);
             if ref.is_null(__local_43) == 0 {
                 __local_44 = ref.as_non_null(__local_43);
-                __local_45 = "core:rt/cm_lower_string"(__local_44);
-                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_45));
-                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_45 >> 32_i64));
+                len_104 = __local_44.used;
+                bytes_105 = __local_44.repr;
+                ptr_106 = "mem/realloc"(0, 0, 1, len_104);
+                "core:rt/gc_array_to_memory"(bytes_105, 0, ptr_106, len_104);
+                __local_45 = builtin::i64_extend_i32_s(ptr_106) | (builtin::i64_extend_i32_s(len_104) << 32_i64);
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64(__local_45));
+                builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_45 >> 32_i64));
             } else {
             }
             __local_46 = __local_41.field_size;
-            builtin::store_u8(((ptr + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_46));
+            builtin::store_u8(((ptr_2 + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_46));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_46) {
                 __local_47 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_46).payload_0;
-                builtin::store_i32((((ptr + 8) + 8) + 12) + 4, __local_47);
+                builtin::store_i32((((ptr_2 + 8) + 8) + 12) + 4, __local_47);
             } else {
             }
         } else if __local_7.discriminant == 25 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"(__local_7) {
             __local_48 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"(__local_7).payload_0;
-            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_48));
+            builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_48));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_48) {
                 __local_50 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_48).payload_0;
-                builtin::store_i32(((ptr + 8) + 8) + 4, __local_50);
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, __local_50);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize"(__local_7) {
             __local_51 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize"(__local_7).payload_0;
             __local_53 = __local_51.field_name;
-            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_53) == 0);
+            builtin::store_u8((ptr_2 + 8) + 8, ref.is_null(__local_53) == 0);
             if ref.is_null(__local_53) == 0 {
                 __local_54 = ref.as_non_null(__local_53);
-                __local_55 = "core:rt/cm_lower_string"(__local_54);
-                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_55));
-                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_55 >> 32_i64));
+                len_110 = __local_54.used;
+                bytes_111 = __local_54.repr;
+                ptr_112 = "mem/realloc"(0, 0, 1, len_110);
+                "core:rt/gc_array_to_memory"(bytes_111, 0, ptr_112, len_110);
+                __local_55 = builtin::i64_extend_i32_s(ptr_112) | (builtin::i64_extend_i32_s(len_110) << 32_i64);
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64(__local_55));
+                builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_55 >> 32_i64));
             } else {
             }
             __local_56 = __local_51.field_size;
-            builtin::store_u8(((ptr + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_56));
+            builtin::store_u8(((ptr_2 + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_56));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_56) {
                 __local_57 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_56).payload_0;
-                builtin::store_i32((((ptr + 8) + 8) + 12) + 4, __local_57);
+                builtin::store_i32((((ptr_2 + 8) + 8) + 12) + 4, __local_57);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseBodySize"(__local_7) {
             __local_58 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseBodySize"(__local_7).payload_0;
-            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_58));
+            builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_58));
             if ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_58) {
                 __local_60 = ref.cast "core:prelude/types.wado//Option<u64>::Some"(__local_58).payload_0;
-                builtin::store_i64(((ptr + 8) + 8) + 8, __local_60);
+                builtin::store_i64(((ptr_2 + 8) + 8) + 8, __local_60);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSectionSize"(__local_7) {
             __local_61 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSectionSize"(__local_7).payload_0;
-            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_61));
+            builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_61));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_61) {
                 __local_63 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_61).payload_0;
-                builtin::store_i32(((ptr + 8) + 8) + 4, __local_63);
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, __local_63);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize"(__local_7) {
             __local_64 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize"(__local_7).payload_0;
             __local_66 = __local_64.field_name;
-            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_66) == 0);
+            builtin::store_u8((ptr_2 + 8) + 8, ref.is_null(__local_66) == 0);
             if ref.is_null(__local_66) == 0 {
                 __local_67 = ref.as_non_null(__local_66);
-                __local_68 = "core:rt/cm_lower_string"(__local_67);
-                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_68));
-                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_68 >> 32_i64));
+                len_116 = __local_67.used;
+                bytes_117 = __local_67.repr;
+                ptr_118 = "mem/realloc"(0, 0, 1, len_116);
+                "core:rt/gc_array_to_memory"(bytes_117, 0, ptr_118, len_116);
+                __local_68 = builtin::i64_extend_i32_s(ptr_118) | (builtin::i64_extend_i32_s(len_116) << 32_i64);
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64(__local_68));
+                builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_68 >> 32_i64));
             } else {
             }
             __local_69 = __local_64.field_size;
-            builtin::store_u8(((ptr + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_69));
+            builtin::store_u8(((ptr_2 + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_69));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_69) {
                 __local_70 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_69).payload_0;
-                builtin::store_i32((((ptr + 8) + 8) + 12) + 4, __local_70);
+                builtin::store_i32((((ptr_2 + 8) + 8) + 12) + 4, __local_70);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding"(__local_7) {
             __local_71 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding"(__local_7).payload_0;
-            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_71) == 0);
+            builtin::store_u8((ptr_2 + 8) + 8, ref.is_null(__local_71) == 0);
             if ref.is_null(__local_71) == 0 {
                 __local_73 = ref.as_non_null(__local_71);
-                __local_74 = "core:rt/cm_lower_string"(__local_73);
-                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_74));
-                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_74 >> 32_i64));
+                len_122 = __local_73.used;
+                bytes_123 = __local_73.repr;
+                ptr_124 = "mem/realloc"(0, 0, 1, len_122);
+                "core:rt/gc_array_to_memory"(bytes_123, 0, ptr_124, len_122);
+                __local_74 = builtin::i64_extend_i32_s(ptr_124) | (builtin::i64_extend_i32_s(len_122) << 32_i64);
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64(__local_74));
+                builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_74 >> 32_i64));
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseContentCoding"(__local_7) {
             __local_75 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseContentCoding"(__local_7).payload_0;
-            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_75) == 0);
+            builtin::store_u8((ptr_2 + 8) + 8, ref.is_null(__local_75) == 0);
             if ref.is_null(__local_75) == 0 {
                 __local_77 = ref.as_non_null(__local_75);
-                __local_78 = "core:rt/cm_lower_string"(__local_77);
-                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_78));
-                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_78 >> 32_i64));
+                len_128 = __local_77.used;
+                bytes_129 = __local_77.repr;
+                ptr_130 = "mem/realloc"(0, 0, 1, len_128);
+                "core:rt/gc_array_to_memory"(bytes_129, 0, ptr_130, len_128);
+                __local_78 = builtin::i64_extend_i32_s(ptr_130) | (builtin::i64_extend_i32_s(len_128) << 32_i64);
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64(__local_78));
+                builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_78 >> 32_i64));
             } else {
             }
         } else if __local_7.discriminant == 33 {
@@ -1199,79 +1342,38 @@ fn "stream_http_response_body_string.wado/__cm_future_write_core:prelude/types.w
         } else if __local_7.discriminant == 37 {
         } else {
             __local_79 = ref.cast "wasi:http/types.wado//ErrorCode::InternalError"(__local_7).payload_0;
-            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_79) == 0);
+            builtin::store_u8((ptr_2 + 8) + 8, ref.is_null(__local_79) == 0);
             if ref.is_null(__local_79) == 0 {
                 __local_81 = ref.as_non_null(__local_79);
-                __local_82 = "core:rt/cm_lower_string"(__local_81);
-                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_82));
-                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_82 >> 32_i64));
+                len_134 = __local_81.used;
+                bytes_135 = __local_81.repr;
+                ptr_136 = "mem/realloc"(0, 0, 1, len_134);
+                "core:rt/gc_array_to_memory"(bytes_135, 0, ptr_136, len_134);
+                __local_82 = builtin::i64_extend_i32_s(ptr_136) | (builtin::i64_extend_i32_s(len_134) << 32_i64);
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64(__local_82));
+                builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_82 >> 32_i64));
             } else {
             }
         }
     }
-    __written = "wasi/future-write"(handle, ptr);
+    __written = "wasi/future-write"(handle, ptr_2);
     if __written == -1 {
         __written = "core:rt/cm_await_blocked"(handle);
     }
-    drop("mem/realloc"(ptr, 40, 8, 0));
-}
-
-fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
-    let b0: u32;
-    let b1_3: u32;
-    let b1_4: u32;
-    let b2_5: u32;
-    let b1_6: u32;
-    let b2_7: u32;
-    let b3: u32;
-    b0 = builtin::array_get<u8>(repr, pos);
-    if b0 <u 128 {
-        return b0, 1;
-    }
-    if b0 <u 224 {
-        b1_3 = builtin::array_get<u8>(repr, pos + 1);
-        return ((b0 & 31) << 6) | (b1_3 & 63), 2;
-    }
-    if b0 <u 240 {
-        b1_4 = builtin::array_get<u8>(repr, pos + 1);
-        b2_5 = builtin::array_get<u8>(repr, pos + 2);
-        return (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63), 3;
-    }
-    b1_6 = builtin::array_get<u8>(repr, pos + 1);
-    b2_7 = builtin::array_get<u8>(repr, pos + 2);
-    b3 = builtin::array_get<u8>(repr, pos + 3);
-    return ((((b0 & 7) << 18) | ((b1_6 & 63) << 12)) | ((b2_7 & 63) << 6)) | (b3 & 63), 4;
+    drop("mem/realloc"(ptr_2, 40, 8, 0));
 }
 
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b160: block {
-        l161: loop {
-            break_if b160 i >= len;
+    b157: block {
+        l158: loop {
+            break_if b157 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l161;
+            continue l158;
         };
     };
-}
-
-fn "core:rt/cm_lower_string"(s) {
-    let len: i32;
-    let bytes: ref Array<u8>;
-    let ptr: i32;
-    len = s.used;
-    bytes = s.repr;
-    ptr = "mem/realloc"(0, 0, 1, len);
-    "core:rt/gc_array_to_memory"(bytes, 0, ptr, len);
-    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
-}
-
-fn "core:rt/cm_lower_list_u8"(data, start, len) {
-    let ptr: i32;
-    ptr = "mem/realloc"(0, 0, 1, len);
-    "core:rt/gc_array_to_memory"(data, start, ptr, len);
-    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
 fn "core:rt/cm_await_blocked"(handle) {
@@ -1289,34 +1391,24 @@ fn "core:rt/cm_await_blocked"(handle) {
     return status;
 }
 
-fn "core:rt/cm_stream_write_u8"(handle, data) {
-    let packed: i64;
-    let ptr: i32;
-    let len_4: i32;
-    ptr = builtin::i32_wrap_i64(local.tee packed("core:rt/cm_lower_list_u8"(data.repr, 0, data.used)));
-    len_4 = builtin::i32_wrap_i64(packed >> 32_i64);
-    "core:rt/cm_stream_write_drain"(handle, ptr, len_4, 1);
-    drop("mem/realloc"(ptr, len_4, 1, 0));
-}
-
 fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b162: block {
-        l163: loop {
-            break_if b162 offset >= count;
+    b159: block {
+        l160: loop {
+            break_if b159 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b162 (if (result >> 4) == 0 -> i32 {
+            break_if b159 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l163;
+            continue l160;
         };
     };
 }
@@ -1325,16 +1417,53 @@ fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(self) {
-    let _av_5: i32;
-    _av_5 = self.byte_index;
-    if _av_5 >= self.used {
+    let repr: ref Array<u8>;
+    let pos: i32;
+    let b0: u32;
+    let b1_7: u32;
+    let b1_8: u32;
+    let b2_9: u32;
+    let b1_10: u32;
+    let b2_11: u32;
+    let b3: u32;
+    let __sroa_slot_28: u32;
+    let __sroa_slot_29: i32;
+    if self.byte_index >= self.used {
         return 1, 0;
     }
-    let __pattern_temp_0_mv_0: u32;
-    let __pattern_temp_0_mv_1: i32;
-    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:prelude/string.wado/decode_char_at"(self.repr, _av_5);
-    self.byte_index = _av_5 + __pattern_temp_0_mv_1;
-    return 0, __pattern_temp_0_mv_0;
+    __sroa_slot_28 = 0;
+    __sroa_slot_29 = 0;
+    __inline_decode_char_at_0: block {
+        repr = self.repr;
+        pos = self.byte_index;
+        b0 = builtin::array_get<u8>(repr, pos);
+        if b0 <u 128 {
+            __sroa_slot_28 = b0;
+            __sroa_slot_29 = 1;
+            break __inline_decode_char_at_0;
+        }
+        if b0 <u 224 {
+            b1_7 = builtin::array_get<u8>(repr, pos + 1);
+            __sroa_slot_28 = ((b0 & 31) << 6) | (b1_7 & 63);
+            __sroa_slot_29 = 2;
+            break __inline_decode_char_at_0;
+        }
+        if b0 <u 240 {
+            b1_8 = builtin::array_get<u8>(repr, pos + 1);
+            b2_9 = builtin::array_get<u8>(repr, pos + 2);
+            __sroa_slot_28 = (((b0 & 15) << 12) | ((b1_8 & 63) << 6)) | (b2_9 & 63);
+            __sroa_slot_29 = 3;
+            break __inline_decode_char_at_0;
+        }
+        b1_10 = builtin::array_get<u8>(repr, pos + 1);
+        b2_11 = builtin::array_get<u8>(repr, pos + 2);
+        b3 = builtin::array_get<u8>(repr, pos + 3);
+        __sroa_slot_28 = ((((b0 & 7) << 18) | ((b1_10 & 63) << 12)) | ((b2_11 & 63) << 6)) | (b3 & 63);
+        __sroa_slot_29 = 4;
+        break __inline_decode_char_at_0;
+    };
+    self.byte_index = self.byte_index + __sroa_slot_29;
+    return 0, __sroa_slot_28;
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(self, value) {

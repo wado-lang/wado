@@ -16,7 +16,7 @@ use super::const_folding::{ConstFoldRule, build_callee_map, build_ctfe_builtin_m
 use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
-use super::labeled_block_fusion::build_labeled_block_fusion;
+use super::labeled_block_fusion::{build_labeled_block_fusion, build_slot_temp_sroa};
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{ConstAsciiPushRule, ShortPushStrRule, resolve_ctx};
@@ -107,6 +107,11 @@ pub(super) fn run_peephole(
         // if-let shape, `apply_expr` threads the value-producing `match LB`
         // (`?`) shape. Both only exist post-inline.
         let labeled_block_fusion_rule = (!pre_inline).then(build_labeled_block_fusion);
+        // Scalarizes the `[tag, slots…]` temp fusion leaves behind — the
+        // value-producing `let x = f()?` consumer it cannot relocate. Ordered
+        // after fusion, which produces the better code where it applies and
+        // whose shape this rule would otherwise consume.
+        let slot_temp_sroa_rule = (!pre_inline).then(|| build_slot_temp_sroa(&type_table));
         // Disjoint borrow of the body arena and the local list so rules can
         // both rewrite the body and allocate fresh locals via the engine.
         let NirFunction { body, locals, .. } = &mut *func;
@@ -125,6 +130,9 @@ pub(super) fn run_peephole(
         }
         if let Some(labeled_block_fusion_rule) = labeled_block_fusion_rule.as_ref() {
             rules.push(labeled_block_fusion_rule);
+        }
+        if let Some(slot_temp_sroa_rule) = slot_temp_sroa_rule.as_ref() {
+            rules.push(slot_temp_sroa_rule);
         }
         rules.extend([
             &array_rule as &dyn Rule,

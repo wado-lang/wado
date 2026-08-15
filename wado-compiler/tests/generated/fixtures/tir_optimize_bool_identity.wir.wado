@@ -37,31 +37,23 @@ type "functype//tir_optimize_bool_identity.wado/__cm_export__run" = fn();  // Ty
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(15)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(16)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(16)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(17)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(18)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(18)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(19)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(19)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(20)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(20)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(21)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(21)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(24)
-
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(25)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(28)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -72,9 +64,9 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:tir_optimize_bool_identity.wado::__modules_initialized: bool = 0;
 
@@ -89,58 +81,102 @@ fn "tir_optimize_bool_identity.wado/test_and_identity"(x) {
 fn "tir_optimize_bool_identity.wado/run"() with Stdout {
     let __local_0: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/string.wado//String";
-    let __local_4: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/string.wado//String";
-    let self_12: bool;
-    let self_18: bool;
-    let self_24: bool;
-    let self_30: bool;
-    let content_33: ref "core:prelude/string.wado//String";
-    let content_41: ref "core:prelude/string.wado//String";
-    let content_49: ref "core:prelude/string.wado//String";
-    let content_57: ref "core:prelude/string.wado//String";
+    let handle_11: i32;
+    let self_17: bool;
+    let packed_19: i64;
+    let rx_20: i32;
+    let tx_21: i32;
+    let handle_26: i32;
+    let self_32: bool;
+    let packed_34: i64;
+    let rx_35: i32;
+    let tx_36: i32;
+    let handle_41: i32;
+    let self_47: bool;
+    let packed_49: i64;
+    let rx_50: i32;
+    let tx_51: i32;
+    let handle_56: i32;
+    let self_62: bool;
+    let packed_64: i64;
+    let rx_65: i32;
+    let tx_66: i32;
+    let content_77: ref "core:prelude/string.wado//String";
+    let content_105: ref "core:prelude/string.wado//String";
+    let content_133: ref "core:prelude/string.wado//String";
+    let content_161: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:tir_optimize_bool_identity.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:tir_optimize_bool_identity.wado::__modules_initialized = 1;
     };
-    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; self_12 = "tir_optimize_bool_identity.wado/test_or_identity"(1); __inline_core_prelude_format_wado_Formatter__pad_spec0_0: block {
-        content_33 = (if self_12 -> ref "core:prelude/string.wado//String" {
+    __local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    self_17 = "tir_optimize_bool_identity.wado/test_or_identity"(1);
+    __inline_core_prelude_format_wado_Formatter__pad_spec0_0: block {
+        content_77 = (if self_17 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_0, content_33);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_0, content_77);
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_0;
-    }; __local_0);
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; self_18 = "tir_optimize_bool_identity.wado/test_or_identity"(0); __inline_core_prelude_format_wado_Formatter__pad_spec0_1: block {
-        content_41 = (if self_18 -> ref "core:prelude/string.wado//String" {
+    };
+    rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
+    tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
+    handle_11 = "tir_optimize_bool_identity.wado/__cm_binding__Stdout_write_via_stream"(rx_20);
+    "core:cli/write_to_stream"(tx_21, __local_0, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_11);
+    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    self_32 = "tir_optimize_bool_identity.wado/test_or_identity"(0);
+    __inline_core_prelude_format_wado_Formatter__pad_spec0_1: block {
+        content_105 = (if self_32 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_2, content_41);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_2, content_105);
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_1;
-    }; __local_2);
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; self_24 = "tir_optimize_bool_identity.wado/test_and_identity"(1); __inline_core_prelude_format_wado_Formatter__pad_spec0_2: block {
-        content_49 = (if self_24 -> ref "core:prelude/string.wado//String" {
+    };
+    rx_35 = builtin::i32_wrap_i64(local.tee packed_34("wasi/stream-new"()));
+    tx_36 = builtin::i32_wrap_i64(packed_34 >> 32_i64);
+    handle_26 = "tir_optimize_bool_identity.wado/__cm_binding__Stdout_write_via_stream"(rx_35);
+    "core:cli/write_to_stream"(tx_36, __local_2, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_26);
+    __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    self_47 = "tir_optimize_bool_identity.wado/test_and_identity"(1);
+    __inline_core_prelude_format_wado_Formatter__pad_spec0_2: block {
+        content_133 = (if self_47 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, content_49);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_4, content_133);
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_2;
-    }; __local_4);
-    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; self_30 = "tir_optimize_bool_identity.wado/test_and_identity"(0); __inline_core_prelude_format_wado_Formatter__pad_spec0_3: block {
-        content_57 = (if self_30 -> ref "core:prelude/string.wado//String" {
+    };
+    rx_50 = builtin::i32_wrap_i64(local.tee packed_49("wasi/stream-new"()));
+    tx_51 = builtin::i32_wrap_i64(packed_49 >> 32_i64);
+    handle_41 = "tir_optimize_bool_identity.wado/__cm_binding__Stdout_write_via_stream"(rx_50);
+    "core:cli/write_to_stream"(tx_51, __local_4_4, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_41);
+    __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    self_62 = "tir_optimize_bool_identity.wado/test_and_identity"(0);
+    __inline_core_prelude_format_wado_Formatter__pad_spec0_3: block {
+        content_161 = (if self_62 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, content_57);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_6, content_161);
         break __inline_core_prelude_format_wado_Formatter__pad_spec0_3;
-    }; __local_6);
+    };
+    rx_65 = builtin::i32_wrap_i64(local.tee packed_64("wasi/stream-new"()));
+    tx_66 = builtin::i32_wrap_i64(packed_64 >> 32_i64);
+    handle_56 = "tir_optimize_bool_identity.wado/__cm_binding__Stdout_write_via_stream"(rx_65);
+    "core:cli/write_to_stream"(tx_66, __local_6, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_56);
 }
 
 fn "tir_optimize_bool_identity.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -159,46 +195,43 @@ fn "tir_optimize_bool_identity.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let len: i32;
+    let len_3: i32;
     let new_repr: ref Array<u8>;
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
     let end_15: i32;
-    let packed_21: i64;
-    let ptr_22: i32;
-    let raw_len_23: i32;
-    let repr_25: ref Array<u8>;
-    len = message.used;
+    let len_18: i32;
+    let ptr_19: i32;
+    let packed_25: i64;
+    let ptr_26: i32;
+    let raw_len_27: i32;
+    let repr_29: ref Array<u8>;
+    let len_35: i32;
+    let ptr_36: i32;
+    len_3 = message.used;
     if add_newline {
-        new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
-        builtin::array_set_u8(new_repr, len, 10);
-        end_15 = len + 1;
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
+        new_repr = builtin::array_new<u8>(len_3 + 1);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len_3);
+        builtin::array_set_u8(new_repr, len_3, 10);
+        len_18 = local.tee end_15(len_3 + 1) - 0;
+        ptr_19 = "mem/realloc"(0, 0, 1, len_18);
+        "core:rt/gc_array_to_memory"(new_repr, 0, ptr_19, len_18);
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9(builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_18) << 32_i64)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
-        repr_25 = message.repr;
-        ptr_22 = builtin::i32_wrap_i64(local.tee packed_21("core:rt/cm_lower_list_u8"(repr_25, 0, len - 0)));
-        raw_len_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
-        "core:rt/cm_stream_write_drain"(tx, ptr_22, raw_len_23, 1);
-        drop("mem/realloc"(ptr_22, raw_len_23, 1, 0));
+        repr_29 = message.repr;
+        len_35 = len_3 - 0;
+        ptr_36 = "mem/realloc"(0, 0, 1, len_35);
+        "core:rt/gc_array_to_memory"(repr_29, 0, ptr_36, len_35);
+        ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));
+        raw_len_27 = builtin::i32_wrap_i64(packed_25 >> 32_i64);
+        "core:rt/cm_stream_write_drain"(tx, ptr_26, raw_len_27, 1);
+        drop("mem/realloc"(ptr_26, raw_len_27, 1, 0));
     }
     "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:cli/println"(message) with Stdout {
-    let handle: i32;
-    let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "tir_optimize_bool_identity.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
-    "core:cli/write_to_stream"(tx_7, message, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
@@ -212,13 +245,6 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
             continue l6;
         };
     };
-}
-
-fn "core:rt/cm_lower_list_u8"(data, start, len) {
-    let ptr: i32;
-    ptr = "mem/realloc"(0, 0, 1, len);
-    "core:rt/gc_array_to_memory"(data, start, ptr, len);
-    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
 fn "core:rt/cm_await_blocked"(handle) {
@@ -261,46 +287,39 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
-    let new_repr: ref Array<u8>;
-    new_repr = builtin::array_new<u8>(new_capacity);
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
-    let a_4: i32;
-    let a_6: i32;
+    let new_capacity: i32;
+    let new_repr: ref Array<u8>;
+    let a_7: i32;
+    let a_9: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, a_4 = capacity * 2; a_6 = select i32(a_4 > min_capacity, a_4, min_capacity); select i32(a_6 > 8, a_6, 8));
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
-    let new_used: i32;
-    let start: i32;
-    new_used = self.used + n;
-    if @unlikely(new_used > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
-    }
-    start = self.used;
-    self.used = new_used;
-    return start;
+    a_9 = capacity * 2;
+    a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, other) {
     let other_len: i32;
-    let start: i32;
+    let new_used: i32;
+    let start_8: i32;
     other_len = other.used;
     if other_len == 0 {
         return;
     }
-    start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, other_len);
-    builtin::array_copy<u8>(self.repr, start, other.repr, 0, other_len);
+    new_used = self.used + other_len;
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
+    }
+    start_8 = self.used;
+    self.used = new_used;
+    builtin::array_copy<u8>(self.repr, start_8, other.repr, 0, other_len);
 }
 
 export fn "tir_optimize_bool_identity.wado/__cm_export__run" as "run"

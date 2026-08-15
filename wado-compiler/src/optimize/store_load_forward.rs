@@ -50,6 +50,13 @@ fn forward_one(
     if func.body.is_none() {
         return false;
     }
+    // Nothing else ever queries a value in a CM export wrapper, so it reaches
+    // this pass with no `ValueGraph` and `scoped_const_reads` — which only
+    // grows one that exists — forwards nothing into it. Only wrappers: building
+    // it everywhere forwards into the hot paths too, which trades shared locals
+    // for duplicated constants and measures slower.
+    let is_cm_export = func.is_cm_export;
+    let param_locals: Vec<u32> = func.params.iter().map(|p| p.local_index).collect();
     // `Local`-read forwarding excludes address-taken / `stores`-aliased
     // locals: the canonical sets plus the engine's body scan — the
     // canonical sets are static elaboration records and go stale after
@@ -77,6 +84,12 @@ fn forward_one(
     engine.set_alias_sets(aliased, untrackable, mut_escaped);
     engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);
+    if is_cm_export {
+        // `ensure_value_graph` never rebuilds, so what is seeded here is what
+        // licm and `promote_fields` inherit.
+        engine.set_param_locals(param_locals);
+        engine.build_value_graph_now();
+    }
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
     // The complement of the unsafe set: what disqualifies a local is being
     // address-taken or `stores`-aliased, not being an aggregate.
