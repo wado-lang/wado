@@ -1,12 +1,25 @@
 //! An optional group ending in another optional.
 //!
 //! `stmt : 'let' ID ('=' expr ('else' block)?)? ';'` nests `('else' block)?`
-//! at the tail of `('=' expr ...)?`. Entering the outer group is a one-token
-//! decision on `'='`, but Gale's scan of it also has to get through the inner
-//! optional; when `expr` takes its multi-token alternative the scan gives up,
-//! the outer group is skipped, and `stmt` reports at the `let` it never
-//! entered. Flattening the nesting (`'=' expr ('else' block)? ';'` with no
-//! outer group) parses the same input, which is what isolates the defect.
+//! at the tail of `('=' expr ...)?`, which selects the 2^n shape-lookahead
+//! strategy: each shape is guarded by a per-position kind set, `sig[d]`
+//! against `peek_at(d)`.
+//!
+//! `shape_lookahead_signature_for_alt` pushes one position per element, so
+//! that alignment holds only while every element consumes exactly one token.
+//! Here it walks past the multi-token `expr` and guards `peek_at(2)` on
+//! `else`; `let v = at ( i ) else { } ;` therefore matches the no-else shape
+//! and then fails on the `;` it does not find.
+//!
+//! Truncating the signature at the first multi-token element makes it sound
+//! but not usable: both shapes collapse to `['=', first(expr)]`, and emit's
+//! `if sig0 … else if sig1 …` chain commits to the first shape it matches. A
+//! body failure rewinds and skips the optional rather than trying the next
+//! shape. Closing this needs the chain to become a longest-match try-chain
+//! over the shapes' scan bodies — the shape guards themselves cannot
+//! distinguish a variable-length prefix. SQLite's
+//! `( ( database_name '.' )? table_name '.' )? column_name` is the same
+//! shape and is what the oracle tests pin.
 
 use g from "./grammars/ll_nested_optional_tail.g4"
     with {

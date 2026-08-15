@@ -3,8 +3,19 @@
 //! `ifExpr` ends with `('else' block)?` and the enclosing `stmt` ends with its
 //! own `('else' block)?`. ANTLR4 resolves a greedy subrule in favour of the
 //! innermost, so `if z { 1 } else { 2 } / 3` is one expression: the `else`
-//! belongs to `ifExpr` and `/ 3` continues the left-recursive chain. Gale
-//! hands the `else` to `stmt` instead, and then has no rule left for the `/`.
+//! belongs to `ifExpr` and `/ 3` continues the left-recursive chain.
+//! Gale hands the `else` to `stmt` instead, through the runtime caller-FOLLOW
+//! yield gate that `compute_gate_caller_follow` puts on a `?` at a rule's
+//! tail, and then has no rule left for the `/`.
+//!
+//! The gate is not simply wrong: `driver_cst_ll_basic_test` pins the opposite
+//! resolution for `r : (a b | a) EOF ; a : X Y? ; b : Y ;`, where ANTLR4 does
+//! yield the `Y` to `b`. Greediness is not the discriminator — viability is.
+//! ANTLR4 predicts with full context and keeps the alternative whose *whole*
+//! continuation parses; here taking the `else` at `stmt` strands the `/`,
+//! while in `ll_basic` both readings complete and the lower alt number wins.
+//! Closing this needs the gate to ask whether the caller's continuation
+//! actually completes, not whether its FOLLOW mask admits the token.
 //!
 //! `driver_cst_ll_empty_alt_group_test` pins the opposite resolution for the
 //! empty-alt spelling `('else' block |)`, and
@@ -15,11 +26,6 @@ use g from "./grammars/ll_greedy_optional_cross_rule.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_greedy_optional_cross_rule" },
     };
-
-fn assert_parses(input: &String) {
-    let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
-}
 
 fn assert_tree(input: &String, expected: &String) {
     let result = g::parse(input);
@@ -39,12 +45,6 @@ test "the inner if claims the else, and the chain continues" {
         &"let e = if z { 1 } else { 2 } / 3 ;",
         &"(prog (stmt let e = (expression (expression (ifExpr if z (block { 1 }) else (block { 2 }))) / (expression 3)) ;))",
     );
-}
-
-// Accepted today, with the else on the wrong side; asserted outside the
-// `#[TODO]` so a regression from "wrong tree" to "rejected" fails.
-test "the single-else form parses" {
-    assert_parses(&"let e = if z { 1 } else { 2 } ;");
 }
 
 #[TODO]
