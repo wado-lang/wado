@@ -1484,20 +1484,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ..
                 } = resolved
                 {
-                    let (name, module_source) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(target_type_id)
-                        .expect("a generic instance names a declaration");
-                    Some((name, module_source, instance_type_args))
+                    Some(instance_type_args)
                 } else {
                     None
                 }
             };
-            if let Some((name, module_source, instance_type_args)) = generic_data
-                && let Some(variant_info) =
-                    self.lookup_variant_case_in(&name, &module_source).cloned()
+            if let Some(instance_type_args) = generic_data
+                && let Some(variant_info) = self.variant_of_type(target_type_id).cloned()
                 && let Some((_, case_data)) = variant_info
                     .cases
                     .iter()
@@ -1640,14 +1633,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let ResolvedType::Variant { .. } =
             self.tysys.type_table.borrow().get(target_type_id).clone()
         {
-            let (name, module_source) = self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(target_type_id)
-                .expect("a variant names a declaration");
             // Look up the variant case info
-            if let Some(variant_info) = self.lookup_variant_case_in(&name, &module_source) {
+            if let Some(variant_info) = self.variant_of_type(target_type_id) {
                 // Find the case by name
                 if let Some((_case_index, case_data)) = variant_info
                     .cases
@@ -1682,18 +1669,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Handle generic variant construction: Result::<i32, String>::Ok(42)
-        let generic_name = {
-            let tt = self.tysys.type_table.borrow();
-            if let ResolvedType::GenericInstance { .. } = tt.get(target_type_id) {
-                tt.nominal_head(target_type_id)
-            } else {
-                None
-            }
-        };
-        if let Some((name, module_source)) = generic_name {
+        let is_generic_instance = matches!(
+            self.tysys.type_table.borrow().get(target_type_id),
+            ResolvedType::GenericInstance { .. }
+        );
+        if is_generic_instance {
             // Check if the base type is a variant
-            if let Some(variant_info) = self.lookup_variant_case_in(&name, &module_source).cloned()
-            {
+            if let Some(variant_info) = self.variant_of_type(target_type_id).cloned() {
+                let name = variant_info.name.clone();
                 // This is a generic variant like Result<T, E>
                 // Find the case by name
                 if let Some((_case_index, case_data)) = variant_info

@@ -87,18 +87,17 @@ fn debug_assert_key_matches(impl_key: Option<TypeId>, elaborated: TypeId) {
 pub(super) fn peel_to_struct(
     tt: &TypeTable,
     type_id: TypeId,
-) -> Option<(String, ModuleSource, Vec<TypeId>)> {
+) -> Option<(crate::tir::StructDef, Vec<TypeId>)> {
     let peeled = tt.peel_refs(type_id);
     match tt.get(peeled) {
-        ResolvedType::Struct { .. } => {
-            let (n, m) = tt.nominal_head(peeled)?;
-            Some((n, m, Vec::new()))
-        }
-        ResolvedType::GenericInstance { type_args, .. } => {
-            let args = type_args.clone();
-            let (n, m) = tt.nominal_head(peeled)?;
-            Some((n, m, args))
-        }
+        // An anonymous shape names no declaration, so the head is what
+        // answers for it — a `DefId` would drop the whole anon-composition
+        // path on the floor.
+        ResolvedType::Struct { def, .. } => Some((*def, Vec::new())),
+        ResolvedType::GenericInstance { def, type_args } => Some((
+            crate::tir::StructDef::Decl(*def),
+            type_args.clone(),
+        )),
         _ => None,
     }
 }
@@ -3719,8 +3718,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ModuleSource,
         Vec<(String, TypeId, u32, crate::ast::Visibility)>,
     )> {
-        let (name, module, type_args) = peel_to_struct(&self.tysys.type_table.borrow(), type_id)?;
-        let info = self.lookup_struct_fields_in(&name, &module)?.clone();
+        let (head, type_args) = peel_to_struct(&self.tysys.type_table.borrow(), type_id)?;
+        let info = self.lookup_struct_fields_of(head)?.clone();
         let subst: IndexMap<u32, TypeId> = (0..type_args.len() as u32)
             .zip(type_args.iter().copied())
             .collect();

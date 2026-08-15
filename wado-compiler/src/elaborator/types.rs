@@ -2321,6 +2321,12 @@ impl<'a> TypeLookup<'a> {
         self.all_variant_cases.get(&def)
     }
 
+    /// The cases of the enum `def` declares.
+    pub(super) fn enum_cases_of(&self, def: crate::defs::DefId) -> Option<&'a EnumInfo> {
+        self.all_enum_cases.get(&def)
+    }
+
+
     /// Which declaration `name` reaches from the module this view stands in.
     ///
     /// The one place a `TypeLookup` turns a spelling into an identity, and it

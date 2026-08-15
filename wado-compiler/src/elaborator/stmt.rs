@@ -6,7 +6,6 @@ use crate::ast::{
     TaskReturnStmt, Type, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::module_source::ModuleSource;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirPattern, TypeId, TypeTable,
 };
@@ -1553,44 +1552,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Each variant case has exactly one payload type.
                 // Determine the payload type for the variant case.
+                let scrutinee_decl = self.tysys.type_def(scrutinee_type);
                 let payload_type: TypeId = match &resolved_type {
                     // Non-generic variant
-                    ResolvedType::Variant { .. } => {
-                        let (name, module_source) = &self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .nominal_head(scrutinee_type)
-                            .expect("a variant names a declaration");
-                        self.get_variant_case_payload_type(
-                            name,
-                            module_source,
-                            normalized_variant_name,
-                            &[],
-                            *span,
-                        )
-                    }
+                    ResolvedType::Variant { .. } => scrutinee_decl.map_or(
+                        TypeTable::UNKNOWN,
+                        |def| {
+                            self.get_variant_case_payload_type(
+                                def,
+                                normalized_variant_name,
+                                &[],
+                                *span,
+                            )
+                        },
+                    ),
                     // Generic variant instantiation
                     ResolvedType::GenericInstance { type_args, .. } => {
-                        let (name, module_source) = &self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .nominal_head(scrutinee_type)
-                            .expect("a generic instance names a declaration");
                         // Check if this is a variant (not a struct)
-                        if self.contains_variant(name) {
+                        let is_variant = scrutinee_decl
+                            .is_some_and(|def| self.type_lookup().variant_cases_of(def).is_some());
+                        if is_variant {
                             self.get_variant_case_payload_type(
-                                name,
-                                module_source,
+                                scrutinee_decl.expect("a variant answers with its declaration"),
                                 normalized_variant_name,
                                 type_args,
                                 *span,
                             )
                         } else {
+                            let found =
+                                self.tysys.type_table.borrow().type_name(scrutinee_type);
                             let _ = self.emit(TypeError::PatternTypeMismatch {
                                 expected: "variant type".to_string(),
-                                found: name.clone(),
+                                found,
                                 span: *span,
                             });
                             TypeTable::UNKNOWN
@@ -1925,15 +1918,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Get payload type for a variant case, substituting type parameters if needed
     pub(super) fn get_variant_case_payload_type(
         &mut self,
-        variant_name: &str,
-        variant_module: &ModuleSource,
+        variant: crate::defs::DefId,
         case_name: &str,
         type_args: &[TypeId],
         span: Span,
     ) -> TypeId {
         // Clone payload first to avoid borrow conflict with substitute_type_params.
         let payload_opt = self
-            .lookup_variant_case_in(variant_name, variant_module)
+            .type_lookup()
+            .variant_cases_of(variant)
             .and_then(|info| {
                 info.cases
                     .iter()
@@ -1946,20 +1939,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.substitute_type_params(payload, type_args);
         }
 
-        // Check if variant exists but case not found
-        if self.contains_variant(variant_name) {
-            let _ = self.emit(TypeError::PatternTypeMismatch {
-                expected: format!("valid case of variant {variant_name}"),
-                found: case_name.to_string(),
-                span,
-            });
-        } else {
-            let _ = self.emit(TypeError::PatternTypeMismatch {
-                expected: "known variant type".to_string(),
-                found: variant_name.to_string(),
-                span,
-            });
-        }
+        // The declaration is a variant — it answered `variant_cases_of` or it
+        // would not be one — so the only way here is a case it does not
+        // declare. The diagnostic reads its spelling at the point of
+        // reporting, off the declaration.
+        let variant_name = self.tysys.resolutions.defs().name(variant).to_string();
+        let _ = self.emit(TypeError::PatternTypeMismatch {
+            expected: format!("valid case of variant {variant_name}"),
+            found: case_name.to_string(),
+            span,
+        });
         TypeTable::UNKNOWN
     }
     /// Resolve a loop statement (infinite loop).
@@ -2494,40 +2483,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `.next()` returns `Option<Item>`. Extract the `Some` payload type
         // for the binding scrutinee. Bind out of the borrow first so the
         // `get_variant_case_payload_type` call below can re-borrow `&mut self`.
-        let option_shape: Option<(String, ModuleSource, Vec<TypeId>)> =
+        let option_shape: Option<(crate::defs::DefId, Vec<TypeId>)> = {
+            let decl = self.tysys.type_def(option_type);
+            let is_variant =
+                decl.is_some_and(|def| self.type_lookup().variant_cases_of(def).is_some());
             match self.tysys.type_table.borrow().get(option_type).clone() {
-                ResolvedType::GenericInstance { def, type_args }
-                    if self.contains_variant(self.tysys.type_table.borrow().def_name(def)) =>
-                {
-                    let (n, m) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(option_type)
-                        .expect("a generic instance names a declaration");
-                    Some((n, m, type_args))
+                ResolvedType::GenericInstance { type_args, .. } if is_variant => {
+                    Some((decl.expect("a variant answers with its declaration"), type_args))
                 }
-                ResolvedType::Variant { def }
-                    if self.contains_variant(self.tysys.type_table.borrow().def_name(def)) =>
-                {
-                    let (n, m) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(option_type)
-                        .expect("a variant names a declaration");
-                    Some((n, m, vec![]))
+                ResolvedType::Variant { .. } if is_variant => {
+                    Some((decl.expect("a variant answers with its declaration"), vec![]))
                 }
                 _ => None,
-            };
+            }
+        };
         let item_type = match option_shape {
-            Some((name, module_source, type_args)) => self.get_variant_case_payload_type(
-                &name,
-                &module_source,
-                &some_case_name,
-                &type_args,
-                span,
-            ),
+            Some((def, type_args)) => {
+                self.get_variant_case_payload_type(def, &some_case_name, &type_args, span)
+            }
             // `.next()` returned an unexpected non-Option type. The iterator-
             // trait check above (or method dispatch downstream) has already
             // diagnosed it; degrade to `UNKNOWN` to keep resolution going.
