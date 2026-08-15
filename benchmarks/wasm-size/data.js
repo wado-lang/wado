@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786756034747,
+  "lastUpdate": 1786758608923,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48017,6 +48017,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6e8e4c49b6fddbd0eb684c37e292a967a7ed1733"
         },
         "date": 1786756033910,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 5998,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "41a8cbb9f86622ded467f7094024ff71a67abc9a",
+          "message": "Merge pull request #1812 from wado-lang/claude/gcs-cache-cargo-incremental-oe5pqh\n\nperf(cache): warm a session by unpacking target/, not by rebuilding it",
+          "timestamp": "2026-08-15T10:37:45+09:00",
+          "tree_id": "5737ff974b6b862a85007847e700b2ede510ae4c",
+          "url": "https://github.com/wado-lang/wado/commit/41a8cbb9f86622ded467f7094024ff71a67abc9a"
+        },
+        "date": 1786758608390,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
