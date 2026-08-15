@@ -327,13 +327,9 @@ fn collect_candidates(
 }
 
 /// Whether the constant bound to `idx` is handed to a callee that delivers its
-/// referent's storage back out — the borrow the caller passes stops being a
-/// borrow there.
+/// referent's storage back out.
 ///
-/// [`is_readonly_body`] only sees the caller, where `__b."…build"()` reads. The
-/// value `build` returns is `*self`, and for the fresh literal `__b` held the
-/// ownership analysis kept no copy of it — so hoisting `__b` hands every caller
-/// the same object to mutate.
+/// [`is_readonly_body`] only sees the caller, where `__b."…build"()` reads.
 fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     reachable_nodes(body).into_iter().any(|node| {
         let NodeRef::Expr(e) = node else {
@@ -356,26 +352,21 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     })
 }
 
-/// [`borrows_local`] over an operand, promoted or not. A promoted argument is
-/// still an argument: the value graph records which locals it reads, and this
-/// file already treats such a read as a use everywhere else.
+/// [`borrows_local`] over an operand. A promoted argument is still an argument.
 fn operand_borrows_local(body: &Body, op: Operand, idx: u32) -> bool {
     match op.as_expr() {
         Some(e) => borrows_local(body, e, idx),
-        // Only the shape that fills the slot whole. A value that merely *reads*
-        // the local (`f(x.len())`) computes from it rather than handing its
-        // storage over, and counting those rejected nearly every candidate.
+        // Only the shape that fills the slot whole: a value that merely reads
+        // the local (`f(x.len())`) computes from it rather than handing it over.
         None => bare_promoted_local(body, op) == Some(idx),
     }
 }
 
-/// Whether `expr` hands over storage rooted at local `idx` — the local itself,
-/// a borrow of it, or a projection chain over either.
+/// Whether `expr` hands over local `idx` itself — the local, or a borrow of it.
 ///
-/// The callee side ([`param_storage_escapes`] through [`projection_roots_at`])
-/// already reads a field, index or deref chain as naming the root's storage, so
-/// the caller side has to as well: `b.inner.build()` borrows `b`'s storage just
-/// as `b.build()` does, and matching only the bare local let it through.
+/// The callee side ([`projection_roots_at`]) also reads a field, index or deref
+/// chain as naming the root's storage, so `h.inner.build()` slips this. Widening
+/// to match costs hoists the callee gate is too coarse to keep: see #1819.
 fn borrows_local(body: &Body, expr: ExprId, idx: u32) -> bool {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => *index == idx,
@@ -390,16 +381,14 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32) -> bool {
 /// The `&<literal>` nodes whose referent escapes the borrow — the ones the
 /// `InlineRef` case must leave alone.
 ///
-/// A borrow reads, so that case used to hoist one with no callee gate at all.
-/// That holds only while the callee keeps it a borrow.
-/// `SequenceLiteralBuilder::build(self: &List<T>) { return *self; }` does not:
-/// the value it returns is the referent, and the caller keeps no copy of it
-/// because the literal it borrowed was fresh. Hoisting the literal makes it
-/// shared, and every caller then mutates the one object — which is what
-/// `core:zlib`'s `build_huffman_tree` did to its `sym_list` across calls.
+/// A borrow reads, which is why that case has no other callee gate, and holds
+/// only while the callee keeps it a borrow.
+/// `SequenceLiteralBuilder::build(self: &List<T>) { return *self; }` returns the
+/// referent, and the caller keeps no copy because the literal it borrowed was
+/// fresh — so hoisting it hands every caller the same object to mutate.
 ///
-/// Two ways in: the borrow is a direct call argument, or it is bound to a local
-/// first (`let r = &LIT; f(r)`) and handed over from there.
+/// Two ways in: a direct call argument, or a local bound to the borrow first
+/// (`let r = &LIT; f(r)`).
 fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
     let mut out: IndexSet<ExprId> = IndexSet::default();
     let is_ref = |body: &Body, e: ExprId| {
@@ -1517,9 +1506,7 @@ fn projection_roots_at(body: &Body, expr: ExprId, idx: u32) -> bool {
             .is_some_and(|e| projection_roots_at(body, e, idx)),
         // `*r` names the referent's storage, not a copy of it: whether the
         // caller keeps a copy is the ownership analysis's call, and for a fresh
-        // literal it elides one. `SequenceLiteralBuilder::build(self: &List<T>)
-        // { return *self; }` is the shape — hoisting the literal it borrows
-        // hands every caller the same list to `push` into.
+        // literal it elides one.
         ExprKind::Unary {
             op: NirUnaryOp::Deref,
             expr: base,

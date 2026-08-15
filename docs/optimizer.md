@@ -47,7 +47,7 @@ The design, its soundness invariants, the standing "do not reintroduce" rules, a
 
 Allocation and aggregate:
 
-- `inline` — replace calls to small, non-recursive functions with their body; reference parameters and receivers inline too. `#[inline]` raises the budget 5x, `#[inline(always)]` forces it, `#[inline(never)]` and cold call sites opt out. Size is the callee's hot path priced in emitted Wasm instructions: an operand leaf (a local read, a constant, a global read) is free, one operation — arithmetic, `struct.get`, `array.get`, `ref.test`, an allocation — is 1, a call is 2, a branch is 2 and a loop 3, since control flow spliced into a caller costs it register pressure where a chain of field reads does not. Two operand leaves come free per node, and an aggregate literal or a match arm past that pays 1 each — arity is the type's or the dispatch's, so a flat price let a 26-field constructor or a 20-arm table cost the same as an `if`. A `cold_path()` marker or a diverging statement ends the walk over its block, so an error path priced nothing. The promoted operand graph is walked too, charging each hash-consed value once.
+- `inline` — replace calls to small, non-recursive functions with their body; reference parameters and receivers inline too. `#[inline]` raises the budget 5x, `#[inline(always)]` forces it, `#[inline(never)]` and cold call sites opt out. Size is the callee's hot path priced in emitted Wasm instructions, so control flow outweighs a straight-line operation and a cold or unreachable tail prices nothing; the weights are in the pass's `weight` module.
 - `sroa` — decompose non-escaping struct/tuple locals into scalar locals. The highest-impact WasmGC pass.
 - `container_sroa` — turn `List<Struct>` / `List<Tuple>` into parallel per-field lists (array-of-structs → struct-of-arrays).
 - `sroa_param` — replace a single-field-struct reference parameter with its inner scalar, unwrapping the box that `&T` values allocate.
@@ -94,7 +94,7 @@ Whole-program and backend:
 - `match_to_switch` — lower a dense integer/enum `match` to a `br_table` switch.
 - `select_lowering` — lower an `if` with pure arms to a branchless `builtin::select`.
 - `multi_value_return` — emit the multi-value ABI for tuple/struct returns whose call sites destructure.
-- `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)). A constant a callee borrows is left alone when that callee delivers the referent back out — `build(&self) -> List<T> { return *self; }` returns the storage, and the caller keeps no copy of what was a fresh literal, so hoisting would share one object across every call. A hoist the later folds leave with no reader is taken back, dropping the initializer with it — unless it could trap, which is observed like any other effect.
+- `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)). A constant a callee borrows is left alone when that callee delivers the referent back out, which would share one object across every call. A hoist the later folds leave with no reader is taken back, dropping the initializer with it — unless it could trap, which is observed like any other effect.
 
 ## Lowering optimizations
 

@@ -99,11 +99,9 @@ fn block_cut(
 /// The immutable context of the inline cost walk: how many Wasm instructions a
 /// callee's hot path emits, in the unit [`weight`] defines.
 ///
-/// The walk threads a `seen` set of promoted values because the operand graph is
-/// hash-consed — a sub-value reachable from several operands is charged once,
-/// which both matches what extraction emits for it and bounds the walk on a wide
-/// DAG. It rides `&self` so a `match` on a node can call back into the walk
-/// without copying the node's operand list out first.
+/// The `seen` set threaded through it charges each promoted value once. The
+/// operand graph is hash-consed, so a sub-value reachable from several operands
+/// emits once too, and the set also bounds the walk on a wide DAG.
 struct CostWalk<'a> {
     body: &'a Body,
     type_table: &'a TypeTable,
@@ -245,20 +243,10 @@ impl CostWalk<'_> {
                 self.expr(*target, seen) + self.operand(*value, seen)
             }
 
-            // One allocation instruction, the initialisers' own cost, and one
-            // push per initialiser past the arity the model already treats as
-            // free.
-            //
-            // A leaf operand costs nothing anywhere else because the consumer
-            // takes it in place, and at the fixed arity of a unary, a binary or
-            // an index that understates by a bounded amount. An aggregate's
-            // arity is its type's, so the same rule priced a 26-field
-            // constructor of constants as one instruction — `core:zlib`'s
-            // `InflateState::new` came to 13 and sat inside the `-O2` budget.
-            // Charging only the excess keeps the small aggregates the rest of
-            // the model is calibrated against where they were: pricing every
-            // field cost `ArraySlice::slice` and `JsonSerializer::serialize_i32`
-            // their inlining, and json-twitter ser 13.8%.
+            // One allocation instruction, the initialisers' own cost, and a
+            // push per initialiser past [`FREE_ARITY`]. An aggregate's arity is
+            // its type's, so leaving every leaf free — sound where arity is
+            // fixed — priced a whole-struct constructor as one instruction.
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 weight::OP
                     + arity_excess(elements.len())
@@ -311,12 +299,8 @@ impl CostWalk<'_> {
                     + self.block(*then_branch, seen)
                     + else_branch.map_or(0, |b| self.block(b, seen))
             }
-            // The dispatch is one branch, but each arm is a block spliced into
-            // the caller however cheap its body is. Pricing only the dispatch
-            // left a 20-arm table of constants costing 2 — an `if`'s price —
-            // and inlining at every call site from `-O1` up. An arm is worth
-            // `OP`, not `BRANCH`: at `BRANCH` the same `-Os` output came out
-            // 0.4% smaller but cost sqlite_parse ~2% of its throughput.
+            // One branch for the dispatch, and an arm apiece: each is a block
+            // spliced into the caller however cheap its body is.
             ExprKind::Match { expr, arms } => {
                 weight::BRANCH
                     + arms.len() * weight::OP
@@ -355,9 +339,8 @@ fn arity_excess(len: usize) -> usize {
     len.saturating_sub(FREE_ARITY) * weight::OP
 }
 
-/// How many operand leaves a node carries before the model starts charging for
-/// them. Two is what a binary — the widest node whose arity is fixed — already
-/// takes for free.
+/// How many operand leaves a node carries before the model charges for them.
+/// Two is what a binary — the widest fixed-arity node — already takes free.
 const FREE_ARITY: usize = 2;
 
 /// The inline cost of a function body, in the unit [`weight`] defines.
