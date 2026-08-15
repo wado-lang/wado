@@ -22,11 +22,24 @@ use crate::uri::Uri;
 
 const JSONRPC_VERSION: &str = "2.0";
 
+/// Largest message body accepted from the client, in bytes.
+///
+/// `Content-Length` is attacker-controlled in the sense that matters here: a
+/// buggy client (or a desynchronised stream after a malformed frame) can name
+/// any length, and the body buffer was allocated eagerly at that size. 64 MiB
+/// is far above any real LSP message — a `didOpen` carries one source file —
+/// and far below a length that would take the editor's language server down
+/// with an allocation failure.
+const MAX_CONTENT_LENGTH: usize = 64 * 1024 * 1024;
+
 /// Failure mode of [`read_message`].
 ///
 /// `Parse` errors are recoverable: per LSP 3.18 (JSON-RPC 2.0 §5.1), the
 /// server should respond with `-32700 ParseError` and keep processing. `Io`
-/// errors are unrecoverable — the transport is broken.
+/// errors are unrecoverable — the transport is broken, or the frame boundary
+/// is lost and no amount of further reading finds it again (an oversized
+/// `Content-Length` names a body we refuse to consume, so every subsequent
+/// byte would be read at the wrong offset).
 #[derive(Debug)]
 pub enum ReadError {
     Parse(String),
@@ -51,17 +64,29 @@ pub fn read_message<R: BufRead>(reader: &mut R) -> Result<Option<JsonRpcRequest>
         if trimmed.is_empty() {
             break;
         }
-        if let Some(len_str) = trimmed.strip_prefix("Content-Length: ") {
+        // Header names are case-insensitive and the space after the colon is
+        // optional (LSP 3.18 §baseProtocol defers to the HTTP header grammar).
+        if let Some((name, value)) = trimmed.split_once(':')
+            && name.eq_ignore_ascii_case("Content-Length")
+        {
+            let value = value.trim();
             content_length = Some(
-                len_str
+                value
                     .parse()
-                    .map_err(|_| ReadError::Parse(format!("invalid Content-Length: {len_str}")))?,
+                    .map_err(|_| ReadError::Parse(format!("invalid Content-Length: {value}")))?,
             );
         }
     }
 
     let length = content_length
         .ok_or_else(|| ReadError::Parse("missing Content-Length header".to_string()))?;
+    if length > MAX_CONTENT_LENGTH {
+        // Fatal, not recoverable: the declared body is never consumed, so the
+        // stream stays framed at an offset we cannot find our way back from.
+        return Err(ReadError::Io(format!(
+            "Content-Length {length} exceeds the {MAX_CONTENT_LENGTH}-byte limit",
+        )));
+    }
     let mut body = vec![0u8; length];
     reader
         .read_exact(&mut body)
@@ -211,4 +236,55 @@ pub async fn publish_diagnostics<W: Write>(
         diagnostics,
     };
     send_notification(writer, "textDocument/publishDiagnostics", params)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn read(input: &[u8]) -> Result<Option<JsonRpcRequest>, ReadError> {
+        read_message(&mut std::io::BufReader::new(input))
+    }
+
+    fn frame(body: &str) -> Vec<u8> {
+        format!("Content-Length: {}\r\n\r\n{body}", body.len()).into_bytes()
+    }
+
+    #[test]
+    fn reads_a_well_formed_frame() {
+        let msg = read(&frame(r#"{"jsonrpc":"2.0","id":1,"method":"shutdown"}"#))
+            .expect("read")
+            .expect("message");
+        assert_eq!(msg.method, "shutdown");
+    }
+
+    #[test]
+    fn content_length_header_is_case_insensitive_and_space_optional() {
+        // LSP defers to the HTTP header grammar: the name is case-insensitive
+        // and the space after the colon is optional. Matching the literal
+        // `"Content-Length: "` silently dropped such a frame into
+        // "missing Content-Length header".
+        let body = r#"{"jsonrpc":"2.0","id":1,"method":"shutdown"}"#;
+        let raw = format!("content-length:{}\r\n\r\n{body}", body.len());
+        let msg = read(raw.as_bytes()).expect("read").expect("message");
+        assert_eq!(msg.method, "shutdown");
+    }
+
+    #[test]
+    fn oversized_content_length_is_refused_without_allocating() {
+        // The body buffer was allocated eagerly at the declared size, so a
+        // bogus length took the server down with an allocation failure
+        // instead of an error.
+        let raw = format!("Content-Length: {}\r\n\r\n", MAX_CONTENT_LENGTH + 1);
+        let err = read(raw.as_bytes()).expect_err("oversized length must be refused");
+        assert!(
+            matches!(&err, ReadError::Io(m) if m.contains("exceeds")),
+            "expected a fatal transport error, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn clean_eof_is_not_an_error() {
+        assert!(read(b"").expect("read").is_none());
+    }
 }

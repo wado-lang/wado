@@ -6,6 +6,7 @@ use std::io::Write;
 use serde_json::Value;
 
 use crate::Engine;
+use crate::host::FilesystemCompilerHost;
 use crate::server::rpc::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     InitializeParams, InitializeResult, InlayHintParams, JsonRpcRequest, PublishDiagnosticsParams,
@@ -19,6 +20,62 @@ use crate::text::PositionEncoding;
 
 const STDLIB_SCHEMES: &[&str] = &["core", "wasi"];
 
+/// The document a request targets.
+///
+/// Every document-scoped request names it the same way, and the dispatcher
+/// needs it *before* the handler runs so it can root the request's
+/// [`FilesystemCompilerHost`] at the document's directory. Naming it once
+/// here is what lets [`query`] be shared by all six arms.
+trait TargetDocument {
+    fn uri(&self) -> &str;
+}
+
+impl TargetDocument for TextDocumentPositionParams {
+    fn uri(&self) -> &str {
+        &self.text_document.uri
+    }
+}
+
+impl TargetDocument for ReferenceParams {
+    fn uri(&self) -> &str {
+        &self.text_document.uri
+    }
+}
+
+impl TargetDocument for SemanticTokensParams {
+    fn uri(&self) -> &str {
+        &self.text_document.uri
+    }
+}
+
+impl TargetDocument for InlayHintParams {
+    fn uri(&self) -> &str {
+        &self.text_document.uri
+    }
+}
+
+/// Run a document-scoped query: decode the params, build the host for the
+/// document they name, hand both to `handler`, and reply with its result.
+async fn query<P, R, W, F>(
+    engine: &Engine,
+    writer: &mut W,
+    id: Option<&Value>,
+    params: Value,
+    handler: F,
+) -> Result<(), String>
+where
+    P: serde::de::DeserializeOwned + TargetDocument,
+    R: serde::Serialize,
+    W: Write,
+    F: AsyncFnOnce(&Engine, P, &FilesystemCompilerHost) -> R,
+{
+    transport::typed_request(writer, id, params, async |p: P| {
+        let host = transport::host_for_uri(p.uri());
+        handler(engine, p, &host).await
+    })
+    .await
+}
+
 /// Tracks server lifecycle per LSP 3.18 §Server lifecycle.
 ///
 /// - `initialized` flips to `true` once the server has *responded* to
@@ -27,10 +84,17 @@ const STDLIB_SCHEMES: &[&str] = &["core", "wasi"];
 /// - `shutdown_requested` flips to `true` once the server has responded to
 ///   `shutdown`. After that, every request except `exit` must fail with
 ///   `InvalidRequest` and every notification except `exit` must be dropped.
+/// - `exit_code` is set by the `exit` notification. `dispatch` never calls
+///   `std::process::exit` itself: it is a library function that
+///   `wado lsp` invokes inside a longer-lived process, and terminating from
+///   inside it skips every destructor between here and `main` — besides
+///   making the exit path untestable. The owning loop reads this and
+///   returns.
 #[derive(Default)]
 pub struct Lifecycle {
     pub initialized: bool,
     pub shutdown_requested: bool,
+    pub exit_code: Option<i32>,
 }
 
 pub async fn dispatch<W: Write>(
@@ -44,7 +108,9 @@ pub async fn dispatch<W: Write>(
     let params = request.params;
 
     if method == "exit" {
-        std::process::exit(i32::from(!lifecycle.shutdown_requested));
+        // LSP 3.18 §exit: 0 when `shutdown` was requested first, else 1.
+        lifecycle.exit_code = Some(i32::from(!lifecycle.shutdown_requested));
+        return Ok(());
     }
 
     if !lifecycle.initialized && method != "initialize" {
@@ -152,65 +218,47 @@ pub async fn dispatch<W: Write>(
             }
         }
         "textDocument/definition" => {
-            let engine = &*engine;
-            transport::typed_request(writer, id, params, async |p: TextDocumentPositionParams| {
-                let host = transport::host_for_uri(&p.text_document.uri);
-                engine
-                    .definition(&p.text_document.uri, p.position, &host)
-                    .await
+            query(engine, writer, id, params, async |e, p: TextDocumentPositionParams, host| {
+                e.definition(&p.text_document.uri, p.position, host).await
             })
             .await?;
         }
         "textDocument/hover" => {
-            let engine = &*engine;
-            transport::typed_request(writer, id, params, async |p: TextDocumentPositionParams| {
-                let host = transport::host_for_uri(&p.text_document.uri);
-                engine.hover(&p.text_document.uri, p.position, &host).await
+            query(engine, writer, id, params, async |e, p: TextDocumentPositionParams, host| {
+                e.hover(&p.text_document.uri, p.position, host).await
             })
             .await?;
         }
         "textDocument/references" => {
-            let engine = &*engine;
-            transport::typed_request(writer, id, params, async |p: ReferenceParams| {
-                let host = transport::host_for_uri(&p.text_document.uri);
-                engine
-                    .references(
-                        &p.text_document.uri,
-                        p.position,
-                        p.context.include_declaration,
-                        &host,
-                    )
-                    .await
+            query(engine, writer, id, params, async |e, p: ReferenceParams, host| {
+                e.references(
+                    &p.text_document.uri,
+                    p.position,
+                    p.context.include_declaration,
+                    host,
+                )
+                .await
             })
             .await?;
         }
         "textDocument/documentHighlight" => {
-            let engine = &*engine;
-            transport::typed_request(writer, id, params, async |p: TextDocumentPositionParams| {
-                let host = transport::host_for_uri(&p.text_document.uri);
-                engine
-                    .document_highlight(&p.text_document.uri, p.position, &host)
+            query(engine, writer, id, params, async |e, p: TextDocumentPositionParams, host| {
+                e.document_highlight(&p.text_document.uri, p.position, host)
                     .await
             })
             .await?;
         }
         "textDocument/semanticTokens/full" => {
-            let engine = &*engine;
-            transport::typed_request(writer, id, params, async |p: SemanticTokensParams| {
-                let host = transport::host_for_uri(&p.text_document.uri);
+            query(engine, writer, id, params, async |e, p: SemanticTokensParams, host| {
                 SemanticTokens {
-                    data: engine.semantic_tokens(&p.text_document.uri, &host).await,
+                    data: e.semantic_tokens(&p.text_document.uri, host).await,
                 }
             })
             .await?;
         }
         "textDocument/inlayHint" => {
-            let engine = &*engine;
-            transport::typed_request(writer, id, params, async |p: InlayHintParams| {
-                let host = transport::host_for_uri(&p.text_document.uri);
-                engine
-                    .inlay_hints(&p.text_document.uri, p.range, &host)
-                    .await
+            query(engine, writer, id, params, async |e, p: InlayHintParams, host| {
+                e.inlay_hints(&p.text_document.uri, p.range, host).await
             })
             .await?;
         }

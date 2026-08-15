@@ -43,16 +43,26 @@ impl FilesystemCompilerHost {
         &self.base_path
     }
 
+    /// The collected buffer, recovering from a poisoned lock.
+    ///
+    /// A panic anywhere under the compiler pipeline while this lock is held
+    /// poisons it for the rest of the process. `unwrap()` would then turn
+    /// one recoverable panic into a permanently dead language server: every
+    /// later query re-panics on the same lock. The buffer's contents are
+    /// plain data — a partially-written `Vec` is still a valid `Vec` — so
+    /// recovering is safe. Matches `DiagnosticCollector` in `lib.rs`.
+    fn buffer(&self) -> std::sync::MutexGuard<'_, Vec<Diagnostic>> {
+        self.diagnostics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
-        self.diagnostics.lock().unwrap().clone()
+        self.buffer().clone()
     }
 
     pub fn has_errors(&self) -> bool {
-        self.diagnostics
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|d| d.severity == Severity::Error)
+        self.buffer().iter().any(|d| d.severity == Severity::Error)
     }
 
     /// Append a diagnostic to the collected buffer without emitting it.
@@ -61,7 +71,7 @@ impl FilesystemCompilerHost {
     /// printing) so the buffer remains the single source of truth for
     /// `has_errors` / `diagnostics()`.
     pub fn collect_diagnostic(&self, diagnostic: Diagnostic) {
-        self.diagnostics.lock().unwrap().push(diagnostic);
+        self.buffer().push(diagnostic);
     }
 }
 
@@ -113,8 +123,20 @@ pub fn registry_component_needs(
     manifest: &wado_manifest::Manifest,
     manifest_dir: &Path,
 ) -> Vec<Result<RegistryComponentNeed, (String, String)>> {
+    let locked = read_lock(manifest_dir)
+        .as_ref()
+        .map(registry_pins)
+        .unwrap_or_default();
+    registry_component_needs_locked(manifest, &locked)
+}
+
+/// [`registry_component_needs`] against an already-parsed lock, so a caller
+/// resolving several dependency kinds reads `wado.lock` once.
+fn registry_component_needs_locked(
+    manifest: &wado_manifest::Manifest,
+    locked: &std::collections::BTreeMap<String, String>,
+) -> Vec<Result<RegistryComponentNeed, (String, String)>> {
     let root = cache_root();
-    let locked = locked_registry_versions(manifest_dir);
     manifest
         .dependencies
         .iter()
@@ -127,7 +149,7 @@ pub fn registry_component_needs(
                     name,
                     registry.as_deref(),
                     package,
-                    &locked,
+                    locked,
                     root.as_deref(),
                 )
                 .map_err(|reason| (name.clone(), reason)),
@@ -186,7 +208,14 @@ pub fn dependency_index_from(
     base: &Path,
 ) -> DependencyIndex {
     let mut index = DependencyIndex::default();
-    let base_abs = absolutize(base);
+    let base_abs = crate::workspace::absolutize(base);
+    // `wado.lock` is read and parsed exactly once here. Both dependency kinds
+    // that consult it — git worktrees and registry components — take their
+    // pins from this one parse; the git path used to re-read the file per
+    // dependency.
+    let lock = read_lock(manifest_dir);
+    let git_pins = lock.clone().map(git_pins).unwrap_or_default();
+    let registry_pins = lock.as_ref().map(registry_pins).unwrap_or_default();
     for (name, dep) in &manifest.dependencies {
         match &dep.source {
             DependencySource::Path { path, .. } => {
@@ -194,7 +223,7 @@ pub fn dependency_index_from(
                     Ok(entry) => {
                         index
                             .resolved
-                            .insert(name.clone(), relative_path(&base_abs, &absolutize(&entry)));
+                            .insert(name.clone(), relative_path(&base_abs, &crate::workspace::absolutize(&entry)));
                     }
                     Err(reason) => {
                         index.unresolved.insert(name.clone(), reason);
@@ -202,11 +231,11 @@ pub fn dependency_index_from(
                 }
             }
             DependencySource::Git { url, directory, .. } => {
-                match git_dependency_entry(manifest_dir, name, url, directory.as_deref()) {
+                match git_dependency_entry(&git_pins, name, url, directory.as_deref()) {
                     Ok(entry) => {
                         index
                             .resolved
-                            .insert(name.clone(), relative_path(&base_abs, &absolutize(&entry)));
+                            .insert(name.clone(), relative_path(&base_abs, &crate::workspace::absolutize(&entry)));
                     }
                     Err(reason) => {
                         index.unresolved.insert(name.clone(), reason);
@@ -214,12 +243,11 @@ pub fn dependency_index_from(
                 }
             }
             DependencySource::Workspace => {}
-            // Registry deps are indexed from `registry_component_needs` below,
-            // so the lock is read once for the whole manifest.
+            // Registry deps are indexed from the needs list below.
             DependencySource::Registry { .. } => {}
         }
     }
-    for need in registry_component_needs(manifest, manifest_dir) {
+    for need in registry_component_needs_locked(manifest, &registry_pins) {
         match need {
             Ok(need) if need.cache_path.is_file() => {
                 index
@@ -245,18 +273,18 @@ pub fn dependency_index_from(
 /// `directory`); `Err(reason)` explains why it cannot be placed (no lock pin, no
 /// cache root, or a cold worktree pointing the user at `wado fetch`).
 fn git_dependency_entry(
-    manifest_dir: &Path,
+    locked: &std::collections::BTreeMap<String, (String, String)>,
     name: &str,
     url: &str,
     directory: Option<&str>,
 ) -> Result<PathBuf, String> {
     let id = format!("git+{url}/{name}");
-    let (version, resolved_ref) = locked_git_packages(manifest_dir)
-        .remove(&id)
+    let (version, resolved_ref) = locked
+        .get(&id)
         .ok_or_else(|| format!("no `wado.lock` entry for {name:?}; run `wado update`"))?;
     let root =
         cache_root().ok_or_else(|| format!("no cache root for {name:?}; set `WADO_ROOT`"))?;
-    let relative = wado_manifest::cache::git_worktree_relative(url, &version, &resolved_ref)
+    let relative = wado_manifest::cache::git_worktree_relative(url, version, resolved_ref)
         .ok_or_else(|| format!("cannot place {name:?} in the cache (bad git url {url:?})"))?;
     let worktree_root = root.join(relative);
     // The `.ready` completion marker (written last by `wado-cli`'s materializer)
@@ -274,6 +302,15 @@ fn git_dependency_entry(
     package_lib_entry(&pkg_dir)
 }
 
+/// Parse `manifest_dir`'s `wado.lock`, or `None` when it is absent or
+/// malformed (a cold checkout reads as "nothing pinned").
+fn read_lock(manifest_dir: &Path) -> Option<wado_manifest::LockFile> {
+    std::fs::read_to_string(manifest_dir.join("wado.lock"))
+        .ok()?
+        .parse::<wado_manifest::LockFile>()
+        .ok()
+}
+
 /// `lock id -> (version, resolved-ref)` for every git `[[package]]` in
 /// `manifest_dir`'s `wado.lock`. Empty when no lock is present. Shared so the CLI
 /// can materialize the same worktrees the offline index resolves against.
@@ -281,36 +318,23 @@ fn git_dependency_entry(
 pub fn locked_git_packages(
     manifest_dir: &Path,
 ) -> std::collections::BTreeMap<String, (String, String)> {
-    let mut out = std::collections::BTreeMap::new();
-    let Ok(text) = std::fs::read_to_string(manifest_dir.join("wado.lock")) else {
-        return out;
-    };
-    let Ok(lock) = text.parse::<wado_manifest::LockFile>() else {
-        return out;
-    };
-    for pkg in &lock.packages {
-        if let Some(sha) = &pkg.resolved_ref {
-            out.insert(pkg.id.clone(), (pkg.version.clone(), sha.clone()));
-        }
-    }
-    out
+    read_lock(manifest_dir).map(git_pins).unwrap_or_default()
 }
 
-/// `lock id -> version` for every registry `[[package]]` in `manifest_dir`'s
-/// `wado.lock`. Keyed by the full id so distinct registries never collide.
-/// Empty when no lock is present (a cold checkout).
-fn locked_registry_versions(manifest_dir: &Path) -> std::collections::BTreeMap<String, String> {
-    let mut out = std::collections::BTreeMap::new();
-    let Ok(text) = std::fs::read_to_string(manifest_dir.join("wado.lock")) else {
-        return out;
-    };
-    let Ok(lock) = text.parse::<wado_manifest::LockFile>() else {
-        return out;
-    };
-    for pkg in &lock.packages {
-        out.insert(pkg.id.clone(), pkg.version.clone());
-    }
-    out
+fn git_pins(lock: wado_manifest::LockFile) -> std::collections::BTreeMap<String, (String, String)> {
+    lock.packages
+        .into_iter()
+        .filter_map(|pkg| Some((pkg.id, (pkg.version, pkg.resolved_ref?))))
+        .collect()
+}
+
+/// `lock id -> version` for every registry `[[package]]`. Keyed by the full id
+/// so distinct registries never collide.
+fn registry_pins(lock: &wado_manifest::LockFile) -> std::collections::BTreeMap<String, String> {
+    lock.packages
+        .iter()
+        .map(|pkg| (pkg.id.clone(), pkg.version.clone()))
+        .collect()
 }
 
 /// The Wado root (dependency cache): `$WADO_ROOT`, else `~/wado` (`$HOME/wado`).
@@ -333,21 +357,12 @@ pub fn cache_root() -> Option<PathBuf> {
         .map(|home| PathBuf::from(home).join("wado"))
 }
 
-/// Walk up from `start` to find the nearest `wado.toml`, returning the parsed
-/// manifest and its directory.
+/// The nearest `wado.toml` at or above `start`, parsed, with its directory.
 fn nearest_manifest(start: &Path) -> Option<(wado_manifest::Manifest, PathBuf)> {
-    let mut dir = absolutize(start);
-    loop {
-        let candidate = dir.join("wado.toml");
-        if candidate.is_file() {
-            let text = std::fs::read_to_string(&candidate).ok()?;
-            let manifest = crate::workspace::resolve_member_manifest(&dir, &text).ok()?;
-            return Some((manifest, dir));
-        }
-        if !dir.pop() {
-            return None;
-        }
-    }
+    let dir = crate::workspace::nearest_manifest_dir(start)?;
+    let text = std::fs::read_to_string(dir.join(crate::workspace::MANIFEST_FILENAME)).ok()?;
+    let manifest = crate::workspace::resolve_member_manifest(&dir, &text).ok()?;
+    Some((manifest, dir))
 }
 
 /// The entry module file of a source dependency: the file itself when the path
@@ -373,16 +388,6 @@ pub fn package_lib_entry(dep_path: &Path) -> Result<PathBuf, String> {
         )
     })?;
     Ok(dep_path.join(lib))
-}
-
-fn absolutize(p: &Path) -> PathBuf {
-    if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(p))
-            .unwrap_or_else(|_| p.to_path_buf())
-    }
 }
 
 /// Lexical relative path from directory `from_dir` to file `to_file`. Both
