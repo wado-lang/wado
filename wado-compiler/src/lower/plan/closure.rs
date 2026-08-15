@@ -533,7 +533,7 @@ impl ClosureLowerer {
             // candidate map. `LocalMethodName` stays unqualified so codegen
             // re-mangles it consistently with other methods.
             let qualified_method_name = MethodName::format_local(
-                &FqTypeName::declared(&self.module_source, &struct_name),
+                &FqTypeName::shape(&self.module_source, &struct_name),
                 None,
                 crate::name::CLOSURE_CALL_METHOD,
             );
@@ -648,7 +648,7 @@ impl ClosureLowerer {
             // `method_info` carries the unmangled (struct, trait, method)
             // triple so codegen can produce the canonical mangled name.
             let method_info = LocalMethodName::new(
-                FqTypeName::declared(&self.module_source, &struct_name),
+                FqTypeName::shape(&self.module_source, &struct_name),
                 None,
                 crate::name::CLOSURE_CALL_METHOD.to_string(),
             );
@@ -756,15 +756,9 @@ impl ClosureLowerer {
         type_table: &mut TypeTable,
         span: Span,
     ) {
-        let formatter_name = type_table
-            .compiler_items()
-            .struct_name(CompilerItem::Formatter)
-            .to_string();
         let formatter_fq = type_table.compiler_struct_fq_name(CompilerItem::Formatter);
         let formatter_type = {
-            let def = type_table
-                .decl_named_in(&formatter_name, &ModuleSource::format())
-                .expect("the declaration this type names exists");
+            let def = type_table.require_compiler_item_def(CompilerItem::Formatter);
             type_table.make_struct(crate::tir::StructDef::Decl(def))
         };
         let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
@@ -914,13 +908,13 @@ impl ClosureLowerer {
                 FunctionRef {
                     module_source: self.module_source.clone(),
                     name: MethodName::format_local(
-                        &FqTypeName::declared(&self.module_source, struct_name),
+                        &FqTypeName::shape(&self.module_source, struct_name),
                         Some(target_trait),
                         target_method,
                     ),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
-                        FqTypeName::declared(&self.module_source, struct_name),
+                        FqTypeName::shape(&self.module_source, struct_name),
                         Some(target_trait.clone()),
                         target_method.to_string(),
                     )),
@@ -962,7 +956,7 @@ impl ClosureLowerer {
             module_source: self.module_source.clone(),
             is_async: false,
             name: MethodName::format_local(
-                &FqTypeName::declared(&self.module_source, struct_name),
+                &FqTypeName::shape(&self.module_source, struct_name),
                 Some(trait_name),
                 method_name,
             ),
@@ -972,7 +966,7 @@ impl ClosureLowerer {
             impl_type_params: Vec::new(),
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
-                FqTypeName::declared(&self.module_source, struct_name),
+                FqTypeName::shape(&self.module_source, struct_name),
                 Some(trait_name.clone()),
                 method_name.to_string(),
             )),
@@ -1698,7 +1692,7 @@ impl ClosureCallSiteLowerer<'_> {
         };
 
         let new_method_info = LocalMethodName::new(
-            FqTypeName::declared(&functor.module_source, &functor.struct_name),
+            FqTypeName::shape(&functor.module_source, &functor.struct_name),
             info.trait_name.clone(),
             info.method_name.clone(),
         );

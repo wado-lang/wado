@@ -130,15 +130,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `param_name::assoc_name` mean `<param_name as ThatTrait>::assoc_name`.
     /// Resolution needs the qualifier: one type may implement two traits that
     /// declare the same associated-type name.
-    fn bound_declaring_assoc_type(&self, param_name: &str, assoc_name: &str) -> Option<String> {
+    fn bound_declaring_assoc_type(
+        &self,
+        param_name: &str,
+        assoc_name: &str,
+    ) -> Option<crate::defs::DefId> {
         self.annotate_ctx
             .trait_ctx
             .type_param_bounds
             .get(param_name)
             .into_iter()
             .flatten()
-            .map(|bound| bound.name.clone())
-            .find(|trait_name| self.trait_assoc_type_decl(trait_name, assoc_name).is_some())
+            .filter(|bound| {
+                self.trait_assoc_type_decl(&bound.name, assoc_name)
+                    .is_some()
+            })
+            // The bound's own reference site says which trait it names, so an
+            // aliased bound and another module's same-named trait stay apart.
+            .find_map(|bound| self.trait_decl_at(bound.id, &bound.name))
     }
 
     /// Resolve a namespaced generic type like `ns::Type<T>` or `Self::Output`
@@ -578,9 +587,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             args.iter().map(|t| self.resolve_type(t)).collect();
                         let def = self
                             .tysys
-                            .type_table
-                            .borrow()
-                            .decl_named_in(name, &variant_info.module_source)
+                            .resolutions
+                            .defs()
+                            .of_ast_id(variant_info.defined_at)
                             .expect("the generic variant being instantiated exists");
                         self.tysys
                             .type_table
@@ -601,9 +610,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `MyArray<i32>` head no `impl` header writes.
                     let def = self
                         .tysys
-                        .type_table
-                        .borrow()
-                        .decl_named_in(name, &gn_info.module_source)
+                        .resolutions
+                        .defs()
+                        .of_ast_id(gn_info.defined_at)
                         .expect("the generic newtype being instantiated exists");
                     self.tysys.type_table.borrow_mut().make_newtype_instance(
                         def,

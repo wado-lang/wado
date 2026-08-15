@@ -80,7 +80,7 @@ pub(crate) struct ModuleDecls {
     /// Canonical keys make cross-module collisions impossible, so the
     /// driver-merged view needs no shadowing rules.
     pub(crate) associated_constants:
-        IndexMap<(ModuleSource, String), (ModuleSource, TypeId, ast::Expr)>,
+        IndexMap<(crate::defs::DefId, String), (ModuleSource, TypeId, ast::Expr)>,
     /// Canonical signatures of this module's method declarations, keyed by
     /// the method's globally-unique `AstId`.
     ///
@@ -170,13 +170,11 @@ pub(crate) struct ModuleDecls {
     pub(crate) local_item_renders: IndexMap<(String, ModuleSource), crate::defs::DefId>,
 
     /// The local items in scope at the walk's position, by the name written in
-    /// source. Populated sequentially as `resolve_stmt` walks the body — no
-    /// hoisting, so a local item is visible only after its own statement, like
-    /// `let` — and cleared per function, so siblings never see each other's.
+    /// source. `hoist_local_items` saves and restores it per block, and
+    /// `clear_fn_local_items` empties it per function body.
     ///
-    /// It answers with an identity, not with a declaration's contents: those
-    /// are read out of the two maps above, which is what keeps this the walk's
-    /// position rather than a second scope.
+    /// It answers with an identity; a declaration's contents come from the two
+    /// maps above.
     pub(crate) fn_local_items: IndexMap<String, crate::defs::DefId>,
 }
 

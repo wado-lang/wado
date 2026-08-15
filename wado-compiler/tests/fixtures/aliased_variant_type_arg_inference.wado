@@ -1,0 +1,20 @@
+// A generic variant reached through an import alias or a namespace must take
+// its type arguments from the annotation. The backward-inference guard
+// compared the expected type's declared name against the *written* prefix, so
+// `M::Nothing` under `use { Maybe as M }` could not be inferred at all.
+
+use { Maybe as M } from "./sub/aliased_variant_type_arg_inference_dep.wado";
+use dep from "./sub/aliased_variant_type_arg_inference_dep.wado";
+
+test "an aliased variant infers its type args from the annotation" {
+    let m: M<i32> = M::Nothing;
+    assert m matches { M::Nothing };
+}
+
+test "a namespace-qualified variant infers its type args from the annotation" {
+    let m: dep::Maybe<i32> = dep::Maybe::Nothing;
+    assert m matches { dep::Maybe::Nothing };
+}
+
+__DATA__
+{"test": {}}

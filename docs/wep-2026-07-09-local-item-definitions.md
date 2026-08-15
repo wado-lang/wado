@@ -19,19 +19,17 @@ scope to speak of. Each of these produces the same parse error a missing `}`
 would ("expected `}`"), not a special-cased message — they were never valid
 here.
 
-Scoping rules, chosen for simplicity over expressiveness:
+Scoping rules, matching Rust's:
 
-- **Function-scoped, not block-scoped.** A local item declared anywhere in a
-  function body — including inside a nested `if`/`while`/`for` block — is
-  visible for the rest of that function, not just the enclosing block. Two
-  unrelated functions may declare same-named local items without collision;
-  a closure literal inside the function does not currently see its enclosing
-  function's local items (an unhandled edge case, not a deliberate
-  restriction).
-- **Sequential resolution, no hoisting.** A local item must be declared
-  before its first use, exactly like `let` — no forward reference, including
-  between two local items (`struct A` referring to a `struct B` declared
-  later in the same function, or vice versa, is unsupported).
+- **Block-scoped.** A local item is visible in the block that declares it and
+  nowhere else, so a nested `if`/`while`/`for` body cannot export one to the
+  rest of the function. Two unrelated blocks may declare same-named local
+  items without collision; a closure literal inside the function does not
+  currently see its enclosing function's local items (an unhandled edge case,
+  not a deliberate restriction).
+- **Hoisted within the block.** A local item is in scope for the whole of its
+  block, so a use may precede the declaration statement and one local item may
+  name another declared later in the same block.
 - **Always private.** A `pub`/`internal`/`export` prefix on a local item is a
   dedicated parse error (`at_visibility_prefixed_local_item_start`) rather
   than the generic "expected `}`" recovery every other invalid block-level
@@ -48,17 +46,22 @@ Implementation, staged as three units of work:
    unchanged for scope checking, formatting, and semantic tokens.
 2. **Resolution**: each local item is minted under an internal mangled name
    (`{name}@{AstId:?}`) — the _storage_ identity — while the _declared_ name
-   is registered in a new per-function ephemeral table
-   (`ModuleDecls::fn_local_*`, cleared at the top of every function/method/
-   test body) that `TypeLookup` consults with the highest precedence. This
-   two-tier split is what makes the two scoping rules above hold at once:
-   the ephemeral, bare-name tier gives correct sequential _visibility_
-   during that one function's resolution, while the durable, mangled-name
-   tier (an existing table, previously used only for anonymous struct
-   literals) is what a _later, independent_ reify pass recovers a
-   declaration's field/case info from, without needing to replay the
-   per-function scoping. Mangling is what lets two sibling functions declare
-   colliding names into the same shared, module-scoped durable table safely.
+   is registered in an ephemeral table (`ModuleDecls::fn_local_*`, filled
+   from a block's own declarations before its statements are walked and
+   restored on the way out) that `TypeLookup` consults with the highest
+   precedence. This two-tier split is what makes the two scoping rules above
+   hold at once: the ephemeral, bare-name tier gives correct block
+   _visibility_ during that one function's resolution, while the durable,
+   mangled-name tier (an existing table, previously used only for anonymous
+   struct literals) is what a _later, independent_ reify pass recovers a
+   declaration's field/case info from, without needing to replay the scoping.
+   Mangling is what lets two sibling blocks declare colliding names into the
+   same shared, module-scoped durable table safely.
+
+   Hoisting runs in three steps, because a name resolves through its field
+   info: every local struct of the block gets its identity and a fieldless
+   entry first, then the newtypes resolve (to a fixpoint, so a base may name
+   a later newtype), then the struct fields are filled in.
 3. **TIR emission**: a local item has no `Item::Struct`/`Item::Newtype` entry
    in `module.items` for reify to walk (it lives inside a function body), so
    — mirroring the pre-existing anonymous-struct-literal mechanism — the
@@ -67,12 +70,11 @@ Implementation, staged as three units of work:
 
 A pre-existing early type-name validation pass (a fast pre-check that runs
 before the real elaborator, built from a flat module-wide name set) had no
-notion of function-scoped names and needed widening: it now also recognizes
+notion of function-local names and needed widening: it now also recognizes
 any name reachable via a local item declaration anywhere in the enclosing
-function, so it does not false-positive ahead of the real (correctly
-sequential) resolution. This is a coarse over-approximation on purpose — it
-does not itself enforce declare-before-use ordering; the real elaborator
-still does.
+function, so it does not false-positive ahead of the real resolution. This is
+a coarse over-approximation on purpose — it does not itself enforce block
+scoping; the real elaborator still does.
 
 Generic local structs (`struct Box<T> { value: T }`) reuse the module-level
 generic-struct machinery unchanged: the monomorphizer already treats any

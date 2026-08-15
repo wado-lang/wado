@@ -1,0 +1,16 @@
+// A local item is scoped to the block that declares it, not to the enclosing
+// function: a reference after that block closes reaches nothing.
+
+export fn run() -> i32 {
+    if true {
+        struct Point {
+            x: i32,
+        }
+        let inner = Point { x: 1 };
+    }
+    let after = Point { x: 2 };
+    return after.x;
+}
+
+__DATA__
+{"compile_error": "unknown type 'Point'"}

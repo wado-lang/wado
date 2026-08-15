@@ -235,12 +235,19 @@ simple name alone is never an identity — two modules may declare the same one.
 
 What is one is a `crate::defs::DefId`: a dense index into the whole-program
 `DefTable`, built after loading from every module's items. Declaration data
-(fields, cases, members, visibility, span) is keyed by it, and `ResolvedType`'s
-nominal variants carry it, so a consumer reads a declaration without knowing
-which module it stands in. `TypeTable::decl_named_in` still turns a
-`(name, module)` pair into one for the callers that hold only a spelling; it
-answers first-declared-wins, so it cannot tell two same-named declarations in a
-module apart. See WEP 2026-08-12 for what still depends on that and why.
+(fields, cases, members, visibility, span) is keyed by it, `ResolvedType`'s
+nominal variants carry it, and every trait / effect / resource / impl-target
+index in the elaborator is keyed by it — so a consumer reads a declaration
+without knowing which module it stands in. `FqTypeName` and `FqTraitName` carry
+one too, in a `DeclaredHead` whose equality and hashing read the `DefId` alone,
+and neither has a constructor that takes a spelling. A head that names no
+declaration — a closure environment, an anonymous literal's shape — is
+`TypeHead::Shape`, whose rendering _is_ its identity.
+
+A handful of functions still turn a name into a declaration; `defs.rs`'s
+`NAME_TO_IDENTITY` lists them with the reason each survives, and
+`no_reachable_function_turns_a_name_into_an_identity` fails on a new one. See
+WEP 2026-08-12 for what is left and why.
 
 A method key is `(impl module, declared receiver, trait, method)`, so `{impl}`
 and `{decl}` repeat whenever a type is implemented in the module declaring it —
@@ -250,7 +257,10 @@ the common case. A receiver with no declaring module (a builtin, a tuple) has no
 The same rule binds names still in their written form. A type name in source is
 relative to the module that wrote it, so a **reference site** — not a consumer —
 is where an identity is derived, once: `crate::resolve::Resolutions` answers
-every site before elaboration begins, keyed by the site's own `AstId`. An `impl`
+every site before elaboration begins, keyed by the site's own `AstId`. A written
+type, a bound, an `impl` header's trait and target, a struct literal's type
+name, a qualified path's segments, a pattern's `Type::` qualifier and a bare
+identifier in expression position are all such sites. An `impl`
 block's digest (`ImplHeader`) carries its module, its target's `ImplTargetKey`
 and its trait's, and the whole-program checks (coherence, orphan rules, sealed
 traits, trait-method arity) read the digest instead of re-walking

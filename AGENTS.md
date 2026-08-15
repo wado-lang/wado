@@ -28,10 +28,6 @@ mise trust                 # trust the mise.toml config (first time only)
 mise run on-task-started   # install project tools
 ```
 
-### When Completing a Task
-
-When you are completing a task, use the `on-task-done` skill to finish it.
-
 ### Common Development Tasks
 
 ```sh
@@ -47,7 +43,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 - Never `pgrep` to check whether a job is alive — it matches the watcher's own command line, so the loop never exits. Have the job record its own completion: `cmd > run.log 2>&1; echo $? > run.done`.
 - Always redirect output to a file and read the file. Filtering a live command (`| tail`, `| grep`) discards everything you did not anticipate, and a filter that misses costs a full re-run — tens of minutes.
-- Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`, `on-task-done`) through the harness's background mechanism, not `nohup ... &`, so completion is notified. Never foreground `sleep` to wait.
+- Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`) through the harness's background mechanism, not `nohup ... &`, so completion is notified. Never foreground `sleep` to wait.
 - Don't edit sources while a `wado test` run is in flight. The run pins each Kiln generator at its first resolve and fails at the end naming every source that changed under it; that verdict describes neither tree, so re-run instead of reading it.
 
 ## General Rules

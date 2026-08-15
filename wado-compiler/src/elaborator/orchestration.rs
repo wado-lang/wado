@@ -259,6 +259,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_enum_compiler_item(
                             &type_table,
                             &enum_decl.attrs,
+                            enum_decl.id,
                             &enum_decl.name,
                             module_source,
                             enum_decl.span,
@@ -288,6 +289,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 },
                             );
                         }
+                        super::item::register_resource_compiler_item(
+                            &type_table,
+                            &resource_decl.attrs,
+                            resource_decl.id,
+                            &resource_decl.name,
+                            module_source,
+                            resource_decl.span,
+                            logger,
+                        );
                     }
                     Item::Trait(trait_decl) => {
                         super::item::register_trait_compiler_item(
@@ -306,6 +316,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_tuple_compiler_item(
                             &type_table,
                             &decl.attrs,
+                            decl.id,
                             module_source,
                             decl.span,
                             logger,
@@ -315,6 +326,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_builtin_type_compiler_item(
                             &type_table,
                             &decl.attrs,
+                            decl.id,
+                            &decl.name,
+                            module_source,
+                            decl.span,
+                            logger,
+                        );
+                    }
+                    Item::Newtype(decl) => {
+                        super::item::register_newtype_compiler_item(
+                            &type_table,
+                            &decl.attrs,
+                            decl.id,
                             &decl.name,
                             module_source,
                             decl.span,
@@ -417,7 +440,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         all_generic_newtypes.insert(
                             def,
                             GenericNewtypeInfo {
-                                module_source: module_source.clone(),
+                                defined_at: newtype_decl.id,
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
                             },
@@ -597,7 +620,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .map(|p| p.name.clone())
                                 .collect();
                             let info = GenericNewtypeInfo {
-                                module_source: module_source.clone(),
+                                defined_at: newtype_decl.id,
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
                             };
@@ -2106,12 +2129,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Local item declarations (`Stmt::Item`) are not in `known_type_names`
         // (a module-wide set built before any function body is walked), so a
         // reference to one would otherwise fail this fast pre-check before
-        // the real elaborator (which understands sequential, function-scoped
-        // visibility) ever runs. Widen the set with every local item name
-        // reachable from this block, recursively — a coarse over-approximation
-        // (it does not enforce forward-declaration order; the real elaborator
-        // still does) is fine here: this pass only exists to fail fast on
-        // *genuinely* unknown names.
+        // the real elaborator (which understands block-scoped visibility) ever
+        // runs. Widen the set with every local item name reachable from this
+        // block, recursively — a coarse over-approximation (it does not
+        // enforce block scoping; the real elaborator still does) is fine here:
+        // this pass only exists to fail fast on *genuinely* unknown names.
         let local_item_names = Self::collect_local_item_names(block);
         let widened;
         let known_type_names = if local_item_names.is_empty() {
@@ -3423,7 +3445,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .as_ref()
                     .and_then(crate::resolve::head_site)
                     .and_then(|site| resolutions.declared(site))
-                    .map(|def| resolutions.decl_key(def))
                 else {
                     continue;
                 };
@@ -3484,7 +3505,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,
-                            trait_key.clone(),
+                            trait_key,
                             binding.name.clone(),
                             type_param_id,
                         );
