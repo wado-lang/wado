@@ -3497,10 +3497,8 @@ fn import_resource_source(
     // interface `types`). The instance-type name doubles as the idempotency key:
     // it is a real builder type, so reusing it never desyncs the ctx/builder
     // type-index counters the way a phantom marker type would.
-    let instance_name = crate::component_model::cm_instance_key(
-        &cm_import.package,
-        &cm_import.interface,
-    );
+    let instance_name =
+        crate::component_model::cm_instance_key(&cm_import.package, &cm_import.interface);
     let instance_type_name = format!("{instance_name}-instance-type");
     if ctx.has_type(&instance_type_name) {
         return;
@@ -4179,9 +4177,7 @@ fn generate_cm_world_func_imports(
         {
             continue;
         }
-        let val_type = |ty: &Type| {
-            wado_type_to_cm_val_type(ty, None, None, &empty, &empty, &empty)
-        };
+        let val_type = |ty: &Type| wado_type_to_cm_val_type(ty, None, None, &empty, &empty, &empty);
         let local_name = func.local_alias_name();
         let func_type_name = format!("world-func-type-{}", func.wasi_func_name);
 

@@ -2236,7 +2236,8 @@ impl<'a> WirEmitter<'a> {
                 len,
             } => {
                 let arr_wasm_idx = self.resolve_type_index(type_id.index());
-                let slot = |role: &str| self.resolve_local(&array_clone_slot(role, type_id.index()));
+                let slot =
+                    |role: &str| self.resolve_local(&array_clone_slot(role, type_id.index()));
                 let src_local = slot("src");
                 let dst_local = slot("dst");
                 let len_local = slot("len");
@@ -2467,7 +2468,10 @@ impl<'a> WirEmitter<'a> {
             // Generate names from WIR functions using remapped Wasm indices
             let mut name_map = NameMap::new();
             for (i, func) in self.wir.functions.iter().enumerate() {
-                name_map.append(self.resolve_func_index(self.defined_func_id(i)), &func.name.fq);
+                name_map.append(
+                    self.resolve_func_index(self.defined_func_id(i)),
+                    &func.name.fq,
+                );
             }
             names.functions(&name_map);
         }
