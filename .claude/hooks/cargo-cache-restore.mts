@@ -5,25 +5,16 @@
 //   registry    -> $CARGO_HOME (index, .crate files, unpacked sources)
 //   target-deps -> $CARGO_TARGET_DIR (the dependency half of target/)
 //
-// The target-deps object makes the session warm by unpacking, not by
-// rebuilding: it carries the compiled registry dependencies for the
-// configurations the dev loop uses, so cargo only ever compiles the workspace
-// crates. Workspace artifacts are deliberately absent -- see
-// scripts/pack-target-deps.sh for why shipping them is unsound.
+// Unpacking these is what makes a session warm: cargo then compiles only the
+// workspace crates. Workspace artifacts are deliberately absent — see
+// scripts/pack-target-deps.sh.
 //
-// PATH PARITY IS A CORRECTNESS REQUIREMENT, NOT A HIT-RATE ONE. Dependency
-// build scripts record absolute paths (`cargo:rustc-link-search=<abs>` and
-// friends, e.g. aws-lc-sys, ring, libmimalloc-sys), and cargo REPLAYS those
-// recordings instead of re-running the script. Restored under a different
-// absolute path, they point at directories that do not exist -- and cargo still
-// considers the units fresh, so nothing self-heals. Hence the manifest check
-// below, which fails closed: a mismatch skips the target restore entirely and
-// leaves the session to a cold (but correct) build.
+// The manifest check below enforces the path parity cargo-cache.yml explains,
+// and fails closed: artifacts built under other paths get replayed rather than
+// rebuilt, so a mismatch skips the target restore and takes a cold build.
 //
-// Neither object contains credentials.
-//
-// Best-effort: any failure (no key, no object yet, network) is logged and the
-// session continues.
+// Neither object contains credentials. Any failure (no key, no object yet,
+// network) is logged and the session continues.
 //
 // Auth uses a read-only service-account key provided via the environment:
 //   WADO_CACHE_SA_KEY_B64   base64 of the JSON key (for stores that reject raw JSON), or
@@ -49,9 +40,8 @@ const TARGET_OBJECT = process.env.WADO_CACHE_TARGET_OBJECT ?? "cargo/target-deps
 const TARGET_MANIFEST =
   process.env.WADO_CACHE_TARGET_MANIFEST ?? "cargo/target-deps/linux-x86_64.manifest.json";
 const CARGO_HOME = process.env.CARGO_HOME ?? join(homedir(), ".cargo");
-// This file sits at <repo>/.claude/hooks/, so its own location pins the repo
-// root without depending on the cwd a hook happens to be invoked with
-// (CLAUDE_PROJECT_DIR is not always set).
+// CLAUDE_PROJECT_DIR is not always set, and a detached re-exec inherits whatever
+// cwd it was launched with, so pin the root to this file's own location.
 const REPO_ROOT =
   process.env.CLAUDE_PROJECT_DIR ?? resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TARGET_DIR = process.env.CARGO_TARGET_DIR ?? join(REPO_ROOT, "target");
@@ -153,8 +143,6 @@ function rustcVersion(): string {
   return out.split("\n").find((l) => l.startsWith("release: "))?.slice("release: ".length) ?? "";
 }
 
-// Fails closed: every mismatch means the artifacts encode paths this container
-// does not have, which cargo would replay without ever rebuilding.
 function manifestMismatch(m: CacheManifest): string | null {
   if (m.schema !== 1) return `unknown manifest schema ${m.schema}`;
   if (m.repo_root !== REPO_ROOT) return `repo root ${m.repo_root} != ${REPO_ROOT}`;
@@ -261,8 +249,8 @@ async function main(): Promise<void> {
   mkdirSync(dirname(RESTORE_MARKER), { recursive: true });
   writeFileSync(RESTORE_MARKER, String(process.pid));
   try {
-    // The registry must land before the target tree is usable for anything
-    // cargo has to resolve, but neither restore depends on the other's success.
+    // Independent and best-effort: a missing target-deps object must not stop
+    // the registry restore, and vice versa.
     const results = await Promise.allSettled([restoreRegistry(token), restoreTargetDeps(token)]);
     for (const r of results) {
       if (r.status === "rejected") log(`skipped: ${(r.reason as Error).message}`);

@@ -4,34 +4,23 @@
 #   cargo/target-deps/linux-x86_64.tar.gz  the dependency half of target/ (GCS)
 #   v0-rust-ci-Linux-x64-*                 ci.yml's target/ and registry (Actions cache)
 #
-# The registry cache saves the download and the unpack; the target-deps cache
-# saves compiling the dependency graph. A session becomes warm by UNPACKING,
-# not by rebuilding -- there is no warm-up task any more. See
+# A session becomes warm by unpacking these, never by rebuilding. See
 # .claude/hooks/cargo-cache-restore.mts (consumer) and
 # scripts/pack-target-deps.sh (what goes in, and why workspace artifacts do not).
 #
-# PATH PARITY IS A CORRECTNESS REQUIREMENT. Dependency build scripts record
-# absolute paths (`cargo:rustc-link-search=<abs>`: aws-lc-sys, ring,
-# libmimalloc-sys, ittapi-sys, wasmtime) and cargo replays those recordings
-# rather than re-running the script, while still treating the units as fresh.
-# Restored under a different absolute path they point at nothing, and nothing
-# self-heals. So the runner MUST build under the exact paths the container uses
-# -- repo at /home/user/wado, CARGO_HOME at /root/.cargo, target at
-# /home/user/wado/target -- and the restore hook re-checks this against the
-# published manifest, failing closed on any mismatch.
+# PATH PARITY IS A CORRECTNESS REQUIREMENT, not a hit-rate one. Dependency build
+# scripts record absolute paths (`cargo:rustc-link-search=<abs>`: aws-lc-sys,
+# ring, libmimalloc-sys, wasmtime) and cargo replays those recordings rather
+# than re-running the script, while still treating the units as fresh — restored
+# under a different path they point at nothing, and nothing self-heals. So the
+# runner must build under the exact paths the container uses, and the restore
+# hook re-checks them against the published manifest, failing closed.
 #
-# The CONFIGURATION SET below is load-bearing. Feature resolution differs
+# The configuration set below is load-bearing. Feature resolution differs
 # between builds that include dev-dependencies and those that do not (16
-# registry crates change features, which propagates to ~72 units), and again
-# between `--workspace` and a single `-p` selection. Each configuration is a
-# separate set of artifacts that coexist in target/, so the cache only covers a
-# command the runner actually ran. Keep this list in step with the commands
-# AGENTS.md tells contributors to use.
-#
-# CARGO_INCREMENTAL is set to 0 here purely to keep the runner's own disk and
-# time down. It does not affect what is published: cargo never passes
-# `-C incremental` to a registry dependency, so dependency artifacts and their
-# fingerprints are identical either way.
+# registry crates change features, propagating to ~72 units), and again between
+# `--workspace` and a single `-p` selection. Each configuration is a separate
+# artifact set, so the cache covers only the commands the runner actually ran.
 #
 # Required repo variables (none are secret — all are plain identifiers):
 #   vars.GCP_WIF_PROVIDER    workload identity provider resource name
@@ -71,6 +60,8 @@ jobs:
       CONTAINER_REPO: /home/user/wado
       CARGO_HOME: /root/.cargo
       CARGO_TARGET_DIR: /home/user/wado/target
+      # Runner disk and time only. Cargo never passes `-C incremental` to a
+      # registry dependency, so this cannot change what gets published.
       CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v7

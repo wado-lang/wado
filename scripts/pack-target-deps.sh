@@ -5,21 +5,21 @@
 # Only registry dependencies are packed. Workspace-owned artifacts are excluded
 # on purpose: cargo decides a path dependency's freshness by mtime, and a fresh
 # clone always looks newer than a CI artifact. Shipping them would either force
-# the rebuild anyway or -- once the mtimes were forced -- silently reuse
-# artifacts compiled from different source. Registry dependencies carry no such
-# hazard; their fingerprints key on the immutable package version, which is why
-# they survive a fresh clone untouched.
+# the rebuild anyway or — once the mtimes were forced — silently reuse artifacts
+# compiled from different source. Registry dependencies carry no such hazard;
+# their fingerprints key on the immutable package version, which is why they
+# survive a fresh clone untouched.
 #
-# `incremental/` is excluded too: it is per-branch state, and the session
-# rebuilds it as it edits.
+# `incremental/` is excluded too: it is per-branch state the session rebuilds as
+# it edits.
 set -e -o pipefail
 
 OUT="${1:?usage: pack-target-deps.sh <out.tar.gz> <out.manifest.json>}"
 MANIFEST_OUT="${2:?usage: pack-target-deps.sh <out.tar.gz> <out.manifest.json>}"
 TARGET_DIR="${CARGO_TARGET_DIR:-${PWD}/target}"
+WORK="$(mktemp -d)"
+trap 'rm -rf "${WORK}"' EXIT
 
-# The absolute paths below are baked into the artifacts and are checked on
-# restore -- see the manifest note in .claude/hooks/cargo-cache-restore.mts.
 cargo metadata --no-deps --format-version 1 \
   | python3 -c '
 import json, sys
@@ -27,9 +27,9 @@ names = set()
 for p in json.load(sys.stdin)["packages"]:
     for t in p["targets"]:
         names.add(t["name"].replace("-", "_"))
-print("\n".join(sorted(names)))' > /tmp/wado-workspace-targets.txt
+print("\n".join(sorted(names)))' > "${WORK}/targets.txt"
 
-python3 - "$TARGET_DIR" /tmp/wado-workspace-targets.txt > /tmp/wado-target-deps.list <<'PY'
+python3 - "$TARGET_DIR" "${WORK}/targets.txt" > "${WORK}/files.list" <<'PY'
 import os, re, sys
 
 target_dir, names_file = sys.argv[1], sys.argv[2]
@@ -102,8 +102,8 @@ json.dump(
 PY
 
 cp "$MANIFEST_OUT" "$TARGET_DIR/wado-cache-manifest.json"
-echo "wado-cache-manifest.json" >> /tmp/wado-target-deps.list
+echo "wado-cache-manifest.json" >> "${WORK}/files.list"
 
-tar -C "$TARGET_DIR" -czf "$OUT" -T /tmp/wado-target-deps.list
-echo "packed $(wc -l < /tmp/wado-target-deps.list) files -> $(du -h "$OUT" | cut -f1)"
+tar -C "$TARGET_DIR" -czf "$OUT" -T "${WORK}/files.list"
+echo "packed $(wc -l < "${WORK}/files.list") files -> $(du -h "$OUT" | cut -f1)"
 cat "$MANIFEST_OUT"
