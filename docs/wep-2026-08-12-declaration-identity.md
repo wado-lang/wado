@@ -452,12 +452,20 @@ caller of the same first-wins index. A removed mechanism takes one fix.
       only a spelling cannot obtain an identity. `DefTable` itself already has
       no such lookup; these three are what remain.
       - `declared_in` backs `TypeLookup`'s `*_in(name, module)` family. Of its
-        45 callers, 15 are left and all but one are `resolve_struct_literal`'s
-        — the one place still resolving a *written* type name, which the walk
-        should answer for through `StructLiteralExpr::name_id` the way it now
-        answers for a path's owner segment. The rest carried an identity
-        already and were rendering it into a pair to look the same identity
-        back up.
+        45 callers, 15 are left: `resolve_struct_literal`'s and
+        `resolve_qualified_case`'s, the two places still resolving a *written*
+        name. The rest carried an identity already and were rendering it into a
+        pair to look the same identity back up.
+
+        Both should read the walk's answer for the name's own site —
+        `StructLiteralExpr::name_id`, the path's owner segment — and the walk
+        must reach two things first, each of which an attempt at this step ran
+        into: a local item stays visible for the rest of its *function*, not
+        just its block, which `Resolver`'s block-scoped `locals` pops too early
+        (`tests/fixtures/local_item_in_match_arm.wado`); and a namespace-member
+        alias must resolve in value position, which `ns::Color::Red` needs
+        (`tests/fixtures/namespace_import_enum.wado`). Neither is a property of
+        this step — both are coverage the walk owes under §3.
       - `declaration_named` / `value_named` back `canonical_decl_key`,
         `decl_key_or_local`, `symbol_named` and the method-lookup receiver
         keys — 21 callers, each of which needs the site it lost.
