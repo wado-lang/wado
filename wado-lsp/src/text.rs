@@ -158,9 +158,8 @@ pub fn span_to_range(span: &Span, source: Option<&str>, encoding: PositionEncodi
     }
 }
 
-/// [`span_to_range`] against an already-built line table. Callers converting
-/// more than one span per document — every position-bearing query does —
-/// share one index instead of rescanning the source per span.
+/// [`span_to_range`] against an already-built line table, for callers
+/// converting more than one span per document.
 #[must_use]
 pub(crate) fn span_to_range_indexed(
     span: &Span,
@@ -225,11 +224,10 @@ fn character_to_codepoint_offset(line: &str, character: u32, encoding: PositionE
 
 /// A document's lines, each paired with its codepoint count.
 ///
-/// Every codepoint→code-unit conversion needs the text of one line. Finding
-/// it with `source.split_inclusive('\n').nth(line)` re-scans the document
-/// from the top, so a caller converting once per diagnostic or once per inlay
-/// hint pays `O(hints × document length)`. Building this once is a single
-/// pass, and each conversion is then a slice index.
+/// Every codepoint→code-unit conversion needs one line's text. Looking it up
+/// with `split_inclusive('\n').nth(line)` rescans from the top, so a caller
+/// converting once per diagnostic or hint pays `O(items × document length)`.
+/// Built once, each conversion is a slice index.
 pub(crate) struct LineIndex<'a> {
     lines: Vec<(&'a str, u32)>,
 }

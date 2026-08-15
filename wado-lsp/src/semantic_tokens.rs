@@ -10,9 +10,7 @@ use crate::text::{LineIndex, PositionEncoding};
 
 /// LSP semantic token type indices — positions into [`TOKEN_TYPES`], the
 /// legend the server advertises at `initialize`. The correspondence is
-/// asserted by `legend_matches_token_type_indices`, not merely documented:
-/// a constant that drifts from its legend entry mis-colours every token of
-/// that kind, silently and in the client only.
+/// asserted by `legend_matches_token_type_indices`.
 ///
 /// Indices `0..=13` are append-only history: keep them stable so the legend
 /// stays comparable across versions. New kinds (`14..`) map Wado-specific
@@ -169,9 +167,7 @@ pub fn delta_encode(
     source: &str,
     encoding: PositionEncoding,
 ) -> Vec<u32> {
-    // The hot loop converts twice per token (start and end), so the line
-    // table is built once up front — see [`LineIndex`]. UTF-32 short-circuits
-    // to a single `min`.
+    // Two conversions per token, so the line table is built up front.
     let lines = LineIndex::new(source);
 
     let mut data = Vec::with_capacity(tokens.len() * 5);
@@ -814,12 +810,11 @@ mod tests {
         futures::executor::block_on(wado_compiler::semantics(source, &host, Some("/test.wado")))
     }
 
-    /// Every `token_type` constant must index its own name in the legend.
+    /// Every `token_type` constant indexes its own name in the legend.
     ///
-    /// The two lists were kept in sync by a comment. A constant pointing one
-    /// slot off does not fail to compile, does not fail any behavioural test
-    /// (the tokens still carry *a* type), and shows up only as wrongly
-    /// coloured code in the editor.
+    /// A constant one slot off still compiles and still carries *a* type
+    /// through every behavioural test; it shows up only as wrongly coloured
+    /// code in the editor.
     #[test]
     fn legend_matches_token_type_indices() {
         let expected = [
@@ -856,8 +851,7 @@ mod tests {
         }
     }
 
-    /// Each modifier constant is a single bit whose position indexes its own
-    /// legend name.
+    /// Each modifier constant is one bit, positioned at its legend name.
     #[test]
     fn legend_matches_token_modifier_bits() {
         let expected = [
@@ -1012,9 +1006,7 @@ mod tests {
         // but no COMMENT token may be produced.
         let src = "fn f() {\n    /* multi\n    line */\n    let _ = 1;\n}\n";
         let tokens = compute(src, None);
-        // No token may extend past the end of the line it starts on — that is
-        // what "must not span lines" means once the token carries only a
-        // start and a length.
+        // "Must not span lines", expressed against a start and a length.
         let line_lengths: Vec<u32> = src
             .split_inclusive('\n')
             .map(|l| crate::text::line_without_terminator(l).chars().count() as u32)

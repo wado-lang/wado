@@ -110,22 +110,15 @@ fn span_to_range(
 /// Returns `None` for diagnostics that should not be shown to the user
 /// (span tracking, log messages, `Debug`-severity output).
 ///
-/// A diagnostic with no span is anchored at the start of the document
-/// rather than dropped. The loader reports its hard failures — a missing
-/// or unreadable import (`ModuleNotFound`) above all — without a span, and
-/// those are exactly the failures that also blank out every position query
-/// for the document. Dropping them left the editor showing a file with no
-/// errors, no hover, and no navigation, with nothing on screen to explain
-/// why.
+/// A diagnostic with no span is anchored at the document start rather than
+/// dropped: the loader reports its hard failures that way, and those are the
+/// same failures that silence every position query, so dropping them leaves
+/// nothing on screen to explain the silence.
 ///
-/// `lines` and `encoding` are used to re-express the compiler's
-/// codepoint columns in the negotiated position encoding. Pass
-/// `None` for diagnostics whose `span.file` is not the request
-/// document — the result will still be valid for ASCII source but may
-/// drift the column for non-ASCII codepoints (the spec's UTF-16
-/// default). For the request document itself the caller should always
-/// provide the index. It is built once per `textDocument/publishDiagnostics`
-/// and shared across every diagnostic in it — see [`LineIndex`].
+/// `lines` re-expresses the compiler's codepoint columns in `encoding`. Pass
+/// `None` for a span outside the request document — the columns then hold
+/// for ASCII and UTF-32 but may drift under UTF-16. One index is built per
+/// batch and shared; see [`LineIndex`].
 pub(crate) fn from_compiler_diagnostic(
     diag: &CompilerDiagnostic,
     _uri: &str,
@@ -277,9 +270,8 @@ mod tests {
 
     #[test]
     fn span_less_diagnostic_anchors_at_document_start() {
-        // The loader reports `ModuleNotFound` without a span, and that same
-        // failure empties the `Semantics` so every position query goes quiet.
-        // Dropping it left the user with a silently dead file.
+        // `ModuleNotFound` carries no span, and the same failure empties the
+        // `Semantics` — dropping it leaves a silently dead file.
         let compiler_diag = CompilerDiagnostic {
             severity: CompilerSeverity::Error,
             code: Code::ModuleNotFound,

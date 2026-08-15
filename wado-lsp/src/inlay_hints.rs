@@ -107,7 +107,6 @@ impl HintCollector<'_> {
     }
 
     fn position(&self, line: u32, codepoint_col: u32) -> Position {
-        // The line table lives on the context, built once per query.
         self.ctx.position_at(line, codepoint_col)
     }
 

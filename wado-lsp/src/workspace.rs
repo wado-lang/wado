@@ -15,18 +15,12 @@ use wado_manifest::{Manifest, ManifestError, read_workspace_members};
 pub const MANIFEST_FILENAME: &str = "wado.toml";
 
 /// The nearest ancestor of `start` (inclusive) that contains a `wado.toml`.
+/// `start` may name a file or a directory.
 ///
-/// `start` may name a file or a directory. It is absolutized first — a
-/// relative path's parent chain runs out after one `pop()`, so walking it
-/// as given would stop short of the real ancestry — and **the result is
-/// therefore always absolute**. Callers that re-anchor other paths against
-/// it must express those in the same frame; every current caller feeds it a
-/// path derived from an absolute `file:` URI, so they already do.
-///
-/// Both callers that need a manifest root go through here: the
-/// dependency-index builder (`host.rs`) and the kiln consume-only resolver
-/// (`kiln.rs`) previously each spelled this loop out, agreeing on the idea
-/// and disagreeing on exactly this detail.
+/// Absolutized first — a relative path's parent chain runs out after one
+/// `pop()` — so **the result is always absolute**. Callers re-anchoring other
+/// paths against it must express those in the same frame; every current
+/// caller derives its input from an absolute `file:` URI.
 #[must_use]
 pub fn nearest_manifest_dir(start: &Path) -> Option<PathBuf> {
     let mut dir = absolutize(start);
@@ -40,8 +34,8 @@ pub fn nearest_manifest_dir(start: &Path) -> Option<PathBuf> {
     }
 }
 
-/// `p` resolved against the current directory when relative. Falls back to
-/// `p` itself when the process has no readable current directory.
+/// `p` against the current directory when relative, or `p` itself when the
+/// process has no readable current directory.
 pub(crate) fn absolutize(p: &Path) -> PathBuf {
     if p.is_absolute() {
         p.to_path_buf()

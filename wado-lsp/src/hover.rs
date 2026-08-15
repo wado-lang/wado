@@ -137,11 +137,9 @@ fn fenced_hover(signature: String) -> HoverResult {
 
 /// Render a signature for the given item-level symbol.
 ///
-/// Matching is by [`AstId`] identity, never by name: a module may hold
-/// several declarations sharing one name (a struct field and a free function,
-/// an enum case and a method), and a name scan returns whichever the parser
-/// happened to place first — `struct Wrap { helper: i32 }` used to shadow
-/// `fn helper()` on hover. `Symbol::defined_at` names exactly one node.
+/// Matching is by [`AstId`], never by name: a module may declare one name
+/// twice — a struct field beside a free function, an enum case beside a
+/// method — and only `Symbol::defined_at` picks out which one.
 fn render_item_signature(sem: &Semantics, symbol: &Symbol, public_only: bool) -> Option<String> {
     let module = sem.modules.get(symbol.module_source())?;
     let target = symbol.defined_at;
@@ -170,15 +168,11 @@ fn render_local_binding(sem: &Semantics, def_id: AstId, name: &str) -> Option<St
 
 /// Locates the AST node that binds `target` and renders its declaration.
 ///
-/// Traversal is [`AstVisitor`]'s, not hand-rolled. The previous hand-rolled
-/// walker only descended through the statement and expression shapes someone
-/// had thought to list, so a binding one level off that path — a `let` inside
-/// a closure passed as a call argument, say — resolved to a symbol whose
-/// declaration hover could not find, and hover silently returned nothing.
-/// `walk_*` covers every shape by construction, including impl constants,
-/// resource methods, and items nested in statements.
+/// Traversal is [`AstVisitor`]'s rather than hand-rolled, so every shape that
+/// can hold a binding is reached by construction — a `let` inside a closure
+/// passed as a call argument as readily as one at the top of a function body.
 ///
-/// Only the shapes that carry extra syntax are intercepted: `Stmt::Let` (for
+/// Only the shapes carrying extra syntax are intercepted: `Stmt::Let` (for
 /// `mut` and the type annotation), function and closure parameters. Every
 /// other binding site — match arms, `if let` / `while let`, `for … of` —
 /// reaches [`Self::visit_pattern`] and renders as a bare `let name`.
@@ -250,9 +244,8 @@ impl AstVisitor for LocalRenderer<'_> {
         }
         self.result = self.render_param(&method.params);
         if self.result.is_none() {
-            // An interface method has no body today, so this walk finds
-            // nothing — but not walking is how the previous implementation
-            // grew its blind spots.
+            // No body to search today; walk anyway so a future one is not
+            // silently missed.
             ast::walk_interface_method(self, method);
         }
     }
@@ -314,9 +307,7 @@ fn pattern_binds(pattern: &ast::Pattern, target: AstId) -> bool {
 }
 
 /// Render `item` when it — or one of its members — is the declaration
-/// identified by `target`. Each arm compares the declaring node's own
-/// [`AstId`], so a member arm can never be reached by an item that merely
-/// shares a name with `target`.
+/// identified by `target`.
 fn item_info(item: &Item, target: AstId, public_only: bool) -> Option<String> {
     match item {
         Item::Function(f) => (f.id == target).then(|| unparse::unparse_function_signature(f)),
@@ -629,9 +620,7 @@ mod tests {
 
     #[test]
     fn item_hover_ignores_a_member_sharing_the_name() {
-        // `render_item_signature` used to scan the module by name, so the
-        // struct field `helper` — declared first — answered a hover on the
-        // free function `helper`. Resolution is by `AstId` now.
+        // A name scan would answer with the struct field, declared first.
         futures::executor::block_on(async {
             let source = concat!(
                 "struct Wrap { helper: i32 }\n",
@@ -645,9 +634,7 @@ mod tests {
 
     #[test]
     fn hover_on_local_inside_a_closure_call_argument() {
-        // The hand-rolled walker bottomed out at `Expr::Call`, so a binding
-        // inside a closure passed as an argument was unreachable: the cursor
-        // resolved to the symbol, and hover returned nothing.
+        // A binding reachable only through a call argument.
         futures::executor::block_on(async {
             let source = concat!(
                 "fn apply(f: fn(i32) -> i32) -> i32 { return f(1); }\n",
@@ -665,8 +652,8 @@ mod tests {
 
     #[test]
     fn hover_on_local_inside_a_nested_call_argument_block() {
-        // Same gap, one shape further out: a labeled block nested in a
-        // binary operand inside a call argument.
+        // One shape further out: a labeled block in a binary operand in a
+        // call argument.
         futures::executor::block_on(async {
             let source = concat!(
                 "fn take(v: i32) -> i32 { return v; }\n",
@@ -683,8 +670,7 @@ mod tests {
 
     #[test]
     fn hover_on_local_inside_a_test_block_closure() {
-        // `Item::Test` bodies were covered before, but only down the same
-        // hand-listed path — a binding inside a closure there was not.
+        // A `test` block body, through a closure.
         futures::executor::block_on(async {
             let source = concat!(
                 "fn apply(f: fn(i32) -> i32) -> i32 { return f(1); }\n",

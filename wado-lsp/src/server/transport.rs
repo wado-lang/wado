@@ -24,26 +24,20 @@ const JSONRPC_VERSION: &str = "2.0";
 
 /// Largest message body accepted from the client, in bytes.
 ///
-/// `Content-Length` is attacker-controlled in the sense that matters here: a
-/// buggy client (or a desynchronised stream after a malformed frame) can name
-/// any length, and the body buffer was allocated eagerly at that size. 64 MiB
-/// is far above any real LSP message — a `didOpen` carries one source file —
-/// and far below a length that would take the editor's language server down
-/// with an allocation failure.
+/// The body buffer is allocated eagerly at the declared length, and a buggy
+/// client or a desynchronised stream can name any. 64 MiB sits far above a
+/// real message and far below an allocation failure.
 const MAX_CONTENT_LENGTH: usize = 64 * 1024 * 1024;
 
 /// Failure mode of [`read_message`].
 ///
-/// `Parse` errors are recoverable: the frame was consumed whole and only its
-/// contents were bad, so per LSP 3.18 (JSON-RPC 2.0 §5.1) the server answers
-/// `-32700 ParseError` and keeps processing.
+/// `Parse` is recoverable: the frame was consumed whole and only its contents
+/// were bad, so per LSP 3.18 (JSON-RPC 2.0 §5.1) the server answers
+/// `-32700 ParseError` and keeps going.
 ///
-/// `Io` errors are unrecoverable — the transport is broken, or the frame
-/// boundary is lost and no amount of further reading finds it again. A
+/// `Io` is not: the transport is broken, or the frame boundary is lost. A
 /// `Content-Length` we cannot parse or refuse to honour leaves a body we
-/// never consumed, so every subsequent byte would be read at the wrong
-/// offset; answering and looping would re-read that body as headers and spin
-/// on the same error.
+/// never consumed, so answering and looping would read that body as headers.
 #[derive(Debug)]
 pub enum ReadError {
     Parse(String),
@@ -75,11 +69,8 @@ pub fn read_message<R: BufRead>(reader: &mut R) -> Result<Option<JsonRpcRequest>
             && name.eq_ignore_ascii_case("Content-Length")
         {
             let value = value.trim();
-            // Fatal, like the over-limit case below and for the same reason:
-            // an unparseable length leaves us unable to say where this
-            // message's body ends, so every later read starts at an offset we
-            // cannot recover. Answering `-32700` and looping would re-read
-            // the body as headers and spin on the error forever.
+            // Fatal: without a length we cannot say where this body ends,
+            // so every later read starts at an unrecoverable offset.
             content_length = Some(
                 value
                     .parse()
@@ -91,8 +82,7 @@ pub fn read_message<R: BufRead>(reader: &mut R) -> Result<Option<JsonRpcRequest>
     let length = content_length
         .ok_or_else(|| ReadError::Parse("missing Content-Length header".to_string()))?;
     if length > MAX_CONTENT_LENGTH {
-        // Fatal, not recoverable: the declared body is never consumed, so the
-        // stream stays framed at an offset we cannot find our way back from.
+        // Fatal for the same reason: the declared body is never consumed.
         return Err(ReadError::Io(format!(
             "Content-Length {length} exceeds the {MAX_CONTENT_LENGTH}-byte limit",
         )));
@@ -270,10 +260,6 @@ mod tests {
 
     #[test]
     fn content_length_header_is_case_insensitive_and_space_optional() {
-        // LSP defers to the HTTP header grammar: the name is case-insensitive
-        // and the space after the colon is optional. Matching the literal
-        // `"Content-Length: "` silently dropped such a frame into
-        // "missing Content-Length header".
         let body = r#"{"jsonrpc":"2.0","id":1,"method":"shutdown"}"#;
         let raw = format!("content-length:{}\r\n\r\n{body}", body.len());
         let msg = read(raw.as_bytes()).expect("read").expect("message");
@@ -282,9 +268,7 @@ mod tests {
 
     #[test]
     fn oversized_content_length_is_refused_without_allocating() {
-        // The body buffer was allocated eagerly at the declared size, so a
-        // bogus length took the server down with an allocation failure
-        // instead of an error.
+        // The buffer is allocated eagerly at the declared size.
         let raw = format!("Content-Length: {}\r\n\r\n", MAX_CONTENT_LENGTH + 1);
         let err = read(raw.as_bytes()).expect_err("oversized length must be refused");
         assert!(
@@ -295,9 +279,7 @@ mod tests {
 
     #[test]
     fn unparseable_content_length_is_fatal_not_recoverable() {
-        // Classifying it `Parse` made `run_stdio` answer `-32700` and loop —
-        // but the body was never consumed, so the next "header" it read came
-        // from mid-body and the server spun on the same error forever.
+        // Recovering here would read the unconsumed body as headers.
         let raw = "Content-Length: not-a-number\r\n\r\n{}";
         let err = read(raw.as_bytes()).expect_err("an unparseable length must be refused");
         assert!(
@@ -308,8 +290,7 @@ mod tests {
 
     #[test]
     fn malformed_json_body_stays_recoverable() {
-        // The counter-case: the body *was* consumed, so the stream is still
-        // framed and JSON-RPC 2.0 §5.1's `-32700`-and-continue applies.
+        // The counter-case: the body was consumed, so the stream stays framed.
         let err = read(&frame("not json")).expect_err("malformed JSON must be reported");
         assert!(
             matches!(&err, ReadError::Parse(m) if m.contains("invalid JSON")),

@@ -20,12 +20,8 @@ use crate::text::PositionEncoding;
 
 const STDLIB_SCHEMES: &[&str] = &["core", "wasi"];
 
-/// The document a request targets.
-///
-/// Every document-scoped request names it the same way, and the dispatcher
-/// needs it *before* the handler runs so it can root the request's
-/// [`FilesystemCompilerHost`] at the document's directory. Naming it once
-/// here is what lets [`query`] be shared by all six arms.
+/// The document a request targets. [`query`] needs it before the handler
+/// runs, to root the request's [`FilesystemCompilerHost`].
 trait TargetDocument {
     fn uri(&self) -> &str;
 }
@@ -85,11 +81,8 @@ where
 ///   `shutdown`. After that, every request except `exit` must fail with
 ///   `InvalidRequest` and every notification except `exit` must be dropped.
 /// - `exit_code` is set by the `exit` notification. `dispatch` never calls
-///   `std::process::exit` itself: it is a library function that
-///   `wado lsp` invokes inside a longer-lived process, and terminating from
-///   inside it skips every destructor between here and `main` — besides
-///   making the exit path untestable. The owning loop reads this and
-///   returns.
+///   `std::process::exit` itself — `wado lsp` invokes it inside a
+///   longer-lived process — so the owning loop reads this and returns.
 #[derive(Default)]
 pub struct Lifecycle {
     pub initialized: bool,

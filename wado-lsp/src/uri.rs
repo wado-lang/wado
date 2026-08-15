@@ -57,11 +57,9 @@ impl Uri {
 
     /// A `file:` URI naming `path`, percent-encoded.
     ///
-    /// The counterpart to [`Self::to_filename`], for callers that start from a
-    /// real path rather than from the wire — `wado query`, which opens a file
-    /// named on the command line. Building the URI by concatenation instead
-    /// leaves any `%` in the path unescaped, and `to_filename` then decodes it
-    /// into a different path than the one the user named.
+    /// The counterpart to [`Self::to_filename`], for callers holding a real
+    /// path rather than a wire URI — `wado query`, opening a file named on
+    /// the command line.
     #[must_use]
     pub fn from_file_path(path: &Path) -> Self {
         Self(format!(
@@ -89,23 +87,16 @@ impl Uri {
         }
     }
 
-    /// Filename string suitable for compiler-side diagnostics
-    /// (`Logger::set_file`, `DiagnosticSpan::file`).
+    /// Filename suitable for compiler-side diagnostics (`Logger::set_file`,
+    /// `DiagnosticSpan::file`).
     ///
-    /// For `file://` URIs returns the absolute path with the scheme
-    /// stripped **and percent-escapes decoded** — LSP clients send
-    /// rfc3986-encoded URIs, so a workspace under `my project/` arrives as
-    /// `file:///…/my%20project/…`. Without decoding, every path this crate
-    /// derives from the URI (the `FilesystemCompilerHost` base path, the
-    /// kiln manifest walk-up, the `span.file` match in
-    /// `Engine::diagnostics`) names a directory that does not exist, and
-    /// the whole language service silently answers nothing.
+    /// `file://` URIs lose the scheme and are percent-decoded: clients send
+    /// rfc3986-encoded URIs, and every path this crate derives from one has
+    /// to name a real directory.
     ///
-    /// For every other scheme returns the raw URI — matching
-    /// `ModuleSource::source_path` so cross-file diagnostic
-    /// rendering stays consistent. Non-`file:` schemes are compiler-minted
-    /// (`core:`, `wasi:`, `kiln:`) and never percent-encoded, so decoding
-    /// them would only corrupt a literal `%` in a generated path.
+    /// Every other scheme returns the raw URI, matching
+    /// `ModuleSource::source_path`. Those are compiler-minted and never
+    /// encoded, so decoding them would only corrupt a literal `%`.
     #[must_use]
     pub fn to_filename(&self) -> String {
         self.0
@@ -155,12 +146,10 @@ impl Uri {
 
 /// Decode rfc3986 percent-escapes (`%XX`) in `s`.
 ///
-/// Decoding happens at the byte level and the result is re-validated as
-/// UTF-8, so a multi-byte character split across several escapes (`%E3%81%82`
-/// for `あ`) round-trips. A malformed escape — a `%` not followed by two hex
-/// digits, or a byte sequence that is not valid UTF-8 — leaves the input
-/// untouched rather than dropping characters: a path we cannot decode is
-/// better handed to the filesystem verbatim than silently mangled.
+/// Decoding is byte-level with the result re-validated as UTF-8, so a
+/// character spread over several escapes (`%E3%81%82`) round-trips. A
+/// malformed escape or non-UTF-8 result leaves the input untouched: a path we
+/// cannot decode is better handed to the filesystem verbatim than mangled.
 fn percent_decode(s: &str) -> String {
     if !s.contains('%') {
         return s.to_owned();
@@ -186,20 +175,13 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8(out).unwrap_or_else(|_| s.to_owned())
 }
 
-/// Percent-encode an absolute filesystem path for use as a `file:` URI body.
+/// Percent-encode a filesystem path for use as a `file:` URI body — the
+/// inverse of [`percent_decode`]. Prefer [`Uri::from_file_path`] when building
+/// a whole URI.
 ///
-/// Prefer [`Uri::from_file_path`] when building a whole URI.
-///
-/// The inverse of [`percent_decode`], and the reason it must exist: this crate
-/// decodes a client URI down to a real path, joins relative imports onto it,
-/// and hands the result back as a URI. Skipping the re-encode emits a string
-/// the client cannot match against the document it already has open.
-///
-/// Unreserved characters, sub-delims, and the path-structural `/ : @` are kept
-/// verbatim (rfc3986 §3.3), matching what LSP clients emit. Everything else —
-/// space, `%`, `#`, `?`, `[`, `]`, and every non-ASCII byte — is escaped.
-/// Escaping `%` is what keeps the round trip exact for a path that really
-/// contains one.
+/// Unreserved characters, sub-delims, and the path-structural `/ : @` stay
+/// verbatim (rfc3986 §3.3), matching what clients emit; everything else,
+/// including `%` itself, is escaped.
 #[must_use]
 pub fn percent_encode_path(path: &str) -> String {
     let mut out = String::with_capacity(path.len());
@@ -325,10 +307,7 @@ mod tests {
 
     #[test]
     fn file_uri_percent_escapes_are_decoded() {
-        // LSP clients percent-encode every reserved character. Leaving the
-        // escapes in place pointed `FilesystemCompilerHost` at a directory
-        // that does not exist, so every cross-file query in a workspace whose
-        // path contains a space returned nothing — with no diagnostic.
+        // Clients percent-encode every reserved character.
         let u = Uri::new("file:///home/user/my%20project/main.wado");
         assert_eq!(u.to_filename(), "/home/user/my project/main.wado");
         assert_eq!(
@@ -352,8 +331,6 @@ mod tests {
 
     #[test]
     fn malformed_escape_is_left_verbatim() {
-        // `%zz` is not a valid escape. Dropping it (or the rest of the path)
-        // would be worse than handing the raw text to the filesystem.
         let u = Uri::new("file:///home/%zz/main.wado");
         assert_eq!(u.to_filename(), "/home/%zz/main.wado");
         let truncated = Uri::new("file:///home/trailing%2");
@@ -362,9 +339,6 @@ mod tests {
 
     #[test]
     fn non_file_schemes_are_not_decoded() {
-        // `core:` / `wasi:` / `kiln:` URIs are compiler-minted and never
-        // percent-encoded; decoding would corrupt a literal `%` in a
-        // generated path.
         assert_eq!(
             Uri::new("kiln:/tmp/a%20b.wado").to_filename(),
             "kiln:/tmp/a%20b.wado"

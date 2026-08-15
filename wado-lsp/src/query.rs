@@ -41,12 +41,8 @@ pub(crate) struct QueryContext<'a> {
     pub(crate) source: &'a str,
     pub(crate) uri: &'a str,
     pub(crate) encoding: PositionEncoding,
-    /// Line table over `source`, built once per query.
-    ///
-    /// A query answers many spans — every reference, every highlight — and
-    /// each one converts two columns. Rebuilding the table per span put the
-    /// document scan back in the inner loop that [`LineIndex`] exists to take
-    /// it out of.
+    /// Line table over `source`, built once per query — a query answers many
+    /// spans and each converts two columns.
     lines: LineIndex<'a>,
 }
 
@@ -84,9 +80,8 @@ impl<'a> QueryContext<'a> {
         text::span_to_range_indexed(span, &self.lines, self.encoding)
     }
 
-    /// An LSP [`Position`] from a 0-based line and 0-based codepoint column
-    /// in the entry document, in the negotiated encoding. Inlay hints anchor
-    /// at one edge of a span rather than converting a whole range.
+    /// An LSP [`Position`] from a 0-based line and codepoint column in the
+    /// entry document. For anchors that are one edge of a span, not a range.
     pub fn position_at(&self, line: u32, codepoint_col: u32) -> Position {
         Position {
             line,

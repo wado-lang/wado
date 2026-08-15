@@ -43,12 +43,10 @@ pub(crate) fn module_uri(
     }
 }
 
-/// Wrap an absolute path as a `file:` URI, percent-encoding it on the way out.
-///
-/// The path reaching here is decoded — it came through `Uri::to_filename`, or
-/// from the compiler, which speaks in real paths. A string that is already a
-/// URI (`file://…`) is left alone, as is a relative path or a non-`file:`
-/// scheme, neither of which this function is in a position to complete.
+/// Wrap an absolute path as a `file:` URI, percent-encoding on the way out —
+/// the paths reaching here are decoded, from `Uri::to_filename` or from the
+/// compiler. A string that is already a URI is left alone, as is a relative
+/// path or a non-`file:` scheme.
 fn filename_to_uri(filename: &str) -> String {
     if filename.starts_with("file://") {
         filename.to_string()
@@ -92,21 +90,17 @@ fn resolve_local_uri(module_path: &str, request_uri: &str) -> String {
 
 /// Collapse `.` and `..` segments lexically.
 ///
-/// A parent-relative import (`use … from "../lib/x.wado"`) otherwise produced
-/// `file:///a/b/../lib/x.wado`. LSP clients key open documents by URI string,
-/// so that names a *different* document than the canonical
-/// `file:///a/lib/x.wado` the same file gets when opened any other way —
-/// jump-to-definition opened a second, duplicate editor tab.
+/// Clients key open documents by URI string, so `file:///a/b/../lib/x.wado`
+/// names a different document than the canonical `file:///a/lib/x.wado` the
+/// same file gets when opened any other way.
 ///
-/// Lexical only: symlinks are not resolved (the LSP has no filesystem on the
-/// wasm target). A leading `..` that cannot be collapsed — the path escapes
-/// its own root — is kept, since dropping it would silently retarget the URI.
+/// Lexical only — symlinks are not resolved, the wasm target has no
+/// filesystem. A `..` that escapes its own root is kept rather than dropped,
+/// which would silently retarget the URI.
 fn normalize_dot_segments(path: &str) -> String {
     if !path.contains("./") && !path.ends_with("/.") && !path.ends_with("/..") {
         return path.to_string();
     }
-    // Split the scheme off first so `..` can never eat it: an opaque URI's
-    // first segment (`kiln:`, `wasi:filesystem`) is not a directory.
     let (prefix, rest) = split_scheme(path);
     let rooted = rest.starts_with('/');
     let mut out: Vec<&str> = Vec::new();
@@ -130,11 +124,8 @@ fn normalize_dot_segments(path: &str) -> String {
     }
 }
 
-/// Split `path` into its scheme prefix and the path body `..` may rewrite.
-///
-/// `file://` URIs keep the authority-less `//`; an opaque URI (`kiln:/abs/x`,
-/// `wasi:filesystem/types.wado`) keeps everything through the `:`. A bare
-/// filesystem path has no prefix.
+/// Split `path` into its scheme prefix and the body `..` may rewrite, so a
+/// `..` can never eat the scheme. A bare filesystem path has no prefix.
 fn split_scheme(path: &str) -> (&str, &str) {
     if let Some(rest) = path.strip_prefix("file://") {
         return ("file://", rest);
@@ -196,9 +187,6 @@ mod tests {
 
     #[test]
     fn parent_relative_import_collapses_dot_dot() {
-        // `file:///home/user/../lib/x.wado` is a different URI *string* than
-        // the canonical form, and LSP clients key documents by URI string —
-        // jumping there opened a duplicate tab for a file already open.
         let resolved = resolve_local_uri("../lib/x.wado", "file:///home/user/foo.wado");
         assert_eq!(resolved, "file:///home/lib/x.wado");
     }
@@ -217,7 +205,7 @@ mod tests {
 
     #[test]
     fn parent_escape_of_root_is_clamped() {
-        // `/..` is `/`; refusing to walk above the root keeps the URI valid.
+        // `/..` is `/`.
         let resolved = resolve_local_uri("../../../x.wado", "file:///a/foo.wado");
         assert_eq!(resolved, "file:///x.wado");
     }
@@ -230,10 +218,8 @@ mod tests {
 
     #[test]
     fn sibling_of_an_encoded_request_uri_stays_encoded() {
-        // `Uri::to_filename` decodes, so the base directory we join against is
-        // a real path. Emitting it back without re-encoding hands the client a
-        // URI string that does not match the document it already has open —
-        // the duplicate-tab failure `normalize_dot_segments` exists to avoid.
+        // The base directory we join against is decoded, so the join has to
+        // be re-encoded on the way back out.
         let resolved = resolve_local_uri("./other.wado", "file:///home/user/my%20project/foo.wado");
         assert_eq!(resolved, "file:///home/user/my%20project/other.wado");
     }
@@ -246,8 +232,7 @@ mod tests {
 
     #[test]
     fn a_literal_percent_survives_the_round_trip() {
-        // `100%` decodes from `100%25`; re-encoding must restore the escape,
-        // not emit a bare `%` that the client would decode a second time.
+        // A bare `%` would be decoded a second time by the client.
         let resolved = resolve_local_uri("./x.wado", "file:///home/100%25/foo.wado");
         assert_eq!(resolved, "file:///home/100%25/x.wado");
         assert_eq!(
@@ -259,16 +244,13 @@ mod tests {
 
     #[test]
     fn path_separators_and_sub_delims_are_not_escaped() {
-        // Over-encoding is as wrong as under-encoding: `/` and `:` are legal
-        // path characters and clients do not escape them.
+        // Over-encoding is as wrong as under-encoding.
         let resolved = resolve_local_uri("./a+b,c.wado", "file:///home/user/foo.wado");
         assert_eq!(resolved, "file:///home/user/a+b,c.wado");
     }
 
     #[test]
     fn parent_segments_never_consume_the_scheme() {
-        // Walking above a scheme's root must clamp at the root, not eat
-        // `kiln:` and emit a scheme-less relative URI.
         let resolved = resolve_local_uri("../../../x.wado", "kiln:/a/foo.wado");
         assert_eq!(resolved, "kiln:/x.wado");
     }

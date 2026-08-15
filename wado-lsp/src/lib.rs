@@ -107,17 +107,14 @@ pub struct Engine {
 /// `hover`, …) rather than the raw bundle.
 pub(crate) struct Snapshot {
     pub(crate) sem: Semantics,
-    /// Diagnostics the compiler host emitted while the pass ran — lex, parse,
-    /// load, and analysis errors. Produced as a side effect of building
-    /// `sem`, so they cost nothing to keep.
+    /// Lex, parse, load, and analysis errors the host emitted while the pass
+    /// ran — a side effect of building `sem`.
     pub(crate) diagnostics: Vec<CompilerDiagnostic>,
     /// Design-B semantic diagnostics (effect / stores / default-purity /
-    /// resource moves), derived from `sem` on first request and cached.
+    /// resource moves), derived on first request and cached.
     ///
-    /// Deriving them is a separate pass over the whole module graph, and
-    /// only `Engine::diagnostics` consumes them — hover, definition,
-    /// references, highlights, semantic tokens, and inlay hints all used to
-    /// pay for it on the keystroke that first touched a document.
+    /// Deriving them walks the whole module graph again, and only
+    /// `Engine::diagnostics` reads them.
     semantic: RefCell<Option<Rc<Vec<CompilerDiagnostic>>>>,
 }
 
@@ -127,8 +124,7 @@ impl Snapshot {
         if let Some(cached) = self.semantic.borrow().clone() {
             return cached;
         }
-        // `check_semantics` builds the shared effect index once and runs all
-        // three of its checks off it.
+        // One shared effect index drives all three checks.
         let checked =
             wado_compiler::check_semantics(&self.sem, wado_compiler::hashmap::IndexSet::default());
         let mut out: Vec<CompilerDiagnostic> = checked
@@ -316,10 +312,8 @@ impl Engine {
         // InvocationIndex through without the LSP having to know the
         // loader's source-based entry point.
         let sem = build_semantics(&doc.text, &filename, invocations, &collecting_host).await;
-        // The Design-B semantic diagnostics are derived lazily — see
-        // `Snapshot::semantic_diagnostics`. Only `Engine::diagnostics` needs
-        // them, and the LSP builds no TIR, so this snapshot is the only place
-        // they can surface in the editor.
+        // Semantic diagnostics are derived lazily; see
+        // `Snapshot::semantic_diagnostics`.
         let snapshot = Rc::new(Snapshot {
             sem,
             diagnostics: collecting_host.take_diagnostics(),
@@ -640,17 +634,13 @@ impl Engine {
     /// The semantics pipeline runs at most once per document version
     /// regardless of which queries the client issued first.
     ///
-    /// Only diagnostics belonging to `uri` are returned. LSP publishes
-    /// diagnostics per document, so a diagnostic whose `span.file` names an
-    /// imported module cannot be reported here: it would draw a squiggle at
-    /// the *imported* file's line and column inside the document the user
-    /// has open. The importing document sees the loader's own failures
-    /// instead, and the imported file reports its errors when the client
-    /// opens it. A span-less diagnostic is about the request itself (a
-    /// loader hard failure) and is always kept.
+    /// Only diagnostics belonging to `uri` are returned. LSP publishes per
+    /// document, so one whose `span.file` names an imported module would draw
+    /// its squiggle at that file's line and column inside the open one; the
+    /// imported file reports its own errors when the client opens it. A
+    /// span-less diagnostic is about the request itself and is always kept.
     ///
-    /// Columns of the kept diagnostics are re-encoded against the document
-    /// text in the negotiated position encoding.
+    /// Kept columns are re-encoded in the negotiated position encoding.
     ///
     /// Unused / dead-code warnings are applied here (not baked into the
     /// snapshot, so [`Engine::set_unused_diagnostics`] stays live).
@@ -660,8 +650,7 @@ impl Engine {
         };
         let filename = Uri::new(uri).to_filename();
         let encoding = self.position_encoding;
-        // One line table for the whole batch: every diagnostic re-encodes two
-        // columns against this same text.
+        // One line table for the batch.
         let lines = self
             .documents
             .get(uri)

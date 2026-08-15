@@ -45,12 +45,9 @@ impl FilesystemCompilerHost {
 
     /// The collected buffer, recovering from a poisoned lock.
     ///
-    /// A panic anywhere under the compiler pipeline while this lock is held
-    /// poisons it for the rest of the process. `unwrap()` would then turn
-    /// one recoverable panic into a permanently dead language server: every
-    /// later query re-panics on the same lock. The buffer's contents are
-    /// plain data — a partially-written `Vec` is still a valid `Vec` — so
-    /// recovering is safe. Matches `DiagnosticCollector` in `lib.rs`.
+    /// One panic under the compiler pipeline would otherwise leave every
+    /// later query panicking on the same lock. The contents are plain data,
+    /// so recovery is safe. Matches `DiagnosticCollector` in `lib.rs`.
     fn buffer(&self) -> std::sync::MutexGuard<'_, Vec<Diagnostic>> {
         self.diagnostics
             .lock()
@@ -130,8 +127,7 @@ pub fn registry_component_needs(
     registry_component_needs_locked(manifest, &locked)
 }
 
-/// [`registry_component_needs`] against an already-parsed lock, so a caller
-/// resolving several dependency kinds reads `wado.lock` once.
+/// [`registry_component_needs`] against an already-parsed lock.
 fn registry_component_needs_locked(
     manifest: &wado_manifest::Manifest,
     locked: &std::collections::BTreeMap<String, String>,
@@ -209,10 +205,7 @@ pub fn dependency_index_from(
 ) -> DependencyIndex {
     let mut index = DependencyIndex::default();
     let base_abs = crate::workspace::absolutize(base);
-    // `wado.lock` is read and parsed exactly once here. Both dependency kinds
-    // that consult it — git worktrees and registry components — take their
-    // pins from this one parse; the git path used to re-read the file per
-    // dependency.
+    // One parse of `wado.lock` for both dependency kinds that consult it.
     let lock = read_lock(manifest_dir);
     let git_pins = lock.clone().map(git_pins).unwrap_or_default();
     let registry_pins = lock.as_ref().map(registry_pins).unwrap_or_default();
