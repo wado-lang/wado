@@ -1514,17 +1514,12 @@ impl<'a> WirUnparser<'a> {
             WirInstr::ArrayClone {
                 type_id,
                 src,
-                element_copy_mangle,
+                element_copy_mangle: _,
                 len,
             } => {
                 let elem = self.array_elem_type_str(type_id);
-                let deep = if element_copy_mangle.is_some() {
-                    "_deep"
-                } else {
-                    ""
-                };
                 let prefix = if len.is_some() { "_prefix" } else { "" };
-                self.write(&format!("builtin::array_clone{deep}{prefix}<{elem}>("));
+                self.write(&format!("builtin::array_clone_deep{prefix}<{elem}>("));
                 self.unparse_instr_inline(src);
                 if let Some(len) = len {
                     self.write(", ");

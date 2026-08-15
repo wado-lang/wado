@@ -7,7 +7,7 @@ use crate::hashmap::IndexSet;
 
 use walrus::passes;
 use wasm_encoder::{
-    CodeSection, ExportKind, ExportSection, ImportSection, MemoryType, Module, RawSection,
+    EntityType, ExportKind, ExportSection, ImportSection, MemoryType, Module, RawSection,
 };
 use wasmparser::{Parser, Payload};
 
@@ -40,178 +40,171 @@ pub fn eliminate_dead_code(wasm_bytes: &[u8], keep_exports: &IndexSet<String>) -
     module.emit_wasm()
 }
 
-/// Convert a Wasm module that defines memory to one that imports memory
-/// This allows the module to share memory with other modules in a component
+const IMPORT_SECTION_ID: u8 = 2;
+
+/// Rewrite a module that *defines* a memory into one that *imports* it, so it
+/// can share the component's memory with the other core modules.
+///
+/// Every other section is carried over byte-for-byte, in its original order.
+/// Only three are touched: the memory definition is dropped, the memory export
+/// is dropped (the importer owns it now), and the import section gains the
+/// memory import — created if the module had none. This leaves every index
+/// space unchanged: a memory import takes slot 0, exactly where the dropped
+/// definition sat, and the memory space is disjoint from the function, global,
+/// and table spaces.
 pub fn convert_memory_to_import(
     wasm_bytes: &[u8],
     import_module: &str,
     import_name: &str,
 ) -> Result<Vec<u8>, String> {
-    let parser = Parser::new(0);
+    let memory = find_single_memory(wasm_bytes)?;
+    let memory_import = |module: &mut Module, mut imports: ImportSection| {
+        imports.import(import_module, import_name, memory);
+        module.section(&imports);
+    };
+
     let mut module = Module::new();
-
-    // Track what we find
-    let mut memory_pages: u64 = 1;
-    let mut type_bytes: Option<Vec<u8>> = None;
-    let mut function_bytes: Option<Vec<u8>> = None;
-    let mut global_bytes: Option<Vec<u8>> = None;
-    let mut export_section_data: Vec<(String, ExportKind, u32)> = Vec::new();
-    let mut data_bytes: Option<Vec<u8>> = None;
-
-    // First pass: collect sections
-    for payload in parser.parse_all(wasm_bytes) {
+    let mut memory_import_written = false;
+    for payload in Parser::new(0).parse_all(wasm_bytes) {
         let payload = payload.map_err(|e| format!("Parse error: {e}"))?;
+
+        // The import section must precede every section that can reference an
+        // import. When the module has none of its own, open one right before
+        // the first such section (any id above the import section's own 2).
+        if !memory_import_written
+            && let Some((id, _)) = payload.as_section()
+            && id > IMPORT_SECTION_ID
+        {
+            memory_import(&mut module, ImportSection::new());
+            memory_import_written = true;
+        }
 
         match &payload {
-            Payload::TypeSection(_) => {
-                // Get raw bytes for this section
-                if let Some(range) = get_section_range(&payload) {
-                    type_bytes = Some(wasm_bytes[range].to_vec());
-                }
-            }
-            Payload::FunctionSection(_) => {
-                if let Some(range) = get_section_range(&payload) {
-                    function_bytes = Some(wasm_bytes[range].to_vec());
-                }
-            }
-            Payload::MemorySection(mems) => {
-                for mem in mems.clone() {
-                    let mem = mem.map_err(|e| format!("{e}"))?;
-                    memory_pages = mem.initial;
-                }
-            }
-            Payload::GlobalSection(_) => {
-                if let Some(range) = get_section_range(&payload) {
-                    global_bytes = Some(wasm_bytes[range].to_vec());
-                }
-            }
-            Payload::ExportSection(exports) => {
-                for exp in exports.clone() {
-                    let exp = exp.map_err(|e| format!("{e}"))?;
-                    let kind = match exp.kind {
-                        wasmparser::ExternalKind::Func => ExportKind::Func,
-                        wasmparser::ExternalKind::Global => ExportKind::Global,
-                        wasmparser::ExternalKind::Memory => {
-                            continue; // Skip memory export
-                        }
-                        _ => continue,
-                    };
-                    export_section_data.push((exp.name.to_string(), kind, exp.index));
-                }
-            }
-            Payload::CodeSectionStart { .. } => {}
-            Payload::CodeSectionEntry(_) => {}
-            Payload::DataSection(_) => {
-                if let Some(range) = get_section_range(&payload) {
-                    data_bytes = Some(wasm_bytes[range].to_vec());
-                }
-            }
-            _ => {}
-        }
-    }
-
-    // Second pass: rebuild with memory import
-    let parser = Parser::new(0);
-    let mut code_entries: Vec<Vec<u8>> = Vec::new();
-
-    for payload in parser.parse_all(wasm_bytes) {
-        let payload = payload.map_err(|e| format!("Parse error: {e}"))?;
-
-        match payload {
-            Payload::TypeSection(_) => {
-                if let Some(bytes) = &type_bytes {
-                    module.section(&RawSection { id: 1, data: bytes });
-                }
-            }
-            Payload::ImportSection(_) => {
-                // Skip original imports, we'll add our own
-            }
-            Payload::FunctionSection(_) => {
-                // Add import section first (before function section)
+            Payload::ImportSection(reader) => {
                 let mut imports = ImportSection::new();
-                imports.import(
-                    import_module,
-                    import_name,
-                    MemoryType {
-                        minimum: memory_pages,
-                        maximum: None,
-                        memory64: false,
-                        shared: false,
-                        page_size_log2: None,
-                    },
-                );
-                module.section(&imports);
-
-                // Then add function section
-                if let Some(bytes) = &function_bytes {
-                    module.section(&RawSection { id: 3, data: bytes });
+                for group in reader.clone() {
+                    for entry in group.map_err(|e| format!("Parse error: {e}"))? {
+                        let (_, import) = entry.map_err(|e| format!("Parse error: {e}"))?;
+                        imports.import(
+                            import.module,
+                            import.name,
+                            entity_type(import.ty).ok_or_else(|| {
+                                format!(
+                                    "unsupported import kind in {}/{}",
+                                    import.module, import.name
+                                )
+                            })?,
+                        );
+                    }
                 }
+                memory_import(&mut module, imports);
+                memory_import_written = true;
             }
-            Payload::MemorySection(_) => {
-                // Skip - we're importing memory instead
-            }
-            Payload::GlobalSection(_) => {
-                if let Some(bytes) = &global_bytes {
-                    module.section(&RawSection { id: 6, data: bytes });
-                }
-            }
-            Payload::ExportSection(_) => {
+            // Replaced by the import above.
+            Payload::MemorySection(_) => {}
+            Payload::ExportSection(reader) => {
                 let mut exports = ExportSection::new();
-                for (name, kind, idx) in &export_section_data {
-                    exports.export(name, *kind, *idx);
+                for export in reader.clone() {
+                    let export = export.map_err(|e| format!("Parse error: {e}"))?;
+                    if export.kind == wasmparser::ExternalKind::Memory {
+                        continue;
+                    }
+                    exports.export(
+                        export.name,
+                        export_kind(export.kind)
+                            .ok_or_else(|| format!("unsupported export kind: {}", export.name))?,
+                        export.index,
+                    );
                 }
                 module.section(&exports);
             }
-            Payload::CodeSectionStart { .. } => {
-                // Start of code section
-            }
-            Payload::CodeSectionEntry(body) => {
-                // Collect code entries
-                let range = body.range();
-                code_entries.push(wasm_bytes[range].to_vec());
-            }
-            Payload::DataSection(_) => {
-                // Build code section before data section
-                if !code_entries.is_empty() {
-                    let mut code = CodeSection::new();
-                    for entry in &code_entries {
-                        code.raw(entry);
-                    }
-                    module.section(&code);
-                    code_entries.clear();
-                }
-
-                // Add data section
-                if let Some(bytes) = &data_bytes {
+            // Individual bodies arrive after `CodeSectionStart`, which already
+            // copied the whole section verbatim.
+            Payload::CodeSectionEntry(_) => {}
+            // Everything else — including sections this rewrite knows nothing
+            // about — is copied through rather than dropped.
+            other => {
+                if let Some((id, range)) = other.as_section() {
                     module.section(&RawSection {
-                        id: 11,
-                        data: bytes,
+                        id,
+                        data: &wasm_bytes[range],
                     });
                 }
             }
-            _ => {}
         }
     }
 
-    // If code section wasn't added before data, add it now
-    if !code_entries.is_empty() {
-        let mut code = CodeSection::new();
-        for entry in &code_entries {
-            code.raw(entry);
-        }
-        module.section(&code);
+    if !memory_import_written {
+        memory_import(&mut module, ImportSection::new());
     }
 
     Ok(module.finish())
 }
 
-fn get_section_range(payload: &Payload) -> Option<std::ops::Range<usize>> {
-    match payload {
-        Payload::TypeSection(reader) => Some(reader.range()),
-        Payload::FunctionSection(reader) => Some(reader.range()),
-        Payload::GlobalSection(reader) => Some(reader.range()),
-        Payload::DataSection(reader) => Some(reader.range()),
-        _ => None,
+/// The memory this module defines, as an import-ready [`MemoryType`]. The
+/// rewrite maps the definition onto import slot 0, so exactly one defined
+/// memory and no imported one is the only shape it can preserve.
+fn find_single_memory(wasm_bytes: &[u8]) -> Result<MemoryType, String> {
+    let mut found: Option<MemoryType> = None;
+    for payload in Parser::new(0).parse_all(wasm_bytes) {
+        match payload.map_err(|e| format!("Parse error: {e}"))? {
+            Payload::MemorySection(reader) => {
+                for mem in reader {
+                    let mem = mem.map_err(|e| format!("Parse error: {e}"))?;
+                    if found.is_some() {
+                        return Err("module defines more than one memory".to_string());
+                    }
+                    found = Some(MemoryType {
+                        minimum: mem.initial,
+                        maximum: mem.maximum,
+                        memory64: mem.memory64,
+                        shared: mem.shared,
+                        page_size_log2: mem.page_size_log2,
+                    });
+                }
+            }
+            Payload::ImportSection(reader) => {
+                for group in reader {
+                    for entry in group.map_err(|e| format!("Parse error: {e}"))? {
+                        let (_, import) = entry.map_err(|e| format!("Parse error: {e}"))?;
+                        if matches!(import.ty, wasmparser::TypeRef::Memory(_)) {
+                            return Err(format!(
+                                "module already imports memory {}/{}",
+                                import.module, import.name
+                            ));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    found.ok_or_else(|| "module defines no memory to convert".to_string())
+}
+
+fn entity_type(ty: wasmparser::TypeRef) -> Option<EntityType> {
+    use wasmparser::TypeRef;
+    match ty {
+        TypeRef::Func(idx) => Some(EntityType::Function(idx)),
+        TypeRef::Memory(mem) => Some(EntityType::Memory(MemoryType {
+            minimum: mem.initial,
+            maximum: mem.maximum,
+            memory64: mem.memory64,
+            shared: mem.shared,
+            page_size_log2: mem.page_size_log2,
+        })),
+        TypeRef::Global(_) | TypeRef::Table(_) | TypeRef::Tag(_) | TypeRef::FuncExact(_) => None,
+    }
+}
+
+fn export_kind(kind: wasmparser::ExternalKind) -> Option<ExportKind> {
+    use wasmparser::ExternalKind;
+    match kind {
+        ExternalKind::Func | ExternalKind::FuncExact => Some(ExportKind::Func),
+        ExternalKind::Table => Some(ExportKind::Table),
+        ExternalKind::Memory => Some(ExportKind::Memory),
+        ExternalKind::Global => Some(ExportKind::Global),
+        ExternalKind::Tag => Some(ExportKind::Tag),
     }
 }
 
@@ -228,43 +221,140 @@ mod tests {
             .into_owned()
     }
 
-    #[test]
-    fn test_convert_memory_to_import() {
-        let bytes = libm_core_wasm();
-        let result = convert_memory_to_import(&bytes, "env", "memory");
-        assert!(result.is_ok(), "Failed to convert: {result:?}");
-
-        let converted = result.unwrap();
-
-        // Verify it's valid Wasm
-        assert!(converted.starts_with(&[0, b'a', b's', b'm']));
-
-        // Parse and verify structure
-        let parser = Parser::new(0);
-        let mut has_memory_import = false;
-        let mut has_memory_definition = false;
-
-        for payload in parser.parse_all(&converted) {
-            match payload {
-                Ok(Payload::ImportSection(imports)) => {
-                    for group in imports.into_iter().flatten() {
-                        for import in group {
-                            if let Ok((_, imp)) = import
-                                && matches!(imp.ty, wasmparser::TypeRef::Memory(_))
-                            {
-                                has_memory_import = true;
-                            }
+    /// The imported memory type, if the module imports one.
+    fn memory_import_of(wasm: &[u8]) -> Option<wasmparser::MemoryType> {
+        for payload in Parser::new(0).parse_all(wasm) {
+            if let Ok(Payload::ImportSection(imports)) = payload {
+                for group in imports.into_iter().flatten() {
+                    for import in group {
+                        if let Ok((_, imp)) = import
+                            && let wasmparser::TypeRef::Memory(mem) = imp.ty
+                        {
+                            return Some(mem);
                         }
                     }
                 }
-                Ok(Payload::MemorySection(_)) => {
-                    has_memory_definition = true;
-                }
-                _ => {}
             }
         }
+        None
+    }
 
-        assert!(has_memory_import, "Should have memory import");
-        assert!(!has_memory_definition, "Should not have memory definition");
+    fn section_ids(wasm: &[u8]) -> Vec<u8> {
+        Parser::new(0)
+            .parse_all(wasm)
+            .filter_map(|p| p.ok().and_then(|p| p.as_section().map(|(id, _)| id)))
+            .collect()
+    }
+
+    fn export_names(wasm: &[u8]) -> Vec<String> {
+        let mut names = Vec::new();
+        for payload in Parser::new(0).parse_all(wasm) {
+            if let Ok(Payload::ExportSection(exports)) = payload {
+                for export in exports.into_iter().flatten() {
+                    names.push(export.name.to_string());
+                }
+            }
+        }
+        names
+    }
+
+    fn validate(wasm: &[u8]) -> Result<(), String> {
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(wasm)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn test_convert_memory_to_import() {
+        let bytes = libm_core_wasm();
+        let converted = convert_memory_to_import(&bytes, "env", "memory").expect("conversion");
+
+        assert!(memory_import_of(&converted).is_some(), "memory import");
+        assert!(
+            !section_ids(&converted).contains(&5),
+            "memory definition must be gone"
+        );
+        validate(&converted).expect("converted libm must validate");
+    }
+
+    /// The rewrite touches three sections; everything else must survive
+    /// byte-for-byte. It used to rebuild the module from a fixed list of
+    /// section kinds, so a table, element, start, or custom section was
+    /// silently dropped and the memory's `maximum` thrown away.
+    #[test]
+    fn convert_memory_to_import_preserves_other_sections() {
+        let source = r#"
+            (module
+              (type $void (func))
+              (type $get (func (result i32)))
+              (memory 2 4)
+              (table 1 funcref)
+              (global $g (mut i32) (i32.const 7))
+              (func $init (type $void))
+              (func $answer (type $get) (result i32) (i32.const 42))
+              (start $init)
+              (elem declare func $answer)
+              (data (i32.const 0) "hi")
+              (export "memory" (memory 0))
+              (export "answer" (func $answer))
+              (export "table" (table 0))
+              (export "g" (global $g)))
+        "#;
+        let bytes = wat::parse_str(source).expect("fixture must parse");
+        let converted = convert_memory_to_import(&bytes, "env", "memory").expect("conversion");
+
+        validate(&converted).expect("converted module must validate");
+
+        let mem = memory_import_of(&converted).expect("memory import");
+        assert_eq!(mem.initial, 2);
+        assert_eq!(mem.maximum, Some(4), "maximum must survive the rewrite");
+
+        let ids = section_ids(&converted);
+        assert!(!ids.contains(&5), "memory definition must be gone");
+        for (id, name) in [
+            (0u8, "custom"),
+            (1, "type"),
+            (2, "import"),
+            (3, "function"),
+            (4, "table"),
+            (6, "global"),
+            (7, "export"),
+            (8, "start"),
+            (9, "element"),
+            (10, "code"),
+            (11, "data"),
+        ] {
+            assert!(ids.contains(&id), "{name} section must survive");
+        }
+        // Custom sections (id 0) may sit anywhere; the rest must stay ordered.
+        let ordered: Vec<u8> = ids.iter().copied().filter(|id| *id != 0).collect();
+        assert_eq!(ordered, {
+            let mut sorted = ordered.clone();
+            sorted.sort_unstable();
+            sorted
+        });
+
+        let exports = export_names(&converted);
+        assert!(!exports.contains(&"memory".to_string()), "memory export");
+        for kept in ["answer", "table", "g"] {
+            assert!(exports.contains(&kept.to_string()), "{kept} export");
+        }
+    }
+
+    /// A module with no import section of its own still gets one, placed
+    /// before every section that could reference an import.
+    #[test]
+    fn convert_memory_to_import_inserts_import_section() {
+        let bytes = wat::parse_str("(module (memory 1) (func))").expect("fixture must parse");
+        let converted = convert_memory_to_import(&bytes, "env", "memory").expect("conversion");
+        validate(&converted).expect("converted module must validate");
+        assert!(memory_import_of(&converted).is_some());
+    }
+
+    #[test]
+    fn convert_memory_to_import_rejects_a_module_with_no_memory() {
+        let bytes = wat::parse_str("(module (func))").expect("fixture must parse");
+        assert!(convert_memory_to_import(&bytes, "env", "memory").is_err());
     }
 }

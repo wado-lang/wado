@@ -572,11 +572,7 @@ impl<'a> WirEmitter<'a> {
         for import in &self.wir.imports {
             match &import.desc {
                 WirImportDesc::Func { type_id, .. } => {
-                    let wasm_type_idx = self
-                        .type_index_map
-                        .get(&type_id.index())
-                        .copied()
-                        .unwrap_or(0);
+                    let wasm_type_idx = self.resolve_type_index(type_id.index());
                     imports.import(
                         &import.module,
                         &import.field,
@@ -597,7 +593,16 @@ impl<'a> WirEmitter<'a> {
                         },
                     );
                 }
-                _ => {}
+                // No pass builds these; dropping one silently would leave the
+                // module's import index space out of step with the accesses.
+                WirImportDesc::Global { .. } => panic!(
+                    "[WIR emit] global import '{}::{}' is not implemented",
+                    import.module, import.field
+                ),
+                WirImportDesc::Table { .. } => panic!(
+                    "[WIR emit] table import '{}::{}' is not implemented",
+                    import.module, import.field
+                ),
             }
         }
 
@@ -611,18 +616,23 @@ impl<'a> WirEmitter<'a> {
             .any(|i| matches!(&i.desc, WirImportDesc::Memory { .. }))
     }
 
+    /// Memories in the module's index space: imported ones first, then defined.
+    fn memory_count(&self) -> usize {
+        self.wir
+            .imports
+            .iter()
+            .filter(|i| matches!(&i.desc, WirImportDesc::Memory { .. }))
+            .count()
+            + self.wir.memories.len()
+    }
+
     // === Function Section ===
 
     fn emit_function_section(&self) -> FunctionSection {
         let mut funcs = FunctionSection::new();
 
         for func in &self.wir.functions {
-            let wasm_type_idx = self
-                .type_index_map
-                .get(&func.type_id.index())
-                .copied()
-                .unwrap_or(0);
-            funcs.function(wasm_type_idx);
+            funcs.function(self.resolve_type_index(func.type_id.index()));
         }
 
         funcs
@@ -721,17 +731,19 @@ impl<'a> WirEmitter<'a> {
         for export in &self.wir.exports {
             match &export.desc {
                 WirExportDesc::Func { func_id } => {
-                    let wasm_idx = self
-                        .func_index_map
-                        .get(&func_id.index())
-                        .copied()
-                        .unwrap_or(func_id.index());
+                    let wasm_idx = self.resolve_func_index(func_id.index());
                     exports.export(&export.name, ExportKind::Func, wasm_idx);
                 }
                 WirExportDesc::Global { .. } => {
                     // TODO: global exports
                 }
                 WirExportDesc::Memory => {
+                    assert_eq!(
+                        self.memory_count(),
+                        1,
+                        "[WIR emit] memory export names index 0, so the module must hold \
+                         exactly one memory"
+                    );
                     exports.export(&export.name, ExportKind::Memory, 0);
                 }
                 WirExportDesc::Table { index } => {
@@ -878,11 +890,7 @@ impl<'a> WirEmitter<'a> {
                     locals.push((format!("__array_copy_i_{key}"), ValType::I32));
                 }
             }
-            WirInstr::ArrayClone {
-                type_id,
-                element_copy_mangle,
-                ..
-            } => {
+            WirInstr::ArrayClone { type_id, .. } => {
                 let arr_ref = RefType {
                     nullable: false,
                     heap_type: HeapType::Concrete(self.resolve_type_index(type_id.index())),
@@ -896,17 +904,13 @@ impl<'a> WirEmitter<'a> {
                     locals.push((format!("__copy_arr_dst_{idx}"), ValType::Ref(arr_ref)));
                     locals.push((format!("__copy_arr_len_{idx}"), ValType::I32));
                     locals.push((format!("__copy_arr_i_{idx}"), ValType::I32));
-                }
-                // The deep-clone loop's per-element nullability branch needs an
-                // element-typed temp; deduped independently, since a shallow
-                // `ArrayClone` of the same `type_id` claims `__copy_arr_src` but
-                // carries no element temp.
-                if element_copy_mangle.is_some()
-                    && let Some(elem_val) = self.array_element_val_type(idx)
-                    && self
-                        .scratch_local_names
-                        .insert(format!("__copy_arr_elem_{idx}"))
-                {
+                    // The clone loop's per-element nullability branch needs an
+                    // element-typed temp.
+                    let elem_val = self.array_element_val_type(idx).unwrap_or_else(|| {
+                        panic!("[WIR emit] ArrayClone on non-array WIR type {idx}")
+                    });
+                    self.scratch_local_names
+                        .insert(format!("__copy_arr_elem_{idx}"));
                     locals.push((format!("__copy_arr_elem_{idx}"), elem_val));
                 }
             }
@@ -2314,14 +2318,11 @@ impl<'a> WirEmitter<'a> {
                         f.instruction(&Instruction::ArrayGet(arr_wasm_idx));
                     }
                 }
-                let copy_mangle = element_copy_mangle
-                    .as_deref()
-                    .unwrap_or_else(|| panic!("WirInstr::ArrayClone with no element_copy_mangle"));
                 let func_idx = self
-                    .resolve_function_index_by_value_copy_mangle(copy_mangle)
+                    .resolve_function_index_by_value_copy_mangle(element_copy_mangle)
                     .unwrap_or_else(|| {
                         panic!(
-                            "WirInstr::ArrayClone references a value-copy helper for {copy_mangle} that was not synthesized"
+                            "WirInstr::ArrayClone references a value-copy helper for {element_copy_mangle} that was not synthesized"
                         )
                     });
                 // Wasm GC `array.get` produces `(ref null T)`; the
@@ -2337,7 +2338,7 @@ impl<'a> WirEmitter<'a> {
                 let elem_local = self.resolve_local(&elem_name);
                 let elem_val = self
                     .array_element_val_type(type_id.index())
-                    .expect("array element val type known when element_copy_type is set");
+                    .expect("collect_scratch_locals already resolved the element type");
                 f.instruction(&Instruction::LocalSet(elem_local));
                 f.instruction(&Instruction::LocalGet(elem_local));
                 f.instruction(&Instruction::RefIsNull);
@@ -2473,10 +2474,19 @@ impl<'a> WirEmitter<'a> {
                 }
             }
 
-            // Everything else - emit unreachable for unimplemented instructions
-            other => {
-                eprintln!("[WIR-EMIT] unhandled instruction: {other:?}");
-                f.instruction(&Instruction::Unreachable);
+            // Table
+            WirInstr::TableGet { table, index } => {
+                self.emit_instr(f, index);
+                f.instruction(&Instruction::TableGet(*table));
+            }
+            WirInstr::TableSet {
+                table,
+                index,
+                value,
+            } => {
+                self.emit_instr(f, index);
+                self.emit_instr(f, value);
+                f.instruction(&Instruction::TableSet(*table));
             }
         }
     }
@@ -2610,16 +2620,51 @@ impl<'a> WirEmitter<'a> {
             .unwrap_or_else(|| panic!("unresolved local: {name}"))
     }
 
+    /// The Wasm type index of a WIR type. An unmapped id is a bug upstream, not
+    /// a case to recover from: index 0 is some other type, so falling back to it
+    /// silently retargets the instruction — a `struct.new` builds the wrong
+    /// shape, a `ref.cast` tests the wrong class — and the module still
+    /// validates whenever the two shapes happen to agree.
     fn resolve_type_index(&self, wir_idx: u32) -> u32 {
-        self.type_index_map.get(&wir_idx).copied().unwrap_or(0)
+        self.type_index_map
+            .get(&wir_idx)
+            .copied()
+            .unwrap_or_else(|| {
+                panic!(
+                    "[WIR emit] WIR type {wir_idx} ({}) has no Wasm type index — either a pass \
+                     dropped the type while leaving a use behind, or the use names a type kind \
+                     that emits none (enum / flags)",
+                    self.describe_wir_type(wir_idx)
+                )
+            })
     }
 
+    /// The field index of `field_name` within a WIR struct. Falling back to 0
+    /// would read or write a *different* field of the same struct.
     fn resolve_field_index(&self, wir_type_idx: u32, field_name: &str) -> u32 {
         self.struct_field_map
             .get(&wir_type_idx)
             .and_then(|m| m.get(field_name))
             .copied()
-            .unwrap_or(0)
+            .unwrap_or_else(|| {
+                panic!(
+                    "[WIR emit] WIR type {wir_type_idx} ({}) has no field '{field_name}'",
+                    self.describe_wir_type(wir_type_idx)
+                )
+            })
+    }
+
+    /// A short description of a WIR type index, for ICE messages.
+    fn describe_wir_type(&self, wir_idx: u32) -> String {
+        match self.wir.types.get(wir_idx as usize) {
+            Some(WirTypeDef::Struct(s)) => format!("struct {}", s.name.fq),
+            Some(WirTypeDef::Variant(v)) => format!("variant {}", v.name.fq),
+            Some(WirTypeDef::Array(a)) => format!("array {}", a.name.fq),
+            Some(WirTypeDef::Func(_)) => "func type".to_string(),
+            Some(WirTypeDef::Enum(_)) => "enum".to_string(),
+            Some(WirTypeDef::Flags(_)) => "flags".to_string(),
+            None => "out of range".to_string(),
+        }
     }
 
     /// True when the array's Wado element type is a non-nullable reference. The
@@ -2667,11 +2712,21 @@ impl<'a> WirEmitter<'a> {
         None
     }
 
+    /// The Wasm index of a WIR function id. `build_func_index_map` maps every
+    /// import (identity) and every defined function, so a miss means a pass
+    /// dropped the callee while leaving the call behind. Passing the WIR id
+    /// through unchanged, as this used to, would call whatever function happens
+    /// to sit at that Wasm index.
     fn resolve_func_index(&self, wir_func_idx: u32) -> u32 {
         self.func_index_map
             .get(&wir_func_idx)
             .copied()
-            .unwrap_or(wir_func_idx) // fallback: use as-is (for imports)
+            .unwrap_or_else(|| {
+                panic!(
+                    "[WIR emit] WIR function id {wir_func_idx} has no Wasm index — a pass dropped \
+                     the function while leaving a reference to it behind"
+                )
+            })
     }
 
     /// Look up the (nullable) element `ValType` of a WIR array type by
@@ -2818,8 +2873,8 @@ mod tests {
     use super::emit_core_module;
     use crate::hashmap::{IndexMap, IndexSet};
     use crate::wir::{
-        WirComponent, WirField, WirGlobal, WirInstr, WirMeta, WirName, WirNames, WirPackage,
-        WirStructType, WirType, WirTypeDef, WirTypeId,
+        WirComponent, WirExport, WirExportDesc, WirField, WirFuncId, WirGlobal, WirInstr, WirMeta,
+        WirName, WirNames, WirPackage, WirStructType, WirType, WirTypeDef, WirTypeId,
     };
     use std::rc::Rc;
 
@@ -2853,13 +2908,9 @@ mod tests {
         v.validate_all(bytes).map(|_| ()).map_err(|e| e.to_string())
     }
 
-    /// A global whose initializer is a constant `struct.new` must be emitted as
-    /// a Wasm GC constant init expression — not the scalar `i32.const 0`
-    /// fallback, which leaves the `(ref $P)` global's init ill-typed.
-    #[test]
-    fn const_struct_global_init_validates() {
-        let tid = WirTypeId::new(0, Rc::from("test//P"));
-        let struct_ty = WirStructType {
+    /// A two-`i32`-field struct named `test//P`.
+    fn point_struct() -> WirStructType {
+        WirStructType {
             name: WirName {
                 fq: "test//P".to_string(),
             },
@@ -2879,7 +2930,16 @@ mod tests {
             generic_origin: None,
             newtype_origin: None,
             supertype: None,
-        };
+        }
+    }
+
+    /// A global whose initializer is a constant `struct.new` must be emitted as
+    /// a Wasm GC constant init expression — not the scalar `i32.const 0`
+    /// fallback, which leaves the `(ref $P)` global's init ill-typed.
+    #[test]
+    fn const_struct_global_init_validates() {
+        let tid = WirTypeId::new(0, Rc::from("test//P"));
+        let struct_ty = point_struct();
         let global = WirGlobal {
             name: WirName {
                 fq: "global:ORIGIN".to_string(),
@@ -2903,5 +2963,54 @@ mod tests {
 
         let bytes = emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
         validate(&bytes).expect("const struct global init should validate as Wasm");
+    }
+
+    /// An instruction naming a WIR type with no Wasm type index must ICE. The
+    /// emitter used to substitute index 0, which is a *different* type: here
+    /// `struct.new` would silently build a `test//P` instead of the missing
+    /// type, and the module still validates whenever the shapes agree.
+    #[test]
+    #[should_panic(expected = "has no Wasm type index")]
+    fn unmapped_type_index_is_an_ice() {
+        let known = WirTypeId::new(0, Rc::from("test//P"));
+        let missing = WirTypeId::new(1, Rc::from("test//Missing"));
+        let mut pkg = empty_package();
+        pkg.types.push(WirTypeDef::Struct(point_struct()));
+        pkg.globals.push(WirGlobal {
+            name: WirName {
+                fq: "global:G".to_string(),
+            },
+            ty: WirType::Ref {
+                type_id: known,
+                nullable: false,
+            },
+            mutable: false,
+            wado_mutable: false,
+            init: WirInstr::StructNew {
+                type_id: missing,
+                fields: vec![WirInstr::I32Const(3), WirInstr::I32Const(4)],
+            },
+            lazy_init: false,
+            meta: WirMeta::default(),
+        });
+
+        emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
+    }
+
+    /// Likewise for a function id with no Wasm index: exporting it used to fall
+    /// back to the raw WIR id, which names whatever function sits at that Wasm
+    /// index.
+    #[test]
+    #[should_panic(expected = "has no Wasm index")]
+    fn unmapped_func_index_is_an_ice() {
+        let mut pkg = empty_package();
+        pkg.exports.push(WirExport {
+            name: "gone".to_string(),
+            desc: WirExportDesc::Func {
+                func_id: WirFuncId::new(7, Rc::from("test//gone")),
+            },
+        });
+
+        emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
     }
 }

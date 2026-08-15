@@ -166,18 +166,24 @@ pub fn build_component(
                     // Alias the record type from the WASI interface that defines it.
                     // WASI imports are already generated (generate_cm_imports runs first),
                     // so we can alias the exported type from the interface instance.
-                    let val = if let Some(interface_name) = project
+                    // No defining interface means the stream would silently become
+                    // `stream<u8>` — a different type at the component boundary.
+                    let interface_name = project
                         .cm_interface_registry
                         .find_interface_for_struct_cm_name(name)
-                    {
-                        let inst_idx = ctx.instance_idx(&interface_name);
-                        builder.alias_export(inst_idx, name, ComponentExportKind::Type);
-                        let aliased_idx = ctx.register_type(name);
-                        ComponentValType::Type(aliased_idx)
-                    } else {
-                        ComponentValType::Primitive(PrimitiveValType::U8)
-                    };
-                    (format!("stream-{name}"), val)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "stream<{name}> has no interface defining the record `{name}` — \
+                                 the interface that declares it is not imported"
+                            )
+                        });
+                    let inst_idx = ctx.instance_idx(&interface_name);
+                    builder.alias_export(inst_idx, name, ComponentExportKind::Type);
+                    let aliased_idx = ctx.register_type(name);
+                    (
+                        format!("stream-{name}"),
+                        ComponentValType::Type(aliased_idx),
+                    )
                 }
             };
             ctx.register_type(&type_key);
@@ -921,17 +927,21 @@ fn build_transmission_future_type_for(
     ctx: &mut ComponentModelContext,
     source: &str,
 ) -> u32 {
+    // `cli` is the shared `wasi:cli/types` error-code, aliased under the bare
+    // key by `generate_cm_imports`. Every other source must have aliased its own
+    // — substituting the CLI one, as this used to, gives the future a different
+    // error type than the host's.
     let error_code_key = if source == "cli" {
         "error-code".to_string()
     } else {
         format!("{source}-error-code")
     };
-    let error_code_idx = if ctx.has_type(&error_code_key) {
-        ctx.type_idx(&error_code_key)
-    } else {
-        // Fallback to CLI error-code if package-specific one is not available
-        ctx.type_idx("error-code")
-    };
+    assert!(
+        ctx.has_type(&error_code_key),
+        "transmission future for `{source}` needs its error-code type `{error_code_key}`, \
+         which no imported interface aliased"
+    );
+    let error_code_idx = ctx.type_idx(&error_code_key);
 
     let result = intern_cm_type(
         builder,
@@ -3555,18 +3565,25 @@ fn import_resource_source(
                 .filter(|(name, _, _)| *name == "ErrorCode")
                 .collect();
             if let Some((_, cm_name, cases)) = interface_variants.first() {
+                // Each case carries its declared payload type. Encoding them
+                // all as `option<string>`, as this used to, gives the host a
+                // variant whose arms have the wrong types.
+                let mut type_gen = CmTypeGen::with_interface_hint(source_path);
+                let no_resources: IndexMap<&str, u32> = IndexMap::default();
                 let cm_cases: Vec<(&str, Option<ComponentValType>)> = cases
                     .iter()
                     .map(|c| {
-                        let payload = c.payload.as_ref().map(|_ty| {
-                            // For simplicity, all payloads are option<string>
-                            instance_type
-                                .ty()
-                                .defined_type()
-                                .option(ComponentValType::Primitive(PrimitiveValType::String));
-                            let option_idx = local_type_idx;
-                            local_type_idx += 1;
-                            ComponentValType::Type(option_idx)
+                        let payload = c.payload.as_ref().map(|ty| {
+                            let mut sink = crate::component_model::InstanceSink {
+                                it: &mut instance_type,
+                                next_idx: &mut local_type_idx,
+                            };
+                            type_gen.ast_type_to_cm(
+                                &mut sink,
+                                ty,
+                                &project.cm_interface_registry,
+                                &no_resources,
+                            )
                         });
                         (c.cm_name.as_str(), payload)
                     })

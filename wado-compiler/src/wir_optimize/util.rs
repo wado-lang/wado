@@ -71,7 +71,7 @@ fn collect_array_clone_helpers_instr(
     pinned: &mut IndexSet<u32>,
 ) {
     if let WirInstr::ArrayClone {
-        element_copy_mangle: Some(copy_mangle),
+        element_copy_mangle: copy_mangle,
         ..
     } = instr
         && let Some(idx) = helper_mangle_to_idx.get(copy_mangle.as_str())
