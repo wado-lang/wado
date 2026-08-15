@@ -455,7 +455,7 @@ caller of the same first-wins index. A removed mechanism takes one fix.
       something they already had, and `TypeLookup`'s whole `*_in(name, module)`
       family went with it.
 
-      `declaration_named` / `value_named` have seven callers left, and they are
+      `declaration_named` / `value_named` have six callers left, and they are
       the hard tail — each is a pass that genuinely has no site, rather than one
       that mislaid it:
 
@@ -463,8 +463,8 @@ caller of the same first-wins index. A removed mechanism takes one fix.
         family (9 callers, each with its own). A written name in *type*
         position has a site; these are reached from resolved types and from
         synthesis, which do not.
-      - `canonical_decl_key` (4 callers) and `decl_key_or_local` (19) are the
-        frame derivation: a name that reaches no import, no declaration of the
+      - `canonical_decl_key` and `decl_key_or_local` (19 callers) are the frame
+        derivation: a name that reaches no import, no declaration of the
         writing module and no prelude entry, for which only the declaration
         indexes can answer. `fq_trait_name_undeclared` is the case that matters
         — a bodiless derive (`impl Deserialize for Point;`) naming a stdlib
@@ -472,14 +472,16 @@ caller of the same first-wins index. A removed mechanism takes one fix.
         *is* an error when it resolves to nothing, so closing this one is a
         language-visible decision, not a refactor: it stops that program from
         compiling.
-      - `symbol_named` (12 callers) reads the symbol row behind a name.
-      - `find_struct_module_source` (6 callers) answers which module a spelling
-        means, for a synthesised lookup that never had a site.
-      - `lookup_inherent_impls` matches an impl header by comparing
-        `get_type_name(&header.ty)` against the receiver's spelling, then asks
-        the impl's module what that spelling means there. The header carries a
-        declaration (`ImplTargetKey::Decl`); comparing those retires both the
-        spelling comparison and the lookup.
+      - `symbol_named` (8 callers) reads the symbol row behind a name. The four
+        that held an identifier now read its site through `symbol_at`; what is
+        left is reached from a mangled name or a synthesis target.
+      - `find_struct_module_source` answers which module a spelling means, for
+        a synthesised lookup that never had a site.
+      - `static_receiver_keys` files a static call under two vantages, because
+        a receiver that arrived through a namespace prefix lost its qualifier.
+        The call site's path still names the receiver with its owner segment,
+        which the walk answers for under `ns$Type` — the dispatch chain has to
+        carry that site down to here for it to be read.
 - [ ] `NAME_TO_IDENTITY` reduced to what belongs there. What is left of its
       original seven is the three above plus three that stay: `imported_as`,
       which answers what a module imported under a local name rather than what
