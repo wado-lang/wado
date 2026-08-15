@@ -1321,37 +1321,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        // ReflectStruct trait-qualified static call: `ReflectStruct::<T>::members()` /
-        // `type_name()`. `ReflectStruct` is a (sealed) trait, not a type, so
-        // `target_type` would not resolve — intercept and route to the
-        // concrete `T`'s synthesized `T^ReflectStruct::method`. This is the only
-        // spelling for ReflectStruct metadata; a bare `T::members()` never
-        // resolves, so struct namespaces stay clean.
+        // `Reflect{Struct,Variant,Enum,Flags}::<T>::method()` — a reflect trait
+        // is a (sealed) trait, not a type, so `target_type` would not resolve.
+        // Intercept and route to the concrete `T`'s synthesized
+        // `T^Trait::method` (WEP 2026-06-13 §1 / §3b–d). This is the only
+        // spelling for reflection metadata; a bare `T::members()` never
+        // resolves, so type namespaces stay clean.
         if let ast::Type::Generic(g) = &static_call.target_type
-            && self.is_reflect_trait_call(&g.name, &static_call.method)
             && let Some(self_ty_ast) = g.args.first()
         {
-            let self_ty = self.resolve_type(self_ty_ast);
-            return self.resolve_reflect_static_call(self_ty, static_call, ctx);
-        }
-
-        // `ReflectVariant::<T>::…` — the variant analog of the interception
-        // above (WEP 2026-06-13 §3d).
-        if let ast::Type::Generic(g) = &static_call.target_type
-            && self.is_reflect_variant_trait_call(&g.name, &static_call.method)
-            && let Some(self_ty_ast) = g.args.first()
-        {
-            let self_ty = self.resolve_type(self_ty_ast);
-            return self.resolve_reflect_variant_static_call(self_ty, static_call, ctx);
-        }
-
-        // `ReflectEnum::<T>::…` / `ReflectFlags::<T>::…` — the scalar-kind
-        // analogs (WEP 2026-06-13 §3b / §3c), sharing one resolver.
-        if let ast::Type::Generic(g) = &static_call.target_type {
+            if self.is_reflect_trait_call(&g.name, &static_call.method) {
+                let self_ty = self.resolve_type(self_ty_ast);
+                return self.resolve_reflect_static_call(self_ty, static_call, ctx);
+            }
+            if self.is_reflect_variant_trait_call(&g.name, &static_call.method) {
+                let self_ty = self.resolve_type(self_ty_ast);
+                return self.resolve_reflect_variant_static_call(self_ty, static_call, ctx);
+            }
             for spec in [ScalarReflectSpec::ENUM, ScalarReflectSpec::FLAGS] {
-                if self.is_reflect_scalar_trait_call(spec, &g.name, &static_call.method)
-                    && let Some(self_ty_ast) = g.args.first()
-                {
+                if self.is_reflect_scalar_trait_call(spec, &g.name, &static_call.method) {
                     let self_ty = self.resolve_type(self_ty_ast);
                     return self.resolve_reflect_scalar_static_call(
                         spec,
