@@ -2442,21 +2442,65 @@ pub fn shape_lookahead_signature_for_alt(
 ) -> List<List<String>> {
     let mut sig: List<List<String>> = [];
     for let mut si = 0; si < shape.len(); si += 1 {
-        let idx = shape[si];
-        let actual = surface_unwrap_optional(&elements[idx]);
-        if let Group(g) = actual {
-            if g.alternatives.len() == 1 {
-                for let mut j = 0; j < g.alternatives[0].elements.len(); j += 1 {
-                    let mut visiting: List<String> = [];
-                    sig.push(ctx.first_of_element(&g.alternatives[0].elements[j], &mut visiting));
-                }
-                continue;
-            }
+        let actual = surface_unwrap_optional(&elements[shape[si]]);
+        let [part, aligned] = shape_signature_positions(actual, ctx);
+        for let position of &part {
+            sig.push(*position);
         }
-        let mut visiting: List<String> = [];
-        sig.push(ctx.first_of_element(actual, &mut visiting));
+        if !aligned {
+            return sig;
+        }
     }
     return sig;
+}
+
+/// The per-position kind sets `elem` contributes, and whether the position
+/// counter still lines up with the input after it.
+///
+/// `sig[d]` guards `peek_at(d)`, so the alignment survives only an element
+/// that consumes exactly one token. A multi-token element contributes its own
+/// position and then stops the signature: in `( '=' expr ('else' block)? )`,
+/// guarding `peek_at(2)` on `else` would name whatever token `expr` left
+/// there.
+fn shape_signature_positions(elem: &Element, ctx: &mut GenContext) -> [List<List<String>>, bool] {
+    if let Group(g) = elem {
+        if g.alternatives.len() == 1 {
+            let mut out: List<List<String>> = [];
+            for let inner of &g.alternatives[0].elements {
+                let [part, aligned] = shape_signature_positions(inner, ctx);
+                for let position of &part {
+                    out.push(*position);
+                }
+                if !aligned {
+                    return [out, false];
+                }
+            }
+            return [out, true];
+        }
+    }
+    let mut visiting: List<String> = [];
+    let first = ctx.first_of_element(elem, &mut visiting);
+    let mut single_visiting: List<String> = [];
+    let aligned = ctx.element_is_single_token(elem, &mut single_visiting);
+    return [
+        [first],
+        aligned,
+    ];
+}
+
+/// Order-stable rendering of a signature, for equality between shapes. Every
+/// shape's sets come from the same `first_of_element` walk, so equal
+/// signatures render equal.
+fn shape_signature_key(sig: &List<List<String>>) -> String {
+    let mut key = String::new();
+    for let position of sig {
+        for let kind of position {
+            key.push_str(kind);
+            key.push('|');
+        }
+        key.push(';');
+    }
+    return key;
 }
 
 /// Build the `RuleHeader` shared by every `Rule` variant. The cached
@@ -3715,21 +3759,32 @@ fn try_optional_shape_lookahead(inner: &Element, ctx: &mut GenContext) -> Option
         }
         let shapes = compute_shapes_for_alt(elements);
         let mut shape_entries: List<OptionalLookaheadShape> = [];
+        let mut seen_signatures: List<String> = [];
+        let mut scan_guarded = false;
         for let shape of &shapes {
             let sig = shape_lookahead_signature_for_alt(shape, elements, ctx);
             if sig.is_empty() {
                 continue;
             }
+            let key = shape_signature_key(&sig);
+            if seen_signatures.contains(&key) {
+                scan_guarded = true;
+            }
+            seen_signatures.push(key);
             shape_entries.push(OptionalLookaheadShape {
                 positions: *shape,
                 sig: sig,
+                scan_body: lower_scan_shape_body(shape, elements, ctx),
             });
         }
         if shape_entries.is_empty() {
             return null;
         }
         return Option::Some(RepeatStrategy::OptionalShapeLookahead(
-            OptionalShapeLookaheadStrategy { shapes: shape_entries },
+            OptionalShapeLookaheadStrategy {
+                shapes: shape_entries,
+                scan_guarded: scan_guarded,
+            },
         ));
     }
     return null;

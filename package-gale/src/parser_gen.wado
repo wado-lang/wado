@@ -1731,39 +1731,39 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
 /// Op-driven scan emitter for `ScanElement::OptionalLookahead` —
 /// emits per-shape if/elseif chain using baked `sigs` + `bodies`.
 fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookaheadElement, ctx: &mut GenContext) {
-    let mut is_first = true;
+    if ole.sigs.is_empty() {
+        return;
+    }
+    // Shapes are ordered longest-first, and a shape's signature is only a
+    // necessary condition: it stops at the first element that may consume more
+    // than one token, so two shapes can share one. Each shape therefore falls
+    // through to the next when its body fails, rather than skipping the whole
+    // optional — the same longest-match resolution the alternative tournament
+    // uses. A shape that matches breaks out of the chain.
+    let outer = ctx.next_scan_group();
+    let chain_done = `osl_${outer}_done`;
+    w.begin(&`${chain_done}:`);
     for let mut si = 0; si < ole.sigs.len(); si += 1 {
         let sig = &ole.sigs[si];
         assert !sig.is_empty(), `gen_scan_op_optional_lookahead: shape ${si} has an empty lookahead signature; lower drops those`;
-        let cond = gen_scan_lookahead_condition(ctx, sig);
-        if is_first {
-            w.begin(&`if ${cond}`);
-            is_first = false;
-        } else {
-            w.else_begin(&`else if ${cond}`);
-        }
-        // A failed optional means "skip", so the position rewinds: leaving a
-        // callee's `-1` in `pos` mis-scans the elements after it and traps
-        // their `pos < tokens.len()` guard.
+        w.begin(&`if ${gen_scan_lookahead_condition(ctx, sig)}`);
+        // A failed shape rewinds: leaving a callee's `-1` in `pos` mis-scans
+        // the elements after it and traps their `pos < tokens.len()` guard.
         let gc = ctx.next_scan_group();
         let body = `sol_${gc}`;
-        let done = `sol_${gc}_done`;
         let save_var = `sol_${gc}_save`;
         let fail = `break ${body};`;
         w.line(&`let ${save_var} = pos;`);
-        w.begin(&`${done}:`);
         w.begin(&`${body}:`);
         for let elem_se of &ole.bodies[si].elements {
             gen_scan_op_element(w, elem_se, ctx, &fail);
         }
-        w.line(&`break ${done};`);
+        w.line(&`break ${chain_done};`);
         w.end();
         w.line(&`pos = ${save_var};`);
         w.end();
     }
-    if !is_first {
-        w.end();
-    }
+    w.end();
 }
 
 /// Op-driven scan element walker — used by top-level scan entry
@@ -3650,6 +3650,45 @@ fn gen_op_optional_entry_cond(
 /// `gen_op_optional_with_shape_lookahead_transparent`, whose `unwrap_optional_op`
 /// peel it shares — the shape already decided that a present nested optional
 /// fires.
+/// One entry condition per shape, longest-first.
+///
+/// Normally the shape's lookahead signature. When the strategy is
+/// `scan_guarded` two shapes share a signature, so each shape is instead
+/// selected by scanning its own body: the scans are emitted up front (a
+/// condition cannot carry statements) and the chain tests the resulting
+/// positions in order, which is the same longest-first resolution.
+fn gen_shape_entry_conditions(
+    w: &mut CodeWriter,
+    s: &OptionalShapeLookaheadStrategy,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+) -> List<String> {
+    let mut conditions: List<String> = [];
+    if !s.scan_guarded {
+        for let entry of &s.shapes {
+            assert !entry.sig.is_empty(), "gen_shape_entry_conditions: shape has an empty lookahead signature; lower drops those";
+            conditions.push(gen_lookahead_condition(ctx, &entry.sig));
+        }
+        return conditions;
+    }
+    for let entry of &s.shapes {
+        let pos_var = dedup_name(&"shape_scan_pos", name_counts);
+        let label = dedup_name(&"shape_scan", name_counts);
+        w.line(&`let mut ${pos_var}: i32 = -1;`);
+        w.begin(&`${label}:`);
+        w.line(&"let tokens = &p.kinds;");
+        w.line(&"let mut pos: i32 = p.pos;");
+        let fail = `break ${label};`;
+        for let scan_elem of &entry.scan_body.elements {
+            gen_scan_op_element(w, scan_elem, ctx, &fail);
+        }
+        w.line(&`${pos_var} = pos;`);
+        w.end();
+        conditions.push(`${pos_var} >= 0`);
+    }
+    return conditions;
+}
+
 fn gen_op_optional_shape_lookahead(
     w: &mut CodeWriter,
     r: &RepeatOp,
@@ -3663,11 +3702,11 @@ fn gen_op_optional_shape_lookahead(
     } else {
         panic("gen_op_optional_shape_lookahead: shape lookahead is only valid on single-alt Group bodies");
     };
+    let conditions = gen_shape_entry_conditions(w, s, ctx, nc);
     let mut is_first = true;
-    for let entry of &s.shapes {
-        // An empty signature renders as a bare `if ${gate}` — not a condition.
-        assert !entry.sig.is_empty(), "gen_op_optional_shape_lookahead: shape has an empty lookahead signature; lower drops those";
-        let cond = `${gen_lookahead_condition(ctx, &entry.sig)}${*gate}`;
+    for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
+        let entry = &s.shapes[ei];
+        let cond = `${conditions[ei]}${*gate}`;
         if is_first {
             w.begin(&`if ${cond}`);
             is_first = false;
@@ -4126,12 +4165,14 @@ fn gen_op_optional_with_shape_lookahead_storable(
     // the present elements append to the builder, so the
     // `Option<T>` shape selection collapses to a plain `if cond { … } else if
     // … ` statement — no struct, no absent-field decls, no `null` else.
+    let conditions = gen_shape_entry_conditions(w, s, ctx, name_counts);
     let mut is_first = true;
-    for let entry of &s.shapes {
+    for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
+        let entry = &s.shapes[ei];
         // K-prefix gate: every shape's entry condition must yield to
         // the caller when the deterministic K-prefix matches, so wrap
         // each entry's condition with `!(K_match) && (cond)`.
-        let cond = gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &entry.sig), gate_caller_follow);
+        let cond = gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow);
 
         if is_first {
             w.begin(&`if ${cond}`);
@@ -4177,12 +4218,14 @@ fn gen_op_optional_with_shape_lookahead_transparent(
     let alt = &g_elem.alternatives[0];
     let elements = &alt.elements;
 
+    let conditions = gen_shape_entry_conditions(w, s, ctx, name_counts);
     let mut is_first = true;
-    for let entry of &s.shapes {
+    for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
+        let entry = &s.shapes[ei];
         // K-prefix gate: every shape entry's condition must yield to
         // the caller when the deterministic K-prefix matches, so wrap
         // each entry's condition with `!(K_match) && (cond)`.
-        let cond = gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &entry.sig), gate_caller_follow);
+        let cond = gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow);
 
         if is_first {
             w.begin(&`if ${cond}`);

@@ -1586,33 +1586,32 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos] == TK_LIT_EQ && pos + 1 < tokens.len() && _kind_set_0(tokens[pos + 1]) && pos + 2 < tokens.len() && tokens[pos + 2] == TK_LIT_ELSE && pos + 3 < tokens.len() && tokens[pos + 3] == TK_LIT_LBRACE {
-        let sol_0_save = pos;
-        sol_0_done: {
-            sol_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sol_0; }
-                pos += 1;
-                pos = scan_expr(tokens, pos, 0);
-                if pos < 0 { break sol_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_ELSE { break sol_0; }
-                pos += 1;
-                pos = scan_block(tokens, pos, 0);
-                if pos < 0 { break sol_0; }
-                break sol_0_done;
-            }
-            pos = sol_0_save;
-        }
-    } else if pos < tokens.len() && tokens[pos] == TK_LIT_EQ && pos + 1 < tokens.len() && _kind_set_0(tokens[pos + 1]) {
-        let sol_1_save = pos;
-        sol_1_done: {
+    osl_0_done: {
+        if pos < tokens.len() && tokens[pos] == TK_LIT_EQ && pos + 1 < tokens.len() && _kind_set_0(tokens[pos + 1]) {
+            let sol_1_save = pos;
             sol_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sol_1; }
                 pos += 1;
                 pos = scan_expr(tokens, pos, 0);
                 if pos < 0 { break sol_1; }
-                break sol_1_done;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_ELSE { break sol_1; }
+                pos += 1;
+                pos = scan_block(tokens, pos, 0);
+                if pos < 0 { break sol_1; }
+                break osl_0_done;
             }
             pos = sol_1_save;
+        }
+        if pos < tokens.len() && tokens[pos] == TK_LIT_EQ && pos + 1 < tokens.len() && _kind_set_0(tokens[pos + 1]) {
+            let sol_2_save = pos;
+            sol_2: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sol_2; }
+                pos += 1;
+                pos = scan_expr(tokens, pos, 0);
+                if pos < 0 { break sol_2; }
+                break osl_0_done;
+            }
+            pos = sol_2_save;
         }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
