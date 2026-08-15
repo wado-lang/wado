@@ -463,11 +463,20 @@ impl AstVisitor for Resolver<'_> {
         self.in_scope(&func.type_params, None, |s| ast::walk_function(s, func));
     }
 
-    /// A block scopes the items declared in it.
+    /// A block opens a scope for the items declared in it, and hands them to
+    /// the enclosing one when it closes.
+    ///
+    /// A local item outlives the block that declares it: `struct Point` written
+    /// in a match arm is nameable for the rest of the function, which is what
+    /// the elaborator's `fn_local_items` records. Discarding the scope at the
+    /// block's end made the walk answer `Unresolved` for every later mention.
     fn visit_block(&mut self, block: &ast::Block) {
         self.locals.push(IndexMap::default());
         ast::walk_block(self, block);
-        self.locals.pop();
+        let inner = self.locals.pop().unwrap_or_default();
+        if let Some(parent) = self.locals.last_mut() {
+            parent.extend(inner);
+        }
     }
 
     /// A local item comes into scope at its own declaration, so it is recorded
@@ -524,6 +533,17 @@ impl AstVisitor for Resolver<'_> {
     /// resolves under the `ns$Type` alias the namespace import registered,
     /// which is the only spelling naming the declaration behind it.
     fn visit_expr(&mut self, expr: &ast::Expr) {
+        // A named struct literal's type name is a reference site like any
+        // written type: `Point { … }` names a declaration, and the module that
+        // wrote it is the vantage that decides which. A `ns::Point` literal
+        // resolves under the `ns$Point` alias, the same spelling the namespace
+        // import registered.
+        if let ast::Expr::StructLiteral(lit) = expr
+            && let (Some(name), Some(name_id)) = (lit.name.as_deref(), lit.name_id)
+        {
+            let answer = self.resolve_name(&name.replace("::", "$"));
+            self.record(name_id, answer);
+        }
         if let ast::Expr::Ident(ident) = expr
             && let [head, rest @ ..] = ident.segments.as_slice()
             && !rest.is_empty()

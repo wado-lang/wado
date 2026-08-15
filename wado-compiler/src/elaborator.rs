@@ -1224,12 +1224,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.associated_constant_of(owner, name)
     }
 
-    pub(super) fn lookup_struct_fields_in(
+    /// Field info for the declaration a *written* struct name resolved to.
+    ///
+    /// `None` where the name reached nothing, or reached something that is no
+    /// struct — the caller has already diagnosed it and is carrying on.
+    pub(super) fn struct_fields_of_written_decl(
         &self,
-        name: &str,
-        module_source: &ModuleSource,
+        decl: Option<crate::defs::DefId>,
     ) -> Option<&StructFieldInfo> {
-        self.type_lookup().struct_fields_in(name, module_source)
+        self.lookup_struct_fields_of_decl(decl?)
     }
 
     /// Field info for the struct `def` declares.
@@ -1250,27 +1253,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         })
     }
 
-    /// Like [`Self::lookup_struct_fields_in`], but also considers the
-    /// current function's own local structs — for resolving a
-    /// source-written struct-literal name against a module, not an
-    /// already-known type identity. See `TypeLookup::struct_fields_in_scope`.
-    pub(super) fn lookup_struct_fields_in_scope(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<&StructFieldInfo> {
-        self.type_lookup()
-            .struct_fields_in_scope(name, module_source)
-    }
-
-    pub(super) fn lookup_variant_case_in(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<&VariantInfo> {
-        self.type_lookup().variant_case_in(name, module_source)
-    }
-
     /// The variant `type_id` is an instance of, or `None` when it is not one.
     ///
     /// Asks the type for its declaration instead of reading a `(name, module)`
@@ -1281,14 +1263,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn variant_of_type(&self, type_id: TypeId) -> Option<&VariantInfo> {
         let def = self.tysys.type_def(type_id)?;
         self.tysys.all_variant_cases.get(&def)
-    }
-
-    pub(super) fn lookup_enum_case_in(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<&EnumInfo> {
-        self.type_lookup().enum_case_in(name, module_source)
     }
 
     /// The enum `type_id` is, or `None` when it is not one. Asks the type for
@@ -1302,14 +1276,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn struct_fields_of_type(&self, type_id: TypeId) -> Option<&StructFieldInfo> {
         let def = self.tysys.type_def(type_id)?;
         self.lookup_struct_fields_of_decl(def)
-    }
-
-    pub(super) fn lookup_flags_case_in(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<&FlagsInfo> {
-        self.type_lookup().flags_case_in(name, module_source)
     }
 
     /// Build effect name → declaring module map for a module.
