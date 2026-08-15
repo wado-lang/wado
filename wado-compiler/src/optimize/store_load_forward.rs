@@ -61,6 +61,7 @@ fn forward_one(
     // everywhere costs the serde hot paths ~10% (the extra forwarding trades
     // shared locals for duplicated constants).
     let is_cm_export = func.is_cm_export;
+    let param_locals: Vec<u32> = func.params.iter().map(|p| p.local_index).collect();
     // `Local`-read forwarding excludes address-taken / `stores`-aliased
     // locals: the canonical sets plus the engine's body scan — the
     // canonical sets are static elaboration records and go stale after
@@ -89,6 +90,11 @@ fn forward_one(
     engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);
     if is_cm_export {
+        // `ensure_value_graph` never rebuilds, so whatever is seeded here is
+        // what licm and `promote_fields` inherit: without the parameters,
+        // `loop_entry_value` would answer `None` for every parameter-rooted
+        // expression in exactly the bodies this build exists to serve.
+        engine.set_param_locals(param_locals);
         engine.build_value_graph_now();
     }
     unsafe_locals.extend(engine.body_address_taken().iter().copied());

@@ -19,8 +19,8 @@ use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{
-    bare_promoted_reads, buried_promoted_reads, collect_reads, expr_mentions_local, is_local,
-    promoted_local_reads, reachable_nodes, strip_refs,
+    bare_promoted_local, bare_promoted_reads, buried_promoted_reads, collect_reads,
+    expr_mentions_local, is_local, promoted_local_reads, reachable_nodes, strip_refs,
 };
 
 /// A hoisting candidate, identified by its owning function. Resolved in an
@@ -240,7 +240,7 @@ fn collect_candidates(
     collect_reads(body, &mut read_locals);
     promoted_local_reads(body, &mut read_locals);
     let buried = buried_promoted_reads(body);
-    let leaked_ref_args = ref_args_the_callee_leaks(body, gate);
+    let leaked_ref_args = ref_args_that_escape(body, gate);
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
@@ -341,90 +341,128 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
         };
         match &body.exprs[e].kind {
             ExprKind::Call { func_id, args, .. } => args.iter().enumerate().any(|(pos, arg)| {
-                arg.expr
-                    .as_expr()
-                    .is_some_and(|a| borrows_local(body, a, idx))
+                operand_borrows_local(body, arg.expr, idx)
                     && gate.callee_ref_param_leaks(*func_id, pos)
             }),
             // No callee body to ask, so the borrow is assumed to escape.
-            ExprKind::IndirectCall { args, .. } => args
-                .iter()
-                .any(|&a| a.as_expr().is_some_and(|e| borrows_local(body, e, idx))),
-            ExprKind::CmRawCall { args, .. } => args
-                .iter()
-                .any(|a| a.as_expr().is_some_and(|e| borrows_local(body, e, idx))),
+            ExprKind::IndirectCall { args, .. } => {
+                args.iter().any(|&a| operand_borrows_local(body, a, idx))
+            }
+            ExprKind::CmRawCall { args, .. } => {
+                args.iter().any(|&a| operand_borrows_local(body, a, idx))
+            }
             _ => false,
         }
     })
 }
 
-/// `x` or `&x` for local `idx`.
+/// [`borrows_local`] over an operand, promoted or not. A promoted argument is
+/// still an argument: the value graph records which locals it reads, and this
+/// file already treats such a read as a use everywhere else.
+fn operand_borrows_local(body: &Body, op: Operand, idx: u32) -> bool {
+    match op.as_expr() {
+        Some(e) => borrows_local(body, e, idx),
+        // Only the shape that fills the slot whole. A value that merely *reads*
+        // the local (`f(x.len())`) computes from it rather than handing its
+        // storage over, and counting those rejected nearly every candidate.
+        None => bare_promoted_local(body, op) == Some(idx),
+    }
+}
+
+/// Whether `expr` hands over storage rooted at local `idx` — the local itself,
+/// a borrow of it, or a projection chain over either.
+///
+/// The callee side ([`param_storage_escapes`] through [`projection_roots_at`])
+/// already reads a field, index or deref chain as naming the root's storage, so
+/// the caller side has to as well: `b.inner.build()` borrows `b`'s storage just
+/// as `b.build()` does, and matching only the bare local let it through.
 fn borrows_local(body: &Body, expr: ExprId, idx: u32) -> bool {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => *index == idx,
         ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
             expr: inner,
         } => inner.as_expr().is_some_and(|e| borrows_local(body, e, idx)),
         _ => false,
     }
 }
 
-/// The `&<literal>` arguments whose callee hands the referent's storage back
-/// out — by returning `*self`, storing it, or passing it on by value.
+/// The `&<literal>` nodes whose referent escapes the borrow — the ones the
+/// `InlineRef` case must leave alone.
 ///
-/// A borrow reads, so the `InlineRef` case hoists one with no callee gate at
-/// all. That holds only while the callee keeps the borrow a borrow.
+/// A borrow reads, so that case used to hoist one with no callee gate at all.
+/// That holds only while the callee keeps it a borrow.
 /// `SequenceLiteralBuilder::build(self: &List<T>) { return *self; }` does not:
 /// the value it returns is the referent, and the caller keeps no copy of it
 /// because the literal it borrowed was fresh. Hoisting the literal makes it
-/// shared, and every caller then mutates the one global — which is what
+/// shared, and every caller then mutates the one object — which is what
 /// `core:zlib`'s `build_huffman_tree` did to its `sym_list` across calls.
-fn ref_args_the_callee_leaks(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
+///
+/// Two ways in: the borrow is a direct call argument, or it is bound to a local
+/// first (`let r = &LIT; f(r)`) and handed over from there.
+fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
     let mut out: IndexSet<ExprId> = IndexSet::default();
-    let note = |body: &Body, arg_expr: ExprId, leaks: bool, out: &mut IndexSet<ExprId>| {
-        if leaks
-            && matches!(
-                body.exprs[arg_expr].kind,
-                ExprKind::Unary {
-                    op: NirUnaryOp::Ref,
-                    ..
-                }
-            )
-        {
-            out.insert(arg_expr);
-        }
+    let is_ref = |body: &Body, e: ExprId| {
+        matches!(
+            body.exprs[e].kind,
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                ..
+            }
+        )
     };
     for node in reachable_nodes(body) {
-        let NodeRef::Expr(e) = node else {
-            continue;
-        };
-        match &body.exprs[e].kind {
-            ExprKind::Call { func_id, args, .. } => {
-                for (pos, arg) in args.iter().enumerate() {
-                    if let Some(arg_expr) = arg.expr.as_expr() {
-                        let leaks = gate.callee_ref_param_leaks(*func_id, pos);
-                        note(body, arg_expr, leaks, &mut out);
-                    }
+        match node {
+            // `let r = &LIT;` — the borrow reaches a call through `r`.
+            NodeRef::Stmt(st) => {
+                if let StmtKind::Let {
+                    local_index, value, ..
+                } = &body.stmts[st].kind
+                    && let Some(e) = value.as_expr()
+                    && is_ref(body, e)
+                    && local_leaks_through_call(body, *local_index, gate)
+                {
+                    out.insert(e);
                 }
             }
-            // No callee body to ask, so every borrow handed over is assumed to
-            // escape — the same verdict `callee_ref_param_leaks` gives an
-            // unknown callee.
-            ExprKind::IndirectCall { args, .. } => {
-                for &arg in args {
-                    if let Some(arg_expr) = arg.as_expr() {
-                        note(body, arg_expr, true, &mut out);
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Call { func_id, args, .. } => {
+                    for (pos, arg) in args.iter().enumerate() {
+                        // The `&<literal>` shape is the only candidate, and it
+                        // is a node test; ask the callee's escape fixpoint only
+                        // for those, or it memoizes a verdict for every
+                        // parameter in the program.
+                        let Some(arg_expr) = arg.expr.as_expr() else {
+                            continue;
+                        };
+                        if is_ref(body, arg_expr) && gate.callee_ref_param_leaks(*func_id, pos) {
+                            out.insert(arg_expr);
+                        }
                     }
                 }
-            }
-            ExprKind::CmRawCall { args, .. } => {
-                for arg in args {
-                    if let Some(arg_expr) = arg.as_expr() {
-                        note(body, arg_expr, true, &mut out);
+                // No callee body to ask, so every borrow handed over is assumed
+                // to escape — the verdict `callee_ref_param_leaks` gives an
+                // unknown callee.
+                ExprKind::IndirectCall { args, .. } => {
+                    for &arg in args {
+                        if let Some(a) = arg.as_expr()
+                            && is_ref(body, a)
+                        {
+                            out.insert(a);
+                        }
                     }
                 }
-            }
+                ExprKind::CmRawCall { args, .. } => {
+                    for &arg in args {
+                        if let Some(a) = arg.as_expr()
+                            && is_ref(body, a)
+                        {
+                            out.insert(a);
+                        }
+                    }
+                }
+                _ => {}
+            },
             _ => {}
         }
     }
